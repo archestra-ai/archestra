@@ -264,15 +264,90 @@ describe("[credentials] lines on the agent path", () => {
     );
   });
 
-  test("a line only a root external reads stays the agent's to write", async () => {
-    // No battery reads this variable, so no stored binding can fill it.
-    const external = `${initialPolicy()}\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = "github-token"\n[externals.jev]\ntoken_env = "APPA_PROVIDER_JEV_API_KEY"\n`;
+  test("a line a root external reads takes credential update on every agent path", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+  }) => {
+    const author = (await makeUser()).id;
+    const role = await makeCustomRole(organizationId, {
+      permission: { openappaPolicy: ["read", "update"] },
+    });
+    await makeMember(author, organizationId, { role: role.role });
+    const as = (userId: string, tool: string, args: Record<string, unknown>) =>
+      executeArchestraTool(`archestra__${tool}`, args, {
+        agent,
+        organizationId,
+        userId,
+      });
+    const reader = (key: string) =>
+      `${initialPolicy()}\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = "${key}"\n[externals.jev]\ntoken_env = "APPA_PROVIDER_JEV_API_KEY"\n`;
+    const external = reader("github-token");
+    const forbidden = { statusCode: 403 };
+    await expect(
+      as(author, "preview_guardrails_policy_change", {
+        content: external,
+        expectedRevision: 0,
+      }),
+    ).rejects.toMatchObject(forbidden);
+    await expect(
+      as(author, "update_guardrails_policy", {
+        content: external,
+        expectedRevision: 0,
+      }),
+    ).rejects.toMatchObject(forbidden);
+    await expect(
+      as(author, "preview_openappa_validation_change", {
+        expectedRevision: 0,
+        expectedVersion: "empty",
+        policyContent: external,
+      }),
+    ).rejects.toMatchObject(forbidden);
+    expect((await guardrailsPolicyService.get(organizationId)).revision).toBe(
+      0,
+    );
+
     const previewed = await call("preview_guardrails_policy_change", {
       content: external,
       expectedRevision: 0,
     });
-    expect(previewed.isError).toBeFalsy();
     expect(previewed.structuredContent).toMatchObject({ valid: true });
+    expect(
+      (
+        await call("update_guardrails_policy", {
+          content: external,
+          expectedRevision: 0,
+        })
+      ).isError,
+    ).toBeFalsy();
+
+    // Leaving the line alone, or removing it, stays the author's to write.
+    const kept = external.replace(
+      "[credentials]",
+      '[[policy.tool]]\nname = "kept"\ndelta = {}\n[credentials]',
+    );
+    expect(
+      (
+        await as(author, "update_guardrails_policy", {
+          content: kept,
+          expectedRevision: 1,
+        })
+      ).isError,
+    ).toBeFalsy();
+    await expect(
+      as(author, "preview_guardrails_policy_change", {
+        content: reader("another-key"),
+        expectedRevision: 2,
+      }),
+    ).rejects.toMatchObject(forbidden);
+    expect(
+      (
+        await as(author, "update_guardrails_policy", {
+          content: initialPolicy(),
+          expectedRevision: 2,
+        })
+      ).isError,
+    ).toBeFalsy();
   });
 
   test("a validation change cannot carry the line either", async () => {

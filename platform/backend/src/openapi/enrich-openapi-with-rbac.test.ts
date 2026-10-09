@@ -27,7 +27,7 @@ describe("enrichOpenApiWithRbac", () => {
 
     expect(getOperation["x-required-permissions"]).toEqual({
       kind: "static",
-      permissions: ["toolPolicy:read"],
+      permissions: ["mcpRegistry:read"],
     });
     expect(getOperation.description).toContain("Authentication:\n\n");
     expect(getOperation.description).toContain(
@@ -35,7 +35,7 @@ describe("enrichOpenApiWithRbac", () => {
     );
     expect(getOperation.description).toContain("\n\nAuthorization:\n\n");
     expect(getOperation.description).toContain(
-      "`toolPolicy:read`: View tools, tool invocation policies, and trusted data policies",
+      "`mcpRegistry:read`: Open the MCP registry and use its built-in servers",
     );
   });
 

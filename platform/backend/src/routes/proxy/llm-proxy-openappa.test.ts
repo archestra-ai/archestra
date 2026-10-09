@@ -13,7 +13,7 @@ import {
 } from "fastify-type-provider-zod";
 import { HttpResponse } from "msw";
 import OpenAIProvider from "openai";
-import { type MockInstance, vi } from "vitest";
+import { vi } from "vitest";
 import { createChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import {
   buildMcpGatewayTool,
@@ -23,8 +23,6 @@ import { internalCallHeader } from "@/clients/internal-call";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
-import * as toolInvocation from "@/guardrails/tool-invocation";
-import * as trustedData from "@/guardrails/trusted-data";
 import { logRingBuffer } from "@/logging/log-ring-buffer";
 import {
   A2AContextModel,
@@ -134,14 +132,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    // These provider stubs exercise direct Anthropic credentials, independent
+    // of a developer's configured Vertex project.
+    config.llm.anthropic.vertexAi.enabled = false;
+    config.openappa = parseOpenAppaConfig();
     // The server flag alone no longer enforces: the deployment-wide switch has
     // to be on too, and every case here is about APPA actually enforcing.
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -476,7 +474,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           teamId: null,
           isOrganizationToken: true,
         },
-        considerContextUntrusted: false,
         repeatTracker: new ToolCallRepeatTracker(),
         modelAcceptsImageToolResults: false,
       },
@@ -1452,11 +1449,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test("block mode lets the platform's own guardrail models through ungoverned", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
-    for (const source of ["guardrail:annotator", "guardrail:dual_llm"]) {
-      const response = await guardrailCall(source);
-      expect(response.statusCode, response.body).toBe(200);
-    }
-    expect(providerRequests).toHaveLength(2);
+    const response = await guardrailCall("guardrail:annotator");
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
     expect(events).toHaveLength(0);
     const [proofHeader] = Object.keys(internalCallHeader());
     for (const [, options] of vi.mocked(anthropicAdapterFactory.createClient)
@@ -3893,11 +3888,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const namespace = "mcp__gw";
     const thread = crypto.randomUUID();
     const probeThread = crypto.randomUUID();
-    const evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-    const evaluateTrustedData = vi.spyOn(
-      trustedData,
-      "evaluateIfContextIsTrusted",
-    );
     block = true;
     const directTools = [
       {
@@ -3962,19 +3952,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       },
     ];
     const governed = async (token: string, threadId: string, text: string) => {
-      evaluatePolicies.mockClear();
-      evaluateTrustedData.mockClear();
       providerRequests.length = 0;
       events.length = 0;
       const response = await send(token, threadId, withSecret(text));
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).not.toContain("defers its tools to a tool search");
       expect(names(response.body)).not.toContain("get_weather");
-      expect(evaluatePolicies).toHaveBeenCalled();
-      expect(JSON.stringify(evaluatePolicies.mock.calls)).toContain(
-        "get_weather",
-      );
-      expect(evaluateTrustedData).toHaveBeenCalled();
       expect(JSON.stringify(providerRequests)).not.toContain(secret);
       expect(JSON.stringify(providerRequests)).toContain(
         "APPROVED REPLACEMENT",
@@ -3991,8 +3974,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     // Pasting the old connect prompt no longer opens a setup bypass.
     await governed(virtualKey, thread, prompt);
 
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
     providerRequests.length = 0;
     events.length = 0;
     const orgThread = crypto.randomUUID();
@@ -4000,15 +3981,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(org.statusCode, org.body).toBe(200);
     expect(org.body).not.toContain("defers its tools to a tool search");
     expect(names(org.body)).not.toContain("get_weather");
-    expect(evaluatePolicies).toHaveBeenCalled();
-    expect(evaluateTrustedData).toHaveBeenCalled();
     expect(JSON.stringify(providerRequests)).not.toContain(secret);
     expect(JSON.stringify(providerRequests)).toContain("APPROVED REPLACEMENT");
     expect(events).toContainEqual(
       expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
     );
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
     providerRequests.length = 0;
     events.length = 0;
     const orgContinued = await send(orgKey, orgThread, [
@@ -4020,8 +3997,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
     expect(orgContinued.statusCode, orgContinued.body).toBe(200);
     expect(names(orgContinued.body)).not.toContain("get_weather");
-    expect(evaluatePolicies).toHaveBeenCalled();
-    expect(evaluateTrustedData).toHaveBeenCalled();
   });
 
   test("scopes an external client's explicit session to its credential", async ({
@@ -5017,91 +4992,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   for (const stream of [true, false]) {
-    test(`existing invocation policies remain enforced alongside APPA (stream=${stream})`, async ({
-      makeTool,
-      makeToolPolicy,
-    }) => {
-      const tool = await makeTool({ name: "get_weather", agentId: agent.id });
-      await makeToolPolicy(tool.id, {
-        action: "block_always",
-        conditions: [],
-        reason: "Platform weather policy refused this call",
-      });
-      const evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-      const request = {
-        method: "POST" as const,
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: headers(),
-        payload: payload(stream),
-      };
-
-      const denied = await app.inject(request);
-      expect(denied.statusCode, denied.body).toBe(200);
-      expect(denied.body).toContain(
-        "Platform weather policy refused this call",
-      );
-      expect(denied.body).not.toContain('"type":"tool_use"');
-      expect(events.some((event) => event.event === "tool_call")).toBe(false);
-      expect(evaluatePolicies).toHaveBeenCalledOnce();
-      evaluatePolicies.mockClear();
-
-      config.openappa.enabled = false;
-      config.llmProxy.plugins = parseLlmProxyPlugins("appa", false);
-      unregisterAppaPlugin();
-      // Other plugins allowing a call must still run the ordinary policy check.
-      const unregisterObserver = registerLlmProxyPlugin({
-        id: "test-allow",
-        async onToolCalls({ toolCalls }) {
-          return { decision: "allow", toolCalls };
-        },
-      });
-      const nativeCalls = events.length;
-      try {
-        const blocked = await app.inject(request);
-        expect(blocked.statusCode, blocked.body).toBe(200);
-        expect(blocked.body).toContain(
-          "Platform weather policy refused this call",
-        );
-        expect(blocked.body).not.toContain('"type":"tool_use"');
-        expect(evaluatePolicies).toHaveBeenCalledOnce();
-        expect(events).toHaveLength(nativeCalls);
-        // A refusal is a terminal answer on both paths: the turn ends, so
-        // the offers of this turn do not outlive it.
-        expect(events).toContainEqual(
-          expect.objectContaining({ event: "turn_end" }),
-        );
-      } finally {
-        unregisterObserver();
-      }
-    });
-  }
-
-  for (const stream of [true, false]) {
-    test(`deployment toggle off preserves existing enforcement without APPA headers (stream=${stream})`, async ({
-      makeTool,
-      makeToolPolicy,
-    }) => {
-      await GuardrailsDeploymentModel.setEnabled(false);
-      const target = await makeTool({ name: "get_weather", agentId: agent.id });
-      await makeToolPolicy(target.id, {
-        action: "block_always",
-        conditions: [],
-        reason: "Existing guardrails still active",
-      });
-      const response = await app.inject({
-        method: "POST",
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: { "x-api-key": "test-key", "anthropic-version": "2023-06-01" },
-        payload: payload(stream),
-      });
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.body).toContain("Existing guardrails still active");
-      expect(response.body).not.toContain('"type":"tool_use"');
-      expect(events).toEqual([]);
-    });
-
     test(`deployment toggle off reads no records for a Claude Code session's messages and subagent results (stream=${stream})`, async () => {
       await GuardrailsDeploymentModel.setEnabled(false);
       native.loadChildReturns.mockClear();
@@ -5158,48 +5048,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(JSON.stringify(providerRequests)).toContain(
         "Three triggers are stuck",
       );
-    });
-
-    test(`legacy policies check plugin rewrites before APPA reserves a call (stream=${stream})`, async ({
-      makeTool,
-      makeToolPolicy,
-    }) => {
-      const target = await makeTool({
-        name: "get_weather",
-        agentId: agent.id,
-      });
-      await makeToolPolicy(target.id, {
-        action: "block_always",
-        conditions: [{ key: "location", operator: "equal", value: "blocked" }],
-        reason: "Rewritten target blocked",
-      });
-      const unregisterRewriter = registerLlmProxyPlugin({
-        id: "test-rewriter",
-        async onToolCalls({ toolCalls }) {
-          return {
-            decision: "allow",
-            toolCalls: toolCalls.map((call) => ({
-              ...call,
-              arguments: JSON.stringify({ location: "blocked" }),
-            })),
-          };
-        },
-      });
-      try {
-        const response = await app.inject({
-          method: "POST",
-          url: url(),
-          remoteAddress: "127.0.0.1",
-          headers: headers(),
-          payload: payload(stream),
-        });
-        expect(response.statusCode, response.body).toBe(200);
-        expect(response.body).toContain("Rewritten target blocked");
-        expect(response.body).not.toContain('"type":"tool_use"');
-        expect(events.some((event) => event.event === "tool_call")).toBe(false);
-      } finally {
-        unregisterRewriter();
-      }
     });
   }
 
@@ -5293,10 +5141,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   test("substitutes saved approved results before the provider sees resent history", async () => {
-    const evaluateTrustedData = vi.spyOn(
-      trustedData,
-      "evaluateIfContextIsTrusted",
-    );
     for (const raw of ["RAW SECRET", "ALTERED RAW SECRET"]) {
       const messages = [
         { role: "user", content: "Weather" },
@@ -5343,25 +5187,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         outcome: "success",
       }),
     ]);
-    expect(evaluateTrustedData).toHaveBeenCalledTimes(2);
   });
 
-  test("OpenAPPA replaces results and controls calls without legacy trusted-data blocking", async ({
-    makeTool,
-    makeToolPolicy,
-    makeTrustedDataPolicy,
-  }) => {
-    const target = await makeTool({ name: "get_weather", agentId: agent.id });
-    await makeTrustedDataPolicy(target.id, {
-      action: "block_always",
-      conditions: [{ key: "secret", operator: "equal", value: "RAW SECRET" }],
-      description: "Unsafe result",
-    });
-    await makeToolPolicy(target.id, {
-      action: "block_when_context_is_untrusted",
-      conditions: [],
-      reason: "Existing untrusted-context policy",
-    });
+  test("OpenAPPA replaces results and releases the approved call", async () => {
     const messages = [
       { role: "user", content: "Weather" },
       {
@@ -5405,7 +5233,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
     expect(JSON.stringify(providerRequests)).toContain("APPROVED REPLACEMENT");
     expect(JSON.stringify(providerRequests)).not.toContain("RAW SECRET");
-    expect(response.body).not.toContain("this session contains sensitive data");
     expect(response.body).toContain('"type":"tool_use"');
   });
 
@@ -10599,8 +10426,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     let otherPassthroughToken: string;
     let otherPassthroughKeyId: string;
     let otherAgent: Agent;
-    let evaluatePolicies: MockInstance;
-    let evaluateTrustedData: MockInstance;
 
     beforeEach(
       async ({
@@ -10769,11 +10594,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 },
               },
             }) as never,
-        );
-        evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-        evaluateTrustedData = vi.spyOn(
-          trustedData,
-          "evaluateIfContextIsTrusted",
         );
       },
     );
@@ -10971,8 +10791,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       headers?: Record<string, string>;
       url?: string;
     }) => {
-      evaluatePolicies.mockClear();
-      evaluateTrustedData.mockClear();
       providerRequests.length = 0;
       events.length = 0;
       const profileId = params.profileId ?? agent.id;
@@ -11026,8 +10844,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.body).not.toContain("cps1_");
       expect(response.body).not.toContain(token);
       expect(events).toEqual([]);
-      expect(evaluatePolicies).not.toHaveBeenCalled();
-      expect(evaluateTrustedData).not.toHaveBeenCalled();
       expect(providerRequests).toHaveLength(1);
       const sent = JSON.stringify(providerRequests);
       expect(sent).toContain(prompt);
@@ -11051,7 +10867,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
       expect(providerRequests).toHaveLength(0);
       expect(events).toEqual([]);
-      expect(evaluatePolicies).not.toHaveBeenCalled();
     };
 
     const expectStillGoverned = (response: {
@@ -11064,8 +10879,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events).toContainEqual(
         expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
       );
-      expect(evaluatePolicies).toHaveBeenCalled();
-      expect(evaluateTrustedData).toHaveBeenCalled();
       expect(providerRequests).toHaveLength(1);
       const sent = JSON.stringify(providerRequests);
       expect(sent).not.toContain(secret);
@@ -11342,7 +11155,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         );
         expect(providerRequests).toHaveLength(0);
         expect(events).toEqual([]);
-        expect(evaluatePolicies).not.toHaveBeenCalled();
       }
 
       const openai = await postSetup({
@@ -11466,12 +11278,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -13942,12 +13751,9 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",

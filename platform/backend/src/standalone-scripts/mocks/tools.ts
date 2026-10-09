@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { randomBool, randomElement } from "./utils";
+import { randomElement } from "./utils";
 
 const PARAMETER_TYPES = ["string", "number", "boolean", "object", "array"];
 
@@ -120,8 +120,6 @@ export interface MockTool {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
-  allowUsageWhenUntrustedDataIsPresent: boolean;
-  dataIsTrustedByDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -144,8 +142,6 @@ export function generateMockTools(
       name,
       description: `${name.replace(/_/g, " ")} tool for ${agentName}`,
       parameters: generateRandomParameters(name),
-      allowUsageWhenUntrustedDataIsPresent: randomBool(),
-      dataIsTrustedByDefault: randomBool(0.3), // 30% chance
       createdAt: new Date(),
       updatedAt: new Date(),
     };

@@ -42,8 +42,6 @@ export function withholdInteractionContent(
       isError: InteractionErrorResponseSchema.safeParse(record.response)
         .success,
     }) as unknown as InteractionResponse,
-    dualLlmAnalyses: null,
-    unsafeContextBoundary: null,
   };
 }
 

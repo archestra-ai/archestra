@@ -220,8 +220,8 @@ export const guardrailsPolicyService = {
    * Save a new revision of the organization's policy.
    *
    * Every user-driven write of the text passes here, so this is where a credential
-   * grant — an organization credential's value reaching a battery's helper sandbox
-   * — is authorized. A grant the submitted text adds, or whose key it changes
+   * grant — an organization credential's value reaching a battery's helper sandbox,
+   * or a root external or profile that names it as its `token_env` — is authorized. A grant the submitted text adds, or whose key it changes
    * against the latest revision, takes `credential:update`; removing one takes
    * nothing beyond the route's own permission. The diff runs against the latest
    * revision, so a stale `expectedRevision` still ends in the save's own conflict.
@@ -246,20 +246,14 @@ export const guardrailsPolicyService = {
       content,
       previous: latest.content,
     });
-    const granted = addedGrants(
-      openappaDeclarations.grants(resolved.previous),
-      openappaDeclarations.grants(resolved.submitted),
-    );
-    if (
-      granted.length > 0 &&
-      !(await userHasPermission(userId, organizationId, "credential", "update"))
-    )
-      throw new ApiError(
-        403,
-        `Credential update permission is required: this policy hands ${granted
-          .map((grant) => `${grant.variable} to ${grant.battery}`)
-          .join(", ")}`,
-      );
+    await requireGrantPermission({
+      organizationId,
+      userId,
+      granted: addedGrants(
+        openappaDeclarations.grants(resolved.previous),
+        openappaDeclarations.grants(resolved.submitted),
+      ),
+    });
     const validation = await this.validate(content, {
       organizationId,
       previous: latest.content,
@@ -297,6 +291,25 @@ export const guardrailsPolicyService = {
     return saved;
   },
 };
+
+/** A write that adds or rekeys a credential grant takes `credential:update`. */
+export async function requireGrantPermission(params: {
+  organizationId: string;
+  userId: string;
+  granted: ReturnType<typeof addedGrants>;
+}): Promise<void> {
+  const { organizationId, userId, granted } = params;
+  if (
+    granted.length > 0 &&
+    !(await userHasPermission(userId, organizationId, "credential", "update"))
+  )
+    throw new ApiError(
+      403,
+      `Credential update permission is required: this policy hands ${granted
+        .map((grant) => `${grant.variable} to ${grant.battery}`)
+        .join(", ")}`,
+    );
+}
 
 function requireEnabled() {
   if (!enterpriseTier.isOpenappaActive())

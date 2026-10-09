@@ -111,7 +111,6 @@ import {
   useUpdateDefaultAgentId,
 } from "@/lib/agent.query";
 import {
-  countAgentCatalog,
   useAgentCatalog,
   useAllMatchingAgentCatalog,
 } from "@/lib/agent-catalog.query";
@@ -269,6 +268,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     access: scopeFilter.access,
+    sharedWith: scopeFilter.sharedWith,
+    owner: scopeFilter.owner,
     includeBuiltIn: includeBuiltIn || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
@@ -575,6 +576,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       authorIds: null,
       excludeAuthorIds: null,
       access: null,
+      sharedWith: null,
+      owner: null,
       builtIn: null,
       labels: null,
       status: null,
@@ -1118,7 +1121,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   <ResourceAccessFilter
                     resource="agent"
                     noun="agents"
-                    countItems={countAgentCatalog}
                     offerBuiltIn
                     queryParamsAdapter={queryParamsAdapter}
                   />

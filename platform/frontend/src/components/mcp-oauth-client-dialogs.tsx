@@ -1,7 +1,6 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { KeyRound } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
@@ -15,7 +14,7 @@ import {
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +49,6 @@ export function EditOAuthClientDialog({
   const [redirectUrisText, setRedirectUrisText] = useState("");
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] = useState<Section>("general");
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
   // The permissions section keeps its edits in its own form. This dialog's
   // Save Changes is the only Save on screen, so it commits them too.
@@ -65,7 +63,6 @@ export function EditOAuthClientDialog({
 
   useEffect(() => {
     if (!oauthClient) return;
-    setActiveSection("general");
     setName(oauthClient.name);
     setSelectedGatewayIds(oauthClient.allowedGatewayIds);
     setGrantsGateways(oauthClient.allowedGatewayIds.length > 0);
@@ -104,7 +101,7 @@ export function EditOAuthClientDialog({
       }));
 
   return (
-    <TabbedDialogShell
+    <StandardFormDialog
       open
       onOpenChange={onOpenChange}
       title={oauthClient.name}
@@ -113,26 +110,7 @@ export function EditOAuthClientDialog({
           ? "Signs users in. Tools act with each user's own identity."
           : "Calls the gateways and agents you pick, as itself."
       }
-      sidebarLabel={name.trim() || "OAuth client"}
-      sidebarDescription="MCP OAuth client"
-      sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
       isDirty={isDirty}
-      activeSection={activeSection}
-      navItems={[
-        { id: "general", label: "General", status: oauthClient.clientId },
-        {
-          id: "permissions",
-          label: "Permissions",
-          status: "Who can manage it",
-        },
-      ]}
-      onActiveSectionChange={setActiveSection}
-      headerExtra={
-        <CreatedByHeader
-          createdBy={oauthClient.createdBy}
-          createdAt={oauthClient.createdAt}
-        />
-      }
       footer={
         <>
           <DialogCancelButton>Cancel</DialogCancelButton>
@@ -154,7 +132,11 @@ export function EditOAuthClientDialog({
         });
       }}
     >
-      <div hidden={activeSection !== "general"} className="space-y-4">
+      <div className="space-y-4">
+        <CreatedByHeader
+          createdBy={oauthClient.createdBy}
+          createdAt={oauthClient.createdAt}
+        />
         <div className="space-y-2">
           <Label htmlFor="edit-oauth-client-name">Name</Label>
           <Input
@@ -222,15 +204,6 @@ export function EditOAuthClientDialog({
             />
           )}
         </div>
-        <AdvancedLabelsSection
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={setLabels}
-        />
-      </div>
-
-      {/* Kept mounted on every tab, so Save Changes commits its edits. */}
-      <div hidden={activeSection !== "permissions"}>
         {/* SPDX-SnippetBegin
               SPDX-SnippetCopyrightText: 2026 Archestra Inc.
               SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
@@ -239,12 +212,14 @@ export function EditOAuthClientDialog({
           id={oauthClient.id}
           registerSave={registerPermissionsSave}
           onDirtyChange={setPermissionsDirty}
-          standalone
         />
         {/* SPDX-SnippetEnd */}
+        <AdvancedLabelsSection
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={setLabels}
+        />
       </div>
-    </TabbedDialogShell>
+    </StandardFormDialog>
   );
 }
-
-type Section = "general" | "permissions";

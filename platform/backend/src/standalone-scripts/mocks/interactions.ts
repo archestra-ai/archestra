@@ -1,8 +1,4 @@
 import { randomUUID } from "node:crypto";
-import {
-  buildToolInvocationRefusalMessages,
-  TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-} from "@archestra/shared";
 import type { InsertInteraction } from "@/types";
 import { randomBool, randomElement, randomInt } from "./utils";
 
@@ -188,7 +184,6 @@ export const CONVERSATION_TEMPLATES: ConversationTemplate[] = [
 interface ToolInfo {
   name: string;
   description: string | null;
-  allowUsageWhenUntrustedDataIsPresent: boolean;
 }
 
 /**
@@ -504,7 +499,6 @@ function generateToolArguments(toolName: string): Record<string, unknown> {
 export function generateMockInteraction(
   agentId: string,
   tools: ToolInfo[],
-  shouldBlock: boolean,
 ): InsertInteraction {
   if (tools.length === 0) {
     throw new Error(
@@ -560,14 +554,10 @@ export function generateMockInteraction(
     ],
   });
 
-  // Add tool response - sometimes with untrusted data
-  const hasUntrustedData = shouldBlock && randomBool();
-  const toolResponseContent = hasUntrustedData
-    ? JSON.stringify({
-        data: "some external data",
-        source: "untrusted@external.com",
-      })
-    : JSON.stringify({ success: true, result: "operation completed" });
+  const toolResponseContent = JSON.stringify({
+    success: true,
+    result: "operation completed",
+  });
 
   messages.push({
     role: "tool",
@@ -576,24 +566,11 @@ export function generateMockInteraction(
   });
 
   // Create the final assistant response (but DON'T add it to request messages)
-  const argsString = JSON.stringify(toolArguments);
-  const blockedMessages = buildToolInvocationRefusalMessages({
-    toolName: selectedTool.name,
-    toolArguments: argsString,
-    reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-    surface: "llm-proxy",
-  });
-  const responseMessage = shouldBlock
-    ? {
-        role: "assistant",
-        content: blockedMessages.contentMessage,
-        refusal: blockedMessages.refusalMessage,
-      }
-    : {
-        role: "assistant",
-        content: `I've successfully executed the ${selectedTool.name} operation. The task is complete!`,
-        refusal: null,
-      };
+  const responseMessage = {
+    role: "assistant",
+    content: `I've successfully executed the ${selectedTool.name} operation. The task is complete!`,
+    refusal: null,
+  };
 
   // The request should NOT include the final assistant response
   // It should end with the tool response
@@ -669,7 +646,6 @@ export function generateMockInteractions(
   agentIds: string[],
   toolsByAgent: Map<string, ToolInfo[]>,
   count: number,
-  blockProbability = 0.3,
 ): InsertInteraction[] {
   const interactions: InsertInteraction[] = [];
 
@@ -692,15 +668,7 @@ export function generateMockInteractions(
     // biome-ignore lint/style/noNonNullAssertion: ok in seed script
     const agentTools = toolsByAgent.get(agentId)!;
 
-    // Randomly decide if this interaction should be blocked
-    const shouldBlock = randomBool(blockProbability);
-
-    const interaction = generateMockInteraction(
-      agentId,
-      agentTools,
-      shouldBlock,
-    );
-    interactions.push(interaction);
+    interactions.push(generateMockInteraction(agentId, agentTools));
   }
 
   return interactions;

@@ -1,4 +1,4 @@
-import { type archestraApiTypes, parseFullToolName } from "@archestra/shared";
+import { parseFullToolName } from "@archestra/shared";
 import { PanelRight } from "lucide-react";
 import type React from "react";
 import {
@@ -57,8 +57,6 @@ export type McpToolOutput = {
   content: string;
   /** Additional metadata (timestamps, version info, etc.) not intended for model context */
   _meta?: Record<string, unknown>;
-  /** Unsafe-context boundary marker preserved in the live tool stream */
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
   /** Structured data optimized for UI rendering (not added to model context) */
   structuredContent?: Record<string, unknown>;
   /** Original MCP content blocks from the tool response */

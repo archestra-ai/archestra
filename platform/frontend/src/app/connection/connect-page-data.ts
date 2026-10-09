@@ -4,8 +4,8 @@
 // context cost, skills, apps, admin settings.
 
 import {
-  isAgentTool,
-  isSkillTool,
+  ARCHESTRA_MCP_CATALOG_ID,
+  type archestraApiTypes,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -14,13 +14,13 @@ import {
 } from "@archestra/shared/connection-setup";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
-import { useDefaultMcpGateway } from "@/lib/agent.query";
+import { useDefaultMcpGateway, useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import { useConfig } from "@/lib/config/config.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
+import { useGatewayToolPreview } from "@/lib/mcp/gateway-tool-preview.query";
 import { useOrganization } from "@/lib/organization.query";
 import { isDeliverablePlugin, usePlugins } from "@/lib/plugins/plugin.query";
 import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
@@ -29,7 +29,7 @@ import {
   usesGenericInstructions,
   visibleClients,
 } from "./clients";
-import type { ConnectChoices } from "./connect-choices";
+import type { ConnectChoices, ConnectPicks } from "./connect-choices";
 import {
   getConnectableProviders,
   useConnectionBaseUrl,
@@ -56,8 +56,12 @@ export interface ConnectFootprint {
 
 export interface ConnectPlugin {
   id: string;
+  /** What the installer's --plugins flag names it by. */
+  slug: string;
   name: string;
   description: string | null;
+  /** The GitHub repo it syncs from; null for an uploaded plugin. */
+  source: string | null;
 }
 
 /** A gateway the user can connect through. */
@@ -80,10 +84,15 @@ export interface ConnectPageData {
   /** The instance's configured name ("Archestra" unless white-labeled). */
   appName: string;
   gateway: ConnectGateway | null;
+  /** Gateways the user can pick instead; empty when they can't read them. */
+  gateways: ConnectGateway[];
+  /** The gateway a setup gets unless the user picks another. */
+  defaultGatewayId: string | null;
   /** The admin's default endpoint; users don't pick one. */
   baseUrl: string;
   servers: ConnectServer[];
-  totalTools: number;
+  totalTools: number | null;
+  toolPreviewError: boolean;
   /** True when the gateway exposes every server in the org, incl. new ones. */
   allServers: boolean;
   skills: ConnectPageSkill[];
@@ -91,12 +100,16 @@ export interface ConnectPageData {
   /** Gateway "progressive tool loading": tools load on demand. */
   progressive: boolean;
   /**
-   * Estimated tokens the gateway's tool list takes in the agent's context,
-   * counted from the same tool list and tokenizer as the chat's context
-   * window view. `byServer` is keyed by ConnectServer key and only has the
-   * servers whose tools load at session start. null until it loads.
+   * Initial context cost of the gateway's served tool definitions.
+   * `byServer` contains fallback estimates keyed by ConnectServer key for
+   * initially loaded tools. It is empty for observed provider totals.
+   * null until the preview loads.
    */
-  toolTokens: { total: number; byServer: Record<string, number> } | null;
+  toolTokens: {
+    total: number;
+    byServer: Record<string, number>;
+    count?: archestraApiTypes.GetAgentMcpToolPreviewResponses[200]["tokenCount"];
+  } | null;
   llmProxyEnabled: boolean;
   /** The org's LLM Proxy, when the user can route through it. */
   llmProxyId: string | null;
@@ -106,6 +119,11 @@ export interface ConnectPageData {
   pluginsEnabled: boolean;
   /** Approved plugins the setup bundles for this client. */
   pluginsFor: (client: ConnectClient) => ConnectPlugin[];
+  /** The plugins on offer that the user kept. */
+  keptPlugins: (
+    client: ConnectClient,
+    pluginIds: ConnectPicks["pluginIds"],
+  ) => ConnectPlugin[];
   /** Setup parts this client can get; the rest never show as choices. */
   partsFor: (client: ConnectClient) => ConnectChoices;
   /**
@@ -129,13 +147,14 @@ export interface ConnectPageData {
   ) => string | null;
   /**
    * The terminal command that runs the public installer for an app with one,
-   * carrying what the user left out. PowerShell on Windows, a POSIX shell
-   * elsewhere.
+   * carrying what the user left out, and a gateway or plugins they picked
+   * over the defaults. PowerShell on Windows, a POSIX shell elsewhere.
    */
   installerCommand: (
     client: ConnectClient,
     choices: ConnectChoices,
     windows: boolean,
+    picks?: ConnectPicks,
   ) => string;
 }
 
@@ -150,7 +169,12 @@ export function welcomePrompt(origin: string, appName: string): string {
   return `Read ${origin}/welcome.md and show me what I can do with ${appName}.`;
 }
 
-export function useConnectPageData(): ConnectPageData {
+/** A gateway pick that is no longer visible falls back to the default. */
+export function useConnectPageData(
+  pickedClientId?: string | null,
+  pickedGatewayId: string | null = null,
+): ConnectPageData {
+  const appName = useAppName();
   // A fresh read: these settings decide what a setup may include.
   const orgQuery = useOrganization(true, { fresh: true });
   const { data: org, isPending: orgPending } = orgQuery;
@@ -178,7 +202,26 @@ export function useConnectPageData(): ConnectPageData {
 
   const { data: defaultGateway, isLoading: defaultGatewayLoading } =
     useDefaultMcpGateway();
-  const gatewayId = org?.connectionDefaultMcpGatewayId ?? defaultGateway?.id;
+  const defaultGatewayId =
+    org?.connectionDefaultMcpGatewayId ?? defaultGateway?.id ?? null;
+  // The same list the browser approval offers.
+  const { data: gatewayList, isPending: gatewaysPending } = useProfiles({
+    filters: {
+      agentTypes: ["profile", "mcp_gateway"],
+      excludeOtherPersonalAgents: true,
+    },
+    enabled: canReadGateways === true,
+  });
+  const gateways = useMemo<ConnectGateway[]>(
+    () => (gatewayList ?? []).map((g) => ({ ...g, slug: g.slug ?? g.id })),
+    [gatewayList],
+  );
+  const gatewayId =
+    (pickedGatewayId && gateways.some((g) => g.id === pickedGatewayId)
+      ? pickedGatewayId
+      : null) ??
+    defaultGatewayId ??
+    undefined;
   const {
     gateway: profile,
     profileQuery: { isPending: profilePending },
@@ -225,9 +268,21 @@ export function useConnectPageData(): ConnectPageData {
       )
       .map((p) => ({
         id: p.id,
+        slug: p.pluginSlug,
         name: p.displayName,
         description: p.description,
+        source: p.sourceRepo,
       }));
+
+  const keptPlugins = (
+    client: ConnectClient,
+    pluginIds: ConnectPicks["pluginIds"],
+  ) => {
+    const offered = pluginsFor(client);
+    if (pluginIds === null) return offered;
+    const kept = new Set(pluginIds);
+    return offered.filter((p) => kept.has(p.id));
+  };
 
   const baseUrl = useConnectionBaseUrl(org?.connectionBaseUrls);
 
@@ -243,48 +298,79 @@ export function useConnectPageData(): ConnectPageData {
         (c): c is ConnectClient => !!c,
       );
 
-  const servers = useMemo<ConnectServer[]>(
-    () =>
-      gatewayServers.map(({ catalogName, description: _, ...server }) => ({
-        ...server,
-        name: catalogName ?? "Other",
-      })),
-    [gatewayServers],
-  );
-  const totalTools = servers.reduce((n, s) => n + s.toolCount, 0);
-  const progressive = profile?.toolExposureMode === "search_and_run_only";
-
   const skills = skillList ?? [];
   const skillsAvailable = skillsEnabled && skills.length > 0;
   const gateway = profile
     ? { ...profile, slug: profile.slug ?? profile.id }
     : null;
   const toolsAvailable = canReadGateways === true && !!gateway;
-  // The gateway's real tool list, as the agent gets it: in on-demand mode
-  // that's the small fixed set, in full mode every server's tools.
-  const { data: listedTools } = useChatProfileMcpTools(
-    toolsAvailable ? gateway?.id : undefined,
-    { silent: true },
-  );
-  const toolTokens = useMemo(() => {
-    if (!listedTools?.length) return null;
-    const serverOf = new Map(
-      (profile?.tools ?? []).map((t) => [t.name, t.catalogId ?? "other"]),
+  const client =
+    clients.find((c) => c.id === pickedClientId) ??
+    clients.find((c) => c.id === org?.connectionDefaultClientId) ??
+    featuredClients[0] ??
+    clients[0];
+  const { data: preview, isError: toolPreviewError } = useGatewayToolPreview({
+    agentId: toolsAvailable ? gateway?.id : undefined,
+    client: client?.id === "claude-code" ? "claude-code" : "generic",
+  });
+  const listedTools = preview?.tools;
+  const progressive =
+    (preview?.toolExposureMode ?? profile?.toolExposureMode) ===
+    "search_and_run_only";
+  const totalTools = toolsAvailable ? (listedTools?.length ?? null) : 0;
+  const servers = useMemo<ConnectServer[]>(() => {
+    const inventory = gatewayServers.map(
+      ({ catalogName, description: _, ...server }) => ({
+        ...server,
+        name: catalogName ?? "Other",
+      }),
     );
+    if (progressive || !listedTools) return inventory;
+    const byKey = new Map(inventory.map((server) => [server.key, server]));
+    const groups = new Map<string, ConnectServer>();
+    for (const tool of listedTools) {
+      const key = tool.catalogId ?? "other";
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          key,
+          catalogId: tool.catalogId,
+          name:
+            byKey.get(key)?.name ??
+            (key === ARCHESTRA_MCP_CATALOG_ID ? appName : "Other"),
+          icon: byKey.get(key)?.icon ?? null,
+          toolCount: 0,
+          tools: [],
+        };
+        groups.set(key, group);
+      }
+      group.toolCount++;
+      group.tools.push({
+        name: tool.name.includes("__")
+          ? tool.name.slice(tool.name.indexOf("__") + 2)
+          : tool.name,
+        description: tool.description,
+      });
+    }
+    return [...groups.values()].sort((a, b) => b.toolCount - a.toolCount);
+  }, [gatewayServers, listedTools, progressive, appName]);
+  const toolTokens = useMemo(() => {
+    if (!listedTools) return null;
     const byServer: Record<string, number> = {};
     let total = 0;
     for (const tool of listedTools) {
-      // The chat's list adds agent and skill delegation tools, but an
-      // on-demand gateway never sends those to a connected agent (any agent,
-      // not only Claude Code), so they don't count toward its context.
-      if (progressive && (isAgentTool(tool.name) || isSkillTool(tool.name)))
-        continue;
       total += tool.tokens;
-      const key = serverOf.get(tool.name);
-      if (key) byServer[key] = (byServer[key] ?? 0) + tool.tokens;
+      const key = tool.catalogId ?? "other";
+      byServer[key] = (byServer[key] ?? 0) + tool.tokens;
     }
-    return { total, byServer };
-  }, [listedTools, profile?.tools, progressive]);
+    const count = preview?.tokenCount;
+    return {
+      total: count?.total ?? total,
+      // Provider counts cover the whole list; they cannot be apportioned to servers.
+      byServer: count?.source === "claude-provider" ? {} : byServer,
+      count,
+    };
+  }, [listedTools, preview?.tokenCount]);
   const partsFor = (client: ConnectClient): ConnectChoices => ({
     tools: toolsAvailable,
     skills: skillsAvailable,
@@ -292,8 +378,6 @@ export function useConnectPageData(): ConnectPageData {
     // Plugins come with the installer; other agents set themselves up.
     plugins: !usesGenericInstructions(client) && pluginsFor(client).length > 0,
   });
-
-  const appName = useAppName();
 
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
@@ -308,6 +392,8 @@ export function useConnectPageData(): ConnectPageData {
     loading:
       orgPending ||
       (!org?.connectionDefaultMcpGatewayId && defaultGatewayLoading) ||
+      // A picked gateway is only trusted once the list confirms it.
+      (!!pickedGatewayId && canReadGateways === true && gatewaysPending) ||
       (!!gatewayId && profilePending),
     revalidating: orgQuery.isFetching,
     clients,
@@ -316,9 +402,12 @@ export function useConnectPageData(): ConnectPageData {
     defaultClientId: org?.connectionDefaultClientId ?? null,
     appName,
     gateway,
+    gateways,
+    defaultGatewayId,
     baseUrl,
     servers,
     totalTools,
+    toolPreviewError,
     allServers: accessAll,
     skills,
     totalSkills: skills.length,
@@ -330,10 +419,11 @@ export function useConnectPageData(): ConnectPageData {
     skillsEnabled,
     pluginsEnabled,
     pluginsFor,
+    keptPlugins,
     partsFor,
     guardrails: {
       name: "OpenAPPA",
-      // No setting to read, or the guardrails beta is off: no chip at all.
+      // No setting to read, or guardrails are unavailable: no chip at all.
       state:
         !guardrails || !guardrails.featureEnabled
           ? null
@@ -359,8 +449,21 @@ export function useConnectPageData(): ConnectPageData {
       if (baseUrl !== `${origin}/v1`) params.set("base", baseUrl);
       return `Read ${origin}/connect.md?${decodeURIComponent(params.toString())} and connect ${client.label}.`;
     },
-    installerCommand: (client, choices, windows) => {
-      const exclude = CONNECT_SETUP_PARTS.filter((part) => !choices[part]);
+    installerCommand: (client, choices, windows, picks) => {
+      const offered = pluginsFor(client);
+      const kept = keptPlugins(client, picks?.pluginIds ?? null);
+      // Keeping none of the plugins is leaving plugins out.
+      const exclude = CONNECT_SETUP_PARTS.filter(
+        (part) =>
+          !choices[part] ||
+          (part === "plugins" && offered.length > 0 && kept.length === 0),
+      );
+      const pickedGateway =
+        choices.tools && gateway && gateway.id !== defaultGatewayId
+          ? gateway.slug
+          : null;
+      const somePlugins =
+        choices.plugins && kept.length > 0 && kept.length < offered.length;
       // Two lines: fetch the installer, then run it. The continuation
       // (a backtick in PowerShell) keeps it one command when pasted.
       const [fetch, next] = windows ? ["irm", "`"] : ["curl -fsSL", "\\"];
@@ -368,6 +471,10 @@ export function useConnectPageData(): ConnectPageData {
         `--url ${origin}`,
         `--client ${client.id}`,
         ...(exclude.length ? [`--exclude ${exclude.join(",")}`] : []),
+        ...(pickedGateway ? [`--gateway ${pickedGateway}`] : []),
+        ...(somePlugins
+          ? [`--plugins ${kept.map((p) => p.slug).join(",")}`]
+          : []),
       ];
       return `${fetch} ${origin}/api/client-connections/installer ${next}\n  | node - ${flags.join(" ")}`;
     },

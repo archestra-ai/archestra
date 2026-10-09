@@ -10,11 +10,7 @@ import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
-import { DualLlmAnalysisSchema } from "./dual-llm";
-import {
-  ToolCallBlockSchema,
-  UnsafeContextBoundarySchema,
-} from "./interaction-guardrails";
+import { ToolCallBlockSchema } from "./interaction-guardrails";
 import {
   Anthropic,
   Azure,
@@ -258,8 +254,6 @@ const EncryptedChatUnavailableContentSchema = z.union([
 const extendedFields = {
   source: InteractionSourceSchema.nullable().optional(),
   authMethod: InteractionAuthMethodSchema.nullable().optional(),
-  dualLlmAnalyses: z.array(DualLlmAnalysisSchema).nullable().optional(),
-  unsafeContextBoundary: UnsafeContextBoundarySchema.nullable().optional(),
   toolCallBlock: ToolCallBlockSchema.nullable().optional(),
 };
 

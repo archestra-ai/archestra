@@ -196,9 +196,6 @@ describe("AppaPluginArchestra namespace controls", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
 
     try {

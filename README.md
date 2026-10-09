@@ -5,7 +5,7 @@
 **The all-in-one open-source enterprise AI platform.**
 
 *Built on a strong security and observability foundation: SSO and RBAC,
-sandboxed code execution, Dual-LLM and Lethal-Trifecta guardrails,
+sandboxed code execution, Lethal-Trifecta guardrails,
 OpenTelemetry traces, and Prometheus metrics — first-class, not bolted on.*
 
 [![License](https://img.shields.io/badge/License-AGPL%203.0%20%2F%20Enterprise-blue.svg)](LICENSE.md)
@@ -61,8 +61,7 @@ Point your users — or your agents, or Claude / Codex / Cursor — at one URL. 
   [connectors](https://archestra.ai/docs/knowledge/connectors) to
   your existing stack.
 - 🧩 **Mini app builder** — see [apps](https://archestra.ai/docs/workspace/apps).
-- 🛡️ **Deterministic guardrails** for [tool calls](https://archestra.ai/docs/agents/guardrails),
-  [Dual-LLM](https://archestra.ai/docs/agents/subagents/built-in#dual-llm-agent) verification, and
+- 🛡️ **Deterministic guardrails** for [tool calls](https://archestra.ai/docs/agents/guardrails) and
   [Lethal Trifecta](https://archestra.ai/docs/agents/guardrails#the-lethal-trifecta) protections.
 - 🪪 **Identity & access** with [SSO](https://archestra.ai/docs/administration/identity/sso)
   (OIDC, SAML, Okta, Entra), [RBAC with role mapping & team sync](https://archestra.ai/docs/administration/access-control),

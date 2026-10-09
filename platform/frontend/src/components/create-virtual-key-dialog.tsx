@@ -295,7 +295,7 @@ export function CreateVirtualKeyDialog({
   const goNext = () => setStep(steps[stepIndex + 1]?.id ?? step);
   const goBack = () => setStep(steps[stepIndex - 1]?.id ?? step);
 
-  // Who else can use the key is managed from its Permissions tab once it
+  // Who else can use the key is managed from its settings once it
   // exists, as for provider API keys.
   return (
     <FormDialog

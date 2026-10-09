@@ -5,8 +5,10 @@ import {
   isMetadataOnlyEdit,
   mcpRuntimeAlertSource,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionActionSchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   SERVER_NAME_PLACEHOLDER,
 } from "@archestra/shared";
@@ -49,6 +51,7 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
@@ -180,6 +183,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.",
             ),
           access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           z.array(
@@ -230,7 +235,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
-        access: request.query.access,
+        access: resourceAccessSelection(request.query),
         readGrantContext: (await userHasPermission(
           request.user.id,
           request.organizationId,

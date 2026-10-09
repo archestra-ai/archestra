@@ -24,8 +24,40 @@ export type GrantPrincipal = {
 export type ResourceAccessFilter = {
   userId: string;
   subjects: PermissionSubject[];
-  relations: ResourceAccessRelation[];
+} & ResourceAccessSelection;
+
+/**
+ * What a list's `access`, `sharedWith`, and `owner` query parameters
+ * selected, before the caller's subjects are resolved. Every part is
+ * optional; see `ResourcePermissionPolicyModel.accessRelationCondition`.
+ */
+export type ResourceAccessSelection = {
+  relations?: ResourceAccessRelation[];
+  sharedWith?: PermissionSubject[];
+  ownerIds?: string[];
 };
+
+/**
+ * The selection a list's query parameters make, or undefined when none of
+ * them filters, so a list that predates them keeps its unfiltered path.
+ */
+export function resourceAccessSelection(query: {
+  access?: ResourceAccessRelation[];
+  sharedWith?: PermissionSubject[];
+  owner?: string[];
+}): ResourceAccessSelection | undefined {
+  if (
+    !query.access?.length &&
+    !query.sharedWith?.length &&
+    !query.owner?.length
+  )
+    return undefined;
+  return {
+    relations: query.access,
+    sharedWith: query.sharedWith,
+    ownerIds: query.owner,
+  };
+}
 
 /** Resolves principals; a request passes one that resolves each caller once. */
 export type PrincipalSource = {
@@ -100,16 +132,23 @@ export default class ResourcePermissionSubjectModel {
   }
 
   /**
-   * The caller's subjects for a list's `access` filter, resolved once so a
-   * page query and its count share them. Undefined when the list is not
-   * filtered.
+   * The caller's subjects for a list's `access`, `sharedWith`, and `owner`
+   * filters, resolved once so a page query and its count share them.
+   * Undefined when none of them filters the list.
    */
   static async resolveAccessFilter(params: {
     userId: string;
     organizationId: string;
-    relations: ResourceAccessRelation[] | undefined;
+    relations?: ResourceAccessRelation[];
+    sharedWith?: PermissionSubject[];
+    ownerIds?: string[];
   }): Promise<ResourceAccessFilter | undefined> {
-    if (!params.relations) return undefined;
+    const selection = resourceAccessSelection({
+      access: params.relations,
+      sharedWith: params.sharedWith,
+      owner: params.ownerIds,
+    });
+    if (!selection) return undefined;
     const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
       userId: params.userId,
       organizationId: params.organizationId,
@@ -117,7 +156,7 @@ export default class ResourcePermissionSubjectModel {
     return {
       userId: params.userId,
       subjects: principal.subjects,
-      relations: params.relations,
+      ...selection,
     };
   }
 

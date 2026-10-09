@@ -13,7 +13,6 @@ import {
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
 } from "@/auth/agent-type-permissions";
-import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
@@ -57,7 +56,12 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
-import { resourceAccessToolArg } from "./resource-access-tool-arg";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 
 // === Constants ===
 
@@ -127,6 +131,8 @@ const ListAgentsToolArgsSchema = z
         "Optional agent name filter. Use this when the user names an agent but you still need to look up the ID.",
       ),
     access: resourceAccessToolArg({ examplePlural: "agents" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
   })
   .strict();
 
@@ -380,9 +386,9 @@ const registry = defineArchestraTools([
             // only need the caller's own personal agents, even though admins
             // see all of them in the UI. An explicit `access` decides on its
             // own, so `others` can reach those agents for an admin.
-            ...(args.access
-              ? { access: args.access }
-              : { excludeOtherPersonalAgents: true }),
+            // `shared_with` and `owner_ids` only narrow further.
+            access: toolAccessSelection(args),
+            ...(args.access ? {} : { excludeOtherPersonalAgents: true }),
           },
           context.userId,
           isAdmin,
@@ -448,10 +454,7 @@ const registry = defineArchestraTools([
             id: agent.id,
             name: agent.name,
             scope: agent.scope,
-            executionMode:
-              config.agentRuntime.enabled && agent.runtime
-                ? "runtime"
-                : "foreground",
+            executionMode: agent.runtime ? "runtime" : "foreground",
             description: agent.description,
             resolvedLlmProviderKeyName:
               agent.resolvedLlmProviderKeyName ?? null,

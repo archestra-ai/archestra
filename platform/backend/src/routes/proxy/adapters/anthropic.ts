@@ -868,7 +868,7 @@ class AnthropicStreamAdapter
           isToolCallChunk = true;
         } else {
           // input_json_delta outside a tool_use block belongs to a
-          // server-side tool and is not subject to invocation policies.
+          // server-side tool and is not subject to tool-call rulings.
           let prefixSse = "";
           if (chunk.delta.type === "text_delta") {
             this.state.text += chunk.delta.text;

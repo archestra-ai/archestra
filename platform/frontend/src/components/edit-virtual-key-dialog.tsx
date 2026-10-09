@@ -205,15 +205,6 @@ export function EditVirtualKeyDialog({
             ]),
         { id: "budget", label: "Budget", status: budgetStatus },
         { id: "connect", label: "Connect", status: "Code samples" },
-        ...(isPassthrough
-          ? []
-          : [
-              {
-                id: "permissions" as const,
-                label: "Permissions",
-                status: "Who can use it",
-              },
-            ]),
       ]}
       onActiveSectionChange={setActiveSection}
       onSubmit={() => void handleUpdate()}
@@ -254,6 +245,14 @@ export function EditVirtualKeyDialog({
           noExpirationText="Key will never expire"
           formatExpiration={formatExpiration}
         />
+        {!isPassthrough && (
+          <ResourceAccessSection
+            resource="llmVirtualKey"
+            id={virtualKey.id}
+            registerSave={registerPermissionsSave}
+            onDirtyChange={setPermissionsDirty}
+          />
+        )}
         <AdvancedLabelsSection
           ref={labelsRef}
           labels={labels}
@@ -287,17 +286,6 @@ export function EditVirtualKeyDialog({
           currentUsage={virtualKey.spendCap?.currentUsage ?? null}
         />
       </div>
-      {!isPassthrough && (
-        <div hidden={activeSection !== "permissions"}>
-          <ResourceAccessSection
-            resource="llmVirtualKey"
-            id={virtualKey.id}
-            registerSave={registerPermissionsSave}
-            onDirtyChange={setPermissionsDirty}
-            standalone
-          />
-        </div>
-      )}
       {activeSection === "connect" && (
         <VirtualKeyConnectionGuide
           keyType={virtualKey.keyType}
@@ -312,7 +300,7 @@ export function EditVirtualKeyDialog({
   );
 }
 
-type EditSection = "general" | "keys" | "budget" | "connect" | "permissions";
+type EditSection = "general" | "keys" | "budget" | "connect";
 
 function toSpendCapValue(cap: EditableVirtualKey["spendCap"]): SpendCapValue {
   return cap

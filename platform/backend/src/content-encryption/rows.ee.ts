@@ -90,8 +90,4 @@ const INTERACTION_COLUMN_CONTEXTS: Array<[string, ContentEncryptionContext]> = [
   ["processedRequest", "interactions.processed_request"],
   ["processed_request", "interactions.processed_request"],
   ["response", "interactions.response"],
-  ["dualLlmAnalyses", "interactions.dual_llm_analyses"],
-  ["dual_llm_analyses", "interactions.dual_llm_analyses"],
-  ["unsafeContextBoundary", "interactions.unsafe_context_boundary"],
-  ["unsafe_context_boundary", "interactions.unsafe_context_boundary"],
 ];

@@ -16,24 +16,11 @@ setup("authenticate as admin", async ({ page }) => {
   // Navigate to trigger cookie storage
   await page.goto(`${UI_BASE_URL}/chat`, { waitUntil: "domcontentloaded" });
 
-  // Mark onboarding as complete and set the default discovered-tool policies via API.
-  // Proxy-discovered tools have their own default invocation/result policies,
-  // so set those (block in sensitive context + mark results as sensitive).
+  // Mark onboarding as complete via API.
   await page.request.post(
     `${UI_BASE_URL}/api/organization/complete-onboarding`,
     { data: { onboardingComplete: true } },
   );
-  const securitySettingsResponse = await page.request.patch(
-    `${UI_BASE_URL}/api/organization/security-settings`,
-    {
-      data: {
-        defaultDiscoveredToolInvocationPolicy:
-          "block_when_context_is_untrusted",
-        defaultDiscoveredToolResultPolicy: "mark_as_untrusted",
-      },
-    },
-  );
-  expect(securitySettingsResponse.ok()).toBe(true);
 
   // Reload page to dismiss onboarding dialog (on fresh env it renders before API call)
   await page.reload({ waitUntil: "domcontentloaded" });

@@ -13,7 +13,6 @@ type MockAgentRaw = {
   agentType: AgentType;
 
   isDefault: boolean;
-  considerContextUntrusted: boolean;
 };
 
 export type MockAgentWithTeams = MockAgentRaw & {
@@ -57,7 +56,6 @@ export function generateMockAgents(
         teamIds: [],
 
         isDefault: false,
-        considerContextUntrusted: false,
       });
     }
   }
@@ -77,7 +75,6 @@ export function generateMockAgents(
         teamIds: [config.teamId],
 
         isDefault: false,
-        considerContextUntrusted: false,
       });
     }
   }
@@ -95,7 +92,6 @@ export function generateMockAgents(
       agentType: params.agentType,
       teamIds: [],
       isDefault: false,
-      considerContextUntrusted: false,
     });
   }
 

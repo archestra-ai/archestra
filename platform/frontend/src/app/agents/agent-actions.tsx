@@ -19,7 +19,6 @@ import {
   getAgentActionModel,
 } from "@/components/agent-pages/agent-actions-model";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import {
   type TableRowAction,
   TableRowActions,
@@ -251,9 +250,7 @@ export function AgentActions({
   ];
 
   return (
-    <ResourceTableRowActions
-      kind="agent"
-      resource={agent}
+    <TableRowActions
       permissionScope={agent.id}
       itemName={agent.name}
       actions={primaryActions}

@@ -32,6 +32,12 @@ export const ResourcePermissionsResponseSchema = z.object({
   resource: ManagedResourceSchema,
   scope: ResourcePermissionScopeSchema,
   name: z.string(),
+  /**
+   * The person who owns the object: its author, whose grant moves on an
+   * ownership transfer. Null for the `*` policy, an object with no author,
+   * and one a service account created.
+   */
+  ownerId: z.string().nullable(),
   revision: z.number().int().nonnegative(),
   grants: z.array(ResourcePermissionGrantSchema.extend({ name: z.string() })),
   inheritedGrants: z.array(

@@ -15,6 +15,7 @@ import {
   AGENT_CATALOG_TEMPLATE_NAMES,
   CatalogAgentIcon,
 } from "@/components/agent-pages/agent-catalog";
+import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { AgentSelector } from "@/components/agent-selector";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { ChannelIcon } from "@/components/channel-icon";
@@ -46,7 +47,7 @@ import {
   APPS_HACKATHON_SETTING_ANCHOR,
   useAppsHackathonOffered,
 } from "@/lib/app-session-recording/apps-hackathon";
-import { type FeaturesResponse, useFeature } from "@/lib/config/config.query";
+import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { useLlmModels } from "@/lib/llm-models.query";
@@ -56,6 +57,7 @@ import {
   useUpdateAgentSettings,
   useUpdateSecuritySettings,
 } from "@/lib/organization.query";
+import { cn } from "@/lib/utils/tailwind";
 import {
   type AgentSettingsState,
   buildSavePayload,
@@ -100,6 +102,7 @@ export default function AgentSettingsPage() {
   // lingering as a switch that no longer changes anything.
   const hackathonOffered = useAppsHackathonOffered();
   const runtimeBackend = useFeature("agentRuntimeBackend");
+  const runtimeEnabled = useFeature("agentRuntime");
 
   const {
     data: allModels,
@@ -451,21 +454,6 @@ export default function AgentSettingsPage() {
         onCancel={handleCancel}
       />
       <IntegrationAvailabilitySection
-        id="popular-agents"
-        catalogKey="popularAgentOverrides"
-        catalog={PopularAgentIdSchema.options}
-        title="Popular agents"
-        description="Choose which templates appear on Create Agent and in the Runtime image choices. Removing a template preserves existing agents and custom runtime configuration."
-        options={PopularAgentIdSchema.options.map((id) => ({
-          value: id,
-          label: AGENT_CATALOG_TEMPLATE_NAMES[id],
-          icon: <CatalogAgentIcon id={id} size={18} />,
-        }))}
-        placeholder="Select popular agents…"
-        emptyMessage="No agents found."
-        savedMessage="Popular agents updated"
-      />
-      <IntegrationAvailabilitySection
         id="available-messaging-channels"
         catalogKey="messagingChannelOverrides"
         catalog={MESSAGING_CHANNEL_LABELS_KEYS}
@@ -480,20 +468,41 @@ export default function AgentSettingsPage() {
         emptyMessage="No channels found."
         savedMessage="Available messaging channels updated"
       />
-      {runtimeBackend && (
-        <RuntimeBackendSection runtimeBackend={runtimeBackend} />
-      )}
+      <section
+        aria-labelledby="agent-runtime-heading"
+        className="space-y-3 border-t pt-6"
+      >
+        <h2 id="agent-runtime-heading" className="text-base font-semibold">
+          Agent Runtime
+        </h2>
+        {runtimeEnabled === false && <AgentRuntimeUnavailableNotice />}
+        <div
+          className={cn("space-y-6", runtimeEnabled !== true && "opacity-50")}
+        >
+          <IntegrationAvailabilitySection
+            disabled={runtimeEnabled !== true}
+            id="popular-agents"
+            catalogKey="popularAgentOverrides"
+            catalog={PopularAgentIdSchema.options}
+            title="Popular agents"
+            description="Choose which templates appear on Create Agent and in the Runtime image choices. Removing a template preserves existing agents and custom runtime configuration."
+            options={PopularAgentIdSchema.options.map((id) => ({
+              value: id,
+              label: AGENT_CATALOG_TEMPLATE_NAMES[id],
+              icon: <CatalogAgentIcon id={id} size={18} />,
+            }))}
+            placeholder="Select popular agents…"
+            emptyMessage="No agents found."
+            savedMessage="Popular agents updated"
+          />
+          {runtimeBackend && <RuntimeBackendSection />}
+        </div>
+      </section>
     </SettingsSectionStack>
   );
 }
 
-type RuntimeBackend = NonNullable<FeaturesResponse["agentRuntimeBackend"]>;
-
-function RuntimeBackendSection({
-  runtimeBackend,
-}: {
-  runtimeBackend: RuntimeBackend;
-}) {
+function RuntimeBackendSection() {
   return (
     <SettingsBlock
       id="runtime-backend"
@@ -520,11 +529,6 @@ function RuntimeBackendSection({
           <Plus className="size-4" />
           <span>Add backend</span>
         </ButtonWithTooltip>
-      }
-      notice={
-        !runtimeBackend.available
-          ? "The feature is enabled, but the Kubernetes backend is unreachable. Check the orchestrator configuration."
-          : undefined
       }
     >
       <div className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center">

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ALL_INCLUDED,
+  DEFAULT_PICKS,
   readConnectChoices,
+  readConnectPicks,
   saveConnectChoices,
 } from "./connect-choices";
 
@@ -22,6 +24,18 @@ describe("connect choices", () => {
       proxy: false,
     });
     expect(readConnectChoices("codex")).toEqual(ALL_INCLUDED);
+  });
+
+  it("reads back the gateway and plugins picked, per client", () => {
+    saveConnectChoices("claude-code", ALL_INCLUDED, {
+      gatewayId: "gw-1",
+      pluginIds: ["p-1"],
+    });
+    expect(readConnectPicks("claude-code")).toEqual({
+      gatewayId: "gw-1",
+      pluginIds: ["p-1"],
+    });
+    expect(readConnectPicks("codex")).toEqual(DEFAULT_PICKS);
   });
 
   it("ignores choices from an earlier, expired run", () => {

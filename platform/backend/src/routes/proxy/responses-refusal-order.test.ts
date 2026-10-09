@@ -17,36 +17,13 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { afterEach, beforeEach, vi } from "vitest";
-import type { PolicyBlockResult } from "@/guardrails/tool-invocation";
+import { afterEach, beforeEach, onTestFinished, vi } from "vitest";
 import { ModelModel } from "@/models";
+import {
+  type LlmProxyToolCallRefusal,
+  registerLlmProxyPlugin,
+} from "@/proxy/plugins/registry";
 import { describe, expect, test } from "@/test";
-
-const mockEvaluatePolicies = vi.fn<(...args: unknown[]) => Promise<unknown>>();
-vi.mock("@/guardrails/tool-invocation", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/guardrails/tool-invocation")>();
-  return {
-    ...original,
-    evaluatePolicies: (...args: unknown[]) => mockEvaluatePolicies(...args),
-  };
-});
-
-vi.mock("@/guardrails/trusted-data", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/guardrails/trusted-data")>();
-  return {
-    ...original,
-    evaluateIfContextIsTrusted: async () => ({
-      toolResultUpdates: {},
-      contextIsTrusted: true,
-      usedDualLlm: false,
-      dualLlmAnalyses: [],
-      unsafeContextBoundary: undefined,
-    }),
-  };
-});
-
 import { openAiResponsesAdapterFactory } from "./adapters/openai-responses";
 import openAiProxyRoutes from "./routes/openai";
 
@@ -132,14 +109,23 @@ describe("Responses refusal terminal ordering", () => {
     makeAgent,
   }) => {
     const agent = await makeAgent();
-    mockEvaluatePolicies.mockResolvedValue({
-      refusalMessage: "Tool get_weather is not enabled here",
-      contentMessage: "Tool get_weather is not enabled here",
-      reason: "Tool invocation blocked: disabled for conversation",
-      blockedToolName: "get_weather",
-      toolInput: {},
-      allToolCallNames: ["get_weather"],
-    } satisfies PolicyBlockResult);
+    const unregister = registerLlmProxyPlugin({
+      id: `test-refusal-${crypto.randomUUID()}`,
+      async onToolCalls() {
+        return {
+          decision: "refuse",
+          refusal: {
+            refusalMessage: "Tool get_weather is not enabled here",
+            contentMessage: "Tool get_weather is not enabled here",
+            reason: "Tool invocation blocked: disabled for conversation",
+            blockedToolName: "get_weather",
+            toolInput: {},
+            allToolCallNames: ["get_weather"],
+          } satisfies LlmProxyToolCallRefusal,
+        };
+      },
+    });
+    onTestFinished(unregister);
 
     const response = await app.inject({
       method: "POST",
@@ -157,6 +143,7 @@ describe("Responses refusal terminal ordering", () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("Tool get_weather is not enabled here");
 
     // Reconstruct the way a Responses client does: last `response.completed`
     // wins, and that snapshot is what the agentic loop dispatches from.

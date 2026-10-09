@@ -31,7 +31,10 @@ import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
-import { ResourceAccessFilter } from "@/components/resource-access-filter";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -72,7 +75,6 @@ import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
-  countInternalMcpCatalog,
   useInternalMcpCatalog,
   useInternalMcpCatalogAccessIds,
   useMcpCatalogLabelKeys,
@@ -167,11 +169,14 @@ export function InternalMCPCatalog({
   } = useInternalMcpCatalog({
     initialData,
   });
-  const { data: accessIds } = useInternalMcpCatalogAccessIds(
-    ownershipFilters.access.length < RESOURCE_ACCESS_RELATIONS.length
-      ? ownershipFilters.access
-      : undefined,
-  );
+  const { data: accessIds } = useInternalMcpCatalogAccessIds({
+    access:
+      ownershipFilters.access.length < RESOURCE_ACCESS_RELATIONS.length
+        ? ownershipFilters.access
+        : undefined,
+    sharedWith: ownershipFilters.sharedWith,
+    owner: ownershipFilters.owner,
+  });
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
   });
@@ -1121,7 +1126,7 @@ export function InternalMCPCatalog({
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
-      "access",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
     ]) {
       params.delete(group);
     }
@@ -1183,7 +1188,6 @@ export function InternalMCPCatalog({
             <ResourceAccessFilter
               resource="mcpRegistry"
               noun="MCP servers"
-              countItems={countInternalMcpCatalog}
               navigate={replaceRegistryListUrl}
             />
             <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />

@@ -50,13 +50,7 @@ import {
 } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -77,7 +71,10 @@ import type { ConnectClient } from "./clients";
 import {
   ALL_INCLUDED,
   type ConnectChoices,
+  type ConnectPicks,
+  DEFAULT_PICKS,
   readConnectChoices,
+  readConnectPicks,
   saveConnectChoices,
 } from "./connect-choices";
 import {
@@ -107,6 +104,7 @@ import {
   LastConnectedMark,
   useConnectedAgents,
 } from "./connected-agents";
+import { type IncludeChange, IncludeDialog } from "./include-dialog";
 import {
   readsPrompts,
   type SetupMode,
@@ -123,7 +121,7 @@ const ConnectCommandPanel = dynamic(
   { ssr: false },
 );
 
-type DialogKind = "servers" | "skills" | "plugins" | "cursor";
+type DialogKind = "servers" | "skills" | "plugins" | "cursor" | "include";
 
 const MOTION_CSS = `
 @keyframes connect-icon {
@@ -139,7 +137,9 @@ const MOTION_CSS = `
 
 export function ConnectPage() {
   usePageTitle("Connect");
-  const data = useConnectPageData();
+  // A gateway and plugins picked over the defaults, per agent, kept next to
+  // the switches below.
+  const [picks, setPicks] = useState<ConnectPicks>(DEFAULT_PICKS);
   const connected = useConnectedAgents();
   // Same access as the Agent connections log it links to.
   const { data: canSeeStatistics } = useHasPermissions(
@@ -150,6 +150,7 @@ export function ConnectPage() {
   const searchParams = useSearchParams();
   const updateUrlParams = useUpdateUrlParams();
   const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
+  const data = useConnectPageData(pickedId, picks.gatewayId);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   // What the user leaves out, per agent. The copied command (or prompt, for
@@ -173,6 +174,7 @@ export function ConnectPage() {
     // left out (Choose what to include).
     if (!clientId) return;
     setChoices({ ...readConnectChoices(clientId), tools: true });
+    setPicks(readConnectPicks(clientId));
   }, [clientId]);
 
   if (data.loading || !client) return <LoadingState />;
@@ -180,14 +182,18 @@ export function ConnectPage() {
   const parts = data.partsFor(client);
   const routed = parts.proxy && choices.proxy;
   const servers = choices.tools ? data.servers : [];
-  const tools = servers.reduce((n, s) => n + s.toolCount, 0);
+  const tools = choices.tools ? data.totalTools : 0;
   const skills = data.skillsEnabled ? skillsSorted : [];
-  const plugins = parts.plugins ? data.pluginsFor(client) : [];
+  const plugins = parts.plugins
+    ? data.keptPlugins(client, picks.pluginIds)
+    : [];
   const prompt = data.connectPrompt(client, choices);
-  const setChoice = (part: keyof ConnectChoices, value: boolean) => {
-    const next = { ...choices, [part]: value };
-    setChoices(next);
-    saveConnectChoices(client.id, next);
+  const update = (change: IncludeChange) => {
+    const nextChoices = { ...choices, ...change.choices };
+    const nextPicks = { ...picks, ...change.picks };
+    setChoices(nextChoices);
+    setPicks(nextPicks);
+    saveConnectChoices(client.id, nextChoices, nextPicks);
   };
 
   const setup = setupModeFor(client);
@@ -276,10 +282,11 @@ export function ConnectPage() {
             skills={skills}
             skillsOff={parts.skills && !choices.skills}
             plugins={plugins}
-            pluginsOff={parts.plugins && !choices.plugins}
+            pluginsOff={
+              parts.plugins && (!choices.plugins || plugins.length === 0)
+            }
             routed={routed}
             choices={choices}
-            onChoice={setChoice}
             onOpen={(d, item) => {
               setFocus(item ?? null);
               setDialog(d);
@@ -293,6 +300,7 @@ export function ConnectPage() {
             setup={setup}
             step={step}
             choices={choices}
+            picks={picks}
             prompt={prompt}
             onCursorNote={() => setDialog("cursor")}
           />
@@ -311,6 +319,15 @@ export function ConnectPage() {
         client={client}
         skills={skillsSorted}
         choices={choices}
+      />
+      <IncludeDialog
+        open={dialog === "include"}
+        onOpenChange={(v) => !v && setDialog(null)}
+        data={data}
+        client={client}
+        choices={choices}
+        picks={picks}
+        onChange={update}
       />
       <InfoDialog
         open={dialog === "cursor"}
@@ -595,6 +612,7 @@ function ConnectArea({
   setup,
   step,
   choices,
+  picks,
   prompt,
   onCursorNote,
 }: {
@@ -603,6 +621,7 @@ function ConnectArea({
   setup: SetupMode;
   step: string;
   choices: ConnectChoices;
+  picks: ConnectPicks;
   /** The generic prompt; null when every part is left out. */
   prompt: string | null;
   onCursorNote: () => void;
@@ -616,13 +635,21 @@ function ConnectArea({
   const script = setup === "script";
   const download = setup === "download";
   const command = script
-    ? data.installerCommand(client, choices, windows)
+    ? data.installerCommand(client, choices, windows, picks)
     : null;
   // What the box shows and the button copies.
   const text = script ? command : prompt;
+  const keptPlugins = data.keptPlugins(client, picks.pluginIds);
+  // Keeping none of the plugins is leaving plugins out.
   const leftOutParts = (
     Object.keys(choices) as (keyof ConnectChoices)[]
-  ).filter((part) => !choices[part]);
+  ).filter(
+    (part) =>
+      !choices[part] ||
+      (part === "plugins" &&
+        data.partsFor(client).plugins &&
+        keptPlugins.length === 0),
+  );
 
   // After copying: the status card under the band. A changed pick or choice
   // sends it back to idle, except once connected.
@@ -632,6 +659,8 @@ function ConnectArea({
     manual,
     download,
     ...leftOutParts,
+    data.gateway?.id,
+    ...keptPlugins.map((p) => p.id),
   ].join();
   const [run, setRun] = useState<AfterConnectRun>({
     phase: "idle",
@@ -661,25 +690,28 @@ function ConnectArea({
       </div>
 
       {download ? (
-        <>
-          <ConnectCommandPanel
-            // Remount on a changed selection; the panel reads it once.
-            key={leftOutParts.join(",")}
-            variant="download"
-            client={client}
-            exclude={leftOutParts}
-            mcpGateways={data.gateway ? [data.gateway] : null}
-            mcpGatewayId={data.gateway?.id ?? null}
-            onMcpGatewaySelect={() => {}}
-            llmProxyId={data.llmProxyId}
-            shownProviders={data.shownProviders}
-            urlProvider={null}
-            onProviderSelect={() => {}}
-            baseUrl={data.baseUrl}
-            skillsEnabled={data.skillsEnabled}
-            pluginsEnabled={data.pluginsEnabled}
-          />
-        </>
+        <ConnectCommandPanel
+          // Remount on a changed selection; the panel reads it once.
+          key={setupKey}
+          variant="download"
+          client={client}
+          exclude={leftOutParts}
+          pluginSlugs={
+            picks.pluginIds === null
+              ? undefined
+              : keptPlugins.map((p) => p.slug)
+          }
+          mcpGateways={data.gateway ? [data.gateway] : null}
+          mcpGatewayId={data.gateway?.id ?? null}
+          onMcpGatewaySelect={() => {}}
+          llmProxyId={data.llmProxyId}
+          shownProviders={data.shownProviders}
+          urlProvider={null}
+          onProviderSelect={() => {}}
+          baseUrl={data.baseUrl}
+          skillsEnabled={data.skillsEnabled}
+          pluginsEnabled={data.pluginsEnabled}
+        />
       ) : manual ? (
         // The steps start right here, in the band.
         <div
@@ -1036,98 +1068,6 @@ function guardrailsStatus(
 
 // === Profile card ===
 
-/** The card's one place to leave parts out; the command carries the result. */
-function IncludeMenu({
-  skills,
-  plugins,
-  routing,
-  choices,
-  onChoice,
-}: {
-  skills: boolean;
-  plugins: boolean;
-  routing: boolean;
-  choices: ConnectChoices;
-  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
-}) {
-  const rows: {
-    id: string;
-    title: string;
-    sub: string;
-    part?: keyof ConnectChoices;
-  }[] = [
-    { id: "tools", title: "Tools", sub: "Always included" },
-    ...(skills
-      ? [
-          {
-            id: "skills",
-            title: "Skills",
-            sub: "Loaded when a task needs one",
-            part: "skills" as const,
-          },
-        ]
-      : []),
-    ...(plugins
-      ? [
-          {
-            id: "plugins",
-            title: "Plugins",
-            sub: "The plugins your org approved for this agent",
-            part: "plugins" as const,
-          },
-        ]
-      : []),
-    ...(routing
-      ? [
-          {
-            id: "proxy",
-            title: "LLM proxy",
-            sub: "Model requests go through the LLM proxy",
-            part: "proxy" as const,
-          },
-        ]
-      : []),
-  ];
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="-mr-1.5 shrink-0 text-muted-foreground"
-        >
-          <SlidersHorizontal />
-          Choose what to include
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-1.5">
-        {rows.map((r) => (
-          <div
-            key={r.id}
-            className="flex items-center gap-3 rounded-md px-2.5 py-2"
-          >
-            <label
-              htmlFor={`include-${r.id}`}
-              className={cn("min-w-0 flex-1", r.part && "cursor-pointer")}
-            >
-              <span className="block text-sm font-semibold">{r.title}</span>
-              <span className="block text-xs text-muted-foreground">
-                {r.sub}
-              </span>
-            </label>
-            <Switch
-              id={`include-${r.id}`}
-              checked={r.part ? choices[r.part] : true}
-              disabled={!r.part}
-              onCheckedChange={(v) => r.part && onChoice(r.part, v)}
-            />
-          </div>
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 /** "See all 5 skills", or "See the skill" when there's one. */
 function seeAllLabel(count: number, noun: string) {
   return count === 1
@@ -1173,7 +1113,6 @@ function ProfileCard({
   pluginsOff,
   routed,
   choices,
-  onChoice,
   onOpen,
 }: {
   data: ConnectPageData;
@@ -1187,9 +1126,8 @@ function ProfileCard({
   plugins: ConnectPlugin[];
   pluginsOff: boolean;
   servers: ConnectServer[];
-  tools: number;
+  tools: number | null;
   choices: ConnectChoices;
-  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
   /** Opens a dialog; for servers and skills, on one row's item. */
   onOpen: (d: DialogKind, item?: string) => void;
 }) {
@@ -1278,14 +1216,19 @@ function ProfileCard({
           <p className="text-sm leading-snug text-pretty text-foreground">
             {cardIntro(data, servers, included)}
           </p>
-          {(skillsOn || pluginsOn || proxyOn) && (
-            <IncludeMenu
-              skills={skillsOn && skills.length > 0}
-              plugins={pluginsOn}
-              routing={proxyOn}
-              choices={choices}
-              onChoice={onChoice}
-            />
+          {(data.gateways.length > 1 ||
+            data.partsFor(client).skills ||
+            pluginsOn ||
+            proxyOn) && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="-mr-1.5 shrink-0 text-muted-foreground"
+              onClick={() => onOpen("include")}
+            >
+              <SlidersHorizontal />
+              Choose what to include
+            </Button>
           )}
         </div>
 
@@ -1303,27 +1246,34 @@ function ProfileCard({
           )}
         >
           <li className="relative min-w-0">
-            {data.servers.length === 0 ? (
+            {data.servers.length === 0 && tools === 0 ? (
               <ListBlock
                 icon={<Wrench />}
                 title="MCP servers"
-                sub="none yet"
+                sub="0 tools"
                 muted
-                empty="Your admin hasn't added any MCP servers yet. Their tools show up here."
+                empty="No tools are available to your account through this gateway."
               />
             ) : (
               <ListBlock
                 icon={<Wrench />}
                 title={`${fmt(servers.length)} MCP ${plural(servers.length, "server")}`}
-                // Many tools reads as a cost; on demand says it isn't.
-                sub={`${fmt(tools)} ${plural(tools, "tool")}${data.progressive ? ", loaded on demand" : ""}`}
+                sub={
+                  tools === null
+                    ? data.toolPreviewError
+                      ? "Tool counts unavailable"
+                      : "Loading tool counts…"
+                    : `${fmt(tools)} ${plural(tools, "tool")}${data.progressive ? " loaded, more on demand" : ""}`
+                }
                 // The context cost sits on the header, across from the count.
                 aside={
-                  tools > 0 && data.toolTokens?.total ? (
+                  tools !== null && tools > 0 && data.toolTokens ? (
                     <ToolLoadingNote
                       progressive={data.progressive}
+                      clientId={client.id}
                       tools={tools}
                       tokens={data.toolTokens.total}
+                      count={data.toolTokens.count}
                     />
                   ) : undefined
                 }
@@ -1585,33 +1535,41 @@ function ListRow({
 
 /** What the included tools cost in context, beside the servers' header. */
 function ToolLoadingNote({
+  clientId,
   progressive,
   tools,
   tokens,
+  count,
 }: {
+  clientId: string;
   progressive: boolean;
   tools: number;
-  /** Estimated tokens of the tool list the agent starts with. */
+  /** Observed or estimated tokens of the tool list the agent starts with. */
   tokens: number | null;
+  count: NonNullable<ConnectPageData["toolTokens"]>["count"];
 }) {
-  // Just the estimate once it's in ("~9K tokens"); the tip says how tools load.
-  const label = tokens
-    ? approxTokens(tokens)
-    : progressive
-      ? "Tools load on demand"
-      : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts`;
+  // The rounded count stays compact; the tooltip identifies its source.
+  const label =
+    tokens !== null
+      ? approxTokens(tokens)
+      : progressive
+        ? "Tools load on demand"
+        : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts`;
   return (
     <span className="inline-flex items-center gap-1 text-muted-foreground">
       <Gauge className="size-3.5 shrink-0" />
       {label}
       <InfoTip label="How tools load">
         {progressive
-          ? "Your agent starts with a small fixed set of tools and finds the rest when a task needs them. Adding servers doesn't grow it."
+          ? `Your agent starts with ${fmt(tools)} ${plural(tools, "tool")} and finds more when a task needs them.`
           : `All ${fmt(tools)} ${plural(tools, "tool")} load at the start of each session. More tools take more of your agent's working memory.`}
-        <span hidden={!tokens}>
+        <span hidden={tokens === null}>
           {" "}
-          The token count is an estimate; your agent's model may count a little
-          differently.
+          {count?.source === "claude-provider"
+            ? `Last matching provider count for ${count.model}, observed ${new Date(count.observedAt).toLocaleString()}. Other connections and tools loaded during your session can change the count.`
+            : clientId === "claude-code"
+              ? "Uses Claude Code's local fallback estimate until a matching provider count passes through the LLM proxy. Its model, tool search settings, and other connections can change the count."
+              : "Estimated from this gateway's tool definitions. Your agent's formatting, model, and other connections can change the count."}
         </span>
       </InfoTip>
     </span>

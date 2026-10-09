@@ -10,21 +10,44 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONNECT_CLIENTS } from "./clients";
-import { ALL_INCLUDED, type ConnectChoices } from "./connect-choices";
+import {
+  ALL_INCLUDED,
+  type ConnectChoices,
+  type ConnectPicks,
+} from "./connect-choices";
 import { useConnectPageData } from "./connect-page-data";
 
-// The command only depends on the page origin, the app and the choices; the
-// data hooks just need to render with nothing loaded.
+// The command only depends on the page origin, the app, the choices and
+// picks; the data hooks render with nothing loaded unless a test sets a
+// gateway or plugins.
+const mocks = vi.hoisted(() => ({
+  gateway: undefined as
+    | { id: string; slug: string; name: string; agentType: "mcp_gateway" }
+    | undefined,
+  plugins: undefined as
+    | {
+        id: string;
+        pluginSlug: string;
+        displayName: string;
+        description: null;
+        supportedPlatforms: string[];
+      }[]
+    | undefined,
+}));
 vi.mock("@/lib/agent.query", () => ({
-  useDefaultMcpGateway: () => ({ data: undefined, isLoading: false }),
+  useDefaultMcpGateway: () => ({
+    data: mocks.gateway ? { id: "gw-default" } : undefined,
+    isLoading: false,
+  }),
+  useProfiles: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),
 }));
-vi.mock("@/lib/chat/chat.query", () => ({
-  useChatProfileMcpTools: () => ({ data: undefined }),
+vi.mock("@/lib/mcp/gateway-tool-preview.query", () => ({
+  useGatewayToolPreview: () => ({ data: undefined }),
 }));
 vi.mock("@/lib/config/config.query", () => ({
   useConfig: () => ({ data: undefined }),
@@ -50,15 +73,15 @@ vi.mock("@/lib/organization.query", () => {
   };
 });
 vi.mock("@/lib/plugins/plugin.query", () => ({
-  isDeliverablePlugin: () => false,
-  usePlugins: () => ({ data: undefined }),
+  isDeliverablePlugin: () => true,
+  usePlugins: () => ({ data: mocks.plugins }),
 }));
 vi.mock("@/lib/skills/skill.query", () => ({
   useAllSkills: () => ({ data: undefined }),
 }));
 vi.mock("./use-gateway-servers", () => ({
   useGatewayServers: () => ({
-    gateway: undefined,
+    gateway: mocks.gateway,
     profileQuery: { isPending: false },
     accessAll: false,
     servers: [],
@@ -69,6 +92,11 @@ const execFileAsync = promisify(execFile);
 const INSTALLER_PATH = "/api/client-connections/installer";
 
 describe("Connect page installer command", () => {
+  afterEach(() => {
+    mocks.gateway = undefined;
+    mocks.plugins = undefined;
+  });
+
   it.each(
     INSTALLER_CLIENT_IDS,
   )("runs the %s command in a POSIX shell with the page's flags", async (clientId) => {
@@ -97,6 +125,46 @@ describe("Connect page installer command", () => {
     expect(leftovers).toEqual([]);
   });
 
+  it("names a picked gateway and the plugins kept, by slug", () => {
+    const origin = "http://127.0.0.1:9000";
+    mocks.gateway = {
+      id: "gw-coding",
+      slug: "coding-gateway",
+      name: "Coding",
+      agentType: "mcp_gateway",
+    };
+    mocks.plugins = ["openappa", "pm", "style"].map((slug) => ({
+      id: `id-${slug}`,
+      pluginSlug: slug,
+      displayName: slug,
+      description: null,
+      supportedPlatforms: ["posix", "windows"],
+    }));
+    const picks = (pluginIds: string[] | null): ConnectPicks => ({
+      gatewayId: "gw-coding",
+      pluginIds,
+    });
+    const command = (p: ConnectPicks, choices = ALL_INCLUDED) =>
+      pageInstallerCommand(origin, "claude-code", choices, false, p).split(
+        "| node - ",
+      )[1];
+    expect(command(picks(["id-openappa", "id-pm"]))).toBe(
+      `--url ${origin} --client claude-code --gateway coding-gateway --plugins openappa,pm`,
+    );
+    // Every plugin kept is the default: no flag.
+    expect(command(picks(null))).toBe(
+      `--url ${origin} --client claude-code --gateway coding-gateway`,
+    );
+    // None kept is plugins left out.
+    expect(command(picks([]))).toBe(
+      `--url ${origin} --client claude-code --exclude plugins --gateway coding-gateway`,
+    );
+    // Tools left out: no gateway to name.
+    expect(command(picks(["id-pm"]), { ...ALL_INCLUDED, tools: false })).toBe(
+      `--url ${origin} --client claude-code --exclude tools --plugins pm`,
+    );
+  });
+
   it("builds the PowerShell twin with a backtick continuation", () => {
     const origin = "http://127.0.0.1:9000";
     expect(
@@ -119,6 +187,7 @@ function pageInstallerCommand(
   clientId: string,
   choices: ConnectChoices,
   windows: boolean,
+  picks?: ConnectPicks,
 ): string {
   const client = CONNECT_CLIENTS.find((c) => c.id === clientId);
   if (!client) throw new Error(`Missing client: ${clientId}`);
@@ -126,7 +195,7 @@ function pageInstallerCommand(
   try {
     const { result, unmount } = renderHook(() => useConnectPageData());
     try {
-      return result.current.installerCommand(client, choices, windows);
+      return result.current.installerCommand(client, choices, windows, picks);
     } finally {
       unmount();
     }

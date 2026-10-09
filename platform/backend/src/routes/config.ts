@@ -92,28 +92,25 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               sandbox: z.boolean(),
               /**
                * Delegated Agent tasks in dedicated runtimes.
-               * True only when the feature is switched on AND the Kubernetes
-               * runtime is configured — the UI must not offer to start a
-               * runtime nothing can schedule.
+               * True only when the cluster serves the Agent Sandbox API — the
+               * UI must not offer to start a runtime nothing can schedule.
                */
               agentRuntime: z.boolean(),
               /** Maintained catalog image per template, as this deployment pulls it. */
               agentRuntimeCatalogImages: z.record(z.string(), z.string()),
               /** Operator-owned defaults and health for the runtime backend. */
-              agentRuntimeBackend: z
-                .object({
-                  name: z.literal("kubernetes"),
-                  available: z.boolean(),
-                  defaultTtlHours: z.number(),
-                  defaultIdleTimeoutMinutes: z.number(),
-                  allowPrivileged: z.boolean(),
-                  resources: z.object({
-                    cpuRequest: z.string(),
-                    memoryRequest: z.string(),
-                    memoryLimit: z.string(),
-                  }),
-                })
-                .nullable(),
+              agentRuntimeBackend: z.object({
+                name: z.literal("kubernetes"),
+                available: z.boolean(),
+                defaultTtlHours: z.number(),
+                defaultIdleTimeoutMinutes: z.number(),
+                allowPrivileged: z.boolean(),
+                resources: z.object({
+                  cpuRequest: z.string(),
+                  memoryRequest: z.string(),
+                  memoryLimit: z.string(),
+                }),
+              }),
               plugins: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.
@@ -247,17 +244,15 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sandbox: skillSandboxRuntimeService.isEnabled,
           agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),
           agentRuntimeCatalogImages: config.agentRuntime.catalogImages,
-          agentRuntimeBackend: config.agentRuntime.enabled
-            ? {
-                name: "kubernetes" as const,
-                available: isAnyAgentRuntimeBackendDriverEnabled(),
-                defaultTtlHours: config.agentRuntime.defaultTtlHours,
-                defaultIdleTimeoutMinutes:
-                  config.agentRuntime.defaultIdleTimeoutMinutes,
-                allowPrivileged: config.agentRuntime.allowPrivileged,
-                resources: config.agentRuntime.resources,
-              }
-            : null,
+          agentRuntimeBackend: {
+            name: "kubernetes" as const,
+            available: isAnyAgentRuntimeBackendDriverEnabled(),
+            defaultTtlHours: config.agentRuntime.defaultTtlHours,
+            defaultIdleTimeoutMinutes:
+              config.agentRuntime.defaultIdleTimeoutMinutes,
+            allowPrivileged: config.agentRuntime.allowPrivileged,
+            resources: config.agentRuntime.resources,
+          },
           plugins: config.plugins.enabled,
           sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
           chatAttachmentStorageBytesLimit:

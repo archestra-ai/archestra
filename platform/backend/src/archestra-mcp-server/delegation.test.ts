@@ -117,8 +117,6 @@ describe("delegation tool execution", () => {
     makeAgent,
     makeAgentTool,
   }) => {
-    const previous = config.agentRuntime.enabled;
-    config.agentRuntime.enabled = true;
     const targetAgent = await makeAgent({
       organizationId: testAgent.organizationId,
       name: "Background Worker",
@@ -152,31 +150,25 @@ describe("delegation tool execution", () => {
       chatOpsThreadId: "thread-1",
     };
 
-    try {
-      const result = await executeArchestraTool(
-        `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
-        { message: "Implement the change." },
-        context,
-      );
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+      { message: "Implement the change." },
+      context,
+    );
 
-      expect(result.isError).toBe(false);
-      expect(mockStartDelegatedTask).toHaveBeenCalledWith({
-        agentId: targetAgent.id,
-        message: "Implement the change.",
-        context,
-      });
-      expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
-    } finally {
-      config.agentRuntime.enabled = previous;
-    }
+    expect(result.isError).toBe(false);
+    expect(mockStartDelegatedTask).toHaveBeenCalledWith({
+      agentId: targetAgent.id,
+      message: "Implement the change.",
+      context,
+    });
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
 
   test("lets a foreground router hand a nested delegation to an Agent Runtime worker", async ({
     makeAgent,
     makeAgentTool,
   }) => {
-    const previous = config.agentRuntime.enabled;
-    config.agentRuntime.enabled = true;
     const router = await makeAgent({
       organizationId: testAgent.organizationId,
       name: "Coding Task Router",
@@ -238,43 +230,39 @@ describe("delegation tool execution", () => {
       };
     });
 
-    try {
-      const result = await executeArchestraTool(
-        `${AGENT_TOOL_PREFIX}${slugify(router.name)}`,
-        { message: "Ask which coding worker to use." },
-        rootContext,
-      );
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(router.name)}`,
+      { message: "Ask which coding worker to use." },
+      rootContext,
+    );
 
-      expect(result.isError).toBe(false);
-      expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          agentId: router.id,
-          parentDelegationChain: testAgent.id,
-          userId: rootContext.userId,
-          sessionId: rootContext.sessionId,
-          chatOpsBindingId: rootContext.chatOpsBindingId,
-          chatOpsThreadId: rootContext.chatOpsThreadId,
-        }),
-      );
-      expect(mockStartDelegatedTask).toHaveBeenCalledWith({
-        agentId: worker.id,
-        message: "Run the complete original task.",
-        context: expect.objectContaining({
-          agentId: router.id,
-          delegationChain: `${testAgent.id}:${router.id}`,
-          userId: rootContext.userId,
-          sessionId: rootContext.sessionId,
-          chatOpsBindingId: rootContext.chatOpsBindingId,
-          chatOpsThreadId: rootContext.chatOpsThreadId,
-        }),
-      });
-    } finally {
-      config.agentRuntime.enabled = previous;
-    }
+    expect(result.isError).toBe(false);
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: router.id,
+        parentDelegationChain: testAgent.id,
+        userId: rootContext.userId,
+        sessionId: rootContext.sessionId,
+        chatOpsBindingId: rootContext.chatOpsBindingId,
+        chatOpsThreadId: rootContext.chatOpsThreadId,
+      }),
+    );
+    expect(mockStartDelegatedTask).toHaveBeenCalledWith({
+      agentId: worker.id,
+      message: "Run the complete original task.",
+      context: expect.objectContaining({
+        agentId: router.id,
+        delegationChain: `${testAgent.id}:${router.id}`,
+        userId: rootContext.userId,
+        sessionId: rootContext.sessionId,
+        chatOpsBindingId: rootContext.chatOpsBindingId,
+        chatOpsThreadId: rootContext.chatOpsThreadId,
+      }),
+    });
   });
 
   for (const enabled of [true, false]) {
-    test(`executes delegation and propagates trust with APPA enabled=${enabled}`, async ({
+    test(`executes delegation with APPA enabled=${enabled}`, async ({
       makeAgent,
       makeAgentTool,
     }) => {
@@ -298,10 +286,7 @@ describe("delegation tool execution", () => {
       const result = await executeArchestraTool(
         `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
         { message: "Review the latest findings." },
-        {
-          ...mockContext,
-          contextIsTrusted: false,
-        },
+        mockContext,
       );
 
       expect(result.isError).toBe(false);
@@ -315,7 +300,6 @@ describe("delegation tool execution", () => {
           organizationId: mockContext.organizationId,
           userId: mockContext.userId,
           parentDelegationChain: testAgent.id,
-          parentContextIsTrusted: false,
         }),
       );
     });
@@ -463,7 +447,6 @@ describe("delegation tool execution", () => {
         organizationId: mockContext.organizationId,
         userId: mockContext.userId,
         parentDelegationChain: testAgent.id,
-        parentContextIsTrusted: undefined,
       }),
     );
   });

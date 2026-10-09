@@ -8,7 +8,6 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
-  type ResourceAccessRelation,
   type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -93,6 +92,7 @@ import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
   type PrincipalSource,
+  type ResourceAccessSelection,
 } from "./resource-permission-subject";
 import ToolModel from "./tool";
 
@@ -108,8 +108,11 @@ type AgentListFilters = {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonalAgents?: boolean;
-  /** The list's "Show" filter; see {@link ResourceAccessRelation}. */
-  access?: ResourceAccessRelation[];
+  /**
+   * The list's "Show", "Shared with", and "Owner" filters; see
+   * {@link ResourceAccessSelection}.
+   */
+  access?: ResourceAccessSelection;
   /**
    * Add the built-in agents to the list. The `access` filter does not apply to
    * them: they have no author and are listed only to agent admins.
@@ -1383,8 +1386,8 @@ class AgentModel {
    * per-agent gateway check against each one. Keeping the two apart means the
    * registry cannot disagree with what a direct card fetch would allow.
    *
-   * Built-in agents are left out: title generation, context compaction and the
-   * dual-LLM pair are machinery this platform runs on, not collaborators
+   * Built-in agents are left out: title generation and context compaction are
+   * machinery this platform runs on, not collaborators
    * anyone would address over A2A. Personal agents stay in — one belongs to
    * somebody, and the per-agent check decides whether that is the caller.
    */
@@ -1592,7 +1595,7 @@ class AgentModel {
       const externalAccessCondition = await externalAgentAccessCondition({
         userId: params.userId,
         organizationId: params.filters.organizationId,
-        relations: params.filters.access,
+        selection: params.filters.access,
       });
       if (externalAccessCondition)
         externalWhereConditions.push(externalAccessCondition);
@@ -2073,14 +2076,7 @@ class AgentModel {
     const includeBuiltIn =
       filters?.includeBuiltIn === true && isAgentAdmin && !filters?.scope;
     if (filters?.scope === "built_in") {
-      whereConditions.push(listedBuiltInAgentCondition());
-    } else if (includeBuiltIn) {
-      whereConditions.push(
-        or(
-          eq(schema.agentsTable.builtIn, false),
-          listedBuiltInAgentCondition(),
-        ) as SQL,
-      );
+      whereConditions.push(eq(schema.agentsTable.builtIn, true));
     } else if (
       filters?.scope === "personal" ||
       filters?.scope === "team" ||
@@ -2090,7 +2086,7 @@ class AgentModel {
         agentAudienceIs(filters.scope),
         eq(schema.agentsTable.builtIn, false),
       );
-    } else {
+    } else if (!includeBuiltIn) {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
     if (!isAgentAdmin) {
@@ -2120,7 +2116,7 @@ class AgentModel {
       const accessCondition = agentAccessCondition({
         userId,
         principals,
-        relations: filters.access,
+        selection: filters.access,
       });
       if (accessCondition)
         whereConditions.push(
@@ -4258,7 +4254,6 @@ class AgentModel {
           // Skill policy rules are copied below. Start closed so a partial
           // clone can never transiently widen a Manual source to All.
           activationSkillMode: "manual",
-          considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
           incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
@@ -4600,7 +4595,6 @@ class AgentModel {
           }
         : null,
       icon: row.icon ?? null,
-      considerContextUntrusted: row.considerContextUntrusted,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,
@@ -4858,13 +4852,15 @@ function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
 /**
  * {@link ResourcePermissionPolicyModel.accessRelationCondition} for every
  * agent kind. The organization's LLM proxy has no grant namespace and serves
- * the whole organization, so it is always `org`.
+ * the whole organization, so it is always `org`, counts as shared with the
+ * organization, and has no owner.
  */
 function agentAccessCondition(params: {
   userId: string;
   principals: GrantPrincipal[];
-  relations: ResourceAccessRelation[];
+  selection: ResourceAccessSelection;
 }): SQL | undefined {
+  const { relations, sharedWith, ownerIds } = params.selection;
   const table = schema.agentsTable;
   const subjects = params.principals.flatMap((principal) => principal.subjects);
   const byResource = (resource: "agent" | "mcpGateway") =>
@@ -4875,10 +4871,15 @@ function agentAccessCondition(params: {
       ownerColumn: table.authorId,
       userId: params.userId,
       subjects,
-      relations: params.relations,
+      ...params.selection,
     });
   const agentCondition = byResource("agent");
   if (!agentCondition) return undefined;
+  const llmProxyMatches =
+    (!relations?.length || relations.includes("org")) &&
+    (!sharedWith?.length ||
+      sharedWith.some((subject) => subject.type === "organization")) &&
+    !ownerIds?.length;
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -4887,7 +4888,7 @@ function agentAccessCondition(params: {
     and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
     and(
       eq(table.agentType, "llm_proxy"),
-      params.relations.includes("org") ? sql`true` : sql`false`,
+      llmProxyMatches ? sql`true` : sql`false`,
     ),
   ) as SQL;
   // SPDX-SnippetEnd
@@ -4900,7 +4901,7 @@ function agentAccessCondition(params: {
 async function externalAgentAccessCondition(params: {
   userId: string;
   organizationId?: string;
-  relations: ResourceAccessRelation[];
+  selection: ResourceAccessSelection;
 }): Promise<SQL | undefined> {
   const table = schema.a2aRemoteAgentsTable;
   const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
@@ -4917,7 +4918,7 @@ async function externalAgentAccessCondition(params: {
     ownerColumn: table.authorId,
     userId: params.userId,
     subjects: principals.flatMap((principal) => principal.subjects),
-    relations: params.relations,
+    ...params.selection,
   });
   // SPDX-SnippetEnd
 }
@@ -4998,21 +4999,4 @@ function agentGrantedTeamIds() {
         AND team_entry->'subject'->>'type' = 'team'
     ) granted_team
   ), array[]::text[])`;
-}
-
-/**
- * The built-in agents the Agents page lists. With OpenAPPA on, the policy
- * configuration and dual-LLM agents are internal and stay hidden.
- */
-function listedBuiltInAgentCondition(): SQL {
-  const builtIn = eq(schema.agentsTable.builtIn, true);
-  if (!enterpriseTier.isOpenappaActive()) return builtIn;
-  return and(
-    builtIn,
-    notInArray(sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`, [
-      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-      BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-      BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-    ]),
-  ) as SQL;
 }

@@ -16,10 +16,7 @@ The Archestra MCP Server is built into every deployment and needs no installatio
 
 In Custom tool mode, assign the tools to the agent or MCP Gateway the client connects through. Auto mode uses [tool discovery](/docs/mcp/gateway#load-tools-when-needed) to reach tools the user can access. New agents include [`todo_write`](#todo_write) and [`query_knowledge_sources`](#query_knowledge_sources); enabled features add their own default tools. [`query_knowledge_sources`](#query_knowledge_sources) appears only when the agent or gateway has at least one [knowledge base or connector](/docs/knowledge) attached.
 
-Two checks apply to every call:
-
-- **Permissions.** Each tool requires the RBAC permission in the last column of its table. `tools/list` shows a user only the tools their role allows; a user without [`knowledgeSource:create`](/docs/reference/permissions#knowledgeSource:create), for example, does not see [`create_knowledge_base`](#create_knowledge_base). A tool marked † has an extra condition, described in its entry.
-- **Guardrails.** Built-in tools are trusted: [tool invocation and trusted data policies](/docs/agents/guardrails) do not evaluate them. [`query_knowledge_sources`](#query_knowledge_sources) is the exception: invocation policies evaluate the call, and trusted data policies evaluate its results as sensitive data.
+Every call is permission-checked. Each tool requires the RBAC permission in the last column of its table. `tools/list` shows a user only the tools their role allows; a user without [`knowledgeSource:create`](/docs/reference/permissions#knowledgeSource:create), for example, does not see [`create_knowledge_base`](#create_knowledge_base). A tool marked † has an extra condition, described in its entry. [Guardrails](/docs/agents/guardrails) policies apply on top of these permissions.
 
 ## Tools Reference
 
@@ -614,6 +611,8 @@ Required RBAC permission: [`app:read`](/docs/reference/permissions#app:read)
 | `labels[].value` | `string` | Yes |  |
 | `limit` | `integer` | No |  |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my apps". |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 ##### Output
 
@@ -1075,6 +1074,8 @@ Additional access requirement: Returns only projects the caller owns or that are
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Case-insensitive substring matched against the project name and description. Omit to list everything the caller can reach. |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my projects". |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 ##### Output
 
@@ -1920,6 +1921,8 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `limit` | `integer` | No | Maximum number of agents to return. |
 | `name` | `string` | No | Optional agent name filter. Use this when the user names an agent but you still need to look up the ID. |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my agents". |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 ##### Output
 
@@ -2195,6 +2198,8 @@ Required RBAC permission: [`knowledgeSource:read`](/docs/reference/permissions#k
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my knowledge bases". |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 ##### Output
 
@@ -2477,6 +2482,8 @@ Required RBAC permission: [`mcpRegistry:read`](/docs/reference/permissions#mcpRe
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Optional search query to filter MCP servers by name or description. |
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my MCP servers". |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 ##### Output
 
@@ -2500,6 +2507,8 @@ Required RBAC permission: [`mcpRegistry:read`](/docs/reference/permissions#mcpRe
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my MCP servers". |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 ##### Output
 
@@ -2917,278 +2926,6 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `duplicates[].error` | `string` | No | Validation or assignment error. |
 | `duplicates[].errorCode` | `"not_found" \| "validation_error" \| "forbidden"` | No | Structured assignment error code. |
 | `duplicates[].errorType` | `string` | No | Structured assignment error type. |
-
-### Policies
-
-| Tool | Description | Required RBAC Permission |
-|------|-------------|--------------------------|
-| `get_autonomy_policy_operators` | Get all supported policy operators with their human-readable labels | [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read) |
-| `get_tool_invocation_policies` | Get all tool invocation policies | [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read) |
-| `create_tool_invocation_policy` | Create a new tool invocation policy | [`toolPolicy:create`](/docs/reference/permissions#toolPolicy:create) |
-| `get_tool_invocation_policy` | Get a specific tool invocation policy by ID | [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read) |
-| `update_tool_invocation_policy` | Update a tool invocation policy | [`toolPolicy:update`](/docs/reference/permissions#toolPolicy:update) |
-| `delete_tool_invocation_policy` | Delete a tool invocation policy by ID | [`toolPolicy:delete`](/docs/reference/permissions#toolPolicy:delete) |
-| `get_trusted_data_policies` | Get all trusted data policies | [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read) |
-| `create_trusted_data_policy` | Create a new trusted data policy | [`toolPolicy:create`](/docs/reference/permissions#toolPolicy:create) |
-| `get_trusted_data_policy` | Get a specific trusted data policy by ID | [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read) |
-| `update_trusted_data_policy` | Update a trusted data policy | [`toolPolicy:update`](/docs/reference/permissions#toolPolicy:update) |
-| `delete_trusted_data_policy` | Delete a trusted data policy by ID | [`toolPolicy:delete`](/docs/reference/permissions#toolPolicy:delete) |
-
-#### get_autonomy_policy_operators
-
-Required RBAC permission: [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read)
-
-This tool takes no arguments.
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `operators` | `object[]` | Yes | Supported autonomy policy operators. |
-| `operators[].value` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The operator enum value. |
-| `operators[].label` | `string` | Yes | The human-readable label. |
-
-#### get_tool_invocation_policies
-
-Required RBAC permission: [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read)
-
-This tool takes no arguments.
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policies` | `object[]` | Yes | Tool invocation policies. |
-| `policies[].id` | `string` | Yes | The policy ID. |
-| `policies[].toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policies[].conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policies[].conditions[].key` | `string` | Yes | The evaluated argument or context key. |
-| `policies[].conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policies[].conditions[].value` | `string` | Yes | The comparison value. |
-| `policies[].action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
-| `policies[].reason` | `string \| null` | Yes | The policy reason, if any. |
-
-#### create_tool_invocation_policy
-
-Required RBAC permission: [`toolPolicy:create`](/docs/reference/permissions#toolPolicy:create)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `toolId` | `string` | Yes | The ID of the tool (UUID from the tools table). |
-| `conditions` | `object[]` | Yes | Array of conditions that must all match. Empty array means unconditional. |
-| `conditions[].key` | `string` | Yes | The argument name or context path to evaluate (for example `url` or `context.externalAgentId`). |
-| `conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `conditions[].value` | `string` | Yes | The value to compare against. |
-| `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The action to take when the policy matches. |
-| `reason` | `string` | No | Human-readable explanation for why this policy exists. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested tool invocation policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated argument or context key. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
-| `policy.reason` | `string \| null` | Yes | The policy reason, if any. |
-
-#### get_tool_invocation_policy
-
-Required RBAC permission: [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `string` | Yes | The ID of the tool invocation policy. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested tool invocation policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated argument or context key. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
-| `policy.reason` | `string \| null` | Yes | The policy reason, if any. |
-
-#### update_tool_invocation_policy
-
-Required RBAC permission: [`toolPolicy:update`](/docs/reference/permissions#toolPolicy:update)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `string` | Yes | The ID of the tool invocation policy to update. |
-| `toolId` | `string` | No | The ID of the tool (UUID from the tools table). |
-| `conditions` | `object[]` | No | Updated array of conditions that must all match. Empty array means unconditional. |
-| `conditions[].key` | `string` | Yes | The argument name or context path to evaluate (for example `url` or `context.externalAgentId`). |
-| `conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `conditions[].value` | `string` | Yes | The value to compare against. |
-| `action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | No | Updated action to take when the policy matches. |
-| `reason` | `string \| null` | No | Updated human-readable explanation for why this policy exists. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested tool invocation policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated argument or context key. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"allow_when_context_is_untrusted" \| "block_when_context_is_untrusted" \| "block_always" \| "require_approval"` | Yes | The policy action. |
-| `policy.reason` | `string \| null` | Yes | The policy reason, if any. |
-
-#### delete_tool_invocation_policy
-
-Required RBAC permission: [`toolPolicy:delete`](/docs/reference/permissions#toolPolicy:delete)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `string` | Yes | The ID of the tool invocation policy. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `success` | `true` | Yes | Whether the delete succeeded. |
-
-#### get_trusted_data_policies
-
-Required RBAC permission: [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read)
-
-This tool takes no arguments.
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policies` | `object[]` | Yes | Trusted data policies. |
-| `policies[].id` | `string` | Yes | The policy ID. |
-| `policies[].toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policies[].conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policies[].conditions[].key` | `string` | Yes | The evaluated result key or path. |
-| `policies[].conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policies[].conditions[].value` | `string` | Yes | The comparison value. |
-| `policies[].action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
-| `policies[].description` | `string \| null` | Yes | The policy description, if any. |
-
-#### create_trusted_data_policy
-
-Required RBAC permission: [`toolPolicy:create`](/docs/reference/permissions#toolPolicy:create)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `toolId` | `string` | Yes | The ID of the tool (UUID from the tools table). |
-| `conditions` | `object[]` | Yes | Array of conditions that must all match. Empty array means unconditional. |
-| `conditions[].key` | `string` | Yes | The attribute key or path in the tool result to evaluate (for example `emails[*].from` or `source`). |
-| `conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `conditions[].value` | `string` | Yes | The value to compare against. |
-| `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The action to take when the policy matches. |
-| `description` | `string` | No | Human-readable explanation for why this policy exists. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested trusted data policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated result key or path. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
-| `policy.description` | `string \| null` | Yes | The policy description, if any. |
-
-#### get_trusted_data_policy
-
-Required RBAC permission: [`toolPolicy:read`](/docs/reference/permissions#toolPolicy:read)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `string` | Yes | The ID of the trusted data policy. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested trusted data policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated result key or path. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
-| `policy.description` | `string \| null` | Yes | The policy description, if any. |
-
-#### update_trusted_data_policy
-
-Required RBAC permission: [`toolPolicy:update`](/docs/reference/permissions#toolPolicy:update)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `string` | Yes | The ID of the trusted data policy to update. |
-| `toolId` | `string` | No | The ID of the tool (UUID from the tools table). |
-| `conditions` | `object[]` | No | Updated array of conditions that must all match. Empty array means unconditional. |
-| `conditions[].key` | `string` | Yes | The attribute key or path in the tool result to evaluate (for example `emails[*].from` or `source`). |
-| `conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `conditions[].value` | `string` | Yes | The value to compare against. |
-| `action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | No | Updated action to take when the policy matches. |
-| `description` | `string \| null` | No | Updated human-readable explanation for why this policy exists. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `policy` | `object` | Yes | The requested trusted data policy. |
-| `policy.id` | `string` | Yes | The policy ID. |
-| `policy.toolId` | `string` | Yes | The tool ID this policy targets. |
-| `policy.conditions` | `object[]` | Yes | Conditions evaluated for the policy. |
-| `policy.conditions[].key` | `string` | Yes | The evaluated result key or path. |
-| `policy.conditions[].operator` | `"equal" \| "notEqual" \| "contains" \| "notContains" \| "startsWith" \| "endsWith" \| "regex"` | Yes | The comparison operator. |
-| `policy.conditions[].value` | `string` | Yes | The comparison value. |
-| `policy.action` | `"block_always" \| "mark_as_trusted" \| "mark_as_untrusted" \| "sanitize_with_dual_llm"` | Yes | The policy action. |
-| `policy.description` | `string \| null` | Yes | The policy description, if any. |
-
-#### delete_trusted_data_policy
-
-Required RBAC permission: [`toolPolicy:delete`](/docs/reference/permissions#toolPolicy:delete)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | `string` | Yes | The ID of the trusted data policy. |
-
-##### Output
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `success` | `true` | Yes | Whether the delete succeeded. |
 
 ### Guardrails
 
@@ -4111,6 +3848,8 @@ Required RBAC permission: [`plugin:read`](/docs/reference/permissions#plugin:rea
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my plugins". |
+| `shared_with` | `string[]` | No | Only return items whose own permissions grant read to one of these subjects: org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Omit for no filtering. |
+| `owner_ids` | `string[]` | No | Only return items created by one of these user IDs. Omit for no filtering. |
 
 
 #### get_plugin

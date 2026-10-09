@@ -20,9 +20,9 @@ archestra:
     ARCHESTRA_OPENAPPA_YELL_ENABLED: "true"
     ARCHESTRA_LLM_PROXY_PLUGINS: ""
     ARCHESTRA_DYNAMIC_TOOL_ACCESS_ENABLED: "true"
-    # Runtime enablement is independent of beta. Sessions use the existing
-    # isolated node pool; each installation supplies its own in-cluster URL.
-    ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"
+    # Agent Runtime turns on when the cluster serves the Agent Sandbox API.
+    # Sessions use the existing isolated node pool; each installation supplies
+    # its own in-cluster URL.
     ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE: "1"
     ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS: "4"
     ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED: "true"

@@ -655,10 +655,6 @@ const CONFIGURATION_FIELDS: {
     identity: (s) => s.activationSkillRuleDigest,
   },
   {
-    label: "Treat context as untrusted",
-    render: (s) => renderBoolean(s.considerContextUntrusted),
-  },
-  {
     label: "Passthrough headers",
     render: (s) =>
       s.passthroughHeaders.length > 0 ? s.passthroughHeaders.join(", ") : null,

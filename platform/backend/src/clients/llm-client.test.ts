@@ -2,13 +2,9 @@ import {
   APP_ID_HEADER,
   CHAT_API_KEY_ID_HEADER,
   CHATGPT_SUBSCRIPTION_LABEL,
-  EXTERNAL_AGENT_ID_HEADER,
   PROVIDER_BASE_URL_HEADER,
   SESSION_ID_HEADER,
-  SOURCE_HEADER,
   type SupportedProviderEndpoint,
-  UNTRUSTED_CONTEXT_HEADER,
-  USER_ID_HEADER,
 } from "@archestra/shared";
 import { generateObject, generateText, streamText } from "ai";
 import { vi } from "vitest";
@@ -398,7 +394,7 @@ describe("createDirectLLMModel", () => {
       throw new Error("Expected a request to reach the fetch stub");
     }
     // Moving off the strict openai client must not drop the schema:
-    // generateObject flows (KB reranker, dual-LLM subagents) rely on the
+    // generateObject flows (KB reranker, built-in subagents) rely on the
     // provider enforcing it, and the compatible client otherwise downgrades to
     // a schema-less `json_object`.
     const responseFormat = (
@@ -482,7 +478,7 @@ describe("createDirectLLMModel", () => {
     if (!sent) {
       throw new Error("Expected a request to reach the fetch stub");
     }
-    // generateObject flows (KB reranker, dual-LLM subagents) rely on the
+    // generateObject flows (KB reranker, built-in subagents) rely on the
     // provider enforcing the schema: without supportsStructuredOutputs the
     // compatible client downgrades to a schema-less `json_object` response
     // format, and nothing else carries the schema to the model.
@@ -525,7 +521,7 @@ describe("createDirectLLMModel", () => {
     // Azure open models moved from the strict openai client, which always sent
     // json_schema, to the compatible one, which downgrades to a schema-less
     // `json_object` unless asked — silently breaking every generateObject flow
-    // (KB reranker, dual-LLM subagents) pointed at an Azure deployment.
+    // (KB reranker, built-in subagents) pointed at an Azure deployment.
     const responseFormat = (
       sent as {
         response_format?: { type?: string; json_schema?: { schema?: unknown } };
@@ -1445,56 +1441,6 @@ describe("createLLMModel", () => {
       provider: "openai",
       providerLabel: CHATGPT_SUBSCRIPTION_LABEL,
     });
-  });
-
-  test("sets the untrusted-context header only when contextIsTrusted is false", () => {
-    createLLMModel({
-      provider: "anthropic",
-      apiKey: "test-key",
-      agentId: "agent-1",
-      modelName: "claude-3-5-haiku-20241022",
-      userId: "user-1",
-      externalAgentId: "external-agent-1",
-      sessionId: "session-1",
-      source: "chat",
-      baseUrl: null,
-      contextIsTrusted: false,
-    });
-
-    expect(mockCreateAnthropic).toHaveBeenCalledWith(
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          [EXTERNAL_AGENT_ID_HEADER]: "external-agent-1",
-          [USER_ID_HEADER]: "user-1",
-          [SESSION_ID_HEADER]: "session-1",
-          [SOURCE_HEADER]: "chat",
-          [UNTRUSTED_CONTEXT_HEADER]: "true",
-        }),
-      }),
-    );
-
-    mockCreateAnthropic.mockClear();
-
-    createLLMModel({
-      provider: "anthropic",
-      apiKey: "test-key",
-      agentId: "agent-1",
-      modelName: "claude-3-5-haiku-20241022",
-      userId: "user-1",
-      externalAgentId: "external-agent-1",
-      sessionId: "session-1",
-      source: "chat",
-      baseUrl: null,
-      contextIsTrusted: undefined,
-    });
-
-    expect(mockCreateAnthropic).toHaveBeenCalledWith(
-      expect.objectContaining({
-        headers: expect.not.objectContaining({
-          [UNTRUSTED_CONTEXT_HEADER]: "true",
-        }),
-      }),
-    );
   });
 
   test("sets the app attribution header only when an app is provided", () => {

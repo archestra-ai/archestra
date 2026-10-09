@@ -506,10 +506,6 @@ export function AppSidebar() {
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const pluginsEnabled = useFeature("plugins");
-  const openappaEnabled = useFeature("openappaEnabled");
-  // Beta on with OpenAPPA off means no licence: Guardrails opens the
-  // enterprise placeholder, and the legacy page stays out of the nav.
-  const betaEnabled = useFeature("betaEnabled");
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
@@ -543,20 +539,6 @@ export function AppSidebar() {
         ...group,
         items: group.items
           .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
-          .filter(
-            (item) =>
-              item.url !== "/openappa" ||
-              openappaEnabled === true ||
-              betaEnabled === true,
-          )
-          // The legacy guardrails page steps aside once OpenAPPA is on: the
-          // flag alone decides, so turning it off brings the page back with
-          // its policies untouched. Waits for the flag answer like Plugins.
-          .filter(
-            (item) =>
-              item.url !== "/mcp/tool-guardrails" ||
-              (openappaEnabled === false && betaEnabled === false),
-          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -596,8 +578,6 @@ export function AppSidebar() {
       })),
     [
       pluginsEnabled,
-      openappaEnabled,
-      betaEnabled,
       guardrailsDeployment?.enabled,
       permissionMap,
     ],

@@ -111,7 +111,12 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
-import { resourceAccessToolArg } from "./resource-access-tool-arg";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import {
   type AppliedEditSpan,
   applyStrReplaceEdits,
@@ -179,6 +184,8 @@ const ListAppsSchema = z.strictObject({
     ),
   limit: z.number().int().positive().max(100).optional(),
   access: resourceAccessToolArg({ examplePlural: "apps" }),
+  shared_with: resourceSharedWithToolArg,
+  owner_ids: resourceOwnerIdsToolArg,
 });
 
 const GetAppSchema = z.strictObject({
@@ -925,7 +932,7 @@ const registry = defineArchestraTools([
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId: auth.organizationId,
         userId: auth.userId,
-        access: args.access,
+        access: toolAccessSelection(args),
       });
       const apps = await AppModel.findByOrganization({
         organizationId: auth.organizationId,
@@ -1758,46 +1765,27 @@ const registry = defineArchestraTools([
     shortName: TOOL_PREVIEW_APP_TOOL_SHORT_NAME,
     title: "Preview App Tool",
     description:
-      "Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. Use this while authoring to see a tool's actual result shape BEFORE writing app code that parses it — never guess the schema. Requires human approval each call (the tool was granted to the app, not to the agent). Output is framed as untrusted data and capped; an auth_required response is surfaced in that framed output so you see exactly what the app would. This previews assigned MCP tools only — not the App Data Store or other built-ins.",
+      "Run one of an app's assigned MCP tools server-side, exactly as the rendered app would (as you, the viewing user, with your MCP credentials), and return its real output. Use this while authoring to see a tool's actual result shape BEFORE writing app code that parses it — never guess the schema. Output is framed as untrusted data and capped; an auth_required response is surfaced in that framed output so you see exactly what the app would. This previews assigned MCP tools only — not the App Data Store or other built-ins.",
     schema: PreviewAppToolSchema,
     outputSchema: PreviewAppToolOutputSchema,
     async handler({ args, context }) {
       const auth = requireAuthed(context);
       if ("error" in auth) return auth.error;
       const { userId, organizationId } = auth;
-      // Server-side approval backstop. The underlying tool was granted to the
-      // app, not the agent, so a preview may run only when the chat harness has
-      // presented the approval gate (it sets approvalRequiredPoliciesHandled
-      // after the click). Every other dispatch path — the raw MCP gateway, A2A,
-      // a run_tool outside chat — lacks the flag and is refused here, so the
-      // carve-out in chat-mcp-client is not the only thing gating it.
-      if (!context.approvalRequiredPoliciesHandled) {
-        return errorResult(
-          "preview_app_tool requires human approval, which only the interactive chat surface can present; it cannot be run from this context.",
-        );
-      }
       const gate = await loadApp({ ...auth, appId: args.appId, modify: true });
       if ("error" in gate) return gate.error;
       const { app } = gate;
 
-      // The exact runtime gate the rendered app hits (allowlist + visibility +
-      // invocation policy). Preview carries its own human-approval gate, so a
-      // require_approval policy on the target is not treated as a block here;
-      // the chat's real trust is forwarded so a block_when_context_is_untrusted
-      // policy still fires on this authoring path.
+      // The exact runtime gate the rendered app hits (allowlist + environment
+      // + visibility), so preview can never reach a tool the app could not.
       const decision = await gateAppToolCall({
         appId: app.id,
-        organizationId,
-        userId,
         toolName: args.toolName,
-        toolInput: args.args ?? {},
-        isContextTrusted: context.contextIsTrusted ?? true,
-        treatRequireApprovalAsBlock: false,
       });
       if (!decision.allowed) {
         return errorResult(decision.reason);
       }
-      // Run the exact tool the gate resolved policy against (a suffix name could
+      // Run the exact tool the gate resolved (a suffix name could
       // otherwise re-resolve to a different assigned row at execution).
       const resolvedToolName =
         decision.kind === "upstream"

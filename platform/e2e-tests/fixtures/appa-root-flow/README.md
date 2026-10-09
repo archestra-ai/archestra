@@ -179,7 +179,7 @@ which is what the proxy reads for new conversations. Install it one of two ways:
   ```
 
   `POST /api/guardrails-policy/validate` checks a policy without applying it.
-  `PUT` requires `toolPolicy:update` and fails on a stale `expectedRevision` —
+  `PUT` requires `openappaPolicy:update` and fails on a stale `expectedRevision` —
   re-read and retry rather than forcing.
 
 There is a third path an agent can use: the Archestra MCP tools

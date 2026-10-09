@@ -16,11 +16,11 @@ import { useMswServer } from "@/test/msw";
 import type { AgentRunRecord } from "@/types";
 import manager from "./manager";
 import { AGENT_RUNTIME_TASK_LABEL } from "./naming";
+import { agentSandboxApi } from "./sandbox-api";
 
 // The singleton caches clients: keep this fake cluster out of shared workers.
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
-    agentRuntime: { enabled: true },
     orchestrator: {
       kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
     },
@@ -63,6 +63,7 @@ const test = base.extend<{ run: AgentRunRecord }>({
 });
 
 beforeEach(() => {
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
   vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
     function (this: KubeConfig) {
       this.loadFromOptions({

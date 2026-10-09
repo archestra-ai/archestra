@@ -2,9 +2,16 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
-import { openappaDeclarations } from "@/openappa/declarations";
+import {
+  addedGrants,
+  openappaDeclarations,
+  type PolicyResolution,
+} from "@/openappa/declarations";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  guardrailsPolicyService,
+  requireGrantPermission,
+} from "@/services/guardrails-policy";
 import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
 import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import {
@@ -61,6 +68,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     throw new ApiError(400, "The proposed policy has no changes");
   await refuseCredentialLines({
     organizationId: params.organizationId,
+    userId: params.userId,
     before: before.content,
     after: content,
   });
@@ -318,29 +326,44 @@ export async function getOpenAppaPolicyChangeStatus(params: {
  * The agent path binds battery credentials with bind_guardrails_credential. A
  * `[credentials]` line wins over that binding and locks it in the Batteries
  * dialog, so an agent may not add a line, or change its key, for a variable an
- * included battery reads. Removing a line is allowed. A variable only a root
- * external's `token_env` names has no stored binding, so its line stays writable.
+ * included battery reads. Removing a line is allowed. A credential a root
+ * external or profile reads as its `token_env` has no stored binding, so adding
+ * or rekeying it, or pointing another reader at it, takes `credential:update`
+ * as it does on the Policy route.
  */
 export async function refuseCredentialLines(params: {
   organizationId: string;
+  userId: string;
   before: string;
   after: string;
 }): Promise<void> {
-  const [previous, submitted] = await Promise.all([
-    openappaDeclarations.resolve({
-      organizationId: params.organizationId,
-      content: params.before,
-    }),
-    batteryCredentialLines(params.organizationId, params.after),
-  ]);
-  const written = [...submitted]
-    .filter(([variable, key]) => previous.credentials[variable] !== key)
+  const [previous, submitted] = await Promise.all(
+    [params.before, params.after].map((content) =>
+      openappaDeclarations.resolveWithBindings({
+        organizationId: params.organizationId,
+        content,
+      }),
+    ),
+  );
+  const before = textLines(previous);
+  const written = [
+    ...batteryLines(submitted.resolution.entries, textLines(submitted)),
+  ]
+    .filter(([variable, key]) => before[variable] !== key)
     .map(([variable]) => variable);
   if (written.length > 0)
     throw new ApiError(
       400,
       `Bind ${written.join(", ")} with bind_guardrails_credential instead of a [credentials] line; the policy text is for rules and includes.`,
     );
+  await requireGrantPermission({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    granted: addedGrants(
+      openappaDeclarations.rootGrants(previous.resolution),
+      openappaDeclarations.rootGrants(submitted.resolution),
+    ),
+  });
 }
 
 /** The validation warning for `[credentials]` lines that override a stored binding. */
@@ -607,10 +630,28 @@ async function batteryCredentialLines(
     organizationId,
     content,
   });
+  return batteryLines(entries, credentials);
+}
+
+function batteryLines(
+  entries: PolicyResolution["entries"],
+  credentials: Record<string, string>,
+): Map<string, string> {
   const read = new Set(
     entries.flatMap((entry) => entry.battery?.credentials ?? []),
   );
   return new Map(
     Object.entries(credentials).filter(([variable]) => read.has(variable)),
+  );
+}
+
+/** The `[credentials]` lines the text itself spells, without stored bindings. */
+function textLines(
+  bound: Awaited<ReturnType<typeof openappaDeclarations.resolveWithBindings>>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(bound.resolution.credentials).filter(
+      ([variable]) => bound.credentialSource[variable] === "policy",
+    ),
   );
 }

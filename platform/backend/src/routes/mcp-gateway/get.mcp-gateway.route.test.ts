@@ -8,10 +8,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { TeamTokenModel } from "@/models";
-import {
-  CONNECTION_SETUP_CONTEXT_PARAM,
-  issueConnectionSetupContext,
-} from "@/services/connection-setup-context";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -157,19 +153,13 @@ describe("MCP Gateway GET transport", () => {
     }
   });
 
-  test("unauthenticated setup-context gateway URL challenges advertise the query-free metadata URL", async ({
+  test("unauthenticated gateway URL challenges with a query string advertise the query-free metadata URL", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({ agentType: "mcp_gateway" });
-    const setupContext = issueConnectionSetupContext({
-      userId: crypto.randomUUID(),
-      organizationId: agent.organizationId,
-      gatewayId: agent.id,
-      setupId: crypto.randomUUID(),
-      secret: "test-setup-signing-key",
-    });
+    const queryValue = "query-secret-value";
     const gatewayUrl = new URL(`http://localhost:9000/v1/mcp/${agent.slug}`);
-    gatewayUrl.searchParams.set(CONNECTION_SETUP_CONTEXT_PARAM, setupContext);
+    gatewayUrl.searchParams.set("client_hint", queryValue);
     const requestUrl = `${gatewayUrl.pathname}${gatewayUrl.search}`;
     const canonicalMetadataUrl = `http://localhost:9000/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}`;
 
@@ -204,8 +194,7 @@ describe("MCP Gateway GET transport", () => {
       expect(challenge, method).toBe(
         `Bearer resource_metadata="${canonicalMetadataUrl}"`,
       );
-      expect(challenge, method).not.toContain("cs1_");
-      expect(challenge, method).not.toContain(setupContext);
+      expect(challenge, method).not.toContain(queryValue);
       expect(challenge, method).not.toContain("?");
     }
   });

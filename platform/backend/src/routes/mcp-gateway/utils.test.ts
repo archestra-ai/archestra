@@ -39,6 +39,7 @@ import {
 } from "@/archestra-mcp-server/tool-attestation";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   AgentTeamModel,
   McpCatalogLabelModel,
@@ -66,8 +67,13 @@ import {
 } from "./utils";
 
 let mockValidateJwt: MockInstance<typeof jwksValidator.validateJwt>;
+let previousOpenappaEnabled: boolean;
 
 beforeEach(() => {
+  previousOpenappaEnabled = config.openappa.enabled;
+  // OpenAPPA cases enable it explicitly; keep unrelated tool-list assertions
+  // independent of the deployment default.
+  config.openappa.enabled = false;
   config.enterpriseFeatures.core = true;
   mockValidateJwt = vi
     .spyOn(jwksValidator, "validateJwt")
@@ -75,6 +81,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  config.openappa.enabled = previousOpenappaEnabled;
   mockValidateJwt.mockRestore();
 });
 
@@ -1964,10 +1971,11 @@ describe("createAgentServer tools/list", () => {
     makeOrganization,
     makeUser,
   }) => {
-    const previousEnabled = config.agentRuntime.enabled;
-    config.agentRuntime.enabled = true;
+    const sandboxInstalled = vi
+      .spyOn(agentSandboxApi, "isInstalled", "get")
+      .mockReturnValue(true);
     onTestFinished(() => {
-      config.agentRuntime.enabled = previousEnabled;
+      sandboxInstalled.mockRestore();
       archestraMcpBranding.syncFromOrganization(null);
     });
     const org = await makeOrganization();
@@ -2457,11 +2465,10 @@ describe("createAgentServer tools/list", () => {
     makeUser,
     makeMember,
   }) => {
-    const runtimeEnabled = config.agentRuntime.enabled;
-    config.agentRuntime.enabled = false;
-    onTestFinished(() => {
-      config.agentRuntime.enabled = runtimeEnabled;
-    });
+    const sandboxInstalled = vi
+      .spyOn(agentSandboxApi, "isInstalled", "get")
+      .mockReturnValue(false);
+    onTestFinished(() => sandboxInstalled.mockRestore());
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });

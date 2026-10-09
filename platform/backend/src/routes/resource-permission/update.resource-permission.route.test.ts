@@ -314,6 +314,29 @@ describe("resource permission routes", () => {
     }
   });
 
+  test("names the object's owner, and no owner for the all-objects policy", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: user.id,
+      access: "personal",
+    });
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/resource-permissions/agent/${agent.id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().ownerId).toBe(user.id);
+    const global = await app.inject({
+      method: "GET",
+      url: "/api/resource-permissions/agent/*",
+    });
+    expect(global.statusCode, global.body).toBe(200);
+    expect(global.json().ownerId).toBeNull();
+  });
+
   test("a permission manager who is not the owner can revoke access while preserving the owner's grant", async ({
     makeAgent,
     makeUser,

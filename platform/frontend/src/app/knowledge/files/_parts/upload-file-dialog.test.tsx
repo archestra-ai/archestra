@@ -43,8 +43,14 @@ vi.mock("@/components/ui/select", () => ({
     selectState.value = value;
     return <div>{children}</div>;
   },
-  SelectTrigger: ({ children }: { children: React.ReactNode }) => (
-    <button type="button" role="combobox" aria-expanded="false">
+  SelectTrigger: ({
+    children,
+    id,
+  }: {
+    children: React.ReactNode;
+    id?: string;
+  }) => (
+    <button type="button" role="combobox" aria-expanded="false" id={id}>
       {children}
     </button>
   ),
@@ -134,7 +140,9 @@ describe("UploadFileDialog", () => {
     expect(
       screen.getByRole("dialog", { name: "Upload documents" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toHaveTextContent(createdDirectory.id);
+    expect(
+      screen.getByRole("combobox", { name: "Directory" }),
+    ).toHaveTextContent(createdDirectory.id);
     expect(
       screen.getByRole("button", { name: createdDirectory.name }),
     ).toBeInTheDocument();

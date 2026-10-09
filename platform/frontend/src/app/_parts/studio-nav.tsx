@@ -1,7 +1,5 @@
 "use client";
 
-// This file contains Enterprise regions licensed under LICENSE_ENTERPRISE.
-import { E2eTestId } from "@archestra/shared";
 import {
   AppWindow,
   Bot,
@@ -21,7 +19,6 @@ import {
   Puzzle,
   Route,
   Settings,
-  ShieldCheck,
   Sparkles,
   Waypoints,
 } from "lucide-react";
@@ -289,22 +286,10 @@ export const contentNavGroups: NavGroup[] = [
     ],
   },
   {
-    // The rows that span every group above: what tools are allowed to do,
-    // what they did, and how the deployment is configured.
+    // The rows that span every group above: what tools did, and how the
+    // deployment is configured.
     id: "platform",
     items: [
-      {
-        // Not under MCP: the page's own tools come from installed MCP
-        // servers, from agents and apps, and from traffic between agents and
-        // LLMs. The URL stays /mcp/tool-guardrails — docs and deep links
-        // point at it, and the route is not what the reader is being told.
-        title: "Guardrails",
-        url: "/mcp/tool-guardrails",
-        icon: ShieldCheck,
-        testId: E2eTestId.SidebarNavGuardrails,
-        customIsActive: (pathname: string) =>
-          pathname.startsWith("/mcp/tool-guardrails"),
-      },
       {
         title: "Logs",
         url: "/llm/logs",
@@ -328,7 +313,6 @@ export const contentNavGroups: NavGroup[] = [
           "/settings/auth",
           "/settings/service-accounts",
           "/settings/agents",
-          "/settings/security",
           "/settings/llm",
           "/settings/mcp",
           "/settings/skills",

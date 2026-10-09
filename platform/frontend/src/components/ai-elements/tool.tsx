@@ -55,11 +55,7 @@ export const Tool = ({
 export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart["type"];
-  state:
-    | ToolUIPart["state"]
-    | "output-available-dual-llm"
-    | "output-denied"
-    | "output-cancelled";
+  state: ToolUIPart["state"] | "output-denied" | "output-cancelled";
   className?: string;
   icon?: React.ReactNode;
   isCollapsible?: boolean;
@@ -72,11 +68,7 @@ export type ToolHeaderProps = {
 };
 
 const getStatusBadge = (
-  status:
-    | ToolUIPart["state"]
-    | "output-available-dual-llm"
-    | "output-denied"
-    | "output-cancelled",
+  status: ToolUIPart["state"] | "output-denied" | "output-cancelled",
   label?: string,
 ) => {
   const labels = {
@@ -85,7 +77,6 @@ const getStatusBadge = (
     "approval-requested": "Approval requested",
     "approval-responded": "Approval responded",
     "output-available": "Completed",
-    "output-available-dual-llm": "Completed (dual LLM)",
     "output-error": "Error",
     "output-denied": "Denied",
     // A user-stopped call: neither a success nor a failure, so it gets a
@@ -99,7 +90,6 @@ const getStatusBadge = (
     "approval-requested": "bg-amber-500",
     "approval-responded": "bg-blue-500",
     "output-available": "bg-emerald-500",
-    "output-available-dual-llm": "bg-emerald-500",
     "output-error": "bg-destructive",
     "output-denied": "bg-orange-500",
     "output-cancelled": "bg-muted-foreground",
@@ -384,10 +374,6 @@ export type ToolOutputProps = ComponentProps<"div"> & {
   output?: ToolUIPart["output"];
   errorText?: ToolUIPart["errorText"];
   label?: string;
-  conversations?: Array<{
-    role: "user" | "assistant";
-    content: string | unknown;
-  }>;
 };
 
 export const ToolOutput = ({
@@ -395,57 +381,13 @@ export const ToolOutput = ({
   output,
   errorText,
   label,
-  conversations,
   ...props
 }: ToolOutputProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const labelText = label ?? (errorText ? "Error" : "Response");
 
-  if (!(output || errorText || conversations)) {
+  if (!(output || errorText)) {
     return null;
-  }
-
-  // Render conversations as chat bubbles if provided
-  // Note: In Dual LLM context, "user" = Main Profile (questions), "assistant" = Quarantined Profile (answers)
-  if (conversations && conversations.length > 0) {
-    return (
-      <div className={cn("px-3 py-3 space-y-1.5", className)} {...props}>
-        <SectionLabel accent="bg-emerald-400">
-          {label ?? "Conversation"}
-        </SectionLabel>
-        <div className="space-y-3 rounded-md bg-muted/50 p-3">
-          {conversations.map((conv, idx) => {
-            // Create a stable key combining index and content hash
-            const contentStr =
-              typeof conv.content === "string"
-                ? conv.content
-                : JSON.stringify(conv.content);
-            const key = `${idx}-${conv.role}-${contentStr.slice(0, 20)}`;
-
-            return (
-              <div
-                key={key}
-                className={cn(
-                  "flex gap-2 items-start",
-                  conv.role === "assistant" ? "justify-end" : "justify-start",
-                )}
-              >
-                <div
-                  className={cn(
-                    "max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-wrap",
-                    conv.role === "assistant"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground",
-                  )}
-                >
-                  {contentStr}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
   }
 
   let Output: ReactNode;

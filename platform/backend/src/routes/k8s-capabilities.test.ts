@@ -44,6 +44,12 @@ async function buildApp(user: User, organizationId: string) {
   return app;
 }
 
+const agentSandbox = {
+  installed: false,
+  missingResources: ["sandboxwarmpools.extensions.agents.x-k8s.io"],
+  message: "The Agent Sandbox controller is not installed on this cluster.",
+};
+
 describe("k8s capabilities routes", () => {
   let app: FastifyInstanceWithZod;
 
@@ -52,7 +58,7 @@ describe("k8s capabilities routes", () => {
     if (app) await app.close();
   });
 
-  test("returns detected Kubernetes network policy capabilities", async ({
+  test("returns detected Kubernetes network policy and Agent Sandbox capabilities", async ({
     makeOrganization,
     makeUser,
   }) => {
@@ -73,6 +79,7 @@ describe("k8s capabilities routes", () => {
         probe: "absent",
         probedAt: null,
       },
+      agentSandbox,
     });
     const user = await makeUser();
     const organization = await makeOrganization();
@@ -99,6 +106,7 @@ describe("k8s capabilities routes", () => {
         probe: "absent",
         probedAt: null,
       },
+      agentSandbox,
     });
   });
 

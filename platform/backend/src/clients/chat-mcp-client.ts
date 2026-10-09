@@ -40,7 +40,6 @@ import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import {
-  AgentModel,
   AgentTeamModel,
   TeamModel,
   TeamTokenModel,
@@ -846,7 +845,6 @@ export async function getChatMcpTools({
   abortSignal,
   elicitation,
   user,
-  blockOnApprovalRequired,
   scheduleTriggerRunId,
   hookRunCollector,
   kbChunksCollector,
@@ -893,8 +891,6 @@ export async function getChatMcpTools({
   elicitation?: ChatMcpElicitationBridge;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
-  /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
-  blockOnApprovalRequired?: boolean;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
@@ -1069,14 +1065,11 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch the agent (for its trust config) and the agent's + user's teams
-    // (for trace span attributes).
-    const [agent, teams, userTeams] = await Promise.all([
-      AgentModel.findById(agentId),
+    // The agent's + user's teams, for trace span attributes.
+    const [teams, userTeams] = await Promise.all([
       AgentTeamModel.getTeamLabelInfoForAgent(agentId),
       TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
     ]);
-    const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
     const toolContext: ChatToolContext = {
@@ -1095,13 +1088,11 @@ export async function getChatMcpTools({
       abortSignal,
       elicitation,
       user,
-      blockOnApprovalRequired,
       hookRunCollector,
       kbChunksCollector,
       subagentToolStream,
       taskBridge,
       mcpGwToken,
-      considerContextUntrusted,
       suppressContentLogging,
       encryptedChatAudit,
       modelAcceptsImageToolResults: modelAcceptsImageToolResults ?? true,

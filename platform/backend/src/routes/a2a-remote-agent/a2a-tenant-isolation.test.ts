@@ -1,6 +1,6 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { A2aConnectionModel, ToolModel } from "@/models";
+import { A2aConnectionModel } from "@/models";
 import AgentToolModel from "@/models/agent-tool";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test } from "@/test";
@@ -30,7 +30,7 @@ async function createRemoteAgent(organizationId: string, name: string) {
 describe("outbound A2A tenant isolation", () => {
   const ctx = useRouteTestApp(routes);
 
-  test("generic tool APIs hide and cannot delete synthetic A2A tools", async ({
+  test("the generic tool list hides synthetic A2A tools", async ({
     makeMember,
     makeOrganization,
     makeTool,
@@ -65,13 +65,6 @@ describe("outbound A2A tenant isolation", () => {
     expect(listedToolIds).toContain(ordinaryTool.id);
     expect(listedToolIds).not.toContain(ownedRemote.toolId);
     expect(listedToolIds).not.toContain(foreignRemote.toolId);
-
-    const deleteResponse = await ctx.app.inject({
-      method: "DELETE",
-      url: `/api/tools/${ownedRemote.toolId}`,
-    });
-    expect(deleteResponse.statusCode).toBe(404);
-    expect(await ToolModel.findById(ownedRemote.toolId)).not.toBeNull();
   });
 
   test("generic agent-tool assignment rejects owned and foreign synthetic tools", async ({
@@ -150,41 +143,5 @@ describe("outbound A2A tenant isolation", () => {
       foreignOrganizationId,
     );
     expect(foreignTargets).toEqual([]);
-  });
-
-  test("policy-editor reads expose a synthetic tool only to its owning organization", async ({
-    makeMember,
-    makeOrganization,
-  }) => {
-    const ownerOrganizationId = ctx.organizationId;
-    const foreignOrganizationId = (await makeOrganization()).id;
-    await makeMember(ctx.user.id, ownerOrganizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
-    await makeMember(ctx.user.id, foreignOrganizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
-
-    const remote = await createRemoteAgent(
-      ownerOrganizationId,
-      "Policy Editor Target",
-    );
-
-    const ownerResponse = await ctx.app.inject({
-      method: "GET",
-      url: `/api/tools/${remote.toolId}`,
-    });
-    expect(ownerResponse.statusCode).toBe(200);
-    expect(ownerResponse.json()).toMatchObject({
-      id: remote.toolId,
-      name: expect.stringMatching(/^agent__policy_editor_target__[a-f0-9]+$/),
-    });
-
-    ctx.organizationId = foreignOrganizationId;
-    const foreignResponse = await ctx.app.inject({
-      method: "GET",
-      url: `/api/tools/${remote.toolId}`,
-    });
-    expect(foreignResponse.statusCode).toBe(404);
   });
 });

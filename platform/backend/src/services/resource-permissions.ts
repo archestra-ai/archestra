@@ -266,7 +266,11 @@ export class ResourcePermissions {
       );
   }
 
-  /** Move the previous owner's direct grant to the new owner after the row changed hands. */
+  /**
+   * Give the new owner the previous owner's direct grant after the row
+   * changed hands. The previous owner keeps theirs, so a handoff never locks
+   * out the person who made it; removing them is an ordinary grant edit.
+   */
   static async transferOwnerGrant(params: {
     organizationId: string;
     resource: ScopedResource;
@@ -275,7 +279,7 @@ export class ResourcePermissions {
     ownerId: string;
   }): Promise<void> {
     if (!params.previousOwnerId) return;
-    await ResourcePermissionPolicyModel.transferSubjectGrant({
+    await ResourcePermissionPolicyModel.copySubjectGrant({
       organizationId: params.organizationId,
       resource: params.resource,
       scope: params.scope,
@@ -392,6 +396,7 @@ export class ResourcePermissions {
       resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
       name: effective.target?.name ?? "All resources",
+      ownerId: ownerUserId(effective.target?.authorId),
       revision: policy?.revision ?? 0,
       grants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
@@ -462,6 +467,7 @@ export class ResourcePermissions {
       resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
       name: effective.target?.name ?? "All resources",
+      ownerId: ownerUserId(effective.target?.authorId),
       revision: policy.revision,
       grants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
@@ -884,4 +890,11 @@ function effectiveActionsForPolicy(
       },
     }),
   );
+}
+
+/** The author as a person, or null when nobody or a service account is. */
+function ownerUserId(authorId: string | null | undefined): string | null {
+  if (!authorId || authorId.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX))
+    return null;
+  return authorId;
 }

@@ -344,12 +344,6 @@ describe("redactEncryptedChatInteraction", () => {
       response: {
         content: [{ type: "text", text: "the secret answer" }],
       } as unknown as InteractionResponse,
-      dualLlmAnalyses: [
-        { verdict: "safe", details: "quoted secret content" },
-      ] as unknown as InsertInteraction["dualLlmAnalyses"],
-      unsafeContextBoundary: {
-        messageIndex: 0,
-      } as unknown as InsertInteraction["unsafeContextBoundary"],
     } as InsertInteraction;
 
     const redacted = redactEncryptedChatInteraction(record);
@@ -359,8 +353,6 @@ describe("redactEncryptedChatInteraction", () => {
       request: ENCRYPTED_CHAT_REDACTED_MARKER,
       processedRequest: null,
       response: ENCRYPTED_CHAT_REDACTED_MARKER,
-      dualLlmAnalyses: null,
-      unsafeContextBoundary: null,
     });
     // Nothing content-bearing leaks through the redacted record.
     expect(JSON.stringify(redacted)).not.toContain("secret");

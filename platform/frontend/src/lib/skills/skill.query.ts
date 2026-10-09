@@ -2,7 +2,6 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   MAX_BULK_IDS,
-  type ResourceAccessRelation,
 } from "@archestra/shared";
 import {
   useInfiniteQuery,
@@ -48,17 +47,6 @@ const {
   previewGithubSkill,
   importGithubSkills,
 } = archestraApiSdk;
-
-/** How many skills a "Show" selection holds, for the filter's counts. */
-export async function countSkills(params: {
-  access: ResourceAccessRelation[];
-}): Promise<number> {
-  const { data, error } = await getSkills({
-    query: { limit: 1, offset: 0, ...params },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.pagination.total ?? 0;
-}
 
 export type SkillCatalogResult =
   archestraApiTypes.SearchSkillCatalogResponses["200"]["results"][number];
@@ -110,6 +98,9 @@ type SkillsPaginatedParams = Pick<
   | "authorIds"
   | "excludeAuthorIds"
   | "excludeOtherPersonalSkills"
+  | "access"
+  | "sharedWith"
+  | "owner"
   | "status"
   | "sortBy"
   | "sortDirection"

@@ -192,7 +192,7 @@ describe("buildAgentSystemPrompt", () => {
     // Enforcement needs both switches; otherwise no ruling can reach the
     // model and the remedy instruction is omitted.
     const openappa = config.openappa;
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
 
     try {
@@ -246,7 +246,7 @@ describe("buildAgentSystemPrompt", () => {
     await makeMember(user.id, agent.organizationId);
 
     const openappa = config.openappa;
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(false);
 
     try {

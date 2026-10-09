@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
-import { FileText, FolderPlus, Upload } from "lucide-react";
+import { FolderPlus, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DirectoryDialog } from "@/app/knowledge/files/_parts/directory-dialog";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
@@ -15,7 +15,7 @@ import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
 } from "@/components/initial-resource-permissions";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
@@ -64,13 +64,6 @@ export function UploadFileDialog({
   const [createDirectoryOpen, setCreateDirectoryOpen] = useState(false);
   const [createdDirectory, setCreatedDirectory] =
     useState<KnowledgeDirectory>();
-  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
-    "general",
-  );
-
-  useEffect(() => {
-    if (open) setActiveSection("general");
-  }, [open]);
 
   const upload = useUploadKnowledgeFile();
   const availableDirectories =
@@ -157,20 +150,11 @@ export function UploadFileDialog({
 
   return (
     <>
-      <TabbedDialogShell
+      <StandardFormDialog
         open={open}
         onOpenChange={onOpenChange}
         title="Upload documents"
         description="PDF, Word, Markdown, CSV, JSON or plain text. Documents become searchable once you add them to a knowledge base."
-        sidebarLabel="New documents"
-        sidebarDescription="Knowledge files"
-        sidebarIcon={<FileText className="h-4 w-4 text-muted-foreground" />}
-        activeSection={activeSection}
-        navItems={[
-          { id: "general", label: "General" },
-          { id: "permissions", label: "Permissions" },
-        ]}
-        onActiveSectionChange={setActiveSection}
         onSubmit={() => void handleUpload()}
         footer={
           <>
@@ -194,11 +178,7 @@ export function UploadFileDialog({
           </>
         }
       >
-        <div
-          hidden={activeSection !== "general"}
-          className="space-y-4"
-          data-testid="upload-file-general"
-        >
+        <div className="space-y-4" data-testid="upload-file-general">
           <FileDropInput
             accept={KNOWLEDGE_FILE_ACCEPT}
             typesLabel={KNOWLEDGE_FILE_TYPES_LABEL}
@@ -236,6 +216,11 @@ export function UploadFileDialog({
             </Select>
           </div>
 
+          <InitialResourcePermissions
+            resource="knowledgeFile"
+            grants={initialGrants}
+            onChange={setInitialGrants}
+          />
           <AdvancedLabelsSection
             ref={labelsRef}
             labels={labels}
@@ -255,15 +240,7 @@ export function UploadFileDialog({
             </InlineNotice>
           )}
         </div>
-        <div hidden={activeSection !== "permissions"}>
-          <InitialResourcePermissions
-            resource="knowledgeFile"
-            grants={initialGrants}
-            onChange={setInitialGrants}
-            standalone
-          />
-        </div>
-      </TabbedDialogShell>
+      </StandardFormDialog>
       <DirectoryDialog
         open={createDirectoryOpen}
         onOpenChange={setCreateDirectoryOpen}

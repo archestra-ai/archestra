@@ -153,9 +153,9 @@ class AgentTeamModel {
   }
 
   /**
-   * The teams an agent's own policy grants read to. Tool policy team
-   * conditions, team limits and team statistics read this, so an agent shared
-   * with a team by grant counts as that team's agent.
+   * The teams an agent's own policy grants read to. Team limits and team
+   * statistics read this, so an agent shared with a team by grant counts as
+   * that team's agent.
    */
   static async getTeamsForAgent(agentId: string): Promise<string[]> {
     return (

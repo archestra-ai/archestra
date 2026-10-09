@@ -101,11 +101,10 @@ const DEFAULT_TOKEN_FORM_VALUES: TokenFormValues = {
  */
 const EXAMPLE_KEY = "<YOUR_KEY>";
 
-type DetailTab = "general" | "keys" | "permissions";
+type DetailTab = "general" | "keys";
 const NAV_ITEMS = [
   { id: "general" as const, label: "General" },
   { id: "keys" as const, label: "API keys" },
-  { id: "permissions" as const, label: "Permissions" },
 ];
 
 /** Sentinel for "no filter", matching the service accounts list beside it. */
@@ -157,6 +156,16 @@ export function ServiceAccountDialog({
   const [statusFilter, setStatusFilter] = useState(ALL);
   const [labels, setLabels] = useState<ProfileLabel[]>(account.labels);
   const labelsRef = useRef<ProfileLabelsRef>(null);
+  // The permissions section keeps its edits in its own form. For someone who
+  // may edit the account, Save is the only Save on screen, so it commits them.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
   const editForm = useForm<ServiceAccountFormValues>({
     defaultValues: { name: account.name, role: account.role },
   });
@@ -371,6 +380,7 @@ export function ServiceAccountDialog({
 
   const handleEdit = editForm.handleSubmit(async (values) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+    await permissionsSave.current?.();
     await updateMutation.mutateAsync({
       id: serviceAccountId,
       body: {
@@ -435,6 +445,7 @@ export function ServiceAccountDialog({
       }}
       isDirty={
         editForm.formState.isDirty ||
+        permissionsDirty ||
         JSON.stringify(labels) !== JSON.stringify(account.labels)
       }
       className="max-w-5xl h-[80vh]"
@@ -543,11 +554,6 @@ export function ServiceAccountDialog({
                   account&apos;s keys.
                 </FieldDescription>
               </div>
-              <AdvancedLabelsSection
-                ref={labelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
-              />
             </fieldset>
           ) : activeTab === "keys" ? (
             <BulkActionsScope>
@@ -686,15 +692,31 @@ export function ServiceAccountDialog({
                 )}
               </div>
             </BulkActionsScope>
-          ) : (
-            /* SPDX-SnippetBegin
-               SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-               SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */
+          ) : null}
+          {/* Kept mounted on every tab, so Save commits its edits. Someone who
+              may manage access but not edit the account saves it on its own. */}
+          <div hidden={activeTab !== "general"}>
+            {/* SPDX-SnippetBegin
+                SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+                SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
             <ResourceAccessSection
               resource="serviceAccount"
               id={serviceAccountId}
+              onDirtyChange={setPermissionsDirty}
+              registerSave={
+                canUpdateServiceAccounts ? registerPermissionsSave : undefined
+              }
             />
-            /* SPDX-SnippetEnd */
+            {/* SPDX-SnippetEnd */}
+          </div>
+          {activeTab === "general" && (
+            <fieldset disabled={!canUpdateServiceAccounts} className="pt-4">
+              <AdvancedLabelsSection
+                ref={labelsRef}
+                labels={labels}
+                onLabelsChange={setLabels}
+              />
+            </fieldset>
           )}
 
           <CreateTokenDialog

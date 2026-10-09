@@ -1,23 +1,18 @@
 import {
-  ClientFilterSchema,
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { z } from "zod";
 import { hasAnyAgentTypeAdminPermission } from "@/auth";
-import { ToolModel, ToolObservationModel } from "@/models";
+import { ToolModel } from "@/models";
 import {
-  ApiError,
   constructResponseSchema,
   createSortingQuerySchema,
   ExtendedSelectToolSchema,
-  SelectToolSchema,
   ToolFilterSchema,
   ToolSortBy,
   ToolWithAssignmentsSchema,
-  UuidIdSchema,
 } from "@/types";
 
 const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
@@ -106,95 +101,6 @@ const toolRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
 
       return reply.send(result);
-    },
-  );
-
-  fastify.get(
-    "/api/tools/observers",
-    {
-      schema: {
-        operationId: RouteId.GetToolObservers,
-        description:
-          "Get filter options for observed tools: the users who have observed tools in LLM proxy traffic, and the client app families their observations came from",
-        tags: ["Tools"],
-        response: constructResponseSchema(
-          z.object({
-            users: z.array(
-              z.object({
-                id: z.string(),
-                name: z.string(),
-                email: z.string(),
-              }),
-            ),
-            clients: z.array(ClientFilterSchema),
-          }),
-        ),
-      },
-    },
-    async (_request, reply) => {
-      return reply.send(await ToolObservationModel.getObserverFilterOptions());
-    },
-  );
-
-  fastify.get(
-    "/api/tools/:id",
-    {
-      schema: {
-        operationId: RouteId.GetTool,
-        description:
-          "Get a single tool's policy-editor fields (id, name, parameters) by id, scoped to what the caller can access",
-        tags: ["Tools"],
-        params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(
-          SelectToolSchema.pick({ id: true, name: true, parameters: true }),
-        ),
-      },
-    },
-    async ({ params: { id }, user, organizationId }, reply) => {
-      const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-        userId: user.id,
-        organizationId,
-      });
-
-      const tool = await ToolModel.findByIdForOrg({
-        id,
-        userId: user.id,
-        organizationId,
-        isAdmin: isAgentAdmin,
-      });
-      if (!tool) {
-        throw new ApiError(404, `Tool with ID ${id} not found`);
-      }
-
-      return reply.send(tool);
-    },
-  );
-
-  fastify.delete(
-    "/api/tools/:id",
-    {
-      schema: {
-        operationId: RouteId.DeleteTool,
-        description:
-          "Delete an auto-discovered tool (tools without an MCP server)",
-        tags: ["Tools"],
-        params: z.object({
-          id: z.string().uuid(),
-        }),
-        response: constructResponseSchema(z.object({ success: z.boolean() })),
-      },
-    },
-    async ({ params: { id } }, reply) => {
-      const success = await ToolModel.delete(id);
-      if (!success) {
-        return reply.status(404).send({
-          error: {
-            message: "Tool not found or cannot be deleted",
-            type: "api_not_found_error",
-          },
-        });
-      }
-      return reply.send({ success: true });
     },
   );
 };

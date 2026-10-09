@@ -75,7 +75,12 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
-import { resourceAccessToolArg } from "./resource-access-tool-arg";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -344,12 +349,16 @@ const SearchPrivateMcpRegistryToolArgsSchema = z
         "Optional search query to filter MCP servers by name or description.",
       ),
     access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
   })
   .strict();
 
 const GetMcpServersToolArgsSchema = z
   .object({
     access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
   })
   .strict();
 
@@ -558,7 +567,8 @@ async function handleSearchPrivateMcpRegistry(
 
     // `searchByQuery` has no `access` filter, so a filtered search narrows
     // the filtered list by the same name/description substring instead.
-    if (query && query.trim() !== "" && !args.access) {
+    const access = toolAccessSelection(args);
+    if (query && query.trim() !== "" && !access) {
       catalogItems = await InternalMcpCatalogModel.searchByQuery(query, {
         expandSecrets: false,
         userId: context.userId,
@@ -581,7 +591,7 @@ async function handleSearchPrivateMcpRegistry(
         isAdmin,
         organizationId,
         environmentId,
-        access: args.access,
+        access,
         readGrantContext: (await userHasPermission(
           context.userId,
           organizationId,
@@ -669,7 +679,7 @@ async function handleGetMcpServers(
       isAdmin,
       organizationId,
       environmentId,
-      access: args.access,
+      access: toolAccessSelection(args),
       readGrantContext: (await userHasPermission(
         context.userId,
         organizationId,

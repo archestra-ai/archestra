@@ -180,13 +180,56 @@ describe("APPA feature boundary", () => {
           currentToolCallId: "report",
         },
       ),
-    ).rejects.toMatchObject({ code: -32601 });
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [
+        { type: "text", text: "Error: OpenAPPA reporting is disabled" },
+      ],
+    });
     expect(native.dispatchHook).not.toHaveBeenCalled();
     config.openappa.yellEnabled = true;
     config.analytics.enabled = true;
     expect(
       getArchestraMcpTools().some((tool) => tool.name === "archestra__yell"),
     ).toBe(true);
+  });
+
+  test("disabled reporting returns a tool refusal without saving or dispatching a report", async () => {
+    const result = await executeYell({
+      session,
+      toolCallId: "disabled-report",
+      args: { message: "Confusing feedback", with_trajectory: false },
+    });
+    expect(result.isError).toBe(true);
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+    expect(
+      (
+        await OpenAppaYellModel.list({
+          organizationId,
+          status: "all",
+          limit: 20,
+        })
+      ).data,
+    ).toEqual([]);
+  });
+
+  test("reporting with inactive guardrails returns a tool refusal instead of failing the run", async () => {
+    config.openappa.yellEnabled = true;
+    await GuardrailsDeploymentModel.setEnabled(false);
+    await expect(
+      executeArchestraTool(
+        "archestra__yell",
+        { message: "Confusing feedback", with_trajectory: false },
+        {
+          agent: { id: "agent", name: "Assistant" },
+          organizationId,
+          userId: "alice",
+          sessionId: "conversation",
+          currentToolCallId: "report",
+        },
+      ),
+    ).resolves.toMatchObject({ isError: true });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
   test("a turn that began while enabled finishes after the switch turns off", async () => {
@@ -3124,6 +3167,7 @@ describe("remedy by offer", () => {
     expect(native.loadChildReturns).toHaveBeenCalledWith(
       organizationId,
       "user:alice|conversation",
+      undefined,
     );
     expect(records).toEqual([
       {
@@ -3161,6 +3205,25 @@ describe("remedy by offer", () => {
         value: "SUMMARY(24 characters): safe",
       },
     ]);
+  });
+
+  test("narrows retained child returns to one child", async () => {
+    native.loadChildReturns.mockResolvedValueOnce([]);
+
+    await loadChildReturns({
+      organizationId,
+      parentSessionId: "user:alice|conversation",
+      childSessionId: "user:alice|conversation:a1",
+    });
+
+    expect(native.loadChildReturns).toHaveBeenCalledWith(
+      organizationId,
+      "user:alice|conversation",
+      {
+        childSessionId: "user:alice|conversation:a1",
+        operationPrefix: undefined,
+      },
+    );
   });
 
   test("fails closed with 503 when the child returns cannot be loaded", async () => {

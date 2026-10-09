@@ -1,8 +1,5 @@
-import { OPENCODE_CLIENT_ID } from "@archestra/shared";
-import { eq } from "drizzle-orm";
 import { afterEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import db, { schema } from "@/database";
 import { AgentToolModel, ToolModel } from "@/models";
 import { describe, expect, test } from "@/test";
 import { persistTools } from "./tools";
@@ -35,7 +32,7 @@ describe("persistTools", () => {
       },
     ];
 
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // Verify tools were created in the tools table
     const tool1 = await ToolModel.findByName("new-tool-1");
@@ -58,163 +55,11 @@ describe("persistTools", () => {
     }
   });
 
-  test("threads the configured invocation and result defaults onto discovered tools' policies", async ({
-    makeAgent,
-  }) => {
-    const agent = await makeAgent({ name: "Test Agent" });
-
-    await persistTools(
-      [
-        {
-          toolName: "discovered-with-default",
-          toolParameters: { type: "object", properties: {} },
-          toolDescription: "Discovered tool",
-        },
-      ],
-      agent.id,
-      { invocationAction: "require_approval", resultAction: "mark_as_trusted" },
-    );
-
-    const tool = await ToolModel.findByName("discovered-with-default");
-    if (!tool) throw new Error("expected discovered tool to be persisted");
-
-    const inv = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-    expect(inv).toHaveLength(1);
-    expect(inv[0].action).toBe("require_approval");
-
-    const trusted = await db
-      .select()
-      .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
-    expect(trusted).toHaveLength(1);
-    expect(trusted[0].action).toBe("mark_as_trusted");
-  });
-
-  test("defaults a coding CLI's native tools to Allow always, keeping the org default for its MCP tools", async ({
-    makeAgent,
-  }) => {
-    const agent = await makeAgent({ name: "CLI Agent" });
-
-    await persistTools(
-      [
-        {
-          toolName: "Bash",
-          toolParameters: { type: "object", properties: {} },
-          toolDescription: "Run a shell command",
-        },
-        {
-          toolName: "mcp__github__create_issue",
-          toolParameters: { type: "object", properties: {} },
-          toolDescription: "Create a GitHub issue",
-        },
-      ],
-      agent.id,
-      // A strict org default: exactly the configuration that bricks a CLI.
-      {
-        invocationAction: "block_when_context_is_untrusted",
-        resultAction: "mark_as_untrusted",
-      },
-      { userId: undefined, externalAgentId: "anthropic_claude_code" },
-    );
-
-    const nativeTool = await ToolModel.findByName("Bash");
-    if (!nativeTool) throw new Error("expected native tool to be persisted");
-    const [nativePolicy] = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, nativeTool.id));
-    expect(nativePolicy.action).toBe("allow_when_context_is_untrusted");
-    expect(nativePolicy.reason).toContain("Native Claude Code client tool");
-
-    // The result policy is NOT overridden: native results still flip the
-    // session sensitive so downstream guardrails keep working.
-    const [nativeResultPolicy] = await db
-      .select()
-      .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.toolId, nativeTool.id));
-    expect(nativeResultPolicy.action).toBe("mark_as_untrusted");
-
-    const mcpTool = await ToolModel.findByName("mcp__github__create_issue");
-    if (!mcpTool) throw new Error("expected MCP tool to be persisted");
-    const [mcpPolicy] = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, mcpTool.id));
-    expect(mcpPolicy.action).toBe("block_when_context_is_untrusted");
-    expect(mcpPolicy.reason).toBeNull();
-  });
-
-  test("keeps the org default for unattributed requests, even for unprefixed names", async ({
-    makeAgent,
-  }) => {
-    const agent = await makeAgent({ name: "Unattributed Agent" });
-
-    await persistTools(
-      [
-        {
-          toolName: "some_custom_tool",
-          toolParameters: { type: "object", properties: {} },
-          toolDescription: "A tool from an unknown client",
-        },
-      ],
-      agent.id,
-      { invocationAction: "block_when_context_is_untrusted" },
-      // No client attribution: the request did not come from a known CLI.
-      { userId: undefined, externalAgentId: undefined },
-    );
-
-    const tool = await ToolModel.findByName("some_custom_tool");
-    if (!tool) throw new Error("expected tool to be persisted");
-    const [policy] = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-    expect(policy.action).toBe("block_when_context_is_untrusted");
-  });
-
-  test("keeps the org default for OpenCode mcp: tools but overrides local tools", async ({
-    makeAgent,
-  }) => {
-    const agent = await makeAgent({ name: "OpenCode Agent" });
-
-    await persistTools(
-      [
-        { toolName: "bash", toolParameters: { type: "object" } },
-        {
-          toolName: "mcp:gateway:write_issue",
-          toolParameters: { type: "object" },
-        },
-      ],
-      agent.id,
-      { invocationAction: "block_when_context_is_untrusted" },
-      { externalAgentId: OPENCODE_CLIENT_ID },
-    );
-
-    const localTool = await ToolModel.findByName("bash");
-    const gatewayTool = await ToolModel.findByName("mcp:gateway:write_issue");
-    if (!localTool || !gatewayTool)
-      throw new Error("expected OpenCode tools to be persisted");
-
-    const [localPolicy] = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, localTool.id));
-    const [gatewayPolicy] = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, gatewayTool.id));
-    expect(localPolicy.action).toBe("allow_when_context_is_untrusted");
-    expect(gatewayPolicy.action).toBe("block_when_context_is_untrusted");
-  });
-
   test("handles empty tools array without errors", async ({ makeAgent }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
     // Should not throw
-    await persistTools([], agent.id);
+    await persistTools({ tools: [], agentId: agent.id });
   });
 
   test("skips Archestra built-in tools", async ({ makeAgent }) => {
@@ -234,7 +79,7 @@ describe("persistTools", () => {
       },
     ];
 
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // Only the regular tool should be created as a proxy-sniffed tool
     const regularTool = await ToolModel.findByName("regular-tool");
@@ -280,7 +125,7 @@ describe("persistTools", () => {
       },
     ];
 
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // Neither prefix of a built-in may be auto-discovered…
     expect(await ToolModel.findByName("archestra__whoami")).toBeNull();
@@ -330,7 +175,7 @@ describe("persistTools", () => {
       },
     ];
 
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // Decorated gateway tools are recognized as ours and NOT auto-discovered…
     expect(
@@ -355,8 +200,8 @@ describe("persistTools", () => {
   }) => {
     const agent = await makeAgent({ name: "Test Agent" });
 
-    await persistTools(
-      [
+    await persistTools({
+      tools: [
         {
           // The gateway's own search_tools under a label nothing recognizes.
           toolName: "mcp__gw__archestra__search_tools",
@@ -370,36 +215,17 @@ describe("persistTools", () => {
           servedByGateway: false,
         },
       ],
-      agent.id,
-      {
-        invocationAction: "require_approval",
-        resultAction: "mark_as_untrusted",
-      },
-    );
+      agentId: agent.id,
+    });
 
     expect(
       await ToolModel.findByName("mcp__gw__archestra__search_tools"),
     ).toBeNull();
-    // The lookalike is discovered like any foreign tool, under the org's
-    // defaults, rather than skipped as a built-in.
-    const lookalike = await ToolModel.findByName(
-      "mcp__evil__archestra__search_tools",
-    );
-    if (!lookalike) throw new Error("expected the lookalike to be discovered");
-    const invocation = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, lookalike.id));
-    expect(invocation.map((policy) => policy.action)).toEqual([
-      "require_approval",
-    ]);
-    const trusted = await db
-      .select()
-      .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.toolId, lookalike.id));
-    expect(trusted.map((policy) => policy.action)).toEqual([
-      "mark_as_untrusted",
-    ]);
+    // The lookalike is discovered like any foreign tool rather than skipped
+    // as a built-in.
+    expect(
+      await ToolModel.findByName("mcp__evil__archestra__search_tools"),
+    ).not.toBeNull();
   });
 
   test("skips agent delegation tools (agent__*)", async ({ makeAgent }) => {
@@ -424,7 +250,7 @@ describe("persistTools", () => {
       },
     ];
 
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // Only the regular tool should be created
     const regularTool = await ToolModel.findByName("regular-tool");
@@ -468,7 +294,7 @@ describe("persistTools", () => {
       },
     ];
 
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // The proxy tool should be created
     const proxyTool = await ToolModel.findByName("proxy-tool-1");
@@ -505,7 +331,7 @@ describe("persistTools", () => {
       },
     ];
 
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // The proxy tool should be created
     const proxyTool = await ToolModel.findByName("proxy-tool-1");
@@ -527,8 +353,8 @@ describe("persistTools", () => {
     ];
 
     // Call persistTools twice
-    await persistTools(tools, agent.id);
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
+    await persistTools({ tools, agentId: agent.id });
 
     // Should only have one tool with this name
     const tool = await ToolModel.findByName("idempotent-tool");
@@ -561,7 +387,7 @@ describe("persistTools", () => {
     ];
 
     // Should not throw
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // Verify all tools were created
     expect(await ToolModel.findByName("tool-with-all-fields")).not.toBeNull();
@@ -590,9 +416,9 @@ describe("persistTools", () => {
 
     // Call persistTools multiple times concurrently - should not throw
     await Promise.all([
-      persistTools(tools, agent.id),
-      persistTools(tools, agent.id),
-      persistTools(tools, agent.id),
+      persistTools({ tools, agentId: agent.id }),
+      persistTools({ tools, agentId: agent.id }),
+      persistTools({ tools, agentId: agent.id }),
     ]);
 
     // Verify tools were created
@@ -631,7 +457,7 @@ describe("persistTools", () => {
       },
     ];
 
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // No new proxy tools should be created — the existing MCP tool should remain unchanged
     const existingTool = await ToolModel.findByName("existing-mcp-tool");
@@ -669,7 +495,7 @@ describe("persistTools", () => {
     ];
 
     // Should not throw a constraint violation error
-    await persistTools(tools, agent.id);
+    await persistTools({ tools, agentId: agent.id });
 
     // Verify tools were created (only unique names)
     const duplicateTool = await ToolModel.findByName("duplicate-tool");

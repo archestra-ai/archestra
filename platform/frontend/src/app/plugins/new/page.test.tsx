@@ -3,7 +3,7 @@ import {
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
 } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -469,20 +469,16 @@ describe("NewPluginPage", () => {
       >,
     );
     view.rerenderPage();
-    await user.click(screen.getByRole("button", { name: "Add access" }));
-    const dialog = screen.getByRole("dialog", { name: "Add access" });
-    await user.click(within(dialog).getByRole("button", { name: /^Roles/ }));
+    await user.click(screen.getByRole("combobox", { name: "Add access" }));
     await user.click(
-      within(dialog).getByRole("combobox", { name: "Add roles" }),
+      await screen.findByRole("option", {
+        name: "Everyone with the Member role",
+      }),
     );
-    await user.click(await screen.findByRole("option", { name: /Member/ }));
     await user.click(
-      within(dialog).getByRole("combobox", { name: "Permission for Member" }),
+      screen.getByRole("combobox", { name: "Permission for Member" }),
     );
     await user.click(screen.getByRole("option", { name: "Can edit" }));
-    await user.click(
-      within(dialog).getByRole("button", { name: "Add access" }),
-    );
     expect(create).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Create plugin" }));
     expect(create).toHaveBeenCalledWith(
@@ -519,7 +515,7 @@ describe("NewPluginPage", () => {
 
     // Access is available on its own tab during creation.
     expect(
-      screen.queryByRole("button", { name: "Add access" }),
+      screen.queryByRole("combobox", { name: "Add access" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getAllByRole("link", { name: "Permissions" })[0],
@@ -530,7 +526,7 @@ describe("NewPluginPage", () => {
       >,
     );
     view.rerenderPage();
-    expect(screen.getByRole("button", { name: "Add access" })).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "Add access" })).toBeVisible();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("source=blank") as ReturnType<typeof useSearchParams>,
     );

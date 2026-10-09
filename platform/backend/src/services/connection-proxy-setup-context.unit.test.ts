@@ -9,10 +9,6 @@ import {
   rewriteConnectionProxySetupUrl,
   verifyConnectionProxySetupContext,
 } from "./connection-proxy-setup-context";
-import {
-  issueConnectionSetupContext,
-  verifyConnectionSetupContext,
-} from "./connection-setup-context";
 
 const PREFIX = "cps1_";
 const DOMAIN = "archestra-connection-proxy-setup-v1:";
@@ -50,25 +46,6 @@ test("the capability is bound to org, presented key, and proxy", () => {
       ...scope,
       proxyAgentId: "other-proxy",
       token,
-    }),
-  ).toBe(false);
-  const mcp = issueConnectionSetupContext({
-    userId: "user-1",
-    organizationId: scope.organizationId,
-    gatewayId: scope.proxyAgentId,
-    setupId: scope.setupId,
-    secret: scope.secret,
-  });
-  expect(verifyConnectionProxySetupContext({ ...scope, token: mcp })).toBe(
-    false,
-  );
-  expect(
-    verifyConnectionSetupContext({
-      token,
-      userId: "user-1",
-      organizationId: scope.organizationId,
-      gatewayId: scope.proxyAgentId,
-      secret: scope.secret,
     }),
   ).toBe(false);
 });

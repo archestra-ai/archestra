@@ -223,7 +223,7 @@ export function AgentCreatePage({
             setSelectedTemplate(template);
             setSourceSelected(true);
           }}
-          showPopularAgents={runtimeEnabled === true}
+          runtimeAvailable={runtimeEnabled}
         />
       ) : (
         <AgentForm

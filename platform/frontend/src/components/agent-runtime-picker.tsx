@@ -22,6 +22,7 @@ import {
   AgentRuntimeSteeringField,
   defaultAgentRuntime,
 } from "@/components/agent-runtime-fields";
+import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { ConfigurationRow } from "@/components/configuration-row";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Accordion } from "@/components/ui/accordion";
@@ -160,12 +161,7 @@ export function AgentRuntimePicker({
           onRetry={() => refetch()}
         />
       )}
-      {runtimeEnabled === false && (
-        <p className="text-sm text-muted-foreground">
-          Your deployment administrator must enable Agent Runtime before you can
-          configure a dedicated runtime.
-        </p>
-      )}
+      {runtimeEnabled === false && <AgentRuntimeUnavailableNotice />}
       <Accordion
         type="multiple"
         value={expandedRows}

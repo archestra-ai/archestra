@@ -46,6 +46,7 @@ beforeEach(() => {
     resource: "agent",
     scope: "*",
     name: "All agents",
+    ownerId: null,
     revision: 1,
     grants: [
       {
@@ -244,7 +245,7 @@ it("opens a linked read-only permissions dialog for the current resource and pre
   });
 });
 
-it("adds recipients in the same dialog and preserves the permission draft when going back", async () => {
+it("adds recipients to the permission draft in the same dialog", async () => {
   server.use(
     http.get(`${origin}/api/resource-permissions/agent/:scope/subjects`, () =>
       HttpResponse.json([
@@ -265,18 +266,10 @@ it("adds recipients in the same dialog and preserves the permission draft when g
     }),
   );
   await user.click(screen.getByRole("option", { name: /Can edit/ }));
-  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
-  expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
-  expect(screen.getByRole("dialog", { name: "Add access" })).toBe(dialog);
-  await user.click(within(dialog).getByRole("button", { name: "Back" }));
-  expect(
-    within(dialog).getByRole("combobox", { name: "Permission for Support" }),
-  ).toHaveTextContent("Can edit");
-  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
-  await user.click(within(dialog).getByRole("button", { name: /^Teams/ }));
-  await user.click(within(dialog).getByRole("combobox", { name: "Add teams" }));
-  await user.click(await screen.findByRole("option", { name: /Design/ }));
-  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
+  await user.click(
+    within(dialog).getByRole("combobox", { name: "Add access" }),
+  );
+  await user.click(await screen.findByRole("option", { name: "Design" }));
   expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
   expect(
     screen.getByRole("dialog", { name: "Permissions for all agents" }),
@@ -286,7 +279,7 @@ it("adds recipients in the same dialog and preserves the permission draft when g
   ).toHaveTextContent("Can edit");
   expect(
     within(dialog).getByRole("combobox", { name: "Permission for Design" }),
-  ).toHaveTextContent("Can view");
+  ).toHaveTextContent("Can use");
   const footer = within(dialog).getByRole("group", {
     name: "Permission actions",
   });

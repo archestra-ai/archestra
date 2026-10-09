@@ -660,8 +660,8 @@ describe("resolveGatewayToolIdentity: compat", () => {
     );
   });
 
-  // Built-ins bypass tool-invocation and trusted-data policies, so a prefix
-  // any server can claim must never confer that status.
+  // Built-ins are trusted as the platform's own, so a prefix any server can
+  // claim must never confer that status.
   test("a learned prefix never yields a branded built-in name", async ({
     makeOrganization,
   }) => {

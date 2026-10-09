@@ -22,7 +22,6 @@ vi.mock("@/lib/environment.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  countInternalMcpCatalog: async () => 0,
   useInternalMcpCatalogAccessIds: () => ({ data: undefined }),
   useInternalMcpCatalog: ({
     initialData,
@@ -87,7 +86,10 @@ vi.mock("@/components/resource-scope-filter", () => ({
   }),
 }));
 
-vi.mock("@/components/resource-access-filter", () => ({
+vi.mock("@/components/resource-access-filter", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/resource-access-filter")
+  >()),
   ResourceAccessFilter: () => null,
 }));
 
@@ -329,28 +331,7 @@ describe("McpServerCard uninstall permission", () => {
     expect(routerPush).toHaveBeenCalledExactlyOnceWith("/mcp/registry/cat-1");
   });
 
-  it("opens the ownership menu without navigating and returns focus when dismissed", async () => {
-    const user = userEvent.setup();
-    renderCard(card);
-
-    const more = screen.getByRole("button", {
-      name: `More actions ${item.name}`,
-    });
-    await user.click(more);
-
-    expect(
-      screen.getByRole("menuitem", { name: "Transfer ownership" }),
-    ).toBeInTheDocument();
-    expect(routerPush).not.toHaveBeenCalled();
-
-    await user.keyboard("{Escape}");
-
-    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    expect(more).toHaveFocus();
-  });
-
-  it("withholds settings and refuses ownership transfer without catalog access", async () => {
-    const user = userEvent.setup();
+  it("withholds settings without catalog access", () => {
     // No `update` grant on the item and no registry-wide `update`: the
     // retired `mcpServerInstallation:admin` action no longer decides this.
     grantAllExcept({ mcpRegistry: ["update"] });
@@ -365,12 +346,6 @@ describe("McpServerCard uninstall permission", () => {
         name: `Server settings for ${item.name}`,
       }),
     ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: `More actions ${item.name}` }),
-    );
-    expect(
-      screen.getByRole("menuitem", { name: "Transfer ownership" }),
-    ).toHaveAttribute("aria-disabled", "true");
     expect(routerPush).not.toHaveBeenCalled();
   });
 

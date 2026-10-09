@@ -1047,7 +1047,6 @@ const baseAgent = {
   llmApiKeyId: null,
   llmModel: null,
   modelId: null,
-  considerContextUntrusted: false,
   identityProviderId: null,
   environmentId: null,
   builtInAgentConfig: null,
@@ -3821,23 +3820,25 @@ describe("AgentForm save payload and failure handling", () => {
   it("sends the advanced step's own fields, and nothing the step does not show", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();
-    const { container } = render(
+    render(
       <AgentForm agentType="agent" agent={baseAgent} sections={["advanced"]} />,
     );
 
-    await screen.findByText("Security");
+    await screen.findByText("Suggested prompts");
     expect(screen.queryByTestId("agent-runtime")).not.toBeInTheDocument();
-    const securitySwitch = container.querySelector<HTMLInputElement>(
-      "#consider-context-untrusted",
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.type(screen.getByLabelText("Button Label"), "Summarize");
+    await user.type(
+      screen.getByLabelText("Suggested prompt"),
+      "Summarize recent changes",
     );
-    if (!securitySwitch) throw new Error("No security switch rendered");
-    await user.click(securitySwitch);
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody().considerContextUntrusted).toBe(true);
+    expect(savedBody().suggestedPrompts).toEqual([
+      { summaryTitle: "Summarize", prompt: "Summarize recent changes" },
+    ]);
     expect(Object.keys(savedBody()).sort()).toEqual([
-      "considerContextUntrusted",
       "identityProviderId",
       "labels",
       // The environment and the suggested prompts are edited on this step, so
@@ -4622,7 +4623,7 @@ describe("AgentForm save payload and failure handling", () => {
       <AgentForm agentType="agent" activeSection="advanced" submitEnabled />,
     );
     expect(
-      panelOf(screen.getByRole("heading", { name: "Security" })),
+      panelOf(screen.getByRole("heading", { name: "Suggested prompts" })),
     ).not.toHaveClass("hidden");
     expect(panelOf(runtimeSection.parentElement as HTMLElement)).toHaveClass(
       "hidden",
@@ -4639,7 +4640,6 @@ describe("AgentForm save payload and failure handling", () => {
       runtime: null,
       labels: [],
       suggestedPrompts: [],
-      considerContextUntrusted: false,
       identityProviderId: null,
       accessAllTools: true,
     });

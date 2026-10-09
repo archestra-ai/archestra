@@ -28,8 +28,6 @@ import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
 import ToolModel from "@/models/tool";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import type {
@@ -68,8 +66,6 @@ import type {
   Skill,
   TeamMember,
   Tool,
-  ToolInvocation,
-  TrustedData,
 } from "@/types";
 import { accessGrants, type TestAccess } from "./access-grants";
 import { type LegacySharing, seedLegacySharing } from "./legacy-sharing";
@@ -102,8 +98,6 @@ interface TestFixtures {
   makeAppVersion: typeof makeAppVersion;
   makeAppTool: typeof makeAppTool;
   makeAppData: typeof makeAppData;
-  makeToolPolicy: typeof makeToolPolicy;
-  makeTrustedDataPolicy: typeof makeTrustedDataPolicy;
   makeCustomRole: typeof makeCustomRole;
   makeServiceAccount: typeof makeServiceAccount;
   makeMember: typeof makeMember;
@@ -202,8 +196,6 @@ async function makeOrganization(
       InsertOrganization,
       | "name"
       | "slug"
-      | "defaultDiscoveredToolInvocationPolicy"
-      | "defaultDiscoveredToolResultPolicy"
       | "defaultEnvironmentNamespace"
       | "defaultMemberRole"
       | "defaultNetworkPolicy"
@@ -611,47 +603,6 @@ async function makeAppData(
     // ownership check a no-op and callerUserId is otherwise unused here.
     callerUserId: userId ?? "fixture",
     callerCanOverrideOwner: true,
-  });
-}
-
-/**
- * Creates a test tool invocation policy using the ToolInvocationPolicy model
- */
-async function makeToolPolicy(
-  toolId: string,
-  overrides: Partial<
-    Pick<
-      ToolInvocation.ToolInvocationPolicy,
-      "conditions" | "action" | "reason"
-    >
-  > = {},
-): Promise<ToolInvocation.ToolInvocationPolicy> {
-  return await ToolInvocationPolicyModel.create({
-    toolId,
-    conditions: [{ key: "test-arg", operator: "equal", value: "test-value" }],
-    action: "block_always",
-    reason: "Test policy reason",
-    ...overrides,
-  });
-}
-
-/**
- * Creates a test trusted data policy using the TrustedDataPolicy model
- * Returns the created policy
- */
-async function makeTrustedDataPolicy(
-  toolId: string,
-  overrides: Partial<
-    Pick<TrustedData.TrustedDataPolicy, "description" | "conditions" | "action">
-  > = {},
-): Promise<TrustedData.TrustedDataPolicy> {
-  return await TrustedDataPolicyModel.create({
-    toolId,
-    description: overrides.description ?? "Test trusted data policy",
-    conditions: overrides.conditions ?? [
-      { key: "test.path", operator: "equal", value: "test-value" },
-    ],
-    action: overrides.action ?? "mark_as_trusted",
   });
 }
 
@@ -1130,7 +1081,7 @@ async function makeSecret(
 
 /**
  * Creates a test chat API key in the database.
- * Used for testing features that require LLM API keys (e.g., auto-policy configuration).
+ * Used for testing features that require LLM API keys.
  */
 async function makeLlmProviderApiKey(
   organizationId: string,
@@ -1533,7 +1484,7 @@ async function seedAndAssignArchestraTools(agentId: string): Promise<void> {
     await db.insert(schema.internalMcpCatalogTable).values({
       id: ARCHESTRA_MCP_CATALOG_ID,
       name: DEFAULT_APP_NAME,
-      description: `Built-in ${DEFAULT_APP_NAME} tools for managing profiles, limits, policies, and MCP servers.`,
+      description: `Built-in ${DEFAULT_APP_NAME} tools for managing profiles, limits, and MCP servers.`,
       serverType: "builtin",
     });
   }
@@ -1617,12 +1568,6 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeAppData: async ({}, use) => {
     await use(makeAppData);
-  },
-  makeToolPolicy: async ({}, use) => {
-    await use(makeToolPolicy);
-  },
-  makeTrustedDataPolicy: async ({}, use) => {
-    await use(makeTrustedDataPolicy);
   },
   makeCustomRole: async ({}, use) => {
     await use(makeCustomRole);

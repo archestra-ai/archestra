@@ -42,6 +42,7 @@ export function IntegrationAvailabilitySection({
   emptyMessage,
   savedMessage,
   id,
+  disabled = false,
 }: {
   catalogKey:
     | "modelProviderOverrides"
@@ -56,6 +57,7 @@ export function IntegrationAvailabilitySection({
   emptyMessage: string;
   savedMessage: string;
   id?: string;
+  disabled?: boolean;
 }) {
   const { data: organization, isLoadingError, refetch } = useOrganization();
   const updateMutation = useUpdateIntegrationSettings(
@@ -84,7 +86,7 @@ export function IntegrationAvailabilitySection({
   const hasChanges = selectionKey(allowed) !== savedKey;
 
   const handleSave = async () => {
-    if (!organization) return;
+    if (!organization || disabled) return;
     await updateMutation.mutateAsync({
       [catalogKey]: withAllowedIntegrationIds(overrides, catalog, allowed),
     });
@@ -116,7 +118,10 @@ export function IntegrationAvailabilitySection({
                 placeholder={placeholder}
                 emptyMessage={emptyMessage}
                 disabled={
-                  !organization || updateMutation.isPending || !hasPermission
+                  disabled ||
+                  !organization ||
+                  updateMutation.isPending ||
+                  !hasPermission
                 }
               />
             )}
@@ -126,7 +131,7 @@ export function IntegrationAvailabilitySection({
       <SettingsSaveBar
         hasChanges={hasChanges}
         isSaving={updateMutation.isPending}
-        disabledSave={!organization}
+        disabledSave={disabled || !organization}
         permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
         onCancel={() => setAllowed(savedAllowed)}

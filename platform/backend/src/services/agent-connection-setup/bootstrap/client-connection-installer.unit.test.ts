@@ -114,11 +114,12 @@ afterEach(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await rm(directory, { recursive: true, force: true });
 });
-function run(url = origin, clientId = "cursor") {
+function run(url = origin, clientId = "cursor", args: string[] = []) {
   return runInstaller({
     url,
     clientId,
     nodeArgs: ["--require", clockPath],
+    args,
   });
 }
 
@@ -126,10 +127,12 @@ function runInstaller({
   url,
   clientId,
   nodeArgs = [],
+  args = [],
 }: {
   url: string;
   clientId: string;
   nodeArgs?: string[];
+  args?: string[];
 }) {
   return new Promise<{ code: number | null; output: string }>(
     (resolve, reject) => {
@@ -142,6 +145,7 @@ function runInstaller({
         clientId,
         "--no-open",
         "--desktop-terminal",
+        ...args,
       ]);
       let output = "";
       child.stdout.on("data", (chunk) => {
@@ -173,6 +177,26 @@ test("downloads and executes the approved script without logging polling credent
     clientId: "cursor",
     deviceName: hostname().trim().slice(0, 64),
   });
+});
+
+test("sends the gateway and plugins picked on the Connect page", async () => {
+  const result = await run(origin, "cursor", [
+    "--gateway",
+    "coding-gateway",
+    "--plugins",
+    "openappa-1a2b3c4d,pm-5e6f7a8b",
+  ]);
+  expect(result.code).toBe(0);
+  expect(startBody).toMatchObject({
+    gateway: "coding-gateway",
+    plugins: ["openappa-1a2b3c4d", "pm-5e6f7a8b"],
+  });
+});
+
+test("refuses a gateway that is not a slug", async () => {
+  const result = await run(origin, "cursor", ["--gateway", "../x"]);
+  expect(result.code).not.toBe(0);
+  expect(result.output).toContain("--gateway takes a gateway slug.");
 });
 
 function installerPlatform() {

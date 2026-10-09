@@ -14,7 +14,7 @@ export const STREAM_KEEPALIVE_SSE_COMMENT = ": archestra keep-alive\n\n";
  * currently writing to.
  *
  * The proxy withholds client tool-call events until the turn has fully
- * streamed and tool-invocation policy has run, so a large tool payload
+ * streamed and the proxy plugins have ruled on its calls, so a large tool payload
  * generated token-by-token is, from the client's side, a silent stream for
  * that whole stretch. Streaming clients run byte-clock watchdogs against
  * exactly that (Claude Code flags a stall after ~20s and aborts after a few

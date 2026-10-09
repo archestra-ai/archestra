@@ -23,13 +23,10 @@ export default async function OpenAppaLayout({
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
-  // `notFound` throws, so it stays outside the catch above.
-  if (config?.features.openappaEnabled !== true) {
-    // Beta on with OpenAPPA off means the licence is what holds it back.
-    if (config?.features.betaEnabled === true)
-      return <OpenAppaLicenceRequired tier={config.smallTeamTier} />;
-    notFound();
-  }
+  if (!config) notFound();
+  // OpenAPPA is only ever off for want of a licence.
+  if (!config.features.openappaEnabled)
+    return <OpenAppaLicenceRequired tier={config.smallTeamTier} />;
 
   return <OpenAppaPageLayout>{children}</OpenAppaPageLayout>;
 }

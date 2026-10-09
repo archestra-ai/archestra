@@ -104,6 +104,31 @@ export type ScopedPermission = {
   action: ResourcePermissionAction;
 };
 
+/**
+ * The audience an object's own grants give it, the client twin of the
+ * backend's `audienceIs` / `sharedAudience`: only grants that include `read`
+ * count; one to the organization or a role is `org`, then one to a team is
+ * `team`, and anything else — the owner alone, named people, service
+ * accounts — is `personal`. `ownerId` is accepted for symmetry with the
+ * server, which reads it only to tell the owner from other named people; both
+ * are `personal`, so it never changes the result.
+ */
+export function grantsAudience(
+  grants: readonly ResourcePermissionGrant[],
+  _ownerId?: string | null,
+): "personal" | "team" | "org" {
+  const readers = grants.filter((grant) => grant.actions.includes("read"));
+  if (
+    readers.some(
+      (grant) =>
+        grant.subject.type === "organization" || grant.subject.type === "role",
+    )
+  )
+    return "org";
+  if (readers.some((grant) => grant.subject.type === "team")) return "team";
+  return "personal";
+}
+
 /** Check the whole tuple: independent action/scope unions escalate access. */
 export function hasScopedPermission(params: {
   grants: readonly ScopedPermission[];

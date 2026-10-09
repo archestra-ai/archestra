@@ -17,7 +17,7 @@ export const OPENAPPA_SUGGESTED_LAUNCH_PROMPTS = {
 
 const POLICY_LAUNCH_PROMPTS = {
   writeValidations:
-    "Help me with validations for my current OpenAPPA policy. Ground me briefly in what the policy protects and why a small validation helps. If no checks exist, suggest one useful starting check; otherwise, summarize their coverage and help me choose whether to review, edit or add one. Draft and replay the chosen change for review. Save only when I ask, and leave the policy unchanged unless I request a fix.",
+    "Help me choose a useful validation for my current policy. Find checks we can actually run, and explain each in everyday language: what it checks, a concrete example, and why I might want it. Explain any important limits without making me read tool calls or policy files. Let me choose before drafting, explain the result, and save only when I ask. Leave the policy unchanged.",
   /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:
     "Set up a starting OpenAPPA policy with what is already available.",

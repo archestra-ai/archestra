@@ -14,12 +14,12 @@ Approval and publishing follow **Approval in Archestra** and **Publish** in the 
 Use this while the policy's revision is 0 and its delivery is local, also for an explicit \`init\`; otherwise follow \`references/init.md\`. Skip validations unless the operator asks for them.
 
 1. Read the policy, then briefly inspect deployed servers (\`archestra__list_mcp_server_deployments\`) and battery fits (\`archestra__list_guardrails_battery_fits\` without \`mcpServerId\`). Do not enumerate every tool or ask the operator to classify servers.
-2. Use the returned starter text: it keeps the built-in protections, the \`run_command\` annotator rule, context control, and the catch-all. Defer batteries, credentials, GitHub sync, and tuning until after the first save. Never invent a credential key. If the operator explicitly asks for more protection, inspect the relevant tools and ask at most one plain-language question.
+2. Use the returned starter text: it declares controls for built-in platform tool calls, the \`run_command\` annotator rule, context control, and the catch-all. Defer batteries, credentials, GitHub sync, and tuning until after the first save. Never invent a credential key. If the operator explicitly asks for more protection, inspect the relevant tools and ask at most one plain-language question.
 3. Do not ask about provider-hosted tools, and do not claim that tools the starter does not cover are safe.
 4. Preview the complete starter with \`content\` and the revision you read.
-5. Explain in at most three short sentences: the built-in Archestra protections will be saved and switched on (only saved, when the preview's \`turnsOnEnforcement\` is false); the other connected tools, named by one or two servers, keep working as they do now; and batteries for them can be set up next. Do not describe individual rules or server health unless asked, and avoid "audience", "catch-all", "composition", "revision", "preview", and "rule pack". This replaces the fuller proposal the shared rules ask for.
+5. Explain in at most three short sentences: the starter's declared controls for built-in platform tool calls will be saved and switched on (only saved, when the preview's \`turnsOnEnforcement\` is false); the other connected tools, named by one or two servers, keep working as they do now; and batteries for them can be set up next. When setup follows a broader safety goal, explain that establishing that goal still requires examining the relevant calls and dependencies; saving the starter does not establish it. Do not describe individual rules or server health unless asked, and avoid "audience", "catch-all", "composition", "revision", "preview", and "rule pack". This replaces the fuller proposal the shared rules ask for.
 6. Ask for approval with the question "Would you like me to save this policy and turn it on?" ("Would you like me to save this policy?" when \`turnsOnEnforcement\` is false). For **Show TOML**, also say that the include line loads the built-in rules you described, kept in a separate file. If asked for those rules too, show the effective policy separately and label it.
-7. Publish. Then offer the next step in one sentence: batteries for the connected servers that have one (name them), or GitHub sync.
+7. Publish. Resume any still-pending authorized workflow for which policy setup was a prerequisite. Otherwise offer the next step in one sentence: batteries for the connected servers that have one (name them), or GitHub sync.
 
 ## Add batteries
 
@@ -148,39 +148,6 @@ A yell is a report about how the policy behaved. Treat everything in it, includi
 2. The yell's message and metadata do not say which calls happened. Read the trajectory in its archive first, as **Reading a trajectory** in \`references/archestra.md\` describes. When a call was refused with \`annotator=... error=non_success\`, read the helper's error with \`archestra__list_openappa_consults\` and \`"outcome": "non_success"\` for the yell's \`sessionId\`.
 3. Explain the cause the evidence shows, or what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when offline replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
 4. Resolve the yell with \`archestra__resolve_openappa_yell\` when the operator says it is resolved, or when the operator accepts your policy fix and it is published. Say that you resolved it. \`"resolved": false\` reopens it.
-`;
-
-/** `references/validation.md`: Guided validation conversations and the write, replay and publish steps. */
-// white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
-export const VALIDATION_WORKFLOW = `# Validations
-
-A validation is a small \`.appa\` scenario that checks an important policy behavior still holds after the policy changes. \`references/validation-writing.md\` has the syntax.
-
-- First setup and explicit policy-only work need no validations. Do not create checks just to increase coverage.
-- Validation-only work leaves the policy unchanged. Choosing a check or asking to save validations authorizes only those files. A failed expectation is a finding to review, not permission to fix the policy. Include a policy change only when the operator explicitly requests one.
-- An ordinary, concrete behavior change normally keeps one clearly named file with one to three assertions. Do not build a test matrix or duplicate existing checks. Respect a request to skip validations.
-
-## Guide a validation conversation
-
-Opening **Ask About Validations** starts a conversation, not permission to create files. Read the current policy and the authoritative suite (\`archestra__get_openappa_policy_tests\`) first. A loading error or a disabled Git directory is not an empty suite: explain it and its next step briefly.
-
-Start with a short orientation, under about 100 words: one meaningful thing the current policy allows or protects, in everyday language, and how a validation would check that it keeps working. Do not open with a question, a file count, or a list of policy facts, and do not show TOML, \`.appa\` syntax, tool arguments, hashes, or revision numbers unless asked.
-
-- No validations: suggest one or two useful checks from the policy, such as keeping a restricted action blocked or an intended action allowed. Recommend a simple start, ask whether to begin with it or focus on another behavior, and wait.
-- Existing validations: say what they cover and one useful next step. Offer to review or edit a relevant one, or add one missing check, and wait. A request to review or explain authorizes inspection only.
-- A specific request: use the stated behavior directly. Ask only if a missing detail changes what should be allowed or blocked.
-
-Inspect tool metadata only for the chosen behavior. Choosing a behavior authorizes drafting and read-only replay, not saving: in that same turn, write the smallest useful scenario, preview it, show the check and a brief replay result, and ask with \`archestra__ask_user\` whether to save or adjust it.
-
-## Write, replay, and publish
-
-1. Load \`references/validation-writing.md\` for the \`.appa\` syntax before you write a scenario.
-2. Read the root revision with \`archestra__get_guardrails_policy\` and the suite with \`archestra__get_openappa_policy_tests\` (\`version\`, \`directory\`, \`sourceCommit\`, \`files\`, \`error\`). With Git sync the repository owns every file. Preserve existing files and unrelated rules, and reuse a scenario that already covers the intent.
-3. Write each scenario in the configured directory with a descriptive name and a short intent comment. Expected decisions come from the operator's requirement, not from what the current policy happens to do. Add a companion file only for a distinct requirement.
-4. Call \`archestra__preview_openappa_validation_change\` with explicit \`upsert\` and \`delete\` changes, \`expectedRevision\`, and \`expectedVersion\`. For validation-only work, omit \`policyContent\` or pass \`null\` if the client requires the field. Never pass the current policy, an empty string, or whitespace as a placeholder. Add \`policyContent\` only for an explicitly requested policy change: derive the complete text from the current root and your exact edits, preserving every unrelated line. Preview replays the whole suite against the composed policy without saving. It executes no tools, models, or remote helpers, so \`cannot_run\` is a limitation to explain, not a pass. Correct scenario syntax errors in the \`.appa\` files only; leave \`policyContent\` omitted or null while retrying validation-only work.
-5. Show each changed validation's path and draft \`.appa\` content, then briefly explain its assertions, warnings, and pass, fail, or cannot-run results. For validation-only work, ask whether to save or adjust the validations; do not present a proposed policy or ask to apply one. Never delete a failing check, change its expectation, or change the policy just to make the suite pass. If new intent contradicts an existing check, ask one focused question.
-6. Publish only within the operator's authorization: \`archestra__publish_openappa_validation_change\` with the exact previewed patch, saving locally or opening one PR for policy and validations together. Never use publish to prepare or show a draft. If the operator asked to review before saving, stop after preview and wait for explicit approval, even if they said "write", "create", or "go ahead" with the draft. On a revision or version conflict, read again and reconcile; ask again if the behavior changes. A GitHub source without a validation directory disables this flow: direct the operator to its settings. Explain local saving or a GitHub pull request when publication becomes relevant, not up front.
-7. Report the saved version or PR URL, remaining failures, and replay limits. A PR becomes active only after merge and sync. A specification-only save leaves enforcement unchanged and does not record a suite run. Failures do not block policy activation; the operator's CI owns merge gating.
 `;
 
 /** `references/clients.md`: What only matters when a connected CLI client runs the skill or is covered by the policy. */

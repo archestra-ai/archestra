@@ -241,6 +241,53 @@ describe("APPA Guide feature availability", () => {
     }
   });
 
+  test("the validation example isolates the read restriction and catches its removal", async () => {
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/validation-read-restriction.md",
+    )?.content;
+    if (!reference) throw new Error("Validation-writing reference is missing");
+    const policy = reference.match(/```toml\n([\s\S]*?)```/)?.[1];
+    const scenario = reference.match(/```appa\n([\s\S]*?)```/)?.[1];
+    if (!policy || !scenario) throw new Error("Validation example is missing");
+    const { replayOpenappaPolicy } = await import("@archestra/openappa-rs");
+    const replay = async (content: string) =>
+      JSON.parse(
+        await replayOpenappaPolicy(
+          JSON.stringify({
+            content,
+            files: [{ path: "traces/private-read.appa", content: scenario }],
+          }),
+        ),
+      ).files[0];
+
+    const baseline = await replay(policy);
+    expect(baseline.status).toBe("passed");
+    expect(
+      baseline.steps.map((step: { actual: string }) => step.actual),
+    ).toEqual(["allow", "allow", "deny"]);
+
+    const unprotected = await replay(
+      policy.replace('delta = { audience = ["internal"] }', "delta = {}"),
+    );
+    expect(unprotected.status).toBe("failed");
+    expect(unprotected.steps.at(-1)).toMatchObject({
+      expected: "deny",
+      actual: "allow",
+    });
+
+    const alwaysBlocked = await replay(
+      policy.replace(
+        'contains = ["public"] } }',
+        'contains = ["public"] }, attention = ["blocked"] }',
+      ),
+    );
+    expect(alwaysBlocked.status).toBe("failed");
+    expect(alwaysBlocked.steps[0]).toMatchObject({
+      expected: "allow",
+      actual: "deny",
+    });
+  });
+
   test("every file the skill points to is bundled with it", () => {
     const bundled = new Set(APPA_GUIDE_SKILL.files.map((file) => file.path));
     const referenced = [

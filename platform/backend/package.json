@@ -148,7 +148,7 @@
     "fastify-type-provider-zod": "^6.0.0",
     "google-auth-library": "^10.5.0",
     "googleapis": "^171.4.0",
-    "handlebars": "^4.7.10",
+    "handlebars": "^4.7.9",
     "ipaddr.js": "^2.3.0",
     "jira.js": "^5.3.1",
     "jose": "^6.2.0",

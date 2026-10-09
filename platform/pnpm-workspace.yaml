@@ -217,10 +217,6 @@ verifyDepsBeforeRun: false
 # 10080 minutes = 7 days.
 # https://daniakash.com/posts/simplest-supply-chain-defense/
 minimumReleaseAge: 10080
-# TEMPORARY: 4.7.10 fixes CVE-2026-106445 and CVE-2026-106446 (CRITICAL).
-# Published 2026-10-05; remove this exact-version exception after 2026-10-12.
-minimumReleaseAgeExclude:
-  - 'handlebars@4.7.10'
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare
 # zod as a peer dependency, so hoist zod to the root node_modules.

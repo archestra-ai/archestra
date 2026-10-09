@@ -45,7 +45,6 @@ import {
 } from "@/components/ui/select";
 import {
   APPS_FIRST_PAGE,
-  countApps,
   useAppLabelKeys,
   useAppLabelValues,
   useApps,
@@ -76,7 +75,8 @@ export default function AppsPage() {
   // Scope/owner filtering is server-side (mirroring the Projects list) so an
   // app admin's "Personal → Other users" view can reach apps that aren't in the
   // default page. The scope filter component owns these URL params.
-  const { scope, authorIds, excludeAuthorIds, access } = useScopeFilterParams();
+  const { scope, authorIds, excludeAuthorIds, access, sharedWith, owner } =
+    useScopeFilterParams();
   const settingsId = searchParams.get("settings");
   // Label filtering is server-side too: an owned app matches its own labels, an
   // external one its backing MCP server's, so both halves of the list filter.
@@ -92,6 +92,8 @@ export default function AppsPage() {
       authorIds,
       excludeAuthorIds,
       access,
+      sharedWith,
+      owner,
       labels: labelsFromUrl || undefined,
     },
     { toastOnError: false },
@@ -201,11 +203,7 @@ export default function AppsPage() {
               />
             }
           >
-            <ResourceAccessFilter
-              resource="app"
-              noun="apps"
-              countItems={countApps}
-            />
+            <ResourceAccessFilter resource="app" noun="apps" />
             <Select
               value={kind}
               onValueChange={(value) =>

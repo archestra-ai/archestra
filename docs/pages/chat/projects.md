@@ -2,7 +2,7 @@
 title: Projects
 description: Keep chats, agent runs, files, instructions, and schedules in one shared workspace
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-09
 ---
 
 A project groups chats, Agent Runtime sessions, files, instructions, and scheduled tasks. Start with a private project, then share it with the people who work on it.
@@ -33,7 +33,7 @@ Pause a schedule to stop automatic runs. You can still run it manually. Deleting
 
 ## Sharing and Ownership
 
-Open the project's settings and select **Permissions** to manage its audience. Access to the project lets members work with its files and start their own chats and sessions. Access to another member's chats or runs requires a separate permission. Only a runtime session's author can attach to its shell.
+Manage the project's audience in its settings, under its permissions. Access to the project lets members work with its files and start their own chats and sessions. Access to another member's chats or runs requires a separate permission. Only a runtime session's author can attach to its shell.
 
 You can transfer ownership to another organization member. Files, instructions, schedules, and sharing stay with the project. Existing chats and scheduled tasks retain their authors and execution identities.
 

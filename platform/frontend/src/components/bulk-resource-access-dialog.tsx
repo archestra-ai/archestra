@@ -59,6 +59,7 @@ export function BulkResourceAccessDialog({
             scope={items[0]?.id}
             grants={grants}
             onChange={setGrants}
+            showAudience={false}
           />
         )}
       </div>

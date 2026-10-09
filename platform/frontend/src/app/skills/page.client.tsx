@@ -41,7 +41,10 @@ import {
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
-import { ResourceAccessFilter } from "@/components/resource-access-filter";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -95,7 +98,6 @@ import {
 } from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
-  countSkills,
   type SkillUsageReference,
   useAllMatchingSkills,
   useBulkDeleteSkills,
@@ -250,6 +252,8 @@ function SkillsList() {
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
     access: scopeFilter.access,
+    sharedWith: scopeFilter.sharedWith,
+    owner: scopeFilter.owner,
     status: isDeletedView ? ("deleted" as const) : undefined,
     sortBy,
     sortDirection,
@@ -555,7 +559,7 @@ function SkillsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
-      "access",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
       "status",
       "kind",
       "labels",
@@ -922,11 +926,7 @@ function SkillsList() {
                   }
                 >
                   {!isDeletedView && (
-                    <ResourceAccessFilter
-                      resource="skill"
-                      noun="skills"
-                      countItems={countSkills}
-                    />
+                    <ResourceAccessFilter resource="skill" noun="skills" />
                   )}
                   {(mcpSkillsEnabled || pluginSkillsEnabled) &&
                     !isDeletedView && (

@@ -3301,6 +3301,25 @@ export function AgentForm({
             </SettingsSectionGroup>
           )}
 
+          {/* Who can use it, at the foot of General as on the detail page:
+              outside the group, so no rule separates it from the fields. It
+              takes back the group's bottom padding to sit at field spacing. */}
+          {showConfigurationSections && !agent && agentType !== "llm_proxy" && (
+            <div
+              className={cn(
+                "-mt-6",
+                !isActiveSection("configuration") && "hidden",
+              )}
+            >
+              <InitialResourcePermissions
+                standalone
+                resource={agentType === "mcp_gateway" ? "mcpGateway" : "agent"}
+                grants={initialGrants}
+                onChange={setInitialGrants}
+              />
+            </div>
+          )}
+
           {/* Messaging channels: a surface of its own, because the
               assignments save through their own endpoint rather than with the
               agent record's fields. */}
@@ -3717,16 +3736,6 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("advanced") && "hidden")}
             >
-              {!agent && agentType !== "llm_proxy" && (
-                <InitialResourcePermissions
-                  layout="settings"
-                  resource={
-                    agentType === "mcp_gateway" ? "mcpGateway" : "agent"
-                  }
-                  grants={initialGrants}
-                  onChange={setInitialGrants}
-                />
-              )}
               {/* Skills served over MCP (SEP-2640). Gateways only, behind the
                   draft-extension feature flag. It sits in Advanced rather than
                   beside Tools & Knowledge: these are resources the gateway

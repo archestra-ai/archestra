@@ -258,7 +258,6 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
-  countProjects: async () => 0,
   // Records its filters: which slice the page asks for is the whole difference
   // between the trash and the active list, so a mock that dropped them would
   // stay green if the page stopped passing `status: "deleted"` and listed live
@@ -407,13 +406,12 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
   });
 
-  it("creates a project with a label from Advanced", async () => {
+  it("creates a project with a label", async () => {
     render(<ProjectsPageClient />);
     fireEvent.click(screen.getByRole("button", { name: "New project" }));
     fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "Labelled project" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.change(screen.getByLabelText("Label key"), {
       target: { value: "stage" },
     });
@@ -432,11 +430,10 @@ describe("ProjectsPageClient", () => {
     );
   });
 
-  it("edits project labels from Advanced", async () => {
+  it("edits project labels", async () => {
     mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
     render(<ProjectsPageClient />);
     fireEvent.click(screen.getByText("Edit details"));
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.change(screen.getByLabelText("Label key"), {
       target: { value: "stage" },
     });
@@ -540,8 +537,8 @@ describe("ProjectsPageClient", () => {
       fireEvent.click(screen.getByText("Save"));
 
       await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalled());
-      // Sharing is a permission policy now, saved by the Permissions page
-      // itself. The legacy columns this form used to write are read by nothing.
+      // Sharing is a permission policy now, saved through the permissions
+      // block. The legacy columns this form used to write are read by nothing.
       const body = mockUpdateMutateAsync.mock.calls[0][0];
       expect(body).toEqual(
         expect.objectContaining({ id: "owner", name: "Renamed project" }),
@@ -556,7 +553,8 @@ describe("ProjectsPageClient", () => {
       fireEvent.click(screen.getByText("Edit details"));
 
       expect(screen.queryByText("Sharing")).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
+      // Access is edited in place, below the project's own fields.
+      expect(screen.getByText("permissions")).toBeVisible();
     });
   });
 

@@ -3,12 +3,15 @@ import {
   PaginationQuerySchema,
   parseLabelsParam,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { getAgentTypePermissionChecker } from "@/auth";
 import { AgentModel } from "@/models";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { listA2aRemoteAgents } from "@/services/a2a-outbound-registry";
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import {
@@ -71,6 +74,8 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               )
               .optional(),
             access: ResourceAccessQuerySchema,
+            sharedWith: ResourceSharedWithQuerySchema,
+            owner: ResourceOwnerQuerySchema,
             selectableOnly: z
               .preprocess(
                 (value) =>
@@ -122,7 +127,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         excludeOtherPersonalAgents: isAgentAdmin
           ? query.excludeOtherPersonalAgents
           : undefined,
-        access: query.access,
+        access: resourceAccessSelection(query),
         labels: parseLabelsParam(query.labels),
         status: query.status,
         providerApiKeyId: query.providerApiKeyId,

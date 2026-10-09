@@ -50,18 +50,6 @@ const {
   unpinAgent,
 } = archestraApiSdk;
 
-/** How many gateways a "Show" selection holds, for the filter's counts. */
-export async function countGateways(params: {
-  access: ResourceAccessRelation[];
-  agentTypes: Array<"mcp_gateway" | "profile">;
-}): Promise<number> {
-  const { data, error } = await getAgents({
-    query: { limit: 1, offset: 0, ...params },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.pagination.total ?? 0;
-}
-
 /**
  * The roster, without each agent's tools. No consumer of this list reads them
  * — the pickers that show tools fetch them per agent — while the refs carry
@@ -210,6 +198,8 @@ export function useProfilesPaginated(
     excludeAuthorIds,
     excludeOtherPersonalAgents,
     access,
+    sharedWith,
+    owner,
     labels,
     status,
     includeActivationSkillsCount,
@@ -232,6 +222,8 @@ export function useProfilesPaginated(
     excludeAuthorIds === undefined &&
     excludeOtherPersonalAgents === initialDataExcludeOtherPersonalAgents &&
     isSameResourceAccess(access, initialDataAccess) &&
+    sharedWith === undefined &&
+    owner === undefined &&
     pinned === initialDataPinned &&
     labels === undefined &&
     status === undefined &&
@@ -255,6 +247,8 @@ export function useProfilesPaginated(
         excludeAuthorIds,
         excludeOtherPersonalAgents,
         access,
+        sharedWith,
+        owner,
         labels,
         status,
         includeActivationSkillsCount,
@@ -277,6 +271,8 @@ export function useProfilesPaginated(
           excludeAuthorIds,
           excludeOtherPersonalAgents,
           access,
+          sharedWith,
+          owner,
           labels,
           status,
           includeActivationSkillsCount,

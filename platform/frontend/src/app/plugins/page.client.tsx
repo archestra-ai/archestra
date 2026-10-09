@@ -30,7 +30,10 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
-import { ResourceAccessFilter } from "@/components/resource-access-filter";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -68,7 +71,6 @@ import {
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
-  countPlugins,
   type PluginListItem,
   useBulkDeletePlugins,
   useDeletePlugin,
@@ -156,6 +158,8 @@ function PluginsList() {
   } = usePlugins(true, {
     labels: labelsFilter,
     access: scopeFilter.access,
+    sharedWith: scopeFilter.sharedWith,
+    owner: scopeFilter.owner,
   });
 
   const setFilter = useCallback(
@@ -246,7 +250,7 @@ function PluginsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
-      "access",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
       "labels",
     ]) {
       params.delete(key);
@@ -600,11 +604,7 @@ function PluginsList() {
                     />
                   }
                 >
-                  <ResourceAccessFilter
-                    resource="plugin"
-                    noun="plugins"
-                    countItems={countPlugins}
-                  />
+                  <ResourceAccessFilter resource="plugin" noun="plugins" />
                   <FacetSelect
                     label="Filter by client"
                     value={client}

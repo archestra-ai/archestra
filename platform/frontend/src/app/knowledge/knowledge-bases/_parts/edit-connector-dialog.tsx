@@ -5,7 +5,7 @@ import {
   getConnectorNamePlaceholder,
   type TextSearchLanguage,
 } from "@archestra/shared";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type Path, useForm } from "react-hook-form";
 import { AutoSyncPermissionsToggle } from "@/app/knowledge/_parts/auto-sync-permissions-toggle";
 import {
@@ -116,9 +116,19 @@ export function EditConnectorDialog({
   );
   const [labels, setLabels] = useState<ProfileLabel[]>(connector.labels ?? []);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] = useState<
-    "general" | "permissions" | "advanced"
-  >("general");
+  const [activeSection, setActiveSection] = useState<"general" | "advanced">(
+    "general",
+  );
+  // The permissions block keeps its edits in its own form. This dialog's
+  // Save Changes is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
 
   const form = useForm<EditConnectorFormValues>({
     defaultValues: {
@@ -238,6 +248,7 @@ export function EditConnectorDialog({
       values.email.length > 0 ||
       values.apiToken.length > 0 ||
       values.adminApiKey.length > 0;
+    await permissionsSave.current?.();
     const result = await updateConnector.mutateAsync({
       id: connector.id,
       body: {
@@ -286,9 +297,9 @@ export function EditConnectorDialog({
       activeSection={activeSection}
       navItems={[
         { id: "general", label: "General" },
-        { id: "permissions", label: "Permissions" },
         { id: "advanced", label: "Advanced" },
       ]}
+      isDirty={permissionsDirty}
       onActiveSectionChange={setActiveSection}
       onSubmit={form.handleSubmit(handleSubmit, () =>
         setActiveSection("general"),
@@ -499,12 +510,11 @@ export function EditConnectorDialog({
             )}
           />
         )}
-      </div>
-      <div hidden={activeSection !== "permissions"}>
         <ResourceAccessSection
           resource="knowledgeConnector"
           id={connector.id}
-          standalone
+          registerSave={registerPermissionsSave}
+          onDirtyChange={setPermissionsDirty}
         />
       </div>
       <div hidden={activeSection !== "advanced"} className="space-y-4">

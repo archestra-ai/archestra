@@ -44,6 +44,7 @@ export function PermissionLevelSelect({
   valueLabel,
   title,
   extraOption,
+  inline = false,
   className,
 }: {
   value: string;
@@ -57,6 +58,8 @@ export function PermissionLevelSelect({
   title?: string;
   /** A disabled entry for a value no option matches, so the list shows it. */
   extraOption?: { value: string; label: string };
+  /** Text-only trigger for a grant row: the level and a chevron, no icon or box. */
+  inline?: boolean;
   className?: string;
 }) {
   // The level the detail explains: the highlighted one while the list is
@@ -78,13 +81,18 @@ export function PermissionLevelSelect({
         size="sm"
         // Sized to fit the longest level ("Full access + deploy") so the
         // label is never cut off, and the same width in every list.
-        className={cn("w-56 shrink-0 text-left", className)}
+        className={cn(
+          inline
+            ? "w-auto shrink-0 gap-1 border-transparent bg-transparent px-2 text-left shadow-none hover:bg-muted dark:bg-transparent"
+            : "w-56 shrink-0 text-left",
+          className,
+        )}
         aria-label={ariaLabel}
         title={title}
       >
         <SelectValue>
           <span className="flex min-w-0 items-center gap-2">
-            {SelectedIcon && !valueLabel ? (
+            {inline ? null : SelectedIcon && !valueLabel ? (
               <SelectedIcon className="size-4 text-muted-foreground" />
             ) : (
               // Holds the icon's place, so a custom set lines up too.

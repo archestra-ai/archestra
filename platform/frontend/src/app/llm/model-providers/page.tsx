@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
-  KeyRound,
   Loader2,
   Pencil,
   Plus,
@@ -49,7 +48,7 @@ import { PageLayout } from "@/components/page-layout";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { SearchInput } from "@/components/search-input";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -233,15 +232,21 @@ export default function ApiKeysPage() {
     defaultValues: DEFAULT_FORM_VALUES,
   });
   const [editLabels, setEditLabels] = useState<ProfileLabel[]>([]);
-  const [editSection, setEditSection] = useState<"general" | "permissions">(
-    "general",
+  // The permissions section keeps its edits in its own form. This dialog's
+  // Test & Save is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
   );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
   const editLabelsRef = useRef<ProfileLabelsRef>(null);
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {
     if (editingApiKey) {
-      setEditSection("general");
       editForm.reset({
         name: editingApiKey.name,
         provider: editingApiKey.provider,
@@ -286,6 +291,7 @@ export default function ApiKeysPage() {
     );
 
     try {
+      await permissionsSave.current?.();
       await updateMutation.mutateAsync({
         id: editingApiKey.id,
         data: {
@@ -298,7 +304,7 @@ export default function ApiKeysPage() {
           inferenceBaseUrl: values.inferenceBaseUrl || null,
           extraHeaders: serializeExtraHeaders(values.extraHeaders),
           // The update route no longer accepts the retired `scope`/`teamId`
-          // fields; sharing is edited on the key's Permissions tab.
+          // fields; sharing is edited in the key's permissions section.
           isPrimary: values.isPrimary,
           vaultSecretPath:
             !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
@@ -837,34 +843,14 @@ export default function ApiKeysPage() {
         )}
 
         {/* Edit Dialog */}
-        <TabbedDialogShell
+        <StandardFormDialog
           open={!!editingApiKey}
           onOpenChange={(open) => {
             if (!open) closeEditDialog();
           }}
           title="Edit API Key"
           description="Update the name, the API key value, or who can reach it"
-          sidebarLabel={editForm.watch("name") || "Provider key"}
-          sidebarDescription="Model provider"
-          sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
-          activeSection={editSection}
-          navItems={[
-            { id: "general", label: "General" },
-            { id: "permissions", label: "Permissions" },
-          ]}
-          onActiveSectionChange={setEditSection}
           onSubmit={handleEdit}
-          headerExtra={
-            editingApiKey?.createdBy && (
-              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="shrink-0">Created by</span>
-                <CreatedByCell
-                  createdBy={editingApiKey.createdBy}
-                  className="max-w-48"
-                />
-              </span>
-            )
-          }
           footer={
             <>
               <DialogCancelButton>Cancel</DialogCancelButton>
@@ -881,12 +867,22 @@ export default function ApiKeysPage() {
           }
           isDirty={
             editForm.formState.isDirty ||
+            permissionsDirty ||
             JSON.stringify(editLabels) !==
               JSON.stringify(editingApiKey?.labels ?? [])
           }
         >
-          <div hidden={editSection === "permissions"}>
-            {editingApiKey && (
+          {editingApiKey && (
+            <div className="space-y-4">
+              {editingApiKey.createdBy && (
+                <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="shrink-0">Created by</span>
+                  <CreatedByCell
+                    createdBy={editingApiKey.createdBy}
+                    className="max-w-48"
+                  />
+                </span>
+              )}
               <LlmProviderApiKeyForm
                 mode="full"
                 showConsoleLink={false}
@@ -900,18 +896,15 @@ export default function ApiKeysPage() {
                 onLabelsChange={setEditLabels}
                 labelsRef={editLabelsRef}
               />
-            )}
-          </div>
-          <div hidden={editSection !== "permissions"}>
-            {editingApiKey && (
               <ResourceAccessSection
                 resource="llmProviderApiKey"
                 id={editingApiKey.id}
-                standalone
+                registerSave={registerPermissionsSave}
+                onDirtyChange={setPermissionsDirty}
               />
-            )}
-          </div>
-        </TabbedDialogShell>
+            </div>
+          )}
+        </StandardFormDialog>
 
         {/* Delete Confirmation Dialog */}
         <DeleteConfirmDialog

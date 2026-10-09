@@ -111,7 +111,12 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
-import { resourceAccessToolArg } from "./resource-access-tool-arg";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import {
   type AppliedEditSpan,
   applyStrReplaceEdits,
@@ -179,6 +184,8 @@ const ListAppsSchema = z.strictObject({
     ),
   limit: z.number().int().positive().max(100).optional(),
   access: resourceAccessToolArg({ examplePlural: "apps" }),
+  shared_with: resourceSharedWithToolArg,
+  owner_ids: resourceOwnerIdsToolArg,
 });
 
 const GetAppSchema = z.strictObject({
@@ -925,7 +932,7 @@ const registry = defineArchestraTools([
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId: auth.organizationId,
         userId: auth.userId,
-        access: args.access,
+        access: toolAccessSelection(args),
       });
       const apps = await AppModel.findByOrganization({
         organizationId: auth.organizationId,

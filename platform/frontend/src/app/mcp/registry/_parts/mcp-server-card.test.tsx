@@ -22,7 +22,6 @@ vi.mock("@/lib/environment.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
-  countInternalMcpCatalog: async () => 0,
   useInternalMcpCatalogAccessIds: () => ({ data: undefined }),
   useInternalMcpCatalog: ({
     initialData,
@@ -87,7 +86,10 @@ vi.mock("@/components/resource-scope-filter", () => ({
   }),
 }));
 
-vi.mock("@/components/resource-access-filter", () => ({
+vi.mock("@/components/resource-access-filter", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/resource-access-filter")
+  >()),
   ResourceAccessFilter: () => null,
 }));
 

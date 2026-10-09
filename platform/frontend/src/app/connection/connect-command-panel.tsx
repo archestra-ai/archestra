@@ -748,10 +748,7 @@ export function ConnectCommandPanel({
                 </span>
               ) : client.id === "droid" ? (
                 <span>
-                  Droid uses a matching local BYOK model key, or your provider
-                  API key from this terminal's environment. Set the key before
-                  running setup. A Factory subscription cannot authenticate
-                  through the proxy.
+                  {`Droid sends model requests through ${appName}'s LLM proxy using your provider API key. The installer reuses a matching custom model key or reads it from your terminal's environment. To use a provider key stored in ${appName}, choose Virtual key.`}
                 </span>
               ) : client.id === "cursor" ? (
                 <span>
@@ -793,6 +790,10 @@ export function ConnectCommandPanel({
                   {`${noVirtualKeyReason} Switch to your provider key, or ask an admin to add ${addKeyPhrase}.`}
                 </span>
               )
+            ) : client.id === "droid" ? (
+              <span>
+                {`Droid sends model requests through ${appName}'s LLM proxy using a virtual key. The provider API key stays in ${appName}; no local provider key is needed.`}
+              </span>
             ) : (
               <span>
                 A virtual key is created for you and wired into the command.

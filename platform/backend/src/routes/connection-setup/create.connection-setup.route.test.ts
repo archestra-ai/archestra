@@ -406,6 +406,50 @@ describe("POST /api/connection-setups", () => {
     expect(virtualKey?.authorId).toBe(user.id);
   });
 
+  test.for([
+    "zhipuai",
+    "minimax",
+    "kimi",
+  ] as const)("creates Droid %s routing backed by a stored provider key", async (provider, {
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const providerKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider },
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "droid",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider,
+        model: "selected-model",
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup).toMatchObject({
+      provider,
+      model: "selected-model",
+      proxyAuth: "virtual-key",
+    });
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(
+        setup?.virtualApiKeyId as string,
+      ),
+    ).toEqual([expect.objectContaining({ providerApiKeyId: providerKey.id })]);
+  });
+
   test("virtual-key mode 400s when no provider API key is configured; passthrough doesn't need one", async ({
     makeAgent,
   }) => {

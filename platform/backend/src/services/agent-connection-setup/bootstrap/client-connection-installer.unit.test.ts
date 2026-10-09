@@ -126,16 +126,18 @@ function runInstaller({
   url,
   clientId,
   nodeArgs = [],
+  piped = false,
 }: {
   url: string;
   clientId: string;
   nodeArgs?: string[];
+  piped?: boolean;
 }) {
   return new Promise<{ code: number | null; output: string }>(
     (resolve, reject) => {
       const child = spawn(process.execPath, [
         ...nodeArgs,
-        join(directory, "connect.cjs"),
+        piped ? "-" : join(directory, "connect.cjs"),
         "--url",
         url,
         "--client",
@@ -152,6 +154,7 @@ function runInstaller({
       });
       child.on("error", reject);
       child.on("close", (code) => resolve({ code, output }));
+      if (piped) child.stdin.end(CLIENT_CONNECTION_INSTALLER);
     },
   );
 }
@@ -173,6 +176,18 @@ test("downloads and executes the approved script without logging polling credent
     clientId: "cursor",
     deviceName: hostname().trim().slice(0, 64),
   });
+});
+
+test("piped Droid bootstrap requests approval and applies the approved setup", async () => {
+  const result = await runInstaller({
+    url: origin,
+    clientId: "droid",
+    piped: true,
+  });
+  expect(result.code).toBe(0);
+  expect(startBody).toMatchObject({ clientId: "droid" });
+  expect(await readFile(join(directory, "applied"), "utf8")).toBe("applied");
+  expect(downloads).toBe(1);
 });
 
 function installerPlatform() {

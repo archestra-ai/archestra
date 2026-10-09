@@ -1546,6 +1546,31 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
+    it.each([
+      "zhipuai",
+      "minimax",
+      "kimi",
+    ] as const)("connects Droid to %s using a stored provider key", async (provider) => {
+      availableKeysMock.mockReturnValue({ data: [{ provider }] });
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("droid"), urlProvider: provider });
+      await screen.findByText(COMMAND);
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            clientId: "droid",
+            provider,
+            proxyAuth: "virtual-key",
+          }),
+        ),
+      );
+      expect(
+        screen.getByText(/no local provider key is needed/),
+      ).toBeInTheDocument();
+    });
+
     it("leaves OpenCode provider and model selection unchanged", async () => {
       renderPanel({ client: findClient("opencode") });
 

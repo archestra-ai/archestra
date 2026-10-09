@@ -69,6 +69,11 @@ describe("Droid installer", () => {
         PATH: `${home}/bin:${process.env.PATH}`,
         ANTHROPIC_API_KEY: "",
         OPENAI_API_KEY: "",
+        ZAI_API_KEY: "",
+        ZHIPU_API_KEY: "",
+        MINIMAX_API_KEY: "",
+        KIMI_API_KEY: "",
+        MOONSHOT_API_KEY: "",
         ...env,
       },
     });
@@ -171,7 +176,13 @@ describe("Droid installer", () => {
   });
 
   test("routes OpenAI Responses and compatible Chat Completions with the correct base URL", async () => {
-    for (const provider of ["openai", "groq"] as const) {
+    for (const provider of [
+      "openai",
+      "groq",
+      "zhipuai",
+      "minimax",
+      "kimi",
+    ] as const) {
       await run({
         ...context,
         proxy: {
@@ -190,7 +201,36 @@ describe("Droid installer", () => {
         `https://example.test/v1/${provider}/my-proxy`,
       );
       expect(entry.model).toBe("test-model");
+      expect(entry.apiKey).toBe(proxy.virtualKey);
     }
+  });
+
+  test.each([
+    "ZAI_API_KEY",
+    "ZHIPU_API_KEY",
+  ])("routes Zhipu through the proxy using the local %s credential", async (credentialEnv) => {
+    await run(
+      {
+        ...context,
+        proxy: {
+          ...proxy,
+          provider: "zhipuai",
+          model: "glm-5.1",
+          authMode: "provider-key",
+          virtualKey: null,
+          url: "https://example.test/v1/zhipuai/my-proxy",
+        },
+      },
+      { [credentialEnv]: "zhipu-provider-key" },
+    );
+    expect(
+      (await json(configPath(home, "settings.json"))).customModels[0],
+    ).toMatchObject({
+      model: "glm-5.1",
+      provider: "generic-chat-completion-api",
+      baseUrl: "https://example.test/v1/zhipuai/my-proxy",
+      apiKey: "zhipu-provider-key",
+    });
   });
 
   test("fails on invalid JSON without writing the other config or exposing its contents", async () => {

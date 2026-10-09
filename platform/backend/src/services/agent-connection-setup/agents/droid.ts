@@ -80,9 +80,9 @@ if (settings) {
   });
   const credential = proxy.authMode === 'virtual-key'
     ? proxy.virtualKey
-    : local?.apiKey || (state.connections?.[id]?.authMode === 'provider-key' && state.connections[id].provider === proxy.provider ? previous?.apiKey : null) || process.env[proxy.credentialEnv];
+    : local?.apiKey || (state.connections?.[id]?.authMode === 'provider-key' && state.connections[id].provider === proxy.provider ? previous?.apiKey : null) || proxy.credentialEnvs.map(name => process.env[name]).find(Boolean);
   if (!credential && proxy.provider !== 'ollama' && proxy.provider !== 'vllm') {
-    throw new Error('Set ' + proxy.credentialEnv + ' in this terminal, or configure a matching BYOK model in Droid, then retry. A Factory subscription cannot authenticate to this proxy.');
+    throw new Error('Set ' + proxy.credentialEnvs.join(' or ') + ' in this terminal, or configure a matching BYOK model in Droid, then retry. To use a provider key stored in ' + ctx.appName + ', choose Virtual key on the connection page and run setup again.');
   }
   const entry = {
     id,
@@ -168,7 +168,7 @@ export function renderDroidSetupScript(ctx: SetupScriptContext): string {
             model: ctx.proxy.model ?? DEFAULT_MODELS[ctx.proxy.provider],
             url: ctx.proxy.url.replace(/\/$/, ""),
             dialect: route.dialect,
-            credentialEnv: route.credentialEnv,
+            credentialEnvs: route.credentialEnvs,
             credentialHosts: route.credentialHosts,
           }
         : null,

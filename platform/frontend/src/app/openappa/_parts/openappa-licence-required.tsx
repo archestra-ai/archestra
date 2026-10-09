@@ -3,7 +3,7 @@
 "use client";
 
 import { Mail } from "lucide-react";
-import { OpenAppaIcon } from "@/components/openappa-icon";
+import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { PageLayout } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,19 +23,19 @@ export function OpenAppaLicenceRequired() {
     <PageLayout title="Guardrails">
       <Empty className="py-16">
         <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <OpenAppaIcon aria-hidden="true" />
+          <EmptyMedia>
+            <OpenAppaSolidIcon className="h-20 w-auto text-foreground" />
           </EmptyMedia>
-          <EmptyTitle>
-            The OpenAPPA integration is an enterprise feature
-          </EmptyTitle>
+          <EmptyTitle>Guardrails are part of Platform + AI Security</EmptyTitle>
           <EmptyDescription>
             <a href={OPENAPPA_URL} target="_blank" rel="noreferrer">
               OpenAPPA
-            </a>{" "}
-            is an open-source policy engine that checks every tool call before
-            it runs, so an agent that read an untrusted page cannot leak your
-            data. Running it on your agents here takes an enterprise license.
+            </a>
+            , frontier technology developed by Archestra Inc, prevents data
+            exfiltration by AI agents. Benchmarked at 0% attack success rate
+            across 1,320 evaluations on Bench-Corp and AgentThreatBench (OWASP
+            Top 10 for Agentic Applications) with 89% task completion. Backed by
+            NeurIPS-accepted research.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>

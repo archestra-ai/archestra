@@ -10,7 +10,7 @@ lastUpdated: 2026-10-09
 
 Guardrails check every tool call an agent makes against your organization's policy, before the call runs. So an agent that has read an untrusted web page cannot then email your customer list. The [OpenAPPA](https://www.openappa.com/) policy engine decides by rules, not by asking another model. It runs outside the agent's loop, so a prompt injection cannot change its decisions.
 
-> **Enterprise feature** — see [Pricing Model](/docs/get-started/pricing-model). OpenAPPA itself is MIT-licensed; its integration here is the Enterprise part. Without an Enterprise license, once the instance has 30 or more users, the integration turns off until a license is activated.
+> **Platform + AI Security** — see [Pricing Model](/docs/get-started/pricing-model#platform--ai-security). OpenAPPA itself is MIT-licensed; its integration here is the licensed part. Once the instance has 30 or more users, the integration turns off until [`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED) is set.
 
 ![The Guardrails Overview tab with the enforcement, GitHub sync, and yells cards above the policy coverage charts](/docs/automated_screenshots/platform-ai-tool-guardrails_overview.webp)
 

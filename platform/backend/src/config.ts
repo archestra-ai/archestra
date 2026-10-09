@@ -3142,6 +3142,8 @@ const config = {
     knowledgeBase:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED ===
       "true",
+    aiSecurity:
+      process.env.ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED === "true",
     fullWhiteLabeling:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
   },

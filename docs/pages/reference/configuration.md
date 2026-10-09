@@ -95,6 +95,10 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Values: `true`, `false`
   - Requires [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED).
 
+- **`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`** - Activates the Platform + AI Security tier: the OpenAPPA integration behind [Guardrails](/docs/agents/guardrails). Instances with fewer than 30 users get it without this flag.
+  - Default: `false`
+  - Values: `true`, `false`
+
 - **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Removes the "Powered by Archestra" branding and the community links.
   - Default: `false`
   - Values: `true`, `false`

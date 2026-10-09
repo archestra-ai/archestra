@@ -1724,9 +1724,9 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
         },
       ];
       const original = config.openappa.enabled;
-      const originalCore = config.enterpriseFeatures.core;
+      const originalAiSecurity = config.enterpriseFeatures.aiSecurity;
       config.openappa.enabled = true;
-      Object.defineProperty(config.enterpriseFeatures, "core", {
+      Object.defineProperty(config.enterpriseFeatures, "aiSecurity", {
         value: false,
         writable: true,
         configurable: true,
@@ -1734,8 +1734,8 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       enterpriseTier.setUserCountForTesting(30);
       onTestFinished(() => {
         config.openappa.enabled = original;
-        Object.defineProperty(config.enterpriseFeatures, "core", {
-          value: originalCore,
+        Object.defineProperty(config.enterpriseFeatures, "aiSecurity", {
+          value: originalAiSecurity,
           writable: true,
           configurable: true,
         });

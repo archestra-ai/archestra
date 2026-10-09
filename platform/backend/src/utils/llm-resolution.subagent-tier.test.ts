@@ -6,6 +6,7 @@ import {
 } from "@/models";
 import { describe, expect, test } from "@/test";
 import {
+  assertModelTrioTiers,
   availableSubagentTiers,
   type ConversationLlmSelection,
   resolveForkParentSelection,
@@ -278,6 +279,30 @@ describe("resolveForkParentSelection", () => {
       modelId: model.id,
       chatApiKeyId: null,
     });
+  });
+});
+
+describe("assertModelTrioTiers", () => {
+  test("a per-user provider accepts its catalog's models, as forks pick them", async ({
+    makeOrganization,
+    makeUser,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const key = await makeLlmProviderApiKey(org.id, null, {
+      provider: "github-copilot",
+      userId: user.id,
+    });
+    const unlinked = await createModel("github-copilot", "gpt-6-luna");
+
+    await expect(
+      assertModelTrioTiers({
+        apiKeyId: key.id,
+        fastModelId: unlinked.id,
+        smartModelId: null,
+      }),
+    ).resolves.toBeUndefined();
   });
 });
 

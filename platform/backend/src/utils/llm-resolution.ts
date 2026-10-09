@@ -342,9 +342,14 @@ export async function assertModelTrioTiers(
   if (!params.apiKeyId) {
     throw new ApiError(400, "Fast and smart models require an API key");
   }
-  const keyModels = await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
-    params.apiKeyId,
-  );
+  // A per-user provider's tiers come from its catalog, as at fork time.
+  const key = await LlmProviderApiKeyModel.findById(params.apiKeyId);
+  const keyModels =
+    key && providerRequiresPerUserCredential(key.provider)
+      ? await ModelModel.findAll({ provider: key.provider })
+      : await LlmProviderApiKeyModelLinkModel.getModelsForApiKey(
+          params.apiKeyId,
+        );
   for (const id of tierIds) {
     const model = keyModels.find((m) => m.id === id);
     if (!model || !isSubagentTierCandidate(model)) {

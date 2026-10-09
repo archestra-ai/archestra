@@ -288,6 +288,18 @@ describe("AgentSettingsPage", () => {
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
+  it("offers fast and smart models only once the normal model is chosen", () => {
+    mockOrganization = { ...mockOrganization, defaultModelId: null };
+    vi.mocked(useOrganization).mockReturnValue({
+      data: mockOrganization,
+    } as unknown as ReturnType<typeof useOrganization>);
+
+    renderPage();
+
+    expect(screen.queryByText("Fast model")).not.toBeInTheDocument();
+    expect(screen.queryByText("Smart model")).not.toBeInTheDocument();
+  });
+
   it("keeps a saved fast model that is no longer on the key visible", () => {
     mockOrganization = { ...mockOrganization, defaultFastModelId: "gone" };
     vi.mocked(useOrganization).mockReturnValue({

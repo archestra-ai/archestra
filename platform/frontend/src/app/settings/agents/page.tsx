@@ -321,7 +321,7 @@ export default function AgentSettingsPage() {
                       !selectedApiKeyId
                     }
                   />
-                  {selectedApiKey && (
+                  {selectedApiKey && defaultModel && (
                     <ModelTierPickers
                       apiKeyId={selectedApiKey.id}
                       provider={selectedApiKey.provider}

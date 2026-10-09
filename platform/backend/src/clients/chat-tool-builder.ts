@@ -266,6 +266,7 @@ export function buildMcpGatewayTool(params: {
                 // `run_tool` can dispatch a delegation tool, so this context
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
+                parentLlm: ctx.parentLlm,
                 openappaSubagent: ctx.appaSubagent,
                 // Every runner that drives an agent lands here — web
                 // chat, A2A, ChatOps, schedule triggers, incoming email

@@ -19,6 +19,7 @@ import {
   AgentExcludedSubagentModel,
   AgentModel,
   AgentTeamModel,
+  ModelModel,
   ToolModel,
 } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
@@ -44,6 +45,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
 import {
   availableSubagentTiers,
+  type ConversationLlmSelection,
   type ModelTrioTiers,
   resolveConversationLlmSelectionForAgent,
 } from "@/utils/llm-resolution";
@@ -881,17 +883,34 @@ async function forkTiers(params: {
   parentLlm?: ModelSelection;
 }): Promise<Exclude<SubagentModelTier, "normal">[]> {
   const { caller, organizationId, userId, parentLlm } = params;
-  if (!userId) return [];
-  const parent = await resolveConversationLlmSelectionForAgent({
-    agent: { llmApiKeyId: caller.llmApiKeyId, modelId: caller.modelId },
-    organizationId,
-    userId,
-    ...(parentLlm && {
-      explicitModelId: parentLlm.modelId,
-      explicitApiKeyId: parentLlm.apiKeyId,
-    }),
-  });
-  return availableSubagentTiers({ parent, agentTrio: caller, organizationId });
+  const parent = parentLlm
+    ? await parentSelection(parentLlm)
+    : userId
+      ? await resolveConversationLlmSelectionForAgent({
+          agent: { llmApiKeyId: caller.llmApiKeyId, modelId: caller.modelId },
+          organizationId,
+          userId,
+        })
+      : null;
+  return parent
+    ? availableSubagentTiers({ parent, agentTrio: caller, organizationId })
+    : [];
+}
+
+async function parentSelection(
+  parentLlm: ModelSelection,
+): Promise<ConversationLlmSelection | null> {
+  const model = parentLlm.modelId
+    ? await ModelModel.findById(parentLlm.modelId)
+    : null;
+  return model
+    ? {
+        modelId: model.id,
+        chatApiKeyId: parentLlm.apiKeyId ?? null,
+        selectedModel: model.modelId,
+        selectedProvider: model.provider,
+      }
+    : null;
 }
 
 const SELF_FORK_DESCRIPTION =

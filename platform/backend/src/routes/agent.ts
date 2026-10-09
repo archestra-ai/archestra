@@ -2080,6 +2080,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             llmApiKeyId: body.llmApiKeyId,
           }),
           ...(body.modelId !== undefined && { modelId: body.modelId }),
+          ...(body.fastModelId !== undefined && {
+            fastModelId: body.fastModelId,
+          }),
+          ...(body.smartModelId !== undefined && {
+            smartModelId: body.smartModelId,
+          }),
         };
       } else {
         // `builtInAgentConfig` is server-owned and a trust attribute (drives

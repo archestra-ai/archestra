@@ -30,6 +30,7 @@ export type ConnectionSetupClientId = z.infer<
 export const ConnectionSetupProxyAuthSchema = z.enum([
   "provider-key",
   "virtual-key",
+  "primary-providers",
 ]);
 
 export type ConnectionSetupProxyAuth = z.infer<

@@ -52,6 +52,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import {
   toolInEnvironmentOrDefaultPredicate,
@@ -1610,7 +1611,7 @@ class ToolModel {
    * Idempotent (`createManyIfNotExists`).
    */
   static async backfillOpenAppaToolsToAllAgents(): Promise<void> {
-    if (!config.openappa.enabled) return;
+    if (!enterpriseTier.isOpenappaActive()) return;
     const organizationIds = await OrganizationModel.findAllIds();
     for (const organizationId of organizationIds) {
       const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
@@ -1794,7 +1795,9 @@ class ToolModel {
     // method assigns just the tools every agent gets.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-      ...(config.openappa.enabled ? REQUIRED_OPENAPPA_TOOL_SHORT_NAMES : []),
+      ...(enterpriseTier.isOpenappaActive()
+        ? REQUIRED_OPENAPPA_TOOL_SHORT_NAMES
+        : []),
     ];
 
     const defaultToolNames = defaultToolShortNames.map((shortName) =>

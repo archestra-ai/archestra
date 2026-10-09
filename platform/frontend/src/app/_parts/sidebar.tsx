@@ -506,7 +506,6 @@ export function AppSidebar() {
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const pluginsEnabled = useFeature("plugins");
-  const openappaEnabled = useFeature("openappaEnabled");
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
@@ -540,9 +539,6 @@ export function AppSidebar() {
         ...group,
         items: group.items
           .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
-          .filter(
-            (item) => item.url !== "/openappa" || openappaEnabled === true,
-          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -580,12 +576,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [
-      pluginsEnabled,
-      openappaEnabled,
-      guardrailsDeployment?.enabled,
-      permissionMap,
-    ],
+    [pluginsEnabled, guardrailsDeployment?.enabled, permissionMap],
   );
 
   return (

@@ -106,9 +106,9 @@ Set the optional validation directory under **Settings → OpenAPPA → GitHub s
 
 ### Ask the Configuration Agent
 
-The agent starts from your policy, explains why a small validation helps, and suggests an essential check. If checks already exist, it summarizes their coverage and helps you choose whether to review, edit or add one.
+For an open-ended request, the agent discovers a few replayable examples and asks which observed behavior you want to preserve. Discovery checks single calls in fresh sessions; it does not prove broader protection or complete coverage. If discovery cannot prepare a check, it explains the missing input or unavailable dependency instead of inventing prerequisites.
 
-After you choose a change, it drafts and replays it for review. It saves only within your authorization. Validation-only requests leave the policy unchanged, and first-time policy setup skips validations unless requested.
+After you choose a discovered example, the agent previews its exact file for review. A specific requirement uses normal drafting and replay, even when the assertion fails against the current policy. It saves only within your authorization. Validation-only requests leave the policy unchanged, and first-time policy setup skips validations unless requested.
 
 For a concrete policy change, the agent can include a focused regression check and replay the full suite against the proposal. It preserves unrelated files and expectations. Publication saves policy and validations together locally, or opens one GitHub pull request; previews do not create saved run history.
 

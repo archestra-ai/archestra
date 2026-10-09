@@ -6,7 +6,10 @@ import {
   parseLabelsParam,
   perUserCredentialLabel,
   providerRequiresPerUserCredential,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -18,6 +21,7 @@ import {
   LlmProviderApiKeyModel,
   OauthClientLabelModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { credentialBilling } from "@/services/credential-billing";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -160,6 +164,9 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(LlmOauthClientSchema),
@@ -175,6 +182,13 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         grantType: query.grantType,
         labels: parseLabelsParam(query.labels),
         viewer: { userId: user.id },
+        access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+          userId: user.id,
+          organizationId,
+          relations: query.access,
+          sharedWith: query.sharedWith,
+          ownerIds: query.owner,
+        }),
       });
       return reply.send(result);
     },

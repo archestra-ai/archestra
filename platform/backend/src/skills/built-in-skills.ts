@@ -3,7 +3,7 @@ import {
   APP_AUTHORING_CONTRACT,
   APP_BUILD_LOOP_GUIDANCE,
 } from "@/archestra-mcp-server/app-authoring-guidance";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import type { SkillFileKind } from "@/types/skill";
 import { APPA_GUIDE_SKILL } from "./appa-guide";
 import { applyBuiltInSkillBranding } from "./built-in-skill-branding";
@@ -86,7 +86,7 @@ export function getDisabledBuiltInSkillSourceRefs(): string[] {
 }
 
 function isEnabled(skill: BuiltInSkill): boolean {
-  return !skill.feature || config.openappa.enabled;
+  return !skill.feature || enterpriseTier.isOpenappaActive();
 }
 
 /**

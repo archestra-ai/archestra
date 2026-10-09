@@ -847,14 +847,13 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).toContain("copilot_internal/v2/token");
     // token obtained at runtime, not injected server-side
     expect(script).toContain("ARCHESTRA_GHCP_TOKEN");
-    // The CLI's provider headers attribute the session the same way Claude
-    // Code's and Codex's do: the client id always, plus the provisioned
+    // The provider JSON includes both the client id and the provisioned
     // passthrough key that ties each request back to this user.
     expect(script).toContain(
-      `${EXTERNAL_AGENT_ID_HEADER}: ${COPILOT_CLI_CLIENT_ID}`,
+      `"${EXTERNAL_AGENT_ID_HEADER}":"${COPILOT_CLI_CLIENT_ID}"`,
     );
     expect(script).toMatch(
-      new RegExp(`${VIRTUAL_KEY_HEADER}: arch_[0-9a-f]{64}`),
+      new RegExp(`"${VIRTUAL_KEY_HEADER}":"arch_[0-9a-f]{64}"`),
     );
   });
 

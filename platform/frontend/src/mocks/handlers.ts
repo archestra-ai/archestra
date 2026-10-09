@@ -242,6 +242,7 @@ export const handlers: HttpHandler[] = [
         scope: params.scope,
         name: "",
         revision: 0,
+        actorSubjects: [],
         grants: [],
         inheritedGrants: [],
         effectiveActions: [

@@ -279,7 +279,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
           encryptedChatEnabled: isEncryptedChatEnabled(),
-          openappaEnabled: config.openappa.enabled,
+          openappaEnabled: enterpriseTier.isOpenappaActive(),
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
           kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,

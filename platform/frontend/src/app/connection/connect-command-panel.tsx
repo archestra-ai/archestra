@@ -3,12 +3,20 @@
 import {
   DEFAULT_MODELS,
   DocsPage,
+  OPENCODE_PRIMARY_PROVIDERS,
+  PROVIDERS_REQUIRING_BASE_URL,
   providerRequiresPerUserCredential,
   resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
-import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  Download,
+  KeyRound,
+  Layers,
+  RotateCcw,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -39,7 +47,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -268,7 +278,17 @@ export function ConnectCommandPanel({
 
   // Toggle one skill, snapshotting the current selection into an explicit set
   // on first interaction (null → all ids, then add/remove the toggled one).
-  const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
+  const [proxyAuthByClient, setProxyAuthByClient] = useState<
+    Record<string, ConnectProxyAuth>
+  >({});
+  const [openCodeUseAllProviders, setOpenCodeUseAllProviders] = useState(true);
+  const proxyAuth =
+    proxyAuthByClient[client.id] ??
+    (client.id === "opencode" ? "primary-providers" : "provider-key");
+  const setProxyAuth = (value: ConnectProxyAuth) =>
+    setProxyAuthByClient((current) => ({ ...current, [client.id]: value }));
+  const allPrimaryProviders =
+    client.id === "opencode" && proxyAuth === "primary-providers";
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
   // user can override it in the review step.
@@ -350,33 +370,88 @@ export function ConnectCommandPanel({
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
   const { data: availableKeys } = useAvailableLlmProviderApiKeys();
-  const configuredProviders = useMemo(
-    () => new Set((availableKeys ?? []).map((k) => k.provider)),
+  const usableOpenCodeKeys = useMemo(
+    () =>
+      (availableKeys ?? []).filter(
+        (key) =>
+          !key.requiresReauthentication &&
+          (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+            Boolean(key.baseUrl?.trim())),
+      ),
     [availableKeys],
+  );
+  const configuredProviders = useMemo(
+    () =>
+      new Set(
+        (client.id === "opencode"
+          ? usableOpenCodeKeys
+          : (availableKeys ?? [])
+        ).map((key) => key.provider),
+      ),
+    [client.id, availableKeys, usableOpenCodeKeys],
   );
 
   // Providers this client can be wired to at all, narrowed by the admin
   // allow-list (independent of auth mode — used to explain the empty state).
   const supportedProviders = useMemo(() => {
     const supported =
-      client.proxy.kind === "custom" ? client.proxy.supportedProviders : [];
+      client.id === "opencode" && proxyAuth !== "provider-key"
+        ? [...OPENCODE_PRIMARY_PROVIDERS]
+        : client.proxy.kind === "custom"
+          ? client.proxy.supportedProviders
+          : [];
     const shown = shownProviders ? new Set(shownProviders) : null;
-    return shown ? supported.filter((p) => shown.has(p)) : supported;
-  }, [client.proxy, shownProviders]);
+    return shown && !allPrimaryProviders
+      ? supported.filter((p) => shown.has(p))
+      : supported;
+  }, [client.id, client.proxy, shownProviders, allPrimaryProviders, proxyAuth]);
+
+  const singleVirtualKeyProviders = useMemo(() => {
+    const supported =
+      client.id === "opencode"
+        ? [...OPENCODE_PRIMARY_PROVIDERS]
+        : client.proxy.kind === "custom"
+          ? client.proxy.supportedProviders
+          : [];
+    return supported.filter(
+      (p) =>
+        (!shownProviders || shownProviders.includes(p)) &&
+        (configuredProviders.has(p) ||
+          (client.id !== "opencode" && providerRequiresPerUserCredential(p))),
+    );
+  }, [client.id, client.proxy, shownProviders, configuredProviders]);
 
   // In virtual-key mode we further restrict to providers the user actually has
   // a key for — a virtual key can only be minted against a configured key — so
   // the tabs never offer a provider the command would fail on. Passthrough
   // needs no key (the user brings their own at runtime).
   const providers = useMemo(() => {
+    if (allPrimaryProviders) {
+      const primaryProviders = new Set(
+        usableOpenCodeKeys
+          .filter((key) => key.isPrimary)
+          .map((key) => key.provider),
+      );
+      return supportedProviders.filter((provider) =>
+        primaryProviders.has(provider),
+      );
+    }
     if (proxyAuth !== "virtual-key") return supportedProviders;
-    // Per-user providers (GitHub Copilot) stay selectable even without a key:
-    // the user connects their own account inline, after which a personal
-    // virtual key is minted. Other providers need a pre-existing key.
+    // OpenCode only offers configured credentials. Other clients can connect
+    // per-user providers inline before minting a personal virtual key.
     return supportedProviders.filter(
-      (p) => configuredProviders.has(p) || providerRequiresPerUserCredential(p),
+      (p) =>
+        configuredProviders.has(p) ||
+        (client.id !== "opencode" && providerRequiresPerUserCredential(p)),
     );
-  }, [supportedProviders, proxyAuth, configuredProviders]);
+  }, [
+    supportedProviders,
+    proxyAuth,
+    configuredProviders,
+    allPrimaryProviders,
+    usableOpenCodeKeys,
+    client.id,
+  ]);
   const provider =
     urlProvider && providers.includes(urlProvider)
       ? urlProvider
@@ -386,7 +461,9 @@ export function ConnectCommandPanel({
   // never the passthrough device flow, and the user must connect their own
   // account before a command can be generated.
   const providerIsPerUser =
-    !!provider && providerRequiresPerUserCredential(provider);
+    !allPrimaryProviders &&
+    !!provider &&
+    providerRequiresPerUserCredential(provider);
   const needsPerUserConnect =
     !!activeLlmProxyId &&
     providerIsPerUser &&
@@ -440,7 +517,9 @@ export function ConnectCommandPanel({
   // proxy, so — like the per-user connect gate — step 3 gates on adding a key
   // instead of shipping a half-configured command.
   const virtualKeyUnbacked =
-    hasProxy && !provider && proxyAuth === "virtual-key";
+    hasProxy &&
+    !provider &&
+    (proxyAuth === "virtual-key" || allPrimaryProviders);
   const requiredPluginPlatform = platform === "windows" ? "windows" : "posix";
   // The selection follows the client across OS changes. Compatibility is a
   // filter, not permission to re-add something the user explicitly removed.
@@ -519,6 +598,8 @@ export function ConnectCommandPanel({
   const { data: canAttribute } = useHasPermissions({
     llmVirtualKey: ["create"],
   });
+  const primaryRoutingBlocked =
+    hasProxy && allPrimaryProviders && canAttribute !== true;
   const passthroughAttributes =
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
@@ -559,6 +640,12 @@ export function ConnectCommandPanel({
     proxyId: proxyActive ? activeLlmProxyId : null,
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? effectiveProxyAuth : null,
+    primaryKeyIds: allPrimaryProviders
+      ? (availableKeys ?? [])
+          .filter((key) => key.isPrimary)
+          .map((key) => key.id)
+          .sort()
+      : null,
     model: proxyActive ? effectiveModel : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
@@ -607,7 +694,10 @@ export function ConnectCommandPanel({
         baseUrl: inputs.baseUrl,
         mcpGatewayId: inputs.gatewayId ?? undefined,
         llmProxyId: inputs.proxyId ?? undefined,
-        provider: inputs.provider ?? undefined,
+        provider:
+          inputs.proxyAuth === "primary-providers"
+            ? undefined
+            : (inputs.provider ?? undefined),
         proxyAuth: inputs.proxyAuth ?? undefined,
         model: inputs.model ?? undefined,
         skills,
@@ -632,7 +722,8 @@ export function ConnectCommandPanel({
       skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
-      virtualKeyUnbacked
+      virtualKeyUnbacked ||
+      primaryRoutingBlocked
     ) {
       return;
     }
@@ -647,6 +738,7 @@ export function ConnectCommandPanel({
     pluginsLoading,
     needsPerUserConnect,
     virtualKeyUnbacked,
+    primaryRoutingBlocked,
     runGeneration,
   ]);
 
@@ -716,7 +808,12 @@ export function ConnectCommandPanel({
   // key and appear to do nothing. Move to the first passthrough-capable provider
   // as well, so the toggle can never strand the user in the per-user state.
   const handleProxyAuthChange = (value: string) => {
-    const next = value as ConnectProxyAuth;
+    const next =
+      client.id === "opencode" &&
+      value === "virtual-key" &&
+      openCodeUseAllProviders
+        ? "primary-providers"
+        : (value as ConnectProxyAuth);
     setProxyAuth(next);
     if (next === "provider-key" && providerIsPerUser) {
       const firstPassthrough = supportedProviders.find(
@@ -728,28 +825,31 @@ export function ConnectCommandPanel({
 
   const proxyEditor = hasProxy ? (
     <div className="grid gap-3">
-      {providers.length > 1 && !openCodeProviderPassthrough && (
-        <EditorField label="Provider">
-          <Select
-            value={provider ?? undefined}
-            onValueChange={onProviderSelect}
-          >
-            <SelectTrigger aria-label="Provider">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <LlmProviderSelectItems
-                options={providers.map((provider) => ({
-                  value: provider,
-                  name: providerCatalog.label(provider),
-                  icon: PROVIDER_CONFIG[provider].icon,
-                }))}
-              />
-            </SelectContent>
-          </Select>
-        </EditorField>
-      )}
-      <EditorField label="Auth">
+      {client.id !== "opencode" &&
+        providers.length > 1 &&
+        !openCodeProviderPassthrough &&
+        !allPrimaryProviders && (
+          <EditorField label="Provider">
+            <Select
+              value={provider ?? undefined}
+              onValueChange={onProviderSelect}
+            >
+              <SelectTrigger aria-label="Provider">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <LlmProviderSelectItems
+                  options={providers.map((provider) => ({
+                    value: provider,
+                    name: providerCatalog.label(provider),
+                    icon: PROVIDER_CONFIG[provider].icon,
+                  }))}
+                />
+              </SelectContent>
+            </Select>
+          </EditorField>
+        )}
+      <EditorField label={client.id === "opencode" ? "Model routing" : "Auth"}>
         <div className="grid gap-1.5">
           {/* The toggle stays visible even for a per-user provider (GitHub
               Copilot), which forces virtual-key auth. Hiding it there stranded
@@ -757,22 +857,65 @@ export function ConnectCommandPanel({
               handleProxyAuthChange moves off the per-user provider when
               switching to passthrough, so the choice sticks. */}
           <Tabs
-            value={effectiveProxyAuth}
+            value={allPrimaryProviders ? "virtual-key" : effectiveProxyAuth}
             onValueChange={handleProxyAuthChange}
           >
             <TabsList size="sm">
+              {client.id === "opencode" && (
+                <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
+              )}
               <TabsTrigger value="provider-key">
                 {client.id === "claude-desktop"
                   ? "Claude subscription"
                   : "Your provider key"}
               </TabsTrigger>
-              <TabsTrigger value="virtual-key">
-                {client.id === "claude-desktop" ? "API key" : "Virtual key"}
-              </TabsTrigger>
+              {client.id !== "opencode" && (
+                <TabsTrigger value="virtual-key">
+                  {client.id === "claude-desktop" ? "API key" : "Virtual key"}
+                </TabsTrigger>
+              )}
             </TabsList>
           </Tabs>
+          {client.id === "opencode" && !openCodeProviderPassthrough && (
+            <Select
+              value={
+                allPrimaryProviders ? "all-primary" : (provider ?? undefined)
+              }
+              onValueChange={(value) => {
+                const all = value === "all-primary";
+                setOpenCodeUseAllProviders(all);
+                setProxyAuth(all ? "primary-providers" : "virtual-key");
+                if (!all) onProviderSelect(value as SupportedProvider);
+              }}
+            >
+              <SelectTrigger aria-label="Model provider">
+                <SelectValue placeholder="Select model provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-primary">
+                  <span className="flex items-center gap-2">
+                    <Layers className="size-4" aria-hidden="true" />
+                    <span>All model providers</span>
+                  </span>
+                </SelectItem>
+                <LlmProviderSelectItems
+                  options={singleVirtualKeyProviders.map((provider) => ({
+                    value: provider,
+                    name: providerCatalog.label(provider),
+                    icon: PROVIDER_CONFIG[provider].icon,
+                  }))}
+                />
+              </SelectContent>
+            </Select>
+          )}
           <p className="text-xs text-muted-foreground">
-            {effectiveProxyAuth === "provider-key" ? (
+            {allPrimaryProviders ? (
+              <span>
+                {providers.length
+                  ? "Create a personal virtual key for all primary model providers you can access, and make their models available in OpenCode."
+                  : "No usable primary model providers are available. Mark a compatible model provider key as primary, or choose another routing option."}
+              </span>
+            ) : effectiveProxyAuth === "provider-key" ? (
               client.id === "claude-desktop" ? (
                 <span>
                   The installer opens Claude subscription sign-in and configures
@@ -840,21 +983,16 @@ export function ConnectCommandPanel({
       <div className="grid gap-1.5">
         <EditorField label="Model">
           {modelOptions.length > 1 ? (
-            <Select
-              value={effectiveModel ?? undefined}
+            <SearchableSelect
+              value={effectiveModel ?? ""}
               onValueChange={setModelChoice}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {modelOptions.map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              items={modelOptions.map((id) => ({ value: id, label: id }))}
+              ariaLabel="Model"
+              placeholder="Select model"
+              searchPlaceholder="Search models..."
+              emptyMessage="No models found."
+              className="w-full"
+            />
           ) : (
             <Input
               value={effectiveModel ?? ""}
@@ -950,8 +1088,9 @@ export function ConnectCommandPanel({
       </div>
     ) : null;
 
-  const noVirtualKeyMessage =
-    supportedNames.length === 1
+  const noVirtualKeyMessage = allPrimaryProviders
+    ? "No usable primary model providers are available. Mark a compatible model provider key as primary, or choose another routing option."
+    : supportedNames.length === 1
       ? `${client.label} only routes ${supportedNames[0]}, which has no key configured for a virtual key — switch to your provider key.`
       : `None of ${client.label}'s providers have a key configured for a virtual key — switch to your provider key.`;
   const pluginCountLabel =
@@ -963,7 +1102,9 @@ export function ConnectCommandPanel({
     : needsPerUserConnect
       ? `Connect ${provider ? providerCatalog.label(provider) : "your provider"} to generate the setup command`
       : virtualKeyUnbacked
-        ? "Add a provider key to generate the setup command"
+        ? allPrimaryProviders
+          ? "Set a usable primary provider to generate the setup command"
+          : "Add a provider key to generate the setup command"
         : failed
           ? "Setup command generation failed"
           : result
@@ -1041,7 +1182,13 @@ export function ConnectCommandPanel({
                 editor={proxyEditor}
                 changeTestId="connect-change-proxy"
               >
-                {!provider ? (
+                {allPrimaryProviders ? (
+                  <span>
+                    {providers.length
+                      ? `Route all primary model providers (${providers.length}) through the LLM Proxy using a virtual key`
+                      : "No usable primary model providers available for OpenCode"}
+                  </span>
+                ) : !provider ? (
                   noVirtualKeyMessage
                 ) : client.id === "cursor" ? (
                   <span>
@@ -1408,6 +1555,18 @@ export function ConnectCommandPanel({
                   }
                 }}
               />
+            ) : primaryRoutingBlocked ? (
+              <InlineNotice variant="info">
+                <InlineNoticeText>
+                  {canAttribute === false
+                    ? "You need permission to create virtual keys to use all primary providers. Choose Your provider key to use local credentials."
+                    : "Checking virtual-key permissions…"}
+                </InlineNoticeText>
+              </InlineNotice>
+            ) : virtualKeyUnbacked && allPrimaryProviders ? (
+              <InlineNotice variant="info">
+                <InlineNoticeText>{noVirtualKeyMessage}</InlineNoticeText>
+              </InlineNotice>
             ) : virtualKeyUnbacked ? (
               <ProviderKeyGate
                 reason={noVirtualKeyReason}
@@ -1426,7 +1585,10 @@ export function ConnectCommandPanel({
                 gatewaySelected={!!gateway}
                 gatewayName={oauthServerName}
                 proxySelected={proxyActive}
-                proxyUsesVirtualKey={effectiveProxyAuth === "virtual-key"}
+                proxyUsesVirtualKey={
+                  effectiveProxyAuth === "virtual-key" ||
+                  effectiveProxyAuth === "primary-providers"
+                }
                 skillsSelected={skillsEligible && includeSkills}
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (

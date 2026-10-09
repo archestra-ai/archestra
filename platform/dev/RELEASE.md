@@ -35,6 +35,15 @@ gitGraph
 
 ## Release A Candidate
 
+If a breaking commit makes Release Please propose a new major version during an RC
+track, set a temporary `packages.platform.release-as` in
+`.github/release-please/release-please-config.json` to the next unpublished RC on the
+intended track. For example, after `1.4.0-rc.35`, use `1.4.0-rc.36`.
+Merge the configuration PR and verify the existing release PR updates its version
+while retaining the breaking-change notes. After that RC publishes, remove only
+`release-as`; the workflow pauses new release PRs while the override matches the
+manifest.
+
 1. [ ] Open the release-please PR on `main` (for example, `1.4.0-rc.14`).
 2. [ ] Review the changelog and confirm checks pass, including migration upgrades from the active stable line.
 3. [ ] Merge the PR and confirm the **Release Please** workflow publishes the RC release.

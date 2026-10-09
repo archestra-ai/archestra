@@ -2,7 +2,7 @@
 # build KinD, Docker CLI, Dagger CLI, and kubectl from source with a patched Go toolchain.
 # the Alpine packages/binaries have historically lagged on Go patch releases, so
 # we compile these tools ourselves to pick up upstream fixes without local vendoring hacks.
-ARG GOLANG_IMAGE=golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df
+ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
 ARG NODE_IMAGE=node:24-alpine3.23@sha256:2bdb65ed1dab192432bc31c95f94155ca5ad7fc1392fb7eb7526ab682fa5bf14
 ARG KIND_VERSION=v0.31.0
 ARG KIND_COMMIT=a323333ff9efd8099f95a8a6b5c86c75a210d00f
@@ -37,7 +37,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod edit -go=1.25.11 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0
-    go get golang.org/x/net@v0.56.0 && \
+    go get golang.org/x/net@v0.60.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o /kind-binary . && \
     cd / && rm -rf /kind
 
@@ -59,9 +59,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-17106: go-archive path traversal fixed in >= 0.3.0 (vendor.mod floors it at 0.2.0)
     go get github.com/moby/go-archive@v0.3.0 && \
     # x/sys/x/term must be pinned for `go mod vendor` to find windows/registry and plan9 sub-pkgs.
-    # Versions must satisfy x/net@v0.56.0 requirements: x/sys >= v0.46.0, x/term >= v0.44.0.
-    go get golang.org/x/sys@v0.46.0 && \
-    go get golang.org/x/term@v0.44.0 && \
+    # x/net@v0.60.0 requires x/sys >= v0.48.0 and x/term >= v0.46.0.
+    go get golang.org/x/sys@v0.48.0 && \
+    go get golang.org/x/term@v0.46.0 && \
     # golang.org/x/net <0.55.0: CVE-2026-39821 (CRITICAL); fixed in >= 0.55.0.
     # golang.org/x/net <0.56.0: CVE-2026-46600 (HIGH); fixed in >= 0.56.0.
     # CVE-2026-33186: grpc Improper Authorization fixed in >= 1.79.3.
@@ -70,8 +70,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.
     # Must be the LAST `go get` before `go mod vendor` — earlier `go get`s for OTel/x/sys
     # transitively pull older x/net and grpc versions and would otherwise override these requirements.
-    # grpc 1.83.2 requires x/net >= 0.58.0.
-    go get golang.org/x/net@v0.58.0 google.golang.org/grpc@v1.83.2 && \
+    # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
+    go get golang.org/x/net@v0.60.0 google.golang.org/grpc@v1.83.2 && \
     go mod vendor && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=vendor \
     -ldflags "-X github.com/docker/cli/cli/version.Version=${DOCKER_CLI_VERSION#v}" \
@@ -103,18 +103,18 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go get github.com/go-git/go-billy/v5@v5.9.0 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
-    # Pinned to 0.56.0 (not 0.55.0) because go-git 5.19.2 requires >= 0.56.0 — asking for
-    # anything lower here makes `go get` downgrade go-git back below 5.19.2 to satisfy it,
-    # silently reintroducing cve-2026-71556. Do not lower without also lowering go-git.
-    go get golang.org/x/net@v0.56.0 && \
+    # x/net <0.60.0: HTTP/2 security fixes (CVE-2026-78663/78669/78660/78659).
+    go get golang.org/x/net@v0.60.0 && \
     # cve-2026-46597: x/crypto issue fixed in >= 0.52.0; keep this after x/net.
     # cve-2026-78662 / cve-2026-56855: x/crypto HIGH fixed in >= 0.56.0.
-    go get golang.org/x/crypto@v0.56.0 && \
+    # Keep >= 0.57.0 to satisfy x/net@v0.60.0 without downgrading it.
+    go get golang.org/x/crypto@v0.57.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
     # Arrives transitively (dagger and containerd both floor it at 0.36.0), so it needs
     # an explicit requirement rather than a bump of any single dependency.
-    go get golang.org/x/mod@v0.40.0 && \
+    # x/net@v0.60.0 requires the newer x/mod floor through x/crypto; avoid downgrades.
+    go get golang.org/x/mod@v0.41.0 && \
     # cve-2026-17106: go-archive path traversal fixed in >= 0.3.0 (matches dockercompat's floor).
     # sys/user must be >= 0.4.1 here — go-archive 0.3.0 requires it, and asking for 0.4.0 in the
     # same `go get` would make go resolve the conflict by downgrading go-archive below 0.3.0.
@@ -151,10 +151,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go get go.opentelemetry.io/otel@v1.41.0 go.opentelemetry.io/otel/metric@v1.41.0 go.opentelemetry.io/otel/trace@v1.41.0 go.opentelemetry.io/otel/sdk@v1.41.0 && \
     # cve-2026-39821: x/net CRITICAL fixed in >= 0.55.0.
     # cve-2026-46600: x/net HIGH fixed in >= 0.56.0.
-    go get golang.org/x/net@v0.56.0 && \
+    go get golang.org/x/net@v0.60.0 && \
     # cve-2026-56865: x/mod/sumdb/tlog tile verification bypass (HIGH) fixed in >= 0.40.0.
     # cve-2026-56864: x/mod/sumdb accepts unauthenticated hashes; same fix version.
-    go get golang.org/x/mod@v0.40.0 && \
+    # x/net@v0.60.0 requires the newer x/mod floor through x/crypto; avoid downgrades.
+    go get golang.org/x/mod@v0.41.0 && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -mod=readonly \
     -ldflags "-X k8s.io/component-base/version.gitVersion=${KUBECTL_VERSION} -X k8s.io/component-base/version.gitCommit=${KUBECTL_COMMIT} -X k8s.io/component-base/version.gitTreeState=clean" \
     -o /kubectl-binary ./cmd/kubectl && \
@@ -498,10 +499,7 @@ RUN apk --no-cache upgrade && \
     rm -rf /tmp/*
 
 # install KinD (Kubernetes in Docker), docker-cli, and kubectl for Kubernetes runtime support
-# these binaries are built from source in parallel Go stages with Go 1.26.6 to fix CVE-2025-68121,
-# the Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811),
-# the Go stdlib HIGH CVE fixed in 1.25.11 (CVE-2026-42504), and the Go stdlib CRITICAL
-# fixed in 1.26.6 (CVE-2026-39821).
+# Build with Go 1.26.9 for the October 2026 stdlib security fixes.
 COPY --from=docker-cli-builder /docker-binary /usr/local/bin/docker
 COPY --from=kind-builder /kind-binary /usr/local/bin/kind
 COPY --from=kubectl-builder /kubectl-binary /usr/local/bin/kubectl

@@ -27,7 +27,7 @@ const policy: ResourcePermissions = {
   ],
   inheritedGrants: [],
   effectiveActions: actions,
-  previewActorSubjects: [{ type: "role", id: "admin" }],
+  actorSubjects: [{ type: "role", id: "admin" }],
 };
 const title = "Permissions for all MCP registry entries";
 
@@ -135,7 +135,7 @@ test("phone controls stay reachable through the permission handoff confirmation"
   await dialog.getByRole("combobox", { name: "Permission for Admin" }).click();
   await page.getByRole("option", { name: "Can view", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText(
-    "You won’t be able to change permissions.",
+    "You won’t be able to edit or delete MCP registry entries that other people created.",
   );
   const save = dialog.getByRole("button", { name: "Save permissions" });
   await expectInsideViewport(page, save);
@@ -151,7 +151,7 @@ test("phone controls stay reachable through the permission handoff confirmation"
   );
   await confirm.getByRole("button", { name: "Keep editing" }).click();
   await expect(dialog.getByRole("alert")).toContainText(
-    "You won’t be able to change permissions.",
+    "You won’t be able to edit or delete MCP registry entries that other people created.",
   );
 });
 
@@ -213,7 +213,7 @@ test("a phone draft cannot remove the last permission manager", async ({
     .getByRole("button", { name: "Remove direct access for Admin" })
     .click();
   await expect(dialog.getByRole("alert")).toContainText(
-    "Someone must be able to change permissions.",
+    "At least one recipient needs Full access.",
   );
   const save = dialog.getByRole("button", { name: "Save permissions" });
   await expect(save).toBeDisabled();

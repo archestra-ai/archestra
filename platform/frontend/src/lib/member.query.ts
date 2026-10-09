@@ -12,6 +12,10 @@ import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import { organizationKeys, useActiveOrganization } from "./organization.query";
+import {
+  parseRoleAssignmentBlocked,
+  RoleAssignmentBlockedError,
+} from "./role-assignment-blocked";
 
 const { bulkDeleteMembers, getMembers } = archestraApiSdk;
 
@@ -257,7 +261,11 @@ export function useUpdateMemberRole() {
         >[0]["role"],
       });
       if (response.error) {
-        throw new Error(response.error.message ?? "Failed to update role");
+        // A refused role is explained in the dialog, not a toast.
+        throw (
+          parseRoleAssignmentBlocked(response.error) ??
+          new Error(response.error.message ?? "Failed to update role")
+        );
       }
       return response.data;
     },
@@ -267,6 +275,7 @@ export function useUpdateMemberRole() {
       toast.success("Member roles updated");
     },
     onError: (error: Error) => {
+      if (error instanceof RoleAssignmentBlockedError) return;
       toast.error("Failed to update role", { description: error.message });
     },
   });

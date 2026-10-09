@@ -48,6 +48,7 @@ beforeEach(() => {
       },
     ],
     effectiveActions: ["read", "use", "update", "delete", "manage-permissions"],
+    actorSubjects: [],
   };
   server.use(
     http.get(endpoint, () => HttpResponse.json(policy)),
@@ -230,7 +231,7 @@ it("retains a stale draft and requires an explicit reload after a concurrent edi
 
 it("requires confirmation before saving a mock permission handoff", async () => {
   vi.stubEnv("NEXT_PUBLIC_API_MOCKING", "enabled");
-  policy.previewActorSubjects = [{ type: "role", id: "admin" }];
+  policy.actorSubjects = [{ type: "role", id: "admin" }];
   policy.grants = [
     {
       subject: { type: "role", id: "admin" },
@@ -274,7 +275,7 @@ it("requires confirmation before saving a mock permission handoff", async () => 
 
 it("blocks a mock policy edit that would remove its last manager", async () => {
   vi.stubEnv("NEXT_PUBLIC_API_MOCKING", "enabled");
-  policy.previewActorSubjects = [{ type: "role", id: "admin" }];
+  policy.actorSubjects = [{ type: "role", id: "admin" }];
   policy.grants = [
     {
       subject: { type: "role", id: "admin" },

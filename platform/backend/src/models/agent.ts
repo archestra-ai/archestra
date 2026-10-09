@@ -46,6 +46,7 @@ import {
   createPaginatedResult,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import {
@@ -816,7 +817,7 @@ class AgentModel {
         getCreationDefaultArchestraToolShortNames({
           skillsEnabled: organization?.skillToolsEnabled === true,
           sandboxEnabled: config.skillsSandbox.enabled,
-          openappaEnabled: config.openappa.enabled,
+          openappaEnabled: enterpriseTier.isOpenappaActive(),
         }),
       );
       const composesGroup = (group: readonly ArchestraToolShortName[]) =>
@@ -1008,7 +1009,7 @@ class AgentModel {
     // platform subagents remain excluded from ordinary chat selection.
     if (options?.excludeBuiltIn || !isAgentAdmin || isChatView) {
       const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
-      if (isChatView && config.openappa.enabled) {
+      if (isChatView && enterpriseTier.isOpenappaActive()) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
       }
       whereConditions.push(or(...visibleAgents) as SQL);

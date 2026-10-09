@@ -3676,6 +3676,13 @@
       "when": 1791506292356,
       "tag": "0524_pale_mikhail_rasputin",
       "breakpoints": true
+    },
+    {
+      "idx": 525,
+      "version": "7",
+      "when": 1791578938459,
+      "tag": "0525_remove-llm-proxy-cost-limits",
+      "breakpoints": true
     }
   ]
 }

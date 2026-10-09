@@ -45,8 +45,13 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { ResourceListActions } from "@/components/resource-list-actions";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -138,9 +143,26 @@ export default function ApiKeysPage() {
     useLlmProviderApiKeys({
       enabled: apiKeyQueriesEnabled,
     });
+  const { hasActiveScopeFilters, access, sharedWith, owner } =
+    useScopeFilterParams();
+  const hasActiveFilters = Boolean(
+    search || providerFilter !== "all" || labelsFilter || hasActiveScopeFilters,
+  );
+  const clearFilters = () =>
+    updateQueryParams({
+      search: null,
+      provider: null,
+      labels: null,
+      ...Object.fromEntries(
+        RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
+      ),
+    });
   const { data: queriedApiKeys = [], isFetching } = useLlmProviderApiKeys({
     search: search || undefined,
     labels: labelsFilter,
+    access,
+    sharedWith,
+    owner,
     provider:
       providerFilter === "all"
         ? undefined
@@ -470,7 +492,14 @@ export default function ApiKeysPage() {
     rows,
     getId: (row) => row.id,
     canSelect: (row) => !row.isSystem && getKeyUsage(row.id) === null,
-    filterSignature: `${search}\u0000${providerFilter}\u0000${labelsFilter ?? ""}`,
+    filterSignature: [
+      search,
+      providerFilter,
+      labelsFilter ?? "",
+      access.join(","),
+      sharedWith?.join(",") ?? "",
+      owner?.join(",") ?? "",
+    ].join("\u0000"),
     matchDescription:
       search || providerFilter !== "all"
         ? "match the current filters"
@@ -698,14 +727,7 @@ export default function ApiKeysPage() {
           <CollectionFilters>
             <FilterBar
               onClearFilters={
-                search || providerFilter !== "all" || labelsFilter
-                  ? () =>
-                      updateQueryParams({
-                        search: null,
-                        provider: null,
-                        labels: null,
-                      })
-                  : undefined
+                hasActiveFilters ? () => clearFilters() : undefined
               }
               search={
                 <SearchInput
@@ -717,6 +739,10 @@ export default function ApiKeysPage() {
                 />
               }
             >
+              <ResourceAccessFilter
+                resource="llmProviderApiKey"
+                noun="credentials"
+              />
               <Select
                 value={providerFilter}
                 onValueChange={(value) =>
@@ -797,17 +823,9 @@ export default function ApiKeysPage() {
               isLoading={permissionsPending || isFetching}
               emptyIcon={Boxes}
               emptyMessage="No credentials configured"
-              hasActiveFilters={Boolean(
-                search || providerFilter !== "all" || labelsFilter,
-              )}
+              hasActiveFilters={hasActiveFilters}
               filteredEmptyMessage="No LLM provider credentials match your filters"
-              onClearFilters={() =>
-                updateQueryParams({
-                  search: null,
-                  provider: null,
-                  labels: null,
-                })
-              }
+              onClearFilters={clearFilters}
             />
           </div>
         </BulkActionsScope>

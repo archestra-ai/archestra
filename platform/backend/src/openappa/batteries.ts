@@ -6,7 +6,7 @@ import type {
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
@@ -334,7 +334,7 @@ class OpenAppaBatteriesService {
    * recomposes. Never throws; a battery problem must not fail an installation.
    */
   async onCatalogToolsChanged(catalogId: string): Promise<void> {
-    if (!config.openappa.enabled) return;
+    if (!enterpriseTier.isOpenappaActive()) return;
     try {
       const catalog = await InternalMcpCatalogModel.findById(catalogId, {
         expandSecrets: false,
@@ -356,7 +356,7 @@ class OpenAppaBatteriesService {
    * name its organizations, so they are read from the catalog itself.
    */
   async recompileForCatalog(organizationId: string | null): Promise<void> {
-    if (!config.openappa.enabled) return;
+    if (!enterpriseTier.isOpenappaActive()) return;
     await this.recompileOrganizations(
       organizationId === null
         ? await OrganizationModel.findAllIds()
@@ -365,7 +365,7 @@ class OpenAppaBatteriesService {
   }
 
   async recompileOrganizations(organizationIds: string[]): Promise<void> {
-    if (!config.openappa.enabled) return;
+    if (!enterpriseTier.isOpenappaActive()) return;
     const results = await mapWithConcurrency(
       organizationIds,
       RECOMPILE_CONCURRENCY,
@@ -394,7 +394,7 @@ class OpenAppaBatteriesService {
     userId: string;
     renamedTools: ReadonlyArray<{ oldName: string; newName: string }>;
   }): Promise<void> {
-    if (!config.openappa.enabled) return;
+    if (!enterpriseTier.isOpenappaActive()) return;
     const organizationIds =
       params.organizationId === null
         ? await OrganizationModel.findAllIds()

@@ -48,6 +48,7 @@ export function ResourceAccessFilter({
   resource,
   noun,
   offerBuiltIn = false,
+  owned = true,
   navigate,
   queryParamsAdapter,
 }: {
@@ -57,6 +58,11 @@ export function ResourceAccessFilter({
   noun: string;
   /** Agents page only: offer the "Built-in" option, kept in the `builtIn` URL parameter. */
   offerBuiltIn?: boolean;
+  /**
+   * Off for objects nobody authors (synced models): no "Mine" option and no
+   * Owner box, since neither could match anything.
+   */
+  owned?: boolean;
   /** Override navigation for lists that own local URL state without an RSC round trip. */
   navigate?: (url: string) => void;
   /** Optional logical-to-URL adapter shared by a page section. */
@@ -123,6 +129,7 @@ export function ResourceAccessFilter({
         access={access}
         builtIn={builtIn}
         offerBuiltIn={offerBuiltIn}
+        owned={owned}
         updateParams={updateParams}
         reset={reset}
       />
@@ -136,16 +143,18 @@ export function ResourceAccessFilter({
         }
         footer={reset}
       />
-      <ResourceOwnerFilter
-        resource={resource}
-        value={owner ?? []}
-        onChange={(next) =>
-          updateParams({
-            [OWNER_PARAM]: next.length > 0 ? next.join(",") : null,
-          })
-        }
-        footer={reset}
-      />
+      {owned && (
+        <ResourceOwnerFilter
+          resource={resource}
+          value={owner ?? []}
+          onChange={(next) =>
+            updateParams({
+              [OWNER_PARAM]: next.length > 0 ? next.join(",") : null,
+            })
+          }
+          footer={reset}
+        />
+      )}
     </>
   );
 }
@@ -232,6 +241,7 @@ function AccessRelationFilter({
   access,
   builtIn,
   offerBuiltIn,
+  owned,
   updateParams,
   reset,
 }: {
@@ -240,6 +250,7 @@ function AccessRelationFilter({
   access: ResourceAccessRelation[];
   builtIn: boolean;
   offerBuiltIn: boolean;
+  owned: boolean;
   updateParams: (updates: Record<string, string | null>) => void;
   reset: ReactNode;
 }) {
@@ -254,7 +265,9 @@ function AccessRelationFilter({
   // A bookmarked selection that holds "others" keeps the option visible, so
   // the viewer can still clear it.
   const options = ACCESS_OPTION_IDS.filter(
-    (id) => id !== "others" || readsEveryObject || isOn("others"),
+    (id) =>
+      (id !== "others" || readsEveryObject || isOn("others")) &&
+      (id !== "mine" || owned),
   );
   const onCount = options.filter(isOn).length;
   // Only agent admins can list the built-in agents.
@@ -284,7 +297,7 @@ function AccessRelationFilter({
           })}
         >
           <Users className="size-4" />
-          <span>{summarize({ access, noun })}</span>
+          <span>{summarize({ access, noun, owned })}</span>
           {builtIn && <span>+ Built-in</span>}
           <ChevronDown className="size-4 opacity-50" />
         </Button>
@@ -429,14 +442,18 @@ function parseList(raw: string | null): string[] | undefined {
 function summarize({
   access,
   noun,
+  owned,
 }: {
   access: ResourceAccessRelation[];
   noun: string;
+  owned: boolean;
 }): string {
   if (access.length === RESOURCE_ACCESS_RELATIONS.length) return `All ${noun}`;
   const selected = new Set(access);
-  return ACCESS_OPTION_IDS.filter((id) =>
-    ACCESS_OPTIONS[id].relations.some((relation) => selected.has(relation)),
+  return ACCESS_OPTION_IDS.filter(
+    (id) =>
+      (id !== "mine" || owned) &&
+      ACCESS_OPTIONS[id].relations.some((relation) => selected.has(relation)),
   )
     .map((id) => ACCESS_OPTIONS[id].label)
     .join(" · ");

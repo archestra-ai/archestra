@@ -1091,7 +1091,7 @@ describe("AgentChatAppsEditor", () => {
     await openPicker(user, "Slack");
     // The refusal names the access to grant and where to grant it.
     const reason =
-      'A personal agent answers only in its owner\'s direct messages. To use shared channels, open the Permissions tab and add "Everyone in this organization" with "Can use" access.';
+      "A personal agent answers only in its owner's direct messages. To use shared channels, add a team, a role or everyone in Who can use it on General.";
     // One sentence for the whole group, not one per row.
     expect(screen.getAllByText(reason)).toHaveLength(1);
     const group = screen.getByRole("button", {

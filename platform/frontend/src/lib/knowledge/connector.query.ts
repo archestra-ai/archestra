@@ -47,7 +47,14 @@ type ConnectorsListParams = Pick<
 };
 type ConnectorsPaginatedParams = Pick<
   ConnectorsQuery,
-  "limit" | "offset" | "search" | "connectorType" | "status"
+  | "limit"
+  | "offset"
+  | "search"
+  | "connectorType"
+  | "status"
+  | "access"
+  | "sharedWith"
+  | "owner"
 > & {
   /** Serialized `?labels=` filter; resolved server-side. */
   labels?: string;

@@ -81,6 +81,8 @@ interface StartupGuardMcpSection {
 }
 
 interface StartupGuardProxySection {
+  /** OpenCode managed catalog requires restoring its configuration snapshot. */
+  usesModelCatalog?: boolean;
   authMode?: SetupScriptProxySection["authMode"];
   /** The proxied provider — drives the health URL's `/v1/<provider>/` path. */
   provider: SupportedProvider;
@@ -288,6 +290,7 @@ export function buildStartupGuardContext(
     proxy: ctx.proxy
       ? {
           authMode: ctx.proxy.authMode,
+          usesModelCatalog: Boolean(ctx.proxy.primaryProviders),
           provider: ctx.proxy.provider,
           providerLabel: ctx.proxy.providerLabel,
           url: ctx.proxy.url,

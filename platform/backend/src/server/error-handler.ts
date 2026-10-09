@@ -296,6 +296,7 @@ export function handleServerError(
         message,
         type,
         ...(internalCode && { internal_code: internalCode }),
+        ...(error.details && { details: error.details }),
       },
     });
   }

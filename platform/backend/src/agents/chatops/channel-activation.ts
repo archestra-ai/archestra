@@ -120,10 +120,21 @@ export async function muteChannelThread(params: {
   channelId: string;
   threadId: string;
 }): Promise<boolean> {
-  await recordThreadMute(params);
-  chatOpsRunRegistry.cancelThread(params);
+  await stopChatOpsThread(params);
   await markChannelThreadMuted(params);
   return await clearChannelThreadActive(params);
+}
+
+/** Cancel current work across pods without changing future auto-reply behavior. */
+export async function stopChatOpsThread(params: {
+  provider: ChatOpsProviderType;
+  channelId: string;
+  threadId: string;
+}): Promise<void> {
+  // The marker suppresses late replies from runs on other pods; it does not
+  // mute the thread. Subsequent runs capture this marker and can reply normally.
+  await recordThreadMute(params);
+  chatOpsRunRegistry.cancelThread(params);
 }
 
 /**

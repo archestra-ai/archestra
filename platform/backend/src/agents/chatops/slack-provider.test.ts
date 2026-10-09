@@ -34,7 +34,14 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ChatOpsChannelBindingModel, UserModel } from "@/models";
-import { markChannelThreadActive } from "./channel-activation";
+import {
+  getThreadMuteMarker,
+  isChannelThreadActive,
+  isChannelThreadMuted,
+  markChannelThreadActive,
+  muteChannelThread,
+} from "./channel-activation";
+import { chatOpsRunRegistry } from "./chatops-run-registry";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import SlackProvider from "./slack-provider";
 
@@ -1082,6 +1089,117 @@ describe("SlackProvider.parseWebhookNotification — thread mute command", () =>
     );
     expect(result).not.toBeNull();
     expect(result?.text).toBe("mute the alerts channel for me");
+  });
+});
+
+describe("SlackProvider.parseWebhookNotification — native stop", () => {
+  test.each([
+    "C_STOP",
+    "D_STOP",
+  ])("cancels current work in %s without muting future replies", async (channelId) => {
+    const provider = createProvider();
+    const setStatus = vi.fn().mockResolvedValue({ ok: true });
+    const postMessage = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only Slack network boundary
+    (provider as any).client = {
+      assistant: { threads: { setStatus } },
+      chat: { postMessage },
+    };
+    const key = {
+      provider: "slack" as const,
+      channelId,
+      threadId: "100.000001",
+    };
+    await markChannelThreadActive(key);
+    const before = await getThreadMuteMarker(key);
+    const run = chatOpsRunRegistry.register(key);
+    const other = chatOpsRunRegistry.register({
+      ...key,
+      threadId: "200.000001",
+    });
+    try {
+      const result = await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "agent_session_stopped",
+            channel: channelId,
+            thread_ts: key.threadId,
+            ts: undefined,
+            event_ts: "100.000002",
+            streaming_message_ts: [],
+          },
+        ),
+        {},
+      );
+      expect(result).toBeNull();
+      expect(run.signal.aborted).toBe(true);
+      expect(other.signal.aborted).toBe(false);
+      expect(await getThreadMuteMarker(key)).not.toBe(before);
+      expect(await isChannelThreadActive(key)).toBe(true);
+      expect(await isChannelThreadMuted(key)).toBe(false);
+      expect(setStatus).toHaveBeenCalledWith({
+        channel_id: channelId,
+        thread_ts: key.threadId,
+        status: "",
+      });
+      expect(postMessage).toHaveBeenCalledWith({
+        channel: channelId,
+        thread_ts: key.threadId,
+        text: "Stopped.",
+      });
+      const next = chatOpsRunRegistry.register(key);
+      expect(next.signal.aborted).toBe(false);
+      next.unregister();
+      if (channelId.startsWith("C")) {
+        const followUp = await provider.parseWebhookNotification(
+          makeEventPayload(
+            {},
+            {
+              type: "message",
+              channel: channelId,
+              thread_ts: key.threadId,
+              text: "try again",
+            },
+          ),
+          {},
+        );
+        expect(followUp?.text).toBe("try again");
+      }
+      await muteChannelThread(key);
+      expect(await isChannelThreadActive(key)).toBe(false);
+      expect(await isChannelThreadMuted(key)).toBe(true);
+    } finally {
+      run.unregister();
+      other.unregister();
+    }
+  });
+
+  test("ignores a stop without a thread rather than cancelling unrelated work", async () => {
+    const provider = createProvider();
+    const key = {
+      provider: "slack" as const,
+      channelId: "C_STOP",
+      threadId: "100.000001",
+    };
+    const run = chatOpsRunRegistry.register(key);
+    try {
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "agent_session_stopped",
+            channel: key.channelId,
+            thread_ts: undefined,
+          },
+        ),
+        {},
+      );
+      expect(run.signal.aborted).toBe(false);
+      expect(await getThreadMuteMarker(key)).toBeNull();
+    } finally {
+      run.unregister();
+    }
   });
 });
 

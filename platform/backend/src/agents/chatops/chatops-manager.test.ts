@@ -757,15 +757,18 @@ describe("ChatOpsManager security validation", () => {
       },
     });
 
-    async function setupBoundAgent(fx: {
-      makeUser: (overrides?: { email: string }) => Promise<{ id: string }>;
-      makeOrganization: () => Promise<{ id: string }>;
-      makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
-      makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
-      makeInternalAgent: (overrides: {
-        organizationId: string;
-      }) => Promise<{ id: string; name: string }>;
-    }) {
+    async function setupBoundAgent(
+      fx: {
+        makeUser: (overrides?: { email: string }) => Promise<{ id: string }>;
+        makeOrganization: () => Promise<{ id: string }>;
+        makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+        makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
+        makeInternalAgent: (overrides: {
+          organizationId: string;
+        }) => Promise<{ id: string; name: string }>;
+      },
+      providerId: "slack" | "ms-teams" = "ms-teams",
+    ) {
       const user = await fx.makeUser({ email: "mute@example.com" });
       const org = await fx.makeOrganization();
       const team = await fx.makeTeam(org.id, user.id);
@@ -776,17 +779,20 @@ describe("ChatOpsManager security validation", () => {
       await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
       await ChatOpsChannelBindingModel.create({
         organizationId: org.id,
-        provider: "ms-teams",
+        provider: providerId,
         channelId: "test-channel-id",
         workspaceId: "test-workspace-id",
         agentId: agent.id,
       });
 
       const sendReplySpy = vi.fn().mockResolvedValue("reply-id");
-      const mockProvider = createMockProvider({
-        getUserEmail: async () => "mute@example.com",
-        sendReply: sendReplySpy,
-      });
+      const mockProvider: ChatOpsProvider = {
+        ...createMockProvider({
+          getUserEmail: async () => "mute@example.com",
+          sendReply: sendReplySpy,
+        }),
+        providerId,
+      };
       return {
         manager: makeManagerWith(mockProvider),
         mockProvider,
@@ -800,6 +806,106 @@ describe("ChatOpsManager security validation", () => {
       channelId: "test-channel-id",
       threadId: "test-channel-id",
     } as const;
+
+    test("ends Slack processing after a successful reply", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue(
+        agentResult(),
+      );
+      const { manager, mockProvider, sendReplySpy } = await setupBoundAgent(
+        {
+          makeUser,
+          makeOrganization,
+          makeTeam,
+          makeTeamMember,
+          makeInternalAgent,
+        },
+        "slack",
+      );
+      const clearStatus = vi.fn().mockResolvedValue(undefined);
+      mockProvider.clearTypingStatus = clearStatus;
+      const result = await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+      expect(result.success).toBe(true);
+      expect(sendReplySpy).toHaveBeenCalled();
+      expect(clearStatus).toHaveBeenCalledWith("test-channel-id", "");
+    });
+
+    test("keeps Slack processing while another run in the thread is working", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue(
+        agentResult(),
+      );
+      const { manager, mockProvider } = await setupBoundAgent(
+        {
+          makeUser,
+          makeOrganization,
+          makeTeam,
+          makeTeamMember,
+          makeInternalAgent,
+        },
+        "slack",
+      );
+      const clearStatus = vi.fn().mockResolvedValue(undefined);
+      mockProvider.clearTypingStatus = clearStatus;
+      const other = chatOpsRunRegistry.register({
+        ...threadKey,
+        provider: "slack",
+      });
+      try {
+        await manager.processMessage({
+          message: createMockMessage(),
+          provider: mockProvider,
+        });
+        expect(clearStatus).not.toHaveBeenCalled();
+      } finally {
+        other.unregister();
+      }
+    });
+
+    test("a stop while Slack displays processing cancels before model execution", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const execute = vi
+        .spyOn(a2aExecutor, "executeA2AMessage")
+        .mockResolvedValue(agentResult());
+      const { manager, mockProvider, sendReplySpy } = await setupBoundAgent(
+        {
+          makeUser,
+          makeOrganization,
+          makeTeam,
+          makeTeamMember,
+          makeInternalAgent,
+        },
+        "slack",
+      );
+      mockProvider.setTypingStatus = async () => {
+        chatOpsRunRegistry.cancelThread({ ...threadKey, provider: "slack" });
+      };
+      const result = await manager.processMessage({
+        message: createMockMessage(),
+        provider: mockProvider,
+      });
+      expect(result.success).toBe(true);
+      expect(execute).not.toHaveBeenCalled();
+      expect(sendReplySpy).not.toHaveBeenCalled();
+    });
 
     test("drops the reply when the thread is muted while the run is in flight (cross-pod marker moved)", async ({
       makeUser,

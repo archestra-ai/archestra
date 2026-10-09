@@ -100,5 +100,8 @@ describe("buildSlackManifest", () => {
       "reaction_added",
     );
     expect(SLACK_REQUIRED_BOT_SCOPES).toContain("reactions:read");
+    expect(manifest.settings.event_subscriptions.bot_events).toContain(
+      "agent_session_stopped",
+    );
   });
 });

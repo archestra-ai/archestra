@@ -166,11 +166,19 @@ class ChatOpsRunRegistry {
           threadId: key.threadId,
           aborted,
         },
-        "[ChatOps] Cancelled in-flight runs after thread was muted",
+        "[ChatOps] Cancelled in-flight thread runs",
       );
     }
 
     return aborted;
+  }
+
+  /** Whether this process still has uncancelled work for the thread. */
+  hasRunningThread(key: ChatOpsThreadKey): boolean {
+    const entries = this.runs.get(this.threadCacheKey(key));
+    return entries
+      ? [...entries].some((entry) => !entry.controller.signal.aborted)
+      : false;
   }
 
   private threadCacheKey(key: ChatOpsThreadKey): string {

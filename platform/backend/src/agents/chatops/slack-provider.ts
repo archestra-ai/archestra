@@ -53,6 +53,7 @@ import {
   isChannelThreadMuted,
   isMuteReaction,
   muteChannelThreadAndNotify,
+  stopChatOpsThread,
 } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
@@ -292,6 +293,22 @@ class SlackProvider implements ChatOpsProvider {
     }
 
     const event = body.event;
+
+    if (event.type === "agent_session_stopped") {
+      if (!event.channel || !event.thread_ts) return null;
+      await stopChatOpsThread({
+        provider: "slack",
+        channelId: event.channel,
+        threadId: event.thread_ts,
+      });
+      await this.clearTypingStatus(event.channel, event.thread_ts);
+      await this.client?.chat.postMessage({
+        channel: event.channel,
+        thread_ts: event.thread_ts,
+        text: "Stopped.",
+      });
+      return null;
+    }
 
     // Reaction-based mute: a 🔇/🤫 reaction on any message in a channel thread
     // mutes that thread. Pure side effect — never forwarded to the agent.

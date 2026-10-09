@@ -1825,36 +1825,6 @@ export class ChatOpsManager {
       processingStartedAt: Date.now(),
     };
 
-    // Send typing indicator before execution starts (non-fatal).
-    // Slack always has threadId (falls back to event.ts); Teams may not
-    // (only set for thread replies) but doesn't need it (uses conversationReference).
-    if (sendReply && provider.setTypingStatus) {
-      await provider
-        .setTypingStatus(
-          message.channelId,
-          message.threadId ?? "",
-          message.metadata,
-        )
-        .catch(() => {});
-    }
-
-    // Platforms whose typing indicator expires on its own (Telegram: ~5s)
-    // need a heartbeat, or long agent runs look stalled. Cleared in `finally`;
-    // no explicit stop on reply is needed — the indicator drops when the
-    // bot's message arrives.
-    const typingHeartbeat =
-      sendReply && provider.setTypingStatus && provider.typingRefreshIntervalMs
-        ? setInterval(() => {
-            provider
-              .setTypingStatus?.(
-                message.channelId,
-                message.threadId ?? "",
-                message.metadata,
-              )
-              .catch(() => {});
-          }, provider.typingRefreshIntervalMs)
-        : null;
-
     // Register this run so muting the thread can abort it mid-flight, and record
     // the thread's mute marker now: if it changes before we reply, the thread
     // was muted while we were working and the reply must be dropped (see
@@ -1886,7 +1856,40 @@ export class ChatOpsManager {
     );
     const muteMarkerAtStart = await getThreadMuteMarker(threadKey);
 
+    // Send typing indicator before execution starts (non-fatal).
+    // Slack always has threadId (falls back to event.ts); Teams may not
+    // (only set for thread replies) but doesn't need it (uses conversationReference).
+    if (sendReply && provider.setTypingStatus) {
+      await provider
+        .setTypingStatus(
+          message.channelId,
+          message.threadId ?? "",
+          message.metadata,
+        )
+        .catch(() => {});
+    }
+
+    // Platforms whose typing indicator expires on its own (Telegram: ~5s)
+    // need a heartbeat, or long agent runs look stalled. Cleared in `finally`;
+    // no explicit stop on reply is needed — the indicator drops when the
+    // bot's message arrives.
+    const typingHeartbeat =
+      sendReply && provider.setTypingStatus && provider.typingRefreshIntervalMs
+        ? setInterval(() => {
+            provider
+              .setTypingStatus?.(
+                message.channelId,
+                message.threadId ?? "",
+                message.metadata,
+              )
+              .catch(() => {});
+          }, provider.typingRefreshIntervalMs)
+        : null;
+
     try {
+      if (abortSignal.aborted) {
+        return await this.suppressMutedReply({ provider, message, threadKey });
+      }
       const executeParams = {
         agent,
         binding,
@@ -1981,6 +1984,17 @@ export class ChatOpsManager {
     } finally {
       if (typingHeartbeat) clearInterval(typingHeartbeat);
       unregister();
+      // Slack bridges the legacy typing API to agent sessions. Posting a reply
+      // no longer ends processing there, so explicitly finish the lifecycle.
+      if (
+        sendReply &&
+        provider.providerId === "slack" &&
+        !chatOpsRunRegistry.hasRunningThread(threadKey)
+      ) {
+        await provider
+          .clearTypingStatus?.(message.channelId, message.threadId ?? "")
+          ?.catch(() => {});
+      }
     }
   }
 

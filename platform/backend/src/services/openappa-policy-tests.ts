@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -28,7 +28,7 @@ import {
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 function enabled() {
-  if (!config.openappa.enabled)
+  if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(409, "Enable OpenAPPA before using policy validation");
 }
 export async function inspectOpenAppaPolicyTests(files: PolicyTestFile[]) {
@@ -394,7 +394,7 @@ async function executeAutomaticPolicyValidation(
       key: z.string(),
     })
     .parse(payload);
-  if (!config.openappa.enabled) return;
+  if (!enterpriseTier.isOpenappaActive()) return;
   const [source, suite, root, history] = await Promise.all([
     OpenAppaGithubSyncModel.find(job.organizationId),
     OpenAppaPolicyTestsModel.find(job.organizationId),

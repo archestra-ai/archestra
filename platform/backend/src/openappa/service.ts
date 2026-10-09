@@ -18,6 +18,7 @@ import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
@@ -217,11 +218,11 @@ export function enterCapturedGuardrailsActivation(
   capturedActivation.enterWith(activation);
 }
 export function openappaYellEnabled(): boolean {
-  return config.openappa.enabled && config.openappa.yellEnabled;
+  return enterpriseTier.isOpenappaActive() && config.openappa.yellEnabled;
 }
 
 export function openappaEnabled(): boolean {
-  return config.openappa.enabled;
+  return enterpriseTier.isOpenappaActive();
 }
 
 /** Read the persisted label of a started session without dispatching a hook. */

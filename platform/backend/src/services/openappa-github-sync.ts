@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
@@ -30,7 +31,7 @@ export async function getAppaGithubSync(organizationId: string) {
   const validationDirectory = row?.repo ? (suite?.directory ?? "traces") : "";
   if (!row)
     return {
-      enabled: config.openappa.enabled,
+      enabled: enterpriseTier.isOpenappaActive(),
       source: null,
       hasPolicy: false,
       validationDirectory,
@@ -39,7 +40,7 @@ export async function getAppaGithubSync(organizationId: string) {
   // reads a held pull by its hash, its commit and its reasons.
   const { content, heldContent, ...source } = row;
   return {
-    enabled: config.openappa.enabled,
+    enabled: enterpriseTier.isOpenappaActive(),
     source,
     hasPolicy: content !== null,
     validationDirectory,
@@ -354,7 +355,7 @@ export async function acceptHeldAppaGithubPull(params: {
 }
 
 export async function syncAppaGithubPolicy(organizationId: string) {
-  if (!config.openappa.enabled) return;
+  if (!enterpriseTier.isOpenappaActive()) return;
   const row = await OpenAppaGithubSyncModel.find(organizationId);
   if (!row?.interval) return;
   // A row can exist for its declaration flags alone, with no source configured.
@@ -507,7 +508,7 @@ async function queuePolicyValidation(
   }
 }
 export async function checkDueAppaGithubSyncs() {
-  if (!config.openappa.enabled) return;
+  if (!enterpriseTier.isOpenappaActive()) return;
   for (const row of await OpenAppaGithubSyncModel.findDue())
     await OpenAppaGithubSyncModel.enqueue(row.organizationId);
 }
@@ -633,7 +634,7 @@ async function saveSource(params: {
 }
 
 function assertEnabled() {
-  if (!config.openappa.enabled)
+  if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(
       409,
       "Enable OpenAPPA on the server before configuring GitHub sync",

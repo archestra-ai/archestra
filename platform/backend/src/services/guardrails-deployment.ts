@@ -1,5 +1,5 @@
 import { userHasPermission } from "@/auth";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { OrganizationModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
@@ -19,7 +19,7 @@ export async function readGuardrailsV2Activation(
   readEnabled: () => Promise<boolean> = () =>
     GuardrailsDeploymentModel.isEnabled(),
 ): Promise<GuardrailsV2Activation> {
-  if (!config.openappa.enabled) return "inactive";
+  if (!enterpriseTier.isOpenappaActive()) return "inactive";
   return (await readEnabled()) ? "active" : "inactive";
 }
 
@@ -33,8 +33,8 @@ export async function getGuardrailsDeployment() {
   return {
     enabled,
     unsupportedClientAction,
-    featureEnabled: config.openappa.enabled,
-    active: config.openappa.enabled && enabled,
+    featureEnabled: enterpriseTier.isOpenappaActive(),
+    active: enterpriseTier.isOpenappaActive() && enabled,
   };
 }
 
@@ -50,7 +50,7 @@ export async function setGuardrailsDeployment(update: {
   enabled?: boolean;
   unsupportedClientAction?: UnsupportedAppaClientAction;
 }) {
-  if (update.enabled && config.openappa.enabled) {
+  if (update.enabled && enterpriseTier.isOpenappaActive()) {
     const refusals = await refusedPolicies();
     if (refusals.length > 0)
       throw new ApiError(

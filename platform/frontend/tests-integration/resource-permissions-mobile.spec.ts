@@ -15,6 +15,7 @@ const policy: ResourcePermissions = {
   resource: "mcpRegistry",
   scope: "*",
   name: "All MCP registry entries",
+  ownerId: null,
   revision: 1,
   grants: [
     { subject: { type: "role", id: "admin" }, name: "Admin", actions },
@@ -223,7 +224,7 @@ test("a phone draft cannot remove the last permission manager", async ({
   ).toBeEnabled();
 });
 
-test("Add access stays in the desktop header and moves into the phone body", async ({
+test("the Add access field sits in the body and is a full touch target on a phone", async ({
   page,
   mswControl,
 }) => {
@@ -242,46 +243,22 @@ test("Add access stays in the desktop header and moves into the phone body", asy
   ]);
   await page.goto("/mcp/registry?permissions=all");
   const dialog = page.getByRole("dialog", { name: title, exact: true });
-  const add = dialog.getByRole("button", { name: "Add access", exact: true });
   const body = dialog.locator('[data-slot="dialog-body"]');
+  const add = body.getByRole("combobox", { name: "Add access", exact: true });
   await expect(add).toBeVisible();
-  await expect(add).toHaveCount(1);
   await expect(
-    body.getByRole("button", { name: "Add access", exact: true }),
-  ).toHaveCount(0);
-  const header = dialog.locator('[data-slot="dialog-header"]');
-  const addBox = await add.boundingBox();
-  const headerBox = await header.boundingBox();
-  expect((addBox?.y ?? 0) + (addBox?.height ?? 0)).toBeLessThanOrEqual(
-    (headerBox?.y ?? 0) + (headerBox?.height ?? 0),
-  );
-  await page.screenshot({ path: test.info().outputPath("desktop-header.png") });
+    dialog.getByRole("combobox", { name: "Add access", exact: true }),
+  ).toHaveCount(1);
+  await page.screenshot({ path: test.info().outputPath("desktop-body.png") });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  const mobileAdd = body.getByRole("button", {
-    name: "Add access",
-    exact: true,
-  });
-  await expect(mobileAdd).toBeVisible();
-  await expect(add).toHaveCount(1);
-  await expectInsideViewport(page, mobileAdd);
+  await expectInsideViewport(page, add);
   await expect
-    .poll(async () => (await mobileAdd.boundingBox())?.height ?? 0)
+    .poll(async () => (await add.boundingBox())?.height ?? 0)
     .toBeGreaterThanOrEqual(43.99);
   await page.screenshot({ path: test.info().outputPath("mobile-body.png") });
-  await mobileAdd.click();
-  const picker = page.getByRole("dialog", { name: "Add access", exact: true });
-  await expect(picker).toBeVisible();
-  await picker.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(mobileAdd).toBeFocused();
-
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await expect(add).toBeVisible();
-  await expect(
-    body.getByRole("button", { name: "Add access", exact: true }),
-  ).toHaveCount(0);
   await add.click();
-  await expect(picker).toBeVisible();
-  await picker.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByRole("listbox", { name: "Recipients" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(add).toBeFocused();
 });

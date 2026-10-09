@@ -35,7 +35,6 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delete";
 import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
 import {
@@ -127,14 +126,6 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
   const hasUnsavedChanges = formDirty || permissionsDirty;
   const navigationGuard = usePageUnsavedChangesGuard(hasUnsavedChanges);
   const agent = query.data;
-  const ownership = useResourceOwnershipTransfer({
-    kind: "remoteAgent",
-    resource: agent,
-    disabledReason: hasUnsavedChanges
-      ? "Save or discard your changes first"
-      : undefined,
-    onTransferred: () => router.push("/agents"),
-  });
   const canUpdate = capabilities.can(id, "update");
   const canDelete = capabilities.can(id, "delete");
   const canManage = canUpdate || canDelete;
@@ -215,53 +206,49 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
                   </p>
                 )}
                 {canManage && (
-                  <>
-                    <TableRowActions
-                      dropdownContent={ownership.menuItem}
-                      itemName={agent.name}
-                      actions={[]}
-                      dropdownActions={[
-                        ...(canUpdate
-                          ? [
-                              {
-                                icon: <Power className="h-4 w-4" />,
-                                label: agent.connection.enabled
-                                  ? "Disable delegation"
-                                  : "Enable delegation",
-                                tooltip: agent.connection.enabled
-                                  ? "Pause this connection everywhere without removing its agent assignments."
-                                  : "Make this connection available to its assigned agents again.",
-                                disabled:
-                                  updateMutation.isPending || hasUnsavedChanges,
-                                disabledTooltip: hasUnsavedChanges
-                                  ? "Save or discard your changes before changing delegation availability."
-                                  : undefined,
-                                onClick: () =>
-                                  updateMutation.mutate({
-                                    enabled: !agent.connection.enabled,
-                                  }),
-                              },
-                            ]
-                          : []),
-                        ...(canDelete
-                          ? [
-                              {
-                                icon: <Trash2 className="h-4 w-4" />,
-                                label: "Delete",
-                                variant: "destructive" as const,
-                                disabled:
-                                  deleteMutation.isPending || hasUnsavedChanges,
-                                disabledTooltip: hasUnsavedChanges
-                                  ? "Save or discard your changes before deleting this external agent."
-                                  : undefined,
-                                onClick: () => setDeleteOpen(true),
-                              },
-                            ]
-                          : []),
-                      ]}
-                    />
-                    {ownership.dialog}
-                  </>
+                  <TableRowActions
+                    itemName={agent.name}
+                    actions={[]}
+                    dropdownActions={[
+                      ...(canUpdate
+                        ? [
+                            {
+                              icon: <Power className="h-4 w-4" />,
+                              label: agent.connection.enabled
+                                ? "Disable delegation"
+                                : "Enable delegation",
+                              tooltip: agent.connection.enabled
+                                ? "Pause this connection everywhere without removing its agent assignments."
+                                : "Make this connection available to its assigned agents again.",
+                              disabled:
+                                updateMutation.isPending || hasUnsavedChanges,
+                              disabledTooltip: hasUnsavedChanges
+                                ? "Save or discard your changes before changing delegation availability."
+                                : undefined,
+                              onClick: () =>
+                                updateMutation.mutate({
+                                  enabled: !agent.connection.enabled,
+                                }),
+                            },
+                          ]
+                        : []),
+                      ...(canDelete
+                        ? [
+                            {
+                              icon: <Trash2 className="h-4 w-4" />,
+                              label: "Delete",
+                              variant: "destructive" as const,
+                              disabled:
+                                deleteMutation.isPending || hasUnsavedChanges,
+                              disabledTooltip: hasUnsavedChanges
+                                ? "Save or discard your changes before deleting this external agent."
+                                : undefined,
+                              onClick: () => setDeleteOpen(true),
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
                 )}
               </div>
             ) : undefined,

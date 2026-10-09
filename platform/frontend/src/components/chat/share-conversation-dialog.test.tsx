@@ -26,7 +26,7 @@ afterAll(() => server.close());
 it.each([
   "conversation",
   "agentRun",
-] as const)("%s saves team access with one Add access click, granting only session capabilities", async (resource) => {
+] as const)("%s shares with a team through the add field, granting only session capabilities", async (resource) => {
   const user = userEvent.setup();
   const ownerGrant = {
     subject: { type: "user", id: "owner" },
@@ -102,21 +102,21 @@ it.each([
     expect(
       screen.getByText(/Apps in this chat have their own permissions/),
     ).toBeVisible();
-  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
-  await user.click(screen.getByRole("button", { name: /Teams/ }));
-  await user.click(screen.getByRole("combobox", { name: "Add teams" }));
-  await user.click(await screen.findByRole("option", { name: /Support/ }));
+  await user.click(
+    within(dialog).getByRole("combobox", { name: "Add access" }),
+  );
+  await user.click(await screen.findByRole("option", { name: "Support" }));
   expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
-  expect(screen.queryByText("Can edit")).not.toBeInTheDocument();
-  expect(screen.queryByText("Full access")).not.toBeInTheDocument();
-  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
-  // While the save is in flight, the list never offers its own Save: a
-  // staged draft would flash Discard and Save in the footer.
-  await waitFor(() => expect(saved).toBeDefined());
+  // A session has no "use", and a new recipient never starts out able to
+  // manage access, so the draft grant is view-only.
   expect(
-    within(dialog).queryByRole("button", { name: "Save permissions" }),
-  ).not.toBeInTheDocument();
-  expect(within(dialog).getByRole("button", { name: "Done" })).toBeVisible();
+    within(dialog).getByRole("combobox", { name: "Permission for Support" }),
+  ).toHaveTextContent("Can view");
+  expect(screen.getByTestId("audience-chip")).toHaveTextContent("Team-wide");
+  await user.click(
+    within(dialog).getByRole("button", { name: "Save permissions" }),
+  );
+  await waitFor(() => expect(saved).toBeDefined());
   releaseSave();
   await waitFor(() =>
     expect(saved).toEqual({

@@ -290,9 +290,9 @@ describe("LlmProviderApiKeyForm", () => {
     expect(
       screen.queryByRole("tab", { name: "Shared" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Permissions")).toBeInTheDocument();
+    expect(screen.getByText("Who can use it")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Add access" }),
+      screen.getByRole("combobox", { name: "Add access" }),
     ).toBeInTheDocument();
   });
 

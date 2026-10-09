@@ -83,14 +83,6 @@ describe("EditVirtualKeyDialog", () => {
     const user = userEvent.setup();
     renderDialog();
 
-    expect(
-      screen
-        .getByRole("button", { name: "Connect" })
-        .compareDocumentPosition(
-          screen.getByRole("button", { name: "Permissions" }),
-        ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-
     await user.click(screen.getByRole("button", { name: "Connect" }));
 
     expect(screen.getByText("Use your saved key")).toBeVisible();
@@ -131,10 +123,15 @@ describe("EditVirtualKeyDialog", () => {
     }
   });
 
-  it("edits access through the key's own permission policy", () => {
+  it("edits access on General through the key's own permission policy", () => {
     renderDialog();
 
+    // Access sits with the key's other settings, not behind a tab of its own.
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
     const section = screen.getByTestId("resource-access");
+    expect(section).toBeVisible();
     expect(section).toHaveAttribute("data-resource", "llmVirtualKey");
     expect(section).toHaveAttribute("data-id", "vk-1");
   });

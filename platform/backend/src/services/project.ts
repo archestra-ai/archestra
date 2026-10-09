@@ -2,7 +2,6 @@ import {
   MAX_PROJECT_UPLOAD_BYTES,
   MAX_PROJECT_UPLOAD_MB,
   PROJECT_INSTRUCTIONS_FILENAME,
-  type ResourceAccessRelation,
   type ResourcePermissionGrant,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
@@ -31,6 +30,7 @@ import {
 } from "@/models";
 import { ProjectNameExistsError } from "@/models/project";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import type { ResourceAccessSelection } from "@/models/resource-permission-subject";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { validateProjectName } from "@/skills-sandbox/project-name";
@@ -223,8 +223,11 @@ class ProjectService {
     search?: string;
     status?: ProjectLifecycle;
     labelFilteredIds?: string[];
-    /** The list's "Show" filter; omit for the default "All" view. */
-    access?: ResourceAccessRelation[];
+    /**
+     * The list's "Show", "Shared with", and "Owner" filters. Without
+     * `relations` the default "All" view applies before the other two narrow.
+     */
+    access?: ResourceAccessSelection;
   }): Promise<ProjectListItem[]> {
     const { organizationId, userId, scope } = params;
 
@@ -277,7 +280,7 @@ class ProjectService {
       candidates = candidates.filter(
         (c) => c.project.visibility === "organization",
       );
-    } else if (params.access === undefined) {
+    } else if (params.access?.relations === undefined) {
       // "All": show only what the caller can actually access — own, org-shared,
       // and team-shared to a team they belong to. For an admin that drops every
       // oversight row (other members' private projects AND team-shared projects
@@ -294,7 +297,7 @@ class ProjectService {
         await ProjectAccessModel.getIdsInAccessRelations({
           organizationId,
           userId,
-          relations: params.access,
+          selection: params.access,
         }),
       );
       candidates = candidates.filter(({ project }) =>

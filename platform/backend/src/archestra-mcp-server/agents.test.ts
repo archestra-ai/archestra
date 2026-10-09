@@ -943,6 +943,69 @@ describe("agent RBAC visibility", () => {
     ]);
   });
 
+  test("list_agents narrows by shared_with and owner_ids", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, admin.id);
+
+    const mine = await makeAgent({
+      name: "Narrow Mine",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "personal",
+      authorId: admin.id,
+    });
+    await makeAgent({
+      name: "Narrow Team",
+      agentType: "agent",
+      organizationId: org.id,
+      access: { teams: [team.id] },
+      authorId: otherUser.id,
+    });
+    await makeAgent({
+      name: "Narrow Org",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "org",
+      authorId: otherUser.id,
+    });
+
+    const context: ArchestraContext = {
+      agent: { id: mine.id, name: mine.name },
+      userId: admin.id,
+      organizationId: org.id,
+    };
+    const listNames = async (args: Record<string, string[]>) => {
+      const result = await executeArchestraTool(
+        archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+        { name: "Narrow", ...args },
+        context,
+      );
+      expect(result.isError, JSON.stringify(result.content)).toBe(false);
+      return JSON.parse((result.content[0] as any).text)
+        .agents.map((agent: { name: string }) => agent.name)
+        .sort();
+    };
+
+    expect(await listNames({ shared_with: [`team:${team.id}`] })).toEqual([
+      "Narrow Team",
+    ]);
+    expect(await listNames({ shared_with: ["org"] })).toEqual(["Narrow Org"]);
+    expect(await listNames({ owner_ids: [admin.id] })).toEqual(["Narrow Mine"]);
+    expect(
+      await listNames({ owner_ids: [otherUser.id], shared_with: ["org"] }),
+    ).toEqual(["Narrow Org"]);
+  });
+
   test("get_agent by name does not return inaccessible team-scoped agent", async ({
     makeUser,
     makeOrganization,

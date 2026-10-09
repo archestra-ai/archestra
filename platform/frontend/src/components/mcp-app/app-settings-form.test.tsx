@@ -19,7 +19,9 @@ const {
   assignMutateAsync,
   unassignMutateAsync,
   useAppToolsMock,
+  savePermissions,
 } = vi.hoisted(() => ({
+  savePermissions: vi.fn(async () => {}),
   updateMutateAsync: vi.fn(),
   setEnabledMutateAsync: vi.fn(),
   setLockedMutateAsync: vi.fn(),
@@ -88,6 +90,24 @@ vi.mock("@/app/apps/_parts/app-tools-editor", () => ({
     </>
   ),
 }));
+// The access editor is its own tested component; here it only has to hand
+// the dialog a save so the one Save can be asserted to commit it.
+vi.mock("@/components/resource-permissions", async () => {
+  const { useEffect } = await import("react");
+  return {
+    ResourcePermissions: ({
+      registerSave,
+    }: {
+      registerSave?: (save: (() => Promise<void>) | null) => void;
+    }) => {
+      useEffect(() => {
+        registerSave?.(savePermissions);
+        return () => registerSave?.(null);
+      }, [registerSave]);
+      return <div data-testid="resource-permissions" />;
+    },
+  };
+});
 vi.mock("@/components/environment-selector", () => ({
   EnvironmentSelector: () => null,
 }));
@@ -192,13 +212,25 @@ beforeEach(() => {
 });
 
 describe("AppSettingsForm save", () => {
-  test("keeps labels under Advanced and saves an in-progress label", async () => {
+  test("shows access on General and commits it with the one Save", async () => {
+    const { onOpenChange } = renderForm();
+
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("resource-permissions")).toBeVisible();
+    goToSection("Tools");
+    submitForm();
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(savePermissions).toHaveBeenCalledTimes(1);
+    expect(updateMutateAsync).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows labels on General and saves an in-progress label", async () => {
     const user = userEvent.setup();
     const { onOpenChange } = renderForm();
 
-    expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.type(screen.getByLabelText("Label key"), "region");
     await user.type(screen.getByLabelText("Label value"), "eu");
     submitForm();
@@ -219,7 +251,6 @@ describe("AppSettingsForm save", () => {
     const user = userEvent.setup();
     const { onOpenChange } = renderForm();
 
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.type(screen.getByLabelText("Label key"), "region");
     await user.type(screen.getByLabelText("Label value"), "eu");
     goToSection("Status");

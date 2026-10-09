@@ -28,6 +28,7 @@ beforeEach(() => {
     resource: "mcpRegistry",
     scope: "00000000-0000-4000-8000-000000000010",
     name: "Example server",
+    ownerId: null,
     revision: 1,
     grants: [
       {
@@ -137,110 +138,7 @@ it("refreshes a clean editor without reporting a conflicting draft", async () =>
   ).not.toBeInTheDocument();
 });
 
-it("explains organization-wide access without making inherited permissions editable", async () => {
-  policy.inheritedGrants = [
-    {
-      subject: { type: "role", id: "editor" },
-      name: "Editor",
-      actions: ["read"],
-      sourceScope: "*",
-    },
-  ];
-  // The viewer can read the all-entries policy but not manage it.
-  server.use(
-    http.get(
-      `${origin}/api/resource-permissions/mcpRegistry/:scope`,
-      ({ request }) => {
-        if (!decodeURIComponent(new URL(request.url).pathname).endsWith("/*"))
-          return HttpResponse.json(policy);
-        return HttpResponse.json({
-          ...policy,
-          scope: "*",
-          grants: [],
-          inheritedGrants: [],
-          effectiveActions: ["read"],
-        });
-      },
-    ),
-  );
-  const user = userEvent.setup();
-  renderEditor();
-  const allSource = await screen.findByRole("button", {
-    name: "Why Editor has access: Every MCP registry entry",
-  });
-  await user.click(allSource);
-  expect(
-    await screen.findByRole("dialog", { name: "Access source for Editor" }),
-  ).toHaveTextContent("every MCP registry entry, including new ones");
-  expect(
-    screen.queryByRole("button", {
-      name: "permissions for all MCP registry entries",
-    }),
-  ).not.toBeInTheDocument();
-  await user.keyboard("{Escape}");
-  expect(allSource).toHaveFocus();
-  allSource.focus();
-  await user.keyboard("{Enter}");
-  expect(
-    await screen.findByRole("dialog", { name: "Access source for Editor" }),
-  ).toBeInTheDocument();
-  await user.keyboard("{Escape}");
-  expect(screen.getAllByText("Editor")).toHaveLength(1);
-  // Inherited access is not editable here: it has no picker and no remove
-  // button, which is what "change it at its source" means in the markup.
-  expect(
-    screen.queryByRole("combobox", { name: "Permission for Editor" }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: /Remove direct access for Editor/ }),
-  ).not.toBeInTheDocument();
-});
-
-it("opens the shared all-resource editor from an inherited permission source", async () => {
-  server.use(
-    http.get(
-      `${origin}/api/resource-permissions/mcpRegistry/:scope`,
-      ({ request }) => {
-        if (!decodeURIComponent(new URL(request.url).pathname).endsWith("/*"))
-          return HttpResponse.json(policy);
-        return HttpResponse.json({
-          ...policy,
-          scope: "*",
-          inheritedGrants: [],
-          grants: [
-            {
-              subject: { type: "role", id: "editor" },
-              name: "Editor",
-              actions: ["read"],
-            },
-          ],
-        });
-      },
-    ),
-  );
-  renderEditor(undefined, true);
-  const user = userEvent.setup();
-  await user.click(
-    await screen.findByRole("button", {
-      name: "Why Engineering has access: Every MCP registry entry",
-    }),
-  );
-  await user.click(
-    screen.getByRole("button", {
-      name: "permissions for all MCP registry entries",
-    }),
-  );
-  expect(
-    await screen.findByRole("dialog", {
-      name: "Permissions for all MCP registry entries",
-    }),
-  ).toBeInTheDocument();
-  expect(
-    await screen.findByRole("combobox", { name: "Permission for Editor" }),
-  ).toBeEnabled();
-});
-
-it("revokes a service account's direct grant without removing inherited team access", async () => {
+it("revokes a service account's direct grant", async () => {
   let submitted: unknown;
   server.use(
     http.put(endpoint, async ({ request }) => {
@@ -258,8 +156,6 @@ it("revokes a service account's direct grant without removing inherited team acc
   );
   await user.click(screen.getByRole("button", { name: "Save changes" }));
   await waitFor(() => expect(submitted).toEqual({ revision: 1, grants: [] }));
-  // The team grant is inherited, so revoking the direct one leaves it standing.
-  expect(screen.getByText("Engineering")).toBeInTheDocument();
   // Saving clears the draft, and with nothing left to save the control rests.
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled(),
@@ -422,6 +318,102 @@ it("lets readers inspect grants without offering mutations", async () => {
     screen.queryByRole("button", { name: "Save changes" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "Add access" }),
+    screen.queryByRole("combobox", { name: "Add access" }),
   ).not.toBeInTheDocument();
+  // The audience still shows, read off the saved grants.
+  expect(screen.getByTestId("audience-chip")).toHaveTextContent("Personal");
 });
+
+it("moves the audience chip with the draft grants before saving", async () => {
+  server.use(
+    http.get(`${endpoint}/subjects`, () =>
+      HttpResponse.json([
+        { subject: { type: "team", id: "team-a" }, name: "Engineering" },
+        { subject: { type: "role", id: "editor" }, name: "Editor" },
+        {
+          subject: {
+            type: "serviceAccount",
+            id: "00000000-0000-4000-8000-000000000012",
+          },
+          name: "Release automation",
+        },
+      ]),
+    ),
+  );
+  const user = userEvent.setup();
+  renderEditor();
+  const chip = await screen.findByTestId("audience-chip");
+  // A service account is a named recipient, not an audience.
+  expect(chip).toHaveTextContent("Personal");
+  await pick(user, "Release automation");
+  expect(chip).toHaveTextContent("Personal");
+  await pick(user, "Engineering");
+  expect(chip).toHaveTextContent("Team-wide");
+  // The new grant starts at Can use, the level a shared resource is for.
+  expect(
+    screen.getByRole("combobox", { name: "Permission for Engineering" }),
+  ).toHaveTextContent("Can use");
+  await pick(user, "Everyone with the Editor role");
+  expect(chip).toHaveTextContent("Org-wide");
+  await user.click(
+    screen.getByRole("button", { name: "Remove direct access for Editor" }),
+  );
+  expect(chip).toHaveTextContent("Team-wide");
+});
+
+it("shows the owner row and makes another person the owner", async () => {
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.scrollIntoView = vi.fn();
+  policy.ownerId = "owner-1";
+  policy.grants = [
+    {
+      subject: { type: "user", id: "owner-1" },
+      name: "Sam Owner",
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    },
+    {
+      subject: { type: "user", id: "user-2" },
+      name: "Alex Reader",
+      actions: ["read", "use"],
+    },
+  ];
+  let transferred: unknown;
+  server.use(
+    http.post(
+      `${origin}/api/internal_mcp_catalog/${policy.scope}/transfer-ownership`,
+      async ({ request }) => {
+        transferred = await request.json();
+        return HttpResponse.json({ success: true });
+      },
+    ),
+  );
+  const user = userEvent.setup();
+  renderEditor();
+  const owner = await screen.findByTestId("owner-grant");
+  expect(owner).toHaveTextContent("Sam OwnerUserOwner");
+  expect(owner).toHaveTextContent("Full access");
+  // The owner keeps their grant: no level menu and no remove button.
+  expect(
+    screen.queryByRole("combobox", { name: "Permission for Sam Owner" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", {
+      name: "Remove direct access for Sam Owner",
+    }),
+  ).not.toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("combobox", { name: "Permission for Alex Reader" }),
+  );
+  await user.click(await screen.findByRole("option", { name: /Make owner/ }));
+  expect(
+    await screen.findByText("Make Alex Reader the owner?"),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Make owner" }));
+  await waitFor(() => expect(transferred).toEqual({ ownerId: "user-2" }));
+});
+
+async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole("combobox", { name: "Add access" }));
+  await user.click(await screen.findByRole("option", { name }));
+}

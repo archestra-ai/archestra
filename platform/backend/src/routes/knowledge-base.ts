@@ -10,13 +10,16 @@ import {
   PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
   parseLabelsParam,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   TextSearchLanguageSchema,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { RuntimeCredentialDefinitionModel } from "@/models";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import {
   canAccessKnowledgeBase,
   findAccessibleKnowledgeBase,
@@ -315,6 +318,8 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
           access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),
@@ -323,7 +328,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, search, status, labels, ...scopeFilters },
+        query: {
+          limit,
+          offset,
+          search,
+          status,
+          labels,
+          access: relations,
+          sharedWith,
+          owner,
+          ...scopeFilters
+        },
         organizationId,
         user,
       },
@@ -340,6 +355,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
         });
+
+      const accessSelection = resourceAccessSelection({
+        access: relations,
+        sharedWith,
+        owner,
+      });
 
       // Resolved once so the page query and the count agree, and so a filter
       // that matches nothing short circuits both.
@@ -360,6 +381,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           viewerTeamIds: access.teamIds,
           viewerUserId: user.id,
           ...scopeFilters,
+          access: accessSelection,
         }),
         KnowledgeBaseModel.countByOrganization({
           organizationId,
@@ -370,6 +392,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           viewerTeamIds: access.teamIds,
           viewerUserId: user.id,
           ...scopeFilters,
+          access: accessSelection,
         }),
       ]);
 

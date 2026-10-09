@@ -7,6 +7,8 @@ import {
   PaginationQuerySchema,
   parseLabelsParam,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   resolveMcpClientServerName,
   TOOL_LOAD_SKILL_SHORT_NAME,
@@ -42,6 +44,7 @@ import {
   OrganizationModel,
   ProjectModel,
 } from "@/models";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { initializeObservabilityMetrics } from "@/observability";
 import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
 import { listPolicyIndependentAvailableAgentSkills } from "@/services/agent-activation-skill-candidates";
@@ -170,6 +173,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
               ),
             access: ResourceAccessQuerySchema,
+            sharedWith: ResourceSharedWithQuerySchema,
+            owner: ResourceOwnerQuerySchema,
             labels: z
               .string()
               .optional()
@@ -245,6 +250,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           authorIds,
           excludeAuthorIds,
           access,
+          sharedWith,
+          owner,
           labels,
           excludeOtherPersonalAgents,
           status,
@@ -304,7 +311,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeOtherPersonalAgents: isAdmin
             ? excludeOtherPersonalAgents
             : undefined,
-          access,
+          access: resourceAccessSelection({ access, sharedWith, owner }),
           labels: parseLabelsParam(labels),
           status,
           providerApiKeyId,

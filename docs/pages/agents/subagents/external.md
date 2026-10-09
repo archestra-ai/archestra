@@ -2,7 +2,7 @@
 title: External Agents
 description: Connect external Agent2Agent systems and use them as subagents
 order: 2
-lastUpdated: 2026-09-15
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,7 +19,7 @@ You need [`agent:create`](/docs/reference/permissions#agent:create).
 
 1. Go to **Agents**, click **Add Agent**, then **Add an External Agent**.
 2. Enter the agent's base URL and its authentication: none, a bearer token, or an API key.
-3. Under **Permissions**, click **Add access** to share it with people, teams, or everyone in the organization. Left alone, only you can use it.
+3. Under **Permissions**, add people, teams, or everyone in the organization. Left alone, only you can use it.
 4. Click **Connect agent**. Archestra reads and checks its Agent Card first.
 
 The connection shows as verified after its first successful call.

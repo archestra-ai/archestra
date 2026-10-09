@@ -2,7 +2,7 @@
 title: "Environments"
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,7 +32,7 @@ A creator who may not deploy into the landing environment gets Default instead, 
 
 ## Deploy Permissions
 
-Deploying into an environment requires a `use` grant on it. Set grants on the environment's **Permissions** tab — the same control you use to share an agent or a skill.
+Deploying into an environment requires a `use` grant on it. Set grants in the environment's permissions, the same control you use to share an agent or a skill.
 
 A new environment is open to the whole organization. To lock one down, remove the organization grant and grant `use` to the people or teams who may deploy there. You can let a team deploy to `staging` without letting them near `production`, for example. One grant covers everything deployed there: MCP servers, agents, apps, gateways, and knowledge connectors.
 

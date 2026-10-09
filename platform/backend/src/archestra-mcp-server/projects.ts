@@ -19,7 +19,12 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
-import { resourceAccessToolArg } from "./resource-access-tool-arg";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 
 const USER_CONTEXT_REQUIRED =
   "This tool requires an authenticated user context. Call it with a user token.";
@@ -225,6 +230,8 @@ const registry = defineArchestraTools([
               "description. Omit to list everything the caller can reach.",
           ),
         access: resourceAccessToolArg({ examplePlural: "projects" }),
+        shared_with: resourceSharedWithToolArg,
+        owner_ids: resourceOwnerIdsToolArg,
       })
       .strict(),
     outputSchema: ListProjectsOutputSchema,
@@ -256,7 +263,7 @@ const registry = defineArchestraTools([
           userId,
           isProjectAdmin,
           search: args.query,
-          access: args.access,
+          access: toolAccessSelection(args),
         });
         const shown = projects.slice(0, MAX_LISTED_PROJECTS);
         const summary =

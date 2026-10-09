@@ -6,12 +6,15 @@ import {
   PROJECT_NAME_MAX_LENGTH,
   parseLabelsParam,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { ProjectLabelModel, ProjectModel } from "@/models";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { projectService } from "@/services/project";
 import { transferResourceOwnership } from "@/services/resource-ownership";
@@ -274,6 +277,8 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "only; org-wide soft-deleted projects for the restore view).",
           ),
           access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(z.array(ProjectListItemSchema)),
       },
@@ -302,7 +307,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         search: query.search,
         status: query.status,
         labelFilteredIds,
-        access: query.access,
+        access: resourceAccessSelection(query),
       });
     },
   );

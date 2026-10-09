@@ -49,6 +49,10 @@ interface ScopeFilterParams<Scope extends string> {
   excludeOtherPersonal: undefined;
   /** The `ResourceAccessFilter` selection, for the list API's `access`. */
   access: ResourceAccessRelation[];
+  /** The "Shared with" selection, for the list API's `sharedWith`. */
+  sharedWith: string[] | undefined;
+  /** The "Owner" selection, for the list API's `owner`. */
+  owner: string[] | undefined;
   hasActiveScopeFilters: boolean;
 }
 
@@ -71,7 +75,12 @@ export function useScopeFilterParams(options?: {
   const searchParams = useSearchParams();
   const activeSearchParams =
     options?.queryParamsAdapter?.searchParams ?? searchParams;
-  const { access, isDefault: isDefaultAccess } = useResourceAccessParam({
+  const {
+    access,
+    sharedWith,
+    owner,
+    isDefault: isDefaultAccess,
+  } = useResourceAccessParam({
     queryParamsAdapter: options?.queryParamsAdapter,
   });
   const scope =
@@ -85,6 +94,8 @@ export function useScopeFilterParams(options?: {
     excludeAuthorIds: undefined,
     excludeOtherPersonal: undefined,
     access,
+    sharedWith,
+    owner,
     hasActiveScopeFilters: !!scope || !isDefaultAccess,
   };
 }

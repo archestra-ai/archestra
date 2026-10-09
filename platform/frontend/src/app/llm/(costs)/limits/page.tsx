@@ -377,7 +377,9 @@ export default function LimitsPage() {
           limit.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
         models: isAllModels ? [] : models,
         isAllModels,
-        labels: limit.labels,
+        // A limit read before labels existed carries none; the labels field
+        // shows open now, so it needs a list.
+        labels: limit.labels ?? [],
       };
     },
     [llmProxyId],

@@ -175,11 +175,6 @@ export function EditOAuthClientDialog({
                 spendCap,
               }),
         },
-        {
-          id: "permissions",
-          label: "Permissions",
-          status: "Who can manage it",
-        },
       ]}
       onActiveSectionChange={setActiveSection}
       headerExtra={
@@ -245,6 +240,16 @@ export function EditOAuthClientDialog({
             onChange={setRedirectUrisText}
           />
         )}
+        {/* SPDX-SnippetBegin
+              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+        <ResourceAccessSection
+          resource="llmOauthClient"
+          id={oauthClient.id}
+          registerSave={registerPermissionsSave}
+          onDirtyChange={setPermissionsDirty}
+        />
+        {/* SPDX-SnippetEnd */}
         <AdvancedLabelsSection
           ref={labelsRef}
           labels={labels}
@@ -282,23 +287,8 @@ export function EditOAuthClientDialog({
           currentUsage={oauthClient.spendCap?.currentUsage ?? null}
         />
       </div>
-
-      {/* Kept mounted on every tab, so Save Changes commits its edits. */}
-      <div hidden={activeSection !== "permissions"}>
-        {/* SPDX-SnippetBegin
-              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-        <ResourceAccessSection
-          resource="llmOauthClient"
-          id={oauthClient.id}
-          registerSave={registerPermissionsSave}
-          onDirtyChange={setPermissionsDirty}
-          standalone
-        />
-        {/* SPDX-SnippetEnd */}
-      </div>
     </TabbedDialogShell>
   );
 }
 
-type Section = "general" | "keys" | "budget" | "permissions";
+type Section = "general" | "keys" | "budget";

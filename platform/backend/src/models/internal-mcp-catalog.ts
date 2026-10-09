@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
-  type ResourceAccessRelation,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
 } from "@archestra/shared";
@@ -50,6 +49,7 @@ import McpServerModel from "./mcp-server";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type ResourceAccessSelection,
 } from "./resource-permission-subject";
 import SecretModel from "./secret";
 import ToolModel, { toolUiResourceUriSql } from "./tool";
@@ -68,8 +68,8 @@ type CatalogListOptions = {
    * which filters by environment client-side).
    */
   environmentId?: string | null;
-  /** The list's "Show" filter, read against `userId`. */
-  access?: ResourceAccessRelation[];
+  /** The list's "Show", "Shared with", and "Owner" filters, read against `userId`. */
+  access?: ResourceAccessSelection;
 };
 
 /**
@@ -1834,7 +1834,7 @@ class InternalMcpCatalogModel {
             ownerColumn: schema.internalMcpCatalogTable.authorId,
             userId,
             subjects: principals.viewer.subjects,
-            relations: options.access,
+            ...options.access,
           });
         if (accessCondition) listConditions.push(accessCondition);
       }

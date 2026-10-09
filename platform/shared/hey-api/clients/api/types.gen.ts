@@ -14320,6 +14320,14 @@ export type GetAgentCatalogData = {
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
+        /**
          * When true, omit external A2A agents unless the caller can manage external-agent settings. Used to enumerate rows for bulk selection on the Agents page.
          */
         selectableOnly?: boolean;
@@ -14653,6 +14661,14 @@ export type GetAgentsData = {
          * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
         /**
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
@@ -25829,6 +25845,14 @@ export type GetAppsData = {
          * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/apps';
 };
@@ -62819,6 +62843,14 @@ export type GetInternalMcpCatalogData = {
          * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/internal_mcp_catalog';
 };
@@ -67443,6 +67475,14 @@ export type GetKnowledgeBasesData = {
          * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/knowledge-bases';
 };
@@ -95562,6 +95602,14 @@ export type GetPluginsData = {
          * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/plugins';
 };
@@ -97977,6 +98025,14 @@ export type GetProjectsData = {
          * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/projects';
 };
@@ -104601,6 +104657,14 @@ export type GetSkillsData = {
          * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
         sortBy?: 'usageCount' | 'lastUsedAt' | 'name' | 'createdAt';
         sortDirection?: 'asc' | 'desc';
     };
@@ -116079,6 +116143,7 @@ export type GetResourcePermissionsResponses = {
         resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
+        ownerId: string | null;
         revision: number;
         grants: Array<{
             subject: {
@@ -116231,6 +116296,7 @@ export type UpdateResourcePermissionsResponses = {
         resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
+        ownerId: string | null;
         revision: number;
         grants: Array<{
             subject: {

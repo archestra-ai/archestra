@@ -90,6 +90,19 @@ let access = {
   isPending: false,
 };
 vi.mock("./use-agent-access", () => ({ useAgentAccess: () => access }));
+let savedGrants: Array<{
+  subject: { type: string; id: string };
+  name: string;
+  actions: string[];
+}> = [];
+vi.mock("@/lib/resource-permissions.query", () => ({
+  useResourcePermissions: () => ({ data: { grants: savedGrants } }),
+}));
+// The editor has its own tests; here it only needs to be on the right tab.
+vi.mock("@/components/resource-permissions", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  ResourcePermissions: () => <div data-testid="resource-permissions" />,
+}));
 
 const baseAgent = {
   id: "a1",
@@ -163,30 +176,27 @@ describe("AgentDetailPage", () => {
       mutate: vi.fn(),
       isPending: false,
     } as unknown as ReturnType<typeof useExportAgent>);
+    savedGrants = [];
     mockAgent(baseAgent);
   });
 
-  it.each([
-    "personal",
-    "team",
-    "org",
-  ])("omits legacy %s visibility from agent and gateway headers", (scope) => {
-    mockAgent({ ...baseAgent, scope });
+  it("reads the header's audience from the saved grants, not the legacy visibility field", () => {
+    // The legacy field says organization; the grants say only the owner.
+    mockAgent({ ...baseAgent, scope: "org" });
     const { unmount } = render(<AgentDetailPage kind="agent" id="a1" />);
-    for (const label of ["Personal", "Team", "Organization"]) {
-      expect(
-        screen.queryByText(label, { exact: true }),
-      ).not.toBeInTheDocument();
-    }
+    expect(screen.getByTestId("audience-chip")).toHaveTextContent("Personal");
     unmount();
-    mockAgent({ ...baseAgent, scope, agentType: "mcp_gateway" });
+    savedGrants = [
+      {
+        subject: { type: "team", id: "t1" },
+        name: "Support",
+        actions: ["read", "use"],
+      },
+    ];
+    mockAgent({ ...baseAgent, scope: "personal", agentType: "mcp_gateway" });
     render(<AgentDetailPage kind="mcp_gateway" id="a1" />);
     expect(screen.getByText(baseAgent.name)).toBeVisible();
-    for (const label of ["Personal", "Team", "Organization"]) {
-      expect(
-        screen.queryByText(label, { exact: true }),
-      ).not.toBeInTheDocument();
-    }
+    expect(screen.getByTestId("audience-chip")).toHaveTextContent("Team-wide");
   });
 
   it("shows the not-found state for a trashed id, which the API no longer returns", () => {

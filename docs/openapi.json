@@ -48363,6 +48363,33 @@
           },
           {
             "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
+          },
+          {
+            "schema": {
               "type": "boolean"
             },
             "in": "query",
@@ -49988,6 +50015,33 @@
             "name": "access",
             "required": false,
             "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
           },
           {
             "schema": {
@@ -91651,6 +91705,33 @@
             "name": "access",
             "required": false,
             "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
           }
         ],
         "responses": {
@@ -246551,6 +246632,33 @@
             "name": "access",
             "required": false,
             "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
           }
         ],
         "responses": {
@@ -263475,6 +263583,33 @@
             "name": "access",
             "required": false,
             "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
           }
         ],
         "responses": {
@@ -370308,6 +370443,33 @@
             "name": "access",
             "required": false,
             "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
           }
         ],
         "responses": {
@@ -380890,6 +381052,33 @@
             "name": "access",
             "required": false,
             "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
           }
         ],
         "responses": {
@@ -403884,6 +404073,33 @@
             "name": "access",
             "required": false,
             "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
           },
           {
             "schema": {
@@ -444753,6 +444969,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "ownerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 0,
@@ -445072,6 +445292,7 @@
                     "resource",
                     "scope",
                     "name",
+                    "ownerId",
                     "revision",
                     "grants",
                     "inheritedGrants",
@@ -445580,6 +445801,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "ownerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 0,
@@ -445899,6 +446124,7 @@
                     "resource",
                     "scope",
                     "name",
+                    "ownerId",
                     "revision",
                     "grants",
                     "inheritedGrants",

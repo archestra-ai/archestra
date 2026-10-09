@@ -27,7 +27,6 @@ import {
 } from "@/components/table-row-actions";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import {
   useOpenAppInChat,
   useOpenExternalAppInChat,
@@ -340,20 +339,12 @@ function OwnedAppActions({
   actions: TableRowAction[];
   dropdownActions: TableRowAction[];
 }) {
-  const ownership = useResourceOwnershipTransfer({
-    kind: "app",
-    resource: app,
-  });
   return (
-    <>
-      <TableRowActions
-        permissionScope={app.id}
-        actions={actions}
-        dropdownActions={dropdownActions}
-        dropdownContent={ownership.menuItem}
-        itemName={app.name}
-      />
-      {ownership.dialog}
-    </>
+    <TableRowActions
+      permissionScope={app.id}
+      actions={actions}
+      dropdownActions={dropdownActions}
+      itemName={app.name}
+    />
   );
 }

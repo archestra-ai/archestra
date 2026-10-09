@@ -1639,6 +1639,72 @@ describe("agent routes", () => {
       expect(await list("org")).toEqual(["Org"]);
     });
 
+    test("sharedWith and owner narrow the list by an agent's own grants and author", async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeTeam,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId, { role: "member" });
+      const team = await makeTeam(organizationId, user.id);
+
+      await makeAgent({
+        name: `Mine ${suffix}`,
+        organizationId,
+        access: "personal",
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Org ${suffix}`,
+        organizationId,
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Team ${suffix}`,
+        organizationId,
+        access: { teams: [team.id] },
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Mine For Team ${suffix}`,
+        organizationId,
+        access: { teams: [team.id] },
+        authorId: user.id,
+      });
+
+      const list = async (params: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}&${params}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response
+          .json()
+          .data.map((agent: { name: string }) =>
+            agent.name.replace(` ${suffix}`, ""),
+          );
+      };
+
+      expect(await list(`sharedWith=team:${team.id}`)).toEqual([
+        "Mine For Team",
+        "Team",
+      ]);
+      expect(await list("sharedWith=org")).toEqual(["Org"]);
+      expect(await list(`owner=${otherUser.id}`)).toEqual(["Org", "Team"]);
+      expect(await list(`sharedWith=team:${team.id}&owner=${user.id}`)).toEqual(
+        ["Mine For Team"],
+      );
+      expect(await list(`access=mine&sharedWith=org`)).toEqual([]);
+
+      const invalid = await app.inject({
+        method: "GET",
+        url: "/api/agents?limit=50&offset=0&sharedWith=group:1",
+      });
+      expect(invalid.statusCode).toBe(400);
+    });
+
     test("hides the default knowledge query tool when an agent has no knowledge sources", async ({
       makeAgent,
     }) => {

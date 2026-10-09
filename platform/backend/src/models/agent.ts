@@ -8,7 +8,6 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
-  type ResourceAccessRelation,
   type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -92,6 +91,7 @@ import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
   type PrincipalSource,
+  type ResourceAccessSelection,
 } from "./resource-permission-subject";
 import ToolModel from "./tool";
 
@@ -107,8 +107,11 @@ type AgentListFilters = {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonalAgents?: boolean;
-  /** The list's "Show" filter; see {@link ResourceAccessRelation}. */
-  access?: ResourceAccessRelation[];
+  /**
+   * The list's "Show", "Shared with", and "Owner" filters; see
+   * {@link ResourceAccessSelection}.
+   */
+  access?: ResourceAccessSelection;
   /**
    * Add the built-in agents to the list. The `access` filter does not apply to
    * them: they have no author and are listed only to agent admins.
@@ -1591,7 +1594,7 @@ class AgentModel {
       const externalAccessCondition = await externalAgentAccessCondition({
         userId: params.userId,
         organizationId: params.filters.organizationId,
-        relations: params.filters.access,
+        selection: params.filters.access,
       });
       if (externalAccessCondition)
         externalWhereConditions.push(externalAccessCondition);
@@ -2119,7 +2122,7 @@ class AgentModel {
       const accessCondition = agentAccessCondition({
         userId,
         principals,
-        relations: filters.access,
+        selection: filters.access,
       });
       if (accessCondition)
         whereConditions.push(
@@ -4857,13 +4860,15 @@ function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
 /**
  * {@link ResourcePermissionPolicyModel.accessRelationCondition} for every
  * agent kind. The organization's LLM proxy has no grant namespace and serves
- * the whole organization, so it is always `org`.
+ * the whole organization, so it is always `org`, counts as shared with the
+ * organization, and has no owner.
  */
 function agentAccessCondition(params: {
   userId: string;
   principals: GrantPrincipal[];
-  relations: ResourceAccessRelation[];
+  selection: ResourceAccessSelection;
 }): SQL | undefined {
+  const { relations, sharedWith, ownerIds } = params.selection;
   const table = schema.agentsTable;
   const subjects = params.principals.flatMap((principal) => principal.subjects);
   const byResource = (resource: "agent" | "mcpGateway") =>
@@ -4874,10 +4879,15 @@ function agentAccessCondition(params: {
       ownerColumn: table.authorId,
       userId: params.userId,
       subjects,
-      relations: params.relations,
+      ...params.selection,
     });
   const agentCondition = byResource("agent");
   if (!agentCondition) return undefined;
+  const llmProxyMatches =
+    (!relations?.length || relations.includes("org")) &&
+    (!sharedWith?.length ||
+      sharedWith.some((subject) => subject.type === "organization")) &&
+    !ownerIds?.length;
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -4886,7 +4896,7 @@ function agentAccessCondition(params: {
     and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
     and(
       eq(table.agentType, "llm_proxy"),
-      params.relations.includes("org") ? sql`true` : sql`false`,
+      llmProxyMatches ? sql`true` : sql`false`,
     ),
   ) as SQL;
   // SPDX-SnippetEnd
@@ -4899,7 +4909,7 @@ function agentAccessCondition(params: {
 async function externalAgentAccessCondition(params: {
   userId: string;
   organizationId?: string;
-  relations: ResourceAccessRelation[];
+  selection: ResourceAccessSelection;
 }): Promise<SQL | undefined> {
   const table = schema.a2aRemoteAgentsTable;
   const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
@@ -4916,7 +4926,7 @@ async function externalAgentAccessCondition(params: {
     ownerColumn: table.authorId,
     userId: params.userId,
     subjects: principals.flatMap((principal) => principal.subjects),
-    relations: params.relations,
+    ...params.selection,
   });
   // SPDX-SnippetEnd
 }

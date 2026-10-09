@@ -240,13 +240,13 @@ describe("ConnectionSettingsForm", () => {
     const user = userEvent.setup();
     render(<ConnectionSettingsForm />);
     const editor = screen.getByRole("textbox", {
-      name: "Runtime handoff instructions",
+      name: "Instructions for connected agents",
     });
     expect(editor).toBeVisible();
     expect(editor).toBeEnabled();
     expect(editor).toHaveValue(DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS);
     const toggle = screen.getByRole("switch", {
-      name: "Suggest runtime handoff",
+      name: "Enable managed instructions",
     });
     expect(toggle).toBeChecked();
     await user.clear(editor);
@@ -286,7 +286,7 @@ describe("ConnectionSettingsForm", () => {
     );
   });
 
-  it("respects a saved disabled handoff setting", () => {
+  it("respects a saved disabled managed instructions setting", () => {
     const organization = vi.mocked(useOrganization)();
     vi.mocked(useOrganization).mockReturnValue({
       ...organization,
@@ -297,10 +297,12 @@ describe("ConnectionSettingsForm", () => {
     } as ReturnType<typeof useOrganization>);
     render(<ConnectionSettingsForm />);
     expect(
-      screen.getByRole("switch", { name: "Suggest runtime handoff" }),
+      screen.getByRole("switch", { name: "Enable managed instructions" }),
     ).not.toBeChecked();
     expect(
-      screen.getByRole("textbox", { name: "Runtime handoff instructions" }),
+      screen.getByRole("textbox", {
+        name: "Instructions for connected agents",
+      }),
     ).toBeDisabled();
   });
 

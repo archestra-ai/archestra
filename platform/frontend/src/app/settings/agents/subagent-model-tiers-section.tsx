@@ -165,7 +165,7 @@ function defaultLabel(
       ? models.find((m) => m.isBest)
       : findFirstModelByPatterns(
           models.map((m) => ({ ...m, modelId: m.id })),
-          FAST_MODEL_PATTERNS[provider] ?? [],
+          FAST_MODEL_PATTERNS[provider],
         );
   return model
     ? `default (${model.displayName ?? model.id})`

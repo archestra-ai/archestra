@@ -213,7 +213,7 @@ export async function resolveSubagentTierSelection(params: {
       candidates,
       tier === "smart"
         ? MODEL_MARKER_PATTERNS[parentModel.provider]
-        : (FAST_MODEL_PATTERNS[parentModel.provider] ?? []),
+        : FAST_MODEL_PATTERNS[parentModel.provider],
     );
   return tierModel
     ? { modelId: tierModel.id, apiKeyId: parent.apiKeyId }

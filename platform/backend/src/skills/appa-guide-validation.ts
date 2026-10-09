@@ -15,7 +15,15 @@ A validation is a small \`.appa\` scenario that checks an important policy behav
 
 A request to explain or review existing checks is inspection only: read the relevant files and policy, then answer without drafting, previewing, or publishing changes. If a needed file is unavailable, report the gap; explain any supplied material within that limit.
 
-For a request to create or edit checks, or an exploratory **Ask About Validations** conversation, read the current policy and the authoritative suite (\`archestra__get_openappa_policy_tests\`) first; reuse reads from this turn. Check whether replay and publication are available:
+For a request to create or edit checks, or an exploratory **Ask About Validations** conversation, read the current policy first; reuse reads from this turn.
+
+## Establish the policy before choosing checks
+
+When \`revision = 0\` and \`delivery.mode = "revision"\` (local delivery), the returned content is an **unsaved starter**, not a configured policy. For a request about the current policy, explain briefly that no policy has been saved yet and that the first step is to set one up before writing validations. Ask whether to start policy setup, then stop. Do not describe the starter's protections as already configured, offer validation behaviors to choose from, inspect tool schemas, or draft or preview scenarios. If setup is already requested, load \`references/first-policy.md\` and follow its proposal and approval steps; a validation request alone does not authorize saving or enabling a policy. Resume current-policy validations after a read confirms the policy was saved.
+
+This prerequisite concerns a missing policy, not disabled enforcement: a saved policy can be validated offline while enforcement is off. An explicitly supplied candidate policy can also be tested before saving; use that candidate and label the result as a draft-policy check. Do not silently substitute the unsaved starter for the operator's intended policy.
+
+Once the policy to test is established, read the authoritative suite (\`archestra__get_openappa_policy_tests\`). Check whether replay and publication are available:
 
 - A collection \`error\` means unavailable, not empty. If it reports a stale source or conflict and asks for a reload, refresh the policy and suite once. For other errors, or if a reload does not resolve it, report the blocker and do not preview or publish validations.
 - When \`source = "github"\` and \`activeDirectory\` is empty, preview and publication are disabled. Direct the operator to set a validation directory in GitHub source settings; do not attempt validation preview or publication.

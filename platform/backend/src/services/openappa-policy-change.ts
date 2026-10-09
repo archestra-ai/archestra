@@ -324,7 +324,7 @@ export async function getOpenAppaPolicyChangeStatus(params: {
  * dialog, so an agent may not add a line, or change its key, for a variable an
  * included battery reads. Removing a line is allowed. A credential a root
  * external or profile reads as its `token_env` has no stored binding, so adding
- * or rekeying it, or changing what reads it, takes `credential:update` as it does
+ * or rekeying it, or pointing another reader at it, takes `credential:update` as it does
  * on the Policy route.
  */
 export async function refuseCredentialLines(params: {

@@ -637,6 +637,13 @@ describe("guardrails policy authoring", () => {
     actAs(admin, await makeSession(admin.id, { activeOrganizationId: orgId }));
     const granted = await put(reader("jev-key"), 0);
     expect(granted.statusCode, granted.body).toBe(200);
+    // Only a profile can read a [credentials] line: an endpoint naming a url is
+    // refused one, so a reader's path fixes where the credential goes.
+    const elsewhere = await put(
+      `${reader("jev-key")}[externals.authorities.review]\nurl = "https://elsewhere.example/review"\ntoken_env = "APPA_PROVIDER_JEV_API_KEY"\n`,
+      1,
+    );
+    expect(elsewhere.statusCode).toBe(400);
 
     actAs(author, authorSession);
     // Rules around an unchanged line stay the author's to write.

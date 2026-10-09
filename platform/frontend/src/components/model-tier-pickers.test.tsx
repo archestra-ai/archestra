@@ -10,12 +10,16 @@ import type { LlmModel } from "@/lib/llm-models.query";
 
 const API_KEY_ID = "key-1";
 
-function model(id: string, displayName: string): LlmModel {
+function model(
+  id: string,
+  displayName: string,
+  provider: LlmModel["provider"] = "anthropic",
+): LlmModel {
   return {
     id,
     dbId: `db-${id}`,
     displayName,
-    provider: "anthropic",
+    provider,
     isFree: false,
   };
 }
@@ -24,6 +28,8 @@ const KEY_MODELS = [
   model("claude-haiku-5-5", "Claude Haiku 5.5"),
   model("claude-sonnet-5-5", "Claude Sonnet 5.5"),
   model("claude-opus-5-5", "Claude Opus 5.5"),
+  // Org-wide per-user provider models ride along with every key's catalog.
+  model("gpt-6-luna", "GPT-6 Luna", "github-copilot"),
 ];
 
 function renderPickers(inherited?: ModelTierSelection) {
@@ -64,5 +70,14 @@ describe("ModelTierPickers unset label", () => {
       screen.getAllByText("Default (Claude Haiku 5.5)").length,
     ).toBeGreaterThan(0);
     expect(screen.queryAllByText(/^Organization default/)).toHaveLength(0);
+  });
+
+  it("never inherits a model of another provider the catalog carries", () => {
+    renderPickers({ fast: "db-gpt-6-luna", smart: null });
+
+    expect(screen.queryAllByText(/GPT-6 Luna/)).toHaveLength(0);
+    expect(
+      screen.getAllByText("Default (Claude Haiku 5.5)").length,
+    ).toBeGreaterThan(0);
   });
 });

@@ -77,7 +77,7 @@ export type InitialChatModelState = {
   setThinkingEffort: (effort: ThinkingEffortSetting) => void;
   onAgentChange: (agentId: string) => void;
   onModelChange: (modelId: string) => void;
-  onProviderChange: (provider: SupportedProvider, apiKeyId: string) => void;
+  onProviderChange: (provider: SupportedProvider) => void;
   onResetModelOverride: () => void;
 };
 

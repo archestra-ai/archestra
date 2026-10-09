@@ -50,8 +50,12 @@ export function ModelTierPickers({
   const { data, isPending, isPlaceholderData } = useLlmModels({ apiKeyId });
   const loading = isPending || isPlaceholderData;
   const keyModels = loading ? [] : (data ?? []);
+  // The catalog also carries org-wide per-user provider models (Copilot),
+  // which the key itself does not serve.
   const candidates = keyModels.filter(
-    (model) => model.capabilities?.supportsToolCalling !== false,
+    (model) =>
+      model.provider === provider &&
+      model.capabilities?.supportsToolCalling !== false,
   );
 
   return (

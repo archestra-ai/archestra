@@ -175,6 +175,8 @@ export async function resolveForkParentSelection(params: {
     }))
       ? params.parentLlm
       : undefined;
+  const direct = parentLlm && (await linkedParentSelection(parentLlm));
+  if (direct) return direct;
   return resolveConversationLlmSelectionForAgent({
     agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
     organizationId,
@@ -184,6 +186,31 @@ export async function resolveForkParentSelection(params: {
       explicitApiKeyId: parentLlm.apiKeyId,
     }),
   });
+}
+
+/**
+ * The parent's own pair, when it still holds: a per-user provider model alone,
+ * or a model its key still serves. Anything else takes the full fallback chain.
+ */
+async function linkedParentSelection(
+  parentLlm: ModelSelection,
+): Promise<ConversationLlmSelection | null> {
+  const model = parentLlm.modelId
+    ? await ModelModel.findById(parentLlm.modelId)
+    : null;
+  if (!model) return null;
+  const selection = {
+    modelId: model.id,
+    selectedModel: model.modelId,
+    selectedProvider: model.provider,
+  };
+  if (providerRequiresPerUserCredential(model.provider)) {
+    return { ...selection, chatApiKeyId: null };
+  }
+  const [linked] = await filterLinkedModelSelectionLevels([parentLlm]);
+  return linked.apiKeyId
+    ? { ...selection, chatApiKeyId: linked.apiKeyId }
+    : null;
 }
 
 async function isParentKeyUsable(params: {

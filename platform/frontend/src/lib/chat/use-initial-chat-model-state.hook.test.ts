@@ -259,10 +259,7 @@ describe("useInitialChatModelState", () => {
     // Same shape as the api-key selector: setApiKeyId then onProviderChange.
     act(() => {
       result.current.setApiKeyId("key-anthropic");
-      result.current.onProviderChange(
-        "anthropic" as SupportedProvider,
-        "key-anthropic",
-      );
+      result.current.onProviderChange("anthropic" as SupportedProvider);
     });
 
     expect(result.current.apiKeyId).toBe("key-anthropic");
@@ -277,10 +274,7 @@ describe("useInitialChatModelState", () => {
 
     act(() => {
       result.current.setApiKeyId("key-openai");
-      result.current.onProviderChange(
-        "openai" as SupportedProvider,
-        "key-openai",
-      );
+      result.current.onProviderChange("openai" as SupportedProvider);
     });
 
     expect(result.current.apiKeyId).toBe("key-openai");

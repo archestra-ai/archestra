@@ -3,32 +3,34 @@ import {
   providerDisplayNames,
   type SupportedProvider,
 } from "@archestra/shared";
-import { OPENCODE_PRIMARY_PROVIDERS } from "@archestra/shared/opencode-provider-routes";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import ModelTeamModel from "@/models/model-team";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { ApiError } from "@/types";
-import type { SetupScriptProxySection } from "./agent-connection-setup/types";
-import { readVirtualKeyValue } from "./connection-setup";
+import { readVirtualKeyValue } from "../../connection-setup";
+import type { SetupScriptProxySection } from "../types";
 
-type UserContext = {
+type PrimaryProviderContext = {
   organizationId: string;
   userId: string;
   userTeamIds: string[];
+  supportedProviders: readonly SupportedProvider[];
 };
 
-/** Resolve all credentials before mutating the dedicated OpenCode key. */
-export async function ensureOpenCodePrimaryKey(params: UserContext) {
+/** Resolve usable primary credentials before creating or refreshing a personal key. */
+export async function ensurePrimaryProviderKey(
+  params: PrimaryProviderContext & { keyName: string },
+) {
   const keys = await getPrimaryKeys(params);
   if (keys.length === 0) {
     throw new ApiError(
       400,
-      "No usable primary provider keys are available for OpenCode. Mark a compatible provider key as primary, or choose another routing option.",
+      "No usable primary provider keys are available. Mark a compatible provider key as primary, or choose another routing option.",
     );
   }
-  const name = "OpenCode primary providers";
+  const name = params.keyName;
   const providerApiKeys = keys.map((key) => ({
     provider: key.provider,
     providerApiKeyId: key.id,
@@ -42,7 +44,7 @@ export async function ensureOpenCodePrimaryKey(params: UserContext) {
   if (existing && existing.keyType !== "standard") {
     throw new ApiError(
       409,
-      "A passthrough key already uses the name OpenCode primary providers. Rename it before generating setup.",
+      `A passthrough key already uses the name ${name}. Rename it before generating setup.`,
     );
   }
   if (existing && (await readVirtualKeyValue(existing.id))) {
@@ -88,8 +90,8 @@ export async function ensureOpenCodePrimaryKey(params: UserContext) {
 }
 
 /** Recheck access and, for all-provider setups, primary status at download time. */
-export async function getOpenCodeVirtualKeyCatalog(
-  params: UserContext & {
+export async function getVirtualKeyProviderCatalog(
+  params: PrimaryProviderContext & {
     virtualApiKeyId: string;
     provider?: SupportedProvider;
   },
@@ -122,7 +124,7 @@ export async function getOpenCodeVirtualKeyCatalog(
   if (!selected.length || selected.length !== selectedMappings.length)
     throw new ApiError(
       410,
-      "Model provider access changed. Generate a new OpenCode setup command.",
+      "Model provider access changed. Generate a new setup command.",
     );
   const models = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(
     selected.map((key) => key.id),
@@ -157,8 +159,8 @@ export async function getOpenCodeVirtualKeyCatalog(
   }));
 }
 
-async function getPrimaryKeys(params: UserContext) {
+async function getPrimaryKeys(params: PrimaryProviderContext) {
   return (await LlmProviderApiKeyModel.getUsablePrimaryKeys(params)).filter(
-    (key) => OPENCODE_PRIMARY_PROVIDERS.includes(key.provider),
+    (key) => params.supportedProviders.includes(key.provider),
   );
 }

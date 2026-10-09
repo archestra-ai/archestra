@@ -112,15 +112,23 @@ describe("POST /api/connection-setups", () => {
       baseUrl: "http://localhost:9000/v1",
       proxyAuth: "primary-providers",
     };
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/api/connection-setups",
-          payload: { ...request, clientId: "codex" },
-        })
-      ).statusCode,
-    ).toBe(400);
+    for (const clientId of [
+      "claude-code",
+      "claude-desktop",
+      "codex",
+      "copilot-cli",
+      "cursor",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: { ...request, clientId },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "only supported for OpenCode",
+      );
+    }
     mockUserHasPermission.mockImplementation(
       async (_user, _org, resource) => resource !== "llmVirtualKey",
     );

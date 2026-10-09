@@ -41,6 +41,10 @@ import {
   renderSetupScript,
   type SetupScriptContext,
 } from "@/services/agent-connection-setup";
+import {
+  ensurePrimaryProviderKey,
+  getVirtualKeyProviderCatalog,
+} from "@/services/agent-connection-setup/credentials/primary-providers";
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
 import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
 import {
@@ -49,10 +53,6 @@ import {
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
-import {
-  ensureOpenCodePrimaryKey,
-  getOpenCodeVirtualKeyCatalog,
-} from "@/services/opencode-primary-providers";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   isReservedMarketplaceName,
@@ -432,7 +432,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // it carries the user's identity on its own — the proxy attributes the
           // request to that owner. No passthrough key is needed in this mode.
           if (allPrimary) {
-            ({ virtualApiKeyId, provider } = await ensureOpenCodePrimaryKey({
+            ({ virtualApiKeyId, provider } = await ensurePrimaryProviderKey({
+              keyName: "OpenCode primary providers",
+              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
               organizationId,
               userId: user.id,
               userTeamIds: await TeamModel.getUserTeamIds(user.id),
@@ -1087,7 +1089,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
         setup.clientId === "opencode" &&
         setup.proxyAuth !== "provider-key" &&
         setup.virtualApiKeyId
-          ? await getOpenCodeVirtualKeyCatalog({
+          ? await getVirtualKeyProviderCatalog({
+              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
               provider:
                 setup.proxyAuth === "virtual-key" ? setup.provider : undefined,
               organizationId: setup.organizationId,

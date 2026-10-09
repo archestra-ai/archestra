@@ -1,15 +1,29 @@
+import type { SupportedProvider } from "@archestra/shared";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { describe, expect, test } from "@/test";
-import { encodeOpenAiCodexCredential } from "./openai-codex-credentials";
+import { encodeOpenAiCodexCredential } from "../../openai-codex-credentials";
 import {
-  ensureOpenCodePrimaryKey,
-  getOpenCodeVirtualKeyCatalog,
-} from "./opencode-primary-providers";
+  ensurePrimaryProviderKey,
+  getVirtualKeyProviderCatalog,
+} from "./primary-providers";
 
-describe("OpenCode primary providers", () => {
+const setupOptions = {
+  keyName: "Agent primary providers",
+  supportedProviders: [
+    "openai",
+    "anthropic",
+    "vllm",
+    "gemini",
+    "groq",
+    "azure",
+    "bedrock",
+  ] as SupportedProvider[],
+};
+
+describe("Connection setup primary providers", () => {
   test("includes the user's primary ChatGPT subscription and excludes other users' subscriptions", async ({
     makeOrganization,
     makeUser,
@@ -40,13 +54,18 @@ describe("OpenCode primary providers", () => {
       isPrimary: true,
       access: "org",
     });
-    const params = { organizationId: org.id, userId: user.id, userTeamIds: [] };
-    const { virtualApiKeyId } = await ensureOpenCodePrimaryKey(params);
+    const params = {
+      ...setupOptions,
+      organizationId: org.id,
+      userId: user.id,
+      userTeamIds: [],
+    };
+    const { virtualApiKeyId } = await ensurePrimaryProviderKey(params);
     expect(
       await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
     ).toEqual([expect.objectContaining({ providerApiKeyId: own.id })]);
     await LlmProviderApiKeyModel.update(own.id, { isPrimary: false });
-    await expect(ensureOpenCodePrimaryKey(params)).rejects.toThrow(
+    await expect(ensurePrimaryProviderKey(params)).rejects.toThrow(
       "No usable primary",
     );
   });
@@ -62,7 +81,12 @@ describe("OpenCode primary providers", () => {
     const other = await makeUser();
     await makeMember(user.id, org.id);
     const secret = await makeSecret();
-    const params = { organizationId: org.id, userId: user.id, userTeamIds: [] };
+    const params = {
+      ...setupOptions,
+      organizationId: org.id,
+      userId: user.id,
+      userTeamIds: [],
+    };
     const anthropic = await makeLlmProviderApiKey(org.id, secret.id, {
       provider: "anthropic",
       isPrimary: true,
@@ -99,8 +123,8 @@ describe("OpenCode primary providers", () => {
       requiresReauthentication: true,
     });
     const [first, concurrent] = await Promise.all([
-      ensureOpenCodePrimaryKey(params),
-      ensureOpenCodePrimaryKey(params),
+      ensurePrimaryProviderKey(params),
+      ensurePrimaryProviderKey(params),
     ]);
     expect(concurrent.virtualApiKeyId).toBe(first.virtualApiKeyId);
     expect(
@@ -130,7 +154,7 @@ describe("OpenCode primary providers", () => {
       model.id,
       embedding.id,
     ]);
-    const catalog = await getOpenCodeVirtualKeyCatalog({
+    const catalog = await getVirtualKeyProviderCatalog({
       ...params,
       virtualApiKeyId: first.virtualApiKeyId,
     });
@@ -140,12 +164,12 @@ describe("OpenCode primary providers", () => {
     });
     await LlmProviderApiKeyModel.update(anthropic.id, { isPrimary: false });
     await expect(
-      getOpenCodeVirtualKeyCatalog({
+      getVirtualKeyProviderCatalog({
         ...params,
         virtualApiKeyId: first.virtualApiKeyId,
       }),
     ).rejects.toThrow("Generate a new");
-    const second = await ensureOpenCodePrimaryKey(params);
+    const second = await ensurePrimaryProviderKey(params);
     expect(second.virtualApiKeyId).toBe(first.virtualApiKeyId);
     expect(
       await VirtualApiKeyModel.getProviderApiKeys(second.virtualApiKeyId),
@@ -172,7 +196,8 @@ describe("OpenCode primary providers", () => {
       userId: user.id,
       isPrimary: false,
     });
-    const { virtualApiKeyId } = await ensureOpenCodePrimaryKey({
+    const { virtualApiKeyId } = await ensurePrimaryProviderKey({
+      ...setupOptions,
       organizationId: org.id,
       userId: user.id,
       userTeamIds: [],
@@ -219,26 +244,31 @@ describe("OpenCode primary providers", () => {
         model.id,
       ]);
     }
-    const params = { organizationId: org.id, userId: user.id, userTeamIds: [] };
+    const params = {
+      ...setupOptions,
+      organizationId: org.id,
+      userId: user.id,
+      userTeamIds: [],
+    };
     const collision = await VirtualApiKeyModel.create({
       organizationId: org.id,
       authorId: user.id,
       scope: "personal",
       keyType: "passthrough",
-      name: "OpenCode primary providers",
+      name: setupOptions.keyName,
     });
-    await expect(ensureOpenCodePrimaryKey(params)).rejects.toThrow(
+    await expect(ensurePrimaryProviderKey(params)).rejects.toThrow(
       "passthrough key",
     );
     expect(
       await VirtualApiKeyModel.findById(collision.virtualKey.id),
     ).toMatchObject({ keyType: "passthrough" });
     await VirtualApiKeyModel.delete(collision.virtualKey.id);
-    const { virtualApiKeyId } = await ensureOpenCodePrimaryKey(params);
+    const { virtualApiKeyId } = await ensurePrimaryProviderKey(params);
     expect(
       await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
     ).toHaveLength(2);
-    const catalog = await getOpenCodeVirtualKeyCatalog({
+    const catalog = await getVirtualKeyProviderCatalog({
       ...params,
       virtualApiKeyId,
     });
@@ -271,23 +301,24 @@ describe("OpenCode primary providers", () => {
       providerApiKeys: [{ provider: "bedrock", providerApiKeyId: key.id }],
     });
     const params = {
+      ...setupOptions,
       organizationId: org.id,
       userId: user.id,
       userTeamIds: [],
       virtualApiKeyId: virtualKey.id,
     };
     expect(
-      await getOpenCodeVirtualKeyCatalog({ ...params, provider: "bedrock" }),
+      await getVirtualKeyProviderCatalog({ ...params, provider: "bedrock" }),
     ).toEqual([expect.objectContaining({ provider: "bedrock" })]);
     await expect(
-      getOpenCodeVirtualKeyCatalog({ ...params, provider: "azure" }),
+      getVirtualKeyProviderCatalog({ ...params, provider: "azure" }),
     ).rejects.toThrow("Model provider access changed");
     await LlmProviderApiKeyModel.setRequiresReauthentication({
       id: key.id,
       requiresReauthentication: true,
     });
     await expect(
-      getOpenCodeVirtualKeyCatalog({ ...params, provider: "bedrock" }),
+      getVirtualKeyProviderCatalog({ ...params, provider: "bedrock" }),
     ).rejects.toThrow("Model provider access changed");
   });
 });

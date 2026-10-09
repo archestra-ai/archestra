@@ -1060,8 +1060,8 @@ export const PROVIDER_MODEL_TIERS: Record<
   kimi: { normal: "kimi-k2-0711-preview" },
   azure: { normal: "gpt-5.5" },
   "github-copilot": {
-    // Copilot does not serve a newer Haiku yet.
-    fast: "claude-haiku-4.5",
+    // Copilot has no Haiku 5.5 yet, and older Claude is not worth defaulting to.
+    fast: "gpt-6-luna",
     normal: "claude-sonnet-5.5",
     smart: "claude-opus-5.5",
   },

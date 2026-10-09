@@ -8,6 +8,7 @@ import {
   guardrailsPolicyService,
   initialPolicy,
 } from "@/services/guardrails-policy";
+import { inspectOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { describe, expect, test } from "@/test";
 import { APPA_GUIDE_SKILL } from "./appa-guide";
 import {
@@ -218,6 +219,26 @@ describe("APPA Guide feature availability", () => {
     expect(
       APPA_GUIDE_SKILL.files.some((file) => file.content.includes(core)),
     ).toBe(false);
+  });
+
+  test("validation-writing examples parse with the embedded scenario parser", async () => {
+    config.openappa.enabled = true;
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/validation-writing.md",
+    );
+    if (!reference) throw new Error("Validation-writing reference is missing");
+    const examples = [...reference.content.matchAll(/```appa\n([\s\S]*?)```/g)];
+    expect(examples.length).toBeGreaterThan(0);
+    const inspection = await inspectOpenAppaPolicyTests(
+      examples.map((example, index) => ({
+        path: `traces/example-${index}.appa`,
+        content: example[1],
+      })),
+    );
+    for (const file of inspection.files) {
+      expect(file.error, file.path).toBeNull();
+      expect(file.assertionCount).toBeGreaterThan(0);
+    }
   });
 
   test("every file the skill points to is bundled with it", () => {

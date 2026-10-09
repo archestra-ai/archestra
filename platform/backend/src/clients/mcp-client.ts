@@ -6,6 +6,7 @@ import {
   type AuthRequiredMcpToolError,
   ENCRYPTED_CHAT_REDACTED_MARKER,
   getArchestraAppResourceUri,
+  isLogContentNotStored,
   isPlaywrightCatalogItem,
   LINKED_IDP_SSO_MODE,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -3938,9 +3939,12 @@ class McpClient {
       };
 
       // The app log stays content-free for every encrypted-chat call, encrypted
-      // rows included: the row is protected at rest, the log line is not.
+      // rows included: the row is protected at rest, the log line is not. The
+      // same goes for a call the Log Content mode kept out of the row.
       if (isEncryptedChat) {
         logData.resultContent = "[redacted: encrypted chat]";
+      } else if (isLogContentNotStored(savedToolCall.toolResult)) {
+        logData.resultContent = "[not stored: log content mode]";
       } else if (toolResult.isError) {
         // Tool errors routinely echo request/response payloads — cap them
         // the same way as the success-path content preview.

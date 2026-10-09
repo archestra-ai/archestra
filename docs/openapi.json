@@ -2,10 +2,187 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.34"
+    "version": "1.4.0-rc.35"
   },
   "components": {
     "schemas": {
+      "LogContentNotStoredInput": {
+        "type": "object",
+        "properties": {
+          "__redacted": {
+            "type": "string",
+            "enum": [
+              "log_content_policy"
+            ]
+          },
+          "isError": {
+            "type": "boolean"
+          },
+          "errorType": {
+            "type": "string",
+            "enum": [
+              "auth_required",
+              "auth_expired",
+              "assigned_credential_unavailable",
+              "policy_denied",
+              "tool_state",
+              "cancelled",
+              "generic"
+            ]
+          },
+          "archestraExecutedAs": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "personal"
+                    ]
+                  },
+                  "ownerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "ownerName": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "ownerUserId",
+                  "ownerName"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "team"
+                    ]
+                  },
+                  "teamId": {
+                    "type": "string"
+                  },
+                  "teamName": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "teamId",
+                  "teamName"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "org"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "idp_exchange"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "idp_passthrough"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "caller_headers"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "platform"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "__redacted"
+        ]
+      },
       "TextSearchLanguageInput": {
         "type": "string",
         "enum": [
@@ -20819,6 +20996,184 @@
           "teams",
           "createdByUserName"
         ]
+      },
+      "LogContentNotStored": {
+        "type": "object",
+        "properties": {
+          "__redacted": {
+            "type": "string",
+            "enum": [
+              "log_content_policy"
+            ]
+          },
+          "isError": {
+            "type": "boolean"
+          },
+          "errorType": {
+            "type": "string",
+            "enum": [
+              "auth_required",
+              "auth_expired",
+              "assigned_credential_unavailable",
+              "policy_denied",
+              "tool_state",
+              "cancelled",
+              "generic"
+            ]
+          },
+          "archestraExecutedAs": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "personal"
+                    ]
+                  },
+                  "ownerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "ownerName": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "ownerUserId",
+                  "ownerName"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "team"
+                    ]
+                  },
+                  "teamId": {
+                    "type": "string"
+                  },
+                  "teamName": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "teamId",
+                  "teamName"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "org"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "idp_exchange"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "idp_passthrough"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "caller_headers"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "platform"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "__redacted"
+        ],
+        "additionalProperties": false
       },
       "TextSearchLanguage": {
         "type": "string",
@@ -150343,300 +150698,6 @@
         }
       }
     },
-    "/api/connection-setups/prompt-session": {
-      "post": {
-        "operationId": "beginConnectionPromptSession",
-        "tags": [
-          "Connection Setups"
-        ],
-        "description": "Begin a 10-minute connection setup window for the signed-in user without changing the prompt.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "clientId": {
-                    "type": "string",
-                    "enum": [
-                      "claude-code",
-                      "cursor",
-                      "codex",
-                      "claude-desktop",
-                      "copilot-cli",
-                      "opencode"
-                    ]
-                  },
-                  "origin": {
-                    "type": "string",
-                    "format": "uri"
-                  }
-                },
-                "required": [
-                  "clientId",
-                  "origin"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "expiresAt": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "expiresAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
-        }
-      }
-    },
     "/v1/health": {
       "get": {
         "operationId": "getConnectionHealth",
@@ -173938,6 +173999,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -173957,7 +174021,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -175184,6 +175249,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -175203,7 +175271,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -175957,6 +176026,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -175976,7 +176048,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -176719,6 +176792,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -176738,7 +176814,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -177481,6 +177558,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -177500,7 +177580,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -178243,6 +178324,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -178262,7 +178346,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -178874,6 +178959,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -178893,7 +178981,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -179516,6 +179605,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -179535,7 +179627,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -182212,6 +182305,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -182231,7 +182327,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -185644,6 +185741,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -185663,7 +185763,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -186286,6 +186387,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -186305,7 +186409,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -186928,6 +187033,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -186947,7 +187055,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -187570,6 +187679,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -187589,7 +187701,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -188212,6 +188325,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -188231,7 +188347,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -188854,6 +188971,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -188873,7 +188993,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -189496,6 +189617,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -189515,7 +189639,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -190138,6 +190263,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -190157,7 +190285,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -190780,6 +190909,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -190799,7 +190931,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -191422,6 +191555,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -191441,7 +191577,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -192064,6 +192201,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -192083,7 +192223,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -192706,6 +192847,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -192725,7 +192869,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -193348,6 +193493,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -193367,7 +193515,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -196392,6 +196541,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -196411,7 +196563,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -199431,6 +199584,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -199450,7 +199606,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -202475,6 +202632,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -202494,7 +202654,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -203117,6 +203278,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -203136,7 +203300,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -203995,6 +204160,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -204014,7 +204182,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -205059,6 +205228,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -205078,7 +205250,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -206123,6 +206296,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -206142,7 +206318,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -207178,6 +207355,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -207197,7 +207377,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -207820,6 +208001,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -207839,7 +208023,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -209537,6 +209722,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "contentNotStored": {
+                            "type": "boolean",
+                            "description": "True when the session's latest turn was logged under the Metadata only Log Content mode, so it has no message preview."
+                          },
                           "conversationTitle": {
                             "nullable": true,
                             "type": "string"
@@ -209578,6 +209767,7 @@
                           "lastUserMessagePreview",
                           "lastInteractionId",
                           "lastInteractionType",
+                          "contentNotStored",
                           "conversationTitle",
                           "claudeCodeTitle"
                         ],
@@ -210887,6 +211077,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -210906,7 +211099,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -212133,6 +212327,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -212152,7 +212349,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -212906,6 +213104,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -212925,7 +213126,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -213668,6 +213870,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -213687,7 +213892,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -214430,6 +214636,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -214449,7 +214658,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -215192,6 +215402,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -215211,7 +215424,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -215823,6 +216037,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -215842,7 +216059,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -216465,6 +216683,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -216484,7 +216705,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -219161,6 +219383,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -219180,7 +219405,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -222593,6 +222819,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -222612,7 +222841,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -223235,6 +223465,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -223254,7 +223487,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -223877,6 +224111,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -223896,7 +224133,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -224519,6 +224757,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -224538,7 +224779,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -225161,6 +225403,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -225180,7 +225425,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -225803,6 +226049,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -225822,7 +226071,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -226445,6 +226695,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -226464,7 +226717,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -227087,6 +227341,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -227106,7 +227363,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -227729,6 +227987,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -227748,7 +228009,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -228371,6 +228633,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -228390,7 +228655,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -229013,6 +229279,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -229032,7 +229301,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -229655,6 +229925,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -229674,7 +229947,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -230297,6 +230571,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -230316,7 +230593,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -233341,6 +233619,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -233360,7 +233641,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -236380,6 +236662,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -236399,7 +236684,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -239424,6 +239710,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -239443,7 +239732,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -240066,6 +240356,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -240085,7 +240378,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -240944,6 +241238,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -240963,7 +241260,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -242008,6 +242306,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -242027,7 +242328,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -243072,6 +243374,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -243091,7 +243396,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -244127,6 +244433,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -244146,7 +244455,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -244769,6 +245079,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -244788,7 +245101,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -313663,7 +313977,8 @@
                                         "enum": [
                                           "encrypted_chat",
                                           "locked_chat",
-                                          "incognito"
+                                          "incognito",
+                                          "log_content_policy"
                                         ]
                                       }
                                     },
@@ -314129,7 +314444,8 @@
                                   "enum": [
                                     "encrypted_chat",
                                     "locked_chat",
-                                    "incognito"
+                                    "incognito",
+                                    "log_content_policy"
                                   ]
                                 }
                               },

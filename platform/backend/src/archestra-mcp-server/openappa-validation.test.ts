@@ -126,7 +126,10 @@ test("the agent previews against a proposed policy and saves the patch without l
   expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
 });
 
-test("specification-only writes preserve unrelated checks and policy without enabling enforcement", async ({
+test.for([
+  undefined,
+  null,
+])("specification-only writes with policyContent=%s preserve unrelated checks and the unsaved starter without enabling enforcement", async (policyContent, {
   makeOrganization,
   makeUser,
   makeMember,
@@ -151,6 +154,7 @@ test("specification-only writes preserve unrelated checks and policy without ena
       expectedRevision: before.revision,
       expectedVersion: initialSuite?.version,
       changes: { upsert: [regression] },
+      policyContent,
     },
     {
       organizationId: organization.id,
@@ -170,6 +174,134 @@ test("specification-only writes preserve unrelated checks and policy without ena
     [regression, existing],
   );
   expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
+});
+
+test.for([
+  { label: "omitted", policyContent: undefined },
+  { label: "null", policyContent: null },
+  { label: "unchanged", policyContent: originalPolicy },
+])("validation-only previews and saves with $label policy content keep the saved policy and failed expectations", async ({
+  policyContent,
+}, {
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  seedAndAssignArchestraTools,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: organization.id });
+  await seedAndAssignArchestraTools(agent.id);
+  await GuardrailsDeploymentModel.set({ enabled: false });
+  await GuardrailsPolicyModel.save({
+    organizationId: organization.id,
+    content: originalPolicy,
+    contentHash: createHash("sha256").update(originalPolicy).digest("hex"),
+    updatedBy: user.id,
+    expectedRevision: 0,
+  });
+  const initialSuite = await OpenAppaPolicyTestsModel.saveLocal({
+    organizationId: organization.id,
+    files: [existing],
+    expectedVersion: "empty",
+  });
+  const context = {
+    organizationId: organization.id,
+    userId: user.id,
+    agent: { id: agent.id, name: agent.name },
+  };
+  const request = {
+    expectedRevision: 1,
+    expectedVersion: initialSuite?.version,
+    changes: { upsert: [regression], delete: [] },
+    policyContent,
+  };
+  const preview = await executeArchestraTool(
+    "archestra__preview_openappa_validation_change",
+    request,
+    context,
+  );
+  expect(preview.isError, JSON.stringify(preview.content)).not.toBe(true);
+  expect(preview.structuredContent).toMatchObject({
+    stage: "preview",
+    policy: { revision: 1, changed: false },
+    changes: request.changes,
+    counts: { passed: 1, failed: 1, cannotRun: 0 },
+  });
+  expect(preview.structuredContent?.policy).not.toHaveProperty("before");
+  expect(preview.structuredContent?.policy).not.toHaveProperty("after");
+  expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
+    [existing],
+  );
+  const saved = await executeArchestraTool(
+    "archestra__publish_openappa_validation_change",
+    request,
+    context,
+  );
+  expect(saved.isError, JSON.stringify(saved.content)).not.toBe(true);
+  expect(saved.structuredContent).toMatchObject({
+    revision: 1,
+    policyChanged: false,
+    counts: { passed: 1, failed: 1, cannotRun: 0 },
+  });
+  expect(await guardrailsPolicyService.get(organization.id)).toMatchObject({
+    revision: 1,
+    content: originalPolicy,
+  });
+  expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
+    [regression, existing],
+  );
+  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(false);
+  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
+});
+
+test("blank policy placeholders are rejected before proposing or publishing a policy replacement", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  seedAndAssignArchestraTools,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: organization.id });
+  await seedAndAssignArchestraTools(agent.id);
+  await GuardrailsDeploymentModel.set({ enabled: false });
+  for (const name of [
+    "preview_openappa_validation_change",
+    "publish_openappa_validation_change",
+  ]) {
+    for (const policyContent of ["", " ", "\n\t"]) {
+      const response = await executeArchestraTool(
+        `archestra__${name}`,
+        {
+          expectedRevision: 0,
+          expectedVersion: "empty",
+          changes: { upsert: [regression] },
+          policyContent,
+        },
+        {
+          organizationId: organization.id,
+          userId: user.id,
+          agent: { id: agent.id, name: agent.name },
+        },
+      );
+      expect(response.isError).toBe(true);
+      expect(response.structuredContent).toBeUndefined();
+      expect(response.content).toEqual([
+        {
+          type: "text",
+          text: expect.stringContaining("omit policyContent or pass null"),
+        },
+      ]);
+    }
+  }
+  expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
+  expect(await OpenAppaPolicyTestsModel.find(organization.id)).toBeNull();
+  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(false);
 });
 
 test("a first combined policy save enables enforcement even with informational failed checks", async ({

@@ -1238,7 +1238,7 @@ export function ConnectCommandPanel({
             <CollapsibleContent className="mt-3 grid max-w-lg gap-4">
               {excluded.size > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Your prompt left some parts out. They stay off for this
+                  Your setup left some parts out. They stay off for this
                   connection.
                 </p>
               )}

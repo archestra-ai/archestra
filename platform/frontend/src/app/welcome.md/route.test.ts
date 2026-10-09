@@ -15,7 +15,7 @@ describe("Welcome agent instructions", () => {
       "You were just connected to the MCP gateway at https://example.test.",
     );
     expect(instructions).toContain(
-      "copy the connect prompt from https://example.test/connection",
+      "tell them to open https://example.test/connection and follow the",
     );
     expect(instructions).toContain(
       "Never send, create, edit or delete anything.",

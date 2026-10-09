@@ -59,7 +59,7 @@ describe("resolveSubagentTierSelection", () => {
   }) => {
     const { org, key, byName } = await setup(
       { makeOrganization, makeLlmProviderApiKey },
-      ["claude-sonnet-5", "claude-haiku-4-5", "claude-opus-4-8"],
+      ["claude-sonnet-5", "claude-haiku-5-5", "claude-opus-4-8"],
     );
     const parent = { modelId: byName["claude-sonnet-5"], apiKeyId: key.id };
 
@@ -69,7 +69,7 @@ describe("resolveSubagentTierSelection", () => {
         parent,
         organizationId: org.id,
       }),
-    ).toEqual({ modelId: byName["claude-haiku-4-5"], apiKeyId: key.id });
+    ).toEqual({ modelId: byName["claude-haiku-5-5"], apiKeyId: key.id });
     expect(
       await resolveSubagentTierSelection({
         tier: "smart",
@@ -85,7 +85,7 @@ describe("resolveSubagentTierSelection", () => {
   }) => {
     const { org, key, byName } = await setup(
       { makeOrganization, makeLlmProviderApiKey },
-      ["claude-sonnet-5", "claude-haiku-4-5", "claude-haiku-5"],
+      ["claude-sonnet-5", "claude-haiku-4-5", "claude-haiku-5-5"],
     );
     await OrganizationModel.patch(org.id, {
       subagentModelTiers: { anthropic: { fast: byName["claude-haiku-4-5"] } },
@@ -106,9 +106,9 @@ describe("resolveSubagentTierSelection", () => {
   }) => {
     const { org, key, byName } = await setup(
       { makeOrganization, makeLlmProviderApiKey },
-      ["claude-sonnet-5", "claude-haiku-4-5"],
+      ["claude-sonnet-5", "claude-haiku-5-5"],
     );
-    const unlinked = await createModel("anthropic", "claude-haiku-5");
+    const unlinked = await createModel("anthropic", "claude-haiku-4-5");
     await OrganizationModel.patch(org.id, {
       subagentModelTiers: { anthropic: { fast: unlinked.id } },
     });
@@ -119,7 +119,7 @@ describe("resolveSubagentTierSelection", () => {
         parent: { modelId: byName["claude-sonnet-5"], apiKeyId: key.id },
         organizationId: org.id,
       }),
-    ).toEqual({ modelId: byName["claude-haiku-4-5"], apiKeyId: key.id });
+    ).toEqual({ modelId: byName["claude-haiku-5-5"], apiKeyId: key.id });
   });
 
   test("falls back to the parent's model when the key serves no tier model", async ({

@@ -983,30 +983,18 @@ export const SubagentModelTierSchema = z.enum(["fast", "normal", "smart"]);
 export type SubagentModelTier = z.infer<typeof SubagentModelTierSchema>;
 
 /**
- * Default `fast` subagent tier for the core providers: substrings matched like
- * MODEL_MARKER_PATTERNS (first listed pattern present on the key wins). Other
- * providers, or no match on the key, run `fast` forks on the parent's model
- * unless the organization sets an override.
+ * Default `fast` subagent tier for the core providers: the latest small model,
+ * matched as a substring of the model id. Other providers, or a key without it,
+ * run `fast` forks on the parent's model unless the organization overrides it.
  */
 export const FAST_MODEL_PATTERNS: Partial<Record<SupportedProvider, string[]>> =
   {
-    anthropic: ["haiku-5-5", "haiku-5", "haiku-4-5", "haiku"],
-    bedrock: [
-      "claude-haiku-5-5",
-      "claude-haiku-5",
-      "claude-haiku-4-5",
-      "claude-haiku",
-    ],
-    openai: ["gpt-6-luna", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5-mini"],
-    gemini: ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"],
-    openrouter: [
-      "anthropic/claude-haiku-5.5",
-      "openai/gpt-6-luna",
-      "google/gemini-3.5-flash-lite",
-      "anthropic/claude-haiku-4.5",
-    ],
-    // GPT-5 mini costs no premium requests on Copilot plans.
-    "github-copilot": ["gpt-5-mini", "claude-haiku", "gpt-5.4-mini"],
+    anthropic: ["claude-haiku-5-5"],
+    bedrock: ["claude-haiku-5-5"],
+    openai: ["gpt-6-luna"],
+    gemini: ["gemini-3.5-flash-lite"],
+    openrouter: ["openai/gpt-6-luna"],
+    "github-copilot": ["gpt-6-luna"],
   };
 
 /**

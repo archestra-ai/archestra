@@ -84,6 +84,12 @@ If the request is unclear, ask with one \`archestra__ask_user\` question what th
 | Find a blocked call | The ruling in this conversation, or a yell: the one the operator names (\`archestra__get_openappa_yell\`), or found with \`archestra__list_openappa_yells\` (\`status\`, \`sessionId\`, \`search\`; pass \`nextCursor\` while \`hasMore\`) |
 | Tuning options | Archestra ships none; work out each stricter or looser request from the source and sink questions |
 
+## Tool-call human approval
+
+For per-call human review, use \`requires = { attention = ["human-approval"] }\` in the tool's static rule. A rule with an annotator must instead have that annotator require \`human-approval\` and admit it in its \`marks\`. Read the current policy first: the starting policy's \`hitl\` authority permits only \`human-approval\`. It cannot waive trust, audience, effects, or other attention requirements. Do not substitute \`hitl\` or a custom mark for \`human-approval\` when relying on this authority.
+
+Preserve the existing authority's permissions unless the operator explicitly requests broader exceptions. These Archestra-specific limits override shared battery-support advice to expand an existing HITL authority. If a battery needs other permissions, explain the gap and propose it separately. See \`references/archestra.md\` for executing an offered review.
+
 ## Approval in Archestra
 
 These rules replace the shared rules on ending a turn with the proposal: in Archestra the \`archestra__ask_user\` card ends the turn, and its answer is the later message that approves.

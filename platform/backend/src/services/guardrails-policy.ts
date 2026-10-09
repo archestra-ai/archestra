@@ -366,17 +366,13 @@ delta = {}
 name = "*"
 annotator = "noop"
 
-# Review one exact call without changing the session's labels. The public
-# audience ceiling also covers internal and self. Every attention mark is
-# reviewable except the reserved blocked mark.
+# Review one exact call that explicitly requires human approval.
 [[policy.authority]]
 name = "hitl"
-hint = "Ask the person running this session to review the exact call, the data it carries, and any required audience expansion."
+hint = "Ask the person running this session to approve this exact call."
 
 [policy.authority.permits]
-trust_below = "trusted"
-audience_missing = ["public"]
-attention = ["*"]
+attention = ["human-approval"]
 
 [externals.authorities.hitl]
 builtin = "hitl"

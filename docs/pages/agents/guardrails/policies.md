@@ -59,11 +59,11 @@ For every field, see the [policy reference](https://www.openappa.com/contracts).
 
 ## Human Review
 
-The starting policy lets a person approve an exact call that needs higher trust, a wider audience, or fresh approval. Audience exceptions cover `self`, `internal`, and `public`. Approval applies once and does not change the session's labels or authorize later calls.
+The starting policy lets a person approve an exact call that requires the `human-approval` attention mark. Approval applies once and does not authorize later calls.
 
-To require review even when trust and audience checks pass, add an attention requirement such as `requires = { attention = ["human-approval"] }` to the tool's rule. The default reviewer can approve any attention mark except the reserved `blocked` mark, which denies the call without an exception. It cannot waive effects restrictions.
+To require review, add `requires = { attention = ["human-approval"] }` to the tool's rule. Trust, audience, and effects restrictions must still pass. The default reviewer cannot approve other attention marks, including the reserved `blocked` mark, which denies the call without an exception.
 
-Saved policies keep their existing reviewers. To add the default review permissions to an existing policy, ask the configuration agent to add a human authority for trust below `trusted`, audience expansion up to `public`, and all reviewable attention marks.
+Saved policies keep their existing reviewers. To add the default review permissions to an existing policy, ask the configuration agent to add a human authority for the `human-approval` attention mark.
 
 ## GitHub Sync
 

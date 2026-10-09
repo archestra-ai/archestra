@@ -63,6 +63,8 @@ A battery governs calls only when \`effective.batteries\` marks it \`active\`. R
 
 ## Approvals and remedies
 
+The starting policy's \`hitl\` authority uses \`builtin = "hitl"\` and permits only \`attention = ["human-approval"]\`. To require fresh review for each call, use \`requires = { attention = ["human-approval"] }\` in a static tool rule, or have its annotator require that mark. Trust, audience, and effects requirements must still pass. Preserve this scope unless the operator explicitly requests broader exceptions; other marks need their own matching authority permissions.
+
 An approval needs an authority whose permits cover the requirement, and a review channel. Do not invent an authority. When a ruling offers a remedy, call \`archestra__execute_remedy_plan\` with the exact \`offer_id\`; it requests the review itself when the policy requires one, or returns the review to ask with \`archestra__ask_user\`.
 
 ## Subagent returns

@@ -17,7 +17,7 @@ describe("initialPolicy", () => {
     archestraMcpBranding.syncFromOrganization(null);
   });
 
-  test("human review covers trust, audience expansion, and fresh attention, but not blocked", async () => {
+  test("human review covers only human-approval, without overriding trust, audience, or other marks", async () => {
     const document = parse(initialPolicy());
     const policy = document.policy as ReturnType<typeof parse>;
     const externals = document.externals as ReturnType<typeof parse>;
@@ -44,6 +44,11 @@ describe("initialPolicy", () => {
           {
             name: "test__review",
             delta: {},
+            requires: { attention: ["human-approval"] },
+          },
+          {
+            name: "test__custom_review",
+            delta: {},
             requires: { attention: ["custom-review"] },
           },
           {
@@ -60,10 +65,15 @@ describe("initialPolicy", () => {
         JSON.stringify({
           content,
           files: [
-            ...["trusted", "public", "review"].map((tool) => ({
+            ...["trusted", "public", "custom_review"].map((tool) => ({
               path: `${tool}.appa`,
-              content: `mcp/test/read {}\nexpect allow\nmcp/test/${tool} {}\nexpect authority hitl\n`,
+              content: `mcp/test/read {}\nexpect allow\nmcp/test/${tool} {}\nexpect deny\n`,
             })),
+            {
+              path: "human-approval.appa",
+              content:
+                "mcp/test/review {}\nexpect authority hitl\nmcp/test/review {}\nexpect authority hitl\n",
+            },
             {
               path: "blocked.appa",
               content: "mcp/test/blocked {}\nexpect deny\n",
@@ -72,7 +82,7 @@ describe("initialPolicy", () => {
         }),
       ),
     );
-    expect(result.files).toHaveLength(4);
+    expect(result.files).toHaveLength(5);
     for (const file of result.files)
       expect(file, JSON.stringify(file)).toMatchObject({ status: "passed" });
 

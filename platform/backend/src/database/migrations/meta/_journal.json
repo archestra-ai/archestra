@@ -3683,6 +3683,13 @@
       "when": 1791578938459,
       "tag": "0525_remove-llm-proxy-cost-limits",
       "breakpoints": true
+    },
+    {
+      "idx": 526,
+      "version": "7",
+      "when": 1791584556997,
+      "tag": "0526_brave_lifeguard",
+      "breakpoints": true
     }
   ]
 }

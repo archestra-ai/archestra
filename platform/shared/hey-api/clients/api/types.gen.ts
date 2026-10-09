@@ -39244,6 +39244,9 @@ export type ListSlackAgentBotsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39286,6 +39289,7 @@ export type ListSlackAgentBotsResponses = {
      */
     200: {
         bots: Array<{
+            identitySyncError: string | null;
             handle: string | null;
             missingScopes: Array<string>;
             reinstallUrl: string | null;
@@ -39356,6 +39360,9 @@ export type ConvertSlackAppToAgentBotErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39442,6 +39449,9 @@ export type DeleteSlackAgentBotErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39534,6 +39544,9 @@ export type UpdateSlackAgentBotErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39620,6 +39633,9 @@ export type UpdateSlackAppConfigTokenErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39710,6 +39726,9 @@ export type MigrateSlackAppsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39804,6 +39823,9 @@ export type CreateSlackAgentBotAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**

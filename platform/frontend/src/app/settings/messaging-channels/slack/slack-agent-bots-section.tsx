@@ -1,6 +1,10 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  SLACK_BOT_HANDLE_PATTERN,
+  slackHandleFor,
+} from "@archestra/shared";
 import {
   ArrowUpRight,
   ChevronRight,
@@ -11,6 +15,7 @@ import {
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
@@ -31,6 +36,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SecretInput } from "@/components/ui/secret-input";
@@ -44,7 +50,6 @@ import {
   useSlackAgentBots,
   useUpdateSlackAgentBot,
 } from "@/lib/chatops/chatops-config.query";
-import { slackHandleFor } from "@/lib/chatops/slack-handle";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -174,8 +179,8 @@ export function SlackAgentBotsSection({
       )}
 
       {bots.length > 0 && (
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <div className="grid grid-cols-[minmax(0,1fr)_220px_160px_120px] gap-4 border-b px-5 py-2.5 text-xs font-medium text-muted-foreground">
+        <div className="@container overflow-hidden rounded-xl border bg-card">
+          <div className="hidden gap-4 border-b px-5 py-2.5 text-xs font-medium text-muted-foreground @3xl:grid @3xl:grid-cols-[minmax(0,1fr)_200px_150px_auto]">
             <div>Bot</div>
             <div>Agent</div>
             <div>Status</div>
@@ -183,13 +188,17 @@ export function SlackAgentBotsSection({
           </div>
           {bots.map((bot, index) => (
             <div key={bot.agentId} className="border-b last:border-b-0">
-              <div className="grid grid-cols-[minmax(0,1fr)_220px_160px_120px] items-center gap-4 px-5 py-4">
-                <div className="flex min-w-0 items-center gap-3">
+              {/* Narrow: the handle gets its own line, agent and status below it. */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4 @3xl:grid @3xl:grid-cols-[minmax(0,1fr)_200px_150px_auto]">
+                <div className="flex min-w-0 basis-full items-center gap-3 @3xl:basis-auto">
                   <BotAvatar
                     handle={
                       bot.handle ?? slackHandleFor(appName, bot.agentName)
                     }
                     tone={index}
+                    icon={
+                      agents.find((agent) => agent.id === bot.agentId)?.icon
+                    }
                   />
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <span className="truncate font-mono text-sm font-medium">
@@ -214,9 +223,11 @@ export function SlackAgentBotsSection({
                     </span>
                   </div>
                 </div>
-                <div className="truncate text-sm">{bot.agentName}</div>
+                <div className="truncate pl-12 text-sm @3xl:pl-0">
+                  {bot.agentName}
+                </div>
                 <BotStatus bot={bot} />
-                <div className="flex justify-end gap-2">
+                <div className="ml-auto flex justify-end gap-2 @3xl:ml-0">
                   {(!bot.installed || bot.needsAppLevelToken) && (
                     <Button
                       size="sm"
@@ -261,6 +272,12 @@ export function SlackAgentBotsSection({
                   </DropdownMenu>
                 </div>
               </div>
+              {bot.identitySyncError && (
+                <p className="mx-5 mb-4 text-xs text-amber-800 @3xl:ml-[68px] dark:text-amber-300">
+                  Slack did not take the agent's latest name or icon:{" "}
+                  {bot.identitySyncError}
+                </p>
+              )}
               {bot.installed && bot.reinstallUrl && (
                 <ReinstallRow
                   reinstallUrl={bot.reinstallUrl}
@@ -351,7 +368,7 @@ export function SlackAgentBotsSection({
 // Internal Components
 // =============================================================================
 
-type AgentRef = { id: string; name: string };
+type AgentRef = { id: string; name: string; icon?: string | null };
 
 type AgentBot =
   archestraApiTypes.ListSlackAgentBotsResponses["200"]["bots"][number];
@@ -378,7 +395,26 @@ function toneFor(index: number): string {
   return TONES[index % TONES.length];
 }
 
-function BotAvatar({ handle, tone }: { handle: string; tone: number }) {
+/** The agent's image icon — Slack shows the same one — else initials. */
+function BotAvatar({
+  handle,
+  tone,
+  icon,
+}: {
+  handle: string;
+  tone: number;
+  icon?: string | null;
+}) {
+  if (icon?.startsWith("data:image/")) {
+    return (
+      <div
+        aria-hidden="true"
+        className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted"
+      >
+        <AgentIcon icon={icon} size={36} />
+      </div>
+    );
+  }
   const initials = handle
     .split(/[_\-.]+/)
     .filter(Boolean)
@@ -455,7 +491,7 @@ function ReinstallRow({
   onCheckAgain: () => void;
 }) {
   return (
-    <div className="mx-5 mb-4 ml-[68px] flex flex-wrap items-center gap-4 rounded-lg bg-amber-50 px-3.5 py-3 dark:bg-amber-950/40">
+    <div className="mx-5 mb-4 flex @3xl:ml-[68px] flex-wrap items-center gap-4 rounded-lg bg-amber-50 px-3.5 py-3 dark:bg-amber-950/40">
       <p className="flex-1 text-sm leading-relaxed text-amber-950 dark:text-amber-100">
         Slack needs a reinstall to grant{" "}
         {missingScopes.map((scope, index) => (
@@ -795,8 +831,13 @@ function AddBotDialog({
   const appName = useAppName();
   const mutation = useCreateSlackAgentBotApp();
   const [agentId, setAgentId] = useState("");
+  // Null until edited: the handle then follows the picked agent's name.
+  const [customHandle, setCustomHandle] = useState<string | null>(null);
   const picked = agents.find((agent) => agent.id === agentId);
-  const handle = picked ? slackHandleFor(appName, picked.name) : null;
+  const handle =
+    customHandle ?? (picked ? slackHandleFor(appName, picked.name) : "");
+  const handleValid = SLACK_BOT_HANDLE_PATTERN.test(handle);
+  const iconIsImage = Boolean(picked?.icon?.startsWith("data:image/"));
 
   return (
     <FormDialog
@@ -812,7 +853,7 @@ function AddBotDialog({
         className="flex min-h-0 flex-1 flex-col"
         onSubmit={async (e) => {
           e.preventDefault();
-          if (!picked || !handle) return;
+          if (!picked || !handleValid) return;
           const created = await mutation.mutateAsync({
             agentId: picked.id,
             body: { appName: handle, connectionMode },
@@ -839,7 +880,10 @@ function AddBotDialog({
             <SearchableSelect
               id="new-slack-bot-agent"
               value={agentId}
-              onValueChange={setAgentId}
+              onValueChange={(value) => {
+                setAgentId(value);
+                setCustomHandle(null);
+              }}
               placeholder="Choose an agent…"
               searchPlaceholder="Search agents..."
               items={agents.map((agent) => ({
@@ -848,14 +892,63 @@ function AddBotDialog({
               }))}
             />
           </div>
-          {handle && (
-            <p className="text-sm text-muted-foreground">
-              It will appear in Slack as{" "}
-              <span className="font-mono font-medium text-foreground">
-                @{handle}
-              </span>
-              .
-            </p>
+          {picked && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-slack-bot-handle">Slack name</Label>
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">
+                  <AgentIcon icon={picked.icon} size={24} />
+                </div>
+                <div className="relative flex-1">
+                  <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 font-mono text-sm text-muted-foreground">
+                    @
+                  </span>
+                  <Input
+                    id="new-slack-bot-handle"
+                    value={handle}
+                    onChange={(e) =>
+                      setCustomHandle(
+                        e.target.value.toLowerCase().replace(/\s+/g, "_"),
+                      )
+                    }
+                    aria-invalid={!handleValid}
+                    className="pl-7 font-mono"
+                  />
+                </div>
+              </div>
+              <p
+                className={cn(
+                  "text-xs",
+                  handleValid ? "text-muted-foreground" : "text-destructive",
+                )}
+              >
+                {handleValid ? (
+                  <span>
+                    People type this after @.{" "}
+                    {customHandle === null
+                      ? "It follows the agent's name when you rename the agent."
+                      : "It stays as you set it when the agent is renamed."}
+                  </span>
+                ) : (
+                  <span>
+                    Use lowercase letters, digits, periods, hyphens, and
+                    underscores — at most 35.
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {iconIsImage ? (
+                  <span>
+                    The bot uses the agent's icon, and keeps it in sync.
+                  </span>
+                ) : (
+                  <span>
+                    Slack app icons must be images; give the agent an image icon
+                    to use it in Slack.
+                  </span>
+                )}
+              </p>
+            </div>
           )}
         </DialogBody>
         <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
@@ -871,7 +964,10 @@ function AddBotDialog({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={!picked || mutation.isPending}>
+          <Button
+            type="submit"
+            disabled={!picked || !handleValid || mutation.isPending}
+          >
             {mutation.isPending ? (
               <span>Creating...</span>
             ) : (

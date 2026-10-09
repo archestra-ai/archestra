@@ -15,6 +15,7 @@ import {
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import {
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
@@ -830,6 +831,8 @@ export async function handleEditResource<
     if (!updated) {
       return errorResult(`failed to update ${toolLabel}.`);
     }
+    // A Slack bot of this agent follows its name and icon (best effort).
+    void slackAppFactory.syncAgentIdentity(args.id);
 
     const toolAssignmentResults =
       expectedType === "agent" && (args.toolAssignments?.length ?? 0) > 0

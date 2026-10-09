@@ -113,6 +113,7 @@ describe("Slack agent bots", () => {
           missingScopes: [],
           reinstallUrl: null,
           handle: null,
+          identitySyncError: null,
           createdByArchestra: false,
         },
       ],

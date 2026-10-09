@@ -4,6 +4,7 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
+  SLACK_BOT_HANDLE_PATTERN,
   TimeInMs,
 } from "@archestra/shared";
 import { WebClient } from "@slack/web-api";
@@ -2024,6 +2025,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             needsAppLevelToken:
               bot.connectionMode === "socket" && !bot.appLevelToken,
             createdByArchestra: Boolean(bot.managed || bot.clientId),
+            /** Why Slack refused the last name or icon update. */
+            identitySyncError: bot.identitySyncError ?? null,
           };
         }),
       );
@@ -2150,6 +2153,8 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         appLevelToken: "",
       });
       await chatOpsManager.reinitialize();
+      // Now the agent's: it takes the agent's icon (its name stays).
+      await slackAppFactory.syncAgentIdentity(agentId);
       return reply.send({
         success: true,
         ...(reinstallUrl && { reinstallUrl }),
@@ -2327,7 +2332,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["ChatOps"],
         params: z.object({ agentId: z.string().uuid() }),
         body: z.object({
-          appName: z.string().min(1).max(35),
+          /** The bot's handle, what people type after @. */
+          appName: z
+            .string()
+            .regex(
+              SLACK_BOT_HANDLE_PATTERN,
+              "Use lowercase letters, digits, periods, hyphens, and underscores (at most 35)",
+            ),
           connectionMode: ChatOpsConnectionModeSchema,
         }),
         response: constructResponseSchema(
@@ -2812,6 +2823,7 @@ const SlackAppMigrationResultSchema = z.object({
 });
 
 const SlackAgentBotSummarySchema = z.object({
+  identitySyncError: z.string().nullable(),
   /** The bot's Slack username, what people type after @. */
   handle: z.string().nullable(),
   /** Required scopes the bot token lacks; a reinstall grants them. */

@@ -1,14 +1,15 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   buildSlackManifest,
   migrateSlackManifest,
+  slackHandleFor,
   TimeInMs,
 } from "@archestra/shared";
 import { WebClient } from "@slack/web-api";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
-import { ChatOpsConfigModel } from "@/models";
+import { AgentModel, ChatOpsConfigModel, OrganizationModel } from "@/models";
 import { ngrokTunnelManager } from "@/ngrok-tunnel-manager";
 import type {
   ChatOpsConnectionMode,
@@ -95,6 +96,13 @@ class SlackAppFactory {
       throw new Error(created.error ?? "Slack did not return the new app");
     }
 
+    // A handle left at its default keeps following the agent's name.
+    const agent = await AgentModel.findById(params.agentId);
+    const handleFollowsAgent =
+      Boolean(agent) &&
+      params.appName ===
+        slackHandleFor(await OrganizationModel.getAppName(), agent?.name ?? "");
+
     // Saved disabled until installed: there is no bot token yet.
     await ChatOpsConfigModel.saveSlackAgentBot({
       agentId: params.agentId,
@@ -107,11 +115,15 @@ class SlackAppFactory {
       clientId: credentials.client_id,
       clientSecret: credentials.client_secret,
       managed: true,
+      handleFollowsAgent,
+      ...(agent && { syncedAgentName: agent.name }),
     });
     logger.info(
       { agentId: params.agentId, appId },
       "[SlackAppFactory] Created a Slack app for an agent bot",
     );
+    // The agent's icon becomes the app's icon.
+    await this.syncAgentIdentity(params.agentId);
 
     if (!oauth || !created.oauth_authorize_url) {
       return {
@@ -316,6 +328,76 @@ class SlackAppFactory {
       : {};
   }
 
+  /**
+   * Keep a managed bot looking like its agent: the agent's icon as the app
+   * icon and, while the handle follows the agent, the agent's name as the
+   * bot's name. Compares against what it last applied, so calling it after
+   * any agent edit is cheap and a no-op when nothing relevant changed. Never
+   * throws: a refusal is saved on the bot for the settings page to show.
+   */
+  async syncAgentIdentity(agentId: string): Promise<void> {
+    try {
+      const bot = (await ChatOpsConfigModel.getSlackAgentBots()).find(
+        (candidate) => candidate.agentId === agentId,
+      );
+      if (!bot?.appId || !(bot.managed || bot.clientId)) return;
+      if (!(await this.hasConfigToken())) return;
+      const agent = await AgentModel.findById(agentId);
+      if (!agent) return;
+
+      const renameTo =
+        bot.handleFollowsAgent && agent.name !== bot.syncedAgentName
+          ? slackHandleFor(await OrganizationModel.getAppName(), agent.name)
+          : null;
+      const icon = parseImageDataUrl(agent.icon);
+      const iconHash = icon
+        ? createHash("sha256")
+            .update(agent.icon ?? "")
+            .digest("hex")
+        : undefined;
+      const updateIcon = Boolean(icon) && iconHash !== bot.syncedIconHash;
+      if (!renameTo && !updateIcon) return;
+
+      const token = await this.getAccessToken();
+      const errors: string[] = [];
+      let syncedAgentName = bot.syncedAgentName;
+      let syncedIconHash = bot.syncedIconHash;
+
+      if (renameTo) {
+        try {
+          await this.renameApp({ token, appId: bot.appId, name: renameTo });
+          syncedAgentName = agent.name;
+        } catch (error) {
+          errors.push(`Name: ${errorMessage(error)}`);
+        }
+      }
+      if (icon && updateIcon) {
+        try {
+          await this.setAppIcon({ token, appId: bot.appId, icon });
+          syncedIconHash = iconHash;
+        } catch (error) {
+          errors.push(`Icon: ${errorMessage(error)}`);
+        }
+      }
+
+      const latest = (await ChatOpsConfigModel.getSlackAgentBots()).find(
+        (candidate) => candidate.agentId === agentId,
+      );
+      if (!latest) return;
+      await ChatOpsConfigModel.saveSlackAgentBot({
+        ...latest,
+        ...(syncedAgentName && { syncedAgentName }),
+        ...(syncedIconHash && { syncedIconHash }),
+        identitySyncError: errors.length > 0 ? errors.join(" · ") : undefined,
+      });
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), agentId },
+        "[SlackAppFactory] Could not sync the bot's name or icon",
+      );
+    }
+  }
+
   /** Where Slack sends the browser back after an install. */
   callbackUrl(): string {
     return `${this.publicBaseUrl()}/api/webhooks/chatops/slack/oauth/callback`;
@@ -337,6 +419,62 @@ class SlackAppFactory {
       return saved.accessToken;
     }
     return (await this.rotate(saved.refreshToken)).accessToken;
+  }
+
+  /** Set the app's name and its bot's name, which is also its @handle. */
+  private async renameApp(params: {
+    token: string;
+    appId: string;
+    name: string;
+  }): Promise<void> {
+    const client = new WebClient();
+    const exported = await client.apps.manifest.export({
+      token: params.token,
+      app_id: params.appId,
+    });
+    if (!exported.manifest) {
+      throw new Error(exported.error ?? "Slack returned no manifest");
+    }
+    const manifest = exported.manifest as {
+      display_information?: Record<string, unknown>;
+      features?: { bot_user?: Record<string, unknown> };
+    };
+    manifest.display_information = {
+      ...manifest.display_information,
+      name: params.name,
+    };
+    manifest.features = {
+      ...manifest.features,
+      bot_user: { ...manifest.features?.bot_user, display_name: params.name },
+    };
+    await client.apps.manifest.update({
+      token: params.token,
+      app_id: params.appId,
+      manifest: manifest as unknown as Parameters<
+        WebClient["apps"]["manifest"]["update"]
+      >[0]["manifest"],
+    });
+  }
+
+  /** Upload an image as the app's icon (Slack's apps.icon.set). */
+  private async setAppIcon(params: {
+    token: string;
+    appId: string;
+    icon: { contentType: string; data: Buffer };
+  }): Promise<void> {
+    const extension = params.icon.contentType.split("/")[1] ?? "png";
+    // A `name` on the buffer gives the multipart upload its filename.
+    const file = Object.assign(params.icon.data, {
+      name: `icon.${extension.replace(/\+.*$/, "")}`,
+    });
+    const result = await new WebClient().apiCall("apps.icon.set", {
+      token: params.token,
+      app_id: params.appId,
+      file,
+    });
+    if (!result.ok) {
+      throw new Error(result.error ?? "Slack refused the icon");
+    }
   }
 
   private async rotate(refreshToken: string): Promise<SlackAppConfigToken> {
@@ -381,6 +519,18 @@ const CONFIG_TOKEN_LIFETIME_MS = 12 * TimeInMs.Hour;
 
 /** Slack's authorization code lives 10 minutes; the link a little longer. */
 const INSTALL_STATE_TTL_MS = 30 * TimeInMs.Minute;
+
+/**
+ * An agent icon that Slack can use: an uploaded image (a base64 data URL).
+ * An emoji icon is not an image file, so it has no Slack app icon.
+ */
+function parseImageDataUrl(
+  icon: string | null | undefined,
+): { contentType: string; data: Buffer } | null {
+  const match = icon?.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
+  if (!match) return null;
+  return { contentType: match[1], data: Buffer.from(match[2], "base64") };
+}
 
 function installStateKey(state: string): AllowedCacheKey {
   return `${CacheKey.SlackAppInstallState}-${state}` as AllowedCacheKey;

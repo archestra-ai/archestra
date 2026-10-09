@@ -141024,6 +141024,10 @@
                       "items": {
                         "type": "object",
                         "properties": {
+                          "identitySyncError": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "handle": {
                             "nullable": true,
                             "type": "string"
@@ -141079,6 +141083,7 @@
                           }
                         },
                         "required": [
+                          "identitySyncError",
                           "handle",
                           "missingScopes",
                           "reinstallUrl",
@@ -141262,6 +141267,10 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
@@ -141549,6 +141558,10 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
@@ -141863,6 +141876,10 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
@@ -142137,6 +142154,10 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
@@ -142456,6 +142477,10 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
@@ -142745,6 +142770,10 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
@@ -142901,8 +142930,7 @@
                 "properties": {
                   "appName": {
                     "type": "string",
-                    "minLength": 1,
-                    "maxLength": 35
+                    "pattern": "^[a-z0-9][a-z0-9._-]{0,34}$"
                   },
                   "connectionMode": {
                     "type": "string",
@@ -143061,6 +143089,10 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       },
                       "required": [

@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, buildSlackManifest } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  buildSlackManifest,
+  slackHandleFor,
+} from "@archestra/shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -17,7 +21,6 @@ import {
   useUpdateSlackAgentBot,
   useUpdateSlackChatOpsConfig,
 } from "@/lib/chatops/chatops-config.query";
-import { slackHandleFor } from "@/lib/chatops/slack-handle";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";

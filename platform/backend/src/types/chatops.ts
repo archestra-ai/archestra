@@ -735,6 +735,17 @@ export interface SlackAgentBotConfig extends SlackDbConfig {
    * an app is deleted from Slack when its bot is removed.
    */
   managed?: boolean;
+  /**
+   * The bot's name follows the agent's: renaming the agent renames the bot.
+   * Off once someone picks a handle of their own.
+   */
+  handleFollowsAgent?: boolean;
+  /** The agent name the bot's handle was last set from. */
+  syncedAgentName?: string;
+  /** Fingerprint of the agent icon last set as the app icon. */
+  syncedIconHash?: string;
+  /** Why Slack refused the last name or icon update, until one succeeds. */
+  identitySyncError?: string;
 }
 
 /** What happened to one Slack app when Archestra brought it up to date. */

@@ -41,6 +41,8 @@ import {
   type SetupScriptContext,
 } from "@/services/agent-connection-setup";
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
+import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
+import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
 import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
 import {
   type ConnectionCreditWarning,
@@ -70,6 +72,7 @@ import {
 } from "@/types";
 import {
   CONNECTION_HEALTH_PATH,
+  CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   SKILL_MARKETPLACE_PREFIX,
   SKILL_MARKETPLACE_STATIC_PATH,
@@ -239,6 +242,40 @@ const ConnectionHealthResponseSchema = z.object({
 });
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    CONNECTION_INSTRUCTIONS_PATH,
+    {
+      schema: {
+        operationId: RouteId.GetConnectionInstructions,
+        description:
+          "Read current managed instructions with an installation-scoped read-only credential. Live membership and gateway access are rechecked.",
+        tags: ["Connection Setups"],
+        response: constructResponseSchema(
+          z.object({
+            instructions: z.string().max(20000).nullable(),
+            version: z.string(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (
+        await isRateLimited(
+          `${CacheKey.ConnectionHealthRateLimit}-instructions-${connectionHealthRequesterKey(request)}`,
+          { windowMs: 60_000, maxRequests: 60 },
+        )
+      )
+        throw new ApiError(429, "Too many requests");
+      const authorization = request.headers.authorization;
+      if (!authorization?.startsWith("Bearer "))
+        throw new ApiError(401, "Instruction credential required");
+      const result = await getConnectionManagedInstructions(
+        authorization.slice(7),
+      );
+      return reply.header("Cache-Control", "no-store").send(result);
+    },
+  );
+
   fastify.get(
     CONNECTION_HEALTH_PATH,
     {
@@ -1174,6 +1211,19 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       toolPrefix: archestraMcpBranding.toolPrefix,
       mcp,
       proxy,
+      managedInstructionsSource:
+        mcp &&
+        ["claude-code", "codex", "copilot-cli", "opencode"].includes(
+          setup.clientId,
+        )
+          ? {
+              url: `${proxyBaseUrlToOrigin(setup.baseUrl)}${CONNECTION_INSTRUCTIONS_PATH}`,
+              token: issueConnectionInstructionsToken({
+                setupId: setup.id,
+                secret: config.auth.secret ?? "",
+              }),
+            }
+          : null,
       runtimeHandoffInstructions:
         mcp && organization.connectionRuntimeHandoffEnabled
           ? (organization.connectionRuntimeHandoffInstructions ??

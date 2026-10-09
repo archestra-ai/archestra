@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-09
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -282,6 +282,12 @@ Admins configure the page under **Settings → Connect Page**, or with **Connect
 | LLM Proxy, Skills, and Plugins on Connect | Turning one off removes it from new setups. Existing setups keep working. |
 | Default MCP Gateway, Default client | Pre-selected for everyone. Users can still switch. |
 | Default provider keys | The provider key a setup's virtual key maps to, per provider. |
-| Suggest runtime handoff | Lets connected agents suggest moving work to [Agent Runtime](/docs/agents/runtime). On by default. Users re-run setup to pick up a change. |
+| Managed instructions | Appends your organization’s instructions to an agent’s system prompt when users connect through the Connect page. CLI wrappers fetch saved changes before the next launch. |
 
-Setup reads `/connect.md`, `/llms.txt`, and the setup endpoints under `/api/client-connections` and `/api/connection-setups/script` without a session. A proxy in front of Archestra that requires login for every URL must let these through.
+Claude Code, Codex, Copilot CLI, and OpenCode refresh managed instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
+
+- **Existing connections:** Run setup once to install the refresh capability. Unix wrappers require Python 3 to fetch updates.
+- **Temporary outages:** The client uses its last fetched copy.
+- **Other clients:** Cursor’s User Rules and Claude Desktop’s organization instructions still need a setup update.
+
+Setup reads `/connect.md`, `/llms.txt`, and the setup endpoints under `/api/client-connections` and `/api/connection-setups/script` without a session. A proxy in front of Archestra that requires login for every URL must let these through. It must also allow `/v1/connection-instructions`; this endpoint checks the installation’s read-only credential and current access.

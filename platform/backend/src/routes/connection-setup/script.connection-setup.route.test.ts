@@ -309,7 +309,8 @@ describe("GET /api/connection-setups/script/:token", () => {
         );
       } else {
         expect(response.body).not.toContain(instructions);
-        expect(response.body).not.toContain("--append-system-prompt-file");
+        // Even initially disabled connections install the refresh path so admins can enable instructions later.
+        expect(response.body).toContain("instructions-refresh.py");
       }
     });
   }
@@ -1061,7 +1062,15 @@ describe("GET /api/connection-setups/script/:token", () => {
       ).toBe("approved");
       const approved = await fetchScript(installerToken);
       expect(approved.statusCode, approved.body).toBe(200);
-      expect(approved.body).toBe(direct.body);
+      // Each installation has its own instruction-refresh credential.
+      const withoutCredential = (body: string) =>
+        body.replace(
+          /cmi1_[0-9a-f-]+\.[A-Za-z0-9_-]+/g,
+          "installation-credential",
+        );
+      expect(withoutCredential(approved.body)).toBe(
+        withoutCredential(direct.body),
+      );
     } finally {
       config.openappa = prior;
     }

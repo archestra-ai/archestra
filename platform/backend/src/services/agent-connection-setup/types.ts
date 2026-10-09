@@ -92,8 +92,9 @@ export interface SetupScriptContext {
   mcp: SetupScriptMcpSection | null;
   proxy: SetupScriptProxySection | null;
   skills: SetupScriptSkillsSection | null;
-  /** Copied locally by setup, never fetched from the platform at launch. */
+  /** Initial local copy; wrappers refresh it before launching an agent. */
   runtimeHandoffInstructions?: string | null;
+  managedInstructionsSource?: { url: string; token: string } | null;
 }
 
 /** One script language's renderer for an agent. */

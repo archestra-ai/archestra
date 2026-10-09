@@ -315,7 +315,7 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  * Preview installs already used version 2. Version 3 repairs their PowerShell
  * permission cleanup; reusing version 2 would not prompt those users to reconnect.
  */
-export const STARTUP_GUARD_FORMAT_VERSION = 3;
+export const STARTUP_GUARD_FORMAT_VERSION = 4;
 
 export const DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
 

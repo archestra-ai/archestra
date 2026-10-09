@@ -4,7 +4,8 @@
 //! annotator endpoint, bound without a token, gets the answer the host says it serves.
 //! Every other consult gets no answer, and the file ends `cannot_run` at the first step
 //! that answer could have decided. A deployment needing a model process, a model profile
-//! or a live remedy party is refused as a whole.
+//! or an external remedy party is refused as a whole. Built-in human review
+//! remains unanswered if a scenario reaches it; merely declaring it is safe.
 use appa_eventlog::{Backend, LogStore};
 use appa_runtime::{
     api::{ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, OfferKind, Runtime},
@@ -24,7 +25,7 @@ use std::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub(crate) const ENGINE_VERSION: &str =
-    "10aa0e09e32d8c6704bdb030dc3c66140bf81915:archestra-offline-v2";
+    "10aa0e09e32d8c6704bdb030dc3c66140bf81915:archestra-offline-v3";
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 const MAX_INPUT_BYTES: usize = 2 * 1024 * 1024;
@@ -344,7 +345,9 @@ async fn offline_runtime(content: &str, noop: Option<&NoopAnnotator>) -> Result<
     let mut config = Config::hosted(content, defaults, |_| Some("offline-replay".into()))
         .map_err(|error| format!("The effective policy cannot load offline: {error}"))?;
     let externals = &mut config.externals;
-    let stock = |binding: &Implementation| matches!(binding, Implementation::Builtin(name) if matches!(name.as_str(), "approve" | "redact-email" | "redact-secrets"));
+    // Replay opens without an elicitation channel or a supplied human ruling.
+    // The hitl backend therefore abstains when invoked, never prompts or approves.
+    let stock = |binding: &Implementation| matches!(binding, Implementation::Builtin(name) if matches!(name.as_str(), "approve" | "hitl" | "redact-email" | "redact-secrets"));
     if externals.llm.is_some()
         || externals.jev.is_some()
         || externals

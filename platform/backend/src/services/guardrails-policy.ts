@@ -366,6 +366,21 @@ delta = {}
 name = "*"
 annotator = "noop"
 
+# Review one exact call without changing the session's labels. The public
+# audience ceiling also covers internal and self. Every attention mark is
+# reviewable except the reserved blocked mark.
+[[policy.authority]]
+name = "hitl"
+hint = "Ask the person running this session to review the exact call, the data it carries, and any required audience expansion."
+
+[policy.authority.permits]
+trust_below = "trusted"
+audience_missing = ["public"]
+attention = ["*"]
+
+[externals.authorities.hitl]
+builtin = "hitl"
+
 [externals.annotators.noop]
 url = "${noopAnnotatorUrl()}"
 `;

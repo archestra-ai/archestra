@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub
 order: 1
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -57,6 +57,14 @@ What to know:
 
 For every field, see the [policy reference](https://www.openappa.com/contracts).
 
+## Human Review
+
+The starting policy lets a person approve an exact call that needs higher trust, a wider audience, or fresh approval. Audience exceptions cover `self`, `internal`, and `public`. Approval applies once and does not change the session's labels or authorize later calls.
+
+To require review even when trust and audience checks pass, add an attention requirement such as `requires = { attention = ["human-approval"] }` to the tool's rule. The default reviewer can approve any attention mark except the reserved `blocked` mark, which denies the call without an exception. It cannot waive effects restrictions.
+
+Saved policies keep their existing reviewers. To add the default review permissions to an existing policy, ask the configuration agent to add a human authority for trust below `trusted`, audience expansion up to `public`, and all reviewable attention marks.
+
 ## GitHub Sync
 
 With GitHub sync, the policy lives in a repository. The agent opens a pull request instead of saving, and a change applies after merge and successful sync.
@@ -90,7 +98,7 @@ Each file describes ordered tool calls and expected decisions. Calls in one file
 
 What to know:
 
-- **Results:** the table shows **Passed** or **Failed** and the last run time. A file that cannot run appears as **Failed**, with its reason: replay stops at the first call that needs a live answer, such as the [`run_command`](/docs/reference/archestra-mcp-server#run_command) model label or a team membership lookup. Open a history run for details; results apply to the policy and files captured by that run.
+- **Results:** the table shows **Passed** or **Failed** and the last run time. A file that cannot run appears as **Failed**, with its reason: replay stops at the first call that needs a live answer, such as the [`run_command`](/docs/reference/archestra-mcp-server#run_command) model label, human review, or a team membership lookup. Open a history run for details; results apply to the policy and files captured by that run.
 - **Drafts:** **Run file** checks only the current editor text. Its temporary result does not change saved suite results or history. Search filters and unsaved drafts do not change **Run all**.
 - **Policy changes:** accepted changes from local saves or GitHub sync automatically queue the full suite. Unchanged syncs and validation-only edits do not trigger runs. Validation failures do not block or roll back a policy; configure repository CI if failures should block merges.
 

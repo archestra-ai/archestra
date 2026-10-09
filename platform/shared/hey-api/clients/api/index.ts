@@ -3373,6 +3373,8 @@ export type {
   LockAppErrors,
   LockAppResponse,
   LockAppResponses,
+  LogContentNotStored,
+  LogContentNotStoredInput,
   MarkChatConversationReadData,
   MarkChatConversationReadError,
   MarkChatConversationReadErrors,

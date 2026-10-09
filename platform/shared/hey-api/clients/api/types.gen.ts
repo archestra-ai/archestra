@@ -4,6 +4,35 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type LogContentNotStoredInput = {
+    __redacted: 'log_content_policy';
+    isError?: boolean;
+    errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
+    archestraExecutedAs?: {
+        kind: 'personal';
+        ownerUserId: string | null;
+        ownerName: string | null;
+    } | {
+        kind: 'team';
+        teamId: string;
+        teamName: string | null;
+    } | {
+        kind: 'org';
+    } | {
+        kind: 'idp_exchange';
+        callerUserId: string | null;
+    } | {
+        kind: 'idp_passthrough';
+        callerUserId: string | null;
+    } | {
+        kind: 'caller_headers';
+        callerUserId: string | null;
+    } | {
+        kind: 'platform';
+        callerUserId: string | null;
+    };
+};
+
 export type TextSearchLanguageInput = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
 
 export type ContextualRetrievalModeInput = 'disabled' | 'document' | 'chunk';
@@ -6415,6 +6444,35 @@ export type InteractionVirtualKeyInput = {
         name: string;
     }>;
     createdByUserName: string | null;
+};
+
+export type LogContentNotStored = {
+    __redacted: 'log_content_policy';
+    isError?: boolean;
+    errorType?: 'auth_required' | 'auth_expired' | 'assigned_credential_unavailable' | 'policy_denied' | 'tool_state' | 'cancelled' | 'generic';
+    archestraExecutedAs?: {
+        kind: 'personal';
+        ownerUserId: string | null;
+        ownerName: string | null;
+    } | {
+        kind: 'team';
+        teamId: string;
+        teamName: string | null;
+    } | {
+        kind: 'org';
+    } | {
+        kind: 'idp_exchange';
+        callerUserId: string | null;
+    } | {
+        kind: 'idp_passthrough';
+        callerUserId: string | null;
+    } | {
+        kind: 'caller_headers';
+        callerUserId: string | null;
+    } | {
+        kind: 'platform';
+        callerUserId: string | null;
+    };
 };
 
 export type TextSearchLanguage = 'simple' | 'arabic' | 'armenian' | 'basque' | 'catalan' | 'danish' | 'dutch' | 'english' | 'finnish' | 'french' | 'german' | 'greek' | 'hindi' | 'hungarian' | 'indonesian' | 'irish' | 'italian' | 'lithuanian' | 'nepali' | 'norwegian' | 'portuguese' | 'romanian' | 'russian' | 'serbian' | 'spanish' | 'swedish' | 'tamil' | 'turkish' | 'yiddish';
@@ -48468,10 +48526,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: OpenAiChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48714,10 +48772,10 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48835,10 +48893,10 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48954,10 +49012,10 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49073,10 +49131,10 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49192,10 +49250,10 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49288,10 +49346,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: GeminiGenerateContentResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49386,10 +49444,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: AnthropicMessagesResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49925,10 +49983,10 @@ export type GetInteractionsResponses = {
                 };
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50563,10 +50621,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: AnthropicMessagesResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50661,10 +50719,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: CerebrasChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50759,10 +50817,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: MistralChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50857,10 +50915,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: PerplexityChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50955,10 +51013,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: GroqChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51053,10 +51111,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: XaiChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51151,10 +51209,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: OpenrouterChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51249,10 +51307,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: VllmChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51347,10 +51405,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: OllamaChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51445,10 +51503,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: OllamaNativeChatResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51543,10 +51601,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: CohereChatResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51641,10 +51699,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: ZhipuaiChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51739,10 +51797,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: DeepSeekChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -52551,10 +52609,10 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53363,10 +53421,10 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -54175,10 +54233,10 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -54273,10 +54331,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: MinimaxChatCompletionResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -54439,10 +54497,10 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -54644,10 +54702,10 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -54849,10 +54907,10 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -55054,10 +55112,10 @@ export type GetInteractionsResponses = {
                 [key: string]: unknown;
             } | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -55152,10 +55210,10 @@ export type GetInteractionsResponses = {
             } | null;
             response: JevDecisionsResponse | {
                 error: string;
-            } | {
+            } | LogContentNotStored | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -55500,6 +55558,10 @@ export type GetInteractionSessionsResponses = {
             lastUserMessagePreview: string | null;
             lastInteractionId: string | null;
             lastInteractionType: string | null;
+            /**
+             * True when the session's latest turn was logged under the Metadata only Log Content mode, so it has no message preview.
+             */
+            contentNotStored: boolean;
             conversationTitle: string | null;
             claudeCodeTitle: string | null;
         }>;
@@ -55876,10 +55938,10 @@ export type GetInteractionResponses = {
         } | null;
         response: OpenAiChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56122,10 +56184,10 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56243,10 +56305,10 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56362,10 +56424,10 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56481,10 +56543,10 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56600,10 +56662,10 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56696,10 +56758,10 @@ export type GetInteractionResponses = {
         } | null;
         response: GeminiGenerateContentResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56794,10 +56856,10 @@ export type GetInteractionResponses = {
         } | null;
         response: AnthropicMessagesResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57333,10 +57395,10 @@ export type GetInteractionResponses = {
             };
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57971,10 +58033,10 @@ export type GetInteractionResponses = {
         } | null;
         response: AnthropicMessagesResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58069,10 +58131,10 @@ export type GetInteractionResponses = {
         } | null;
         response: CerebrasChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58167,10 +58229,10 @@ export type GetInteractionResponses = {
         } | null;
         response: MistralChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58265,10 +58327,10 @@ export type GetInteractionResponses = {
         } | null;
         response: PerplexityChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58363,10 +58425,10 @@ export type GetInteractionResponses = {
         } | null;
         response: GroqChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58461,10 +58523,10 @@ export type GetInteractionResponses = {
         } | null;
         response: XaiChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58559,10 +58621,10 @@ export type GetInteractionResponses = {
         } | null;
         response: OpenrouterChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58657,10 +58719,10 @@ export type GetInteractionResponses = {
         } | null;
         response: VllmChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58755,10 +58817,10 @@ export type GetInteractionResponses = {
         } | null;
         response: OllamaChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58853,10 +58915,10 @@ export type GetInteractionResponses = {
         } | null;
         response: OllamaNativeChatResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58951,10 +59013,10 @@ export type GetInteractionResponses = {
         } | null;
         response: CohereChatResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -59049,10 +59111,10 @@ export type GetInteractionResponses = {
         } | null;
         response: ZhipuaiChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -59147,10 +59209,10 @@ export type GetInteractionResponses = {
         } | null;
         response: DeepSeekChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -59959,10 +60021,10 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60771,10 +60833,10 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -61583,10 +61645,10 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -61681,10 +61743,10 @@ export type GetInteractionResponses = {
         } | null;
         response: MinimaxChatCompletionResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -61847,10 +61909,10 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -62052,10 +62114,10 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -62257,10 +62319,10 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -62462,10 +62524,10 @@ export type GetInteractionResponses = {
             [key: string]: unknown;
         } | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -62560,10 +62622,10 @@ export type GetInteractionResponses = {
         } | null;
         response: JevDecisionsResponse | {
             error: string;
-        } | {
+        } | LogContentNotStored | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -80483,7 +80545,7 @@ export type GetMcpToolCallsResponses = {
             } | {
                 __encryptedChatSealed: string;
             } | {
-                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
             } | null;
             toolResult: unknown;
             userId: string | null;
@@ -80601,7 +80663,7 @@ export type GetMcpToolCallResponses = {
         } | {
             __encryptedChatSealed: string;
         } | {
-            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito' | 'log_content_policy';
         } | null;
         toolResult: unknown;
         userId: string | null;

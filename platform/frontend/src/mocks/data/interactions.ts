@@ -65,6 +65,7 @@ export function makeSessionSummary(
     lastUserMessagePreview: null,
     lastInteractionId: null,
     lastInteractionType: null,
+    contentNotStored: false,
     conversationTitle: null,
     claudeCodeTitle: null,
     ...overrides,
@@ -168,6 +169,7 @@ export const llmLogsSessionsSeed = [
     source: "api",
     lastUserMessagePreview: "Plain API session message",
     lastInteractionType: "openai:chatCompletions",
+    contentNotStored: false,
   }),
 ];
 

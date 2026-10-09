@@ -291,6 +291,72 @@ describe("LogDetail virtual key", () => {
   });
 });
 
+describe("LogDetail Metadata only", () => {
+  /** A chat turn stored under Metadata only, as the detail route returns it. */
+  const WITHHELD_CHAT = {
+    id: "test-interaction-id",
+    type: "anthropic:messages",
+    source: "chat",
+    profileId: null,
+    model: "claude-sonnet-5",
+    inputTokens: 1842,
+    outputTokens: 96,
+    createdAt: "2026-10-08T19:52:53.000Z",
+    request: { __redacted: "log_content_policy" },
+    response: { __redacted: "log_content_policy", isError: false },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubNavigation();
+  });
+
+  function renderWith(interaction: Record<string, unknown>) {
+    vi.mocked(useInteraction).mockReturnValue({
+      data: interaction,
+      isPending: false,
+      isLoadingError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useInteraction>);
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <ChatPage id="test-interaction-id" />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("says the tools used were not stored rather than none", async () => {
+    renderWith(WITHHELD_CHAT);
+
+    expect(await screen.findByText("Tools used")).toBeVisible();
+    expect(screen.getByText("Not stored")).toBeVisible();
+    expect(screen.queryByText("None")).not.toBeInTheDocument();
+    expect(screen.queryByText("Result")).not.toBeInTheDocument();
+  });
+
+  it("shows a failed request as an error without its content", async () => {
+    renderWith({
+      ...WITHHELD_CHAT,
+      response: { __redacted: "log_content_policy", isError: true },
+    });
+
+    expect(await screen.findByText("Result")).toBeVisible();
+    expect(screen.getByText("Error")).toBeVisible();
+  });
+
+  it("shows a stored provider error as an error too", async () => {
+    renderWith({
+      ...WITHHELD_CHAT,
+      request: { model: "claude-sonnet-5", messages: [] },
+      response: { error: "prompt is too long" },
+    });
+
+    expect(await screen.findByText("Result")).toBeVisible();
+    expect(screen.getByText("Error")).toBeVisible();
+  });
+});
+
 function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: 60_000 } },

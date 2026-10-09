@@ -49,6 +49,7 @@ import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
 } from "@/guardrails/dual-llm-progress-bus";
+import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import {
   AgentTeamModel,
@@ -1280,9 +1281,11 @@ export async function handleLLMProxy<
     userId,
     dek: readEncryptedChatDek(request),
   });
-  // Content never reaches spans or logs for an encrypted-chat session, whether it
-  // ends up encrypted or redacted.
-  const suppressContent = encryptedChat.kind !== "none";
+  // Content never reaches spans or logs for an encrypted-chat session or a
+  // deployment whose Log Content mode is Metadata only.
+  const isEncryptedChatSession = encryptedChat.kind !== "none";
+  const suppressContent =
+    isEncryptedChatSession || resolveLogContentMode() === "metadata_only";
   const {
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
@@ -1296,7 +1299,7 @@ export async function handleLLMProxy<
   // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
   if (
     appaActive &&
-    suppressContent &&
+    isEncryptedChatSession &&
     !(
       sessionId &&
       (await startedUnenforced({
@@ -2589,8 +2592,12 @@ export async function handleLLMProxy<
     // Persist failed interactions so they appear in LLM logs
     try {
       const errorMessage = provider.extractErrorMessage(lifecycleError);
+      // Provider errors routinely echo the prompt back.
       logger.info(
-        { profileId: resolvedAgent.id, errorMessage },
+        {
+          profileId: resolvedAgent.id,
+          ...(suppressContent ? {} : { errorMessage }),
+        },
         "Persisting error interaction record",
       );
       const record: InsertInteraction = {
@@ -3510,8 +3517,9 @@ async function handleStreaming<
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
       const errorMessage = provider.extractErrorMessage(lifecycleError);
+      // Provider errors routinely echo the prompt back.
       logger.info(
-        { profileId: agent.id, errorMessage },
+        { profileId: agent.id, ...(suppressContent ? {} : { errorMessage }) },
         "Persisting error interaction record for failed stream",
       );
       await recordUsagelessInteraction(

@@ -101,6 +101,7 @@ function makeSessionSummary(
     lastUserMessagePreview: null,
     lastInteractionId: null,
     lastInteractionType: null,
+    contentNotStored: false,
     conversationTitle: null,
     claudeCodeTitle: null,
     ...overrides,
@@ -310,5 +311,20 @@ describe("LlmProxyLogsPage proxy filter", () => {
 
     expect(screen.getByText("No user — provider key")).toBeVisible();
     expect(screen.queryByText(/archestra_/)).toBeNull();
+  });
+
+  it("says a Metadata only session's content was not stored", () => {
+    vi.mocked(useInteractionSessions).mockReturnValue({
+      data: {
+        data: [makeSessionSummary({ contentNotStored: true })],
+        pagination: makePagination(),
+      },
+      isFetching: false,
+    } as unknown as ReturnType<typeof useInteractionSessions>);
+
+    render(<LlmProxyLogsPage />);
+
+    expect(screen.getByText("Content not stored")).toBeVisible();
+    expect(screen.queryByText("No message")).toBeNull();
   });
 });

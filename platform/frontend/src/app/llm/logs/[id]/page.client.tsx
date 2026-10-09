@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   DynamicInteraction,
   isEncryptedChatUnavailableContent,
+  isLogContentNotStored,
 } from "@archestra/shared";
 import { Database, Layers } from "lucide-react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -97,6 +98,9 @@ function LogDetail({
   const interaction = new DynamicInteraction(dynamicInteraction);
   const agent = agents?.find((a) => a.id === interaction.profileId);
   const toolsUsed = interaction.getToolNamesUsed();
+  // Metadata only keeps no response, so which tools it called is unknown.
+  const toolsNotStored = isLogContentNotStored(dynamicInteraction.response);
+  const failed = isFailedResponse(dynamicInteraction.response);
   const toolsBlocked = interaction.getToolNamesRefused();
   const isDualLlmRelevant = interaction.isLastMessageToolCall();
   const lastToolCallId = interaction.getLastToolCallId();
@@ -170,6 +174,14 @@ function LogDetail({
       ),
     },
     { label: "Provider", value: interaction.provider },
+    ...(failed
+      ? [
+          {
+            label: "Result",
+            value: <Badge variant="destructive">Error</Badge>,
+          },
+        ]
+      : []),
     ...(dynamicInteraction.connectorId
       ? [
           {
@@ -265,7 +277,9 @@ function LogDetail({
             ))}
           </div>
         ) : (
-          <span className="text-muted-foreground">None</span>
+          <span className="text-muted-foreground">
+            {toolsNotStored ? "Not stored" : "None"}
+          </span>
         ),
     },
     ...(toolsBlocked.length > 0
@@ -469,5 +483,19 @@ function InteractionShell({ children }: { children: React.ReactNode }) {
     >
       {children}
     </PageLayout>
+  );
+}
+
+/**
+ * Whether the provider call failed: the proxy stores a failure as
+ * `{ error: string }`, and Metadata only keeps just that outcome on the
+ * not-stored marker.
+ */
+function isFailedResponse(response: unknown): boolean {
+  if (isLogContentNotStored(response)) return response.isError === true;
+  return (
+    typeof response === "object" &&
+    response !== null &&
+    typeof (response as { error?: unknown }).error === "string"
   );
 }

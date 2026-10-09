@@ -74,6 +74,7 @@ function expectNativeRemedy(
     ...(expected.precheckRefusal
       ? { precheck_refusal: expected.precheckRefusal }
       : {}),
+    withhold_consult_content: false,
   });
 }
 
@@ -337,6 +338,7 @@ describe("APPA feature boundary", () => {
           control_tool: "archestra__execute_remedy_plan",
           supports_delegation: false,
         },
+        withhold_consult_content: false,
       },
       {
         ...session,
@@ -344,6 +346,7 @@ describe("APPA feature boundary", () => {
         yell_receiver: { port: expect.any(Number), token: expect.any(String) },
         operation_id: "yell:report",
         arguments: args,
+        withhold_consult_content: false,
       },
     ]);
   });
@@ -490,6 +493,7 @@ describe("APPA feature boundary", () => {
         yell_receiver: { port: expect.any(Number), token: expect.any(String) },
         operation_id: "yell:toolu_report",
         arguments: args,
+        withhold_consult_content: false,
       },
     ]);
     await expect(
@@ -672,6 +676,40 @@ describe("APPA feature boundary", () => {
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
     ).toEqual(["alice@example.com", undefined, undefined]);
+  });
+
+  test("the deployment's Log Content mode, never the caller, decides whether consult rows keep content", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const canonicalize = { canonicalize: (name: string) => name };
+    const claimsFull = { ...session, withhold_consult_content: false };
+    const call = (id: string) => [{ id, name: "read_file", arguments: {} }];
+
+    await evaluateToolCalls(session, call("first"), canonicalize);
+    const original = config.logs.contentMode;
+    config.logs.contentMode = "metadata_only";
+    try {
+      await evaluateToolCalls(claimsFull, call("second"), canonicalize);
+      await executeRemedyByOffer({
+        organizationId,
+        sessionId: "session",
+        originalArguments: '{"offer_id":"offer-1"}',
+        args: { offer_id: "offer-1" },
+      });
+    } finally {
+      config.logs.contentMode = original;
+    }
+
+    expect(
+      native.dispatchHook.mock.calls.map(
+        ([raw]) => JSON.parse(raw).withhold_consult_content,
+      ),
+    ).toEqual([false, true]);
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0])
+        .withhold_consult_content,
+    ).toBe(true);
   });
 
   test("holds what a provider-run call brought in behind the runtime's staged ruling", async () => {
@@ -1515,12 +1553,14 @@ describe("APPA feature boundary", () => {
         event: "child_return",
         operation_id: "runtime-return:task:turn",
         output: "private source text",
+        withhold_consult_content: false,
       },
       {
         ...child,
         event: "child_return",
         operation_id: "runtime-return:task:turn:echo",
         output: "approved summary",
+        withhold_consult_content: false,
       },
     ]);
   });
@@ -1640,12 +1680,14 @@ describe("APPA feature boundary", () => {
         event: "child_end",
         operation_id: "child_end:turn",
         output: "REPORT-RAW-KOALA-0831",
+        withhold_consult_content: false,
       },
       {
         ...child,
         event: "child_end",
         operation_id: "child_end:turn:echo",
         output: "SUMMARY(24 characters): safe",
+        withhold_consult_content: false,
       },
     ]);
   });
@@ -1768,6 +1810,7 @@ describe("APPA feature boundary", () => {
       spawned_id: "conversation:child",
       output: "SUMMARY(24 characters): safe",
       outcome: "success",
+      withhold_consult_content: false,
     });
   });
 
@@ -2094,7 +2137,11 @@ describe("APPA feature boundary", () => {
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
     ).toEqual([
-      { ...session, event: "session_start" },
+      {
+        ...session,
+        event: "session_start",
+        withhold_consult_content: false,
+      },
       {
         ...session,
         event: "tool_result",
@@ -2105,6 +2152,7 @@ describe("APPA feature boundary", () => {
           control_tool: "mcp__gateway__archestra__execute_remedy_plan",
           supports_delegation: false,
         },
+        withhold_consult_content: false,
       },
     ]);
   });

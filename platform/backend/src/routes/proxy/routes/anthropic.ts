@@ -7,6 +7,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import config from "@/config";
 import logger from "@/logging";
 import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
+import { mcpToolTokenCountObserver } from "@/services/mcp-tool-token-count";
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
 import { anthropicAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
@@ -34,19 +35,29 @@ function summarizeAnthropicRequestHeaders(headers: FastifyRequest["headers"]) {
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const ANTHROPIC_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
+  const upstream = config.llm.anthropic.baseUrl;
 
   logger.debug("[UnifiedProxy] Registering unified Anthropic routes");
 
   await fastify.register(fastifyHttpProxy, {
-    upstream: config.llm.anthropic.baseUrl,
+    upstream,
     prefix: ANTHROPIC_PREFIX,
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: ANTHROPIC_PREFIX,
       endpointSuffix: MESSAGES_SUFFIX,
-      upstream: config.llm.anthropic.baseUrl,
+      upstream,
       providerName: "Anthropic",
       rewritePrefix: "",
+      beforeCleanBody: async (request, body) => {
+        if (
+          request.method === "POST" &&
+          request.url.split("?")[0] ===
+            `${ANTHROPIC_PREFIX}/v1/messages/count_tokens`
+        ) {
+          await mcpToolTokenCountObserver.prepare(request, body, upstream);
+        }
+      },
       skipErrorResponse: {
         type: "error",
         error: {
@@ -56,6 +67,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     }),
+    replyOptions: { onResponse: mcpToolTokenCountObserver.onResponse },
   });
 
   /**

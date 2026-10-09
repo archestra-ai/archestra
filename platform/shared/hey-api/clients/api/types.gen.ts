@@ -18013,6 +18013,17 @@ export type GetAgentMcpToolPreviewResponses = {
      */
     200: {
         toolExposureMode: 'full' | 'search_and_run_only';
+        tokenCount: {
+            total: number;
+            source: 'claude-provider';
+            model: string;
+            observedAt: string;
+        } | {
+            total: number;
+            source: 'estimate';
+            model: null;
+            observedAt: null;
+        };
         tools: Array<{
             name: string;
             description: string;

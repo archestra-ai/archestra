@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { estimateMcpToolTokens } from "./mcp-tool-token-estimate";
+import {
+  buildClaudeMcpToolDefinitions,
+  estimateMcpToolTokens,
+} from "./mcp-tool-token-estimate";
 
 const searchTool = {
   name: "search",
@@ -12,6 +15,115 @@ const searchTool = {
 };
 
 describe("estimateMcpToolTokens", () => {
+  test("normalizes tool definitions but only escapes the configured server name", () => {
+    const [definition] = buildClaudeMcpToolDefinitions({
+      serverName: "Ｇａｔｅｗａｙ",
+      tools: [
+        {
+          name: "ｒｅａｄ",
+          description: "Ａ… a\u200d\u0301 \ud800x\udc00😀",
+          inputSchema: {
+            type: "object",
+            properties: {
+              ｑ: {
+                enum: ["Ａ…", "a\u200db\ue000\u0378\ud800c\udc00😀"],
+                description: "ASCII\n\t\u0001",
+              },
+            },
+            required: ["ｑ"],
+          },
+        },
+      ],
+    });
+    expect(definition).toEqual({
+      name: "mcp___________read",
+      description: "A... á x😀",
+      input_schema: {
+        type: "object",
+        properties: {
+          q: { enum: ["A...", "abc😀"], description: "ASCII\n\t\u0001" },
+        },
+        required: ["q"],
+      },
+    });
+  });
+
+  test("moves only the root schema's reserved fields and preserves nested schema order", () => {
+    const inputSchema = {
+      properties: { q: { description: "Query", type: "string" } },
+      required: ["q"],
+      type: "object",
+      $schema: "https://example.test/schema",
+    };
+    const [definition] = buildClaudeMcpToolDefinitions({
+      serverName: "gateway",
+      tools: [{ ...searchTool, inputSchema }],
+    });
+    expect(JSON.stringify(definition.input_schema)).toBe(
+      '{"$schema":"https://example.test/schema","type":"object","properties":{"q":{"description":"Query","type":"string"}},"required":["q"]}',
+    );
+    expect(Object.keys(inputSchema)).toEqual([
+      "properties",
+      "required",
+      "type",
+      "$schema",
+    ]);
+  });
+
+  test("omits normalized prototype keys without changing other schema properties", () => {
+    const [definition] = buildClaudeMcpToolDefinitions({
+      serverName: "gateway",
+      tools: [
+        {
+          ...searchTool,
+          inputSchema: JSON.parse(
+            '{"type":"object","properties":{"__proto__":{"type":"number"},"＿＿ｐｒｏｔｏ＿＿":{"type":"string"},"safe":{"type":"string"}}}',
+          ),
+        },
+      ],
+    });
+    expect(JSON.stringify(definition.input_schema)).toBe(
+      '{"type":"object","properties":{"safe":{"type":"string"}}}',
+    );
+  });
+
+  test("normalizes description text before clipping and retains the generated suffix", () => {
+    const definitions = buildClaudeMcpToolDefinitions({
+      serverName: "gateway",
+      tools: [
+        { ...searchTool, description: `${"x".repeat(2046)}…` },
+        { ...searchTool, description: `${"x".repeat(2047)}\u200dy` },
+      ],
+    });
+    expect(definitions[0].description).toBe(
+      `${"x".repeat(2046)}..… [truncated]`,
+    );
+    expect(definitions[1].description).toBe(`${"x".repeat(2047)}y`);
+  });
+
+  test("serializes the same ordered provider definitions for observation and fallback estimates", () => {
+    const tools = [
+      { ...searchTool, description: "x".repeat(3000) },
+      { ...searchTool, name: "read" },
+    ];
+    const definitions = buildClaudeMcpToolDefinitions({
+      tools,
+      serverName: "gateway label",
+    });
+    expect(definitions.map((tool) => tool.name)).toEqual([
+      "mcp__gateway_label__search",
+      "mcp__gateway_label__read",
+    ]);
+    expect(definitions[0].description).toBe(`${"x".repeat(2048)}… [truncated]`);
+    expect(definitions[0].input_schema).toEqual(searchTool.inputSchema);
+    expect(
+      estimateMcpToolTokens({
+        tools,
+        serverName: "gateway label",
+        client: "claude-code",
+      }).reduce((sum, count) => sum + count, 0),
+    ).toBe(Math.round(JSON.stringify(definitions).length / 2));
+  });
   test("counts complete Claude definitions and reconciles rounding across tools", () => {
     const tokens = estimateMcpToolTokens({
       client: "claude-code",

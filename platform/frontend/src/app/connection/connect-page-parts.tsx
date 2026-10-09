@@ -652,9 +652,10 @@ export function fmt(n: number) {
 
 /** A token estimate, rounded so it doesn't read as exact: "~3.2K tokens". */
 export function approxTokens(n: number) {
+  if (n === 0) return "~0 tokens";
   if (n < 1000) return `~${Math.max(100, Math.round(n / 100) * 100)} tokens`;
   const k = n / 1000;
-  return `~${k < 10 ? k.toFixed(1).replace(/\.0$/, "") : fmt(Math.round(k))}K tokens`;
+  return `~${k < 100 ? k.toFixed(1).replace(/\.0$/, "") : fmt(Math.round(k))}K tokens`;
 }
 
 /**

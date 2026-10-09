@@ -291,6 +291,42 @@ describe("ConnectPage gateway footprint", () => {
     expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
   });
 
+  it.each([
+    [11732, "~11.7K tokens"],
+    [0, "~0 tokens"],
+  ])("shows provider total %i instead of summing fallback estimates", async (total, label) => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({
+          ...listed(8443),
+          tokenCount: {
+            total,
+            source: "claude-provider",
+            model: "claude-sonnet-5-5",
+            observedAt: "2026-10-09T12:00:00.000Z",
+          },
+        }),
+      ),
+    );
+    show();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(await within(summary).findByText(label)).toBeVisible();
+    await userEvent.hover(
+      within(summary).getByRole("button", { name: "How tools load" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Last matching provider count for claude-sonnet-5-5",
+    );
+    await userEvent.click(
+      within(summary).getByRole("button", { name: "1 MCP server" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Example server")).toBeVisible();
+    expect(within(dialog).queryByText(/16\.9K tokens/)).toBeNull();
+  });
+
   it("shows an empty gateway instead of retaining catalog counts", async () => {
     api.use(
       http.get(previewUrl, () =>

@@ -1274,6 +1274,7 @@ function ProfileCard({
                       clientId={client.id}
                       tools={tools}
                       tokens={data.toolTokens.total}
+                      count={data.toolTokens.count}
                     />
                   ) : undefined
                 }
@@ -1539,19 +1540,22 @@ function ToolLoadingNote({
   progressive,
   tools,
   tokens,
+  count,
 }: {
   clientId: string;
   progressive: boolean;
   tools: number;
-  /** Estimated tokens of the tool list the agent starts with. */
+  /** Observed or estimated tokens of the tool list the agent starts with. */
   tokens: number | null;
+  count: NonNullable<ConnectPageData["toolTokens"]>["count"];
 }) {
-  // Just the estimate once it's in ("~9K tokens"); the tip says how tools load.
-  const label = tokens
-    ? approxTokens(tokens)
-    : progressive
-      ? "Tools load on demand"
-      : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts`;
+  // The rounded count stays compact; the tooltip identifies its source.
+  const label =
+    tokens !== null
+      ? approxTokens(tokens)
+      : progressive
+        ? "Tools load on demand"
+        : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts`;
   return (
     <span className="inline-flex items-center gap-1 text-muted-foreground">
       <Gauge className="size-3.5 shrink-0" />
@@ -1560,11 +1564,13 @@ function ToolLoadingNote({
         {progressive
           ? `Your agent starts with ${fmt(tools)} ${plural(tools, "tool")} and finds more when a task needs them.`
           : `All ${fmt(tools)} ${plural(tools, "tool")} load at the start of each session. More tools take more of your agent's working memory.`}
-        <span hidden={!tokens}>
+        <span hidden={tokens === null}>
           {" "}
-          {clientId === "claude-code"
-            ? "Uses Claude Code's local fallback estimate, including its tool names and description limit. Its provider-measured count, tool search settings, and other connections can differ."
-            : "Estimated from this gateway's tool definitions. Your agent's formatting, model, and other connections can change the count."}
+          {count?.source === "claude-provider"
+            ? `Last matching provider count for ${count.model}, observed ${new Date(count.observedAt).toLocaleString()}. Other connections and tools loaded during your session can change the count.`
+            : clientId === "claude-code"
+              ? "Uses Claude Code's local fallback estimate until a matching provider count passes through the LLM proxy. Its model, tool search settings, and other connections can change the count."
+              : "Estimated from this gateway's tool definitions. Your agent's formatting, model, and other connections can change the count."}
         </span>
       </InfoTip>
     </span>

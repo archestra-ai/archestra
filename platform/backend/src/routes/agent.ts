@@ -70,6 +70,7 @@ import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { getObservedMcpToolTokenCount } from "@/services/mcp-tool-token-count";
 import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -1214,6 +1215,20 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(
           z.object({
             toolExposureMode: ToolExposureModeSchema,
+            tokenCount: z.discriminatedUnion("source", [
+              z.object({
+                total: z.number().int().nonnegative(),
+                source: z.literal("claude-provider"),
+                model: z.string(),
+                observedAt: z.iso.datetime(),
+              }),
+              z.object({
+                total: z.number().int().nonnegative(),
+                source: z.literal("estimate"),
+                model: z.null(),
+                observedAt: z.null(),
+              }),
+            ]),
             tools: z.array(
               z.object({
                 name: z.string(),
@@ -1258,17 +1273,35 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tokenAuth: { userId: user.id, organizationId },
       });
       const organization = await OrganizationModel.getById(organizationId);
+      const serverName = resolveMcpClientServerName({
+        gatewayName: agent.name,
+        appName: organization?.appName ?? DEFAULT_APP_NAME,
+        isPersonalGateway: agent.isPersonalGateway,
+      });
       const tokens = estimateMcpToolTokens({
         tools,
         client,
-        serverName: resolveMcpClientServerName({
-          gatewayName: agent.name,
-          appName: organization?.appName ?? DEFAULT_APP_NAME,
-          isPersonalGateway: agent.isPersonalGateway,
-        }),
+        serverName,
       });
+      const observed =
+        client === "claude-code"
+          ? await getObservedMcpToolTokenCount({
+              organizationId,
+              gatewayId: agent.id,
+              tools,
+              serverName,
+            })
+          : null;
       return reply.send({
         toolExposureMode: agent.toolExposureMode ?? "full",
+        tokenCount: observed
+          ? { ...observed, source: "claude-provider" as const }
+          : {
+              total: tokens.reduce((sum, count) => sum + count, 0),
+              source: "estimate" as const,
+              model: null,
+              observedAt: null,
+            },
         tools: tools.map((tool, index) => ({
           name: tool.name,
           description: removeAttestationTokens(tool.description ?? ""),

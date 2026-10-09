@@ -5,6 +5,7 @@
 
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  type archestraApiTypes,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
@@ -91,11 +92,16 @@ export interface ConnectPageData {
   /** Gateway "progressive tool loading": tools load on demand. */
   progressive: boolean;
   /**
-   * Estimated initial context cost of the gateway's served tool definitions.
-   * `byServer` is keyed by ConnectServer key and only has the
-   * servers whose tools load at session start. null until it loads.
+   * Initial context cost of the gateway's served tool definitions.
+   * `byServer` contains fallback estimates keyed by ConnectServer key for
+   * initially loaded tools. It is empty for observed provider totals.
+   * null until the preview loads.
    */
-  toolTokens: { total: number; byServer: Record<string, number> } | null;
+  toolTokens: {
+    total: number;
+    byServer: Record<string, number>;
+    count?: archestraApiTypes.GetAgentMcpToolPreviewResponses[200]["tokenCount"];
+  } | null;
   llmProxyEnabled: boolean;
   /** The org's LLM Proxy, when the user can route through it. */
   llmProxyId: string | null;
@@ -310,8 +316,14 @@ export function useConnectPageData(
       const key = tool.catalogId ?? "other";
       byServer[key] = (byServer[key] ?? 0) + tool.tokens;
     }
-    return { total, byServer };
-  }, [listedTools]);
+    const count = preview?.tokenCount;
+    return {
+      total: count?.total ?? total,
+      // Provider counts cover the whole list; they cannot be apportioned to servers.
+      byServer: count?.source === "claude-provider" ? {} : byServer,
+      count,
+    };
+  }, [listedTools, preview?.tokenCount]);
   const partsFor = (client: ConnectClient): ConnectChoices => ({
     tools: toolsAvailable,
     skills: skillsAvailable,

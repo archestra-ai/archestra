@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, type SupportedProvider } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 vi.mock("next/navigation");
 
@@ -1657,7 +1658,7 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it("defaults OpenCode to all primary providers and allows switching back to local credentials", async () => {
+    it("lets OpenCode's first Virtual key tab switch between all primary model providers and one provider", async () => {
       const user = userEvent.setup();
       availableKeysMock.mockReturnValue({
         data: [
@@ -1671,7 +1672,21 @@ describe("ConnectCommandPanel", () => {
           { id: "non-primary", provider: "openai", isPrimary: false },
         ],
       });
-      renderPanel({ client: findClient("opencode") });
+      function OpenCodePanel() {
+        const [provider, setProvider] = useState<SupportedProvider | null>(
+          null,
+        );
+        return (
+          <ConnectCommandPanel
+            {...renderPanelProps({
+              client: findClient("opencode"),
+              urlProvider: provider,
+              onProviderSelect: setProvider,
+            })}
+          />
+        );
+      }
+      render(<OpenCodePanel />, { wrapper: queryWrapper() });
 
       expect(await screen.findByText(COMMAND)).toBeInTheDocument();
       expect(
@@ -1680,7 +1695,7 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.getByTestId("connect-change-proxy").closest("li"),
       ).toHaveTextContent(
-        "Route all primary providers (2) through the LLM Proxy using a virtual key",
+        "Route all primary model providers (2) through the LLM Proxy using a virtual key",
       );
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenCalledWith(
@@ -1693,8 +1708,28 @@ describe("ConnectCommandPanel", () => {
         ),
       );
       await user.click(screen.getByTestId("connect-change-proxy"));
-      expect(screen.getAllByRole("tab")[0]).toHaveTextContent(
-        "All primary providers",
+      expect(screen.getAllByRole("tab")[0]).toHaveTextContent("Virtual key");
+      expect(screen.getAllByRole("tab")).toHaveLength(2);
+      expect(
+        screen.getByRole("combobox", { name: "Model provider" }),
+      ).toHaveTextContent("All primary model providers");
+      expect(
+        screen.getByText(
+          "Create a personal virtual key for all primary model providers you can access, and make their models available in OpenCode.",
+        ),
+      ).toBeInTheDocument();
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Model provider" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(screen.getByRole("option", { name: "OpenAI" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            proxyAuth: "virtual-key",
+            provider: "openai",
+          }),
+        ),
       );
       await user.click(screen.getByRole("tab", { name: "Your provider key" }));
       await waitFor(() =>
@@ -1702,6 +1737,44 @@ describe("ConnectCommandPanel", () => {
           expect.objectContaining({ proxyAuth: "provider-key" }),
         ),
       );
+      expect(
+        screen.queryByRole("combobox", { name: "Model provider" }),
+      ).not.toBeInTheDocument();
+      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+      expect(
+        screen.getByRole("combobox", { name: "Model provider" }),
+      ).toHaveTextContent("OpenAI");
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Model provider" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: "All primary model providers" }),
+      );
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            proxyAuth: "primary-providers",
+            provider: undefined,
+          }),
+        ),
+      );
+    });
+
+    it("keeps Your provider key first and selected for other clients", async () => {
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("codex") });
+      await screen.findByText(COMMAND);
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      expect(screen.getAllByRole("tab")[0]).toHaveTextContent(
+        "Your provider key",
+      );
+      expect(
+        screen.getByRole("tab", { name: "Your provider key" }),
+      ).toHaveAttribute("aria-selected", "true");
+      expect(
+        screen.queryByRole("combobox", { name: "Model provider" }),
+      ).not.toBeInTheDocument();
     });
 
     it("does not generate an OpenCode command without a usable primary", async () => {
@@ -1719,7 +1792,9 @@ describe("ConnectCommandPanel", () => {
       });
       renderPanel({ client: findClient("opencode") });
       expect(
-        await screen.findByText(/No usable primary providers are available/),
+        await screen.findByText(
+          /No usable primary model providers are available/,
+        ),
       ).toBeInTheDocument();
       expect(createSetupMock).not.toHaveBeenCalled();
     });

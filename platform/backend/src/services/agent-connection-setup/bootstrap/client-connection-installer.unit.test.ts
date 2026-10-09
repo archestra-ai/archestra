@@ -3,14 +3,21 @@ import { createHash } from "node:crypto";
 import { EventEmitter, once } from "node:events";
 import { readFileSync } from "node:fs";
 import * as fileSystem from "node:fs/promises";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { createServer as createSecureServer } from "node:https";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { CLIENT_CONNECTION_INSTALLER } from "./client-connection-installer";
 
 let directory: string;
@@ -597,7 +604,8 @@ test("a transport failure that is not a certificate problem still reports its ca
 function openerEnv(bin: string, wsl: boolean) {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    // Never fall back to a browser executable on the developer's PATH.
+    PATH: bin,
   };
   delete env.WSL_DISTRO_NAME;
   delete env.WSL_INTEROP;
@@ -610,7 +618,21 @@ function openerEnv(bin: string, wsl: boolean) {
   return env;
 }
 
-function runOpened(env: NodeJS.ProcessEnv, extraArgs: string[] = []) {
+async function runOpened({
+  env,
+  extraArgs = [],
+  platform = "linux",
+}: {
+  env: NodeJS.ProcessEnv;
+  extraArgs?: string[];
+  platform?: "linux" | "darwin";
+}) {
+  // These subprocess tests must exercise the requested platform on every host.
+  const platformPath = join(directory, "platform.cjs");
+  await writeFile(
+    platformPath,
+    `Object.defineProperty(process, 'platform', { value: ${JSON.stringify(platform)} });\n`,
+  );
   return new Promise<{ code: number | null; output: string }>(
     (resolve, reject) => {
       const child = spawn(
@@ -618,6 +640,8 @@ function runOpened(env: NodeJS.ProcessEnv, extraArgs: string[] = []) {
         [
           "--require",
           clockPath,
+          "--require",
+          platformPath,
           join(directory, "connect.cjs"),
           "--url",
           origin,
@@ -643,6 +667,9 @@ function runOpened(env: NodeJS.ProcessEnv, extraArgs: string[] = []) {
 async function writeOpener(name: string, body: string) {
   const bin = join(directory, "bin");
   await mkdir(bin, { recursive: true });
+  // Only approval/setup tools supplied by the fixture can be executed.
+  await symlink("/bin/bash", join(bin, "bash"));
+  await symlink("/usr/bin/which", join(bin, "which"));
   await writeFile(join(bin, name), body, { mode: 0o755 });
   return bin;
 }
@@ -657,7 +684,7 @@ test("WSL uses wslview arguments and keeps one approval request", async () => {
     "wslview",
     `#!/bin/sh\nprintf '%s\\n' "$0" "$@" > '${log}'\n`,
   );
-  const result = await runOpened(openerEnv(bin, true));
+  const result = await runOpened({ env: openerEnv(bin, true) });
   expect(result.code).toBe(0);
   expect(starts).toBe(1);
   expect(polls).toBeGreaterThanOrEqual(1);
@@ -680,7 +707,7 @@ test("WSL rundll32 receives the protocol-handler arguments and no shell", async 
     "rundll32.exe",
     `#!/bin/sh\nprintf '%s\\n' "$@" > '${log}'\n`,
   );
-  const result = await runOpened(openerEnv(bin, true));
+  const result = await runOpened({ env: openerEnv(bin, true) });
   expect(result.code).toBe(0);
   expect(starts).toBe(1);
   expect(polls).toBeGreaterThanOrEqual(1);
@@ -695,7 +722,7 @@ test("WSL rundll32 receives the protocol-handler arguments and no shell", async 
 
 test("a browser opener nonzero exit keeps the same approval URL and poller", async () => {
   const bin = await writeOpener("wslview", "#!/bin/sh\nexit 1\n");
-  const result = await runOpened(openerEnv(bin, true));
+  const result = await runOpened({ env: openerEnv(bin, true) });
   expect(result.code).toBe(0);
   expect(starts).toBe(1);
   expect(polls).toBeGreaterThanOrEqual(1);
@@ -715,7 +742,7 @@ test("Linux without WSL still opens through xdg-open", async () => {
     "xdg-open",
     `#!/bin/sh\nprintf '%s\\n' "$@" > '${log}'\n`,
   );
-  const result = await runOpened(openerEnv(bin, false));
+  const result = await runOpened({ env: openerEnv(bin, false) });
   expect(result.code).toBe(0);
   expect(starts).toBe(1);
   expect((await readFile(log, "utf8")).trim()).toBe(approvalUrl());
@@ -728,11 +755,57 @@ test("--no-open does not launch a WSL browser", async () => {
     "wslview",
     `#!/bin/sh\nprintf '%s\\n' "$@" > '${log}'\n`,
   );
-  const result = await runOpened(openerEnv(bin, true), ["--no-open"]);
+  const result = await runOpened({
+    env: openerEnv(bin, true),
+    extraArgs: ["--no-open"],
+  });
   expect(result.code).toBe(0);
   expect(starts).toBe(1);
   await expect(readFile(log, "utf8")).rejects.toThrow();
   expect(result.output).toContain(approvalUrl());
+});
+
+test("macOS opens only the fixture browser and applies the approved setup", async () => {
+  const log = join(directory, "opener.log");
+  const bin = await writeOpener(
+    "open",
+    `#!/bin/sh\nprintf '%s\\n' "$@" > '${log}'\n`,
+  );
+  const result = await runOpened({
+    env: openerEnv(bin, false),
+    platform: "darwin",
+  });
+  expect(result.code).toBe(0);
+  expect((await readFile(log, "utf8")).trim()).toBe(approvalUrl());
+  expect(await readFile(join(directory, "applied"), "utf8")).toBe("applied");
+  expect(starts).toBe(1);
+  expect(downloads).toBe(1);
+});
+
+test.each([
+  "darwin",
+  "linux",
+] as const)("%s cannot fall back to a host browser when the fixture opener is missing", async (platform) => {
+  const bin = await writeOpener("unused", "#!/bin/sh\nexit 1\n");
+  // A regression must hit this fake host browser, never the real browser.
+  const hostBin = join(directory, "host-bin");
+  const hostLog = join(directory, "host-browser.log");
+  await mkdir(hostBin);
+  await writeFile(
+    join(hostBin, platform === "darwin" ? "open" : "xdg-open"),
+    `#!/bin/sh\nprintf launched > '${hostLog}'\n`,
+    { mode: 0o755 },
+  );
+  vi.stubEnv("PATH", hostBin);
+  const result = await runOpened({ env: openerEnv(bin, false), platform });
+  expect(result.code).toBe(0);
+  await expect(readFile(hostLog, "utf8")).rejects.toThrow();
+  expect(result.output).toContain(
+    "Browser did not open. Use the approval URL above.",
+  );
+  expect(await readFile(join(directory, "applied"), "utf8")).toBe("applied");
+  expect(starts).toBe(1);
+  expect(downloads).toBe(1);
 });
 
 function installWithBrowser(params: {

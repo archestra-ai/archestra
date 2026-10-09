@@ -883,7 +883,7 @@ describe("executeA2AMessage current turn assembly", () => {
 });
 
 describe("executeA2AMessage model selection", () => {
-  test("uses the shared conversation selection so delegated agents inherit the organization default model", async ({
+  test("uses the shared conversation selection so delegated agents inherit the organization default model and key", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -964,6 +964,9 @@ describe("executeA2AMessage model selection", () => {
         model: "gemini-2.5-pro",
         provider: "gemini",
         externalAgentId: `agent-parent:${agent.id}`,
+        // The key selected with the model, not a fresh lookup that would
+        // prefer the caller's personal key.
+        agentLlmApiKeyId: "org-key",
       }),
     );
   });

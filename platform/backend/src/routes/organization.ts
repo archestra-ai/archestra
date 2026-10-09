@@ -62,7 +62,6 @@ import {
   type NetworkPolicy,
   type OrganizationRole,
   SelectOrganizationSchema,
-  type SubagentModelTiers,
   type TrustedImageRegistries,
   UpdateAgentSettingsSchema,
   UpdateAppearanceSettingsSchema,
@@ -75,7 +74,7 @@ import {
   UpdateSecuritySettingsSchema,
   UpdateSkillsSettingsSchema,
 } from "@/types";
-import { isSubagentTierCandidate } from "@/utils/llm-resolution";
+import { assertModelTrioTiers } from "@/utils/llm-resolution";
 
 const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -344,8 +343,26 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      if (body.subagentModelTiers) {
-        await assertSubagentModelTiers(body.subagentModelTiers);
+      if (
+        body.defaultLlmApiKeyId !== undefined ||
+        body.defaultFastModelId !== undefined ||
+        body.defaultSmartModelId !== undefined
+      ) {
+        const currentOrg = await OrganizationModel.getById(organizationId);
+        await assertModelTrioTiers({
+          apiKeyId:
+            body.defaultLlmApiKeyId !== undefined
+              ? body.defaultLlmApiKeyId
+              : (currentOrg?.defaultLlmApiKeyId ?? null),
+          fastModelId:
+            body.defaultFastModelId !== undefined
+              ? body.defaultFastModelId
+              : (currentOrg?.defaultFastModelId ?? null),
+          smartModelId:
+            body.defaultSmartModelId !== undefined
+              ? body.defaultSmartModelId
+              : (currentOrg?.defaultSmartModelId ?? null),
+        });
       }
 
       if (body.defaultAgentId) {
@@ -1437,32 +1454,6 @@ async function assertOrganizationDefaultModelSelection(params: {
   ).some(({ model }) => model.id === params.modelId);
   if (!modelIsLinked) {
     throw new ApiError(400, "The default model and API key must be linked");
-  }
-}
-
-/** Each tier override must name a model of the provider it is filed under. */
-async function assertSubagentModelTiers(
-  tiers: SubagentModelTiers,
-): Promise<void> {
-  const entries = Object.entries(tiers).flatMap(([provider, tier]) =>
-    [tier?.fast, tier?.smart].flatMap((modelId) =>
-      modelId ? [{ provider, modelId }] : [],
-    ),
-  );
-  const models = new Map(
-    (await ModelModel.findByIds(entries.map((e) => e.modelId))).map((m) => [
-      m.id,
-      m,
-    ]),
-  );
-  for (const { provider, modelId } of entries) {
-    const model = models.get(modelId);
-    if (model?.provider !== provider || !isSubagentTierCandidate(model)) {
-      throw new ApiError(
-        400,
-        `Subagent tier model ${modelId} is not a ${provider} chat model with tool calling`,
-      );
-    }
   }
 }
 

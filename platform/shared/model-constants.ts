@@ -853,167 +853,24 @@ export const OPENROUTER_FREE_MODEL_ID = "openrouter/free";
 export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
 
 /**
- * Pattern-based model markers per provider.
- * Patterns are substrings that model IDs must contain (case-insensitive).
- * Used to identify "best" (highest quality) models.
- *
- * Patterns are checked in array order (first match wins), so list each
- * provider's ids most- to least-preferred (more specific before general). The
- * first listed id present in the account is the one marked best.
- */
-export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
-  anthropic: ["opus-5-5", "opus-4-8", "opus-4-7", "opus", "sonnet"],
-  openai: [
-    // Luna is deliberately absent so a smaller tier is never marked best.
-    "gpt-6-astra",
-    "gpt-6-sol",
-    "gpt-5.6-sol",
-    "gpt-5.6-terra",
-    "gpt-5.5-pro",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
-  gemini: [
-    // Gemini 4 Argon, the next flagship tier. It has no public API id yet, so
-    // match the tier name rather than a guessed full id.
-    "argon",
-    "gemini-3.8-flash",
-    "gemini-3.5-pro",
-    "gemini-3.6-flash",
-    "gemini-3.1-pro-preview",
-    "gemini-3-pro",
-    "gemini-3.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash",
-  ],
-  cerebras: ["zai-glm-4.7"],
-  cohere: ["command-a-plus", "command-a", "command-r-plus", "command-r"],
-  mistral: [
-    "mistral-medium-2604",
-    "mistral-large",
-    "mistral-medium",
-    "mistral-small",
-  ],
-  // The bare `sonar*` chat-completions family leads so the provider's default
-  // stays a Sonar model; the vendor-prefixed Agent API entries trail it,
-  // mirroring the cross-vendor shape of `archestra` below.
-  perplexity: [
-    "sonar-deep-research",
-    "sonar-reasoning-pro",
-    "sonar-pro",
-    "sonar",
-    "anthropic/claude-opus-5",
-    "anthropic/claude-sonnet-5",
-    "perplexity/glm-5.2",
-  ],
-  groq: ["openai/gpt-oss-120b", "gpt-oss", "llama-4", "llama-3.3"],
-  xai: ["grok-4.3", "grok-4", "grok-3"],
-  openrouter: [
-    "anthropic/claude-opus-5.5",
-    "anthropic/claude-opus-4.8",
-    "anthropic/claude-opus-4.7",
-    "openai/gpt-5.5-pro",
-    "openai/gpt-5.5",
-    "google/gemini-3.1-pro-preview",
-    "x-ai/grok-4.3",
-    "deepseek/deepseek-v4-pro",
-  ],
-  ollama: ["gpt-oss:120b", "llama4:maverick", "llama4:scout", "qwen3:235b"],
-  "ollama-native": [
-    "gpt-oss:120b",
-    "llama4:maverick",
-    "llama4:scout",
-    "qwen3:235b",
-  ],
-  vllm: ["gpt-oss-120b", "llama-4-maverick", "llama-4-scout", "qwen3-235b"],
-  zhipuai: ["glm-5.1", "glm-5", "glm-4.7", "glm-4"],
-  deepseek: ["deepseek-v4-pro", "deepseek-v4", "deepseek-v3", "deepseek-chat"],
-  minimax: ["minimax-m3", "minimax-m2.7"],
-  kimi: [
-    "kimi-k2-thinking",
-    "kimi-k2-turbo",
-    "kimi-k2",
-    "kimi-latest",
-    "moonshot-v1-128k",
-    "kimi",
-  ],
-  azure: [
-    "gpt-5.5-pro",
-    "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.3",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
-  bedrock: [
-    "claude-opus-5-5",
-    "anthropic.claude-opus-4-8",
-    "anthropic.claude-opus-4-7",
-    "claude-opus",
-    "claude-sonnet",
-    "amazon.nova-pro",
-  ],
-  "github-copilot": [
-    "claude-opus-5.5",
-    "claude-opus",
-    "claude-sonnet",
-    "gpt-5",
-    "gpt-4.1",
-    "gpt-4o",
-  ],
-  "microsoft-365-copilot": [MICROSOFT_365_COPILOT_MODELS[0].id],
-  // The upstream Archestra can front any provider, so match common flagship
-  // families across vendors (most- to least-preferred).
-  archestra: ["opus", "sonnet", "gpt-5", "gemini-3", "grok-4"],
-  // Embeddings-only, so these mark the best *embedding* model rather than a
-  // chat one — the retrieval-quality flagship first.
-  voyage: ["voyage-4-large", "voyage-multimodal-3.5", "voyage-4"],
-  jev: ["jev"],
-};
-
-/**
  * Model tier a forked subagent runs on. `normal` is the parent's own model;
- * `smart` and `fast` stay on the parent's provider key and resolve to the
- * organization's override for that provider, else to PROVIDER_MODEL_TIERS.
+ * `smart` and `fast` stay on the parent's key and resolve to the agent's trio,
+ * then the organization's, then PROVIDER_MODEL_TIERS.
  */
 export const SubagentModelTierSchema = z.enum(["fast", "normal", "smart"]);
 export type SubagentModelTier = z.infer<typeof SubagentModelTierSchema>;
 
-/**
- * The first model whose id contains a pattern, honoring pattern order (first
- * pattern = highest priority); ties within a pattern go to the lowest id.
- */
-export function findFirstModelByPatterns<T extends { modelId: string }>(
-  models: T[],
-  patterns: readonly string[],
-): T | undefined {
-  const sorted = [...models].sort((a, b) => a.modelId.localeCompare(b.modelId));
-  for (const pattern of patterns) {
-    const match = sorted.find((m) =>
-      m.modelId.toLowerCase().includes(pattern.toLowerCase()),
-    );
-    if (match) return match;
-  }
-  return undefined;
-}
-
 interface ProviderModelTiers {
-  /** Default model when no synced "best" model is available. */
   normal: string;
-  /** Default `smart` / `fast` subagent tiers, matched as a substring of the
-   * model ids on the parent's key; unset or unmatched runs the parent's model. */
   smart?: string;
   fast?: string;
 }
 
 /**
- * Per-provider model trio. Record<SupportedProvider, ...> ensures a
- * compile-time error when a new provider is added.
+ * The default trio per provider: what runs when no agent, organization or
+ * conversation picked a model. Matched as a substring of a key's model ids
+ * (see findTierDefault); a key that serves none of them falls back to its first
+ * model, and an unset or unmatched `smart` / `fast` runs the parent's model.
  */
 export const PROVIDER_MODEL_TIERS: Record<
   SupportedProvider,
@@ -1070,14 +927,17 @@ export const PROVIDER_MODEL_TIERS: Record<
   archestra: { normal: "gpt-4o" },
 };
 
-/** The provider's default `smart` / `fast` model among `models`, if any. */
+/** The provider's default-trio model for `tier` among `models`, if any. */
 export function findTierDefault<T extends { modelId: string }>(
   models: T[],
   provider: SupportedProvider,
-  tier: Exclude<SubagentModelTier, "normal">,
+  tier: SubagentModelTier,
 ): T | undefined {
-  const modelId = PROVIDER_MODEL_TIERS[provider][tier];
-  return modelId ? findFirstModelByPatterns(models, [modelId]) : undefined;
+  const pattern = PROVIDER_MODEL_TIERS[provider][tier]?.toLowerCase();
+  if (!pattern) return undefined;
+  return [...models]
+    .sort((a, b) => a.modelId.localeCompare(b.modelId))
+    .find((m) => m.modelId.toLowerCase().includes(pattern));
 }
 
 /**

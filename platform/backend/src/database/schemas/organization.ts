@@ -27,7 +27,6 @@ import type {
   NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
-  SubagentModelTiers,
   TrustedImageRegistries,
 } from "@/types";
 import modelsTable from "./model";
@@ -171,8 +170,15 @@ const organizationsTable = pgTable("organization", {
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
 
-  /** Per-provider `fast`/`smart` model overrides for forked subagents. */
-  subagentModelTiers: jsonb("subagent_model_tiers").$type<SubagentModelTiers>(),
+  /** Optional `fast` / `smart` tiers of the default trio, on `defaultLlmApiKeyId`. */
+  defaultFastModelId: uuid("default_fast_model_id").references(
+    () => modelsTable.id,
+    { onDelete: "set null" },
+  ),
+  defaultSmartModelId: uuid("default_smart_model_id").references(
+    () => modelsTable.id,
+    { onDelete: "set null" },
+  ),
 
   /** Default token-cost limit value applied to every organization member. */
   defaultUserLimitValue: integer("default_user_limit_value"),

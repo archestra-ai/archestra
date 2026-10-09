@@ -6,7 +6,6 @@ import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
 import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
-import { useMemberDefaultModel } from "@/lib/chat/chat.query";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
@@ -18,7 +17,7 @@ import { ViewTransition } from "@/lib/view-transition";
  * The /chat "new conversation" composer as a standalone component: the SAME
  * ArchestraPromptInput driven by the shared new-chat resolution chain
  * (project default → org default → saved pick → member default → first
- * available) and the same persistence (saved agent, member-default model). The
+ * available) and the same saved-agent persistence. The
  * only difference is what happens on submit: the prompt is handed to
  * `onSubmitPrompt` instead of creating a conversation in place.
  *
@@ -63,7 +62,6 @@ export function NewChatComposer({
   const { data: chatModels = [] } = useLlmModels();
   const { data: chatApiKeys = [] } = useLlmProviderApiKeys();
   const { data: organization, isPending: isOrgLoading } = useOrganization();
-  const { data: memberDefault } = useMemberDefaultModel();
 
   const {
     agentId,
@@ -84,7 +82,6 @@ export function NewChatComposer({
     isProjectLoading,
     modelsByProvider,
     chatApiKeys,
-    memberDefault: memberDefault ?? null,
     canUseSavedAgent: true,
     isPermissionResolving: false,
     isOrgLoading,

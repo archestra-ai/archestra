@@ -102,17 +102,10 @@ interface OrganizationInfo {
   defaultLlmApiKeyId?: string | null;
 }
 
-/** The current user's saved default (model, key) pair — the "member" level. */
-interface MemberDefaultInfo {
-  modelId?: string | null;
-  chatApiKeyId?: string | null;
-}
-
 interface ChatContext {
   modelsByProvider: Record<string, ModelInfo[]>;
   chatApiKeys: Array<{ id: string; provider: string }>;
   organization: OrganizationInfo | null;
-  memberDefault: MemberDefaultInfo | null;
 }
 
 interface ResolveInitialModelParams extends ChatContext {
@@ -126,7 +119,7 @@ interface ResolvedModel {
 
 /**
  * Resolve which model to use on initial chat load.
- * Priority: member default -> agent default -> organization default ->
+ * Priority: agent default -> organization default ->
  * best available model. Returns null when no model can be resolved.
  *
  * Delegates to the shared `resolveModelSelection` so the client and the
@@ -135,8 +128,7 @@ interface ResolvedModel {
 export function resolveInitialModel(
   params: ResolveInitialModelParams,
 ): ResolvedModel | null {
-  const { modelsByProvider, agent, chatApiKeys, organization, memberDefault } =
-    params;
+  const { modelsByProvider, agent, chatApiKeys, organization } = params;
 
   const findKeyForProvider = (provider: string): string | null =>
     chatApiKeys.find((k) => k.provider === provider)?.id ?? null;
@@ -201,7 +193,6 @@ export function resolveInitialModel(
   });
 
   const levels: ModelSelection[] = [
-    toLevel(memberDefault?.modelId, memberDefault?.chatApiKeyId),
     toLevel(agent?.modelId, agent?.llmApiKeyId),
     toLevel(organization?.defaultModelId, organization?.defaultLlmApiKeyId),
   ];

@@ -1,7 +1,6 @@
 import {
   type CompleteModelSelection,
-  findFirstModelByPatterns,
-  MODEL_MARKER_PATTERNS,
+  findTierDefault,
   type SupportedProvider,
 } from "@archestra/shared";
 import { and, asc, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
@@ -178,12 +177,8 @@ class LlmProviderApiKeyModelLinkModel {
 
       // Insert new links
       if (uniqueModels.length > 0) {
-        // Detect the best model using pattern matching
-        // Patterns are checked in order (first pattern = highest priority)
-        const bestModel = findFirstModelByPatterns(
-          uniqueModels,
-          MODEL_MARKER_PATTERNS[provider],
-        );
+        // `is_best` marks the provider's default-trio `normal` model.
+        const bestModel = findTierDefault(uniqueModels, provider, "normal");
 
         // Build values with markers
         const syncedAt = new Date();

@@ -65,6 +65,7 @@ import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availabi
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
 import {
+  type ModelTrioTiers,
   resolveConversationLlmSelectionForAgent,
   resolveSubagentTierSelection,
 } from "@/utils/llm-resolution";
@@ -321,7 +322,7 @@ export async function executeA2AMessage(
     selectedProvider: provider,
     chatApiKeyId: resolvedApiKeyId,
   } = await resolveRunLlmSelection({
-    agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+    agent,
     organizationId,
     userId,
     parentLlm: params.parentLlm,
@@ -1213,38 +1214,37 @@ export async function buildUserContent(
 // ============================================================================
 
 /**
- * A fork starts from its parent's model; any run without one resolves from the
- * agent's own configuration. A2A runs (chatops, scheduled triggers, external
- * A2A, delegation) are not the user driving the /chat model selector, so the
- * caller's personal chat default never participates.
+ * A fork starts from its parent's model, moved to its tier when one is asked
+ * for; any other run resolves from the agent's own configuration.
  */
 async function resolveRunLlmSelection(params: {
-  agent: { llmApiKeyId: string | null; modelId: string | null };
+  agent: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+  } & ModelTrioTiers;
   organizationId: string;
   userId: string;
   parentLlm?: ModelSelection;
   tier?: SubagentModelTier;
 }) {
-  const resolve = (explicit?: ModelSelection) =>
-    resolveConversationLlmSelectionForAgent({
-      agent: params.agent,
-      organizationId: params.organizationId,
-      userId: params.userId,
-      ...(explicit && {
-        explicitModelId: explicit.modelId,
-        explicitApiKeyId: explicit.apiKeyId,
-      }),
-      includeMemberChatDefault: false,
-    });
-
-  const base = await resolve(params.parentLlm);
-  if (!params.tier || !base.modelId || !base.chatApiKeyId) return base;
-  const tiered = await resolveSubagentTierSelection({
-    tier: params.tier,
-    parent: { modelId: base.modelId, apiKeyId: base.chatApiKeyId },
+  const { llmApiKeyId, modelId } = params.agent;
+  const base = await resolveConversationLlmSelectionForAgent({
+    agent: { llmApiKeyId, modelId },
     organizationId: params.organizationId,
+    userId: params.userId,
+    ...(params.parentLlm && {
+      explicitModelId: params.parentLlm.modelId,
+      explicitApiKeyId: params.parentLlm.apiKeyId,
+    }),
   });
-  return tiered.modelId === base.modelId ? base : resolve(tiered);
+  return params.tier
+    ? resolveSubagentTierSelection({
+        tier: params.tier,
+        parent: base,
+        agentTrio: params.agent,
+        organizationId: params.organizationId,
+      })
+    : base;
 }
 
 /** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */

@@ -1826,6 +1826,8 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `runtime.inferenceProtocol` | `"openai_responses" \| "openai_chat" \| "anthropic"` | No |  |
 | `llmApiKeyId` | `string` | No | Provider API key the agent uses. Set together with modelId. Use list_llm_models to find both. |
 | `modelId` | `string` | No | Model the agent uses: the model's id from list_llm_models, not its provider name. Set together with llmApiKeyId. |
+| `fastModelId` | `string` | No | Optional faster model on the same llmApiKeyId, used when the agent forks itself with tier fast. Omit to use the provider default. |
+| `smartModelId` | `string` | No | Optional stronger model on the same llmApiKeyId, used when the agent forks itself with tier smart. Omit to use the provider default. |
 
 
 #### get_agent
@@ -1893,6 +1895,8 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `runtime.idleTimeoutMinutes` | `integer \| null` | Yes |  |
 | `llmApiKeyId` | `string \| null` | No | The pinned provider API key ID, or null for the default. |
 | `modelId` | `string \| null` | No | The pinned model ID, or null for the default. |
+| `fastModelId` | `string \| null` | No | The pinned fast-tier model ID, or null for the default. |
+| `smartModelId` | `string \| null` | No | The pinned smart-tier model ID, or null for the default. |
 | `skillsEnabled` | `boolean` | No | Present for an internal agent when the current user has skill:read; whether load_skill is executable for it. |
 | `skillsNotice` | `string` | No | Trust boundary for the catalog-supplied skill names and descriptions in skills. |
 | `skills` | `object[]` | No | Present for an internal agent when the current user has skill:read; caller-relative skills it can activate. |
@@ -1984,6 +1988,8 @@ Required RBAC permission: `update` on the agent (granted per item)
 | `runtime` | `object \| null` | No | Run this agent in its own container (Agent Runtime) instead of the built-in chat harness. Pass { template } for a maintained CLI, or { image } for a custom image. Other fields override the defaults: claudeCode.authentication is 'subscription' (each user signs in with their own Claude account, the default) or 'provider' (bill through llmApiKeyId/modelId); credentials declares environment variables a run needs (users supply values later, or use transfer_credential); ttlHours, idleTimeoutMinutes, and maxCostUsd bound each run; privileged requires an agent administrator. Replaces the whole runtime: pass every field to keep. Pass null to return the agent to the built-in chat harness. |
 | `llmApiKeyId` | `string \| null` | No | Provider API key the agent uses. Set together with modelId. Use list_llm_models to find both. Pass null for both to use the default model. |
 | `modelId` | `string \| null` | No | Model the agent uses: the model's id from list_llm_models, not its provider name. Set together with llmApiKeyId. Pass null for both to use the default model. |
+| `fastModelId` | `string \| null` | No | Optional faster model on the same llmApiKeyId, used when the agent forks itself with tier fast. Omit to use the provider default. Pass null to clear. |
+| `smartModelId` | `string \| null` | No | Optional stronger model on the same llmApiKeyId, used when the agent forks itself with tier smart. Omit to use the provider default. Pass null to clear. |
 
 
 #### list_llm_models

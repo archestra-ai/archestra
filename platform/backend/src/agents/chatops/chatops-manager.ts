@@ -2282,7 +2282,6 @@ export class ChatOpsManager {
           agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
           organizationId: params.organizationId,
           userId: params.userId,
-          includeMemberChatDefault: false,
         });
 
       const userTeamIds = await TeamModel.getUserTeamIds(params.userId);

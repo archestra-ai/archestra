@@ -668,14 +668,6 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
 
 ### Defaults and Limits
 
-- **`ARCHESTRA_CHAT_DEFAULT_PROVIDER`** - Provider of the last-resort default model, used when the organization has no default model, no synced models, and no provider API key variable.
-  - Default: `anthropic`
-  - Values: a provider ID, for example `anthropic`, `openai`, `gemini`, `bedrock`, `azure`, `ollama`. An unknown value falls back to `anthropic`.
-
-- **`ARCHESTRA_CHAT_DEFAULT_MODEL`** - Model ID of the last-resort default model.
-  - Default: the default Anthropic model of your Archestra release
-  - Set it together with [`ARCHESTRA_CHAT_DEFAULT_PROVIDER`](/docs/reference/configuration#ARCHESTRA_CHAT_DEFAULT_PROVIDER).
-
 - **`ARCHESTRA_CHAT_MAX_OUTPUT_TOKENS`** - Upper limit on output tokens for one agent turn, in chat and in A2A runs.
   - Default: `32768`
   - Values: `1` to `1000000`

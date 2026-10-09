@@ -54,9 +54,7 @@ const {
   bulkAssignTools,
   cancelChatMcpTask,
   stopChatStream,
-  getMemberDefaultModel,
   resolveChatMcpElicitation,
-  updateMemberDefaultModel,
   deleteChatAttachment,
   deleteSkillSandboxArtifact,
 } = archestraApiSdk;
@@ -563,42 +561,6 @@ export function useUpdateConversation() {
         queryClient.invalidateQueries({
           queryKey: ["conversation", variables.id, "enabled-tools"],
         });
-      }
-    },
-  });
-}
-
-/**
- * The current user's default (model, key) pair — the "member" level of the
- * model-resolution chain. Used to preselect the model when opening a new chat.
- */
-export function useMemberDefaultModel() {
-  return useQuery({
-    queryKey: ["member-default-model"],
-    queryFn: () =>
-      callApi(() => getMemberDefaultModel(), {
-        modelId: null,
-        chatApiKeyId: null,
-      }),
-  });
-}
-
-/**
- * Persist the current user's default (model, key) pair. Fired whenever the
- * user changes the model in chat so the next new chat reuses their choice
- * (the "member" level of the model-resolution chain).
- */
-export function useUpdateMemberDefaultModel() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (body: {
-      modelId: string | null;
-      chatApiKeyId: string | null;
-    }) => callApi(() => updateMemberDefaultModel({ body }), null),
-    onSuccess: (data) => {
-      if (data) {
-        queryClient.setQueryData(["member-default-model"], data);
       }
     },
   });

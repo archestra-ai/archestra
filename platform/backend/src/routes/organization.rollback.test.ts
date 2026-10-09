@@ -397,68 +397,126 @@ describe("organization routes", () => {
     });
   });
 
-  describe("PATCH /api/organization/agent-settings - subagent model tiers", () => {
-    function createTierModel(
-      provider: "anthropic" | "openai",
-      modelId: string,
-      supportsToolCalling = true,
+  describe("PATCH /api/organization/agent-settings - default trio", () => {
+    async function setupKey(
+      makeLlmProviderApiKey: (
+        organizationId: string,
+        secretId: null,
+        overrides: { provider: "anthropic" },
+      ) => Promise<{ id: string }>,
     ) {
-      return ModelModel.create({
-        externalId: `${provider}/${modelId}`,
-        provider,
-        modelId,
-        inputModalities: ["text"],
-        outputModalities: ["text"],
-        supportsToolCalling,
-        lastSyncedAt: new Date(),
+      const key = await makeLlmProviderApiKey(organizationId, null, {
+        provider: "anthropic",
       });
+      const create = (modelId: string, supportsToolCalling = true) =>
+        ModelModel.create({
+          externalId: `anthropic/${modelId}`,
+          provider: "anthropic",
+          modelId,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling,
+          lastSyncedAt: new Date(),
+        });
+      const [normal, fast, noTools] = await Promise.all([
+        create("trio-test-normal"),
+        create("trio-test-fast"),
+        create("trio-test-no-tools", false),
+      ]);
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        normal.id,
+        fast.id,
+        noTools.id,
+      ]);
+      return { key, normal, fast, noTools };
     }
 
-    test("saves a tool-capable override of the matching provider and records the audit change", async () => {
-      const haiku = await createTierModel("anthropic", "tier-test-haiku");
-      const subagentModelTiers = { anthropic: { fast: haiku.id } };
+    test("saves fast and smart on the default key and records the audit change", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const { key, normal, fast } = await setupKey(makeLlmProviderApiKey);
+      const trio = {
+        defaultLlmApiKeyId: key.id,
+        defaultModelId: normal.id,
+        defaultFastModelId: fast.id,
+        defaultSmartModelId: normal.id,
+      };
 
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/agent-settings",
-        payload: { subagentModelTiers },
+        payload: trio,
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json().subagentModelTiers).toEqual(subagentModelTiers);
+      expect(response.json()).toMatchObject(trio);
       await vi.waitFor(async () => {
         const [audit] = await db
           .select()
           .from(schema.auditLogsTable)
           .where(eq(schema.auditLogsTable.action, "organization.updated"));
-        expect(audit?.before).toMatchObject({ subagentModelTiers: null });
-        expect(audit?.after).toMatchObject({ subagentModelTiers });
+        expect(audit?.before).toMatchObject({ defaultFastModelId: null });
+        expect(audit?.after).toMatchObject({
+          defaultFastModelId: fast.id,
+          defaultSmartModelId: normal.id,
+        });
       });
     });
 
-    test("rejects an override filed under another provider", async () => {
-      const gpt = await createTierModel("openai", "tier-test-mini");
+    test("rejects a tier the default key does not serve", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const { key, normal } = await setupKey(makeLlmProviderApiKey);
+      const unlinked = await ModelModel.create({
+        externalId: "anthropic/trio-test-unlinked",
+        provider: "anthropic",
+        modelId: "trio-test-unlinked",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling: true,
+        lastSyncedAt: new Date(),
+      });
 
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/agent-settings",
-        payload: { subagentModelTiers: { anthropic: { fast: gpt.id } } },
+        payload: {
+          defaultLlmApiKeyId: key.id,
+          defaultModelId: normal.id,
+          defaultFastModelId: unlinked.id,
+        },
       });
 
       expect(response.statusCode).toBe(400);
     });
 
-    test("rejects an override that cannot call tools", async () => {
-      const noTools = await createTierModel(
-        "anthropic",
-        "tier-test-no-tools",
-        false,
-      );
+    test("rejects a tier that cannot call tools", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const { key, normal, noTools } = await setupKey(makeLlmProviderApiKey);
 
       const response = await app.inject({
         method: "PATCH",
         url: "/api/organization/agent-settings",
-        payload: { subagentModelTiers: { anthropic: { smart: noTools.id } } },
+        payload: {
+          defaultLlmApiKeyId: key.id,
+          defaultModelId: normal.id,
+          defaultSmartModelId: noTools.id,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects tiers without a default key", async ({
+      makeLlmProviderApiKey,
+    }) => {
+      const { fast } = await setupKey(makeLlmProviderApiKey);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { defaultFastModelId: fast.id },
       });
 
       expect(response.statusCode).toBe(400);

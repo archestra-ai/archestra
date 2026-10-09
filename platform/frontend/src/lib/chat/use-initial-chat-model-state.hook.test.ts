@@ -1,14 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { LlmModel } from "@/lib/llm-models.query";
 import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
 import { CHAT_STORAGE_KEYS } from "./use-chat-preferences";
 import { useInitialChatModelState } from "./use-initial-chat-model-state.hook";
-
-const mutate = vi.fn();
-vi.mock("./chat.query", () => ({
-  useUpdateMemberDefaultModel: () => ({ mutate }),
-}));
 
 const model = (dbId: string, provider: string, isBest = false) =>
   ({ id: dbId, dbId, provider, isBest }) as unknown as LlmModel;
@@ -40,14 +35,12 @@ const baseParams = {
   defaultAgentId: null as string | null,
   modelsByProvider,
   chatApiKeys,
-  memberDefault: null,
   canUseSavedAgent: true,
   isPermissionResolving: false,
   isOrgLoading: false,
 };
 
 beforeEach(() => {
-  mutate.mockClear();
   localStorage.clear();
 });
 
@@ -247,7 +240,7 @@ describe("useInitialChatModelState", () => {
     await waitFor(() => expect(result.current.agentId).toBe("agent-2"));
   });
 
-  it("derives the provider and persists the member default on a model change", async () => {
+  it("derives the provider on a model change", async () => {
     const { result } = renderHook(() => useInitialChatModelState(baseParams));
 
     await waitFor(() => expect(result.current.agentId).toBe("agent-1"));
@@ -256,10 +249,6 @@ describe("useInitialChatModelState", () => {
     act(() => result.current.onModelChange("uuid-gpt-mini"));
 
     expect(result.current.modelId).toBe("uuid-gpt-mini");
-    expect(mutate).toHaveBeenCalledWith({
-      modelId: "uuid-gpt-mini",
-      chatApiKeyId: "key-openai",
-    });
   });
 
   it("preserves the api-key two-step: key set first, then provider re-resolves the model", async () => {
@@ -279,10 +268,6 @@ describe("useInitialChatModelState", () => {
     expect(result.current.apiKeyId).toBe("key-anthropic");
     // The best model for the new provider is selected.
     expect(result.current.modelId).toBe("uuid-claude");
-    expect(mutate).toHaveBeenCalledWith({
-      modelId: "uuid-claude",
-      chatApiKeyId: "key-anthropic",
-    });
   });
 
   it("selecting a key for the same provider keeps that provider's best model", async () => {
@@ -394,26 +379,14 @@ describe("useInitialChatModelState", () => {
     expect(result.current.apiKeyId).toBe("key-openai");
   });
 
-  it("reset clears the member default and re-resolves without the override", async () => {
-    const { result } = renderHook(() =>
-      useInitialChatModelState({
-        ...baseParams,
-        memberDefault: {
-          modelId: "uuid-claude",
-          chatApiKeyId: "key-anthropic",
-        },
-      }),
-    );
+  it("reset drops a manual model pick and re-resolves the agent's model", async () => {
+    const { result } = renderHook(() => useInitialChatModelState(baseParams));
 
     await waitFor(() => expect(result.current.agentId).toBe("agent-1"));
-
+    act(() => result.current.onModelChange("uuid-gpt-mini"));
     act(() => result.current.onResetModelOverride());
 
-    expect(mutate).toHaveBeenCalledWith({
-      modelId: null,
-      chatApiKeyId: null,
-    });
-    // Reset drops the member override and falls back to the agent's model.
     expect(result.current.modelId).toBe("uuid-gpt");
+    expect(result.current.apiKeyId).toBe("key-openai");
   });
 });

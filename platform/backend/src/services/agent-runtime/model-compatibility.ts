@@ -51,7 +51,6 @@ export async function getResolvedAgentRuntimeModelCompatibility(params: {
           agent: params.agent,
           organizationId: params.organizationId,
           userId: params.userId,
-          includeMemberChatDefault: false,
         });
   const usesClaudeCodeSubscription =
     params.runtime.command?.[0] === "archestra-claude-code" &&

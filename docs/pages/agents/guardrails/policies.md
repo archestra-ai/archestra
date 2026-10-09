@@ -59,7 +59,7 @@ For every field, see the [policy reference](https://www.openappa.com/contracts).
 
 ## Human Review
 
-Use `requires = { attention = ["human-approval"] }` for potentially destructive actions or publishing outside the company, not every tool call. The starting policy includes a reviewer for this mark; saved policies keep their existing reviewers.
+Use `requires = { attention = ["human-approval"] }` for potentially destructive actions or publishing outside the company, not every tool call. The starting policy includes a reviewer for this mark.
 
 ## GitHub Sync
 

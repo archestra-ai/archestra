@@ -7,7 +7,10 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { COPILOT_GUARD_CLIENT } from "../guard/clients";
-import { COPILOT_PROVIDER_CONFIG_NODE } from "../payloads/copilot-provider-config";
+import {
+  COPILOT_PROVIDER_CONFIG_NODE,
+  COPILOT_PROVIDER_INSTRUCTIONS_NODE,
+} from "../payloads/copilot-provider-config";
 import { starterPrompt } from "../steps/ending";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { legacyServerNames } from "../steps/mcp";
@@ -411,7 +414,6 @@ fi`,
         ]
       : []),
     ...withStartupGuardBash(ctx, COPILOT_GUARD_CLIENT, sections),
-    ...(ctx.proxy ? ["archestra_copilot_config instructions"] : []),
   ];
 }
 
@@ -462,7 +464,6 @@ ${pluginInstalls}`);
         ]
       : []),
     ...withStartupGuardPowerShell(ctx, COPILOT_GUARD_CLIENT, sections),
-    ...(ctx.proxy ? ["Invoke-ArchCopilotConfig 'instructions'"] : []),
   ];
 }
 
@@ -472,9 +473,6 @@ function copilotEnding(ctx: SetupScriptContext): AgentEnding {
     ? "Provider settings saved in providers.json; model selected in settings.json"
     : undefined;
   if (ctx.proxy) {
-    notes.push(
-      "The COPILOT_* lines printed above are optional. Copilot reads providers.json regardless of your shell.",
-    );
     if (!ctx.proxy.virtualKey && ctx.proxy.provider !== "github-copilot") {
       notes.push(
         "If setup reported a missing API key, add your provider key as apiKey in providers.json.",
@@ -488,6 +486,9 @@ function copilotEnding(ctx: SetupScriptContext): AgentEnding {
   }
   return {
     proxyDetail,
+    ...(ctx.proxy
+      ? { optionalInstructions: COPILOT_PROVIDER_INSTRUCTIONS_NODE }
+      : {}),
     parts:
       ctx.mcp || ctx.proxy || ctx.skills
         ? [{ name: "Launch check", detail: "Runs each time you start copilot" }]

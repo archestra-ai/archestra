@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { renderSetupScript } from "../index";
 import { CLIENT_CONNECTION_INSTALLER } from "./client-connection-installer";
 
 let directory: string;
@@ -177,6 +178,61 @@ test("downloads and executes the approved script without logging polling credent
     clientId: "cursor",
     deviceName: hostname().trim().slice(0, 64),
   });
+});
+
+test("Copilot prints saved credentials once in the final instructions, after the summary and before sign-in", async () => {
+  const bin = join(directory, "bin");
+  await mkdir(bin);
+  await writeFile(
+    join(bin, "copilot"),
+    '#!/bin/sh\nif [ "$1" = --version ]; then echo "GitHub Copilot CLI 1.0.95"; fi\n',
+    { mode: 0o755 },
+  );
+  vi.stubEnv("HOME", directory);
+  vi.stubEnv("COPILOT_HOME", join(directory, ".copilot"));
+  vi.stubEnv("COPILOT_PROVIDERS_CONFIG", "");
+  vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
+  vi.stubEnv("SHELL", "/bin/bash");
+  scriptBody = renderSetupScript({
+    clientId: "copilot-cli",
+    platform: "macos",
+    appName: "Test",
+    mcp: {
+      serverName: "test",
+      toolPrefix: "test",
+      url: "https://example.com/mcp",
+    },
+    skills: null,
+    proxy: {
+      authMode: "virtual-key",
+      provider: "openai",
+      providerLabel: "OpenAI",
+      baseUrl: "https://example.com/v1",
+      url: "https://example.com/v1/openai",
+      proxyName: "test",
+      virtualKey: "test-key",
+      virtualKeyName: "Test",
+      passthroughVirtualKey: null,
+      model: "gpt-4o",
+    },
+  });
+  const result = await run(origin, "copilot-cli");
+  expect(result.code).toBe(0);
+  const summary = result.output.indexOf("Copilot CLI is connected");
+  const optional = result.output.indexOf("Optional: add environment variables");
+  const credentials = result.output.indexOf(
+    "export COPILOT_PROVIDER_API_KEY='test-key'",
+  );
+  const signIn = result.output.indexOf("Sign in to Test tools");
+  expect(summary).toBeGreaterThan(-1);
+  expect(optional).toBeGreaterThan(summary);
+  expect(credentials).toBeGreaterThan(optional);
+  expect(signIn).toBeGreaterThan(credentials);
+  expect(
+    result.output.match(/^export COPILOT_PROVIDER_API_KEY=/gm),
+  ).toHaveLength(1);
+  expect(result.output).toContain("No shell changes are required");
+  expect(result.output).not.toContain("printed above");
 });
 
 test("sends the gateway and plugins picked on the Connect page", async () => {

@@ -123,9 +123,14 @@ test("setup saves credentials and model, preserves other settings, reruns safely
   );
   expect(stdout).toContain("Your API key is installed in providers.json");
   expect(stdout).not.toMatch(/<your-[a-z-]+>/);
-  expect(stdout.indexOf("Optional environment variables")).toBeGreaterThan(
-    stdout.indexOf("Launch check added"),
+  expect(stdout.indexOf("Optional: add environment variables")).toBeGreaterThan(
+    stdout.indexOf("Copilot CLI is connected"),
   );
+  expect(stdout.indexOf("Next: open a new terminal")).toBeGreaterThan(
+    stdout.indexOf("export COPILOT_PROVIDER_API_KEY="),
+  );
+  expect(stdout.match(/^export COPILOT_PROVIDER_API_KEY=/gm)).toHaveLength(1);
+  expect(stdout).not.toContain("printed above");
   // Executing the optional exports must round-trip even quotes/metacharacters.
   const exports = stdout
     .split("\n")
@@ -242,9 +247,20 @@ test("PowerShell embeds the same executable writer and prints optional instructi
   });
   expect((await json(f.registry)).providers[0].apiKey).toBe(proxy.virtualKey);
   expect((await json(f.settings)).model).toBe("archestra/gpt-4o");
-  expect(
-    script.indexOf("Invoke-ArchCopilotConfig 'instructions'"),
-  ).toBeGreaterThan(script.indexOf("Invoke-ArchCopilotConfig 'install'"));
+  const marker = script.match(/^# archestra-ending: (\S+)$/m)?.[1];
+  const instructions = JSON.parse(
+    Buffer.from(marker ?? "", "base64").toString("utf8"),
+  ).optionalInstructions;
+  expect(instructions).toBeDefined();
+  const { stdout } = await exec(process.execPath, ["-e", instructions ?? ""], {
+    env: { ...f.env, ARCHESTRA_COPILOT_SHELL: "powershell" },
+  });
+  expect(stdout).toContain(
+    "$env:COPILOT_PROVIDER_API_KEY = 'arch_test''$`\\key'",
+  );
+  expect(script.indexOf(instructions ?? "")).toBeGreaterThan(
+    script.indexOf("Copilot CLI is connected"),
+  );
 });
 
 test("older Copilot versions fail before changing provider files", async () => {

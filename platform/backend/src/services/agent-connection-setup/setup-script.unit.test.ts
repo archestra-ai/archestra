@@ -935,7 +935,7 @@ ${binary} "$@"
       // The ending's text shows commands for the person to type; it is
       // printed, never run.
       const bareInvocations = script
-        .replace(/<<'ARCHESTRA_NEXT'\n[\s\S]*?\nARCHESTRA_NEXT/, "")
+        .replace(/<<'ARCHESTRA_NEXT'\n[\s\S]*?\nARCHESTRA_NEXT/g, "")
         .split("\n")
         .map((line) => line.trim())
         .filter((line) =>

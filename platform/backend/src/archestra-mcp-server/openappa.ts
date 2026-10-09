@@ -88,7 +88,14 @@ import {
   publishOpenAppaPolicyChange,
   refuseCredentialLines,
 } from "@/services/openappa-policy-change";
-import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
+import {
+  getOpenAppaPolicyTests,
+  runOpenAppaPolicyTests,
+} from "@/services/openappa-policy-tests";
+import {
+  discoverOpenAppaScenarios,
+  draftOpenAppaScenario,
+} from "@/services/openappa-scenario-discovery";
 import {
   previewOpenAppaValidationChange,
   publishOpenAppaValidationChange,
@@ -109,6 +116,11 @@ import {
   ExternalConsultRoleSchema,
 } from "@/types/openappa-external-consults";
 import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
+import { RunPolicyTestsSchema } from "@/types/openappa-policy-tests";
+import {
+  DiscoverOpenAppaScenariosSchema,
+  SelectOpenAppaScenarioSchema,
+} from "@/types/openappa-scenario-discovery";
 import {
   PreviewOpenAppaValidationChangeSchema,
   PublishOpenAppaValidationChangeSchema,
@@ -866,6 +878,37 @@ const registry = defineArchestraTools([
       }),
   }),
   defineArchestraTool({
+    shortName: "discover_openappa_validation_scenarios",
+    title: "Find replayable validation scenarios",
+    annotations: { readOnlyHint: true },
+    description:
+      "Find up to three exact current-policy call scenarios verified by offline replay. Checks policy and suite readiness itself; no prerequisite policy, suite, or tool-schema reads are needed. No model-invented calls or files are needed. Each candidate states an observed decision, not a desired requirement or proof of general protection. Explain returned candidates as human situations: what behavior each checks, a concrete example consistent with its inputs and starting state, and which unwanted policy change it would catch. Use short behavior labels that include the tested starting scope; describe each choice in at most two sentences. Distinguish illustrative context from what replay actually checked, and ask which outcome the user wants to preserve, then wait. A needs_input entry requires a custom check; its reason explains the discovery limit; cannot_run means no offline decision was established, not evidence of a live helper outage. Stop those branches. Discovery is bounded and incomplete; do not retry unchanged inputs or invent missing state. Saves nothing. For an explicit concrete requirement or supplied candidate policy, use validation preview directly. Do not discover for inspection-only/no-tests requests.",
+    schema: DiscoverOpenAppaScenariosSchema,
+    async handler({ context }) {
+      return result(
+        await discoverOpenAppaScenarios(
+          organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED),
+        ),
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: "draft_openappa_validation_scenario",
+    title: "Draft a selected validation scenario",
+    annotations: { readOnlyHint: true },
+    description:
+      "After the user chooses a discovered scenario and confirms its observed decision is the desired expectation, prepare its exact verified file and preview the full suite without saving. Pass the discoveryId and candidateId returned by discovery; do not reconstruct its calls. Explain the example behavior and result before technical details; retain the exact returned file and provide its source on request. Do not substitute a scenario or change the policy. Stale or expired choices need fresh discovery and user selection. Saving requires separate authorization and publish_openappa_validation_change with this exact file, expectedRevision and expectedVersion.",
+    schema: SelectOpenAppaScenarioSchema,
+    async handler({ args, context }) {
+      return result(
+        await draftOpenAppaScenario(
+          organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED),
+          args,
+        ),
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: "get_openappa_policy_tests",
     title: "Read OpenAPPA validation specifications",
     annotations: { readOnlyHint: true },
@@ -896,11 +939,42 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: "run_openappa_policy_tests",
+    title: "Run saved OpenAPPA validations",
+    description:
+      "Replay the complete currently saved validation suite offline against the current policy and record the result in validation run history. Use when the user asks to run saved checks or explicitly requests a fresh recorded result on the validations page. Showing existing results does not authorize a new run. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID, pass/fail/cannot-run outcomes and stale status. A preview or publication replay alone does not create this recorded run.",
+    schema: z.strictObject({}),
+    async handler({ context }) {
+      const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);
+      const suite = await getOpenAppaPolicyTests(
+        ids.organizationId,
+        ids.userId,
+      );
+      if (suite.error) throw new ApiError(409, suite.error);
+      if (suite.source === "github" && !suite.activeDirectory)
+        throw new ApiError(
+          409,
+          "Validation is disabled. Set a validation directory in GitHub source settings first.",
+        );
+      if (!suite.files.length)
+        throw new ApiError(
+          400,
+          "No saved validations to run. Save a validation first.",
+        );
+      const args = RunPolicyTestsSchema.parse({
+        files: suite.files,
+        sourceVersion: suite.version,
+        directory: suite.directory,
+      });
+      return result(await runOpenAppaPolicyTests({ ...ids, ...args }));
+    },
+  }),
+  defineArchestraTool({
     shortName: "preview_openappa_validation_change",
     title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. Replay evaluates the effective policy contracts, including their parameter schemas and selectors; it does not fetch installed MCP input schemas or require tools to be installed. Draft from those contracts and use replay to check decisions. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect global run history, execute business tools, or contact model/helper providers. Show the draft validation files and explain their assertions, warnings, failed or cannot-run scenarios and offline limits before publishing. A failed check does not authorize a policy fix or changing expectations merely to force green. Keep specifications small and focused on the user's intended behavior.",
+      "Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. Replay evaluates the effective policy contracts, including their parameter schemas and selectors; it does not fetch installed MCP input schemas or require tools to be installed. Draft from those contracts and use replay to check decisions. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect global run history, execute business tools, or contact model/helper providers. Before publishing, explain the scenario in ordinary language, its expected behavior, observed results and relevant limits. Give the file path and provide its exact source on request. A failed check does not authorize a policy fix or changing expectations merely to force green. Keep specifications small and focused on the user's intended behavior.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(

@@ -48,6 +48,15 @@ export const TOOL_PERMISSIONS: Record<
   list_openappa_consults: { resource: "openappaDiagnostics", action: "read" },
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
+  run_openappa_policy_tests: { resource: "openappaPolicy", action: "update" },
+  discover_openappa_validation_scenarios: {
+    resource: "openappaPolicy",
+    action: "read",
+  },
+  draft_openappa_validation_scenario: {
+    resource: "openappaPolicy",
+    action: "read",
+  },
   preview_openappa_validation_change: {
     resource: "openappaPolicy",
     action: "read",

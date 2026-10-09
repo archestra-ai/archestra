@@ -8,6 +8,7 @@
     ".": "./index.ts",
     "./access-control": "./access-control.ts",
     "./archestra-mcp-server": "./archestra-mcp-server.ts",
+    "./built-in-agents": "./built-in-agents.ts",
     "./api-error": "./api-error.ts",
     "./chat-error": "./chat-error.ts",
     "./consts": "./consts.ts",

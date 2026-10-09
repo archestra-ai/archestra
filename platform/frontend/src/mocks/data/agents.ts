@@ -1,8 +1,8 @@
+import type { archestraApiTypes } from "@archestra/shared";
 import {
-  type archestraApiTypes,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
-} from "@archestra/shared";
+} from "@archestra/shared/built-in-agents";
 
 type AgentsList = archestraApiTypes.GetAgentsResponses["200"];
 type Agent = AgentsList["data"][number];

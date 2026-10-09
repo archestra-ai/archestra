@@ -120,8 +120,14 @@ describe("AgentCreatePage", () => {
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
     ).toEqual(["Create your own", "Popular agents", "External agents"]);
-    expect(screen.getByText("Agent Runtime is not available")).toBeVisible();
-    expect(screen.getByText("sandboxes.agents.x-k8s.io")).toBeVisible();
+    expect(screen.getByText("Agent Runtime unavailable.")).toBeVisible();
+    expect(
+      screen.queryByText(/sandboxes\.agents\.x-k8s\.io/),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByText(/Missing API resources/)).toHaveTextContent(
+      "sandboxes.agents.x-k8s.io",
+    );
     for (const name of [
       "Claude Code",
       "Codex",

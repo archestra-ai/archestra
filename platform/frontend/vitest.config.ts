@@ -24,6 +24,10 @@ export default defineConfig({
         __dirname,
         "../shared/api-error.ts",
       ),
+      "@archestra/shared/built-in-agents": path.resolve(
+        __dirname,
+        "../shared/built-in-agents.ts",
+      ),
       "@archestra/shared/consts": path.resolve(
         __dirname,
         "../shared/consts.ts",

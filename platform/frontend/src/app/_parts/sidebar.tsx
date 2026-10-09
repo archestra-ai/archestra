@@ -576,11 +576,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [
-      pluginsEnabled,
-      guardrailsDeployment?.enabled,
-      permissionMap,
-    ],
+    [pluginsEnabled, guardrailsDeployment?.enabled, permissionMap],
   );
 
   return (

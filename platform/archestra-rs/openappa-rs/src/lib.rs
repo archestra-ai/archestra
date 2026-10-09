@@ -2499,16 +2499,6 @@ enum OutputSource {
 }
 
 #[derive(Serialize)]
-struct RenderedRemedy {
-    decision: &'static str,
-    approved_output: String,
-    output_source: OutputSource,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<&'static str>,
-    result: HostToolResult,
-}
-
-#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HostToolResult {
     is_error: bool,
@@ -2644,7 +2634,7 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             reason.detail().to_owned(),
         ),
     };
-    serde_json::to_value(RenderedRemedy {
+    serde_json::to_value(HostMcpResult {
         decision: "mcp_result",
         approved_output: text.clone(),
         output_source,
@@ -2917,8 +2907,6 @@ fn cancellation_operation(call_id: &str) -> String {
 }
 
 struct CompletedOperation {
-    #[allow(dead_code)]
-    root: String,
     input: Value,
     context: Option<Value>,
     decision: Value,
@@ -2933,7 +2921,7 @@ fn read_completed_operation(
     let organization_id = key.session.organization_id.clone();
     pg.with_client(move |client| {
         let row = client.query_opt(
-            "SELECT root, input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
+            "SELECT input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
             &[&session_id, &operation_id, &organization_id],
         )?;
         let Some(row) = row else {
@@ -2943,7 +2931,6 @@ fn read_completed_operation(
         if status != "complete" {
             return Ok(None);
         }
-        let root: String = row.get("root");
         let input: Value = row.get("input");
         let decision: Option<Value> = row.get("decision");
         let Some(decision) = decision else {
@@ -2961,7 +2948,6 @@ fn read_completed_operation(
             (input, None)
         };
         Ok(Some(CompletedOperation {
-            root,
             input: actual_input,
             context,
             decision,

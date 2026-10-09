@@ -69,6 +69,7 @@
       "versioning": "prerelease",
       "prerelease-type": "rc",
       "prerelease": true,
+      "release-as": "1.4.0-rc.36",
       "initial-version": "0.0.1",
       "draft": true,
       "extra-files": [

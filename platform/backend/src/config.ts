@@ -27,6 +27,8 @@ import {
   getAgentCatalogImageTag,
   isValidK8sCpuQuantity,
   isValidK8sMemoryQuantity,
+  type LogContentMode,
+  LogContentModeSchema,
   MAX_CHUNK_SIZE_TOKENS,
   MAX_CONTEXT_EXPANSION_RADIUS,
   MCP_ORCHESTRATOR_DEFAULTS,
@@ -722,6 +724,25 @@ export const parseLogFormat = (
     );
   }
   return "json";
+};
+
+/**
+ * Parse `ARCHESTRA_LOGS_CONTENT_MODE`. Unset means `full`. An unrecognized
+ * value fails closed to `metadata_only`: a typo must never store content an
+ * operator asked the platform to keep out of the logs.
+ * @public — exported for testability
+ */
+export const parseLogContentMode = (
+  envValue?: string | undefined,
+): LogContentMode => {
+  const value = envValue?.toLowerCase().trim();
+  if (!value) return "full";
+  const parsed = LogContentModeSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  logger.warn(
+    `Invalid ARCHESTRA_LOGS_CONTENT_MODE value "${envValue}", storing metadata only`,
+  );
+  return "metadata_only";
 };
 
 /** @public — exported for testability */
@@ -3444,6 +3465,14 @@ const config = {
   },
   logging: {
     format: parseLogFormat(process.env.ARCHESTRA_LOGGING_FORMAT),
+  },
+  logs: {
+    /**
+     * What the LLM Logs, MCP Logs and guardrail consult rows record.
+     * `metadata_only` never writes prompts, responses, tool arguments or
+     * results; see `backend/src/log-content`.
+     */
+    contentMode: parseLogContentMode(process.env.ARCHESTRA_LOGS_CONTENT_MODE),
   },
   observability: {
     otel: {

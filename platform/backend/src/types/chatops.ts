@@ -299,6 +299,14 @@ export interface ChatOpsProvider {
   readonly usesServerSideSessions?: boolean;
 
   /**
+   * Per-message form of {@link usesServerSideSessions}, for providers whose
+   * platform keeps history for some conversations but not others. MS Teams
+   * reads channel threads from Graph, but its 1:1 and group chats have no
+   * reply threads to read, so those run on server-side sessions.
+   */
+  usesServerSideSessionsFor?(message: IncomingChatMessage): boolean;
+
+  /**
    * How often to re-send the typing indicator while an agent run is in
    * flight. For platforms whose indicator expires on its own (Telegram's
    * lasts ~5s), a heartbeat keeps it visible during long runs. Leave unset

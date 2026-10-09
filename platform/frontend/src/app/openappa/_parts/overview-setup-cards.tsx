@@ -8,7 +8,9 @@ import {
   CircleX,
   ClipboardCheck,
   Github,
+  LoaderCircle,
   MessageCircle,
+  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
@@ -45,10 +47,13 @@ import {
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import {
+  useAppaGithubSync,
+  useUpdateAppaGithubSync,
+} from "@/lib/openappa-github-sync.query";
 import { useOpenAppaPolicyTestRuns } from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
-import { formatDate } from "@/lib/utils/date-time";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import {
@@ -217,6 +222,7 @@ function EnforcementCard({ next }: { next: boolean }) {
 
 function GithubSyncCard({ next }: { next: boolean }) {
   const sync = useAppaGithubSync();
+  const update = useUpdateAppaGithubSync();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
@@ -236,7 +242,10 @@ function GithubSyncCard({ next }: { next: boolean }) {
           !sync.data ? null : failed ? (
             <Status failed>Sync failed</Status>
           ) : connected && source?.setupPullRequestNumber ? (
-            <Status>Awaiting initial merge</Status>
+            <Badge variant="outline">
+              <LoaderCircle className="animate-spin text-muted-foreground" />
+              <span>Awaiting initial merge</span>
+            </Badge>
           ) : next ? (
             <Badge>Step 2 of 2</Badge>
           ) : connected ? (
@@ -249,7 +258,15 @@ function GithubSyncCard({ next }: { next: boolean }) {
         }
         description={
           connected && source?.setupPullRequestNumber ? (
-            "Merge the initial policy pull request to finish setup. Your current policy stays active until it merges."
+            <span>
+              Merge the initial policy pull request to finish setup. Your
+              current policy stays active until it merges.{" "}
+              <span aria-live="polite">
+                {source.lastSyncedAt
+                  ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}.`
+                  : "Checking for the merge…"}
+              </span>
+            </span>
           ) : connected && source?.repo ? (
             <span>
               {appName} pulls the policy from{" "}
@@ -269,16 +286,33 @@ function GithubSyncCard({ next }: { next: boolean }) {
         action={
           !sync.data?.enabled ? null : connected &&
             source?.setupPullRequestNumber ? (
-            <Button size="sm" variant="outline" asChild>
-              <a
-                href={`https://github.com/${source.repo}/pull/${source.setupPullRequestNumber}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <span>Review and merge PR</span>
-                <ArrowRight />
-              </a>
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <a
+                  href={`https://github.com/${source.repo}/pull/${source.setupPullRequestNumber}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>Review and merge PR</span>
+                  <ArrowRight />
+                </a>
+              </Button>
+              {canManage && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={update.isPending}
+                  onClick={() => update.mutate({ action: "sync" })}
+                >
+                  <RefreshCw
+                    className={cn(update.isPending && "animate-spin")}
+                  />
+                  <span>
+                    {update.isPending ? "Checking…" : "Check if merged"}
+                  </span>
+                </Button>
+              )}
+            </div>
           ) : !canManage ? (
             connected ? null : (
               <p className="text-sm text-muted-foreground">

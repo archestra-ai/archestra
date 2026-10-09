@@ -3831,6 +3831,18 @@ class AgentModel {
   }
 
   /**
+   * The member's personal chat agent (their oldest live one), without seeding
+   * one. Null when they have none.
+   */
+  static async findPersonalChatAgentId(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<string | null> {
+    const [id] = await AgentModel.findOwnPersonalChatAgentIds(params);
+    return id ?? null;
+  }
+
+  /**
    * Live personal chat agents this member authored in the organization,
    * oldest first, excluding `excludeId`.
    */

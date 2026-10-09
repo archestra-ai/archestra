@@ -221,7 +221,7 @@ test("connects an existing repository with an App and renders the saved source",
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
-test("creates a repository with a connected App and shows the initial merge link", async () => {
+test("creates a repository with a connected App and waits on the initial merge in the dialog", async () => {
   state = {
     validationDirectory: "traces",
     enabled: true,
@@ -287,6 +287,36 @@ test("creates a repository with a connected App and shows the initial merge link
     "https://github.com/example/openappa-policy/pull/7",
   );
   expect(screen.getByText("Awaiting initial merge")).toBeVisible();
+  // The dialog stays open on the pull request instead of closing.
+  expect(screen.getByText("Finish setup in GitHub")).toBeVisible();
+  server.use(
+    http.patch(url, async ({ request }) => {
+      expect(await request.json()).toEqual({ action: "sync" });
+      state = {
+        ...state,
+        source: {
+          ...source,
+          repo: "example/openappa-policy",
+          sourceCommit: "b".repeat(40),
+          setupPullRequestNumber: null,
+        },
+      };
+      return HttpResponse.json(state);
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Check if merged" }));
+  expect(await screen.findByText("Setup finished")).toBeVisible();
+  expect(screen.getByText("Merged")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Check if merged" }),
+  ).not.toBeInTheDocument();
+  expect(toast.success).toHaveBeenCalledWith(
+    "Initial policy merged. Policy synced from GitHub.",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  await waitFor(() =>
+    expect(screen.queryByText("Setup finished")).not.toBeInTheDocument(),
+  );
 });
 
 test("asks before discarding a GitHub source draft", async () => {

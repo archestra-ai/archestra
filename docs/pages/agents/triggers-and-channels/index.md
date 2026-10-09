@@ -2,7 +2,7 @@
 title: Triggers & Channels
 description: Start agent runs from webhooks, A2A calls, email, Slack, Microsoft Teams, and Telegram
 order: 7
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,3 +26,16 @@ A channel is one place where people message the agent: a Slack or Microsoft Team
 1. Connect the provider first. Each provider's page shows how.
 2. Open the agent's **Messaging Channels** tab and click **Add channel**.
 3. To change the channel's instructions or reply behavior, click **Settings** on it.
+
+## Conversation History
+
+The agent remembers the conversation, so a follow-up such as "and for last month?" works without repeating the details.
+
+- **In a thread:** in a Slack thread, a Microsoft Teams channel thread, or a Telegram topic, the agent reads the whole thread. Start a new thread for a new topic.
+- **In a chat without threads:** in a Teams direct message or group chat, or a Telegram chat, Archestra keeps the history. To start a new conversation, send `reset` as the whole message. `new chat`, `new conversation`, and `start over` also work.
+
+What to know:
+
+- After 8 hours with no messages, the next message starts a new conversation. The reply says so.
+- A long conversation is summarized, and the bot says so.
+- In a group chat, the reply footer names the person who started the conversation (everyone in the chat shares its history). Each message still runs with the sender's own permissions.

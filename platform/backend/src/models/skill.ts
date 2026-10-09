@@ -867,8 +867,9 @@ class SkillModel {
      * only by the GitHub import; see `skill_versions.source_commit`.
      */
     versionSourceCommit?: string;
+    tx?: Transaction;
   }): Promise<Skill | null> {
-    return await withDbTransaction(async (tx) => {
+    const run = async (tx: Transaction): Promise<Skill | null> => {
       const [skill] = await tx
         .insert(schema.skillsTable)
         .values(
@@ -941,7 +942,8 @@ class SkillModel {
       });
 
       return skill;
-    });
+    };
+    return params.tx ? run(params.tx) : withDbTransaction(run);
   }
 
   /**

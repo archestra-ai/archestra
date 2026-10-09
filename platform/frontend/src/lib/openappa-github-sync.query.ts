@@ -83,13 +83,26 @@ export function useUpdateAppaGithubSync() {
       }
       return data;
     },
+    // Whether a setup pull request was pending when the sync was asked for:
+    // the row forgets its number once the merge imports the policy.
+    onMutate: () => ({
+      awaitingMerge: !!client.getQueryData<
+        archestraApiTypes.GetAppaGithubSyncResponses["200"]
+      >(appaGithubSyncQueryKey)?.source?.setupPullRequestNumber,
+    }),
     onSettled: () => invalidatePolicyViews(client),
-    onSuccess: (data, body) => {
-      if (
-        body.action === "sync" &&
-        (data?.source?.lastSyncError || data?.source?.setupPullRequestNumber)
-      )
+    onSuccess: (data, body, context) => {
+      if (body.action === "sync" && data?.source?.lastSyncError) return;
+      if (body.action === "sync" && data?.source?.setupPullRequestNumber) {
+        toast.info(
+          "Not merged yet. The initial policy pull request is still open.",
+        );
         return;
+      }
+      if (body.action === "sync" && context.awaitingMerge) {
+        toast.success("Initial policy merged. Policy synced from GitHub.");
+        return;
+      }
       toast.success(
         body.action === "sync"
           ? "Sync complete"

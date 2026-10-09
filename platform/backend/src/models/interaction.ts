@@ -8,6 +8,7 @@ import {
   clientFilterToAgentIds,
   DynamicInteraction,
   isClaudeSessionSource,
+  isLogContentNotStored,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
   TimeInMs,
 } from "@archestra/shared";
@@ -44,6 +45,10 @@ import {
   encodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import {
+  resolveLogContentMode,
+  withholdInteractionContent,
+} from "@/log-content";
 import logger from "@/logging";
 import type {
   InsertInteraction,
@@ -450,7 +455,6 @@ class InteractionModel {
     data: InsertInteraction,
     auditContext?: EncryptedChatAuditContext | null,
   ) {
-    const audit = auditContext ?? null;
     // Snapshot the environment from the agent at creation time (single funnel
     // for all interaction writes) so per-environment cost-limit usage stays
     // stable under later agent reassignment. The agent is authoritative: when a
@@ -459,14 +463,21 @@ class InteractionModel {
     const environmentId = data.profileId
       ? await AgentModel.findEnvironmentId(data.profileId)
       : (data.environmentId ?? null);
+    // Enforced here, in the single funnel, so no writer can store content
+    // the deployment's Log Content mode withholds.
+    const withheld = resolveLogContentMode() === "metadata_only";
+    const record = withheld ? withholdInteractionContent(data) : data;
+    // A withheld row holds no content to encrypt under a conversation key, so
+    // it is written like the encrypted-chat fallback: unkeyed, marker in place.
+    const audit = withheld ? null : (auditContext ?? null);
 
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
-      ...data,
+      ...record,
       environmentId,
-      request: stripUnstorableChars(data.request),
-      processedRequest: stripUnstorableChars(data.processedRequest),
-      response: stripUnstorableChars(data.response),
+      request: stripUnstorableChars(record.request),
+      processedRequest: stripUnstorableChars(record.processedRequest),
+      response: stripUnstorableChars(record.response),
     };
 
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
@@ -480,9 +491,14 @@ class InteractionModel {
     // but relying on that coincidence would be fragile: a delta chain mixes rows
     // across requests and only the request that created a row carries its key,
     // so a chain spanning keys could not be reconstructed by any reader.
-    const { values, tip } = audit
-      ? { values: sanitized, tip: null }
-      : await InteractionDeltaManager.encodeOnWrite(sanitized);
+    //
+    // Withheld rows are excluded too: there is no conversation to share with
+    // a parent, and leaving their hash columns empty keeps a later full-content
+    // row from chaining onto a request that was never stored.
+    const { values, tip } =
+      audit || withheld
+        ? { values: sanitized, tip: null }
+        : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
     const [interaction] = await db
       .insert(schema.interactionsTable)
@@ -1241,9 +1257,10 @@ class InteractionModel {
         );
         return;
       }
-      const teamIds = await AgentTeamModel.getTeamsForAgent(
-        interaction.profileId,
-      );
+      // A credential's billing team takes the place of the agent's teams.
+      const teamIds = interaction.billingTeamId
+        ? [interaction.billingTeamId]
+        : await AgentTeamModel.getTeamsForAgent(interaction.profileId);
       if (teamIds.length === 0) {
         logger.warn(
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
@@ -1256,8 +1273,17 @@ class InteractionModel {
         entityType: LimitEntityType;
         entityId: string | null | undefined;
       }> = [
-        { entityType: "user", entityId: interaction.userId },
+        // The billing team pays instead of the caller, so a team-billed
+        // interaction leaves the caller's personal limit untouched.
+        {
+          entityType: "user",
+          entityId: interaction.billingTeamId ? null : interaction.userId,
+        },
         { entityType: "virtual_key", entityId: interaction.virtualKeyId },
+        {
+          entityType: "llm_oauth_client",
+          entityId: interaction.authenticatedAppId,
+        },
         {
           entityType: "virtual_key",
           entityId: interaction.passthroughVirtualKeyId,
@@ -1912,6 +1938,7 @@ class InteractionModel {
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         lastInteractionId: lastInteraction?.lastInteractionId ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
+        contentNotStored: lastInteraction?.contentNotStored ?? false,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
       };
@@ -2023,6 +2050,7 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
     >
@@ -2066,6 +2094,7 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
     >();
@@ -2150,7 +2179,14 @@ class InteractionModel {
           const hasGeminiContent =
             Array.isArray(request?.contents) && request.contents.length > 0;
 
-          if (hasOpenAiContent || hasResponsesContent || hasGeminiContent) {
+          // A Metadata only turn is a real turn whose content was never
+          // stored: it is the session's tip, with no preview to show.
+          if (
+            hasOpenAiContent ||
+            hasResponsesContent ||
+            hasGeminiContent ||
+            isLogContentNotStored(interaction.request)
+          ) {
             lastMainInteraction = interaction;
           }
         }
@@ -2224,6 +2260,9 @@ class InteractionModel {
           : null,
         lastInteractionId: lastMainInteraction?.id ?? null,
         lastInteractionType: lastMainInteraction?.type ?? null,
+        contentNotStored: lastMainInteraction
+          ? isLogContentNotStored(lastMainInteraction.request)
+          : false,
         claudeCodeTitle: claudeCodeTitle ?? null,
       });
     }

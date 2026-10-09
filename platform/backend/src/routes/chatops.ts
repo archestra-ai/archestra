@@ -295,7 +295,12 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   activityValue.workspaceId ||
                   context.activity.channelData?.team?.id ||
                   null,
-                threadId: context.activity.conversation?.id,
+                // 1:1 and group chats have no reply threads; the whole chat
+                // is the conversation.
+                threadId:
+                  context.activity.conversation?.conversationType === "channel"
+                    ? context.activity.conversation?.id
+                    : undefined,
                 senderId:
                   context.activity.from?.aadObjectId ||
                   context.activity.from?.id ||
@@ -307,7 +312,10 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ? new Date(context.activity.timestamp)
                   : new Date(),
                 isThreadReply: false,
-                metadata: {},
+                metadata: {
+                  conversationType:
+                    context.activity.conversation?.conversationType,
+                },
               };
               // Resolve sender email and verify they are a registered Archestra user
               if (
@@ -516,6 +524,11 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               title: "mute",
                               value:
                                 "Stop auto-replies in this thread (@mention me to resume)",
+                            },
+                            {
+                              title: "reset",
+                              value:
+                                "Start a new conversation (direct messages and group chats)",
                             },
                           ],
                         },
@@ -2511,6 +2524,7 @@ async function handleAgentSelection(
         timestamp: message.timestamp,
         isThreadReply: message.isThreadReply,
         metadata: {
+          conversationType: context.activity.conversation?.conversationType,
           conversationReference: TurnContext.getConversationReference(
             context.activity,
           ),

@@ -153,6 +153,9 @@ struct OfferInput {
     /// Recorded as the remedy result.
     #[serde(default)]
     precheck_refusal: Option<String>,
+    /// As on [`Input`]: a remedy's consults are recorded like any dispatch's.
+    #[serde(default)]
+    withhold_consult_content: bool,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -245,6 +248,10 @@ struct Input {
     ruling: Option<RulingInput>,
     #[serde(default)]
     precheck_refusal: Option<String>,
+    /// The host's Log Content mode is Metadata only: this dispatch's consult
+    /// rows keep no content.
+    #[serde(default)]
+    withhold_consult_content: bool,
 }
 
 /// Maximum byte length for precheck refusal text.
@@ -1142,6 +1149,7 @@ pub async fn execute_remedy_by_offer(
         presentation: Some(input.presentation),
         ruling: input.ruling,
         precheck_refusal: input.precheck_refusal,
+        withhold_consult_content: input.withhold_consult_content,
     };
     validate(&input)?;
     let response: Value = serde_json::from_str(&run(input, policy.into()).await?).map_err(error)?;
@@ -1787,6 +1795,7 @@ impl State {
             organization_id: input.organization_id.clone(),
             session_id: input.session_id.clone(),
             caller_id: input.caller_id.clone(),
+            withhold_content: input.withhold_consult_content,
         };
         let result = leased.state.dispatch_on_lease(input, root, key).await;
         // On the dispatch's own connection, after its session lock is released.

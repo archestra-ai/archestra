@@ -1676,9 +1676,12 @@ test("history opens the chosen saved run's explanations by row and keyboard", as
   );
   showPage();
   await screen.findByText("Revision 1");
-  const historicalRow = screen.getByText("Revision 1").closest("tr");
-  if (!historicalRow) throw new Error("Historical run row missing");
-  fireEvent.click(historicalRow);
+  // Keyboard first: closing a modal hands focus back on a timer, which could
+  // land after a later focus() and swallow the Enter.
+  screen
+    .getByRole("button", { name: formatDate({ date: historical.createdAt }) })
+    .focus();
+  await userEvent.keyboard("{Enter}");
   const dialog = await screen.findByRole("dialog", {
     name: "Validation run details",
   });
@@ -1701,11 +1704,9 @@ test("history opens the chosen saved run's explanations by row and keyboard", as
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
-  const dateButton = screen.getByRole("button", {
-    name: formatDate({ date: historical.createdAt }),
-  });
-  dateButton.focus();
-  await userEvent.keyboard("{Enter}");
+  const historicalRow = screen.getByText("Revision 1").closest("tr");
+  if (!historicalRow) throw new Error("Historical run row missing");
+  fireEvent.click(historicalRow);
   expect(
     await screen.findByRole("dialog", { name: "Validation run details" }),
   ).toBeVisible();

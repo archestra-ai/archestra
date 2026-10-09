@@ -39,6 +39,7 @@ import {
   decodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import { resolveLogContentMode, withholdToolCallContent } from "@/log-content";
 import type { InsertMcpToolCall, McpToolCall, SortingQuery } from "@/types";
 import { escapeLikePattern } from "@/utils/sql-search";
 import AgentTeamModel from "./agent-team";
@@ -79,13 +80,23 @@ class McpToolCallModel {
     data: InsertMcpToolCall,
     auditContext?: EncryptedChatAuditContext | null,
   ) {
-    const audit = auditContext ?? null;
+    // Enforced here, the one place every MCP log row is written, so no caller
+    // can store content the deployment's Log Content mode withholds.
+    const withheld = resolveLogContentMode() === "metadata_only";
+    // A withheld row holds no content to encrypt under a conversation key, so
+    // it is written like the encrypted-chat fallback: unkeyed, marker in place.
+    const audit = withheld ? null : (auditContext ?? null);
     const [mcpToolCall] = await db
       .insert(schema.mcpToolCallsTable)
       // Spread first: the encrypt helper mutates in place, and callers must
       // keep their plaintext copy (e.g. to build the JSON-RPC response).
       .values(
-        encryptMcpToolCallContent(redactToolCallArguments({ ...data }), audit),
+        encryptMcpToolCallContent(
+          withheld
+            ? withholdToolCallContent(data)
+            : redactToolCallArguments({ ...data }),
+          audit,
+        ),
       )
       .returning();
 

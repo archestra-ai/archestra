@@ -30,6 +30,11 @@
 #                          without both APPA tools, so the default lite suite
 #                          must run with it off. The dedicated `openappa`
 #                          Playwright project is the one that sets it.
+#   ARCHESTRA_AGENT_RUNTIME_ENABLED
+#                          turn Agent Runtime on in the platform container
+#                          (default: false). The beta switch never implies it.
+#                          The docs screenshots set it to show the runtime
+#                          picker and popular agents.
 
 set -euo pipefail
 
@@ -161,6 +166,7 @@ cmd_up() {
     --env-file "${SCRIPT_DIR}/e2e-lite-platform.env" \
     -e "ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE=${MCP_SERVER_BASE_IMAGE}" \
     -e "ARCHESTRA_BETA=${ARCHESTRA_BETA:-false}" \
+    -e "ARCHESTRA_AGENT_RUNTIME_ENABLED=${ARCHESTRA_AGENT_RUNTIME_ENABLED:-false}" \
     -e "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET=${ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET:-e2e-openappa-offer-signing-secret}" \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -v "${PLATFORM_DIR}/e2e-tests/fixtures/a2a-test-agent:/opt/archestra-e2e/a2a-test-agent:ro" \

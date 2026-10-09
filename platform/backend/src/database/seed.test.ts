@@ -50,6 +50,42 @@ import {
 
 const [BASE_SKILL] = getEnabledBuiltInSkills();
 
+async function countBuiltIns(organizationId: string) {
+  const agents = await db
+    .select({
+      builtInId: sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+    })
+    .from(schema.agentsTable)
+    .where(
+      and(
+        eq(schema.agentsTable.organizationId, organizationId),
+        eq(schema.agentsTable.builtIn, true),
+      ),
+    );
+  const skills = await db
+    .select({ sourceRef: schema.skillsTable.sourceRef })
+    .from(schema.skillsTable)
+    .where(
+      and(
+        eq(schema.skillsTable.organizationId, organizationId),
+        eq(schema.skillsTable.sourceType, "built_in"),
+      ),
+    );
+  return {
+    agents: agents.map(({ builtInId }) => builtInId).sort(),
+    skills: skills.map(({ sourceRef }) => sourceRef).sort(),
+  };
+}
+
+function expectedBuiltIns() {
+  return {
+    agents: Object.values(BUILT_IN_AGENT_IDS).sort(),
+    skills: getEnabledBuiltInSkills()
+      .map(({ builtInSkillId }) => builtInSkillSourceRef(builtInSkillId))
+      .sort(),
+  };
+}
+
 describe("syncBuiltInAgents", () => {
   test("reuses the built-in OpenAPPA agent and reconciles its capabilities", async ({
     makeOrganization,
@@ -649,6 +685,28 @@ Be neurodiversity friendly.
     } finally {
       config.openappa.enabled = original;
     }
+  });
+
+  test("two replicas syncing at once provision each built-in exactly once", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+
+    await Promise.all([syncBuiltInAgents(), syncBuiltInAgents()]);
+
+    expect(await countBuiltIns(organization.id)).toEqual(expectedBuiltIns());
+  });
+
+  test("two replicas booting an empty database share one default organization", async () => {
+    await Promise.all([syncBuiltInAgents(), syncBuiltInAgents()]);
+
+    const organizations = await db
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable);
+    expect(organizations).toHaveLength(1);
+    expect(await countBuiltIns(organizations[0].id)).toEqual(
+      expectedBuiltIns(),
+    );
   });
 
   test("creates built-in agents for every organization", async ({

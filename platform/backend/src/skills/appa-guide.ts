@@ -7,12 +7,16 @@ import {
   appaContractsPartPath,
 } from "./appa-guide-contracts";
 import {
+  VALIDATION_READ_RESTRICTION,
+  VALIDATION_WORKFLOW,
+  VALIDATION_WRITING,
+} from "./appa-guide-validation";
+import {
   ADJUST_WORKFLOW,
   CLIENTS_REFERENCE,
   FIRST_POLICY_WORKFLOW,
   INIT_WORKFLOW,
   REQUESTS_WORKFLOW,
-  VALIDATION_WORKFLOW,
 } from "./appa-guide-workflows";
 import type { BuiltInSkill } from "./built-in-skills";
 
@@ -137,67 +141,12 @@ ${APPA_GUIDE_CORE}`,
     {
       path: "references/validation-writing.md",
       kind: "reference",
-      content: `# Lightweight OpenAPPA validation specifications
-
-A specification is a UTF-8 .appa file with an ordered scenario. Every file starts a fresh session, independent of this chat: public audience and the highest trust rank, unless the policy's deployment starting label overrides them. Calls in one file share state. Replay supplies empty tool results and does not execute the tools.
-
-## Resolve names and contracts once
-
-Scenario tool names must be canonical \`<family>/<namespace>/<tool>\` IDs, even when a policy rule uses a raw client name. For an ordinary Archestra MCP name, \`crm__search_records\` becomes \`mcp/crm/search_records\`. Never put the raw double-underscore name in a scenario.
-
-Use the installed catalog namespace, not a battery's alias: if \`[server_aliases]\` maps \`mail = ["mail_prod"]\`, an installed \`mail_prod__send\` call is \`mcp/mail_prod/send\`, even though its battery rule is \`mcp/mail/send\`. Match it against the effective policy in declaration order: root rules first, then batteries. For native names or names containing additional \`__\` separators, load **Tool names** in \`references/archestra.md\` instead of guessing.
-
-Use concrete arguments that satisfy the selected contract's schema, selectors, and argument-based audiences. \`{}\` is appropriate only when the check needs no arguments. A schema refusal, unmatched selector, catch-all decision, or missing helper does not establish the intended restriction.
-
-## Check the boundary with a control
-
-A read's \`delta.audience\` restricts later sharing; \`requires.audience.contains\` checks that the destination is permitted by the current audience. Reading public data later cannot undo an earlier restriction. Trust is independent and can also cause a denial. Consult \`references/contracts/audiences.md\` or \`references/contracts/labels.md\` only when those semantics are unclear.
-
-For "this read prevents this public write", check the exact same write before and after the read. If the write has \`delta = {}\` and no other state-changing behavior, all three calls fit in one file. Otherwise put the fresh-session control in a separate file. If the control is denied too, report the confounding requirement; the denial after the read alone does not establish its cause. An unrelated allowed lookup is not that control.
-
-This illustrative policy has a private read and a public send; adapt the names and contracts to the user's effective policy, never add these rules merely to make a validation pass:
-
-\`\`\`toml
-[server_aliases]
-mail = ["mail_prod"]
-
-[policy]
-version = 2
-
-[[policy.tool]]
-name = "crm__search_records"
-delta = { audience = ["internal"] }
-
-[[policy.tool]]
-name = "mcp/mail/send"
-requires = { audience = { contains = ["public"] } }
-delta = {}
-\`\`\`
-
-The scenario checks that public sending works until private data is read:
-
-\`\`\`appa
-# The private read must block the same public send that was allowed before it.
-mcp/mail_prod/send {
-  recipient: "public"
-  body: "Synthetic status update"
-}
-expect allow
-mcp/crm/search_records {}
-expect allow
-mcp/mail_prod/send {
-  recipient: "public"
-  body: "Synthetic status update"
-}
-expect deny
-\`\`\`
-
-Argument blocks are not JSON objects: put each unquoted name on its own line, followed by a colon and a JSON value, without commas between lines. Start with one file or a small pair. Preserve existing expectations; explain conflicts rather than rewriting them to force a pass. Do not invent call arguments from a Yell archive.
-
-Offline replay uses the same native policy engine as enforcement, against the composed candidate policy. It executes no tools, models or remote helpers. The host's catch-all annotator (\`noop\`) answers offline; a step that needs any other annotator, such as \`archestra.run-command\`, or an audience lookup such as team membership reports cannot_run. Steps before a missing annotator still pass or fail; after an unanswered audience lookup, replay stops at the first call in the file that was not allowed, which can be an earlier denial. A policy with a model annotator other than \`archestra\`, a model profile, or an external authority or sanitizer cannot run at all. A passing replay demonstrates only the decisions represented by the scenario; it does not prove live client integration or provider behavior.
-
-Use get_openappa_policy_tests to obtain the authoritative version and configured directory. Upsert only the named files you intend to edit and use explicit deletions. For Git sources, files must stay under that directory and Git remains authoritative. Preview the full patched suite against the current policy; omit policyContent or pass null for validation-only work. Include policyContent only when the operator explicitly requested a policy change. A replay failure does not authorize a policy fix.
-`,
+      content: VALIDATION_WRITING,
+    },
+    {
+      path: "references/validation-read-restriction.md",
+      kind: "reference",
+      content: VALIDATION_READ_RESTRICTION,
     },
     {
       path: "references/first-policy.md",

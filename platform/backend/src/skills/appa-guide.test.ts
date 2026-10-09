@@ -221,11 +221,12 @@ describe("APPA Guide feature availability", () => {
     ).toBe(false);
   });
 
-  test("validation-writing examples parse with the embedded scenario parser", async () => {
+  test.each([
+    "references/validation-writing.md",
+    "references/validation-read-restriction.md",
+  ])("%s examples parse with the embedded scenario parser", async (path) => {
     config.openappa.enabled = true;
-    const reference = APPA_GUIDE_SKILL.files.find(
-      (file) => file.path === "references/validation-writing.md",
-    );
+    const reference = APPA_GUIDE_SKILL.files.find((file) => file.path === path);
     if (!reference) throw new Error("Validation-writing reference is missing");
     const examples = [...reference.content.matchAll(/```appa\n([\s\S]*?)```/g)];
     expect(examples.length).toBeGreaterThan(0);
@@ -243,7 +244,7 @@ describe("APPA Guide feature availability", () => {
 
   test("the validation example isolates the read restriction and catches its removal", async () => {
     const reference = APPA_GUIDE_SKILL.files.find(
-      (file) => file.path === "references/validation-writing.md",
+      (file) => file.path === "references/validation-read-restriction.md",
     )?.content;
     if (!reference) throw new Error("Validation-writing reference is missing");
     const policy = reference.match(/```toml\n([\s\S]*?)```/)?.[1];

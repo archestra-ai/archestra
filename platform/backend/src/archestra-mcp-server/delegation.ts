@@ -223,10 +223,8 @@ export async function handleDelegation(
     return errorResult("message is required.");
   }
 
-  const tier = SubagentModelTierSchema.optional().safeParse(args?.tier);
-  if (!tier.success) {
-    return errorResult("tier must be one of: fast, normal, smart.");
-  }
+  // Validated against the advertised schema at dispatch.
+  const tier = SubagentModelTierSchema.optional().parse(args?.tier);
 
   if (!agentId) {
     return errorResult("No agent context available.");
@@ -368,7 +366,7 @@ export async function handleDelegation(
     const run = {
       agentId: target.id,
       selfFork,
-      ...(selfFork ? { parentLlm: context.parentLlm, tier: tier.data } : {}),
+      ...(selfFork ? { parentLlm: context.parentLlm, tier } : {}),
       ...(spawn.binding ? { appaSubagent: spawn.binding.child } : {}),
       organizationId,
       userId: userId || "system",

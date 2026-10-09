@@ -42,7 +42,7 @@ export function SubagentModelTiersSection() {
   );
 
   const saved = organization?.subagentModelTiers ?? {};
-  const savedKey = JSON.stringify(saved);
+  const savedKey = tiersKey(saved);
   const [tiers, setTiers] = useState<SubagentModelTiers>(saved);
   const lastSavedKey = useRef(savedKey);
   useEffect(() => {
@@ -50,7 +50,7 @@ export function SubagentModelTiersSection() {
     const previousSavedKey = lastSavedKey.current;
     lastSavedKey.current = savedKey;
     setTiers((current) =>
-      JSON.stringify(current) === previousSavedKey ? saved : current,
+      tiersKey(current) === previousSavedKey ? saved : current,
     );
   }, [savedKey, saved]);
 
@@ -74,7 +74,7 @@ export function SubagentModelTiersSection() {
         : others;
     });
 
-  if (providers.length === 0) return null;
+  if (!organization || providers.length === 0) return null;
 
   return (
     <>
@@ -128,7 +128,7 @@ export function SubagentModelTiersSection() {
         </WithPermissions>
       </SettingsBlock>
       <SettingsSaveBar
-        hasChanges={JSON.stringify(tiers) !== savedKey}
+        hasChanges={tiersKey(tiers) !== savedKey}
         isSaving={updateMutation.isPending}
         disabledSave={!organization}
         permissions={{ organizationSettings: ["update"] }}
@@ -140,6 +140,14 @@ export function SubagentModelTiersSection() {
 }
 
 const TIER_LABELS: Record<Tier, string> = { fast: "Fast", smart: "Smart" };
+
+function tiersKey(tiers: SubagentModelTiers): string {
+  return JSON.stringify(
+    Object.entries(tiers)
+      .map(([provider, tier]) => [provider, tier?.fast, tier?.smart])
+      .sort(([a], [b]) => String(a).localeCompare(String(b))),
+  );
+}
 
 function toolCapable(models: LlmModel[] | undefined): LlmModel[] {
   return (models ?? []).filter(

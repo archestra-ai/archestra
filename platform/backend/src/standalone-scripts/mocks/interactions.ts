@@ -184,7 +184,6 @@ export const CONVERSATION_TEMPLATES: ConversationTemplate[] = [
 interface ToolInfo {
   name: string;
   description: string | null;
-  allowUsageWhenUntrustedDataIsPresent: boolean;
 }
 
 /**

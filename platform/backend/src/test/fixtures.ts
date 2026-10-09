@@ -1081,7 +1081,7 @@ async function makeSecret(
 
 /**
  * Creates a test chat API key in the database.
- * Used for testing features that require LLM API keys (e.g., auto-policy configuration).
+ * Used for testing features that require LLM API keys.
  */
 async function makeLlmProviderApiKey(
   organizationId: string,

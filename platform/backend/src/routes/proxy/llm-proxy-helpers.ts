@@ -553,8 +553,8 @@ export function withProviderToolCallIds<T>(
 
 /**
  * Record OTEL spans and Prometheus metrics for blocked tool calls.
- * Used by both streaming and non-streaming paths when tool invocation
- * policies refuse tool calls.
+ * Used by both streaming and non-streaming paths when guardrails refuse
+ * tool calls.
  */
 /**
  * The row-level marker for a turn whose tool calls a guardrail refused.

@@ -75,7 +75,7 @@ export function makeConfig(
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
       encryptedChatEnabled: false,
-      openappaEnabled: false,
+      openappaEnabled: true,
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,
       // On in the mock: the connector-dialog tests exercise the M-Files form,

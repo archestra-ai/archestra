@@ -2,6 +2,7 @@
 title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
+alpha: "Available on every deployment."
 lastUpdated: 2026-10-09
 ---
 

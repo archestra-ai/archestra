@@ -1,4 +1,8 @@
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
+} from "@archestra/shared";
 
 type AgentsList = archestraApiTypes.GetAgentsResponses["200"];
 type Agent = AgentsList["data"][number];
@@ -147,6 +151,19 @@ export function makeExternalAgent(
     ...overrides,
   };
 }
+
+export const builtInAgentsSeed = Object.entries(BUILT_IN_AGENT_IDS).map(
+  ([key, name]) =>
+    makeAgent({
+      id: name,
+      name: BUILT_IN_AGENT_NAMES[key as keyof typeof BUILT_IN_AGENT_NAMES],
+      authorId: null,
+      authorName: null,
+      scope: "org",
+      builtIn: true,
+      builtInAgentConfig: { name },
+    }),
+);
 
 export const agentsSeed = makeAgentsList();
 

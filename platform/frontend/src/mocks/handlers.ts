@@ -8,7 +8,12 @@ import {
   clientFilterToAgentIds,
 } from "@archestra/shared/interactions/client";
 import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
-import { agentsSeed, makeAgent, makeAgentCatalog } from "./data/agents";
+import {
+  agentsSeed,
+  builtInAgentsSeed,
+  makeAgent,
+  makeAgentCatalog,
+} from "./data/agents";
 import {
   adminPermissionsSeed,
   adminScopedCapabilitiesSeed,
@@ -391,7 +396,23 @@ export const handlers: HttpHandler[] = [
 
   // Agents
   ...getJson("/api/agents", agentsSeed),
-  ...getJson("/api/agent-catalog", makeAgentCatalog()),
+  ...paths("/api/agent-catalog").map((url) =>
+    http.get(url, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const includeBuiltIn =
+        params.get("includeBuiltIn") === "true" ||
+        params.get("scope") === "built_in";
+      const agents =
+        includeBuiltIn && params.get("pinned") !== "true"
+          ? builtInAgentsSeed.filter((agent) =>
+              agent.name
+                .toLowerCase()
+                .includes((params.get("name") ?? "").toLowerCase()),
+            )
+          : [];
+      return HttpResponse.json(makeAgentCatalog({ agents }));
+    }),
+  ),
   ...getJson("/api/agents/all", []),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.

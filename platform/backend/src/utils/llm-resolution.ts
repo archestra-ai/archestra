@@ -1,13 +1,11 @@
 import {
   type CompleteModelSelection,
-  DEFAULT_MODELS,
-  FAST_MODEL_PATTERNS,
-  findFirstModelByPatterns,
+  findTierDefault,
   isCompleteModelSelection,
   isSubscriptionCredential,
-  MODEL_MARKER_PATTERNS,
   type ModelInputModality,
   type ModelSelection,
+  PROVIDER_MODEL_TIERS,
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   resolveModelSelection,
@@ -209,12 +207,7 @@ export async function resolveSubagentTierSelection(params: {
     organization?.subagentModelTiers?.[parentModel.provider]?.[tier];
   const tierModel =
     candidates.find((model) => model.id === overrideId) ??
-    findFirstModelByPatterns(
-      candidates,
-      tier === "smart"
-        ? MODEL_MARKER_PATTERNS[parentModel.provider]
-        : (FAST_MODEL_PATTERNS[parentModel.provider] ?? []),
-    );
+    findTierDefault(candidates, parentModel.provider, tier);
   return tierModel
     ? { modelId: tierModel.id, apiKeyId: parent.apiKeyId }
     : parent;
@@ -667,16 +660,16 @@ function resolveDefaultLlmFromEnv(): {
       getProviderEnvApiKey(provider) &&
       !providerRequiresPerUserCredential(provider)
     ) {
-      return { model: DEFAULT_MODELS[provider], provider };
+      return { model: PROVIDER_MODEL_TIERS[provider].normal, provider };
     }
   }
 
   if (isVertexAiEnabled()) {
     logger.info(
-      { model: DEFAULT_MODELS.gemini },
+      { model: PROVIDER_MODEL_TIERS.gemini.normal },
       "resolveDefaultLlmFromEnv: Vertex AI is enabled",
     );
-    return { model: DEFAULT_MODELS.gemini, provider: "gemini" };
+    return { model: PROVIDER_MODEL_TIERS.gemini.normal, provider: "gemini" };
   }
 
   return {

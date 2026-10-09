@@ -2,8 +2,7 @@
 
 import {
   type archestraApiTypes,
-  FAST_MODEL_PATTERNS,
-  findFirstModelByPatterns,
+  findTierDefault,
   type SupportedProvider,
 } from "@archestra/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -81,7 +80,7 @@ export function SubagentModelTiersSection() {
       <SettingsBlock
         id="subagent-model-tiers"
         title="Subagent Model Tiers"
-        description="When an agent forks itself, it can run the copy on a smarter or faster model from the same provider. Default uses the provider's best model for Smart and its small model for Fast."
+        description="When an agent forks itself, it can run the copy on a smarter or faster model from the same provider. Default uses the provider's latest flagship for Smart and its latest small model for Fast."
         control={null}
       >
         <WithPermissions
@@ -160,13 +159,11 @@ function defaultLabel(
   tier: Tier,
   models: LlmModel[],
 ): string {
-  const model =
-    tier === "smart"
-      ? models.find((m) => m.isBest)
-      : findFirstModelByPatterns(
-          models.map((m) => ({ ...m, modelId: m.id })),
-          FAST_MODEL_PATTERNS[provider] ?? [],
-        );
+  const model = findTierDefault(
+    models.map((m) => ({ ...m, modelId: m.id })),
+    provider,
+    tier,
+  );
   return model
     ? `default (${model.displayName ?? model.id})`
     : "same as parent";

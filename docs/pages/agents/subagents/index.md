@@ -38,7 +38,7 @@ The agent picks the model the copy runs on for each task:
 - **Smart**: a stronger model, for hard reasoning or checking a conclusion.
 - **Fast**: a cheaper, quicker model, for bulk reading, searching, or extraction.
 
-To choose the Smart and Fast models, go to **Settings → Agents → Subagent Model Tiers**. Each provider has its own pair. Unset tiers use the provider's best model for Smart and its small model for Fast.
+To choose the Smart and Fast models, go to **Settings → Agents → Subagent Model Tiers**. Each provider has its own pair. Unset tiers use the provider's latest flagship for Smart and its latest small model for Fast.
 
 What to know:
 

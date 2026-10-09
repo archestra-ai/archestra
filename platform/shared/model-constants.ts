@@ -862,7 +862,7 @@ export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
  * first listed id present in the account is the one marked best.
  */
 export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
-  anthropic: ["opus-4-8", "opus-4-7", "opus", "sonnet"],
+  anthropic: ["opus-5-5", "opus-4-8", "opus-4-7", "opus", "sonnet"],
   openai: [
     // Luna is deliberately absent so a smaller tier is never marked best.
     "gpt-6-astra",
@@ -913,6 +913,7 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   groq: ["openai/gpt-oss-120b", "gpt-oss", "llama-4", "llama-3.3"],
   xai: ["grok-4.3", "grok-4", "grok-3"],
   openrouter: [
+    "anthropic/claude-opus-5.5",
     "anthropic/claude-opus-4.8",
     "anthropic/claude-opus-4.7",
     "openai/gpt-5.5-pro",
@@ -950,6 +951,7 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "gpt-4o",
   ],
   bedrock: [
+    "claude-opus-5-5",
     "anthropic.claude-opus-4-8",
     "anthropic.claude-opus-4-7",
     "claude-opus",
@@ -957,6 +959,7 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "amazon.nova-pro",
   ],
   "github-copilot": [
+    "claude-opus-5.5",
     "claude-opus",
     "claude-sonnet",
     "gpt-5",
@@ -976,26 +979,10 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
 /**
  * Model tier a forked subagent runs on. `normal` is the parent's own model;
  * `smart` and `fast` stay on the parent's provider key and resolve to the
- * organization's override for that provider, else to the provider default
- * (`smart` = the best-model markers above, `fast` = FAST_MODEL_PATTERNS).
+ * organization's override for that provider, else to PROVIDER_MODEL_TIERS.
  */
 export const SubagentModelTierSchema = z.enum(["fast", "normal", "smart"]);
 export type SubagentModelTier = z.infer<typeof SubagentModelTierSchema>;
-
-/**
- * Default `fast` subagent tier for the core providers: the latest small model,
- * matched as a substring of the model id. Other providers, or a key without it,
- * run `fast` forks on the parent's model unless the organization overrides it.
- */
-export const FAST_MODEL_PATTERNS: Partial<Record<SupportedProvider, string[]>> =
-  {
-    anthropic: ["claude-haiku-5-5"],
-    bedrock: ["claude-haiku-5-5"],
-    openai: ["gpt-6-luna"],
-    gemini: ["gemini-3.5-flash-lite"],
-    openrouter: ["openai/gpt-6-luna"],
-    "github-copilot": ["gpt-6-luna"],
-  };
 
 /**
  * The first model whose id contains a pattern, honoring pattern order (first
@@ -1015,39 +1002,83 @@ export function findFirstModelByPatterns<T extends { modelId: string }>(
   return undefined;
 }
 
+interface ProviderModelTiers {
+  /** Default model when no synced "best" model is available. */
+  normal: string;
+  /** Default `smart` / `fast` subagent tiers, matched as a substring of the
+   * model ids on the parent's key; unset or unmatched runs the parent's model. */
+  smart?: string;
+  fast?: string;
+}
+
 /**
- * Default model for each provider when no synced "best" model is available.
- * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
+ * Per-provider model trio. Record<SupportedProvider, ...> ensures a
+ * compile-time error when a new provider is added.
  */
-export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
+export const PROVIDER_MODEL_TIERS: Record<
+  SupportedProvider,
+  ProviderModelTiers
+> = {
   // Embeddings-only: never used to start a conversation, only as the fallback
   // embedding model when no synced "best" row exists.
-  voyage: "voyage-4",
-  jev: "jev-1.13.0",
-  anthropic: "claude-opus-4-8",
-  openai: "gpt-5.5",
-  openrouter: "openrouter/auto",
-  gemini: "gemini-3.6-flash",
-  cohere: "command-a-plus-05-2026",
-  groq: "openai/gpt-oss-120b",
-  xai: "grok-4.3",
-  ollama: "llama3.2",
-  "ollama-native": "llama3.2",
-  vllm: "default",
-  cerebras: "zai-glm-4.7",
-  mistral: "mistral-medium-2604",
-  perplexity: "sonar-pro",
-  zhipuai: "glm-5.1",
-  deepseek: "deepseek-v4-pro",
-  bedrock: "anthropic.claude-opus-4-8",
-  minimax: "MiniMax-M3",
-  kimi: "kimi-k2-0711-preview",
-  azure: "gpt-5.5",
-  "github-copilot": "gpt-4o",
-  "microsoft-365-copilot": MICROSOFT_365_COPILOT_MODELS[0].id,
+  voyage: { normal: "voyage-4" },
+  jev: { normal: "jev-1.13.0" },
+  anthropic: {
+    fast: "claude-haiku-5-5",
+    normal: "claude-sonnet-5-5",
+    smart: "claude-opus-5-5",
+  },
+  openai: { fast: "gpt-6-luna", normal: "gpt-6.1-sol", smart: "gpt-6-astra" },
+  openrouter: {
+    fast: "anthropic/claude-haiku-5.5",
+    normal: "anthropic/claude-sonnet-5.5",
+    smart: "anthropic/claude-opus-5.5",
+  },
+  gemini: {
+    fast: "gemini-3.5-flash-lite",
+    normal: "gemini-3.8-flash",
+    // Gemini 4 Argon has no public API yet; switch `smart` to it once it ships.
+    smart: "gemini-3.8-flash",
+  },
+  cohere: { normal: "command-a-plus-05-2026" },
+  groq: { normal: "openai/gpt-oss-120b" },
+  xai: { normal: "grok-4.3" },
+  ollama: { normal: "llama3.2" },
+  "ollama-native": { normal: "llama3.2" },
+  vllm: { normal: "default" },
+  cerebras: { normal: "zai-glm-4.7" },
+  mistral: { normal: "mistral-medium-2604" },
+  perplexity: { normal: "sonar-pro" },
+  zhipuai: { normal: "glm-5.1" },
+  deepseek: { normal: "deepseek-v4-pro" },
+  bedrock: {
+    fast: "claude-haiku-5-5",
+    normal: "anthropic.claude-opus-4-8",
+    smart: "claude-opus-5-5",
+  },
+  minimax: { normal: "MiniMax-M3" },
+  kimi: { normal: "kimi-k2-0711-preview" },
+  azure: { normal: "gpt-5.5" },
+  "github-copilot": {
+    // Copilot does not serve a newer Haiku yet.
+    fast: "claude-haiku-4.5",
+    normal: "claude-sonnet-5.5",
+    smart: "claude-opus-5.5",
+  },
+  "microsoft-365-copilot": { normal: MICROSOFT_365_COPILOT_MODELS[0].id },
   // Fallback only; users pick from the upstream's fetched model list.
-  archestra: "gpt-4o",
+  archestra: { normal: "gpt-4o" },
 };
+
+/** The provider's default `smart` / `fast` model among `models`, if any. */
+export function findTierDefault<T extends { modelId: string }>(
+  models: T[],
+  provider: SupportedProvider,
+  tier: Exclude<SubagentModelTier, "normal">,
+): T | undefined {
+  const modelId = PROVIDER_MODEL_TIERS[provider][tier];
+  return modelId ? findFirstModelByPatterns(models, [modelId]) : undefined;
+}
 
 /**
  * Cache token price as a multiple of the model's per-token INPUT price.

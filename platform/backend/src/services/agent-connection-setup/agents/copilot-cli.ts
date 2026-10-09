@@ -1,8 +1,8 @@
 import {
   COPILOT_CLI_CLIENT_ID,
   COPILOT_PROVIDER_ENV_KEYS,
-  DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
+  PROVIDER_MODEL_TIERS,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { COPILOT_GUARD_CLIENT } from "../guard/clients";
@@ -192,7 +192,7 @@ if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
 else
   printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' '<your-github-oauth-token>'
 fi
-printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${proxy.model ?? DEFAULT_MODELS["github-copilot"]}"\\n'
+printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${proxy.model ?? PROVIDER_MODEL_TIERS["github-copilot"].normal}"\\n'
 printf '  export ${COPILOT_PROVIDER_ENV_KEYS.headers}="%s"\\n' ${sh(copilotAttributionHeadersValue(proxy))}`;
 }
 
@@ -388,7 +388,7 @@ if (-not [string]::IsNullOrEmpty($ArchGhcpToken)) {
 }
 ${psCopilotModelApply({
   chosenModel: proxy.model,
-  defaultModel: DEFAULT_MODELS["github-copilot"],
+  defaultModel: PROVIDER_MODEL_TIERS["github-copilot"].normal,
 })}`;
 }
 
@@ -423,7 +423,7 @@ Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER
       ? sh(ctx.proxy.virtualKey)
       : `"<your-${ctx.proxy.provider}-api-key>"`
   }
-  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${ctx.proxy.model ?? DEFAULT_MODELS[ctx.proxy.provider]}"
+  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${ctx.proxy.model ?? PROVIDER_MODEL_TIERS[ctx.proxy.provider].normal}"
   export ${COPILOT_PROVIDER_ENV_KEYS.headers}="${copilotAttributionHeadersValue(ctx.proxy)}"
 ARCHESTRA_COPILOT`);
     }
@@ -492,7 +492,7 @@ ${PS_COPILOT_APPLIED_OK}${
 }
 ${psCopilotModelApply({
   chosenModel: ctx.proxy.model,
-  defaultModel: DEFAULT_MODELS[ctx.proxy.provider],
+  defaultModel: PROVIDER_MODEL_TIERS[ctx.proxy.provider].normal,
 })}`);
     }
   }

@@ -21,7 +21,6 @@ import {
   DEFAULT_CHILD_CHUNK_SIZE_TOKENS,
   DEFAULT_CHUNK_SIZE_TOKENS,
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
-  DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
   getAgentCatalogImageTag,
@@ -34,6 +33,7 @@ import {
   MCP_ORCHESTRATOR_DEFAULTS,
   MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
+  PROVIDER_MODEL_TIERS,
   parsePublicHostSchemes,
   type SupportedProvider,
   SupportedProviders,
@@ -3058,7 +3058,8 @@ const config = {
       apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
     },
     defaultModel:
-      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || DEFAULT_MODELS.anthropic,
+      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL ||
+      PROVIDER_MODEL_TIERS.anthropic.normal,
     defaultProvider: ((): SupportedProvider => {
       const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
       if (

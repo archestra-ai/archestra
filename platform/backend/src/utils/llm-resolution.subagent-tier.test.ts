@@ -59,7 +59,7 @@ describe("resolveSubagentTierSelection", () => {
   }) => {
     const { org, key, byName } = await setup(
       { makeOrganization, makeLlmProviderApiKey },
-      ["claude-sonnet-5", "claude-haiku-5-5", "claude-opus-4-8"],
+      ["claude-sonnet-5", "claude-haiku-5-5", "claude-opus-5-5"],
     );
     const parent = { modelId: byName["claude-sonnet-5"], apiKeyId: key.id };
 
@@ -76,7 +76,7 @@ describe("resolveSubagentTierSelection", () => {
         parent,
         organizationId: org.id,
       }),
-    ).toEqual({ modelId: byName["claude-opus-4-8"], apiKeyId: key.id });
+    ).toEqual({ modelId: byName["claude-opus-5-5"], apiKeyId: key.id });
   });
 
   test("the organization override wins over the default", async ({

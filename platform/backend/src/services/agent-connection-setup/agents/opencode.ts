@@ -1,9 +1,9 @@
 import {
-  DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
   OPENCODE_CLIENT_ID,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   openCodePassthroughBaseUrl,
+  PROVIDER_MODEL_TIERS,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { OPENCODE_GUARD_CLIENT } from "../guard/clients";
@@ -53,7 +53,7 @@ function opencodeProviderTarget(
   }
   return {
     id: route.openCodeProviderId,
-    model: proxy.model ?? DEFAULT_MODELS[proxy.provider],
+    model: proxy.model ?? PROVIDER_MODEL_TIERS[proxy.provider].normal,
   };
 }
 

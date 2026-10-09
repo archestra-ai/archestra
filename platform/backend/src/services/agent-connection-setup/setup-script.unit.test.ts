@@ -22,7 +22,7 @@ import {
   CODEX_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
-import { DEFAULT_MODELS } from "@archestra/shared/model-constants";
+import { PROVIDER_MODEL_TIERS } from "@archestra/shared/model-constants";
 import { OPENCODE_PASSTHROUGH_PROVIDER_ROUTES } from "@archestra/shared/opencode-provider-routes";
 import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
@@ -1912,7 +1912,7 @@ ${script.slice(start, end)}
         stat(path.join(home, ".archestra", "opencode-connection-state.json")),
       ).rejects.toMatchObject({ code: "ENOENT" });
 
-      restored.model = `openai/${DEFAULT_MODELS.openai}`;
+      restored.model = `openai/${PROVIDER_MODEL_TIERS.openai.normal}`;
       await writeFile(configPath, JSON.stringify(restored));
       await execFileAsync("bash", [block], {
         env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
@@ -2865,7 +2865,7 @@ describe("renderSetupScript (windows)", () => {
     expect(script).not.toContain("+ $ArchGhcpToken");
     // BYOK needs an explicit model to launch: default applied when unset
     expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'gpt-4o', 'User')",
+      `[Environment]::SetEnvironmentVariable('COPILOT_MODEL', '${PROVIDER_MODEL_TIERS["github-copilot"].normal}', 'User')`,
     );
     // client attribution rides COPILOT_PROVIDER_HEADERS (proxy-only headers)
     expect(script).toContain(
@@ -2919,7 +2919,7 @@ describe("renderSetupScript (windows)", () => {
       "if ([string]::IsNullOrEmpty($env:COPILOT_MODEL))",
     );
     expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'gpt-5.5', 'User')",
+      `[Environment]::SetEnvironmentVariable('COPILOT_MODEL', '${PROVIDER_MODEL_TIERS.openai.normal}', 'User')`,
     );
     expect(script).toContain("Keeping your existing COPILOT_MODEL");
     expect(script).toContain(

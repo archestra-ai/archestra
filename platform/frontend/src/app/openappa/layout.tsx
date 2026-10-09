@@ -27,7 +27,7 @@ export default async function OpenAppaLayout({
   if (config?.features.openappaEnabled !== true) {
     // Beta on with OpenAPPA off means the licence is what holds it back.
     if (config?.features.betaEnabled === true)
-      return <OpenAppaLicenceRequired tier={config.smallTeamTier} />;
+      return <OpenAppaLicenceRequired />;
     notFound();
   }
 

@@ -17,13 +17,7 @@ import {
 
 const SALES_EMAIL = "sales@archestra.ai";
 
-// The tier comes from the same server fetch that chose this page: the
-// client's config cache can lag behind and contradict that choice.
-export function OpenAppaLicenceRequired({
-  tier,
-}: {
-  tier: { threshold: number; userCount: number };
-}) {
+export function OpenAppaLicenceRequired() {
   return (
     <PageLayout title="Guardrails">
       <Empty className="py-16">
@@ -39,10 +33,6 @@ export function OpenAppaLicenceRequired({
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <p className="text-sm text-muted-foreground">
-            It is free for teams under {tier.threshold} users. This instance has{" "}
-            {tier.userCount}, so it needs an enterprise license.
-          </p>
           <Button asChild>
             <a href={`mailto:${SALES_EMAIL}`}>
               <Mail aria-hidden="true" />

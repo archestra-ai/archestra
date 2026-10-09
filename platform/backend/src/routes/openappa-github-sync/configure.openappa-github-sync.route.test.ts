@@ -1091,6 +1091,87 @@ describe("APPA GitHub sync", () => {
     ).toMatchObject({ content: spelled, revision: 3 });
   });
 
+  test("a pull handing a root profile a credential is held", async () => {
+    await configure();
+    await syncAppaGithubPolicy(organizationId);
+    const granted = `${policy}\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = "jev-key"\n[externals.jev]\ntoken_env = "APPA_PROVIDER_JEV_API_KEY"\n`;
+    upstream(granted, "b".repeat(40));
+    await syncAppaGithubPolicy(organizationId);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: granted,
+      heldReasons: ["changes_credentials"],
+    });
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: policy, revision: 1 });
+  });
+
+  test("accepting a held pull takes credential update for a grant a binding made since the hold", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+  }) => {
+    await configure();
+    const declared = `include = ["batteries/github/appa.toml", "batteries/jev/appa.toml"]\n\n${policy}`;
+    upstream(declared, commit);
+    await syncAppaGithubPolicy(organizationId);
+    await flagDeclarationsPendingPublish();
+    // The pull drops jev and points the root jev profile at the github battery's
+    // variable, which nothing binds yet: it is held only for the dropped battery.
+    const pulled = `include = ["batteries/github/appa.toml"]\n\n${policy}\n[externals.jev]\ntoken_env = "APPA_PROVIDER_GITHUB_TOKEN"\n`;
+    upstream(pulled, "c".repeat(40));
+    await syncAppaGithubPolicy(organizationId);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: pulled,
+      heldReasons: ["drops_batteries"],
+    });
+    await OpenAppaCredentialBindingModel.upsert({
+      organizationId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      credentialKey: "github-token",
+      updatedBy: adminId,
+    });
+
+    const manager = await makeUser();
+    const role = await makeCustomRole(organizationId, {
+      permission: {
+        organizationSettings: ["update"],
+        openappaPolicy: ["read", "update"],
+      },
+    });
+    await makeMember(manager.id, organizationId, { role: role.role });
+    const managerApp = createFastifyInstance();
+    managerApp.addHook("onRequest", async (request) => {
+      Object.assign(request, { user: manager, organizationId });
+    });
+    registerRoutePermissions(managerApp);
+    await managerApp.register(routes);
+    try {
+      expect(
+        (
+          await managerApp.inject({
+            method: "POST",
+            url: "/api/openappa/github-sync/accept-held",
+          })
+        ).statusCode,
+      ).toBe(403);
+    } finally {
+      await managerApp.close();
+    }
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: declared, revision: 1 });
+
+    const accepted = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/accept-held",
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: pulled, revision: 2 });
+  });
+
   test("a pull dropping a battery this deployment has not published yet is held", async () => {
     await configure();
     const declared = `include = ["batteries/github/appa.toml"]\n\n${policy}`;

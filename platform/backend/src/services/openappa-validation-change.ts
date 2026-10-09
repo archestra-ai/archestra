@@ -80,6 +80,7 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
   if (policyChanged)
     await refuseCredentialLines({
       organizationId,
+      userId,
       before: root.content,
       after: policyContent,
     });

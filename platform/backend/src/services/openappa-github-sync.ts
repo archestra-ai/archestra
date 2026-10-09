@@ -307,14 +307,6 @@ export async function acceptHeldAppaGithubPull(params: {
   const row = await OpenAppaGithubSyncModel.find(organizationId);
   if (!row?.heldContent || !row.heldContentHash)
     throw new ApiError(409, "There is no held pull to accept");
-  if (
-    row.heldReasons.includes("changes_credentials") &&
-    !(await userHasPermission(userId, organizationId, "credential", "update"))
-  )
-    throw new ApiError(
-      403,
-      "Credential update permission is required: this pull changes which credentials batteries read",
-    );
   const local = await guardrailsPolicyService.get(organizationId);
   const changes = heldChanges({
     ...(await resolvePair({
@@ -328,10 +320,22 @@ export async function acceptHeldAppaGithubPull(params: {
       row.declarationsPendingPublish ||
       row.heldReasons.includes("drops_batteries"),
   });
+  // Bindings can change while a pull is held, so the grants are judged as they
+  // stand now as well as by the reasons recorded at hold time.
+  if (
+    (row.heldReasons.includes("changes_credentials") ||
+      changes.granted.length > 0) &&
+    !(await userHasPermission(userId, organizationId, "credential", "update"))
+  )
+    throw new ApiError(
+      403,
+      "Credential update permission is required: this pull changes which credentials batteries or the root policy read",
+    );
   const published = await OpenAppaGithubSyncModel.publishHeld({
     organizationId,
     userId,
     heldContentHash: row.heldContentHash,
+    revision: row.revision,
   });
   if (!published) throw new ApiError(409, "There is no held pull to accept");
   await openappaBatteriesService.recompileOrganizations([organizationId]);

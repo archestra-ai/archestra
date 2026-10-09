@@ -6,6 +6,7 @@ import type {
   HelperBindingInput,
   BatteryPackage as NativeBatteryPackage,
   PolicyDeclarations,
+  TokenEnvReader,
 } from "@archestra/openappa-rs";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -55,6 +56,8 @@ export type PolicyResolution = {
   credentials: Record<string, string>;
   /** The annotators the root's own tool rules route calls to. */
   routedAnnotators: string[];
+  /** Every root external or profile naming a `token_env`, by reader identity. */
+  tokenEnvReaders: TokenEnvReader[];
   /**
    * Everything wrong with the declarations themselves: a shape the reader could
    * not make sense of, and an entry spelled outside the two admitted forms.
@@ -74,9 +77,11 @@ type BoundPolicy = {
 };
 
 /**
- * One credential value reaching one battery's helper sandbox: the battery an
- * include entry resolves to, a variable its manifest declares, and the store key
- * the `[credentials]` table binds to that variable.
+ * One credential value reaching code outside the platform: a battery's helper
+ * sandbox (`battery` is the name an include entry resolves to) or a root external
+ * or profile the runtime authenticates with it (`battery` is the reader's
+ * identity, its `externals` path and binding), a variable it reads, and the store
+ * key the `[credentials]` table binds to that variable.
  */
 type Grant = { battery: string; variable: string; key: string };
 
@@ -219,6 +224,7 @@ class OpenAppaDeclarations {
         declarations.credentials.map(({ variable, key }) => [variable, key]),
       ),
       routedAnnotators: declarations.routedAnnotators,
+      tokenEnvReaders: declarations.tokenEnvReaders,
       errors,
     };
   }
@@ -455,7 +461,10 @@ class OpenAppaDeclarations {
     };
   }
 
-  /** Every grant a resolution holds: resolved batteries × declared variables × the table. */
+  /**
+   * Every grant a resolution holds: resolved batteries × declared variables × the
+   * table, and the root's own readers.
+   */
   grants(resolution: PolicyResolution): Grant[] {
     const grants: Grant[] = [];
     for (const entry of resolution.entries) {
@@ -465,7 +474,15 @@ class OpenAppaDeclarations {
         if (key) grants.push({ battery: entry.name, variable, key });
       }
     }
-    return grants;
+    return [...grants, ...this.rootGrants(resolution)];
+  }
+
+  /** The grants the runtime itself sends: a root reader × the key its variable is bound to. */
+  rootGrants(resolution: PolicyResolution): Grant[] {
+    return resolution.tokenEnvReaders.flatMap(({ variable, reader }) => {
+      const key = resolution.credentials[variable];
+      return key ? [{ battery: reader, variable, key }] : [];
+    });
   }
 
   /**

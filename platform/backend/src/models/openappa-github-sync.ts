@@ -211,6 +211,8 @@ class OpenAppaGithubSyncModel {
     userId: string;
     /** The held bytes the accepting user saw; anything else is a newer pull. */
     heldContentHash: string;
+    /** The row revision the acceptance was authorized against. */
+    revision: string;
   }): Promise<{ contentHash: string; sourceCommit: string } | null> {
     const { organizationId, userId } = params;
     return db.transaction(async (tx) => {
@@ -225,6 +227,7 @@ class OpenAppaGithubSyncModel {
       if (!row.heldContent || !row.heldContentHash || !row.heldSourceCommit)
         return null;
       if (row.heldContentHash !== params.heldContentHash) return null;
+      if (row.revision !== params.revision) return null;
       const policies = schema.guardrailsPolicyRevisionsTable;
       const [current] = await tx
         .select()

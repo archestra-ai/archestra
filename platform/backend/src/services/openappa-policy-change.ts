@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
-import { openappaDeclarations } from "@/openappa/declarations";
+import { addedGrants, openappaDeclarations } from "@/openappa/declarations";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  guardrailsPolicyService,
+  requireGrantPermission,
+} from "@/services/guardrails-policy";
 import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
 import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import {
@@ -61,6 +64,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     throw new ApiError(400, "The proposed policy has no changes");
   await refuseCredentialLines({
     organizationId: params.organizationId,
+    userId: params.userId,
     before: before.content,
     after: content,
   });
@@ -318,11 +322,14 @@ export async function getOpenAppaPolicyChangeStatus(params: {
  * The agent path binds battery credentials with bind_guardrails_credential. A
  * `[credentials]` line wins over that binding and locks it in the Batteries
  * dialog, so an agent may not add a line, or change its key, for a variable an
- * included battery reads. Removing a line is allowed. A variable only a root
- * external's `token_env` names has no stored binding, so its line stays writable.
+ * included battery reads. Removing a line is allowed. A credential a root
+ * external or profile reads as its `token_env` has no stored binding, so adding
+ * or rekeying it, or changing what reads it, takes `credential:update` as it does
+ * on the Policy route.
  */
 export async function refuseCredentialLines(params: {
   organizationId: string;
+  userId: string;
   before: string;
   after: string;
 }): Promise<void> {
@@ -341,6 +348,22 @@ export async function refuseCredentialLines(params: {
       400,
       `Bind ${written.join(", ")} with bind_guardrails_credential instead of a [credentials] line; the policy text is for rules and includes.`,
     );
+  const [bound, proposed] = await Promise.all(
+    [params.before, params.after].map((content) =>
+      openappaDeclarations.resolveWithBindings({
+        organizationId: params.organizationId,
+        content,
+      }),
+    ),
+  );
+  await requireGrantPermission({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    granted: addedGrants(
+      openappaDeclarations.rootGrants(bound.resolution),
+      openappaDeclarations.rootGrants(proposed.resolution),
+    ),
+  });
 }
 
 /** The validation warning for `[credentials]` lines that override a stored binding. */

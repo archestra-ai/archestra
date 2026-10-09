@@ -154,10 +154,11 @@ export async function resolveConversationLlmSelectionForAgent(params: {
 }
 
 /**
- * The selection a fork starts from: its parent's model and key, else the
- * agent's own configuration. The fork runs on the resolved key as its agent
- * key, which skips the per-user access check, so a parent key the user can no
- * longer use is dropped.
+ * The selection a fork starts from: its parent's model, else the agent's own
+ * configuration. The fork runs on the returned key as its agent key, which
+ * skips the per-user access check, so the parent's key is kept only while the
+ * user can use it and it still serves the model. Without it the fork resolves
+ * a key for the model the way its parent's turn does.
  */
 export async function resolveForkParentSelection(params: {
   agent: { llmApiKeyId: string | null; modelId: string | null };
@@ -165,52 +166,46 @@ export async function resolveForkParentSelection(params: {
   userId: string;
   parentLlm?: ModelSelection;
 }): Promise<ConversationLlmSelection> {
-  const { agent, organizationId, userId } = params;
-  const parentLlm =
-    params.parentLlm &&
-    (await isParentKeyUsable({
-      apiKeyId: params.parentLlm.apiKeyId,
-      agentLlmApiKeyId: agent.llmApiKeyId,
-      userId,
-    }))
-      ? params.parentLlm
-      : undefined;
-  const direct = parentLlm && (await linkedParentSelection(parentLlm));
-  if (direct) return direct;
-  return resolveConversationLlmSelectionForAgent({
-    agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
-    organizationId,
-    userId,
-    ...(parentLlm && {
-      explicitModelId: parentLlm.modelId,
-      explicitApiKeyId: parentLlm.apiKeyId,
-    }),
-  });
-}
-
-/**
- * The parent's own pair, when it still holds: a per-user provider model alone,
- * or a model its key still serves. Anything else takes the full fallback chain.
- */
-async function linkedParentSelection(
-  parentLlm: ModelSelection,
-): Promise<ConversationLlmSelection | null> {
-  const model = parentLlm.modelId
+  const { agent, organizationId, userId, parentLlm } = params;
+  const model = parentLlm?.modelId
     ? await ModelModel.findById(parentLlm.modelId)
     : null;
-  if (!model) return null;
-  const selection = {
+  if (!parentLlm || !model) {
+    return resolveConversationLlmSelectionForAgent({
+      agent,
+      organizationId,
+      userId,
+    });
+  }
+  return {
     modelId: model.id,
+    chatApiKeyId: providerRequiresPerUserCredential(model.provider)
+      ? null
+      : await usableLinkedKey({
+          parentLlm,
+          agentLlmApiKeyId: agent.llmApiKeyId,
+          userId,
+        }),
     selectedModel: model.modelId,
     selectedProvider: model.provider,
   };
-  if (providerRequiresPerUserCredential(model.provider)) {
-    return { ...selection, chatApiKeyId: null };
-  }
+}
+
+async function usableLinkedKey(params: {
+  parentLlm: ModelSelection;
+  agentLlmApiKeyId: string | null;
+  userId: string;
+}): Promise<string | null> {
+  const { parentLlm, agentLlmApiKeyId, userId } = params;
+  if (!parentLlm.apiKeyId) return null;
+  const usable = await isParentKeyUsable({
+    apiKeyId: parentLlm.apiKeyId,
+    agentLlmApiKeyId,
+    userId,
+  });
+  if (!usable) return null;
   const [linked] = await filterLinkedModelSelectionLevels([parentLlm]);
-  return linked.apiKeyId
-    ? { ...selection, chatApiKeyId: linked.apiKeyId }
-    : null;
+  return linked.apiKeyId ?? null;
 }
 
 async function isParentKeyUsable(params: {

@@ -269,8 +269,15 @@ describe("resolveForkParentSelection", () => {
         parentLlm: { modelId: model.id, apiKeyId },
       });
 
-    expect((await forkOn(orgKey.id)).chatApiKeyId).toBe(orgKey.id);
-    expect((await forkOn(othersKey.id)).chatApiKeyId).not.toBe(othersKey.id);
+    expect(await forkOn(orgKey.id)).toMatchObject({
+      modelId: model.id,
+      chatApiKeyId: orgKey.id,
+    });
+    // The parent's model stays; its key is left for the fork to re-resolve.
+    expect(await forkOn(othersKey.id)).toMatchObject({
+      modelId: model.id,
+      chatApiKeyId: null,
+    });
   });
 });
 

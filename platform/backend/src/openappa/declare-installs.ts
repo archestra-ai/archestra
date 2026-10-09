@@ -8,11 +8,13 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import { initialPolicy } from "@/services/guardrails-policy";
 import {
+  attachmentOf,
   BATTERY_CREDENTIAL_VARIABLE,
+  type BatteryAttachment,
   type BatteryInstall,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
-import { catalogToolPrefixes } from "./batteries";
+import { type CatalogPrefixes, catalogToolPrefixes } from "./batteries";
 import {
   bundledEntry,
   openappaDeclarations,
@@ -178,7 +180,14 @@ async function planFor(params: {
   });
   const prefixes = await catalogToolPrefixes(organizationId, {
     targets: [],
-    catalogIds: [...new Set(rows.flatMap((row) => row.catalogId ?? []))],
+    catalogIds: [
+      ...new Set(
+        rows.flatMap((row) => {
+          const attachment = attachmentOf(row);
+          return attachment.kind === "catalog" ? [attachment.catalogId] : [];
+        }),
+      ),
+    ],
   });
   const includes: PolicyEditInput[] = [];
   const batteries: string[] = [];
@@ -223,17 +232,14 @@ async function planFor(params: {
       if (Object.keys(row.credentialBindings).length > 0)
         drop({ organizationId, row, reason: "not_helper_owner", log });
     for (const row of batteryRows) {
-      // An organization-wide row stands for the include alone.
-      if (row.catalogId === null) continue;
-      const carried = prefixes.byCatalog.get(row.catalogId);
-      if (!carried || carried.size === 0) {
-        if (log)
-          logger.warn(
-            { organizationId, battery: name, catalogId: row.catalogId },
-            "An OpenAPPA battery install names a catalog carrying no tool prefix; the battery is declared with no alias for it",
-          );
-        continue;
-      }
+      const carried = carriedTargets({
+        organizationId,
+        battery: name,
+        attachment: attachmentOf(row),
+        prefixes,
+        log,
+      });
+      if (!carried) continue;
       for (const namespace of resolved.battery.namespaces)
         mergeTargets({ targets, resolution, namespace, carried });
     }
@@ -401,4 +407,35 @@ async function latestRevision(
     content: latest?.content ?? initialPolicy(),
     revision: latest?.revision ?? 0,
   };
+}
+
+/**
+ * The alias targets a row's attachment stands for: a catalog's tool prefixes,
+ * a detected server's own id, or nothing for the organization, whose row
+ * stands for the include alone.
+ */
+function carriedTargets(params: {
+  organizationId: string;
+  battery: string;
+  attachment: BatteryAttachment;
+  prefixes: CatalogPrefixes;
+  log: boolean;
+}): ReadonlySet<string> | null {
+  const { organizationId, battery, attachment, prefixes, log } = params;
+  switch (attachment.kind) {
+    case "organization":
+      return null;
+    case "detected":
+      return new Set([attachment.detectedId]);
+    case "catalog": {
+      const carried = prefixes.byCatalog.get(attachment.catalogId);
+      if (carried && carried.size > 0) return carried;
+      if (log)
+        logger.warn(
+          { organizationId, battery, catalogId: attachment.catalogId },
+          "An OpenAPPA battery install names a catalog carrying no tool prefix; the battery is declared with no alias for it",
+        );
+      return null;
+    }
+  }
 }

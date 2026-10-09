@@ -75,6 +75,8 @@ const declared = (fields: Partial<PolicyBattery>): PolicyBattery => ({
 });
 const install = (fields: Partial<Install>): Install => ({
   id: "install-1",
+  kind: "catalog",
+  detectedId: null,
   organizationId: "org",
   catalogId,
   batteryName: "github",
@@ -105,6 +107,7 @@ beforeEach(() => {
   batteries = [];
   declarations = {
     batteries: [],
+    aliasesWithoutIncludedBattery: [],
     unusedAliases: [],
     rootRevision: 1,
     lastError: null,

@@ -53,6 +53,29 @@ describe("declaring the legacy battery installs", () => {
     ).toEqual([["APPA_PROVIDER_GITHUB_TOKEN", "github_prod_token"]]);
   });
 
+  test("declares a detected server's row as the alias target its id spells", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    await legacyInstall({
+      organizationId,
+      batteryName: "github",
+      catalogId: null,
+      detectedId: "claude-code.github",
+    });
+
+    const summary = await declareExistingInstalls();
+
+    expect(summary.declared).toEqual([organizationId]);
+    const declared = await declarationsOf(organizationId);
+    expect(
+      declared.serverAliases.map(({ namespace, servers }) => ({
+        namespace,
+        servers,
+      })),
+    ).toEqual([{ namespace: "github", servers: ["claude-code.github"] }]);
+  });
+
   test("declares the stored package's hashed spelling when one shadows the bundled battery", async ({
     makeOrganization,
     makeInternalMcpCatalog,
@@ -409,7 +432,9 @@ let written = 0;
 async function legacyInstall(params: {
   organizationId: string;
   batteryName: string;
-  catalogId: string;
+  catalogId: string | null;
+  /** A detected server's row; the kind is stored, as a recompose stores it. */
+  detectedId?: string;
   enabled?: boolean;
   credentialBindings?: BatteryCredentialBindings;
 }) {
@@ -419,6 +444,9 @@ async function legacyInstall(params: {
       organizationId: params.organizationId,
       batteryName: params.batteryName,
       catalogId: params.catalogId,
+      ...(params.detectedId
+        ? { kind: "detected" as const, detectedId: params.detectedId }
+        : {}),
       createdAt: new Date(Date.UTC(2026, 0, 1) + written++ * 1000),
       enabled: params.enabled ?? true,
       credentialBindings: params.credentialBindings ?? {},

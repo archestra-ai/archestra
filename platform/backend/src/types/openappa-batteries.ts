@@ -45,9 +45,37 @@ export type BatteryInstallStatus = z.infer<typeof BatteryInstallStatusSchema>;
 export const BatteryScopeSchema = z.enum(["catalogs", "organization"]);
 export type BatteryScope = z.infer<typeof BatteryScopeSchema>;
 
+/**
+ * What a battery is attached to: a registry catalog, a detected MCP server (a
+ * client's own, named by its `<family>.<label>` id), or the whole organization
+ * for a battery made of annotators alone.
+ */
+export const BatteryAttachmentKindSchema = z.enum([
+  "catalog",
+  "detected",
+  "organization",
+]);
+export type BatteryAttachmentKind = z.infer<typeof BatteryAttachmentKindSchema>;
+
+/** An attachment to one server: the kinds an alias target can resolve to. */
+export const BatteryServerAttachmentSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("catalog"), catalogId: z.string().uuid() }),
+  z.object({ kind: z.literal("detected"), detectedId: z.string().min(1) }),
+]);
+export type BatteryServerAttachment = z.infer<
+  typeof BatteryServerAttachmentSchema
+>;
+
+export const BatteryAttachmentSchema = z.discriminatedUnion("kind", [
+  ...BatteryServerAttachmentSchema.options,
+  z.object({ kind: z.literal("organization") }),
+]);
+export type BatteryAttachment = z.infer<typeof BatteryAttachmentSchema>;
+
 export const BatteryInstallSchema = createSelectSchema(
   openappaBatteryInstallsTable,
 ).extend({
+  kind: BatteryAttachmentKindSchema.nullable(),
   status: BatteryInstallStatusSchema,
   credentialBindings: BatteryCredentialBindingsSchema,
   createdAt: z.coerce.date(),
@@ -56,12 +84,57 @@ export const BatteryInstallSchema = createSelectSchema(
 export type BatteryInstall = z.infer<typeof BatteryInstallSchema>;
 
 /**
- * One derived install as a recompose computes it; ids are the model's to preserve.
- * A battery made of annotators alone governs no catalog: its one row has none.
+ * The attachment a stored row stands for. A row written before `kind` existed
+ * has none stored; its catalog column says which it was.
  */
+export function attachmentOf(
+  row: Pick<BatteryInstall, "kind" | "catalogId" | "detectedId">,
+): BatteryAttachment {
+  switch (row.kind) {
+    case "catalog":
+      return { kind: "catalog", catalogId: row.catalogId as string };
+    case "detected":
+      return { kind: "detected", detectedId: row.detectedId as string };
+    case "organization":
+      return { kind: "organization" };
+    case null:
+      return row.catalogId === null
+        ? { kind: "organization" }
+        : { kind: "catalog", catalogId: row.catalogId };
+  }
+}
+
+export function sameAttachment(
+  a: BatteryAttachment,
+  b: BatteryAttachment,
+): boolean {
+  return attachmentKey(a) === attachmentKey(b);
+}
+
+/** One string per attachment, for map keys and row identity. */
+export function attachmentKey(attachment: BatteryAttachment): string {
+  switch (attachment.kind) {
+    case "catalog":
+      return `catalog:${attachment.catalogId}`;
+    case "detected":
+      return `detected:${attachment.detectedId}`;
+    case "organization":
+      return "organization";
+  }
+}
+
+/** The identity a recompose and the store agree on: one row per (battery, attachment). */
+export function installIdentityKey(
+  batteryName: string,
+  attachment: BatteryAttachment,
+): string {
+  return `${batteryName}\u0000${attachmentKey(attachment)}`;
+}
+
+/** One derived install as a recompose computes it; ids are the model's to preserve. */
 export const BatteryInstallRowSchema = z.strictObject({
   batteryName: z.string().min(1).max(100),
-  catalogId: z.string().uuid().nullable(),
+  attachment: BatteryAttachmentSchema,
   status: BatteryInstallStatusSchema,
   packageHash: z.string().nullable(),
   lastError: z.string().nullable(),
@@ -150,9 +223,14 @@ export const BatterySummarySchema = z.object({
 });
 export type BatterySummary = z.infer<typeof BatterySummarySchema>;
 
-/** One `[server_aliases]` target beside the catalog it resolves to, if any does. */
+/**
+ * One `[server_aliases]` target beside the server it resolves to, if one does.
+ * `catalogId` repeats a catalog attachment's id for a client that reads the
+ * older shape.
+ */
 const BatteryServerViewSchema = z.object({
   target: z.string(),
+  attachment: BatteryServerAttachmentSchema.nullable(),
   catalogId: z.string().nullable(),
 });
 
@@ -181,8 +259,8 @@ export const PolicyBatteryViewSchema = z.object({
 });
 export type PolicyBatteryView = z.infer<typeof PolicyBatteryViewSchema>;
 
-/** An alias whose namespace no included battery declares: inert, not refused. */
-const UnusedAliasViewSchema = z.object({
+/** An alias whose namespace no included battery declares; a hand-written rule may still bind through it. */
+const AliasWithoutIncludedBatteryViewSchema = z.object({
   namespace: z.string(),
   servers: z.array(z.string()),
   line: z.number(),
@@ -197,7 +275,9 @@ const HeldPullViewSchema = z.object({
 
 export const PolicyDeclarationsViewSchema = z.object({
   batteries: z.array(PolicyBatteryViewSchema),
-  unusedAliases: z.array(UnusedAliasViewSchema),
+  aliasesWithoutIncludedBattery: z.array(AliasWithoutIncludedBatteryViewSchema),
+  /** The same list under its former name, for a client from before the rename. */
+  unusedAliases: z.array(AliasWithoutIncludedBatteryViewSchema),
   rootRevision: z.number(),
   lastError: z.string().nullable(),
   managedInGithub: z.boolean(),

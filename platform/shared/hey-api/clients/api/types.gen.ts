@@ -86215,7 +86215,9 @@ export type GetOpenappaBatteriesResponses = {
             id: string;
             organizationId: string;
             batteryName: string;
+            kind: 'catalog' | 'detected' | 'organization';
             catalogId: string | null;
+            detectedId: string | null;
             enabled: boolean;
             status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
             packageHash: string | null;
@@ -86319,6 +86321,13 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             line: number;
             servers: Array<{
                 target: string;
+                attachment: {
+                    kind: 'catalog';
+                    catalogId: string;
+                } | {
+                    kind: 'detected';
+                    detectedId: string;
+                } | null;
                 catalogId: string | null;
             }>;
             credentials: Array<{
@@ -86327,6 +86336,11 @@ export type GetOpenappaPolicyDeclarationsResponses = {
                 readers: Array<string>;
             }>;
             helpers: Array<string>;
+        }>;
+        aliasesWithoutIncludedBattery: Array<{
+            namespace: string;
+            servers: Array<string>;
+            line: number;
         }>;
         unusedAliases: Array<{
             namespace: string;
@@ -86610,7 +86624,9 @@ export type GetOpenappaBatteryMatchesResponses = {
                 id: string;
                 organizationId: string;
                 batteryName: string;
+                kind: 'catalog' | 'detected' | 'organization';
                 catalogId: string | null;
+                detectedId: string | null;
                 enabled: boolean;
                 status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
                 packageHash: string | null;
@@ -86718,6 +86734,13 @@ export type CreateOpenappaBatteryInstallResponses = {
         line: number;
         servers: Array<{
             target: string;
+            attachment: {
+                kind: 'catalog';
+                catalogId: string;
+            } | {
+                kind: 'detected';
+                detectedId: string;
+            } | null;
             catalogId: string | null;
         }>;
         credentials: Array<{
@@ -86910,6 +86933,13 @@ export type UpdateOpenappaBatteryInstallResponses = {
         line: number;
         servers: Array<{
             target: string;
+            attachment: {
+                kind: 'catalog';
+                catalogId: string;
+            } | {
+                kind: 'detected';
+                detectedId: string;
+            } | null;
             catalogId: string | null;
         }>;
         credentials: Array<{

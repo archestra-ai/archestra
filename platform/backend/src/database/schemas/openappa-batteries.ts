@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type {
+  BatteryAttachmentKind,
   BatteryCredentialBindings,
   BatteryInstallStatus,
   BatteryPackageFile,
@@ -51,8 +52,9 @@ export const openappaBatteryPackagesTable = pgTable(
   ],
 );
 
-// The derived read model of the declarations: one row per (organization, catalog, battery).
-// A battery made of annotators alone governs no catalog and derives one organization-wide row.
+// The derived read model of the declarations: one row per (organization, attachment, battery).
+// An attachment is a catalog, a detected MCP server, or the organization itself for a battery
+// made of annotators alone.
 export const openappaBatteryInstallsTable = pgTable(
   "openappa_battery_installs",
   {
@@ -61,9 +63,14 @@ export const openappaBatteryInstallsTable = pgTable(
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
     batteryName: text("battery_name").notNull(),
+    // Null on rows written before the kind existed; `attachmentOf` reads the
+    // catalog column for those. A later release makes it required.
+    kind: text().$type<BatteryAttachmentKind>(),
     catalogId: uuid("catalog_id").references(() => internalMcpCatalogTable.id, {
       onDelete: "cascade",
     }),
+    // A detected server's id, `<family>.<label>`; set for kind = "detected".
+    detectedId: text("detected_id"),
     enabled: boolean().notNull().default(true),
     status: text()
       .$type<BatteryInstallStatus>()
@@ -84,6 +91,8 @@ export const openappaBatteryInstallsTable = pgTable(
       .defaultNow(),
   },
   (table) => [
+    // Still the identity every writer agrees on until the contract migration
+    // replaces it with (organization, kind, catalog, detected, battery).
     unique("openappa_battery_installs_org_catalog_battery_uq")
       .on(table.organizationId, table.catalogId, table.batteryName)
       .nullsNotDistinct(),

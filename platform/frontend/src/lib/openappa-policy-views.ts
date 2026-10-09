@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@archestra/shared";
 import type { QueryClient } from "@tanstack/react-query";
 
 /**
@@ -27,4 +28,15 @@ export function invalidatePolicyViews(client: QueryClient) {
     client.invalidateQueries({ queryKey: [coverageQueryPrefix] }),
     client.invalidateQueries({ queryKey: trustAudienceQueryKey }),
   ]);
+}
+
+/**
+ * The aliases no included battery declares. A backend from before the field
+ * was renamed answers under `unusedAliases`; either spelling reads.
+ */
+export function aliasesWithoutIncludedBattery(
+  declarations: archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"],
+): archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"]["aliasesWithoutIncludedBattery"] {
+  const view = declarations as Partial<typeof declarations>;
+  return view.aliasesWithoutIncludedBattery ?? view.unusedAliases ?? [];
 }

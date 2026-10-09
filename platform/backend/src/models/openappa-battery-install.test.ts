@@ -4,15 +4,21 @@ import type { BatteryInstallRow } from "@/types/openappa-batteries";
 
 const row = (
   overrides: Partial<BatteryInstallRow> & { catalogId: string | null },
-) =>
-  ({
+) => {
+  const { catalogId, ...rest } = overrides;
+  return {
     batteryName: "github",
+    attachment:
+      catalogId === null
+        ? { kind: "organization" as const }
+        : { kind: "catalog" as const, catalogId },
     status: "active",
     packageHash: null,
     lastError: null,
     credentialBindings: {},
-    ...overrides,
-  }) satisfies BatteryInstallRow;
+    ...rest,
+  } satisfies BatteryInstallRow;
+};
 
 describe("OpenAppaBatteryInstallModel.replaceAll", () => {
   test("keeps the id of a surviving row, updates it, and deletes the rest", async ({
@@ -60,6 +66,40 @@ describe("OpenAppaBatteryInstallModel.replaceAll", () => {
     );
   });
 
+  test("a recompose that derives what is stored leaves the rows untouched", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const rows = [
+      row({
+        catalogId: catalog.id,
+        credentialBindings: { APPA_PROVIDER_GITHUB_TOKEN: "github_token" },
+      }),
+      row({ catalogId: catalog.id, batteryName: "linear" }),
+    ];
+
+    const before = await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId,
+      rows,
+    });
+    const again = await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId,
+      rows: rows.map((planned) => ({
+        ...planned,
+        credentialBindings: { ...planned.credentialBindings },
+      })),
+    });
+
+    const byName = (a: { batteryName: string }, b: { batteryName: string }) =>
+      a.batteryName.localeCompare(b.batteryName);
+    expect(again).toEqual(before);
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).sort(byName),
+    ).toEqual([...before].sort(byName));
+  });
+
   test("an organization-wide row is upserted in place rather than duplicated", async ({
     makeOrganization,
     makeInternalMcpCatalog,
@@ -92,13 +132,78 @@ describe("OpenAppaBatteryInstallModel.replaceAll", () => {
     expect(
       byBattery(await OpenAppaBatteryInstallModel.list(organizationId)),
     ).toEqual([
-      expect.objectContaining({ batteryName: "github", catalogId: catalog.id }),
+      expect.objectContaining({
+        batteryName: "github",
+        kind: "catalog",
+        catalogId: catalog.id,
+        detectedId: null,
+      }),
       expect.objectContaining({
         batteryName: "jev",
+        kind: "organization",
         catalogId: null,
+        detectedId: null,
         status: "missing_credentials",
       }),
     ]);
+  });
+
+  test("a detected server's row is its own identity beside the organization's", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const detected = {
+      ...row({ catalogId: null, batteryName: "slack" }),
+      attachment: {
+        kind: "detected" as const,
+        detectedId: "claude-code.slack",
+      },
+    };
+    const before = await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId,
+      rows: [detected, row({ catalogId: null, batteryName: "jev" })],
+    });
+    expect(before.map((install) => install.kind).sort()).toEqual([
+      "detected",
+      "organization",
+    ]);
+    const after = await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId,
+      rows: [{ ...detected, status: "server_missing" }],
+    });
+    expect(after).toEqual([
+      expect.objectContaining({
+        id: before.find((install) => install.kind === "detected")?.id,
+        kind: "detected",
+        detectedId: "claude-code.slack",
+        catalogId: null,
+        status: "server_missing",
+      }),
+    ]);
+  });
+
+  test("two recomposes of one organization at once leave one row per identity", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const rows = [
+      row({ catalogId: catalog.id }),
+      row({ catalogId: null, batteryName: "jev" }),
+    ];
+
+    const [first, second] = await Promise.all([
+      OpenAppaBatteryInstallModel.replaceAll({ organizationId, rows }),
+      OpenAppaBatteryInstallModel.replaceAll({ organizationId, rows }),
+    ]);
+
+    const stored = await OpenAppaBatteryInstallModel.list(organizationId);
+    expect(stored).toHaveLength(2);
+    const ids = (installs: { id: string }[]) =>
+      installs.map((install) => install.id).sort();
+    expect(ids(first)).toEqual(ids(stored));
+    expect(ids(second)).toEqual(ids(stored));
   });
 
   test("an empty declaration deletes the organization's rows and leaves another organization alone", async ({

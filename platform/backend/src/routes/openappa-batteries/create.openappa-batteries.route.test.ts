@@ -171,7 +171,12 @@ describe("guardrails batteries", () => {
       source: "bundled",
       packageHash: null,
       status: "missing_credentials",
-      servers: [{ target: "github_prod", catalogId: catalog.id }],
+      servers: [
+        {
+          target: "github_prod",
+          attachment: { kind: "catalog", catalogId: catalog.id },
+        },
+      ],
     });
     // The wizard wrote a declaration: the root spells the entry and the alias.
     const root = await guardrailsPolicyService.get(organizationId);
@@ -381,7 +386,12 @@ describe("guardrails batteries", () => {
         {
           name: "acme-extra",
           status: "active",
-          servers: [{ target: "acme_prod", catalogId: catalog.id }],
+          servers: [
+            {
+              target: "acme_prod",
+              attachment: { kind: "catalog", catalogId: catalog.id },
+            },
+          ],
         },
       ],
     });
@@ -543,8 +553,14 @@ describe("guardrails batteries", () => {
     expect(same.json()).toMatchObject({
       entry: `batteries/github@sha256-${packageHash}/appa.toml`,
       servers: [
-        { target: "github_prod", catalogId: catalogs[0].id },
-        { target: "github_staging", catalogId: catalogs[1].id },
+        {
+          target: "github_prod",
+          attachment: { kind: "catalog", catalogId: catalogs[0].id },
+        },
+        {
+          target: "github_staging",
+          attachment: { kind: "catalog", catalogId: catalogs[1].id },
+        },
       ],
     });
   });
@@ -691,7 +707,7 @@ describe("guardrails batteries", () => {
         {
           name: "acme",
           status: "server_missing",
-          servers: [{ target: "acme_gone", catalogId: null }],
+          servers: [{ target: "acme_gone", attachment: null }],
         },
       ],
     });
@@ -706,7 +722,7 @@ describe("guardrails batteries", () => {
     ).toBe(200);
     expect(await declarations()).toMatchObject({
       batteries: [],
-      unusedAliases: [],
+      aliasesWithoutIncludedBattery: [],
     });
     const content = (await guardrailsPolicyService.get(organizationId)).content;
     expect(content).not.toContain("batteries/acme@");
@@ -757,7 +773,7 @@ describe("guardrails batteries", () => {
     expect(created.statusCode).toBe(200);
     expect(created.json()).toMatchObject({
       status: "naming_conflict",
-      servers: [{ target: "notion", catalogId: null }],
+      servers: [{ target: "notion", attachment: null }],
     });
   });
 

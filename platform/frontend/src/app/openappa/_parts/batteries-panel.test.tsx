@@ -54,7 +54,9 @@ let freshSynced: boolean;
 const install = (fields: Partial<Install> = {}): Install => ({
   id: "install-1",
   organizationId: "org",
+  kind: fields.catalogId === null ? "organization" : "catalog",
   catalogId,
+  detectedId: null,
   batteryName: "github",
   enabled: true,
   packageHash: null,
@@ -89,7 +91,9 @@ const declaredGithub = (
   scope: "catalogs",
   composed: false,
   line: 4,
-  servers: [{ target: "code", catalogId }],
+  servers: [
+    { target: "code", attachment: { kind: "catalog", catalogId }, catalogId },
+  ],
   credentials: [
     {
       variable: "APPA_PROVIDER_GITHUB_TOKEN",
@@ -104,6 +108,7 @@ const emptyDeclarations = (
   fields: Partial<Declarations> = {},
 ): Declarations => ({
   batteries: [],
+  aliasesWithoutIncludedBattery: [],
   unusedAliases: [],
   rootRevision: 3,
   lastError: null,
@@ -858,8 +863,16 @@ test("detaching a server deletes that server's install alone", async () => {
     batteries: [
       declaredGithub({
         servers: [
-          { target: "code", catalogId },
-          { target: "docs", catalogId: otherCatalogId },
+          {
+            target: "code",
+            attachment: { kind: "catalog", catalogId },
+            catalogId,
+          },
+          {
+            target: "docs",
+            attachment: { kind: "catalog", catalogId: otherCatalogId },
+            catalogId: otherCatalogId,
+          },
         ],
       }),
     ],
@@ -929,8 +942,16 @@ test("removing an entry takes its include out in one write", async () => {
     batteries: [
       declaredGithub({
         servers: [
-          { target: "code", catalogId },
-          { target: "docs", catalogId: otherCatalogId },
+          {
+            target: "code",
+            attachment: { kind: "catalog", catalogId },
+            catalogId,
+          },
+          {
+            target: "docs",
+            attachment: { kind: "catalog", catalogId: otherCatalogId },
+            catalogId: otherCatalogId,
+          },
         ],
       }),
     ],
@@ -962,7 +983,7 @@ test("an entry bound to no server this deployment carries is removed the same wa
     batteries: [
       declaredGithub({
         status: "server_missing",
-        servers: [{ target: "gone", catalogId: null }],
+        servers: [{ target: "gone", attachment: null, catalogId: null }],
       }),
     ],
   });
@@ -1310,7 +1331,9 @@ test("uploading a package sends the picked files by their path inside the folder
 
 test("an alias no entry declares is listed without a control to remove it", async () => {
   declarations = emptyDeclarations({
-    unusedAliases: [{ namespace: "stripe", servers: ["billing"], line: 9 }],
+    aliasesWithoutIncludedBattery: [
+      { namespace: "stripe", servers: ["billing"], line: 9 },
+    ],
   });
   show();
   await screen.findByText("stripe");

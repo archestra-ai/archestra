@@ -343,7 +343,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     expect(agentRow?.smartModelId).toBe(smart.id);
   });
 
-  test("drops a restored tier that is no longer on the key instead of failing", async ({
+  test("refuses a version whose tier is no longer on the key, changing nothing", async ({
     makeAgent,
     makeLlmProviderApiKey,
   }) => {
@@ -369,11 +369,11 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
       );
 
     const response = await restore(agent.id, withTiers?.latestVersion ?? 0);
-    expect(response.statusCode).toBe(200);
+    expect(response.statusCode).toBe(400);
 
     const agentRow = await AgentModel.findById(agent.id, user.id, true);
     expect(agentRow?.fastModelId).toBeNull();
-    expect(agentRow?.smartModelId).toBe(smart.id);
+    expect(agentRow?.smartModelId).toBeNull();
   });
 
   test("a snapshot captured before tiers existed restores them to unset", async ({

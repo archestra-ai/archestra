@@ -520,19 +520,26 @@ async function planScalars(params: {
   }
 
   // Tiers ride on the key, so they are re-checked against the key being
-  // restored whenever either changes. Unlike the model/key pair, a tier that is
-  // no longer valid there is dropped rather than failing the restore: the agent
-  // simply falls back to the provider's default tier.
-  const [fastModelId, smartModelId] = await Promise.all(
-    [snapshot.fastModel, snapshot.smartModel].map((tier) =>
-      validTierOrNull(tier?.id ?? null, snapshotKeyId),
-    ),
-  );
+  // restored whenever either changes, and refuse the restore like the pair.
+  const fastModelId = snapshot.fastModel?.id ?? null;
+  const smartModelId = snapshot.smartModel?.id ?? null;
   if (
     "llmApiKeyId" in scalars ||
     fastModelId !== (current.fastModelId ?? null) ||
     smartModelId !== (current.smartModelId ?? null)
   ) {
+    try {
+      await assertModelTrioTiers({
+        apiKeyId: snapshotKeyId,
+        fastModelId,
+        smartModelId,
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.statusCode === 400) {
+        throw unrestorable(`its fast or smart model (${error.message})`);
+      }
+      throw error;
+    }
     scalars.fastModelId = fastModelId;
     scalars.smartModelId = smartModelId;
   }
@@ -542,24 +549,6 @@ async function planScalars(params: {
   // (clone and import both null it), so there is no value to restore.
 
   return scalars;
-}
-
-async function validTierOrNull(
-  modelId: string | null,
-  apiKeyId: string | null,
-): Promise<string | null> {
-  if (modelId === null) return null;
-  try {
-    await assertModelTrioTiers({
-      apiKeyId,
-      fastModelId: modelId,
-      smartModelId: null,
-    });
-    return modelId;
-  } catch (error) {
-    if (error instanceof ApiError && error.statusCode === 400) return null;
-    throw error;
-  }
 }
 
 /**

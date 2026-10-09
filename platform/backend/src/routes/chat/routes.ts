@@ -149,6 +149,7 @@ import {
 } from "@/types";
 import { ConversationFilesResponseSchema } from "@/types/conversation-file";
 import { SelectScheduleTriggerRunSchema } from "@/types/schedule-trigger";
+import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import {
   resolveAgentLlmOrDefault,
   resolveConversationLlmSelectionForAgent,
@@ -938,7 +939,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             projectFileNamesPromise,
             conversationModelPromise,
           ]).then(
-            ([projectInstructions, openedApp, projectFileNames, selected]) =>
+            async ([
+              projectInstructions,
+              openedApp,
+              projectFileNames,
+              selected,
+            ]) =>
               buildChatContext({
                 conversationId,
                 agentId,
@@ -950,12 +956,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 organizationId,
                 modelAcceptsImageToolResults:
                   selected.inputModalities?.includes("image") === true,
-                // A per-user provider model has no stored key; the fork then
-                // re-resolves the acting user's own credential for it.
+                // The key this turn runs on, which can differ from the stored
+                // one (revoked, deleted); a fork starts from the same pair.
                 parentLlm: conversation.modelId
                   ? {
                       modelId: conversation.modelId,
-                      apiKeyId: conversation.chatApiKeyId,
+                      apiKeyId: (
+                        await resolveProviderApiKey({
+                          organizationId,
+                          userId: user.id,
+                          provider: selected.provider,
+                          conversationId,
+                          agentLlmApiKeyId: agent.llmApiKeyId,
+                          modelName: selected.model,
+                        })
+                      ).chatApiKeyId,
                     }
                   : undefined,
                 hookSessionContext,

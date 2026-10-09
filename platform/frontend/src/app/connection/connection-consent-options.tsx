@@ -67,7 +67,7 @@ export function ConnectionConsentOptions({
           {hasExcludedParts && (
             <InlineNotice variant="neutral">
               <InlineNoticeText>
-                Your prompt left some parts out. They stay off for this
+                Your setup left some parts out. They stay off for this
                 connection.
               </InlineNoticeText>
             </InlineNotice>

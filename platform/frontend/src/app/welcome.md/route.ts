@@ -17,8 +17,8 @@ from MCP servers the user's organization runs, and may have installed shared
 skills. Give the user a short guided tour. Keep the whole reply under 25 lines.
 
 0. If you have no tools from this gateway, the user isn't connected yet. Say
-   so in one line and tell them to copy the connect prompt from ${origin}/connection
-   first. Stop there.
+   so in one line and tell them to open ${origin}/connection and follow the
+   setup shown for their app first. Stop there.
 1. List the tools you have from the gateway, grouped by MCP server. If tools
    load on demand, call the gateway's search_tools tool with a few broad
    queries first. One line per server: what it lets you do, in plain words.

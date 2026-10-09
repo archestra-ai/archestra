@@ -349,13 +349,11 @@ if (Test-Path $guardPath) { throw 'Failed first install created a guard' }
 if ((Get-Content -Raw $profilePath) -cne $originalProfile) { throw 'Failed first install changed the profile' }
 $env:ARCHESTRA_TEST_FAIL_ADD = '0'
 Invoke-Expression $setup
-if ('${clientId}' -eq 'codex' -and -not (Test-Path ($guardPath + '.verify.ps1'))) { throw 'Native verification script was not installed' }
 $invokeArgs = @('invoke', 'two words', '', 'single''quote', '$HOME', '*')
 foreach ($attempt in 1..2) {
   $priorFunction = (Get-Item Function:${binary}).ScriptBlock
   $priorProfile = Get-Content -Raw $profilePath
   $priorGuard = Get-Content -Raw $guardPath
-  if ('${clientId}' -eq 'codex') { $priorVerifier = Get-Content -Raw ($guardPath + '.verify.ps1') }
   $env:ARCHESTRA_TEST_FAIL_ADD = '1'
   $failed = $false
   try { Invoke-Expression $setup } catch {
@@ -367,7 +365,6 @@ foreach ($attempt in 1..2) {
   if (-not $restoredFunction -or $restoredFunction.ScriptBlock.ToString() -cne $priorFunction.ToString()) { throw 'Loaded wrapper was not restored' }
   if ((Get-Content -Raw $profilePath) -cne $priorProfile) { throw 'Failed reconnect changed the profile' }
   if ((Get-Content -Raw $guardPath) -cne $priorGuard) { throw 'Failed reconnect changed the guard' }
-  if ('${clientId}' -eq 'codex' -and (Get-Content -Raw ($guardPath + '.verify.ps1')) -cne $priorVerifier) { throw 'Failed reconnect changed the verifier' }
   ${binary} @invokeArgs
   if ($LASTEXITCODE -ne ${clientId === "codex" ? 125 : 23}) { throw 'Restored wrapper lost client exit status' }
   $env:ARCHESTRA_TEST_FAIL_ADD = '0'

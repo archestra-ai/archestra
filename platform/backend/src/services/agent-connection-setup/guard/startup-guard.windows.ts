@@ -10,7 +10,6 @@ import {
   ARCHESTRA_MARK_TAGLINE_ROW,
   archestraMarkWithText,
 } from "@/services/archestra-mark";
-import { CODEX_CONNECTION_VERIFICATION_WINDOWS } from "../payloads/codex-connection-verification.windows";
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
@@ -1002,8 +1001,7 @@ export function buildWindowsStartupGuardInstallSection(
     : `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(promptRelpath)})`;
   const extraInstall =
     client.clientId === "codex"
-      ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.cjs'), [Convert]::FromBase64String('${Buffer.from(CODEX_HANDOFF_HELPER).toString("base64")}'))
-[IO.File]::WriteAllBytes(($archGuardPath + '.verify.ps1'), [Convert]::FromBase64String('${Buffer.from(CODEX_CONNECTION_VERIFICATION_WINDOWS).toString("base64")}'))`
+      ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.cjs'), [Convert]::FromBase64String('${Buffer.from(CODEX_HANDOFF_HELPER).toString("base64")}'))`
       : client.clientId === "copilot-cli"
         ? handoffEnabled
           ? `$null = New-Item -ItemType Directory -Force ($archGuardPath + '.instructions')\nCopy-Item -Force (Join-Path $env:USERPROFILE ${psq(promptRelpath)}) ($archGuardPath + '.instructions/AGENTS.md')`

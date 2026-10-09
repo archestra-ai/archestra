@@ -1001,7 +1001,7 @@ describe("ConnectPage after copying the command", () => {
     );
     const card = screen.getByRole("region", { name: "Starter prompt" });
     expect(card).toHaveTextContent(
-      "Works once your agent is connected. If it isn't yet, it points you back to the connect prompt.",
+      "Works once your agent is connected. If it isn't yet, it points you back to the Connect page.",
     );
     expect(within(card).getByText(welcome)).toBeVisible();
     await userEvent.click(within(card).getByRole("button", { name: "Close" }));

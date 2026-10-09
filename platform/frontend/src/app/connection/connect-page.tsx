@@ -152,8 +152,9 @@ export function ConnectPage() {
   const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
-  // What the user leaves out, per agent. The prompt carries it, and this
-  // browser keeps it for a while (connect-choices.ts).
+  // What the user leaves out, per agent. The copied command (or prompt, for
+  // generic agents) carries it, and this browser keeps it for a while
+  // (connect-choices.ts).
   const [choices, setChoices] = useState<ConnectChoices>(ALL_INCLUDED);
 
   const skillsSorted = useMemo(
@@ -979,7 +980,7 @@ function guardrailsStatus(
 
 // === Profile card ===
 
-/** The card's one place to leave parts out; the prompt carries the result. */
+/** The card's one place to leave parts out; the command carries the result. */
 function IncludeMenu({
   skills,
   plugins,

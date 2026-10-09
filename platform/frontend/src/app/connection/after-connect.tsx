@@ -148,7 +148,7 @@ export function AfterConnect({
           </div>
           <p className="px-1 text-xs text-muted-foreground">
             Works once {name} is connected. If it isn't yet, it points you back
-            to the connect prompt.
+            to the Connect page.
           </p>
           <WelcomePrompt text={welcome} />
         </section>

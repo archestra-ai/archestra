@@ -1657,7 +1657,20 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it("leaves OpenCode provider and model selection unchanged", async () => {
+    it("defaults OpenCode to all primary providers and allows switching back to local credentials", async () => {
+      const user = userEvent.setup();
+      availableKeysMock.mockReturnValue({
+        data: [
+          { id: "primary-anthropic", provider: "anthropic", isPrimary: true },
+          {
+            id: "primary-custom",
+            provider: "vllm",
+            isPrimary: true,
+            baseUrl: "https://models.example/v1",
+          },
+          { id: "non-primary", provider: "openai", isPrimary: false },
+        ],
+      });
       renderPanel({ client: findClient("opencode") });
 
       expect(await screen.findByText(COMMAND)).toBeInTheDocument();
@@ -1667,17 +1680,62 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.getByTestId("connect-change-proxy").closest("li"),
       ).toHaveTextContent(
-        "Route supported OpenCode providers through the LLM Proxy using their existing local credentials",
+        "Route all primary providers (2) through the LLM Proxy using a virtual key",
       );
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenCalledWith(
           expect.objectContaining({
             clientId: "opencode",
-            proxyAuth: "provider-key",
+            proxyAuth: "primary-providers",
+            provider: undefined,
             model: undefined,
           }),
         ),
       );
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      expect(screen.getAllByRole("tab")[0]).toHaveTextContent(
+        "All primary providers",
+      );
+      await user.click(screen.getByRole("tab", { name: "Your provider key" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ proxyAuth: "provider-key" }),
+        ),
+      );
+    });
+
+    it("does not generate an OpenCode command without a usable primary", async () => {
+      availableKeysMock.mockReturnValue({
+        data: [
+          { id: "not-primary", provider: "anthropic", isPrimary: false },
+          {
+            id: "expired",
+            provider: "openai",
+            isPrimary: true,
+            requiresReauthentication: true,
+          },
+          { id: "no-endpoint", provider: "vllm", isPrimary: true },
+        ],
+      });
+      renderPanel({ client: findClient("opencode") });
+      expect(
+        await screen.findByText(/No usable primary providers are available/),
+      ).toBeInTheDocument();
+      expect(createSetupMock).not.toHaveBeenCalled();
+    });
+
+    it("requires virtual-key permission for all primary providers", async () => {
+      vi.mocked(useHasPermissions).mockReturnValue({
+        data: false,
+      } as ReturnType<typeof useHasPermissions>);
+      availableKeysMock.mockReturnValue({
+        data: [{ id: "primary", provider: "anthropic", isPrimary: true }],
+      });
+      renderPanel({ client: findClient("opencode") });
+      expect(
+        await screen.findByText(/You need permission to create virtual keys/),
+      ).toBeInTheDocument();
+      expect(createSetupMock).not.toHaveBeenCalled();
     });
 
     it("offers the org's synced models for the provider as a dropdown", async () => {

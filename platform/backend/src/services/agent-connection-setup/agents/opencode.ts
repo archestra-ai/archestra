@@ -8,6 +8,10 @@ import {
 } from "@archestra/shared";
 import { OPENCODE_GUARD_CLIENT } from "../guard/clients";
 import {
+  OPENCODE_PRIMARY_CONFIG_SCRIPT,
+  openCodePrimaryConfig,
+} from "../payloads/opencode-primary-config";
+import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
 } from "../payloads/opencode-routing-plugin";
@@ -427,6 +431,12 @@ ARCHESTRA_OPENCODE_MAJOR="$( { opencode --version 2>/dev/null || true; } </dev/n
 [ -n "$ARCHESTRA_OPENCODE_MAJOR" ] || ARCHESTRA_OPENCODE_MAJOR=1`,
   ];
 
+  if (ctx.proxy && ctx.proxy.authMode !== "primary-providers") {
+    sections.push(`if [ -f "$HOME/.archestra/opencode-primary-state.json" ]; then
+  ARCHESTRA_OC_PRIMARY=null node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)}
+fi`);
+  }
+
   if (ctx.mcp) {
     sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 ${opencodeOwnedMergeBash(
@@ -445,7 +455,15 @@ ${opencodeOwnedMergeBash(
   }
 
   if (ctx.proxy) {
-    if (ctx.proxy.authMode === "provider-key") {
+    if (ctx.proxy.authMode === "primary-providers") {
+      const { routes, providers } = openCodePrimaryConfig(ctx.proxy);
+      sections.push(`say "Configuring all usable primary providers in OpenCode"
+command -v node >/dev/null 2>&1 || { err "Node.js is required to configure primary providers"; exit 1; }
+ARCHESTRA_OC_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" ARCHESTRA_OC_KEY=${sh(ctx.proxy.virtualKey ?? "")} ARCHESTRA_OC_PRIMARY=stdin node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)} <<'ARCHESTRA_PRIMARY_CATALOG'
+${JSON.stringify({ providers })}
+ARCHESTRA_PRIMARY_CATALOG
+${opencodeRoutingPluginBash({ routes, headers: opencodeProxyHeaders(ctx.proxy) })}`);
+    } else if (ctx.proxy.authMode === "provider-key") {
       const routes = Object.fromEntries(
         OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
           route.openCodeProviderId,
@@ -614,8 +632,31 @@ Set-ArchProp $archCfg.mcp ${psq(ctx.mcp.serverName)} ([pscustomobject]@{ type = 
 Write-ArchOcOwned $archCfg`);
   }
 
+  if (ctx.proxy && ctx.proxy.authMode !== "primary-providers") {
+    sections.push(`if (Test-Path (Join-Path $env:USERPROFILE '.archestra/opencode-primary-state.json')) {
+$archPrimaryRestore = @'
+${OPENCODE_PRIMARY_CONFIG_SCRIPT}
+'@
+$env:ARCHESTRA_OC_PRIMARY = 'null'
+try { $archPrimaryRestore | & node -; if ($LASTEXITCODE -ne 0) { throw 'Could not restore previous provider configuration' } }
+finally { Remove-Item Env:ARCHESTRA_OC_PRIMARY -ErrorAction SilentlyContinue }
+}`);
+  }
   if (ctx.proxy) {
-    if (ctx.proxy.authMode === "provider-key") {
+    if (ctx.proxy.authMode === "primary-providers") {
+      const { routes, providers } = openCodePrimaryConfig(ctx.proxy);
+      sections.push(`Say 'Configuring all usable primary providers in OpenCode'
+$env:ARCHESTRA_OC_MAJOR = [string]$archOcMajor
+$env:ARCHESTRA_OC_KEY = ${psq(ctx.proxy.virtualKey ?? "")}
+$env:ARCHESTRA_OC_PRIMARY = 'stdin'
+$archPrimaryCatalog = ${psq(JSON.stringify({ providers }))}
+$archPrimaryScript = @'
+${OPENCODE_PRIMARY_CONFIG_SCRIPT}
+'@
+try { $archPrimaryCatalog | & node -e $archPrimaryScript; if ($LASTEXITCODE -ne 0) { throw 'Could not configure primary providers' } }
+finally { Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHESTRA_OC_MAJOR -ErrorAction SilentlyContinue }
+${opencodeRoutingPluginPowerShell({ routes, headers: opencodeProxyHeaders(ctx.proxy) })}`);
+    } else if (ctx.proxy.authMode === "provider-key") {
       const headers = opencodeProxyHeaders(ctx.proxy);
       const legacyTarget = opencodeProviderTarget(ctx);
       const routes = Object.fromEntries(
@@ -739,7 +780,9 @@ try { & opencode mcp list 2>$null | Out-Host } catch { }`);
 
 function opencodeEnding(ctx: SetupScriptContext): AgentEnding {
   let proxyDetail: string | undefined;
-  if (ctx.proxy?.authMode === "provider-key") {
+  if (ctx.proxy?.authMode === "primary-providers") {
+    proxyDetail = `All usable primary providers are available in OpenCode’s model picker`;
+  } else if (ctx.proxy?.authMode === "provider-key") {
     proxyDetail = `Providers you have signed in to in OpenCode now go through the ${ctx.appName} LLM proxy`;
   } else if (ctx.proxy) {
     const target = opencodeProviderTarget(ctx);

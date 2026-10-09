@@ -58,6 +58,81 @@ describe("POST /api/connection-setups", () => {
     expect(response.json().error.message).toContain("at least one");
   });
 
+  test("OpenCode primary routing provisions all accessible primaries without a selected provider", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret();
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      isPrimary: true,
+    });
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "vllm",
+      isPrimary: true,
+      baseUrl: "https://models.example/v1",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "primary-providers",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup?.proxyAuth).toBe("primary-providers");
+    expect(setup?.virtualApiKeyId).toBeTruthy();
+    const mappings = await VirtualApiKeyModel.getProviderApiKeys(
+      setup?.virtualApiKeyId as string,
+    );
+    expect(mappings.map((key) => key.provider).sort()).toEqual([
+      "anthropic",
+      "vllm",
+    ]);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${rawToken}`,
+    });
+    expect(script.statusCode).toBe(200);
+    expect(script.body).toContain("archestra-anthropic");
+    expect(script.body).toContain("archestra-vllm");
+    expect(script.body).toContain("opencode-primary.key");
+  });
+
+  test("primary routing is OpenCode-only and requires virtual-key creation permission", async () => {
+    const request = {
+      baseUrl: "http://localhost:9000/v1",
+      proxyAuth: "primary-providers",
+    };
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/connection-setups",
+          payload: { ...request, clientId: "codex" },
+        })
+      ).statusCode,
+    ).toBe(400);
+    mockUserHasPermission.mockImplementation(
+      async (_user, _org, resource) => resource !== "llmVirtualKey",
+    );
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/connection-setups",
+          payload: { ...request, clientId: "opencode" },
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+
   test("provider alone opts the LLM Proxy in; llmProxyId alone selects nothing", async () => {
     // `provider` opts the proxy in — the org's single LLM Proxy is resolved
     // server-side, so no llmProxyId is needed in the payload.

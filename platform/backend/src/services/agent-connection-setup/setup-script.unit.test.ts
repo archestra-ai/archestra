@@ -1611,6 +1611,79 @@ ${script.slice(pluginStart, pluginEnd)}
     }
   });
 
+  test.each([
+    1, 2,
+  ])("OpenCode %i primary setup installs a large catalog and every plugin route", async (major) => {
+    const models = Array.from({ length: 1500 }, (_, i) => ({
+      id: `accounts/example/models/coder-${i}`,
+      name: `Coding model ${i}`,
+      context: 200000,
+      output: 8192,
+    }));
+    const script = renderSetupScript({
+      ...fullContext("opencode", "linux"),
+      proxy: {
+        ...PROXY,
+        authMode: "primary-providers",
+        primaryProviders: [
+          { provider: "vllm", name: "Custom inference", models },
+          { provider: "openai", name: "My subscription", models: [models[0]] },
+        ],
+      },
+    });
+    const start = script.indexOf(
+      'say "Configuring all usable primary providers',
+    );
+    const end = script.indexOf("\nsay ", start + 5);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const home = await mkdtemp(path.join(tmpdir(), "opencode-primary-script-"));
+    try {
+      const block = path.join(home, "install.sh");
+      await writeFile(
+        block,
+        `set -euo pipefail
+say() { :; }
+ok() { :; }
+err() { echo "$*" >&2; }
+ARCHESTRA_OPENCODE_MAJOR=${major}
+ARCHESTRA_OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+${script.slice(start, end)}
+`,
+      );
+      await execFileAsync("bash", [block], {
+        env: {
+          ...process.env,
+          HOME: home,
+          XDG_CONFIG_HOME: path.join(home, ".config"),
+        },
+      });
+      const config = JSON.parse(
+        await readFile(
+          path.join(home, ".config/opencode/opencode.json"),
+          "utf8",
+        ),
+      );
+      const providers = config[major === 2 ? "providers" : "provider"];
+      expect(Object.keys(providers["archestra-vllm"].models)).toHaveLength(
+        1500,
+      );
+      expect(providers["archestra-openai"]).toBeDefined();
+      const plugin = await readFile(
+        path.join(home, ".config/opencode/plugins/archestra-llm-proxy.js"),
+        "utf8",
+      );
+      expect(plugin).toContain(
+        '"archestra-vllm":"https://archestra.example.com/v1/model-router"',
+      );
+      expect(plugin).toContain(
+        '"archestra-openai":"https://archestra.example.com/v1/model-router"',
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("opencode provider-key merge preserves local auth options and model selection", async () => {
     const script = renderSetupScript({
       ...fullContext("opencode", "linux"),

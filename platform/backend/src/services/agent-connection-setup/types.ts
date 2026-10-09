@@ -21,10 +21,21 @@ export interface SetupScriptMcpSection {
 }
 
 export interface SetupScriptProxySection {
+  /** Resolved, authorized catalog for OpenCode's all-primary setup. */
+  primaryProviders?: Array<{
+    provider: SupportedProvider;
+    name: string;
+    models: Array<{
+      id: string;
+      name: string;
+      context: number | null;
+      output: number | null;
+    }>;
+  }>;
   /**
    * "provider-key" (passthrough): only the base URL is rewired and the user
    * keeps their own provider credentials — virtualKey/virtualKeyName are
-   * null. "virtual-key": the auto-provisioned key below is injected.
+   * null. "virtual-key" and "primary-providers": the auto-provisioned key is injected.
    */
   authMode: ConnectionSetupProxyAuth;
   provider: SupportedProvider;
@@ -35,7 +46,7 @@ export interface SetupScriptProxySection {
   url: string;
   /** Slug of the LLM proxy name — provider id in client configs. */
   proxyName: string;
-  /** Raw virtual key value injected at render time (virtual-key mode only). */
+  /** Raw virtual key value injected at render time (virtual-key and primary-providers modes). */
   virtualKey: string | null;
   /** Display name of the virtual key, for revocation guidance. */
   virtualKeyName: string | null;

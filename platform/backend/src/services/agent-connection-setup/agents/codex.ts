@@ -137,7 +137,8 @@ fi`;
     });
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
-  warn "Marketplace may already be registered — run /plugins inside Codex to inspect."
+  err "Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error."
+  exit 1
 fi
 ${installs.join("\n")}`);
   }
@@ -235,7 +236,7 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not deliver plugin — run 'codex p
       .join("\n");
     sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
 codex plugin marketplace add ${psq(ctx.skills.cloneUrl)}
-if ($LASTEXITCODE -ne 0) { Warn 'Marketplace may already be registered — run /plugins inside Codex to inspect.' }
+if ($LASTEXITCODE -ne 0) { throw 'Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error.' }
 ${pluginInstalls}`);
   }
 

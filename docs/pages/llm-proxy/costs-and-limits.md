@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -56,9 +56,11 @@ Click your name in the sidebar, then **My Usage**. It shows your billed spend, r
 A limit blocks matching requests once spend reaches it. Requests run again when the limit resets, or when you raise it.
 
 1. Go to **Costs & Limits → Limits** and click **Add Limit**.
-2. Choose who it applies to: organization, team, user, agent, LLM Proxy, virtual key, LLM OAuth client, or environment.
+2. Choose who it applies to: organization, team, user, agent, virtual key, LLM OAuth client, or environment.
 3. Pick models, or **All models**.
 4. Enter **Limit value ($)**, choose the **Cleanup interval**, and click **Create limit**.
+
+Use an organization limit for a shared budget across all LLM requests, including proxy traffic.
 
 The table shows each limit's use so far, and when it resets.
 

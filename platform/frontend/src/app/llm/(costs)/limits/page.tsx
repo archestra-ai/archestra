@@ -117,8 +117,7 @@ type UsageSummary = {
 
 const canBulkDeleteLimit = (limit: LimitData) => limit.entityType !== "user";
 
-// llm_proxy is a type of agent
-// It is more convenient and clear to handle it as a separate entity on the frontend
+// Retain the legacy proxy target only when editing an existing limit.
 type LimitFormEntityType = LimitEntityType | "llm_proxy";
 
 type LimitFormState = {
@@ -174,12 +173,6 @@ const ENTITY_TYPE_ITEMS: Array<{
         className="h-4 w-4 shrink-0 text-muted-foreground"
       />
     ),
-  },
-  {
-    value: "llm_proxy",
-    label: "LLM Proxy",
-    description: "Caps spend routed through the LLM Proxy.",
-    icon: <Network className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
   {
     value: "user",
@@ -1063,7 +1056,23 @@ export default function LimitsPage() {
                     }))
                   }
                   placeholder="Select scope"
-                  items={ENTITY_TYPE_ITEMS.map((item) => ({
+                  ariaLabel="Limit scope"
+                  items={[
+                    ...ENTITY_TYPE_ITEMS,
+                    ...(editingLimit && formState.entityType === "llm_proxy"
+                      ? [
+                          {
+                            value: "llm_proxy" as const,
+                            label: "LLM Proxy",
+                            description:
+                              "Existing proxy limit. Use an organization limit for new budgets.",
+                            icon: (
+                              <Network className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            ),
+                          },
+                        ]
+                      : []),
+                  ].map((item) => ({
                     value: item.value,
                     label: item.label,
                     searchText: `${item.label} ${item.description}`,
@@ -1493,7 +1502,6 @@ const APPLIED_TO_OPTIONS: Array<{
   { value: "organization", label: "Organization", icon: Building2 },
   { value: "team", label: "Team", icon: Users },
   { value: "agent", label: "Agent", icon: Bot },
-  { value: "llm_proxy", label: "LLM Proxy", icon: Network },
   { value: "user", label: "User", icon: User },
   { value: "virtual_key", label: "Virtual key", icon: Key },
   { value: "llm_oauth_client", label: "LLM OAuth client", icon: KeyRound },

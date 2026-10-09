@@ -26,16 +26,13 @@ export function OpenAppaLicenceRequired() {
           <EmptyMedia>
             <OpenAppaSolidIcon className="h-20 w-auto text-foreground" />
           </EmptyMedia>
-          <EmptyTitle>Guardrails are part of Platform + AI Security</EmptyTitle>
+          <EmptyTitle>Stop your agents from leaking data</EmptyTitle>
           <EmptyDescription>
             <a href={OPENAPPA_URL} target="_blank" rel="noreferrer">
               OpenAPPA
-            </a>
-            , frontier technology developed by Archestra Inc, prevents data
-            exfiltration by AI agents. Benchmarked at 0% attack success rate
-            across 1,320 evaluations on Bench-Corp and AgentThreatBench (OWASP
-            Top 10 for Agentic Applications) with 89% task completion. Backed by
-            NeurIPS-accepted research.
+            </a>{" "}
+            blocked every attack across 1,320 evaluations while agents still
+            finished 89% of their tasks. It comes with the AI Security plan.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>

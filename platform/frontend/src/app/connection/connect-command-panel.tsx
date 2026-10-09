@@ -10,7 +10,13 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
-import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  Download,
+  KeyRound,
+  Layers,
+  RotateCcw,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -363,9 +369,25 @@ export function ConnectCommandPanel({
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
   const { data: availableKeys } = useAvailableLlmProviderApiKeys();
-  const configuredProviders = useMemo(
-    () => new Set((availableKeys ?? []).map((k) => k.provider)),
+  const usableOpenCodeKeys = useMemo(
+    () =>
+      (availableKeys ?? []).filter(
+        (key) =>
+          !key.requiresReauthentication &&
+          (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+            Boolean(key.baseUrl?.trim())),
+      ),
     [availableKeys],
+  );
+  const configuredProviders = useMemo(
+    () =>
+      new Set(
+        (client.id === "opencode"
+          ? usableOpenCodeKeys
+          : (availableKeys ?? [])
+        ).map((key) => key.provider),
+      ),
+    [client.id, availableKeys, usableOpenCodeKeys],
   );
 
   // Providers this client can be wired to at all, narrowed by the admin
@@ -393,7 +415,8 @@ export function ConnectCommandPanel({
     return supported.filter(
       (p) =>
         (!shownProviders || shownProviders.includes(p)) &&
-        (configuredProviders.has(p) || providerRequiresPerUserCredential(p)),
+        (configuredProviders.has(p) ||
+          (client.id !== "opencode" && providerRequiresPerUserCredential(p))),
     );
   }, [client.id, client.proxy, shownProviders, configuredProviders]);
 
@@ -404,14 +427,8 @@ export function ConnectCommandPanel({
   const providers = useMemo(() => {
     if (allPrimaryProviders) {
       const primaryProviders = new Set(
-        (availableKeys ?? [])
-          .filter(
-            (key) =>
-              key.isPrimary &&
-              !key.requiresReauthentication &&
-              (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
-                Boolean(key.baseUrl)),
-          )
+        usableOpenCodeKeys
+          .filter((key) => key.isPrimary)
           .map((key) => key.provider),
       );
       return supportedProviders.filter((provider) =>
@@ -419,18 +436,20 @@ export function ConnectCommandPanel({
       );
     }
     if (proxyAuth !== "virtual-key") return supportedProviders;
-    // Per-user providers (GitHub Copilot) stay selectable even without a key:
-    // the user connects their own account inline, after which a personal
-    // virtual key is minted. Other providers need a pre-existing key.
+    // OpenCode only offers configured credentials. Other clients can connect
+    // per-user providers inline before minting a personal virtual key.
     return supportedProviders.filter(
-      (p) => configuredProviders.has(p) || providerRequiresPerUserCredential(p),
+      (p) =>
+        configuredProviders.has(p) ||
+        (client.id !== "opencode" && providerRequiresPerUserCredential(p)),
     );
   }, [
     supportedProviders,
     proxyAuth,
     configuredProviders,
     allPrimaryProviders,
-    availableKeys,
+    usableOpenCodeKeys,
+    client.id,
   ]);
   const provider =
     urlProvider && providers.includes(urlProvider)
@@ -857,35 +876,36 @@ export function ConnectCommandPanel({
             </TabsList>
           </Tabs>
           {client.id === "opencode" && !openCodeProviderPassthrough && (
-            <EditorField label="Model provider">
-              <Select
-                value={
-                  allPrimaryProviders ? "all-primary" : (provider ?? undefined)
-                }
-                onValueChange={(value) => {
-                  const all = value === "all-primary";
-                  setOpenCodeUseAllProviders(all);
-                  setProxyAuth(all ? "primary-providers" : "virtual-key");
-                  if (!all) onProviderSelect(value as SupportedProvider);
-                }}
-              >
-                <SelectTrigger aria-label="Model provider">
-                  <SelectValue placeholder="Select model provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all-primary">
-                    All primary model providers
-                  </SelectItem>
-                  <LlmProviderSelectItems
-                    options={singleVirtualKeyProviders.map((provider) => ({
-                      value: provider,
-                      name: providerCatalog.label(provider),
-                      icon: PROVIDER_CONFIG[provider].icon,
-                    }))}
-                  />
-                </SelectContent>
-              </Select>
-            </EditorField>
+            <Select
+              value={
+                allPrimaryProviders ? "all-primary" : (provider ?? undefined)
+              }
+              onValueChange={(value) => {
+                const all = value === "all-primary";
+                setOpenCodeUseAllProviders(all);
+                setProxyAuth(all ? "primary-providers" : "virtual-key");
+                if (!all) onProviderSelect(value as SupportedProvider);
+              }}
+            >
+              <SelectTrigger aria-label="Model provider">
+                <SelectValue placeholder="Select model provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-primary">
+                  <span className="flex items-center gap-2">
+                    <Layers className="size-4" aria-hidden="true" />
+                    <span>All model providers</span>
+                  </span>
+                </SelectItem>
+                <LlmProviderSelectItems
+                  options={singleVirtualKeyProviders.map((provider) => ({
+                    value: provider,
+                    name: providerCatalog.label(provider),
+                    icon: PROVIDER_CONFIG[provider].icon,
+                  }))}
+                />
+              </SelectContent>
+            </Select>
           )}
           <p className="text-xs text-muted-foreground">
             {allPrimaryProviders ? (

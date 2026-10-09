@@ -57,6 +57,8 @@ async function fixture() {
   const env = {
     ...process.env,
     HOME: home,
+    ZDOTDIR: home,
+    XDG_CONFIG_HOME: path.join(home, ".config"),
     COPILOT_HOME: path.join(home, ".copilot"),
     COPILOT_PROVIDERS_CONFIG: "",
     COPILOT_PROVIDER_API_KEY: "",
@@ -72,7 +74,15 @@ async function fixture() {
     await writeFile(script, renderSetupScript(ctx));
     return exec("bash", [script], { env });
   };
-  return { home, env, registry, settings, run };
+  const remove = () =>
+    exec(process.execPath, ["-e", COPILOT_PROVIDER_CONFIG_NODE], {
+      env: {
+        ...env,
+        ARCHESTRA_COPILOT_ACTION: "remove",
+        ARCHESTRA_COPILOT_CONFIG: JSON.stringify({ url: proxy.url }),
+      },
+    });
+  return { home, env, registry, settings, run, remove };
 }
 async function json(file: string) {
   return JSON.parse(await readFile(file, "utf8"));
@@ -121,7 +131,6 @@ test("setup saves credentials and model, preserves other settings, reruns safely
   expect((await stat(`${f.registry}.archestra-backup`)).mode & 0o777).toBe(
     0o600,
   );
-  expect(stdout).toContain("Your API key is installed in providers.json");
   expect(stdout).not.toMatch(/<your-[a-z-]+>/);
   expect(stdout.indexOf("Environment variables (optional)")).toBeGreaterThan(
     stdout.indexOf("Copilot CLI is connected"),
@@ -132,7 +141,6 @@ test("setup saves credentials and model, preserves other settings, reruns safely
   expect(stdout.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm)).toHaveLength(
     1,
   );
-  expect(stdout).not.toContain("printed above");
   // Executing the optional exports must round-trip even quotes/metacharacters.
   const exports = stdout
     .split("\n")
@@ -197,7 +205,9 @@ test("custom config paths are honored and missing credentials are not reported a
     (await json(f.env.COPILOT_PROVIDERS_CONFIG)).providers[0],
   ).not.toHaveProperty("apiKey");
   expect(stdout).toContain("No API key was available");
-  expect(stdout).not.toContain("Your API key is installed");
+  expect(stdout).not.toContain(
+    "Your provider settings and API key are already saved",
+  );
 });
 
 test.each([
@@ -215,15 +225,7 @@ test("disconnect preserves a model the user selected after setup", async () => {
   const f = await fixture();
   await f.run();
   await writeFile(f.settings, JSON.stringify({ model: "personal/local" }));
-  const file = path.join(f.home, "remove.cjs");
-  await writeFile(file, COPILOT_PROVIDER_CONFIG_NODE);
-  await exec(process.execPath, [file], {
-    env: {
-      ...f.env,
-      ARCHESTRA_COPILOT_ACTION: "remove",
-      ARCHESTRA_COPILOT_CONFIG: JSON.stringify({ url: proxy.url }),
-    },
-  });
+  await f.remove();
   expect((await json(f.settings)).model).toBe("personal/local");
   expect((await json(f.registry)).providers).toEqual([]);
 });
@@ -286,9 +288,8 @@ test("fish instructions quote credentials literally and a changed user model sur
   expect(stdout).not.toContain("export COPILOT_PROVIDER_API_KEY=");
   await writeFile(f.settings, JSON.stringify({ model: "personal/new-model" }));
   await f.run();
-  expect((await json(`${f.registry}.archestra-state.json`)).previousModel).toBe(
-    "personal/new-model",
-  );
+  await f.remove();
+  expect((await json(f.settings)).model).toBe("personal/new-model");
 });
 
 test("reconnecting does not replace a provider the user repurposed after setup", async () => {

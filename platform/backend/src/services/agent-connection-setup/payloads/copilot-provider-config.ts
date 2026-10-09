@@ -79,8 +79,7 @@ if (action === "install") {
   write(settingsPath, settings);
   console.log("Saved Copilot provider settings to " + registryPath);
   console.log("Selected " + selectedModel + " in " + settingsPath);
-  if (key) console.log("Your API key is installed in providers.json. Environment variables are optional.");
-  else console.log("No API key was available. Add your provider key as apiKey in providers.json before launching Copilot.");
+  if (!key) console.log("No API key was available. Add your provider key as apiKey in providers.json before launching Copilot.");
 } else if (action === "remove") {
   if (state.installedModel && state.url === input.url && (!existing || existing.baseUrl === input.url)) {
     const settings = read(settingsPath, true);

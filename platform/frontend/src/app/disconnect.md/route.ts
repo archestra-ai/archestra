@@ -158,7 +158,7 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
 - LLM proxy: the archestra provider and its models in ~/.copilot/providers.json
   (respect COPILOT_HOME and COPILOT_PROVIDERS_CONFIG overrides); the selected model in
   ~/.copilot/settings.json. Setup ownership and the previous model are recorded in
-  providers.json.archestra-state.json alongside the registry.
+  a sidecar at the registry path with .archestra-state.json appended.
 - Optional environment settings: export COPILOT_PROVIDER_TYPE, COPILOT_PROVIDER_BASE_URL,
   COPILOT_PROVIDER_API_KEY and COPILOT_PROVIDER_HEADERS lines in ~/.zshrc, ~/.bashrc
   and ~/.profile; fish set -gx lines in config.fish or conf.d/*.fish
@@ -169,7 +169,7 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
 - Remove only the archestra provider whose baseUrl points to {{BASE}}, and its models.
   If settings.json still selects the model in the setup state file, restore previousModel
   (or remove the model setting if previousModel is null). Remove the setup state file.
-- Remove the export COPILOT_PROVIDER_* lines found above. Remove COPILOT_MODEL only when it selects an archestra/ model; preserve other choices.`,
+- Remove the COPILOT_PROVIDER_* assignments found above. Remove COPILOT_MODEL only when it selects an archestra/ model; preserve other choices.`,
     finish:
       "Tell the user to open a new terminal so the removed environment variables are gone.",
   },

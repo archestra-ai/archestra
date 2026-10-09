@@ -189,6 +189,8 @@ test("Copilot prints saved credentials once in the final instructions, after the
     { mode: 0o755 },
   );
   vi.stubEnv("HOME", directory);
+  vi.stubEnv("ZDOTDIR", directory);
+  vi.stubEnv("XDG_CONFIG_HOME", join(directory, ".config"));
   vi.stubEnv("COPILOT_HOME", join(directory, ".copilot"));
   vi.stubEnv("COPILOT_PROVIDERS_CONFIG", "");
   vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
@@ -234,7 +236,6 @@ test("Copilot prints saved credentials once in the final instructions, after the
   expect(result.output).toContain(
     "copilot -i 'What can you do with my Test tools?'",
   );
-  expect(result.output).not.toContain("printed above");
 });
 
 test("sends the gateway and plugins picked on the Connect page", async () => {

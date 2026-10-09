@@ -58,12 +58,9 @@ function copilotProviderBash(proxy: SetupScriptProxySection): string {
       ? '"${ARCHESTRA_GHCP_TOKEN:-}"'
       : '"${COPILOT_PROVIDER_API_KEY:-}"';
   return `say 'Saving Copilot provider settings'
-archestra_copilot_config() {
-  ARCHESTRA_COPILOT_VERSION="$(cli copilot --version)" ARCHESTRA_COPILOT_ACTION="$1" ARCHESTRA_COPILOT_CONFIG=${sh(copilotProviderConfig(proxy))} ARCHESTRA_COPILOT_API_KEY=${key} node <<'ARCHESTRA_COPILOT_NODE'
+ARCHESTRA_COPILOT_VERSION="$(cli copilot --version)" ARCHESTRA_COPILOT_ACTION=install ARCHESTRA_COPILOT_CONFIG=${sh(copilotProviderConfig(proxy))} ARCHESTRA_COPILOT_API_KEY=${key} node <<'ARCHESTRA_COPILOT_NODE'
 ${COPILOT_PROVIDER_CONFIG_NODE}
-ARCHESTRA_COPILOT_NODE
-}
-archestra_copilot_config install`;
+ARCHESTRA_COPILOT_NODE`;
 }
 
 function copilotProviderPowerShell(proxy: SetupScriptProxySection): string {
@@ -73,22 +70,18 @@ function copilotProviderPowerShell(proxy: SetupScriptProxySection): string {
       ? "$ArchGhcpToken"
       : "$env:COPILOT_PROVIDER_API_KEY";
   return `Say 'Saving Copilot provider settings'
-function Invoke-ArchCopilotConfig($Action) {
   $env:ARCHESTRA_COPILOT_VERSION = (copilot --version | Out-String)
-  $env:ARCHESTRA_COPILOT_ACTION = $Action
+  $env:ARCHESTRA_COPILOT_ACTION = 'install'
   $env:ARCHESTRA_COPILOT_CONFIG = ${psq(copilotProviderConfig(proxy))}
   $env:ARCHESTRA_COPILOT_API_KEY = ${key}
-  $env:ARCHESTRA_COPILOT_SHELL = 'powershell'
   try {
     @'
 ${COPILOT_PROVIDER_CONFIG_NODE}
 '@ | node
     if ($LASTEXITCODE -ne 0) { throw 'Could not update Copilot provider configuration.' }
   } finally {
-    Remove-Item Env:ARCHESTRA_COPILOT_VERSION, Env:ARCHESTRA_COPILOT_ACTION, Env:ARCHESTRA_COPILOT_CONFIG, Env:ARCHESTRA_COPILOT_API_KEY, Env:ARCHESTRA_COPILOT_SHELL -ErrorAction SilentlyContinue
-  }
-}
-Invoke-ArchCopilotConfig 'install'`;
+    Remove-Item Env:ARCHESTRA_COPILOT_VERSION, Env:ARCHESTRA_COPILOT_ACTION, Env:ARCHESTRA_COPILOT_CONFIG, Env:ARCHESTRA_COPILOT_API_KEY -ErrorAction SilentlyContinue
+  }`;
 }
 
 /**
@@ -472,13 +465,6 @@ function copilotEnding(ctx: SetupScriptContext): AgentEnding {
   const proxyDetail = ctx.proxy
     ? "Provider settings saved in providers.json"
     : undefined;
-  if (ctx.proxy) {
-    if (!ctx.proxy.virtualKey && ctx.proxy.provider !== "github-copilot") {
-      notes.push(
-        "If setup reported a missing API key, add your provider key as apiKey in providers.json.",
-      );
-    }
-  }
   if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {
     notes.push(
       `To add the shared skills, run: copilot plugin marketplace browse ${ctx.skills.marketplaceName}`,

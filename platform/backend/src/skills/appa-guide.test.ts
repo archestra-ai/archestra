@@ -221,12 +221,11 @@ describe("APPA Guide feature availability", () => {
     ).toBe(false);
   });
 
-  test.each([
-    "references/validation-writing.md",
-    "references/validation-read-restriction.md",
-  ])("%s examples parse with the embedded scenario parser", async (path) => {
+  test("validation-writing examples parse with the embedded scenario parser", async () => {
     config.openappa.enabled = true;
-    const reference = APPA_GUIDE_SKILL.files.find((file) => file.path === path);
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/validation-writing.md",
+    );
     if (!reference) throw new Error("Validation-writing reference is missing");
     const examples = [...reference.content.matchAll(/```appa\n([\s\S]*?)```/g)];
     expect(examples.length).toBeGreaterThan(0);

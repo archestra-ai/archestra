@@ -246,7 +246,8 @@ version = 2
 [policy.deployment]
 starting_label = { audience = ['internal'] }
 [[policy.tool]]
-name = 'mcp/mail/send(recipient:public)'
+name = 'mcp/mail/send(recipient:public/*)'
+parameters = { type = 'object', required = ['body'], properties = { body = { type = 'string' } } }
 delta = {}
 requires = { audience = { contains = ['public'] } }
 `);
@@ -254,10 +255,13 @@ requires = { audience = { contains = ['public'] } }
     expect(result.candidates, JSON.stringify(result)).toEqual([
       expect.objectContaining({
         tool: "mcp/mail_prod/send",
-        arguments: { recipient: "public" },
+        arguments: { recipient: "public/example", body: "example" },
         decision: "deny",
       }),
     ]);
+    expect(result.candidates[0].content).toContain(
+      'recipient: "public/example"',
+    );
   });
   test("model dependencies stop their branch while deterministic calls remain available", async () => {
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);

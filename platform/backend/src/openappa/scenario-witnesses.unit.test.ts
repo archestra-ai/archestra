@@ -1,26 +1,5 @@
 import { expect, test } from "vitest";
-import { scenarioContent, scenarioWitnesses } from "./scenario-witnesses";
-
-test("generates concrete selector arguments and configured alias bindings", () => {
-  const generated = scenarioWitnesses(`[server_aliases]
-mail = ['mail_prod']
-[policy]
-version = 2
-[[policy.tool]]
-name = 'mcp/mail/send(recipient:internal/*)'
-parameters = { type = 'object', required = ['body'], properties = { body = { type = 'string' } } }
-delta = {}
-`);
-  expect(generated.calls).toEqual([
-    {
-      tool: "mcp/mail_prod/send",
-      arguments: { body: "example", recipient: "internal/example" },
-    },
-  ]);
-  expect(scenarioContent(generated.calls[0], "deny")).toContain(
-    'recipient: "internal/example"',
-  );
-});
+import { scenarioWitnesses } from "./scenario-witnesses";
 
 test("unsupported selectors and unsafe keys produce no fabricated call", () => {
   for (const name of [

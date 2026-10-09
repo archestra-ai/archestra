@@ -94,7 +94,6 @@ async function replay(
 export async function discoverOpenAppaScenarios(
   caller: Caller,
 ): Promise<OpenAppaScenarioDiscovery> {
-  const started = performance.now();
   const current = await snapshot(caller);
   const result: OpenAppaScenarioDiscovery = {
     discoveryId: randomUUID(),
@@ -138,13 +137,6 @@ export async function discoverOpenAppaScenarios(
       ...result,
       message:
         "Discovery could not construct a concrete example within its supported syntax. Supply a specific call and arguments, or choose a different behavior.",
-    };
-  if (performance.now() - started > 5000)
-    return {
-      ...result,
-      limited: true,
-      message:
-        "Discovery reached its time budget before replay. Supply a concrete scenario for preview.",
     };
   const observed = await replay(
     current.effective.content,
@@ -192,8 +184,7 @@ export async function discoverOpenAppaScenarios(
     result.candidates.push({
       id,
       tool: call.tool,
-      arguments:
-        call.arguments as OpenAppaScenarioDiscovery["candidates"][number]["arguments"],
+      arguments: call.arguments,
       decision: step.actual,
       content,
       existingFiles: existing.files
@@ -204,14 +195,6 @@ export async function discoverOpenAppaScenarios(
   }
   // Materialize and verify the exact expected decision the operator can adopt.
   // Do not turn an unavailable step into a denial or repair its prerequisites.
-  // Each native batch has a 15-second engine deadline. Start the verification
-  // batch only with at least 15 seconds left in the 20-second discovery budget.
-  if (performance.now() - started > 5000) {
-    result.candidates = [];
-    result.limited = true;
-    result.message =
-      "Discovery reached its time budget before verification. Supply a concrete scenario for preview.";
-  }
   if (result.candidates.length) {
     const verified = await replay(
       current.effective.content,

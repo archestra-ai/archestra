@@ -832,17 +832,17 @@ function ScriptBlock({
 }
 
 /**
- * The Script option's "When it finishes" list. Its meaning follows the setup
- * script's own Next steps (each agent's nextSteps in
- * backend/src/services/agent-connection-setup/agents/); the full list prints at
+ * The Script option's "When it finishes" list. It follows the installer's own
+ * ending (each agent's ending in
+ * backend/src/services/agent-connection-setup/agents/), which prints in full at
  * the end of the output.
  */
 function scriptNextSteps(client: ConnectClient): string[] {
   switch (client.id) {
     case "claude-code":
       return [
-        "Open a new terminal and start claude.",
-        "Run /mcp, pick the gateway and sign in through the browser. Skills load on their own.",
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Open a new terminal and run the claude command it prints. Skills load on their own.",
       ];
     case "cursor":
       return [
@@ -852,19 +852,19 @@ function scriptNextSteps(client: ConnectClient): string[] {
       ];
     case "codex":
       return [
-        "Open a new terminal and run codex.",
-        'If the output doesn\'t say "Successfully logged in.", run the codex mcp login command it prints.',
-        "For skills, run /plugins and install the plugin.",
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Open a new terminal and run the codex command it prints.",
+        "For skills, run /plugins in Codex and install the plugin.",
       ];
     case "copilot-cli":
       return [
-        "Restart Copilot. It opens the browser to sign in to the gateway.",
-        "If the output prints export lines, add them to your shell profile.",
+        "If the output prints COPILOT_* lines, add them to your shell profile.",
+        "Open a new terminal and run the copilot command it prints. It opens the browser to sign in to the gateway.",
       ];
     case "opencode":
       return [
-        "Close OpenCode and start it again in a new terminal.",
-        "If the gateway isn't connected, run the opencode mcp auth command it prints.",
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Close OpenCode if it's open, then run the opencode command it prints in a new terminal.",
       ];
     default:
       return [`Restart ${nameOf(client)}.`];

@@ -166,7 +166,7 @@ interface ConnectCommandPanelProps {
   skillsEnabled?: boolean;
   /** When false, plugins are not offered in the setup. */
   pluginsEnabled?: boolean;
-  /** Parts the user left out on the Connect page; they stay off. */
+  /** Optional parts initially left out on the Connect page; editable here. */
   exclude?: readonly ConnectSetupPart[];
   /** Plugins the user kept on the Connect page, by slug; omitted = all. */
   pluginSlugs?: readonly string[];
@@ -203,9 +203,7 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
-  // The gateway and the LLM Proxy join the setup unless the prompt flow's
-  // review step switched them off (only the approval page can be told that).
-  const [includeGateway, setIncludeGateway] = useState(true);
+  // Optional portions start from the Connect page choices and remain editable.
   const [includeProxy, setIncludeProxy] = useState(true);
   const activeLlmProxyId = includeProxy ? llmProxyId : null;
   const showSetupSummary = !connectRequest && client.id !== "claude-desktop";
@@ -284,8 +282,8 @@ export function ConnectCommandPanel({
         : toPlatformOption(detectPlatform()),
     );
   }, [requestedPlatform]);
-  // Parts the copied prompt left out. The deployment won't approve a setup
-  // that includes one, so they start off here and stay off.
+  // Exclusions seed the optional choices; they do not restrict customization.
+  // Legacy tools exclusions cannot remove the required gateway.
   const { data: connection } = useClientConnection(connectRequest ?? "");
   const excludeKey = (connection?.exclude ?? exclude ?? []).join(",");
   const excluded = useMemo(
@@ -293,7 +291,6 @@ export function ConnectCommandPanel({
     [excludeKey],
   );
   useEffect(() => {
-    if (excluded.has("tools")) setIncludeGateway(false);
     if (excluded.has("proxy")) setIncludeProxy(false);
     if (excluded.has("skills")) setSelectedSkillIds(new Set());
     if (excluded.has("plugins")) {
@@ -431,9 +428,7 @@ export function ConnectCommandPanel({
   const openCodeProviderPassthrough =
     client.id === "opencode" && effectiveProxyAuth === "provider-key";
 
-  const gateway = includeGateway
-    ? (mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null)
-    : null;
+  const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The LLM Proxy may be available without a usable provider (e.g. virtual-key
   // mode with no configured providers); keep it for the row/editor, but it
   // only joins the command when a provider is also resolved.
@@ -887,7 +882,6 @@ export function ConnectCommandPanel({
       >
         <Checkbox
           id="connect-include-skills"
-          disabled={excluded.has("skills")}
           // All or nothing: the shared marketplace URL has no per-skill knob,
           // so "all" (null) and "none" (empty set) are the only honest states.
           checked={selectedSkills.length > 0}
@@ -913,7 +907,6 @@ export function ConnectCommandPanel({
         >
           <Checkbox
             id="connect-include-plugins"
-            disabled={excluded.has("plugins")}
             checked={
               selectedPlugins.length === compatiblePlugins.length
                 ? true
@@ -941,7 +934,6 @@ export function ConnectCommandPanel({
               >
                 <Checkbox
                   id={`connect-plugin-${plugin.id}`}
-                  disabled={excluded.has("plugins")}
                   checked={
                     selectedPluginIds === null ||
                     selectedPluginIds.has(plugin.id)
@@ -1218,17 +1210,15 @@ export function ConnectCommandPanel({
           <ConnectionConsentOptions
             open={customizing}
             onOpenChange={setCustomizing}
-            hasExcludedParts={excluded.size > 0}
             gateway={
               mcpGatewayId && mcpGateways !== null ? (
                 <>
                   <IncludeCheckbox
                     id="connect-include-gateway"
-                    disabled={excluded.has("tools")}
-                    checked={includeGateway}
-                    onCheckedChange={setIncludeGateway}
+                    disabled
+                    checked
                   >
-                    Connect the MCP gateway
+                    Connect the MCP gateway (required)
                   </IncludeCheckbox>
                   {gatewayEditor}
                 </>
@@ -1239,7 +1229,6 @@ export function ConnectCommandPanel({
                 <>
                   <IncludeCheckbox
                     id="connect-include-proxy"
-                    disabled={excluded.has("proxy")}
                     checked={includeProxy}
                     onCheckedChange={setIncludeProxy}
                   >
@@ -1281,13 +1270,16 @@ export function ConnectCommandPanel({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 grid max-w-lg gap-4">
-              {excluded.size > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Your setup left some parts out. They stay off for this
-                  connection.
-                </p>
-              )}
               {gatewayEditor}
+              {llmProxyId && (
+                <IncludeCheckbox
+                  id="connect-include-proxy"
+                  checked={includeProxy}
+                  onCheckedChange={setIncludeProxy}
+                >
+                  Route model requests through the LLM Proxy
+                </IncludeCheckbox>
+              )}
               {proxyEditor}
               {proxyActive && modelEditor}
               {skillsEligible && skillsEditor}
@@ -1857,7 +1849,7 @@ function IncludeCheckbox({
   id: string;
   disabled?: boolean;
   checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  onCheckedChange?: (checked: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
@@ -1866,7 +1858,7 @@ function IncludeCheckbox({
         id={id}
         disabled={disabled}
         checked={checked}
-        onCheckedChange={(value) => onCheckedChange(value === true)}
+        onCheckedChange={(value) => onCheckedChange?.(value === true)}
       />
       {children}
     </label>

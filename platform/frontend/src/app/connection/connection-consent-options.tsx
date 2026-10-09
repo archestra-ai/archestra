@@ -8,13 +8,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { cn } from "@/lib/utils/tailwind";
 
 export function ConnectionConsentOptions({
   open,
   onOpenChange,
-  hasExcludedParts,
   gateway,
   proxy,
   skills,
@@ -23,7 +21,6 @@ export function ConnectionConsentOptions({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  hasExcludedParts: boolean;
   gateway: ReactNode;
   proxy: ReactNode;
   skills: ReactNode;
@@ -64,14 +61,6 @@ export function ConnectionConsentOptions({
       </div>
       <CollapsibleContent className="border-t">
         <div className="space-y-5 p-5 sm:p-6">
-          {hasExcludedParts && (
-            <InlineNotice variant="neutral">
-              <InlineNoticeText>
-                Your setup left some parts out. They stay off for this
-                connection.
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
           <div className="divide-y">
             {sections
               .filter((section) => section.content)

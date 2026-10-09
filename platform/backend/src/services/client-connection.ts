@@ -96,7 +96,6 @@ class ClientConnectionService {
           tokenHash: pending.tokenHash,
           tokenStart: pending.tokenStart,
           expiresAt: new Date(pending.expiresAt),
-          exclude: pending.exclude,
           deviceName: pending.deviceName,
         });
       } catch (error) {
@@ -121,7 +120,7 @@ class ClientConnectionService {
     if (params.setupId && !approved)
       throw new ApiError(
         400,
-        "The setup must be unused, belong to you, match the requested client and operating system, and leave out what the prompt excluded. Start the installer again.",
+        "The setup must be unused, belong to you, and match the requested client and operating system. Start the installer again.",
       );
     return {
       status: approved ? ("approved" as const) : ("denied" as const),

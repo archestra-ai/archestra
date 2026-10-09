@@ -10,7 +10,9 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import logger from "@/logging";
 import { AgentModel, LimitModel } from "@/models";
+import { createLimit } from "@/services/limit";
 import {
+  ApiError,
   LimitCleanupIntervalSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
@@ -129,7 +131,7 @@ const registry = defineArchestraTools([
       );
 
       try {
-        const limit = await LimitModel.create({
+        const limit = await createLimit({
           entityType: args.entity_type,
           entityId: args.entity_id,
           limitType: args.limit_type,
@@ -158,6 +160,7 @@ const registry = defineArchestraTools([
           }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
         );
       } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
         return catchError(error, "creating limit");
       }
     },

@@ -98,14 +98,6 @@ vi.mock("@/lib/agent.query", () => ({
   },
 }));
 
-// The LLM Proxy singleton the llm_proxy limit target resolves against.
-vi.mock("@/lib/llm-proxy.query", () => ({
-  useLlmProxy: () => ({
-    data: { id: "proxy-1", identityProviderId: null },
-    isPending: false,
-  }),
-}));
-
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
   useDataTableQueryParams: () => ({
     searchParams: mockDataTableSearchParams(),
@@ -826,39 +818,13 @@ describe("LimitsPage", () => {
     expect(row).toHaveTextContent("CI runner");
   });
 
-  it("labels the LLM Proxy row for a limit targeting the proxy", () => {
-    mockUseLimits.mockReturnValue({
-      data: [
-        {
-          id: "limit-proxy",
-          entityType: "agent",
-          entityId: "proxy-1",
-          limitType: "token_cost",
-          limitValue: 1000,
-          model: null,
-          mcpServerName: null,
-          toolName: null,
-          lastCleanup: null,
-          createdAt: "2026-01-01",
-          updatedAt: "2026-01-01",
-          modelUsage: [],
-        },
-      ],
-      isPending: false,
-    });
-
-    render(<LimitsPage />);
-    const row = screen.getByTestId("data-table-row-limit-proxy");
-    expect(row).toHaveTextContent("LLM Proxy");
-  });
-
   it("shows 'Unknown agent' for an agent row that no longer resolves", () => {
     mockUseLimits.mockReturnValue({
       data: [
         {
-          id: "limit-proxy",
+          id: "limit-unknown-agent",
           entityType: "agent",
-          entityId: "unknown-proxy",
+          entityId: "unknown-agent",
           limitType: "token_cost",
           limitValue: 1000,
           model: null,
@@ -874,15 +840,16 @@ describe("LimitsPage", () => {
     });
 
     render(<LimitsPage />);
-    const row = screen.getByTestId("data-table-row-limit-proxy");
+    const row = screen.getByTestId("data-table-row-limit-unknown-agent");
     expect(row).toHaveTextContent("Unknown agent");
+    expect(within(row).getByText("Agent", { exact: true })).toBeInTheDocument();
   });
 
   it("opens the edit dialog seeded from an ?edit= deep link", async () => {
     const limit = {
-      id: "limit-proxy",
+      id: "limit-agent",
       entityType: "agent",
-      entityId: "proxy-1",
+      entityId: "agent-1",
       limitType: "token_cost",
       limitValue: 1000,
       model: null,
@@ -906,13 +873,13 @@ describe("LimitsPage", () => {
     expect(screen.getByLabelText("Limit value")).toHaveValue("1,000");
     expect(
       screen.getByRole("combobox", { name: "Limit scope" }),
-    ).toHaveTextContent("LLM Proxy");
+    ).toHaveTextContent("Agent");
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     expect(mockUpdateLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         id: limit.id,
         entityType: "agent",
-        entityId: "proxy-1",
+        entityId: "agent-1",
         limitValue: 1000,
       }),
     );

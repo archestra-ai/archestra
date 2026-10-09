@@ -229,7 +229,7 @@ test("Copilot prints saved credentials once in the final instructions, after the
   expect(credentials).toBeGreaterThan(optional);
   expect(signIn).toBeGreaterThan(credentials);
   expect(
-    result.output.match(/^export COPILOT_PROVIDER_API_KEY=/gm),
+    result.output.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm),
   ).toHaveLength(1);
   expect(result.output).toContain("No shell changes are required");
   expect(result.output).not.toContain("printed above");

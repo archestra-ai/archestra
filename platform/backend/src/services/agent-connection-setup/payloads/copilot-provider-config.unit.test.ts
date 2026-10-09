@@ -129,11 +129,14 @@ test("setup saves credentials and model, preserves other settings, reruns safely
   expect(stdout.indexOf("Next: open a new terminal")).toBeGreaterThan(
     stdout.indexOf("export COPILOT_PROVIDER_API_KEY="),
   );
-  expect(stdout.match(/^export COPILOT_PROVIDER_API_KEY=/gm)).toHaveLength(1);
+  expect(stdout.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm)).toHaveLength(
+    1,
+  );
   expect(stdout).not.toContain("printed above");
   // Executing the optional exports must round-trip even quotes/metacharacters.
   const exports = stdout
     .split("\n")
+    .map((line) => line.trim())
     .filter((line) => line.startsWith("export "))
     .join("\n");
   const printed = await exec(

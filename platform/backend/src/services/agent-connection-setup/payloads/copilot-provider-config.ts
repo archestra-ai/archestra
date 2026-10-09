@@ -108,13 +108,23 @@ const registry = JSON.parse(fs.readFileSync(registryPath, "utf8").replace(/^\uFE
 const state = JSON.parse(fs.readFileSync(registryPath + ".archestra-state.json", "utf8"));
 const existing = registry.providers?.find(provider => provider.name === "archestra");
 if (!existing || !state.installedModel) throw new Error("Copilot provider configuration was not installed");
-console.log("\nOptional: add environment variables");
-console.log(existing.apiKey
-  ? "Your provider settings and API key are already saved in " + registryPath + ". No shell changes are required."
-  : "Your provider settings are saved in " + registryPath + ". Add your API key there before launching Copilot.");
-console.log("You can also set the variables below if you prefer. Provider settings in providers.json take precedence.");
+const paint = (code, text) => process.stdout.isTTY && !process.env.NO_COLOR
+  ? "\x1b[" + code + "m" + text + "\x1b[0m" : text;
+const divider = "─".repeat(Math.min(56, process.stdout.columns || 56));
+console.log("\n" + paint("2", divider));
+console.log(paint("1;35", "Optional: add environment variables"));
+console.log();
+if (existing.apiKey) {
+  console.log("  " + paint("1", "You can skip this step. No shell changes are required."));
+  console.log("  Your provider settings and API key are already saved in:");
+} else {
+  console.log("  Your provider settings are saved in:");
+}
+console.log("    " + paint("2", registryPath));
+if (!existing.apiKey) console.log("\n  " + paint("1;33", "Add your API key to that file before launching Copilot."));
 if (process.env.COPILOT_MODEL && process.env.COPILOT_MODEL !== state.installedModel && process.env.COPILOT_MODEL !== state.installedModel.slice("archestra/".length)) {
-  console.log("Your existing COPILOT_MODEL selects another model. Use the launch command below, or unset it to use the saved model.");
+  console.log("\n  " + paint("1;33", "Your existing COPILOT_MODEL selects another model."));
+  console.log("  Use the launch command below, or unset it to use the saved model.");
 }
 const values = {
   COPILOT_PROVIDER_TYPE: existing.type,
@@ -125,11 +135,22 @@ const values = {
 };
 const fish = /(?:^|\/)fish$/.test(process.env.SHELL || "");
 const windows = process.platform === "win32" || process.env.ARCHESTRA_COPILOT_SHELL === "powershell";
-console.log(windows ? "You can optionally set these in PowerShell:" : fish ? "Add these to ~/.config/fish/config.fish, then open a new terminal:" : "Add these to your shell profile (for example ~/.zshrc or ~/.bashrc), then open a new terminal:");
+console.log();
+console.log(windows
+  ? "  To also use environment variables, paste these into PowerShell."
+  : "  To also use environment variables, add these to your shell profile:");
+if (!windows) {
+  console.log("    " + paint("1", fish ? "~/.config/fish/config.fish" : "~/.zshrc or ~/.bashrc") + ", then open a new terminal.");
+}
+console.log("  " + paint("2", "Provider settings in providers.json take precedence."));
+console.log();
 for (const [name, value] of Object.entries(values)) {
   const quoted = windows ? "'" + value.replace(/'/g, "''") + "'" : fish
     ? "'" + value.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'"
     : "'" + value.replace(/'/g, "'\\''") + "'";
-  console.log(windows ? "$env:" + name + " = " + quoted : fish ? "set -gx " + name + " " + quoted : "export " + name + "=" + quoted);
+  const variable = paint("1;36", name);
+  console.log("  " + (windows ? "$env:" + variable + " = " + quoted : fish ? "set -gx " + variable + " " + quoted : "export " + variable + "=" + quoted));
+  console.log();
 }
+console.log(paint("2", divider));
 `;

@@ -40,6 +40,13 @@ test.each([
     model: null,
     primaryProviders: [
       {
+        provider: "kimi",
+        name: "Kimi",
+        models: [
+          { id: "kimi-test", name: "Kimi", context: null, output: null },
+        ],
+      },
+      {
         provider: "anthropic",
         name: "Anthropic",
         models: [
@@ -109,11 +116,24 @@ test.each([
     run(payload);
     const config = JSON.parse(readFileSync(configPath, "utf8"));
     expect(config.enabled_providers).toEqual([
+      "archestra-kimi",
       "archestra-anthropic",
       "archestra-vllm",
       "archestra-openai",
     ]);
     expect(config[section].local).toEqual({ name: "Local account" });
+    expect(config[section]["archestra-kimi"]).toMatchObject({
+      [major === 2 ? "package" : "npm"]:
+        major === 2
+          ? "@opencode/ai/providers/openai-compatible"
+          : "@ai-sdk/openai-compatible",
+      [major === 2 ? "settings" : "options"]: {
+        baseURL: "https://proxy.example/v1/kimi",
+      },
+      models: {
+        "kimi-test": { [major === 2 ? "modelID" : "id"]: "kimi-test" },
+      },
+    });
     expect(
       config[section]["archestra-vllm"].models["accounts/example/models/coder"][
         major === 2 ? "modelID" : "id"

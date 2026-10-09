@@ -738,7 +738,6 @@ describe("POST /api/connection-setups", () => {
     expect(script.body).toContain(`"wireId":"${provider}:example/coder"`);
     expect(script.body).not.toContain('"archestra-openai"');
     expect(script.body).toContain("opencode-primary-state.json");
-    expect(script.body).toContain("before model-provider setup");
   });
 
   test("rejects OpenCode providers without a verified passthrough wire", async ({

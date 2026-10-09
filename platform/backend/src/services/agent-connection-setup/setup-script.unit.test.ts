@@ -141,7 +141,29 @@ function fullContext(
     proxy:
       clientId === "claude-code"
         ? PROXY
-        : { ...PROXY, provider: "openai", providerLabel: "OpenAI" },
+        : {
+            ...PROXY,
+            provider: "openai",
+            providerLabel: "OpenAI",
+            ...(clientId === "opencode"
+              ? {
+                  primaryProviders: [
+                    {
+                      provider: "openai" as const,
+                      name: "OpenAI",
+                      models: [
+                        {
+                          id: "gpt-test",
+                          name: "GPT test",
+                          context: null,
+                          output: null,
+                        },
+                      ],
+                    },
+                  ],
+                }
+              : {}),
+          },
     skills: SKILLS,
   };
 }

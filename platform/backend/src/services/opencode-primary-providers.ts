@@ -64,6 +64,26 @@ export async function ensureOpenCodePrimaryKey(params: UserContext) {
     name,
     providerApiKeys,
   });
+  // Match connection-key creation: concurrent first setups converge on the
+  // oldest key so later catalog refreshes update every installation.
+  const winner = await VirtualApiKeyModel.findByAuthorScopeName({
+    organizationId: params.organizationId,
+    authorId: params.userId,
+    scope: "personal",
+    name,
+  });
+  if (winner && winner.id !== virtualKey.id) {
+    await VirtualApiKeyModel.delete(virtualKey.id);
+    await VirtualApiKeyModel.update({
+      id: winner.id,
+      name,
+      scope: "personal",
+      authorId: params.userId,
+      teamIds: [],
+      providerApiKeys,
+    });
+    return { virtualApiKeyId: winner.id, provider: keys[0].provider };
+  }
   return { virtualApiKeyId: virtualKey.id, provider: keys[0].provider };
 }
 

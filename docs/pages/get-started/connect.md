@@ -53,7 +53,7 @@ The command changes nothing on your computer until you approve it in your browse
 
 OpenCode defaults to **Virtual key**, with **All model providers** selected. Setup creates a personal virtual key for your accessible, compatible primary provider keys and adds their synced chat models to OpenCode, including OpenAI-compatible endpoints. Your personal ChatGPT subscription is included when it is your primary OpenAI credential and does not need reauthentication.
 
-For providers with a shared model catalog, setup prefers your primary key, then a primary shared with your team, then another accessible primary; custom endpoints retain models from all accessible primary keys. Re-run setup after changing primary keys or syncing new models. Choose one configured model provider to configure it individually, or **Your provider key** to keep using OpenCode's local credentials.
+Re-run setup after changing primary keys or syncing new models. Choose one configured model provider to configure it individually, or **Your provider key** to keep using OpenCode's local credentials.
 
 ![The browser approval page with a code to match against the terminal](/docs/automated_screenshots/platform-connection_browser-approval.webp)
 

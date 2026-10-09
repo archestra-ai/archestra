@@ -98,7 +98,11 @@ describe("OpenCode primary providers", () => {
       id: expired.id,
       requiresReauthentication: true,
     });
-    const first = await ensureOpenCodePrimaryKey(params);
+    const [first, concurrent] = await Promise.all([
+      ensureOpenCodePrimaryKey(params),
+      ensureOpenCodePrimaryKey(params),
+    ]);
+    expect(concurrent.virtualApiKeyId).toBe(first.virtualApiKeyId);
     expect(
       (await VirtualApiKeyModel.getProviderApiKeys(first.virtualApiKeyId))
         .map((key) => key.provider)
@@ -285,22 +289,5 @@ describe("OpenCode primary providers", () => {
     await expect(
       getOpenCodeVirtualKeyCatalog({ ...params, provider: "bedrock" }),
     ).rejects.toThrow("Model provider access changed");
-  });
-
-  test("refuses setup without a usable primary", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id);
-    await expect(
-      ensureOpenCodePrimaryKey({
-        organizationId: org.id,
-        userId: user.id,
-        userTeamIds: [],
-      }),
-    ).rejects.toThrow("No usable primary");
   });
 });

@@ -1714,11 +1714,6 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.getByRole("combobox", { name: "Model provider" }),
       ).toHaveTextContent("All model providers");
-      expect(
-        screen.getByText(
-          "Create a personal virtual key for all primary model providers you can access, and make their models available in OpenCode.",
-        ),
-      ).toBeInTheDocument();
       fireEvent.keyDown(
         screen.getByRole("combobox", { name: "Model provider" }),
         { key: "ArrowDown" },

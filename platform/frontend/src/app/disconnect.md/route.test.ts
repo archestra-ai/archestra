@@ -33,6 +33,7 @@ describe("Disconnect agent instructions", () => {
       "codex",
       "copilot-cli",
       "opencode",
+      "droid",
       "cursor",
       "claude-desktop",
       "generic",

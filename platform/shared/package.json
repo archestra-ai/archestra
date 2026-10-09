@@ -20,6 +20,7 @@
     "./interactions/client": "./interactions/client.ts",
     "./interactions/session-source": "./interactions/session-source.ts",
     "./model-constants": "./model-constants.ts",
+    "./droid-provider-routes": "./droid-provider-routes.ts",
     "./opencode-provider-routes": "./opencode-provider-routes.ts",
     "./permission.types": "./permission.types.ts",
     "./roles": "./roles.ts",

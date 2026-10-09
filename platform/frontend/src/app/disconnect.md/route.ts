@@ -189,6 +189,7 @@ function focusedInstructions(
   client: string,
 ): string | null {
   if (!isInstallerClientId(client)) return null;
+  if (client === "droid") return droidInstructions(target);
   const details = GUARD_CLIENTS[client];
   const guard = startupGuardStem(client);
   if (!details || !guard) {
@@ -235,6 +236,27 @@ ${withOrigin(details.manual)}
   ~/.archestra/${guard}-startup-guard.* (the script, .skip, .prompt.md and
   .instructions files). Remove ~/.archestra only if it is then empty.`,
     finish: details.finish,
+  });
+}
+
+function droidInstructions(target: DeploymentTarget): string {
+  return instructions({
+    target,
+    label: INSTALLER_CLIENT_LABELS.droid,
+    inventory: `- Gateway: the mcpServers entry in ~/.factory/mcp.json whose URL starts with ${target.base}/mcp/.
+- Model: a customModels entry in ~/.factory/settings.json whose baseUrl points at ${target.host}.
+- Previous model defaults: ~/.archestra/droid-connection-state.json, keyed by the custom model ID.
+- Skills: a Git clone in ~/.factory/skills/ whose origin points at ${target.host}/skills/.
+- Runtime handoff: ~/.factory/skills/archestra-runtime-handoff/SKILL.md, if it names this gateway.`,
+    remove: `- In Droid /mcp, clear authentication for the gateway, then remove its entry from ~/.factory/mcp.json. Keep other servers.
+- Remove only the customModels entry whose baseUrl points at ${target.host}. If its saved connection state has a previousModel, restore that entry instead.
+- If sessionDefaultSettings.model or specModeModel still equals the removed custom model ID, restore the corresponding model or specModel from its saved state. When modelPresent or specModelPresent is false, delete that default. Keep defaults the user changed since setup.
+- Remove that model's connection state. Delete the state file only when connections is empty.
+- Delete only the skills clone found above. Keep other skill folders and configuration.
+- Remove the runtime handoff skill only if it carries the archestra-managed-runtime-handoff marker and its Gateway URL points at ${target.host}.
+- If state is missing, use the adjacent .archestra-backup to identify previous defaults; ask the user which model to select if there is no backup.`,
+    finish:
+      "Tell the user to start a new Droid session and check /mcp, /model, and /skills.",
   });
 }
 

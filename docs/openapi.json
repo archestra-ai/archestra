@@ -146435,7 +146435,8 @@
                       "codex",
                       "claude-desktop",
                       "copilot-cli",
-                      "opencode"
+                      "opencode",
+                      "droid"
                     ]
                   },
                   "platform": {
@@ -147071,7 +147072,8 @@
                         "codex",
                         "claude-desktop",
                         "copilot-cli",
-                        "opencode"
+                        "opencode",
+                        "droid"
                       ]
                     },
                     "platform": {
@@ -147440,7 +147442,8 @@
                         "codex",
                         "claude-desktop",
                         "copilot-cli",
-                        "opencode"
+                        "opencode",
+                        "droid"
                       ]
                     },
                     "platform": {
@@ -151016,7 +151019,8 @@
                       "codex",
                       "claude-desktop",
                       "copilot-cli",
-                      "opencode"
+                      "opencode",
+                      "droid"
                     ]
                   },
                   "platform": {
@@ -151203,7 +151207,8 @@
                               "codex",
                               "claude-desktop",
                               "copilot-cli",
-                              "opencode"
+                              "opencode",
+                              "droid"
                             ]
                           }
                         },

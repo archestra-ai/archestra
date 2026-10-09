@@ -356,7 +356,9 @@ export function ConnectCommandPanel({
   // leaks onto another. Options come from the org's synced model list; with
   // none synced for the provider, a free-text field takes any model id.
   const supportsModelChoice =
-    client.id === "copilot-cli" || client.id === "claude-desktop";
+    client.id === "copilot-cli" ||
+    client.id === "claude-desktop" ||
+    client.id === "droid";
   const [modelChoice, setModelChoice] = useState<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: provider is the reset trigger
   useEffect(() => setModelChoice(null), [provider]);
@@ -743,6 +745,13 @@ export function ConnectCommandPanel({
                   Supported OpenCode providers keep their model IDs and local
                   credentials. Only their base URLs change, and a personal
                   passthrough key attributes requests to you.
+                </span>
+              ) : client.id === "droid" ? (
+                <span>
+                  Droid uses a matching local BYOK model key, or your provider
+                  API key from this terminal's environment. Set the key before
+                  running setup. A Factory subscription cannot authenticate
+                  through the proxy.
                 </span>
               ) : client.id === "cursor" ? (
                 <span>

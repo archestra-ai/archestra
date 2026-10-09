@@ -41,6 +41,7 @@ export const INSTALLER_CLIENT_IDS = [
   "claude-desktop",
   "copilot-cli",
   "opencode",
+  "droid",
 ] as const;
 
 export type InstallerClientId = (typeof INSTALLER_CLIENT_IDS)[number];
@@ -52,6 +53,7 @@ export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
   codex: "Codex",
   "copilot-cli": "Copilot CLI",
   opencode: "OpenCode",
+  droid: "Droid",
 };
 
 export function isInstallerClientId(id: string): id is InstallerClientId {
@@ -101,6 +103,13 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
     "Routing plugin archestra-llm-proxy.js",
     "~/.archestra state file",
     "Startup check in your shell profile",
+  ],
+  droid: [
+    "~/.factory/mcp.json (gateway)",
+    "~/.factory/settings.json (custom model and session defaults)",
+    "Skills folder in ~/.factory/skills/",
+    "Runtime handoff skill (when enabled)",
+    "~/.archestra/droid-connection-state.json (previous model defaults)",
   ],
 };
 

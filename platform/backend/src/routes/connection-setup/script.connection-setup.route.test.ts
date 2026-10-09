@@ -122,6 +122,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     "copilot-cli",
     "cursor",
     "opencode",
+    "droid",
   ] as const) {
     for (const proxyAuth of ["virtual-key", "provider-key"] as const) {
       test(`${clientId} ${proxyAuth} installer binds setup scope to its actual authentication`, async ({
@@ -166,23 +167,33 @@ describe("GET /api/connection-setups/script/:token", () => {
             : {}),
         });
         expect(response.statusCode, response.body).toBe(200);
+        const scriptContext =
+          clientId === "droid"
+            ? JSON.parse(
+                Buffer.from(
+                  response.body.match(
+                    /ARCHESTRA_NODE_SETUP_CONTEXT='([^']+)'/,
+                  )?.[1] ?? "",
+                  "base64",
+                ).toString("utf8"),
+              )
+            : null;
+        const rendered = scriptContext
+          ? JSON.stringify(scriptContext)
+          : response.body;
         const token =
           clientId === "claude-desktop"
             ? response.json().proxy.baseUrl.split("/connection-setup/")[1]
-            : response.body.match(
+            : rendered.match(
                 /\/v1\/connection-setup\/(cps1_[A-Za-z0-9_.-]+)\//,
               )?.[1];
         if (!setup?.virtualApiKeyId) {
           expect(token).toBeUndefined();
-          expect(response.body).toContain(
-            `http://localhost:9000/v1/${provider}`,
-          );
+          expect(rendered).toContain(`http://localhost:9000/v1/${provider}`);
           return;
         }
         expect(token).toBeTruthy();
-        expect(response.body).toContain(
-          `/connection-setup/${token}/${provider}`,
-        );
+        expect(rendered).toContain(`/connection-setup/${token}/${provider}`);
         expect(
           verifyConnectionProxySetupContext({
             token,

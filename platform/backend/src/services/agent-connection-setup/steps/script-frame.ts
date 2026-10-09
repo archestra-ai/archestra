@@ -78,7 +78,7 @@ function setupParts(ctx: SetupScriptContext): string[] {
 
 export function bashHeader(
   ctx: SetupScriptContext,
-  agent: ShellAgentSetup,
+  agent: Pick<ShellAgentSetup, "label" | "binary">,
 ): string {
   const { label, binary } = agent;
   const requireBinary = binary
@@ -177,7 +177,7 @@ function Err($m)  { if ($ArchUseColor) { Write-Host ('error: ' + $m) -Foreground
 
 export function powerShellHeader(
   ctx: SetupScriptContext,
-  agent: ShellAgentSetup,
+  agent: Pick<ShellAgentSetup, "label" | "binary">,
 ): string {
   const { label, binary } = agent;
   const requireBinary = binary

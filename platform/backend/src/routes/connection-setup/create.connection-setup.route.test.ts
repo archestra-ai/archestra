@@ -550,7 +550,7 @@ describe("POST /api/connection-setups", () => {
     expect(attributionKey?.authorId).toBe(user.id);
   });
 
-  test("model persists for copilot-cli setups and 400s for other clients", async ({
+  test("model persists for Copilot and Droid setups and rejects clients without model selection", async ({
     makeAgent,
   }) => {
     const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
@@ -570,6 +570,26 @@ describe("POST /api/connection-setups", () => {
     const rawToken = ok.json().command.match(/script\/([^']+)'/)?.[1] as string;
     const setup = await ConnectionSetupModel.findByToken(rawToken);
     expect(setup?.model).toBe("claude-sonnet-4");
+
+    const droid = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "droid",
+        platform: "windows",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider: "anthropic",
+        model: "claude-sonnet-4-5-20250929",
+      },
+    });
+    expect(droid.statusCode).toBe(200);
+    const droidToken = droid
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    expect((await ConnectionSetupModel.findByToken(droidToken))?.model).toBe(
+      "claude-sonnet-4-5-20250929",
+    );
 
     const wrongClient = await app.inject({
       method: "POST",

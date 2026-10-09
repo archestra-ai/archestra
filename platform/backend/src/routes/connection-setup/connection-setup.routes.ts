@@ -12,6 +12,7 @@ import {
   SupportedProvidersSchema,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import { DROID_PROVIDER_ROUTES } from "@archestra/shared/droid-provider-routes";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
@@ -93,6 +94,7 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   "claude-desktop": ["anthropic"],
   codex: ["openai"],
   cursor: ["openai"],
+  droid: DROID_PROVIDER_ROUTES.map(({ provider }) => provider),
   "copilot-cli": [
     "openai",
     "azure",
@@ -363,11 +365,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         model &&
         clientId !== "copilot-cli" &&
-        clientId !== "claude-desktop"
+        clientId !== "claude-desktop" &&
+        clientId !== "droid"
       ) {
         throw new ApiError(
           400,
-          "model is only supported for copilot-cli and claude-desktop setups",
+          "model is only supported for copilot-cli, claude-desktop, and droid setups",
         );
       }
 
@@ -528,6 +531,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else if (
         clientId !== "claude-desktop" &&
         clientId !== "opencode" &&
+        clientId !== "droid" &&
         config.plugins.enabled &&
         organization.connectionPluginsEnabled
       ) {
@@ -980,7 +984,7 @@ interface MarketplaceRenderContext {
   pluginNames: string[];
   pluginClientType: Exclude<
     ConnectionSetupClientId,
-    "claude-desktop" | "opencode"
+    "claude-desktop" | "opencode" | "droid"
   > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
@@ -1191,7 +1195,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       pluginClientType:
         pluginIds.length > 0 &&
         setup.clientId !== "claude-desktop" &&
-        setup.clientId !== "opencode"
+        setup.clientId !== "opencode" &&
+        setup.clientId !== "droid"
           ? setup.clientId
           : null,
       pluginPlatform:

@@ -17,6 +17,7 @@ export * from "./citation-quotes";
 export * from "./consts";
 export * from "./created-by";
 export * from "./docs";
+export * from "./droid-provider-routes";
 export * from "./e2e-test-ids";
 export * from "./encrypted-chat-content";
 export * from "./environment-defaults";

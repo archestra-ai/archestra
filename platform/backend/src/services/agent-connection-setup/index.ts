@@ -4,6 +4,7 @@ import { renderClaudeDesktopSetupScript } from "./agents/claude-desktop";
 import { codexSetup } from "./agents/codex";
 import { copilotCliSetup } from "./agents/copilot-cli";
 import { cursorSetup } from "./agents/cursor";
+import { renderDroidSetupScript } from "./agents/droid";
 import { opencodeSetup } from "./agents/opencode";
 import { buildEnding } from "./steps/ending";
 import {
@@ -50,7 +51,7 @@ export type { SetupScriptContext } from "./types";
 
 /** Agents whose setup is a rendered bash/PowerShell script. */
 const SHELL_AGENTS: Record<
-  Exclude<ConnectionSetupClientId, "claude-desktop">,
+  Exclude<ConnectionSetupClientId, "claude-desktop" | "droid">,
   ShellAgentSetup
 > = {
   "claude-code": claudeCodeSetup,
@@ -61,9 +62,6 @@ const SHELL_AGENTS: Record<
 };
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
-  if (rawCtx.clientId === "claude-desktop") {
-    return renderClaudeDesktopSetupScript(rawCtx);
-  }
   // appName is white-label, admin-controlled text that lands in script comments
   // and bare echo strings. Collapse control characters (newlines, NUL, …) to
   // spaces so it can never break out of a comment line and execute.
@@ -71,7 +69,10 @@ export function renderSetupScript(rawCtx: SetupScriptContext): string {
     ...rawCtx,
     appName: sanitizeAppName(rawCtx.appName),
   };
-  const agent = SHELL_AGENTS[rawCtx.clientId];
+  if (ctx.clientId === "claude-desktop")
+    return renderClaudeDesktopSetupScript(ctx);
+  if (ctx.clientId === "droid") return renderDroidSetupScript(ctx);
+  const agent = SHELL_AGENTS[ctx.clientId];
   const ending = buildEnding(ctx, agent.label, agent.ending(ctx));
 
   // Windows targets PowerShell; macOS/Linux share bash.

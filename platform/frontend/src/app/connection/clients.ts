@@ -1,6 +1,7 @@
 import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CLAUDE_DESKTOP_CLIENT_ID,
+  DROID_PROVIDER_ROUTES,
   EXTERNAL_AGENT_ID_HEADER,
   OPENCODE_CLIENT_ID,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
@@ -248,15 +249,6 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
       kind: "unsupported",
       reason: "Antigravity sends its model requests to its own service.",
     },
-  },
-  {
-    id: "droid",
-    label: "Droid",
-    sub: "Factory coding agent",
-    svg: FACTORY_PATH,
-    svgViewBox: "84 84 340 340",
-    iconColor: "#020202",
-    tileBg: "#f6f6f6",
   },
   {
     id: "hermes-agent",
@@ -967,6 +959,54 @@ export COPILOT_MODEL="<model-name>"`,
           ],
         };
       },
+    },
+  },
+  {
+    id: "droid",
+    label: "Droid",
+    sub: "Factory coding agent",
+    svg: FACTORY_PATH,
+    svgViewBox: "84 84 340 340",
+    iconColor: "#020202",
+    tileBg: "#f6f6f6",
+    mcp: {
+      kind: "custom",
+      supportedAuth: "oauth",
+      configFile: "~/.factory/mcp.json",
+      language: "json",
+      steps: [
+        {
+          title: "Configure the gateway",
+          body: "The connection script updates ~/.factory/mcp.json.",
+        },
+        {
+          title: FINISH_OAUTH_FLOW_TITLE,
+          body: "In Droid, run /mcp and sign in to the gateway.",
+        },
+      ],
+      buildConfig: ({ url, serverName }) =>
+        JSON.stringify(
+          {
+            mcpServers: {
+              [serverName]: { type: "http", url, disabled: false },
+            },
+          },
+          null,
+          2,
+        ),
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: DROID_PROVIDER_ROUTES.map(({ provider }) => provider),
+      build: () => ({
+        kind: "steps",
+        steps: [
+          {
+            title: "Run the connection script",
+            body: "The installer configures your custom model in ~/.factory/settings.json.",
+          },
+        ],
+      }),
     },
   },
   ...POPULAR_GENERIC_CLIENTS.map(

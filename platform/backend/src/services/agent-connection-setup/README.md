@@ -44,12 +44,14 @@ extension bundle that runs the reviewed setup from inside the app.
 index.ts            renderSetupScript and the agent dispatch map
 types.ts            SetupScriptContext and the agent module interface
 setup-command.ts    the one-line Connect command and URL helpers
+node-runner.ts      shell transport for a single Node.js implementation
 agents/             one module per agent
   claude-code.ts    bash and PowerShell steps side by side, plus its ending
   codex.ts
   copilot-cli.ts
   cursor.ts
   opencode.ts
+  droid.ts          Node.js setup logic, shared across operating systems
   claude-desktop.ts Python installer for Claude Desktop (separate path)
 steps/              building blocks shared by agents
   script-frame.ts   header, banner, footer and logging helpers (bash + PowerShell)
@@ -98,6 +100,7 @@ behavior differences that exist today are kept on purpose, so this refactor
 changed no rendered output.
 
 New agents should use the "new" model: setup steps written once in Node.js and
-run by the bootstrap installer, which already runs on every platform. That
-runner is not built yet. Until it is, prefer extending shared steps over adding
-agent-specific shell code, and add no new bash or PowerShell for agent setup.
+run through `node-runner.ts`, which carries the context via environment and
+uses the shared shell frame and ending. Droid is the first client on this path.
+Keep agent-specific setup logic in Node.js; do not add separate bash and
+PowerShell implementations.

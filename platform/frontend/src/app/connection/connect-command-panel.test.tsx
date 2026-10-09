@@ -1519,6 +1519,33 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
+    it("generates Droid setup and regenerates it when the model changes", async () => {
+      const user = userEvent.setup();
+      renderPanel({ client: findClient("droid") });
+      await screen.findByText(COMMAND);
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            clientId: "droid",
+            provider: "anthropic",
+            model: "claude-opus-4-8",
+          }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-model"));
+      fireEvent.change(screen.getByPlaceholderText("Model id"), {
+        target: { value: "claude-haiku-4-5-20251001" },
+      });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            clientId: "droid",
+            model: "claude-haiku-4-5-20251001",
+          }),
+        ),
+      );
+    });
+
     it("leaves OpenCode provider and model selection unchanged", async () => {
       renderPanel({ client: findClient("opencode") });
 

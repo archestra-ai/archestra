@@ -49,7 +49,7 @@ const RUNS_AS: Record<RunsAs["key"], RunsAs> = {
   },
 };
 
-/** Null when the remedy is declared but no `[externals.*]` entry wires it. */
+/** Null when the declaration has no `[externals.*]` entry wiring it. */
 export function runsAs(remedy: Remedy): RunsAs | null {
   switch (remedy.implementation?.kind) {
     case "hitl":
@@ -70,22 +70,7 @@ export function runsAs(remedy: Remedy): RunsAs | null {
   }
 }
 
-/** How many wired remedies each kind of implementation runs, for a bar; empty groups left out. */
-export function runsAsBreakdown(
-  remedies: Remedy[],
-): (RunsAs & { count: number })[] {
-  const counts = new Map<RunsAs["key"], number>();
-  for (const remedy of remedies) {
-    const group = runsAs(remedy);
-    if (group) counts.set(group.key, (counts.get(group.key) ?? 0) + 1);
-  }
-  return Object.values(RUNS_AS).flatMap((group) => {
-    const count = counts.get(group.key) ?? 0;
-    return count > 0 ? [{ ...group, count }] : [];
-  });
-}
-
-/** One kind of block a remedy lifts, as `Lock · value`. */
+/** One kind of block an authority or sanitizer lifts, as `Lock · value`. */
 export type CoverChip = {
   lock: "Approvals" | "Audience" | "Trust" | "Effects";
   value: string;
@@ -190,9 +175,9 @@ export function groupBySource(view: RemediesView): RemedySourceGroup[] {
   );
 }
 
-/** One line of the Gaps panel: a kind of block, or the wiring check. */
+/** One line of the Gaps panel: a level data can carry, a kind of block, or the wiring check. */
 export type GapLine = {
-  key: BlockCoverage["kind"] | "wiring";
+  key: string;
   label: string;
   text: string;
   covered: boolean;
@@ -205,56 +190,72 @@ const BLOCK_LABEL: Record<BlockCoverage["kind"], string> = {
   approvals: "Approvals",
 };
 
-const BLOCK_NEED: Record<BlockCoverage["kind"], string> = {
-  trust: "need trusted data",
-  audience: "limit who may read",
-  effects: "exclude an earlier effect",
-  approvals: "need an approval mark",
-};
-
-const rules = (count: number) => `${count} ${count === 1 ? "rule" : "rules"}`;
+const names = (list: string[]) => list.join(", ");
 const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
 
+/** The runtime's reserved sanitizer: it raises trust for subagent returns only. */
+const ATTEST_SCHEMA = "attest-schema";
+
 /**
- * The lines the Gaps panel shows: every kind of block some rule can cause,
- * then the wiring check when a remedy is declared but not wired. A kind no
- * rule uses is left out.
+ * The lines the Gaps panel shows: every trust rank and audience data can be
+ * labelled with, and whether a blocked call can get past it; effects and
+ * approval marks when some rule uses them; then the wiring check when an
+ * authority or sanitizer is declared but not wired. Gaps come first, so the
+ * number above them is explained before what is covered.
  */
 export function gapLines(view: RemediesView): GapLine[] {
-  const lines = view.blocks.flatMap((block): GapLine[] => {
-    if (block.rules === 0) return [];
-    const label = BLOCK_LABEL[block.kind];
+  const lines = view.blocks.map((block): GapLine => {
+    const key = block.level ? `${block.kind}:${block.level}` : block.kind;
+    const by = [...block.approvers, ...block.cleaners];
     if (block.kind === "approvals")
-      return [
-        block.covered
-          ? {
-              key: block.kind,
-              label,
-              text: `${rules(block.rules)} · every mark has an approver`,
-              covered: true,
-            }
-          : {
-              key: block.kind,
-              label,
-              text: `${plural(block.unservedMarks.length, "mark", "marks")} nobody gives: ${block.unservedMarks.join(", ")}`,
-              covered: false,
-            },
-      ];
-    const lifts = [
-      block.approvers > 0 ? `${block.approvers} approve` : null,
-      block.cleaners > 0 ? `${block.cleaners} clean` : null,
-    ].filter((each) => each !== null);
-    return [
-      {
-        key: block.kind,
-        label,
+      return block.covered
+        ? {
+            key,
+            label: BLOCK_LABEL.approvals,
+            text: "every mark has an approver",
+            covered: true,
+          }
+        : {
+            key,
+            label: BLOCK_LABEL.approvals,
+            text: `${plural(block.unservedMarks.length, "mark", "marks")} nobody gives: ${names(block.unservedMarks)}`,
+            covered: false,
+          };
+    if (block.kind === "effects")
+      return {
+        key,
+        label: BLOCK_LABEL.effects,
         text: block.covered
-          ? `${rules(block.rules)} · ${lifts.join(", ")}`
-          : `${rules(block.rules)} ${BLOCK_NEED[block.kind]} · no remedy`,
+          ? `can run after an excluded effect (${names(by)})`
+          : "can't run after an excluded effect",
         covered: block.covered,
-      },
-    ];
+      };
+    const label = `${block.level} data`;
+    if (block.kind === "trust") {
+      const onlySubagents =
+        block.approvers.length === 0 &&
+        block.cleaners.length > 0 &&
+        block.cleaners.every((name) => name === ATTEST_SCHEMA);
+      return {
+        key,
+        label,
+        text: !block.covered
+          ? "can't be made trusted"
+          : onlySubagents
+            ? `only subagent returns can be made trusted (${names(by)})`
+            : `can be made trusted (${names(by)})`,
+        covered: block.covered,
+      };
+    }
+    return {
+      key,
+      label,
+      text: block.covered
+        ? `can be shared wider (${names(by)})`
+        : "can't be shared wider",
+      covered: block.covered,
+    };
   });
   const unwired = [...view.authorities, ...view.sanitizers].filter(
     (remedy) => !isWired(remedy),
@@ -263,10 +264,13 @@ export function gapLines(view: RemediesView): GapLine[] {
     lines.push({
       key: "wiring",
       label: "Wiring",
-      text: `${plural(unwired.length, "remedy", "remedies")} declared but not wired: ${unwired.map((each) => each.name).join(", ")}`,
+      text: `${unwired.length} declared but not wired: ${names(unwired.map((each) => each.name))}`,
       covered: false,
     });
-  return lines;
+  return [
+    ...lines.filter((line) => !line.covered),
+    ...lines.filter((line) => line.covered),
+  ];
 }
 
 /** How many Gaps lines are not covered: the panel's number. */

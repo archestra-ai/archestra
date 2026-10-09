@@ -24,9 +24,9 @@ export function useRemedies() {
 
 export type RemediesActivity =
   archestraApiTypes.GetOpenappaRemediesActivityResponses["200"];
-export type BlockedCallsDay = RemediesActivity["days"][number];
+export type ActivityDay = RemediesActivity["days"][number];
 
-/** Denied calls per day over the last week, in the viewer's time zone. */
+/** Denied calls per day over the last week by how each ended, in the viewer's time zone. */
 export function useRemediesActivity() {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return useQuery({

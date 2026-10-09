@@ -89711,9 +89711,9 @@ export type GetOpenappaRemediesResponses = {
         }>;
         blocks: Array<{
             kind: 'trust' | 'audience' | 'effects' | 'approvals';
-            rules: number;
-            approvers: number;
-            cleaners: number;
+            level: string | null;
+            approvers: Array<string>;
+            cleaners: Array<string>;
             unservedMarks: Array<string>;
             covered: boolean;
         }>;
@@ -89805,7 +89805,8 @@ export type GetOpenappaRemediesActivityResponses = {
         days: Array<{
             date: string;
             blocked: number;
-            remedied: number;
+            approved: number;
+            cleaned: number;
         }>;
     };
 };

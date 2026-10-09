@@ -74,7 +74,6 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
     makeAgent,
     makeAgentTool,
     makeMcpServer,
-    makeToolPolicy,
   }) => {
     const catalog = await createCatalog({
       name: "rename-source",
@@ -104,7 +103,6 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
     const [toolA, toolB] = created;
     const agent = await makeAgent({ organizationId });
     await makeAgentTool(agent.id, toolA.id);
-    const policy = await makeToolPolicy(toolA.id);
     await db.insert(schema.limitsTable).values([
       {
         entityType: "user",
@@ -158,12 +156,7 @@ describe("PUT /api/internal_mcp_catalog/:id — rename", () => {
       .where(eq(schema.toolsTable.id, toolB.id));
     expect(toolBRow.name).toBe("renamed-target__other_thing");
 
-    // Policies and agent assignments survive (they hang off the stable id).
-    const [policyRow] = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.id, policy.id));
-    expect(policyRow.toolId).toBe(toolA.id);
+    // Agent assignments survive (they hang off the stable id).
     const agentToolRows = await db
       .select()
       .from(schema.agentToolsTable)

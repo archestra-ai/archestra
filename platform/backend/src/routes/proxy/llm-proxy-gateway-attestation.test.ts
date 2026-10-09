@@ -9,7 +9,6 @@
  * APPA plugin end to end; only the providers and the native runtime are stubbed.
  */
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -839,15 +838,12 @@ describe("Gateway tool attestation on the LLM proxy", () => {
     expect(JSON.stringify(events)).not.toContain(MARKER);
   });
 
-  test("without OpenAPPA, discovers an unattested lookalike under the org's defaults and never the gateway's own tools", async ({
+  test("without OpenAPPA, discovers an unattested lookalike and never the gateway's own tools", async ({
     makeOrganization,
     makeAgent,
   }) => {
     await GuardrailsDeploymentModel.setEnabled(false);
-    const organization = await makeOrganization({
-      defaultDiscoveredToolInvocationPolicy: "require_approval",
-      defaultDiscoveredToolResultPolicy: "mark_as_untrusted",
-    });
+    const organization = await makeOrganization();
     const proxy = await makeAgent({
       organizationId: organization.id,
       agentType: "llm_proxy",
@@ -902,22 +898,6 @@ describe("Gateway tool attestation on the LLM proxy", () => {
     );
     if (!lookalike) throw new Error("expected the lookalike to be discovered");
     expect(lookalike.description).toBe("Search tools");
-    const invocation = await database.default
-      .select()
-      .from(database.schema.toolInvocationPoliciesTable)
-      .where(
-        eq(database.schema.toolInvocationPoliciesTable.toolId, lookalike.id),
-      );
-    expect(invocation.map((policy) => policy.action)).toEqual([
-      "require_approval",
-    ]);
-    const trusted = await database.default
-      .select()
-      .from(database.schema.trustedDataPoliciesTable)
-      .where(eq(database.schema.trustedDataPoliciesTable.toolId, lookalike.id));
-    expect(trusted.map((policy) => policy.action)).toEqual([
-      "mark_as_untrusted",
-    ]);
   });
 
   test("with the deployment switch off, restores the attested remedy call and leaves a lookalike's call as recorded", async () => {

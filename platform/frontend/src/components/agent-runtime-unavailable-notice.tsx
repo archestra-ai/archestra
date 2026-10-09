@@ -44,15 +44,16 @@ export function AgentRuntimeUnavailableNotice({
               </ExternalDocsLink>
             </p>
             {missingResources.length > 0 ? (
-              <p>
-                Missing resources:{" "}
-                {missingResources.map((resource, index) => (
-                  <span key={resource}>
-                    {index > 0 ? ", " : null}
-                    <code className="text-xs">{resource}</code>
-                  </span>
-                ))}
-              </p>
+              <div>
+                <p>Missing resources:</p>
+                <ul className="list-disc pl-5">
+                  {missingResources.map((resource) => (
+                    <li key={resource}>
+                      <code className="text-xs">{resource}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
             <p>The agents become available without a restart.</p>
           </div>

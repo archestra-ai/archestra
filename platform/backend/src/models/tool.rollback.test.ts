@@ -12,7 +12,7 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq, sql } from "drizzle-orm";
-import { beforeEach, vi } from "vitest";
+import { beforeEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
@@ -26,8 +26,6 @@ import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
 import TeamModel from "./team";
 import ToolModel, { parseArchestraBuiltInName } from "./tool";
-import ToolInvocationPolicyModel from "./tool-invocation-policy";
-import TrustedDataPolicyModel from "./trusted-data-policy";
 
 // these suites assert exact assigned-tool sets after agent creation; pin the
 // sandbox runtime off so its tools do not leak into the default-assignment
@@ -1286,20 +1284,6 @@ describe("ToolModel", () => {
     });
   });
 
-  describe("getDefaultToolPolicies", () => {
-    test("falls back to safe restrictive defaults when no organization exists", async () => {
-      // setup.ts intentionally seeds no organization, so getFirst() returns
-      // null here. New tools must then fail safe: block on an untrusted context
-      // and mark results untrusted, never silently permissive.
-      const defaults = await ToolModel.getDefaultToolPolicies();
-
-      expect(defaults).toEqual({
-        invocationAction: "block_when_context_is_untrusted",
-        resultAction: "mark_as_untrusted",
-      });
-    });
-  });
-
   describe("bulkCreateToolsIfNotExists", () => {
     test("creates multiple tools for an MCP server in bulk", async ({
       makeInternalMcpCatalog,
@@ -1344,42 +1328,6 @@ describe("ToolModel", () => {
         expect(tool.catalogId).toBe(catalog.id);
         expect(tool.agentId).toBeNull();
       });
-    });
-
-    test("applies the org's configured default guardrails to new MCP catalog tools", async ({
-      makeOrganization,
-      makeInternalMcpCatalog,
-    }) => {
-      // The org's "Default Guardrails for MCP Tools" settings must flow to every
-      // newly created catalog tool — not just proxy-discovered ones.
-      const org = await makeOrganization({
-        defaultDiscoveredToolInvocationPolicy: "require_approval",
-        defaultDiscoveredToolResultPolicy: "mark_as_trusted",
-      });
-      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-
-      const [tool] = await ToolModel.bulkCreateToolsIfNotExists([
-        {
-          name: "catalog-tool-honors-org-default",
-          description: "Catalog tool",
-          parameters: { type: "object", properties: {} },
-          catalogId: catalog.id,
-        },
-      ]);
-
-      const inv = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-      expect(inv).toHaveLength(1);
-      expect(inv[0].action).toBe("require_approval");
-
-      const trusted = await db
-        .select()
-        .from(schema.trustedDataPoliciesTable)
-        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
-      expect(trusted).toHaveLength(1);
-      expect(trusted[0].action).toBe("mark_as_trusted");
     });
 
     test("returns existing tools when some tools already exist", async ({
@@ -1999,72 +1947,6 @@ describe("ToolModel", () => {
       expect(toolWithoutParams?.description).toBe(
         "Has description but no parameters",
       );
-    });
-
-    test("applies the configured invocation and result defaults to new proxy tools", async ({
-      makeAgent,
-    }) => {
-      const agent = await makeAgent({ name: "Test Agent" });
-
-      const [tool] = await ToolModel.bulkCreateProxyToolsIfNotExists(
-        [
-          {
-            name: "proxy-tool-with-default",
-            description: "Discovered tool",
-            parameters: { type: "object", properties: {} },
-          },
-        ],
-        agent.id,
-        {
-          invocationAction: "allow_when_context_is_untrusted",
-          resultAction: "mark_as_trusted",
-        },
-      );
-
-      const inv = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-      expect(inv).toHaveLength(1);
-      expect(inv[0].action).toBe("allow_when_context_is_untrusted");
-
-      const trusted = await db
-        .select()
-        .from(schema.trustedDataPoliciesTable)
-        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
-      expect(trusted).toHaveLength(1);
-      expect(trusted[0].action).toBe("mark_as_trusted");
-    });
-
-    test("falls back to the original hardcoded defaults when no override is provided", async ({
-      makeAgent,
-    }) => {
-      const agent = await makeAgent({ name: "Test Agent" });
-
-      const [tool] = await ToolModel.bulkCreateProxyToolsIfNotExists(
-        [
-          {
-            name: "proxy-tool-no-override",
-            description: "Discovered tool",
-            parameters: { type: "object", properties: {} },
-          },
-        ],
-        agent.id,
-      );
-
-      const inv = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-      expect(inv).toHaveLength(1);
-      expect(inv[0].action).toBe("block_when_context_is_untrusted");
-
-      const trusted = await db
-        .select()
-        .from(schema.trustedDataPoliciesTable)
-        .where(eq(schema.trustedDataPoliciesTable.toolId, tool.id));
-      expect(trusted).toHaveLength(1);
-      expect(trusted[0].action).toBe("mark_as_untrusted");
     });
   });
 
@@ -2734,29 +2616,21 @@ describe("ToolModel", () => {
       expect(result.unchanged[0].id).toBe(unchangedTool.id);
     });
 
-    test("preserves tool IDs during update (for policy preservation)", async ({
+    test("preserves tool IDs and assignments during update", async ({
       makeInternalMcpCatalog,
       makeMcpServer,
       makeTool,
-      makeToolPolicy,
       makeAgent,
     }) => {
       const catalog = await makeInternalMcpCatalog();
       await makeMcpServer({ catalogId: catalog.id });
       const agent = await makeAgent();
 
-      // Create existing tool with policy
       const existingTool = await makeTool({
-        name: "tool-with-policy",
-        description: "Has policy",
+        name: "tool-with-assignment",
+        description: "Has assignment",
         parameters: { type: "object" },
         catalogId: catalog.id,
-      });
-
-      // Create a tool invocation policy for this tool
-      await makeToolPolicy(existingTool.id, {
-        action: "block_always",
-        reason: "Test policy",
       });
 
       // Assign tool to agent
@@ -2765,7 +2639,7 @@ describe("ToolModel", () => {
       // Sync with updated description
       const toolsToSync = [
         {
-          name: "tool-with-policy",
+          name: "tool-with-assignment",
           description: "Updated description",
           parameters: { type: "object" },
           catalogId: catalog.id,
@@ -2777,7 +2651,7 @@ describe("ToolModel", () => {
       expect(result.updated).toHaveLength(1);
       expect(result.updated[0].id).toBe(existingTool.id);
 
-      // Verify agent-tool assignment still exists (key verification for policy preservation)
+      // The agent-tool assignment hangs off the stable id.
       const agentToolIds = await AgentToolModel.findToolIdsByAgent(agent.id);
       expect(agentToolIds).toContain(existingTool.id);
     });
@@ -2922,32 +2796,6 @@ describe("ToolModel", () => {
       expect(survivingTools.length + result.created.length).toBe(1);
       const finalTool = survivingTools[0] || result.created[0];
       expect(finalTool.name).toBe("new-name__query-docs");
-    });
-
-    test("creates default policies for newly created tools", async ({
-      makeInternalMcpCatalog,
-      makeMcpServer,
-    }) => {
-      const catalog = await makeInternalMcpCatalog();
-      await makeMcpServer({ catalogId: catalog.id });
-
-      const toolsToSync = [
-        {
-          name: "new-tool",
-          description: "New tool",
-          parameters: { type: "object" },
-          catalogId: catalog.id,
-        },
-      ];
-
-      const result = await ToolModel.syncToolsForCatalog(toolsToSync);
-
-      expect(result.created).toHaveLength(1);
-
-      // Verify the tool was created (default policies are created internally by createDefaultPolicies)
-      const createdTool = result.created[0];
-      expect(createdTool.id).toBeDefined();
-      expect(createdTool.name).toBe("new-tool");
     });
 
     test("creates new tools with meta field", async ({
@@ -3672,84 +3520,6 @@ describe("ToolModel", () => {
       expect(catalog?.requiresAuth).toBe(metadata.requiresAuth);
     });
 
-    test("seeds default invocation + trusted data policies for query_knowledge_sources", async () => {
-      const catalogId = randomUUID();
-      archestraMcpBranding.syncFromOrganization(null);
-
-      await ToolModel.seedArchestraTools(catalogId);
-
-      const [kbTool] = await db
-        .select({ id: schema.toolsTable.id })
-        .from(schema.toolsTable)
-        .where(
-          eq(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
-        );
-      expect(kbTool).toBeDefined();
-
-      const invocationPolicies = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, kbTool.id));
-      const trustedDataPolicies = await db
-        .select()
-        .from(schema.trustedDataPoliciesTable)
-        .where(eq(schema.trustedDataPoliciesTable.toolId, kbTool.id));
-
-      expect(invocationPolicies).toHaveLength(1);
-      expect(invocationPolicies[0].conditions).toEqual([]);
-      expect(invocationPolicies[0].action).toBe(
-        "allow_when_context_is_untrusted",
-      );
-
-      expect(trustedDataPolicies).toHaveLength(1);
-      expect(trustedDataPolicies[0].conditions).toEqual([]);
-      expect(trustedDataPolicies[0].action).toBe("mark_as_untrusted");
-    });
-
-    test("does not overwrite admin-customized policies for query_knowledge_sources on reseed", async () => {
-      const catalogId = randomUUID();
-      archestraMcpBranding.syncFromOrganization(null);
-
-      await ToolModel.seedArchestraTools(catalogId);
-
-      const [kbTool] = await db
-        .select({ id: schema.toolsTable.id })
-        .from(schema.toolsTable)
-        .where(
-          eq(schema.toolsTable.name, TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME),
-        );
-
-      // Admin changes both policies via the UI.
-      await db
-        .update(schema.toolInvocationPoliciesTable)
-        .set({ action: "block_when_context_is_untrusted" })
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, kbTool.id));
-      await db
-        .update(schema.trustedDataPoliciesTable)
-        .set({ action: "mark_as_trusted" })
-        .where(eq(schema.trustedDataPoliciesTable.toolId, kbTool.id));
-
-      // Re-seed (simulates a server restart).
-      await ToolModel.seedArchestraTools(catalogId);
-
-      const invocationPolicies = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, kbTool.id));
-      const trustedDataPolicies = await db
-        .select()
-        .from(schema.trustedDataPoliciesTable)
-        .where(eq(schema.trustedDataPoliciesTable.toolId, kbTool.id));
-
-      expect(invocationPolicies).toHaveLength(1);
-      expect(invocationPolicies[0].action).toBe(
-        "block_when_context_is_untrusted",
-      );
-
-      expect(trustedDataPolicies).toHaveLength(1);
-      expect(trustedDataPolicies[0].action).toBe("mark_as_trusted");
-    });
-
     test("rebrands built-in catalog metadata and tool names on sync for white-labeled orgs", async ({
       makeOrganization,
     }) => {
@@ -4425,8 +4195,8 @@ describe("ToolModel", () => {
   });
 });
 
-describe("ToolModel.cloneToolsAndPoliciesFromCatalog", () => {
-  test("copies tools and both policy types as provisional", async ({
+describe("ToolModel.cloneToolsFromCatalog", () => {
+  test("copies tools as provisional", async ({
     makeOrganization,
     makeInternalMcpCatalog,
   }) => {
@@ -4437,26 +4207,13 @@ describe("ToolModel.cloneToolsAndPoliciesFromCatalog", () => {
       clonedFrom: source.id,
     });
 
-    const sourceTool = await ToolModel.create({
+    await ToolModel.create({
       catalogId: source.id,
       name: ToolModel.slugifyName(source.name, "search"),
       parameters: { type: "object" },
       description: "search desc",
     });
-    await ToolInvocationPolicyModel.create({
-      toolId: sourceTool.id,
-      conditions: [],
-      action: "block_always",
-      reason: "custom",
-    });
-    await TrustedDataPolicyModel.create({
-      toolId: sourceTool.id,
-      conditions: [],
-      action: "mark_as_trusted",
-      description: "custom",
-    });
-
-    await ToolModel.cloneToolsAndPoliciesFromCatalog({
+    await ToolModel.cloneToolsFromCatalog({
       sourceCatalogId: source.id,
       targetCatalogId: clone.id,
       targetCatalogName: clone.name,
@@ -4471,20 +4228,6 @@ describe("ToolModel.cloneToolsAndPoliciesFromCatalog", () => {
     expect(cloned[0].name).toBe(ToolModel.slugifyName(clone.name, "search"));
     expect(cloned[0].description).toBe("search desc");
 
-    const inv = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, cloned[0].id));
-    expect(inv).toHaveLength(1);
-    expect(inv[0].action).toBe("block_always");
-
-    const trusted = await db
-      .select()
-      .from(schema.trustedDataPoliciesTable)
-      .where(eq(schema.trustedDataPoliciesTable.toolId, cloned[0].id));
-    expect(trusted).toHaveLength(1);
-    expect(trusted[0].action).toBe("mark_as_trusted");
-
     const assignments = await db
       .select()
       .from(schema.agentToolsTable)
@@ -4494,7 +4237,7 @@ describe("ToolModel.cloneToolsAndPoliciesFromCatalog", () => {
 });
 
 describe("ToolModel.reconcileClonedCatalogTools", () => {
-  test("confirms matches, deletes unmatched provisional, keeps policies", async ({
+  test("confirms matches and deletes unmatched provisional tools", async ({
     makeOrganization,
     makeInternalMcpCatalog,
   }) => {
@@ -4507,12 +4250,6 @@ describe("ToolModel.reconcileClonedCatalogTools", () => {
       parameters: {},
       description: "old",
       clonedPendingDiscovery: true,
-    });
-    await ToolInvocationPolicyModel.create({
-      toolId: kept.id,
-      conditions: [],
-      action: "block_always",
-      reason: "keep-me",
     });
     const dropped = await ToolModel.create({
       catalogId: cat.id,
@@ -4531,11 +4268,6 @@ describe("ToolModel.reconcileClonedCatalogTools", () => {
 
     const keptRow = await ToolModel.findById(kept.id);
     expect(keptRow?.clonedPendingDiscovery).toBe(false);
-    const inv = await db
-      .select()
-      .from(schema.toolInvocationPoliciesTable)
-      .where(eq(schema.toolInvocationPoliciesTable.toolId, kept.id));
-    expect(inv[0]?.action).toBe("block_always");
 
     const droppedRow = await ToolModel.findById(dropped.id);
     expect(droppedRow).toBeNull();
@@ -4625,49 +4357,6 @@ describe("provisional tools are gated from assignment", () => {
 
     const ids = result.data.map((t) => t.id);
     expect(ids).toContain(provisional.id);
-  });
-});
-
-describe("policy configurator and cloned tools", () => {
-  test("clone copy and reconcile do not trigger the configurator", async ({
-    makeOrganization,
-    makeInternalMcpCatalog,
-  }) => {
-    // triggerAutoConfigureIfEnabled is private; cast to access it for spying.
-    const spy = vi
-      // biome-ignore lint/suspicious/noExplicitAny: spy on private static method
-      .spyOn(ToolModel as any, "triggerAutoConfigureIfEnabled")
-      .mockResolvedValue(undefined);
-    try {
-      const org = await makeOrganization();
-      const source = await makeInternalMcpCatalog({ organizationId: org.id });
-      await ToolModel.create({
-        catalogId: source.id,
-        name: ToolModel.slugifyName(source.name, "search"),
-        parameters: {},
-        description: null,
-      });
-      const clone = await makeInternalMcpCatalog({
-        organizationId: org.id,
-        clonedFrom: source.id,
-      });
-
-      await ToolModel.cloneToolsAndPoliciesFromCatalog({
-        sourceCatalogId: source.id,
-        targetCatalogId: clone.id,
-        targetCatalogName: clone.name,
-      });
-      await ToolModel.reconcileClonedCatalogTools({
-        catalogId: clone.id,
-        discoveredToolNames: new Set([
-          ToolModel.slugifyName(clone.name, "search"),
-        ]),
-      });
-
-      expect(spy).not.toHaveBeenCalled();
-    } finally {
-      spy.mockRestore();
-    }
   });
 });
 

@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "Built-in role grants, available permissions, and LLM API access requirements"
 order: 6
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-09
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -47,7 +47,6 @@ Full access to core resources, but cannot change organization settings or manage
 | LLM Cost Analytics | `read` |
 | MCP Gateways | `read`, `create`, `delete` |
 | MCP OAuth Clients | `read`, `create` |
-| Tools & Policies | `read`, `create`, `update`, `delete` |
 | MCP Registry | `read`, `create` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
@@ -81,7 +80,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | LLM Models | `read` |
 | MCP Gateways | `read`, `create`, `delete` |
 | MCP OAuth Clients | `read` |
-| Tools & Policies | `read` |
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
@@ -199,10 +197,6 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="team:create"></span>`team:create` | Create new teams |
 | <span id="team:update"></span>`team:update` | Modify team settings |
 | <span id="team:delete"></span>`team:delete` | Delete teams |
-| <span id="toolPolicy:read"></span>`toolPolicy:read` | View tools, tool invocation policies, and trusted data policies |
-| <span id="toolPolicy:create"></span>`toolPolicy:create` | Register tools and create security policies |
-| <span id="toolPolicy:update"></span>`toolPolicy:update` | Modify tools, tool configuration, and security policies |
-| <span id="toolPolicy:delete"></span>`toolPolicy:delete` | Remove tools and security policies |
 
 
 ## LLM API Permissions

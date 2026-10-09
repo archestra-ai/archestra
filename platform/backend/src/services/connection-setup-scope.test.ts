@@ -1,7 +1,6 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { beginConnectionPromptSession } from "./connection-prompt-session";
-import { issueConnectionSetupContext } from "./connection-setup-context";
 import {
   nativeSetupClientFromProvenance,
   resolveConnectionSetupScope,
@@ -173,45 +172,4 @@ test("principal and deployment gates deny native scope without consuming it", as
   expect(
     await resolveConnectionSetupScope({ principal, evidence }),
   ).not.toBeNull();
-});
-
-test("approved installer scope is bound to authenticated user, org, and gateway", async () => {
-  const secret = "a-shared-signing-key-for-setup";
-  const gatewayId = "gateway-1";
-  const evidence = {
-    kind: "approved-installer" as const,
-    token: issueConnectionSetupContext({
-      userId,
-      organizationId,
-      gatewayId,
-      setupId: "approved-setup-1",
-      secret,
-    }),
-    gatewayId,
-    signingSecret: secret,
-  };
-  expect(await resolveConnectionSetupScope({ principal, evidence })).toEqual({
-    kind: "approved-installer",
-    userId,
-    organizationId,
-    gatewayId,
-  });
-  expect(
-    await resolveConnectionSetupScope({
-      principal: { ...principal, userId: "other-user" },
-      evidence,
-    }),
-  ).toBeNull();
-  expect(
-    await resolveConnectionSetupScope({
-      principal,
-      evidence: { ...evidence, gatewayId: "other-gateway" },
-    }),
-  ).toBeNull();
-  expect(
-    await resolveConnectionSetupScope({
-      principal: { ...principal, guardrailsActive: false },
-      evidence,
-    }),
-  ).toBeNull();
 });

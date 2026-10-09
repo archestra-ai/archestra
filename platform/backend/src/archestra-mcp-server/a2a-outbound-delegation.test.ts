@@ -1,13 +1,13 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { MEMBER_ROLE_NAME } from "@archestra/shared";
-import { eq } from "drizzle-orm";
-import db, { schema } from "@/database";
 import { ToolModel } from "@/models";
 import { syncA2aDelegations } from "@/services/a2a-outbound-assignments";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { expect, test } from "@/test";
-import { executeArchestraTool } from ".";
+// Load the tool registry first, as production does: importing `./delegation`
+// directly would enter its import cycle through the registry half-initialized.
+import ".";
 import { getAgentTools, handleDelegation } from "./delegation";
 
 // Keep the dependency-free fixture as plain JavaScript while avoiding a
@@ -19,113 +19,6 @@ const fixtureModuleUrl = new URL(
 const { createA2aFixtureServer } = (await import(fixtureModuleUrl)) as {
   createA2aFixtureServer: (options: { authMode: string }) => Server;
 };
-
-test("blocks an outbound A2A delegation with the exact synthetic tool policy before network dispatch", async ({
-  makeAgent,
-  makeOrganization,
-  makeToolPolicy,
-}) => {
-  await withFixture(async ({ baseUrl, journal }) => {
-    const organization = await makeOrganization();
-    const parent = await makeAgent({
-      name: "Policy parent",
-      organizationId: organization.id,
-    });
-    const remote = await createA2aRemoteAgent({
-      organizationId: organization.id,
-      input: {
-        source: {
-          type: "inline_card",
-          agentCard: makeAgentCard(baseUrl),
-        },
-        auth: { type: "none" },
-      },
-    });
-    await syncA2aDelegations({
-      agentId: parent.id,
-      organizationId: organization.id,
-      connectionIds: [remote.connection.id],
-    });
-    const tool = await ToolModel.findById(remote.toolId);
-    if (!tool) throw new Error("expected synthetic outbound A2A tool");
-    await makeToolPolicy(tool.id, {
-      action: "block_always",
-      reason: "External classified-data transfer blocked",
-      conditions: [],
-    });
-
-    const result = await executeArchestraTool(
-      tool.name,
-      { message: "classified" },
-      {
-        agent: { id: parent.id, name: parent.name },
-        agentId: parent.id,
-        organizationId: organization.id,
-        contextIsTrusted: true,
-      },
-    );
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0]).toMatchObject({
-      type: "text",
-      text: expect.stringContaining(
-        "External classified-data transfer blocked",
-      ),
-    });
-    const policyError = (
-      result.structuredContent as {
-        archestraError?: Record<string, unknown>;
-      }
-    )?.archestraError;
-    expect(policyError).toMatchObject({
-      type: "policy_denied",
-      toolName: tool.name,
-      toolId: tool.id,
-      input: { message: "classified" },
-    });
-    expect((await journal()).requests).toEqual([]);
-
-    const runs = await db
-      .select({ id: schema.a2aOutboundRunsTable.id })
-      .from(schema.a2aOutboundRunsTable)
-      .where(
-        eq(schema.a2aOutboundRunsTable.connectionId, remote.connection.id),
-      );
-    expect(runs).toEqual([]);
-  });
-});
-
-test("stamps guardrail defaults from the owning organization", async ({
-  makeOrganization,
-}) => {
-  const organization = await makeOrganization({
-    defaultDiscoveredToolInvocationPolicy: "allow_when_context_is_untrusted",
-    defaultDiscoveredToolResultPolicy: "mark_as_trusted",
-  });
-  const remote = await createA2aRemoteAgent({
-    organizationId: organization.id,
-    input: {
-      name: "Organization Defaults",
-      source: {
-        type: "inline_card",
-        agentCard: makeAgentCard("https://defaults.example.com"),
-      },
-      auth: { type: "none" },
-    },
-  });
-
-  const [invocationPolicy] = await db
-    .select({ action: schema.toolInvocationPoliciesTable.action })
-    .from(schema.toolInvocationPoliciesTable)
-    .where(eq(schema.toolInvocationPoliciesTable.toolId, remote.toolId));
-  const [resultPolicy] = await db
-    .select({ action: schema.trustedDataPoliciesTable.action })
-    .from(schema.trustedDataPoliciesTable)
-    .where(eq(schema.trustedDataPoliciesTable.toolId, remote.toolId));
-
-  expect(invocationPolicy.action).toBe("allow_when_context_is_untrusted");
-  expect(resultPolicy.action).toBe("mark_as_trusted");
-});
 
 test("hides and rejects an inaccessible external target for a real user while preserving headless execution", async ({
   makeAgent,
@@ -207,8 +100,8 @@ test("hides and rejects an inaccessible external target for a real user while pr
 
 function makeAgentCard(baseUrl: string) {
   return {
-    name: "Policy Fixture Agent",
-    description: "External target used to verify outbound policy enforcement.",
+    name: "Fixture Agent",
+    description: "External target used to verify outbound delegation.",
     version: "1.0.0",
     supportedInterfaces: [
       {

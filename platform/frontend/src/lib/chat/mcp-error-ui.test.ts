@@ -1,5 +1,4 @@
 // @vitest-environment node
-import { TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON } from "@archestra/shared";
 import { describe, expect, it } from "vitest";
 import {
   extractCatalogIdFromInstallUrl,
@@ -9,104 +8,11 @@ import {
   isInstallAuthResolved,
   parseAuthRequired,
   parseExpiredAuth,
-  parsePolicyDenied,
   resolveAssistantTextAuthState,
   resolveMcpAppToolCallAuthState,
   resolveToolAuthState,
   type ToolAuthState,
 } from "./mcp-error-ui";
-
-describe("parsePolicyDenied", () => {
-  it("parses a legacy plain-text policy denial with tool name, args, and reason", () => {
-    // Hardcoded legacy wording: this is what pre-rewrite refusals persisted
-    // in chat history look like.
-    const text = `\nI tried to invoke the upstash__context7__get-library-docs tool with the following arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool call blocked: context contains sensitive data`;
-    const result = parsePolicyDenied(text);
-    expect(result).not.toBeNull();
-    expect(result?.type).toBe("tool-upstash__context7__get-library-docs");
-    expect(result?.state).toBe("output-denied");
-    expect(result?.input).toEqual({
-      context7CompatibleLibraryID: "/websites/p5js_reference",
-    });
-    const errorInfo = JSON.parse(result?.errorText ?? "");
-    expect(errorInfo.reason).toContain("context contains sensitive data");
-    expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
-  });
-
-  it("parses a current-format plain-text policy denial with tool name, args, and reason", () => {
-    const text = `\nArchestra MCP Gateway blocked unsafe tool call: upstash__context7__get-library-docs with arguments: {"context7CompatibleLibraryID":"/websites/p5js_reference"}.\n\n${TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON}.\n\nDo not retry: the same tool call will be blocked again.\n\nArchestra MCP Gateway monitors agentic traffic and blocks unsafe tool calls according to the configured guardrails. If you believe this is a misconfiguration, contact your administrator.`;
-    const result = parsePolicyDenied(text);
-    expect(result).not.toBeNull();
-    expect(result?.type).toBe("tool-upstash__context7__get-library-docs");
-    expect(result?.state).toBe("output-denied");
-    expect(result?.input).toEqual({
-      context7CompatibleLibraryID: "/websites/p5js_reference",
-    });
-    const errorInfo = JSON.parse(result?.errorText ?? "");
-    expect(errorInfo.reason).toBe(TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON);
-    expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
-  });
-
-  it("parses a JSON-wrapped policy denial (originalError.message)", () => {
-    const inner =
-      '\nI tried to invoke the my-tool tool with the following arguments: {"key":"value"}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked by admin';
-    const text = JSON.stringify({
-      code: "unknown",
-      originalError: { message: inner },
-    });
-    const result = parsePolicyDenied(text);
-    expect(result).not.toBeNull();
-    expect(result?.type).toBe("tool-my-tool");
-    expect(result?.input).toEqual({ key: "value" });
-    expect(result?.unsafeContextActiveAtRequestStart).toBe(false);
-  });
-
-  it("uses structured reasonType for policy denials when available", () => {
-    const text = JSON.stringify({
-      _meta: {
-        archestraError: {
-          type: "policy_denied",
-          message: "blocked",
-          toolName: "some-tool",
-          input: {},
-          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-          reasonType: "sensitive_context",
-        },
-      },
-    });
-
-    const result = parsePolicyDenied(text);
-
-    expect(result).not.toBeNull();
-    expect(result?.type).toBe("tool-some-tool");
-    expect(result?.unsafeContextActiveAtRequestStart).toBe(true);
-  });
-
-  it("parses a JSON-wrapped policy denial (message)", () => {
-    const inner =
-      "\nI tried to invoke the some-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nNot allowed";
-    const text = JSON.stringify({ message: inner });
-    const result = parsePolicyDenied(text);
-    expect(result).not.toBeNull();
-    expect(result?.type).toBe("tool-some-tool");
-  });
-
-  it("returns null for unrelated text", () => {
-    expect(parsePolicyDenied("Hello world")).toBeNull();
-  });
-
-  it("returns null for text missing required keywords", () => {
-    expect(
-      parsePolicyDenied("The tool was denied access to the resource"),
-    ).toBeNull();
-  });
-
-  it("returns null for text with keywords but no matching pattern", () => {
-    const text =
-      "The tool invocation was denied by policy but has no structured format";
-    expect(parsePolicyDenied(text)).toBeNull();
-  });
-});
 
 describe("parseAuthRequired", () => {
   const makeDirectErrorText = (catalogName: string, installUrl: string) =>
@@ -178,12 +84,6 @@ describe("parseAuthRequired", () => {
   it("returns null when Authentication required is present but URL is missing", () => {
     const text =
       'Authentication required for "some-tool".\n\nPlease authenticate.';
-    expect(parseAuthRequired(text)).toBeNull();
-  });
-
-  it("returns null for policy denial errors", () => {
-    const text =
-      "\nI tried to invoke the my-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked";
     expect(parseAuthRequired(text)).toBeNull();
   });
 
@@ -456,46 +356,6 @@ describe("resolveToolAuthState", () => {
     ).toBeUndefined();
   });
 
-  it("parses policy-denied tool errors from errorText", () => {
-    const authState = resolveToolAuthState({
-      errorText:
-        "\nI tried to invoke the my-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked",
-    });
-
-    expect(authState?.kind).toBe("policy-denied");
-  });
-
-  it("prefers the structured policy_denied error on rawOutput over prose parsing", () => {
-    const authState = resolveToolAuthState({
-      rawOutput: {
-        structuredContent: {
-          archestraError: {
-            type: "policy_denied",
-            message: "blocked",
-            toolName: "archestra_pm__list_tasks",
-            input: { list: "week" },
-            reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-            reasonType: "sensitive_context",
-          },
-        },
-      },
-    });
-
-    expect(authState).toEqual({
-      kind: "policy-denied",
-      policyDenied: {
-        type: "tool-archestra_pm__list_tasks",
-        toolCallId: "",
-        state: "output-denied",
-        input: { list: "week" },
-        unsafeContextActiveAtRequestStart: true,
-        errorText: JSON.stringify({
-          reason: TOOL_INVOCATION_UNTRUSTED_CONTEXT_REASON,
-        }),
-      },
-    });
-  });
-
   it("parses auth-required fallbacks from raw string output", () => {
     expect(
       resolveToolAuthState({
@@ -619,24 +479,6 @@ describe("resolveMcpAppToolCallAuthState", () => {
     ).toBeNull();
   });
 
-  it("returns null for policy-denied errors (no connect affordance)", () => {
-    expect(
-      resolveMcpAppToolCallAuthState({
-        isError: true,
-        content: [{ type: "text", text: "blocked" }],
-        _meta: {
-          archestraError: {
-            type: "policy_denied",
-            message: "blocked",
-            toolName: "some-tool",
-            input: {},
-            reason: "blocked by policy",
-          },
-        },
-      }),
-    ).toBeNull();
-  });
-
   it("returns null for non-object results", () => {
     expect(resolveMcpAppToolCallAuthState(null)).toBeNull();
     expect(resolveMcpAppToolCallAuthState("error text")).toBeNull();
@@ -694,8 +536,7 @@ describe("hasToolPartsWithAuthErrors", () => {
     expect(
       hasToolPartsWithAuthErrors([
         {
-          errorText:
-            "\nI tried to invoke the my-tool tool with the following arguments: {}.\n\nHowever, I was denied by a tool invocation policy:\n\nBlocked",
+          errorText: "Tool call failed: upstream timed out",
         },
       ]),
     ).toBe(false);

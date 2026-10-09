@@ -67,8 +67,8 @@ export const ChatCompletionRequestSchema = z
     stream: z.boolean().optional(),
     /**
      * Temperature range: [0.0, 1.0]. MiniMax accepts 0 (deterministic
-     * callers like the dual LLM guardrail send it); rejecting it here failed
-     * those requests at the proxy before MiniMax was ever reached.
+     * callers send it); rejecting it here would fail those requests at the
+     * proxy before MiniMax was ever reached.
      * Recommended value: 1.0
      */
     temperature: z.number().min(0).max(1).nullable().optional(),

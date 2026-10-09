@@ -846,9 +846,6 @@ export async function processProxyResults(params: {
   return {
     toolResultUpdates: updates,
     ...(returnContract ? { returnContract } : {}),
-    contextIsTrusted: true,
-    dualLlmAnalyses: [],
-    unsafeContextBoundary: undefined,
   };
 }
 

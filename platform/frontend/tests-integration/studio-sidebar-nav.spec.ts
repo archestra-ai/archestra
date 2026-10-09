@@ -37,10 +37,6 @@ const STUDIO_NAV = [
   "Connectors",
   "Files",
   "Knowledge Bases",
-  // Guardrails closes the list with the other rows that span every group
-  // above it, rather than sitting under MCP: its tools come from MCP servers,
-  // from agents and apps, and from traffic between agents and LLMs.
-  "Guardrails",
   "Logs",
   "Settings",
 ];
@@ -119,8 +115,8 @@ test.describe("studio sidebar navigation", () => {
     expect(await rowNames(page)).toEqual(STUDIO_NAV);
     // Title case, not caps: set in caps these read as peers of the rows under
     // them, which made "AGENTS" above a row called Agents the same word twice.
-    // Guardrails, Logs and Settings close the list with no heading — they
-    // belong to no one section.
+    // Logs and Settings close the list with no heading — they belong to no
+    // one section.
     expect(await sectionHeadings(page).allInnerTexts()).toEqual([
       "Agents",
       "MCP",

@@ -44,10 +44,6 @@ import config, { parseOpenAppaConfig } from "@/config";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { clientConnectionService } from "@/services/client-connection";
 import { verifyConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
-import {
-  CONNECTION_SETUP_CONTEXT_PARAM,
-  verifyConnectionSetupContext,
-} from "@/services/connection-setup-context";
 import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
@@ -1003,11 +999,10 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(response.statusCode).toBe(410);
   });
 
-  test("mints a signed MCP context only for an approved installer redemption", async ({
+  test("an approved installer redemption renders the same gateway URL as a direct setup", async ({
     makeAgent,
   }) => {
     const prior = config.openappa;
-    const secret = "test-offer-signing-secret-32chars";
     const prompt =
       "Read http://localhost:9000/connect.md?client=claude-code and connect Claude Code.";
     const gateway = await makeAgent({
@@ -1020,7 +1015,23 @@ describe("GET /api/connection-setups/script/:token", () => {
       connectionRuntimeHandoffInstructions: prompt,
     });
 
-    async function installerTicket() {
+    try {
+      config.openappa = {
+        ...parseOpenAppaConfig("true"),
+        offerSigningSecret: "test-offer-signing-secret-32chars",
+      };
+      await GuardrailsDeploymentModel.setEnabled(true);
+
+      const { rawToken: directToken } = await createSetup({
+        clientId: "claude-code",
+        platform: "linux",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+      });
+      const direct = await fetchScript(directToken);
+      expect(direct.statusCode, direct.body).toBe(200);
+      expect(direct.body).toContain(prompt);
+
       const pending = await clientConnectionService.start({
         clientId: "claude-code",
         platform: "linux",
@@ -1033,99 +1044,24 @@ describe("GET /api/connection-setups/script/:token", () => {
       });
       const setup = await ConnectionSetupModel.findByToken(rawToken);
       if (!setup) throw new Error("setup ticket missing");
-      return {
-        pending,
-        setup,
-        installerToken: `archestra_con_${pending.deviceCode}`,
-        rawToken,
-      };
-    }
+      const installerToken = `archestra_con_${pending.deviceCode}`;
 
-    try {
-      config.openappa = parseOpenAppaConfig("true");
-      const inactive = await installerTicket();
-      const unapproved = await fetchScript(inactive.installerToken);
-      expect(unapproved.statusCode).toBe(404);
-      expect(unapproved.body).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
-      expect(unapproved.body).not.toContain("cs1_");
-
-      expect(
-        (
-          await clientConnectionService.decide({
-            id: inactive.pending.id,
-            setupId: inactive.setup.id,
-            userId: user.id,
-            organizationId,
-          })
-        ).status,
-      ).toBe("approved");
-      const withoutGuardrails = await fetchScript(inactive.installerToken);
-      expect(withoutGuardrails.statusCode, withoutGuardrails.body).toBe(200);
-      expect(withoutGuardrails.body).not.toContain(
-        CONNECTION_SETUP_CONTEXT_PARAM,
-      );
-      expect(withoutGuardrails.body).toContain(prompt);
-
-      config.openappa = {
-        ...parseOpenAppaConfig("true"),
-        offerSigningSecret: secret,
-      };
-      await GuardrailsDeploymentModel.setEnabled(true);
-
-      const { rawToken: directToken } = await createSetup({
-        clientId: "claude-code",
-        platform: "linux",
-        baseUrl: "http://localhost:9000/v1",
-        mcpGatewayId: gateway.id,
-      });
-      const direct = await fetchScript(directToken);
-      expect(direct.statusCode, direct.body).toBe(200);
-      expect(direct.body).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
-      expect(direct.body).toContain(prompt);
-      expect(direct.body).toBe(withoutGuardrails.body);
-
-      const active = await installerTicket();
-      const beforeApproval = await fetchScript(active.installerToken);
+      const beforeApproval = await fetchScript(installerToken);
       expect(beforeApproval.statusCode).toBe(404);
-      expect(beforeApproval.body).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
 
       expect(
         (
           await clientConnectionService.decide({
-            id: active.pending.id,
-            setupId: active.setup.id,
+            id: pending.id,
+            setupId: setup.id,
             userId: user.id,
             organizationId,
           })
         ).status,
       ).toBe("approved");
-      const approved = await fetchScript(active.installerToken);
+      const approved = await fetchScript(installerToken);
       expect(approved.statusCode, approved.body).toBe(200);
-      const contexts = [
-        ...approved.body.matchAll(
-          new RegExp(`${CONNECTION_SETUP_CONTEXT_PARAM}=([^'&\\s]+)`, "g"),
-        ),
-      ].map((match) => decodeURIComponent(match[1]));
-      expect(contexts.length).toBeGreaterThan(0);
-      expect(new Set(contexts).size).toBe(1);
-      expect(contexts[0]).toMatch(/^cs1_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
-      expect(
-        verifyConnectionSetupContext({
-          token: contexts[0],
-          userId: user.id,
-          organizationId,
-          gatewayId: gateway.id,
-          secret,
-        }),
-      ).toBe(true);
-      const stripped = approved.body.replace(
-        new RegExp(`\\?${CONNECTION_SETUP_CONTEXT_PARAM}=[^'&\\s]+`, "g"),
-        "",
-      );
-      expect(stripped).toBe(withoutGuardrails.body);
-      expect(stripped).toContain(prompt);
-      expect(stripped).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
-      expect(stripped).not.toContain(contexts[0]);
+      expect(approved.body).toBe(direct.body);
     } finally {
       config.openappa = prior;
     }

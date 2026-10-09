@@ -99,19 +99,18 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               /** Maintained catalog image per template, as this deployment pulls it. */
               agentRuntimeCatalogImages: z.record(z.string(), z.string()),
               /** Operator-owned defaults and health for the runtime backend. */
-              agentRuntimeBackend: z
-                .object({
-                  name: z.literal("kubernetes"),
-                  available: z.boolean(),
-                  defaultTtlHours: z.number(),
-                  defaultIdleTimeoutMinutes: z.number(),
-                  allowPrivileged: z.boolean(),
-                  resources: z.object({
-                    cpuRequest: z.string(),
-                    memoryRequest: z.string(),
-                    memoryLimit: z.string(),
-                  }),
+              agentRuntimeBackend: z.object({
+                name: z.literal("kubernetes"),
+                available: z.boolean(),
+                defaultTtlHours: z.number(),
+                defaultIdleTimeoutMinutes: z.number(),
+                allowPrivileged: z.boolean(),
+                resources: z.object({
+                  cpuRequest: z.string(),
+                  memoryRequest: z.string(),
+                  memoryLimit: z.string(),
                 }),
+              }),
               plugins: z.boolean(),
               // Max size of a file the sandbox can stage. The chat composer caps
               // sandbox-routed uploads at this instead of guessing.

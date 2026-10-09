@@ -7,10 +7,8 @@ import {
   type archestraApiTypes,
   BLOCKED_PASSTHROUGH_HEADERS,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
-  BUILT_IN_AGENT_IDS,
   DEFAULT_AGENT_SYSTEM_PROMPT,
   DocsPage,
-  DUAL_LLM_DEFAULT_MAX_ROUNDS,
   E2eTestId,
   getAgentRuntimeModelCompatibility,
   getAgentRuntimeProviderCompatibility,
@@ -139,7 +137,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -326,39 +323,6 @@ function AgentToolsList({ agentId }: { agentId: string }) {
       </div>
     </div>
   );
-}
-
-type BuiltInAgentId =
-  (typeof BUILT_IN_AGENT_IDS)[keyof typeof BUILT_IN_AGENT_IDS];
-
-function getBuiltInAgentConfigForSave(params: {
-  builtInAgentName: BuiltInAgentId;
-  autoConfigureOnToolDiscovery: boolean;
-  maxRounds: number;
-}) {
-  switch (params.builtInAgentName) {
-    case BUILT_IN_AGENT_IDS.POLICY_CONFIG:
-      return {
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolDiscovery: params.autoConfigureOnToolDiscovery,
-      };
-    case BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN:
-      return {
-        name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-        maxRounds: params.maxRounds,
-      };
-    case BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG:
-    case BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE:
-    case BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION:
-    case BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION:
-    case BUILT_IN_AGENT_IDS.APP_RUNTIME:
-      return { name: params.builtInAgentName };
-    default: {
-      // exhaustive check: a new BUILT_IN_AGENT_ID will fail the build here
-      const _exhaustive: never = params.builtInAgentName;
-      throw new Error(`Unsupported built-in agent: ${String(_exhaustive)}`);
-    }
-  }
 }
 
 // Single subagent pill with popover
@@ -1261,8 +1225,6 @@ export function AgentForm({
   // scope, so the control below reads (scope, userIds) as a fourth choice.
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  const [considerContextUntrusted, setConsiderContextUntrusted] =
-    useState(false);
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
@@ -1303,11 +1265,6 @@ export function AgentForm({
   );
   const [knowledgeBaseIds, setKnowledgeBaseIds] = useState<string[]>([]);
   const [connectorIds, setConnectorIds] = useState<string[]>([]);
-  const [autoConfigureOnToolDiscovery, setAutoConfigureOnToolDiscovery] =
-    useState(false);
-  const [dualLlmMaxRounds, setDualLlmMaxRounds] = useState(
-    String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
-  );
   const [passthroughHeaders, setPassthroughHeaders] = useState<string[]>([]);
   const [runtime, setAgentRuntime] = useState<AgentRuntimeConfig | null>(null);
   const originalRuntimeId =
@@ -1499,13 +1456,6 @@ export function AgentForm({
   const defaultSystemPrompt = builtInAgentName
     ? (BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[builtInAgentName] ?? "")
     : undefined;
-  const isPolicyConfigBuiltIn =
-    builtInAgentName === BUILT_IN_AGENT_IDS.POLICY_CONFIG;
-  const isDualLlmMainBuiltIn =
-    builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN;
-  const isDualLlmQuarantineBuiltIn =
-    builtInAgentName === BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE;
-  const _isDualLlmBuiltIn = isDualLlmMainBuiltIn || isDualLlmQuarantineBuiltIn;
   const showsEnvironmentSelector =
     isInternalAgent || agentType === "mcp_gateway";
   const supportsIdentityProvider =
@@ -1546,9 +1496,7 @@ export function AgentForm({
     !isBuiltIn ||
     shouldShowDescriptionField({ agentType, isBuiltIn }) ||
     showsModelControl ||
-    isInternalAgent ||
-    isPolicyConfigBuiltIn ||
-    isDualLlmMainBuiltIn;
+    isInternalAgent;
   // Who may reach it — the scope picker, plus the caller's own default-agent
   // toggle. A built-in belongs to the organization and offers neither, so the
   // section would be empty.
@@ -1567,7 +1515,6 @@ export function AgentForm({
     !agent?.id ||
     !supportsSubagents ||
     (delegationsLoaded && subagentExclusionsLoaded);
-  const showSecurity = !isBuiltIn && agentType === "agent";
   const showsHooks = agentHooksEnabled && isInternalAgent && !isBuiltIn;
   // The tools panel is mounted only when it has a section to show: an empty
   // bordered panel would read as broken.
@@ -1661,7 +1608,6 @@ export function AgentForm({
             assignedTeamIds: agentData.teams.map((t) => t.id),
             assignedUserIds: agentData.users?.map((u) => u.id) ?? [],
             labels: agentData.labels,
-            considerContextUntrusted: agentData.considerContextUntrusted,
             llmApiKeyId: agentData.llmApiKeyId,
             llmModel: agentData.modelId,
             identityProviderId: agentData.identityProviderId ?? undefined,
@@ -1670,16 +1616,6 @@ export function AgentForm({
             connectorIds: agentData.connectorIds,
             scope: agentData.scope,
             initialGrants: [],
-            autoConfigureOnToolDiscovery:
-              agentData.builtInAgentConfig?.name ===
-              BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                ? agentData.builtInAgentConfig.autoConfigureOnToolDiscovery
-                : false,
-            dualLlmMaxRounds:
-              agentData.builtInAgentConfig?.name ===
-              BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN
-                ? String(agentData.builtInAgentConfig.maxRounds)
-                : String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: agentData.passthroughHeaders ?? [],
             runtime: (agentData.runtime as AgentRuntimeConfig | null) ?? null,
             toolExposureMode: agentData.toolExposureMode ?? "full",
@@ -1702,7 +1638,6 @@ export function AgentForm({
             assignedTeamIds: [],
             assignedUserIds: [],
             labels: [],
-            considerContextUntrusted: false,
             llmApiKeyId: null,
             llmModel: null,
             identityProviderId: undefined,
@@ -1711,8 +1646,6 @@ export function AgentForm({
             connectorIds: [],
             scope: "personal",
             initialGrants: [],
-            autoConfigureOnToolDiscovery: false,
-            dualLlmMaxRounds: String(DUAL_LLM_DEFAULT_MAX_ROUNDS),
             passthroughHeaders: [],
             runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
@@ -1734,7 +1667,6 @@ export function AgentForm({
       setAssignedTeamIds(nextValues.assignedTeamIds);
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
-      setConsiderContextUntrusted(nextValues.considerContextUntrusted);
       setIdentityProviderId(nextValues.identityProviderId);
       setEnvironmentId(nextValues.environmentId);
       setKnowledgeBaseIds(nextValues.knowledgeBaseIds);
@@ -1747,8 +1679,6 @@ export function AgentForm({
       setMissingCredentialBehavior(nextValues.missingCredentialBehavior);
       setAccessAllTools(nextValues.accessAllTools);
       setAccessAllSubagents(nextValues.accessAllSubagents);
-      setAutoConfigureOnToolDiscovery(nextValues.autoConfigureOnToolDiscovery);
-      setDualLlmMaxRounds(nextValues.dualLlmMaxRounds);
       if (!agentData) {
         // Create mode only: edit mode remounts per agent and seeds each set
         // from its own request, and clearing here would instead wipe pending
@@ -2159,20 +2089,9 @@ export function AgentForm({
   const performSave = useCallback(async (): Promise<boolean> => {
     const trimmedName = name.trim();
     const trimmedSystemPrompt = systemPrompt.trim();
-    const parsedDualLlmMaxRounds = Number.parseInt(dualLlmMaxRounds, 10);
 
     if (!trimmedName) {
       toast.error("Name is required");
-      return false;
-    }
-
-    if (
-      isDualLlmMainBuiltIn &&
-      (!Number.isInteger(parsedDualLlmMaxRounds) ||
-        parsedDualLlmMaxRounds < 1 ||
-        parsedDualLlmMaxRounds > 20)
-    ) {
-      toast.error("Max rounds must be an integer between 1 and 20");
       return false;
     }
 
@@ -2243,11 +2162,7 @@ export function AgentForm({
       }
 
       if (agent && isBuiltIn && builtInAgentName) {
-        const builtInAgentConfig = getBuiltInAgentConfigForSave({
-          builtInAgentName,
-          autoConfigureOnToolDiscovery,
-          maxRounds: parsedDualLlmMaxRounds,
-        });
+        const builtInAgentConfig = { name: builtInAgentName };
 
         const updated = await updateAgent.mutateAsync({
           id: agent.id,
@@ -2311,7 +2226,6 @@ export function AgentForm({
               ...(supportsIdentityProvider && {
                 identityProviderId: identityProviderId || null,
               }),
-              ...(showSecurity && { considerContextUntrusted }),
               ...(agentType === "mcp_gateway" && {
                 passthroughHeaders:
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -2376,7 +2290,6 @@ export function AgentForm({
           accessAllTools,
           ...(supportsSubagents && { accessAllSubagents }),
           labels: updatedLabels,
-          ...(showSecurity && { considerContextUntrusted }),
           ...(agentType === "mcp_gateway" && {
             passthroughHeaders:
               passthroughHeaders.length > 0 ? passthroughHeaders : null,
@@ -2591,7 +2504,6 @@ export function AgentForm({
     systemPrompt,
     suggestedPrompts,
     labels,
-    considerContextUntrusted,
     llmApiKeyId,
     llmModel,
     llmSelectionChanged,
@@ -2604,12 +2516,8 @@ export function AgentForm({
     agentType,
     agent,
     isBuiltIn,
-    autoConfigureOnToolDiscovery,
-    dualLlmMaxRounds,
-    isDualLlmMainBuiltIn,
     isInternalAgent,
     builtInAgentName,
-    showSecurity,
     showConfigurationSections,
     showToolsSections,
     showAdvancedSections,
@@ -2745,7 +2653,6 @@ export function AgentForm({
     assignedTeamIds,
     assignedUserIds,
     labels,
-    considerContextUntrusted,
     llmApiKeyId,
     llmModel,
     identityProviderId,
@@ -2754,8 +2661,6 @@ export function AgentForm({
     connectorIds,
     scope,
     initialGrants,
-    autoConfigureOnToolDiscovery,
-    dualLlmMaxRounds,
     passthroughHeaders,
     toolExposureMode,
     missingCredentialBehavior,
@@ -3183,7 +3088,6 @@ export function AgentForm({
                         onChange={setSystemPrompt}
                         readOnly={readOnly}
                         variant="default"
-                        builtInAgentId={builtInAgentName}
                         headerExtra={
                           defaultSystemPrompt !== undefined && !readOnly ? (
                             <Button
@@ -3237,45 +3141,6 @@ export function AgentForm({
                         modelBlock={showsModelControl ? modelBlock : null}
                         modelSummary={modelSummary}
                         modelAttention={modelAttention}
-                      />
-                    </div>
-                  )}
-
-                  {/* Built-in agent config */}
-                  {isPolicyConfigBuiltIn && (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label
-                            htmlFor="auto-configure-on-tool-discovery"
-                            className="text-sm font-medium cursor-pointer"
-                          >
-                            Auto-configure on tool discovery
-                          </Label>
-                          <FieldDescription>
-                            Automatically analyze and configure security
-                            policies when tools are discovered
-                          </FieldDescription>
-                        </div>
-                        <Switch
-                          id="auto-configure-on-tool-discovery"
-                          checked={autoConfigureOnToolDiscovery}
-                          onCheckedChange={setAutoConfigureOnToolDiscovery}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {isDualLlmMainBuiltIn && (
-                    <div className="space-y-2">
-                      <Label htmlFor="dual-llm-max-rounds">Max rounds</Label>
-                      <Input
-                        id="dual-llm-max-rounds"
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={dualLlmMaxRounds}
-                        onChange={(e) => setDualLlmMaxRounds(e.target.value)}
                       />
                     </div>
                   )}
@@ -4008,37 +3873,6 @@ export function AgentForm({
                 </SettingsSection>
               )}
 
-              {/* Security (LLM Proxy and Agent only) */}
-              {showSecurity && (
-                <SettingsSection
-                  title="Security"
-                  description="How this agent treats the content its tools hand back."
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label
-                          htmlFor="consider-context-untrusted"
-                          className="text-sm font-medium cursor-pointer"
-                        >
-                          Treat context as sensitive from the start of chat
-                        </Label>
-                        <FieldDescription>
-                          When enabled, the context is always considered
-                          sensitive. Only tools allowed to run in sensitive
-                          context will be permitted.
-                        </FieldDescription>
-                      </div>
-                      <Switch
-                        id="consider-context-untrusted"
-                        checked={considerContextUntrusted}
-                        onCheckedChange={setConsiderContextUntrusted}
-                      />
-                    </div>
-                  </div>
-                </SettingsSection>
-              )}
-
               {/* Custom Header Passthrough (MCP Gateway only) */}
               {agentType === "mcp_gateway" && (
                 <SettingsSection
@@ -4285,7 +4119,6 @@ type AgentFormFields = {
   assignedTeamIds: string[];
   assignedUserIds: string[];
   labels: ProfileLabel[];
-  considerContextUntrusted: boolean;
   llmApiKeyId: string | null;
   llmModel: string | null;
   identityProviderId: string | null | undefined;
@@ -4293,8 +4126,6 @@ type AgentFormFields = {
   knowledgeBaseIds: string[];
   connectorIds: string[];
   scope: AgentScope;
-  autoConfigureOnToolDiscovery: boolean;
-  dualLlmMaxRounds: string;
   passthroughHeaders: string[];
   runtime: AgentRuntimeConfig | null;
   toolExposureMode: ToolExposureMode;

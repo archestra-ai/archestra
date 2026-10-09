@@ -82,7 +82,6 @@ export const RouteId = {
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
-  AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
   UnassignToolFromAgent: "unassignToolFromAgent",
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
@@ -206,12 +205,8 @@ export const RouteId = {
   BulkDeleteRoles: "bulkDeleteRoles",
 
   // Tool Routes
-  GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
-  GetToolObservers: "getToolObservers",
-  GetUnassignedTools: "getUnassignedTools",
-  DeleteTool: "deleteTool",
 
   // Interaction Routes
   GetInteractions: "getInteractions",
@@ -225,21 +220,6 @@ export const RouteId = {
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",
   GetMcpToolCall: "getMcpToolCall",
-
-  // Autonomy Policy Routes
-  GetOperators: "getOperators",
-  GetToolInvocationPolicies: "getToolInvocationPolicies",
-  CreateToolInvocationPolicy: "createToolInvocationPolicy",
-  GetToolInvocationPolicy: "getToolInvocationPolicy",
-  UpdateToolInvocationPolicy: "updateToolInvocationPolicy",
-  DeleteToolInvocationPolicy: "deleteToolInvocationPolicy",
-  GetTrustedDataPolicies: "getTrustedDataPolicies",
-  CreateTrustedDataPolicy: "createTrustedDataPolicy",
-  GetTrustedDataPolicy: "getTrustedDataPolicy",
-  UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
-  DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
-  BulkUpsertDefaultCallPolicy: "bulkUpsertDefaultCallPolicy",
-  BulkUpsertDefaultResultPolicy: "bulkUpsertDefaultResultPolicy",
 
   // Proxy Routes - OpenAI
   OpenAiChatCompletionsWithDefaultAgent:

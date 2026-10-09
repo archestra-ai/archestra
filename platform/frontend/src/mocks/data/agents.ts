@@ -20,7 +20,6 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     isDefault: false,
     isPersonalGateway: false,
     isPersonalProxy: false,
-    considerContextUntrusted: false,
     agentType: "agent",
     systemPrompt: null,
     description: null,

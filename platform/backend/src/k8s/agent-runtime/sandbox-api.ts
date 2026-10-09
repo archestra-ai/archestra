@@ -118,7 +118,9 @@ class AgentSandboxApiDetector {
     }
     const { installed } = await inspectAgentSandboxApi(this.customObjectsApi);
     if (installed && !this.installed) {
-      logger.info("Agent Sandbox controller detected; Agent Runtime is available");
+      logger.info(
+        "Agent Sandbox controller detected; Agent Runtime is available",
+      );
     }
     this.installed = installed;
     return installed;
@@ -151,8 +153,7 @@ async function listServedResources(
   groupVersion: { group: string; version: string },
 ): Promise<Set<string>> {
   try {
-    const resourceList =
-      await customObjectsApi.getAPIResources(groupVersion);
+    const resourceList = await customObjectsApi.getAPIResources(groupVersion);
     return new Set(resourceList.resources?.map((resource) => resource.name));
   } catch (error) {
     // A cluster without the CRD answers discovery with a plain-text 404.

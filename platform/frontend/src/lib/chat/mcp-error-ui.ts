@@ -4,10 +4,8 @@ import {
   MCP_CATALOG_INSTALL_QUERY_PARAM,
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
-  type PolicyDeniedMcpToolError,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
-import type { PolicyDeniedPart } from "@/components/message-thread";
 
 export interface AuthRequiredResult {
   catalogName: string;
@@ -22,10 +20,6 @@ export interface ExpiredAuthResult {
 }
 
 export type ToolAuthState =
-  | {
-      kind: "policy-denied";
-      policyDenied: PolicyDeniedPart;
-    }
   | {
       kind: "assigned-credential-unavailable";
       catalogName: string;
@@ -53,29 +47,6 @@ export type ToolAuthState =
       credentialScope?: ResourceVisibilityScope;
       credentialTeamName?: string | null;
     };
-
-function policyDeniedPartFromError(
-  error: PolicyDeniedMcpToolError,
-): PolicyDeniedPart {
-  return {
-    type: `tool-${error.toolName}`,
-    toolCallId: "",
-    state: "output-denied",
-    input: error.input,
-    unsafeContextActiveAtRequestStart: error.reasonType === "sensitive_context",
-    errorText: JSON.stringify({ reason: error.reason }),
-    toolId: error.toolId,
-  };
-}
-
-export function parsePolicyDenied(text: string): PolicyDeniedPart | null {
-  const policyDenied = extractMcpToolError(text);
-  if (policyDenied?.type !== "policy_denied") {
-    return null;
-  }
-
-  return policyDeniedPartFromError(policyDenied);
-}
 
 export function parseAuthRequired(
   errorText: string,
@@ -162,13 +133,6 @@ export function resolveToolAuthState(params: {
 }): ToolAuthState | null {
   const structuredError = extractMcpToolError(params.rawOutput);
 
-  if (structuredError?.type === "policy_denied") {
-    return {
-      kind: "policy-denied",
-      policyDenied: policyDeniedPartFromError(structuredError),
-    };
-  }
-
   if (structuredError?.type === "auth_expired") {
     return {
       kind: "auth-expired",
@@ -208,14 +172,6 @@ export function resolveToolAuthState(params: {
   }
 
   if (params.errorText) {
-    const policyDenied = parsePolicyDenied(params.errorText);
-    if (policyDenied) {
-      return {
-        kind: "policy-denied",
-        policyDenied,
-      };
-    }
-
     const expiredAuth = parseExpiredAuth(params.errorText);
     if (expiredAuth) {
       const ids = extractIdsFromReauthUrl(expiredAuth.reauthUrl);

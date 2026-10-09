@@ -17,10 +17,7 @@ import {
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
 import { AGENT_RUNTIME_WORKSPACE_LABEL, agentRuntimeLabels } from "./naming";
-import {
-  AGENT_SANDBOX_EXTENSIONS_API,
-  agentSandboxApi,
-} from "./sandbox-api";
+import { AGENT_SANDBOX_EXTENSIONS_API, agentSandboxApi } from "./sandbox-api";
 import { warmPoolTemplate } from "./warm-pool-template";
 
 export const SANDBOX_CLAIM_API = {

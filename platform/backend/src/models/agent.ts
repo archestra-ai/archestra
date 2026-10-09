@@ -1382,8 +1382,8 @@ class AgentModel {
    * per-agent gateway check against each one. Keeping the two apart means the
    * registry cannot disagree with what a direct card fetch would allow.
    *
-   * Built-in agents are left out: title generation, context compaction and the
-   * dual-LLM pair are machinery this platform runs on, not collaborators
+   * Built-in agents are left out: title generation and context compaction are
+   * machinery this platform runs on, not collaborators
    * anyone would address over A2A. Personal agents stay in — one belongs to
    * somebody, and the per-agent check decides whether that is the caller.
    */
@@ -2072,14 +2072,7 @@ class AgentModel {
     const includeBuiltIn =
       filters?.includeBuiltIn === true && isAgentAdmin && !filters?.scope;
     if (filters?.scope === "built_in") {
-      whereConditions.push(listedBuiltInAgentCondition());
-    } else if (includeBuiltIn) {
-      whereConditions.push(
-        or(
-          eq(schema.agentsTable.builtIn, false),
-          listedBuiltInAgentCondition(),
-        ) as SQL,
-      );
+      whereConditions.push(eq(schema.agentsTable.builtIn, true));
     } else if (
       filters?.scope === "personal" ||
       filters?.scope === "team" ||
@@ -2089,7 +2082,7 @@ class AgentModel {
         agentAudienceIs(filters.scope),
         eq(schema.agentsTable.builtIn, false),
       );
-    } else {
+    } else if (!includeBuiltIn) {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
     if (!isAgentAdmin) {
@@ -4257,7 +4250,6 @@ class AgentModel {
           // Skill policy rules are copied below. Start closed so a partial
           // clone can never transiently widen a Manual source to All.
           activationSkillMode: "manual",
-          considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
           incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
@@ -4599,7 +4591,6 @@ class AgentModel {
           }
         : null,
       icon: row.icon ?? null,
-      considerContextUntrusted: row.considerContextUntrusted,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,
@@ -4997,21 +4988,4 @@ function agentGrantedTeamIds() {
         AND team_entry->'subject'->>'type' = 'team'
     ) granted_team
   ), array[]::text[])`;
-}
-
-/**
- * The built-in agents the Agents page lists. With OpenAPPA on, the policy
- * configuration and dual-LLM agents are internal and stay hidden.
- */
-function listedBuiltInAgentCondition(): SQL {
-  const builtIn = eq(schema.agentsTable.builtIn, true);
-  if (!config.openappa.enabled) return builtIn;
-  return and(
-    builtIn,
-    notInArray(sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`, [
-      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-      BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-      BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-    ]),
-  ) as SQL;
 }

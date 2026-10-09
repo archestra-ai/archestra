@@ -359,8 +359,8 @@ function parseSse(data: string | Uint8Array | null): unknown {
 
 describe("OpenAiResponsesRequestAdapter.getMessages", () => {
   // The AI SDK emits Responses "easy input" messages: role/content with no
-  // `type`. getMessages() feeds trusted-data / Dual LLM policy evaluation, so
-  // dropping these would silently bypass those policies for routed chats.
+  // `type`. Dropping these would leave getMessages() without the user's
+  // prompt for routed chats.
   test("includes easy-input message items that omit a top-level type", () => {
     const request = {
       model: "gpt-5.5-pro",
@@ -396,8 +396,8 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
   });
 
   // Tool results ride as function_call_output items paired to a function_call
-  // by call_id. Trusted-data / Dual LLM evaluation reads CommonMessage.toolCalls,
-  // so results that don't surface there silently bypass sanitization policies.
+  // by call_id. Common-format readers see CommonMessage.toolCalls, so results
+  // that don't surface there are silently lost.
   test("surfaces function_call_output items as tool calls paired by call_id", () => {
     const request = {
       model: "gpt-5.6-sol",
@@ -490,8 +490,7 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
   });
 
   // Codex calls a namespaced tool by its bare name and names the namespace
-  // beside it; the pair is the tool's identity, so trusted-data evaluation
-  // and the plugins must see both.
+  // beside it; the pair is the tool's identity, so the plugins must see both.
   test("carries the namespace a paired history call named", () => {
     const request = {
       model: "gpt-5.5",
@@ -639,7 +638,7 @@ describe("OpenAiResponsesRequestAdapter.toProviderRequest", () => {
     }
   });
 
-  // Sanitized Dual LLM summaries flow back through applyToolResultUpdates and
+  // Plugin-approved replacements flow back through applyToolResultUpdates and
   // must replace the raw output the upstream model would otherwise read.
   test("replaces function_call_output content for updated tool call ids", () => {
     const request = {

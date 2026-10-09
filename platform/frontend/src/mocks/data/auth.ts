@@ -88,7 +88,6 @@ export function makeUserPermissions(
     llmModel: [...ALL],
     llmLimit: [...ALL],
     llmCost: [...ALL],
-    toolPolicy: [...ALL],
     openappaPolicy: ["read", "update"],
     openappaDiagnostics: ["read", "update", "admin"],
     organizationSettings: ["read", "update"],

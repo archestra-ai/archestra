@@ -219,9 +219,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
-  const { data: canReadToolPolicy } = useHasPermissions({
-    toolPolicy: ["read"],
-  });
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeSource: ["read"],
   });
@@ -231,10 +228,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId: effectiveAgentId ?? undefined },
     skipPagination: true,
-    enabled:
-      shouldLoadAgentManagementDetails &&
-      !!effectiveAgentId &&
-      !!canReadToolPolicy,
+    enabled: shouldLoadAgentManagementDetails && !!effectiveAgentId,
   });
 
   const assignedCatalogs = useMemo(() => {

@@ -10,10 +10,6 @@ import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
 import type { RequestLookups } from "@/auth/request-lookups";
-import {
-  evaluateSingleMcpToolInvocationPolicy,
-  policyBlockToToolError,
-} from "@/guardrails/tool-invocation";
 import logger from "@/logging";
 import {
   A2aConnectionModel,
@@ -43,12 +39,7 @@ import {
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
-import {
-  errorResult,
-  isAbortLikeError,
-  structuredToolErrorResult,
-  successResult,
-} from "./helpers";
+import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 export const delegationToolArgsSchema = z.object({
@@ -257,26 +248,6 @@ export async function handleDelegation(
         "Outbound A2A delegation is not available for environment-bound agents yet.",
       );
     }
-    const policyBlock = context.connectionSetupBypass
-      ? null
-      : await evaluateSingleMcpToolInvocationPolicy({
-          agentId,
-          toolName,
-          toolInput: { message },
-          organizationId,
-          contextIsTrusted: context.contextIsTrusted ?? true,
-          sensitiveContextOrigin: context.sensitiveContextOrigin,
-          enabledToolNames: new Set([toolName]),
-          resolvedToolId: outboundTarget.tool.id,
-          enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
-        });
-    if (policyBlock) {
-      return structuredToolErrorResult({
-        error: policyBlockToToolError(policyBlock),
-        text: policyBlock.contentMessage,
-      });
-    }
-
     try {
       const text = await executeOutboundA2aDelegation({
         target: outboundTarget,
@@ -396,10 +367,6 @@ export async function handleDelegation(
       chatOpsThreadId: context.chatOpsThreadId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,
       abortSignal: context.abortSignal,
-      // We only need to propagate whether the parent was already unsafe at the
-      // delegation boundary. The child re-evaluates its own tool results and
-      // records its own unsafe boundary instead of inheriting the parent's.
-      parentContextIsTrusted: context.contextIsTrusted,
       // Surface the child's tool calls on the caller's conversation, attributed
       // to this delegation call. The shared bridge is threaded into the child
       // run so deeper descendants surface too.

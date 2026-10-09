@@ -344,9 +344,8 @@ describe("AnthropicRequestAdapter", () => {
   });
 
   describe("getMessages - tool result error status", () => {
-    // toCommonFormat feeds getMessages(), which is what tool-invocation and
-    // trusted-data policies evaluate. Dropping is_error there records every
-    // tool result as a success even when the tool reported an error.
+    // toCommonFormat feeds getMessages(). Dropping is_error there records
+    // every tool result as a success even when the tool reported an error.
     test.each([
       ["true", { is_error: true }, true],
       ["false", { is_error: false }, false],

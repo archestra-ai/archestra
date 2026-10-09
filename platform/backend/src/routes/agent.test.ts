@@ -1851,13 +1851,12 @@ describe("agent routes", () => {
     }) => {
       // Create a built-in agent
       await makeAgent({
-        name: "Policy Configuration Subagent",
+        name: "Context Compaction Subagent",
         organizationId,
         agentType: "agent",
         authorId: user.id,
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: true,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
       // Also create a regular agent with tools
@@ -2280,13 +2279,12 @@ describe("agent routes", () => {
 
     test("should return 400 for built-in agents", async ({ makeAgent }) => {
       const created = await makeAgent({
-        name: "Policy Configuration Subagent",
+        name: "Context Compaction Subagent",
         organizationId,
         authorId: user.id,
         agentType: "agent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: true,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
 
@@ -2336,7 +2334,6 @@ describe("agent routes", () => {
         systemPrompt: "Hello",
         icon: null,
         scope: "personal",
-        considerContextUntrusted: false,
         toolExposureMode: "full",
         llmModel: null,
         incomingEmailEnabled: false,

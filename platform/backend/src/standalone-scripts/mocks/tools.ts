@@ -121,7 +121,6 @@ export interface MockTool {
   description: string;
   parameters: Record<string, unknown>;
   allowUsageWhenUntrustedDataIsPresent: boolean;
-  dataIsTrustedByDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -145,7 +144,6 @@ export function generateMockTools(
       description: `${name.replace(/_/g, " ")} tool for ${agentName}`,
       parameters: generateRandomParameters(name),
       allowUsageWhenUntrustedDataIsPresent: randomBool(),
-      dataIsTrustedByDefault: randomBool(0.3), // 30% chance
       createdAt: new Date(),
       updatedAt: new Date(),
     };

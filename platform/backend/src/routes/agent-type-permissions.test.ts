@@ -794,10 +794,9 @@ describe("agent type permission isolation (routes)", () => {
       await makeAgent({
         organizationId,
         agentType: "agent",
-        name: "Policy Configuration Subagent",
+        name: "Context Compaction Subagent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: true,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
         authorId: adminUser.id,
       });

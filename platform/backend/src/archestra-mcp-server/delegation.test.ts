@@ -262,7 +262,7 @@ describe("delegation tool execution", () => {
   });
 
   for (const enabled of [true, false]) {
-    test(`executes delegation and propagates trust with APPA enabled=${enabled}`, async ({
+    test(`executes delegation with APPA enabled=${enabled}`, async ({
       makeAgent,
       makeAgentTool,
     }) => {
@@ -286,10 +286,7 @@ describe("delegation tool execution", () => {
       const result = await executeArchestraTool(
         `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
         { message: "Review the latest findings." },
-        {
-          ...mockContext,
-          contextIsTrusted: false,
-        },
+        mockContext,
       );
 
       expect(result.isError).toBe(false);
@@ -303,7 +300,6 @@ describe("delegation tool execution", () => {
           organizationId: mockContext.organizationId,
           userId: mockContext.userId,
           parentDelegationChain: testAgent.id,
-          parentContextIsTrusted: false,
         }),
       );
     });
@@ -451,7 +447,6 @@ describe("delegation tool execution", () => {
         organizationId: mockContext.organizationId,
         userId: mockContext.userId,
         parentDelegationChain: testAgent.id,
-        parentContextIsTrusted: undefined,
       }),
     );
   });

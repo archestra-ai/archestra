@@ -723,35 +723,6 @@ const ALL_CLIENTS = [
 ] as const;
 
 describe("renderSetupScript", () => {
-  const signedGatewayUrl = `${MCP.url}?archestra_setup_ctx=cs1_example.signature`;
-
-  test.each(
-    ALL_CLIENTS,
-  )("%s: retains the approved setup context in both shell installers", (clientId) => {
-    for (const platform of ["linux", "windows"] as const) {
-      const script = renderSetupScript({
-        ...fullContext(clientId, platform),
-        mcp: { ...MCP, url: signedGatewayUrl },
-      });
-      expect(script).toContain(signedGatewayUrl);
-    }
-  });
-
-  test.each([
-    "linux",
-    "windows",
-  ] as const)("Claude Desktop (%s): carries the approved setup context in its encoded installer", (platform) => {
-    const script = renderSetupScript({
-      ...fullContext("claude-desktop", platform),
-      mcp: { ...MCP, url: signedGatewayUrl },
-      proxy: PROXY,
-    });
-    const encoded = script.match(/base64\.b64decode\('([^']+)'\)/)?.[1];
-    expect(encoded).toBeDefined();
-    const context = JSON.parse(Buffer.from(encoded ?? "", "base64").toString());
-    expect(context.mcp.url).toBe(signedGatewayUrl);
-  });
-
   test.each([
     { clientId: "claude-code" as const, binary: "claude", mode: "-p" },
     { clientId: "codex" as const, binary: "codex", mode: "exec" },

@@ -680,7 +680,6 @@ export class A2AManager {
               sessionId,
               source: systemParams?.source,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
-              blockOnApprovalRequired: false, // No need to block. We check approval flow availability below
               originalUiMessages: contextUiMessages,
               chatOpsBindingId:
                 systemParams?.completionTarget?.type === "chatops"

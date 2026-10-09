@@ -109,37 +109,6 @@ export function resolveRunToolDispatch(params: {
 }
 
 /**
- * Resolves the target tool and arguments for an unverified `run_tool` wrapper.
- * `toolName` is a wire spelling without a verified attestation that matches
- * the wrapper under loose scanning.
- *
- * Clients might route this call to a platform gateway that executes the target.
- * The policy evaluates the target in addition to the wrapper itself, rather than
- * replacing the wrapper. The target is evaluated as written and never as a
- * built-in tool. Returns undefined if the call is not a valid dispatch.
- */
-export function resolveUnprovenRunToolTarget(params: {
-  toolName: string;
-  args: unknown;
-}): { toolName: string; toolInput: Record<string, unknown> } | undefined {
-  if (!runToolMatch(params.toolName, true) || !isRecord(params.args)) {
-    return undefined;
-  }
-  const targetToolName = params.args.tool_name;
-  if (
-    typeof targetToolName !== "string" ||
-    targetToolName.length === 0 ||
-    isBuiltInTarget(targetToolName)
-  ) {
-    return undefined;
-  }
-  return {
-    toolName: targetToolName,
-    toolInput: isRecord(params.args.tool_args) ? params.args.tool_args : {},
-  };
-}
-
-/**
  * Resolve a run_tool target name to its canonical form (Archestra short names
  * like `run_command` → `archestra__run_command`; everything else unchanged),
  * mirroring run_tool's own resolution so dispatch and access checks line up.

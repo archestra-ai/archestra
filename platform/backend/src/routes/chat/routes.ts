@@ -59,10 +59,6 @@ import {
   chatTaskPrincipal,
   createChatTaskBridge,
 } from "@/clients/chat-task-bridge";
-import {
-  applyDualLlmAnalysesToMessages,
-  createDualLlmAnalysisStreamBridge,
-} from "@/clients/dual-llm-analysis-stream";
 import { createLLMModelForAgent, isApiKeyRequired } from "@/clients/llm-client";
 import {
   applySubagentToolCallsToMessages,
@@ -77,7 +73,6 @@ import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import db, { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
-import { dualLlmProgressBus } from "@/guardrails/dual-llm-progress-bus";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import {
   applyHookRunsToMessages,
@@ -564,18 +559,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // splicing into the assistant message in onFinish. One instance is shared
       // down the whole delegation chain.
       const subagentToolStream = createSubagentToolStreamBridge();
-      // Surfaces the proxy's dual LLM sanitization work on this conversation as
-      // structured analysis parts. The proxy publishes events on the in-process
-      // bus under a per-turn channel id that rides the loopback request as a
-      // header; the bridge streams them live and collects them for splicing in
-      // onFinish, buffering anything that fires before the model stream's
-      // `start` chunk (a pre-`start` data part mints a phantom message).
-      const dualLlmAnalysisStream = createDualLlmAnalysisStreamBridge();
-      const dualLlmProgressChannel = randomUUID();
-      const unsubscribeDualLlmProgress = dualLlmProgressBus.subscribe(
-        dualLlmProgressChannel,
-        (event) => dualLlmAnalysisStream.handleEvent(event),
-      );
       // Detaches a tool call that outlives the synchronous threshold into a
       // durable task, so the user sees a live cancellable card instead of the
       // turn simply failing at the timeout.
@@ -814,7 +797,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             onStreamSettled: () => {
               removeAbortListeners();
               stopActiveRunPolling();
-              unsubscribeDualLlmProgress();
             },
             buildErrorPayload: ({ error, mappedError }) =>
               buildStreamErrorPayload({
@@ -1163,7 +1145,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 chatMcpElicitation.setWriter(writer);
                 subagentToolStream.setWriter(writer);
                 chatTaskBridge.setWriter(writer);
-                dualLlmAnalysisStream.setWriter(writer);
 
                 // Create the LLM model here, inside execute, so a credential
                 // failure (e.g. a per-user provider like GitHub Copilot the user
@@ -1184,7 +1165,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     sessionId: conversationId,
                     source: "chat",
                     agentLlmApiKeyId: agent.llmApiKeyId,
-                    dualLlmProgressChannel,
                     // Lets the proxy store this turn's interaction encrypted
                     // rather than redacted. Only sent when an escrow record
                     // exists, since without one the row could never be reopened.
@@ -1921,7 +1901,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   }) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
-                    unsubscribeDualLlmProgress();
 
                     const lastMessage = finalMessages.at(-1);
                     const reply =
@@ -1960,18 +1939,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // Splice the turn's collected hook runs into the assistant
                     // message(s) as inline `data-hook-run` parts before persisting,
                     // so they survive refresh and sit at their lifecycle position.
-                    const messagesToPersist = applyDualLlmAnalysesToMessages(
-                      applyMcpTasksToMessages(
-                        applySubagentToolCallsToMessages(
-                          applyHookRunsToMessages(
-                            turnMessages as unknown as ChatMessage[],
-                            hookRunCollector,
-                          ),
-                          subagentToolStream.collected(),
+                    const messagesToPersist = applyMcpTasksToMessages(
+                      applySubagentToolCallsToMessages(
+                        applyHookRunsToMessages(
+                          turnMessages as unknown as ChatMessage[],
+                          hookRunCollector,
                         ),
-                        chatTaskBridge.collected(),
+                        subagentToolStream.collected(),
                       ),
-                      dualLlmAnalysisStream.collected(),
+                      chatTaskBridge.collected(),
                     );
 
                     if (!messagesPersisted && conversationId) {
@@ -2054,27 +2030,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 modelStreamMerged = true;
                 writer.merge(
                   modelUiStream
-                    .pipeThrough(
-                      // Releases the dual-LLM bridge's buffered analysis parts
-                      // once the model stream has opened — writing them any
-                      // earlier mints a phantom assistant message client-side.
-                      // Flushed on the second chunk, not the first: the merge
-                      // pump has provably forwarded the `start` chunk to the
-                      // outbound stream before this transform sees chunk two,
-                      // so a side-write can no longer overtake it.
-                      (() => {
-                        let chunksSeen = 0;
-                        return new TransformStream({
-                          transform(chunk, controller) {
-                            controller.enqueue(chunk);
-                            chunksSeen++;
-                            if (chunksSeen >= 2) {
-                              dualLlmAnalysisStream.markStreamStarted();
-                            }
-                          },
-                        });
-                      })(),
-                    )
                     .pipeThrough(
                       createToolUiStartTransform({
                         prefetchedUiResources,
@@ -2191,7 +2146,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           chatAbortController.abort();
         }
         stopActiveRunPolling();
-        unsubscribeDualLlmProgress();
         await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",

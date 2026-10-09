@@ -43,9 +43,6 @@ import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
-import ToolModel from "@/models/tool";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
@@ -560,30 +557,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
   },
 
-  // Tool Invocation Policies
-  "/api/autonomy-policies/tool-invocation": {
-    resourceType: "toolInvocationPolicy",
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  "/api/autonomy-policies/tool-invocation/:id": {
-    resourceType: "toolInvocationPolicy",
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-
-  // Trusted Data Policies
-  "/api/trusted-data-policies": {
-    resourceType: "trustedDataPolicy",
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-  "/api/trusted-data-policies/:id": {
-    resourceType: "trustedDataPolicy",
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-
   // Knowledge Bases
   "/api/knowledge-bases": {
     resourceType: "knowledgeBase",
@@ -1070,12 +1043,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       InternalMcpCatalogModel.findByNameForAudit(name, orgId),
   },
 
-  // Tools (delete discovered tools)
-  "/api/tools/:id": {
-    resourceType: "tool",
-    fetchById: (id, orgId) => ToolModel.findByIdForAudit(id, orgId),
-  },
-
   // ChatOps
   "/api/chatops/bindings": {
     resourceType: "chatOpsBinding",
@@ -1132,23 +1099,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
   },
 
-  // Autonomy policy bulk defaults (org-scoped tool footprint)
-  "/api/tool-invocation/bulk-default": {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.bulk_defaulted",
-    resourceIdSource: "organizationContext",
-    fetchById: (id, _orgId) =>
-      ToolInvocationPolicyModel.findDefaultPoliciesSnapshotForOrganization(id),
-  },
-  "/api/trusted-data-policies/bulk-default": {
-    resourceType: "trustedDataPolicy",
-    action: "trustedDataPolicy.bulk_defaulted",
-    resourceIdSource: "organizationContext",
-    fetchById: (id, _orgId) =>
-      TrustedDataPolicyModel.findDefaultPoliciesSnapshotForOrganization(id),
-  },
-
-  // Agent tool bulk / auto-policy (assignment counts + default policy maps)
+  // Agent tool bulk assignment (assignment counts)
   "/api/agents/tools/bulk-assign": {
     resourceType: "agentTool",
     action: "agentTool.bulk_assigned",
@@ -1165,22 +1116,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "agentTool",
     action: "agentTool.bulk_updated",
     resourceIdSource: "organizationContext",
-  },
-  "/api/agent-tools/auto-configure-policies": {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.auto_configured",
-    resourceIdSource: "organizationContext",
-    fetchById: async (orgId, _orgId) => {
-      const [tip, tdp] = await Promise.all([
-        ToolInvocationPolicyModel.findDefaultPoliciesSnapshotForOrganization(
-          orgId,
-        ),
-        TrustedDataPolicyModel.findDefaultPoliciesSnapshotForOrganization(
-          orgId,
-        ),
-      ]);
-      return { ...tip, ...tdp };
-    },
   },
 
   // Enterprise: team vault folder (same snapshot model as teams)

@@ -1763,7 +1763,6 @@ done`
     throw new Error("Timed out waiting for the Agent terminal");
   }
 
-
   private requireClients(): K8sClients {
     if (!this.isEnabled) {
       throw new Error("Agent Runtime is not enabled");

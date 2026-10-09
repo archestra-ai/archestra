@@ -741,24 +741,8 @@ function ConnectArea({
           )}
 
           {script && (
-            <div className="mt-3 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
-              <div>
-                <p className="font-semibold text-foreground">
-                  When it finishes
-                </p>
-                <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-                  {scriptNextSteps(client).map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                  <li>
-                    The full next steps are printed at the end of the output.
-                  </li>
-                </ol>
-              </div>
-              <TextButton
-                onClick={() => setWindows(!windows)}
-                className="self-start"
-              >
+            <div className="mt-3 flex justify-end px-1 text-xs text-muted-foreground">
+              <TextButton onClick={() => setWindows(!windows)}>
                 {windows
                   ? "Use the macOS / Linux command"
                   : "Use the Windows command"}
@@ -828,46 +812,6 @@ function ScriptBlock({
       </pre>
     </div>
   );
-}
-
-/**
- * The Script option's "When it finishes" list. Its meaning follows the setup
- * script's own Next steps (each agent's nextSteps in
- * backend/src/services/agent-connection-setup/agents/); the full list prints at
- * the end of the output.
- */
-function scriptNextSteps(client: ConnectClient): string[] {
-  switch (client.id) {
-    case "claude-code":
-      return [
-        "Open a new terminal and start claude.",
-        "Run /mcp, pick the gateway and sign in through the browser. Skills load on their own.",
-      ];
-    case "cursor":
-      return [
-        "Reload Cursor.",
-        "Open Customize > MCPs and sign in to the gateway.",
-        'If the output shows "Cursor model settings", enter them under Settings > Models > API Keys.',
-      ];
-    case "codex":
-      return [
-        "Open a new terminal and run codex.",
-        'If the output doesn\'t say "Successfully logged in.", run the codex mcp login command it prints.',
-        "For skills, run /plugins and install the plugin.",
-      ];
-    case "copilot-cli":
-      return [
-        "Restart Copilot. It opens the browser to sign in to the gateway.",
-        "If the output prints export lines, add them to your shell profile.",
-      ];
-    case "opencode":
-      return [
-        "Close OpenCode and start it again in a new terminal.",
-        "If the gateway isn't connected, run the opencode mcp auth command it prints.",
-      ];
-    default:
-      return [`Restart ${nameOf(client)}.`];
-  }
 }
 
 // === Connect band heading: the one instruction ===

@@ -253,7 +253,7 @@ function AgentDetails({
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const permissionResource =
     agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
-  // The same query as the Permissions tab, so the header chip reflects what
+  // The same query as the access block, so the header chip reflects what
   // is saved and updates once a permissions save lands.
   const savedPolicy = useResourcePermissions(permissionResource, agent.id);
   const audience = savedPolicy.data

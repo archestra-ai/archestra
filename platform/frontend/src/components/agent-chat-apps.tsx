@@ -266,8 +266,8 @@ export function AgentChatAppsEditor({
   const assignmentOptions = buildAssignmentOptions({
     subject,
     visibilityLocation: emailAgent
-      ? "the Permissions tab"
-      : "Permissions in the Configuration step",
+      ? "Who can use it on General"
+      : "Who can use it in the Configuration step",
     agentNames,
     bindings,
     configuredDmProviders,
@@ -1412,7 +1412,7 @@ function buildAssignmentOptions({
           ? (agentNames.get(binding.agentId) ?? "another agent")
           : null,
       disabledReason: personalAssignmentRefused
-        ? `A personal agent answers only in its owner's direct messages. To use shared channels, open ${visibilityLocation} and add "Everyone in this organization" with "Can use" access.`
+        ? `A personal agent answers only in its owner's direct messages. To use shared channels, add a team, a role or everyone in ${visibilityLocation}.`
         : null,
       virtualDm: false,
       isDm: binding.isDm,

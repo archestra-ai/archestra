@@ -51,6 +51,12 @@ vi.mock("@/lib/organization.query");
 // is the shared component's contract, not this page's.
 vi.mock("@/components/resource-scope-filter", () => ({
   ResourceDeletedStatusFilter: () => <div>status filter</div>,
+  useScopeFilterParams: () => ({ hasActiveScopeFilters: false }),
+}));
+
+vi.mock("@/components/resource-access-filter", () => ({
+  ResourceAccessFilter: () => null,
+  RESOURCE_ACCESS_FILTER_PARAMS: ["access", "sharedWith", "owner", "builtIn"],
 }));
 
 vi.mock("@/components/delete-confirm-dialog", () => ({

@@ -23,8 +23,12 @@ import LimitModel from "./limit";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type ResourceAccessFilter,
 } from "./resource-permission-subject";
 import UserModel from "./user";
+
+/** Who created a client: kept in its metadata, not in a column. */
+const oauthClientAuthorColumn = sql`${schema.oauthClientsTable.metadata}->>'authorId'`;
 
 class LlmOauthClientModel {
   static async findAllByOrganization(params: {
@@ -65,6 +69,8 @@ class LlmOauthClientModel {
     grantType?: LlmOauthClientGrantType;
     labels?: Record<string, string[]>;
     viewer?: { userId: string };
+    /** The list's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter;
   }) {
     const labelFilteredIds = params.labels
       ? await OauthClientLabelModel.getIdsMatchingLabels(params.labels)
@@ -487,6 +493,7 @@ function listWhereClause(params: {
   viewer: GrantPrincipal | null;
   /** Client ids matching a `?labels=` filter; omit when not filtering. */
   labelFilteredIds?: string[];
+  access?: ResourceAccessFilter;
 }) {
   return and(
     params.labelFilteredIds !== undefined
@@ -517,6 +524,15 @@ function listWhereClause(params: {
           resource: "llmOauthClient",
           scopeColumn: schema.oauthClientsTable.id,
           action: "read",
+        })
+      : undefined,
+    params.access
+      ? ResourcePermissionPolicyModel.accessRelationCondition({
+          ...params.access,
+          organizationId: params.organizationId,
+          resource: "llmOauthClient",
+          scopeColumn: schema.oauthClientsTable.id,
+          ownerColumn: oauthClientAuthorColumn,
         })
       : undefined,
     // SPDX-SnippetEnd

@@ -5,7 +5,9 @@ import type { AclEntry } from "@/types";
 import type { KnowledgeFileVisibility } from "@/types/knowledge-file";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessFilter,
+} from "./resource-permission-subject";
 
 /**
  * Who a caller is, for repository-listing purposes.
@@ -29,12 +31,27 @@ class KbFileModel {
     search?: string;
     /** File ids matching a `?labels=` filter; omit when not filtering. */
     labelFilteredIds?: string[];
+    /** The list's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter;
     limit: number;
     offset: number;
   }) {
     const where = and(
       eq(schema.kbFilesTable.organizationId, params.organizationId),
       await KbFileModel.visibleTo(params),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      params.access
+        ? ResourcePermissionPolicyModel.accessRelationCondition({
+            ...params.access,
+            organizationId: params.organizationId,
+            resource: "knowledgeFile",
+            scopeColumn: schema.kbFilesTable.id,
+            ownerColumn: schema.kbFilesTable.uploadedBy,
+          })
+        : undefined,
+      // SPDX-SnippetEnd
       ...(params.labelFilteredIds !== undefined
         ? [inArray(schema.kbFilesTable.id, params.labelFilteredIds)]
         : []),

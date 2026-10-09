@@ -6,7 +6,7 @@ import { describe, expect, test } from "@/test";
 import { encodeOpenAiCodexCredential } from "./openai-codex-credentials";
 import {
   ensureOpenCodePrimaryKey,
-  getOpenCodePrimaryCatalog,
+  getOpenCodeVirtualKeyCatalog,
 } from "./opencode-primary-providers";
 
 describe("OpenCode primary providers", () => {
@@ -126,7 +126,7 @@ describe("OpenCode primary providers", () => {
       model.id,
       embedding.id,
     ]);
-    const catalog = await getOpenCodePrimaryCatalog({
+    const catalog = await getOpenCodeVirtualKeyCatalog({
       ...params,
       virtualApiKeyId: first.virtualApiKeyId,
     });
@@ -136,7 +136,7 @@ describe("OpenCode primary providers", () => {
     });
     await LlmProviderApiKeyModel.update(anthropic.id, { isPrimary: false });
     await expect(
-      getOpenCodePrimaryCatalog({
+      getOpenCodeVirtualKeyCatalog({
         ...params,
         virtualApiKeyId: first.virtualApiKeyId,
       }),
@@ -234,7 +234,7 @@ describe("OpenCode primary providers", () => {
     expect(
       await VirtualApiKeyModel.getProviderApiKeys(virtualApiKeyId),
     ).toHaveLength(2);
-    const catalog = await getOpenCodePrimaryCatalog({
+    const catalog = await getOpenCodeVirtualKeyCatalog({
       ...params,
       virtualApiKeyId,
     });
@@ -243,6 +243,48 @@ describe("OpenCode primary providers", () => {
       "personal-coder",
       "shared-coder",
     ]);
+  });
+
+  test("single-provider catalogs require an accessible usable mapping, but not primary status", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const key = await makeLlmProviderApiKey(org.id, (await makeSecret()).id, {
+      provider: "bedrock",
+      isPrimary: false,
+    });
+    const { virtualKey } = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      authorId: user.id,
+      scope: "personal",
+      name: "Connection",
+      providerApiKeys: [{ provider: "bedrock", providerApiKeyId: key.id }],
+    });
+    const params = {
+      organizationId: org.id,
+      userId: user.id,
+      userTeamIds: [],
+      virtualApiKeyId: virtualKey.id,
+    };
+    expect(
+      await getOpenCodeVirtualKeyCatalog({ ...params, provider: "bedrock" }),
+    ).toEqual([expect.objectContaining({ provider: "bedrock" })]);
+    await expect(
+      getOpenCodeVirtualKeyCatalog({ ...params, provider: "azure" }),
+    ).rejects.toThrow("Model provider access changed");
+    await LlmProviderApiKeyModel.setRequiresReauthentication({
+      id: key.id,
+      requiresReauthentication: true,
+    });
+    await expect(
+      getOpenCodeVirtualKeyCatalog({ ...params, provider: "bedrock" }),
+    ).rejects.toThrow("Model provider access changed");
   });
 
   test("refuses setup without a usable primary", async ({

@@ -254,13 +254,16 @@ function opencodeRestoreRoutingPluginSh(): string {
 }
 
 function opencodeProxyDisconnect(ctx: StartupGuardContext): string {
-  if (ctx.proxy?.authMode === "primary-providers") {
+  if (
+    ctx.proxy?.usesModelCatalog ||
+    ctx.proxy?.authMode === "primary-providers"
+  ) {
     return `disconnect_proxy() {
   ARCHESTRA_OC_PRIMARY=null node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)} || return 1
   ${opencodeRestoreRoutingPluginSh()}
 }
 proxy_disconnect_notes() {
-  printf '%s\\n' 'Restored the provider configuration from before primary-provider setup.'
+  printf '%s\\n' 'Restored the provider configuration from before model-provider setup.'
 }`;
   }
 
@@ -393,7 +396,10 @@ function opencodeWindowsRemoveConfigBackup(): string {
 }
 
 function opencodeWindowsProxyDisconnect(ctx: StartupGuardContext): string {
-  if (ctx.proxy?.authMode === "primary-providers") {
+  if (
+    ctx.proxy?.usesModelCatalog ||
+    ctx.proxy?.authMode === "primary-providers"
+  ) {
     return `function Disconnect-ArchProxy {
 $archPrimaryRestore = @'
 ${OPENCODE_PRIMARY_CONFIG_SCRIPT}

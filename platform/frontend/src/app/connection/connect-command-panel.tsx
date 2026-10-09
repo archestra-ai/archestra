@@ -371,26 +371,31 @@ export function ConnectCommandPanel({
   // Providers this client can be wired to at all, narrowed by the admin
   // allow-list (independent of auth mode — used to explain the empty state).
   const supportedProviders = useMemo(() => {
-    const supported = allPrimaryProviders
-      ? [...OPENCODE_PRIMARY_PROVIDERS]
-      : client.proxy.kind === "custom"
-        ? client.proxy.supportedProviders
-        : [];
+    const supported =
+      client.id === "opencode" && proxyAuth !== "provider-key"
+        ? [...OPENCODE_PRIMARY_PROVIDERS]
+        : client.proxy.kind === "custom"
+          ? client.proxy.supportedProviders
+          : [];
     const shown = shownProviders ? new Set(shownProviders) : null;
     return shown && !allPrimaryProviders
       ? supported.filter((p) => shown.has(p))
       : supported;
-  }, [client.proxy, shownProviders, allPrimaryProviders]);
+  }, [client.id, client.proxy, shownProviders, allPrimaryProviders, proxyAuth]);
 
   const singleVirtualKeyProviders = useMemo(() => {
     const supported =
-      client.proxy.kind === "custom" ? client.proxy.supportedProviders : [];
+      client.id === "opencode"
+        ? [...OPENCODE_PRIMARY_PROVIDERS]
+        : client.proxy.kind === "custom"
+          ? client.proxy.supportedProviders
+          : [];
     return supported.filter(
       (p) =>
         (!shownProviders || shownProviders.includes(p)) &&
         (configuredProviders.has(p) || providerRequiresPerUserCredential(p)),
     );
-  }, [client.proxy, shownProviders, configuredProviders]);
+  }, [client.id, client.proxy, shownProviders, configuredProviders]);
 
   // In virtual-key mode we further restrict to providers the user actually has
   // a key for — a virtual key can only be minted against a configured key — so

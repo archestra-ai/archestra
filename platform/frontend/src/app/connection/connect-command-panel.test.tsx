@@ -1670,6 +1670,7 @@ describe("ConnectCommandPanel", () => {
             baseUrl: "https://models.example/v1",
           },
           { id: "non-primary", provider: "openai", isPrimary: false },
+          { id: "bedrock", provider: "bedrock", isPrimary: false },
         ],
       });
       function OpenCodePanel() {
@@ -1722,6 +1723,12 @@ describe("ConnectCommandPanel", () => {
         screen.getByRole("combobox", { name: "Model provider" }),
         { key: "ArrowDown" },
       );
+      expect(
+        screen.getByRole("option", { name: "AWS Bedrock" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: "OpenAI-compatible" }),
+      ).toBeInTheDocument();
       await user.click(screen.getByRole("option", { name: "OpenAI" }));
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(

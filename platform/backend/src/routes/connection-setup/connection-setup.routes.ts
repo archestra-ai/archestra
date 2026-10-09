@@ -4,6 +4,7 @@ import {
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   legacyMcpClientServerNames,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  OPENCODE_PRIMARY_PROVIDERS,
   providerDisplayNames,
   RouteId,
   resolveMcpClientServerName,
@@ -50,7 +51,7 @@ import {
 } from "@/services/connection-setup";
 import {
   ensureOpenCodePrimaryKey,
-  getOpenCodePrimaryCatalog,
+  getOpenCodeVirtualKeyCatalog,
 } from "@/services/opencode-primary-providers";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -344,7 +345,11 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         !allPrimary &&
         provider &&
-        !CLIENT_SUPPORTED_PROVIDERS[clientId].includes(provider)
+        !(
+          clientId === "opencode" && proxyAuth === "virtual-key"
+            ? OPENCODE_PRIMARY_PROVIDERS
+            : CLIENT_SUPPORTED_PROVIDERS[clientId]
+        ).includes(provider)
       ) {
         throw new ApiError(
           400,
@@ -1079,8 +1084,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       : proxyApiPrefix;
     proxy = {
       primaryProviders:
-        setup.proxyAuth === "primary-providers" && setup.virtualApiKeyId
-          ? await getOpenCodePrimaryCatalog({
+        setup.clientId === "opencode" &&
+        setup.proxyAuth !== "provider-key" &&
+        setup.virtualApiKeyId
+          ? await getOpenCodeVirtualKeyCatalog({
+              provider:
+                setup.proxyAuth === "virtual-key" ? setup.provider : undefined,
               organizationId: setup.organizationId,
               userId: setup.userId,
               userTeamIds: await TeamModel.getUserTeamIds(setup.userId),

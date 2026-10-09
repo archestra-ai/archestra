@@ -431,7 +431,7 @@ ARCHESTRA_OPENCODE_MAJOR="$( { opencode --version 2>/dev/null || true; } </dev/n
 [ -n "$ARCHESTRA_OPENCODE_MAJOR" ] || ARCHESTRA_OPENCODE_MAJOR=1`,
   ];
 
-  if (ctx.proxy && ctx.proxy.authMode !== "primary-providers") {
+  if (ctx.proxy && !ctx.proxy.primaryProviders) {
     sections.push(`if [ -f "$HOME/.archestra/opencode-primary-state.json" ]; then
   ARCHESTRA_OC_PRIMARY=null node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)}
 fi`);
@@ -455,10 +455,10 @@ ${opencodeOwnedMergeBash(
   }
 
   if (ctx.proxy) {
-    if (ctx.proxy.authMode === "primary-providers") {
+    if (ctx.proxy.primaryProviders) {
       const { routes, providers } = openCodePrimaryConfig(ctx.proxy);
-      sections.push(`say "Configuring all usable primary providers in OpenCode"
-command -v node >/dev/null 2>&1 || { err "Node.js is required to configure primary providers"; exit 1; }
+      sections.push(`say "Configuring model providers in OpenCode"
+command -v node >/dev/null 2>&1 || { err "Node.js is required to configure model providers"; exit 1; }
 ARCHESTRA_OC_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" ARCHESTRA_OC_KEY=${sh(ctx.proxy.virtualKey ?? "")} ARCHESTRA_OC_PRIMARY=stdin node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)} <<'ARCHESTRA_PRIMARY_CATALOG'
 ${JSON.stringify({ providers })}
 ARCHESTRA_PRIMARY_CATALOG
@@ -632,7 +632,7 @@ Set-ArchProp $archCfg.mcp ${psq(ctx.mcp.serverName)} ([pscustomobject]@{ type = 
 Write-ArchOcOwned $archCfg`);
   }
 
-  if (ctx.proxy && ctx.proxy.authMode !== "primary-providers") {
+  if (ctx.proxy && !ctx.proxy.primaryProviders) {
     sections.push(`if (Test-Path (Join-Path $env:USERPROFILE '.archestra/opencode-primary-state.json')) {
 $archPrimaryRestore = @'
 ${OPENCODE_PRIMARY_CONFIG_SCRIPT}
@@ -643,9 +643,9 @@ finally { Remove-Item Env:ARCHESTRA_OC_PRIMARY -ErrorAction SilentlyContinue }
 }`);
   }
   if (ctx.proxy) {
-    if (ctx.proxy.authMode === "primary-providers") {
+    if (ctx.proxy.primaryProviders) {
       const { routes, providers } = openCodePrimaryConfig(ctx.proxy);
-      sections.push(`Say 'Configuring all usable primary providers in OpenCode'
+      sections.push(`Say 'Configuring model providers in OpenCode'
 $env:ARCHESTRA_OC_MAJOR = [string]$archOcMajor
 $env:ARCHESTRA_OC_KEY = ${psq(ctx.proxy.virtualKey ?? "")}
 $env:ARCHESTRA_OC_PRIMARY = 'stdin'
@@ -653,7 +653,7 @@ $archPrimaryCatalog = ${psq(JSON.stringify({ providers }))}
 $archPrimaryScript = @'
 ${OPENCODE_PRIMARY_CONFIG_SCRIPT}
 '@
-try { $archPrimaryCatalog | & node -e $archPrimaryScript; if ($LASTEXITCODE -ne 0) { throw 'Could not configure primary providers' } }
+try { $archPrimaryCatalog | & node -e $archPrimaryScript; if ($LASTEXITCODE -ne 0) { throw 'Could not configure model providers' } }
 finally { Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHESTRA_OC_MAJOR -ErrorAction SilentlyContinue }
 ${opencodeRoutingPluginPowerShell({ routes, headers: opencodeProxyHeaders(ctx.proxy) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
@@ -782,6 +782,8 @@ function opencodeEnding(ctx: SetupScriptContext): AgentEnding {
   let proxyDetail: string | undefined;
   if (ctx.proxy?.authMode === "primary-providers") {
     proxyDetail = `All usable primary providers are available in OpenCode’s model picker`;
+  } else if (ctx.proxy?.primaryProviders) {
+    proxyDetail = `${ctx.proxy.providerLabel} models are available in OpenCode’s model picker`;
   } else if (ctx.proxy?.authMode === "provider-key") {
     proxyDetail = `Providers you have signed in to in OpenCode now go through the ${ctx.appName} LLM proxy`;
   } else if (ctx.proxy) {

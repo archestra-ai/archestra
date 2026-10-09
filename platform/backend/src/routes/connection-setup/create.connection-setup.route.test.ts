@@ -2,6 +2,8 @@ import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { CONNECTION_SETUP_MAX_SKILLS, type User } from "@/types";
 
@@ -659,6 +661,84 @@ describe("POST /api/connection-setups", () => {
     });
     expect(wrongClient.statusCode).toBe(400);
     expect(wrongClient.json().error.message).toContain("copilot-cli");
+  });
+
+  test.for([
+    "bedrock",
+    "vllm",
+    "azure",
+  ] as const)("OpenCode virtual key installs %s models without leaking other mappings", async (provider, {
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret();
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    // Reuse a personal connection key that already has another provider.
+    const previous = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "codex",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "openai",
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(previous.statusCode).toBe(200);
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider,
+      isPrimary: false,
+      baseUrl: "https://models.example/v1",
+    });
+    const model = await ModelModel.create({
+      provider,
+      modelId: "example/coder",
+      externalId: `${provider}-coder`,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        provider,
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(
+      await VirtualApiKeyModel.findById(setup?.virtualApiKeyId as string),
+    ).toMatchObject({
+      authorId: user.id,
+      scope: "personal",
+      keyType: "standard",
+    });
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(
+        setup?.virtualApiKeyId as string,
+      ),
+    ).toHaveLength(2);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${rawToken}`,
+    });
+    expect(script.statusCode).toBe(200);
+    expect(script.body).toContain(`"archestra-${provider}"`);
+    expect(script.body).toContain(`"wireId":"${provider}:example/coder"`);
+    expect(script.body).not.toContain('"archestra-openai"');
+    expect(script.body).toContain("opencode-primary-state.json");
+    expect(script.body).toContain("before model-provider setup");
   });
 
   test("rejects OpenCode providers without a verified passthrough wire", async ({

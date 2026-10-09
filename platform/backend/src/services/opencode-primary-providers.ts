@@ -1,4 +1,8 @@
-import { providerDisplayNames } from "@archestra/shared";
+import {
+  PROVIDERS_REQUIRING_BASE_URL,
+  providerDisplayNames,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { OPENCODE_PRIMARY_PROVIDERS } from "@archestra/shared/opencode-provider-routes";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
@@ -63,20 +67,42 @@ export async function ensureOpenCodePrimaryKey(params: UserContext) {
   return { virtualApiKeyId: virtualKey.id, provider: keys[0].provider };
 }
 
-/** Recheck access and primary status when the one-time installer is fetched. */
-export async function getOpenCodePrimaryCatalog(
-  params: UserContext & { virtualApiKeyId: string },
+/** Recheck access and, for all-provider setups, primary status at download time. */
+export async function getOpenCodeVirtualKeyCatalog(
+  params: UserContext & {
+    virtualApiKeyId: string;
+    provider?: SupportedProvider;
+  },
 ): Promise<NonNullable<SetupScriptProxySection["primaryProviders"]>> {
   const [keys, mappings] = await Promise.all([
-    getPrimaryKeys(params),
+    params.provider
+      ? LlmProviderApiKeyModel.getAvailableKeysForUser(
+          params.organizationId,
+          params.userId,
+          params.userTeamIds,
+        )
+      : getPrimaryKeys(params),
     VirtualApiKeyModel.getProviderApiKeys(params.virtualApiKeyId),
   ]);
-  const boundIds = new Set(mappings.map((mapping) => mapping.providerApiKeyId));
-  const selected = keys.filter((key) => boundIds.has(key.id));
-  if (!selected.length || selected.length !== mappings.length)
+  // Connection keys can be reused by other clients/providers. Only publish the
+  // provider selected in this setup, never the key's unrelated mappings.
+  const selectedMappings = mappings.filter(
+    (mapping) => !params.provider || mapping.provider === params.provider,
+  );
+  const boundIds = new Set(
+    selectedMappings.map((mapping) => mapping.providerApiKeyId),
+  );
+  const selected = keys.filter(
+    (key) =>
+      boundIds.has(key.id) &&
+      !key.requiresReauthentication &&
+      (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+        Boolean(key.baseUrl?.trim())),
+  );
+  if (!selected.length || selected.length !== selectedMappings.length)
     throw new ApiError(
       410,
-      "Primary provider access changed. Generate a new OpenCode setup command.",
+      "Model provider access changed. Generate a new OpenCode setup command.",
     );
   const models = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(
     selected.map((key) => key.id),

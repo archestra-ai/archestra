@@ -21,7 +21,7 @@ export interface SetupScriptMcpSection {
 }
 
 export interface SetupScriptProxySection {
-  /** Resolved, authorized catalog for OpenCode's all-primary setup. */
+  /** Resolved, authorized catalog for OpenCode's virtual-key setup (all primary or one provider). */
   primaryProviders?: Array<{
     provider: SupportedProvider;
     name: string;

@@ -1612,8 +1612,31 @@ ${script.slice(pluginStart, pluginEnd)}
   });
 
   test.each([
-    1, 2,
-  ])("OpenCode %i primary setup installs a large catalog and every plugin route", async (major) => {
+    {
+      major: 1,
+      authMode: "primary-providers" as const,
+      provider: "vllm" as const,
+    },
+    {
+      major: 2,
+      authMode: "primary-providers" as const,
+      provider: "vllm" as const,
+    },
+    {
+      major: 1,
+      authMode: "virtual-key" as const,
+      provider: "bedrock" as const,
+    },
+    {
+      major: 2,
+      authMode: "virtual-key" as const,
+      provider: "bedrock" as const,
+    },
+  ])("OpenCode $major $authMode setup installs a large catalog and every plugin route", async ({
+    major,
+    authMode,
+    provider,
+  }) => {
     const models = Array.from({ length: 1500 }, (_, i) => ({
       id: `accounts/example/models/coder-${i}`,
       name: `Coding model ${i}`,
@@ -1624,16 +1647,23 @@ ${script.slice(pluginStart, pluginEnd)}
       ...fullContext("opencode", "linux"),
       proxy: {
         ...PROXY,
-        authMode: "primary-providers",
+        authMode,
+        provider,
         primaryProviders: [
-          { provider: "vllm", name: "Custom inference", models },
-          { provider: "openai", name: "My subscription", models: [models[0]] },
+          { provider, name: "Selected inference", models },
+          ...(authMode === "primary-providers"
+            ? [
+                {
+                  provider: "openai" as const,
+                  name: "My subscription",
+                  models: [models[0]],
+                },
+              ]
+            : []),
         ],
       },
     });
-    const start = script.indexOf(
-      'say "Configuring all usable primary providers',
-    );
+    const start = script.indexOf('say "Configuring model providers');
     const end = script.indexOf("\nsay ", start + 5);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
@@ -1665,20 +1695,33 @@ ${script.slice(start, end)}
         ),
       );
       const providers = config[major === 2 ? "providers" : "provider"];
-      expect(Object.keys(providers["archestra-vllm"].models)).toHaveLength(
-        1500,
+      expect(
+        Object.keys(providers[`archestra-${provider}`].models),
+      ).toHaveLength(1500);
+      expect(Object.keys(providers)).toHaveLength(
+        authMode === "primary-providers" ? 2 : 1,
       );
-      expect(providers["archestra-openai"]).toBeDefined();
       const plugin = await readFile(
         path.join(home, ".config/opencode/plugins/archestra-llm-proxy.js"),
         "utf8",
       );
       expect(plugin).toContain(
-        '"archestra-vllm":"https://archestra.example.com/v1/model-router"',
+        `"archestra-${provider}":"https://archestra.example.com/v1/model-router"`,
       );
-      expect(plugin).toContain(
-        '"archestra-openai":"https://archestra.example.com/v1/model-router"',
-      );
+      if (authMode === "primary-providers") {
+        expect(plugin).toContain(
+          '"archestra-openai":"https://archestra.example.com/v1/model-router"',
+        );
+      } else {
+        expect(plugin).not.toContain('"archestra-openai"');
+        expect(
+          providers[`archestra-${provider}`].models[models[0].id],
+        ).toMatchObject(
+          major === 2
+            ? { modelID: `${provider}:${models[0].id}` }
+            : { id: `${provider}:${models[0].id}` },
+        );
+      }
     } finally {
       await rm(home, { recursive: true, force: true });
     }

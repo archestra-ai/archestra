@@ -335,6 +335,8 @@ const organizationsTable = pgTable("organization", {
    */
   connectionShownClientIds: text("connection_shown_client_ids").array(),
 
+  connectionClientOrder: text("connection_client_order").array(),
+
   /** Providers shown in the /connection proxy step. Null = show all. */
   connectionShownProviders: text("connection_shown_providers")
     .$type<SupportedProvider[]>()

@@ -1,9 +1,10 @@
 import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 
 /**
- * What the review step's switches say to include. The copied prompt carries
- * whatever is off; this browser keeps the switches as they were left, per
- * client. A stale or missing entry reads as everything included.
+ * What the "Choose what to include" switches say to include. The copied
+ * command carries whatever is off (the prompt, for generic agents); this
+ * browser keeps the switches as they were left, per client. A stale or missing
+ * entry reads as everything included.
  */
 export interface ConnectChoices {
   tools: boolean;

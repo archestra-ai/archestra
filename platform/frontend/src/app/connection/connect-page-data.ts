@@ -9,7 +9,6 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import {
-  buildConnectionPrompt,
   CONNECT_SETUP_PARTS,
   INSTALLER_CLIENT_IDS,
 } from "@archestra/shared/connection-setup";
@@ -73,8 +72,9 @@ export interface ConnectPageData {
   revalidating: boolean;
   /** Every app the admin shows on the page ("generic" = Any client, always last). */
   clients: ConnectClient[];
-  /** The handful of apps with first-class setup, for hero rows and pickers. */
+  /** Apps offered as tiles, in the admin order or the default installer order. */
   featuredClients: ConnectClient[];
+  hasClientOrder: boolean;
   /** The app the admin picks first, when set. */
   defaultClientId: string | null;
   /** The instance's configured name ("Archestra" unless white-labeled). */
@@ -119,18 +119,18 @@ export interface ConnectPageData {
   /** What connecting this client would create. */
   footprintFor: (client: ConnectClient) => ConnectFootprint;
   /**
-   * The connect prompt, carrying what the user left out: `exclude=` for apps
-   * with an installer, the setup/gateway/base params for other agents. null
-   * when nothing is left to set up.
+   * The connect prompt for agents without an installer, carrying what the
+   * user left out as connect.md's gateway/exclude/base params. null when
+   * nothing is left to set up, and for apps with an installer.
    */
   connectPrompt: (
     client: ConnectClient,
     choices: ConnectChoices,
   ) => string | null;
   /**
-   * The terminal command that runs the public installer for an app with one
-   * (the same installer the prompt has the agent run), carrying what the user
-   * left out. PowerShell on Windows, a POSIX shell elsewhere.
+   * The terminal command that runs the public installer for an app with one,
+   * carrying what the user left out. PowerShell on Windows, a POSIX shell
+   * elsewhere.
    */
   installerCommand: (
     client: ConnectClient,
@@ -232,12 +232,16 @@ export function useConnectPageData(): ConnectPageData {
   const baseUrl = useConnectionBaseUrl(org?.connectionBaseUrls);
 
   const clients = useMemo(
-    () => visibleClients(org?.connectionShownClientIds),
-    [org?.connectionShownClientIds],
+    () =>
+      visibleClients(org?.connectionShownClientIds, org?.connectionClientOrder),
+    [org?.connectionShownClientIds, org?.connectionClientOrder],
   );
-  const featuredClients = INSTALLER_CLIENT_IDS.map((id) =>
-    clients.find((c) => c.id === id),
-  ).filter((c): c is ConnectClient => !!c);
+  const hasClientOrder = !!org?.connectionClientOrder?.length;
+  const featuredClients = hasClientOrder
+    ? clients.filter((client) => client.id !== "generic")
+    : INSTALLER_CLIENT_IDS.map((id) => clients.find((c) => c.id === id)).filter(
+        (c): c is ConnectClient => !!c,
+      );
 
   const servers = useMemo<ConnectServer[]>(
     () =>
@@ -308,6 +312,7 @@ export function useConnectPageData(): ConnectPageData {
     revalidating: orgQuery.isFetching,
     clients,
     featuredClients,
+    hasClientOrder,
     defaultClientId: org?.connectionDefaultClientId ?? null,
     appName,
     gateway,
@@ -339,16 +344,10 @@ export function useConnectPageData(): ConnectPageData {
     canManage: canManage === true,
     footprintFor: () => footprint,
     connectPrompt: (client, choices) => {
+      // Apps with an installer run it from the terminal instead.
+      if (!usesGenericInstructions(client)) return null;
       const parts = partsFor(client);
       const on = (part: keyof ConnectChoices) => parts[part] && choices[part];
-      if (!usesGenericInstructions(client)) {
-        return buildConnectionPrompt({
-          origin,
-          clientId: client.id,
-          label: client.label,
-          exclude: CONNECT_SETUP_PARTS.filter((part) => !choices[part]),
-        });
-      }
       // Other agents: connect.md?client=generic checks what the app supports
       // and reads what to leave out from these params (no plugins there).
       const exclude = GENERIC_PARTS.filter((part) => !on(part));

@@ -1,10 +1,12 @@
-import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
   CreateLimit,
+  CredentialSpendCap,
+  CredentialSpendCapInput,
   LabelWithDetails,
   Limit,
   LimitCleanupInterval,
@@ -13,6 +15,7 @@ import type {
   Model,
   UpdateLimit,
 } from "@/types";
+import { LLM_OAUTH_CLIENT_METADATA_TYPE } from "@/types/llm-oauth-client";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
@@ -361,6 +364,123 @@ class LimitModel {
       .where(inArray(schema.limitsTable.id, ids))
       .returning({ id: schema.limitsTable.id });
     return deleted.map(({ id }) => id);
+  }
+
+  /**
+   * The spend cap of each credential: its oldest all-models `token_cost`
+   * limit, with the billed spend of the current window. Other limits on the
+   * same credential (model-scoped ones made on the limits page) are left to
+   * that page.
+   */
+  static async findSpendCaps(params: {
+    entityType: Extract<LimitEntityType, "virtual_key" | "llm_oauth_client">;
+    entityIds: string[];
+  }): Promise<Map<string, CredentialSpendCap>> {
+    if (params.entityIds.length === 0) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.limitsTable)
+      .where(
+        and(
+          eq(schema.limitsTable.entityType, params.entityType),
+          inArray(schema.limitsTable.entityId, params.entityIds),
+          eq(schema.limitsTable.limitType, "token_cost"),
+          isNull(schema.limitsTable.model),
+        ),
+      )
+      .orderBy(schema.limitsTable.createdAt, schema.limitsTable.id);
+    const capRows = new Map<string, Limit>();
+    for (const row of rows) {
+      if (!capRows.has(row.entityId)) capRows.set(row.entityId, row as Limit);
+    }
+    if (capRows.size === 0) return new Map();
+
+    const usages = await db
+      .select()
+      .from(schema.limitModelUsageTable)
+      .where(
+        inArray(
+          schema.limitModelUsageTable.limitId,
+          [...capRows.values()].map((row) => row.id),
+        ),
+      );
+    const usagesByLimitId = new Map<string, LimitModelUsageRecord[]>();
+    for (const usage of usages) {
+      const list = usagesByLimitId.get(usage.limitId) ?? [];
+      list.push(usage);
+      usagesByLimitId.set(usage.limitId, list);
+    }
+    const pricing = await ModelModel.findByModelIdsOnly([
+      ...new Set(usages.map((usage) => usage.model)),
+    ]);
+
+    const caps = new Map<string, CredentialSpendCap>();
+    for (const [entityId, row] of capRows) {
+      caps.set(entityId, {
+        limitId: row.id,
+        limitValue: row.limitValue,
+        cleanupInterval: row.cleanupInterval ?? DEFAULT_LIMIT_CLEANUP_INTERVAL,
+        currentUsage: computeModelUsageCosts(
+          usagesByLimitId.get(row.id) ?? [],
+          pricing,
+        ).cost,
+      });
+    }
+    return caps;
+  }
+
+  /**
+   * Create, change, or remove a credential's spend cap (see
+   * {@link LimitModel.findSpendCaps}). `null` removes it.
+   */
+  static async setSpendCap(params: {
+    entityType: Extract<LimitEntityType, "virtual_key" | "llm_oauth_client">;
+    entityId: string;
+    cap: CredentialSpendCapInput | null;
+  }): Promise<void> {
+    const existing = (
+      await LimitModel.findSpendCaps({
+        entityType: params.entityType,
+        entityIds: [params.entityId],
+      })
+    ).get(params.entityId);
+
+    if (!params.cap) {
+      if (existing) await LimitModel.delete(existing.limitId);
+      return;
+    }
+    if (!existing) {
+      await LimitModel.create({
+        entityType: params.entityType,
+        entityId: params.entityId,
+        limitType: "token_cost",
+        limitValue: params.cap.limitValue,
+        cleanupInterval: params.cap.cleanupInterval,
+        model: null,
+      });
+      return;
+    }
+    if (
+      existing.limitValue !== params.cap.limitValue ||
+      existing.cleanupInterval !== params.cap.cleanupInterval
+    ) {
+      await LimitModel.patch(existing.limitId, params.cap);
+    }
+  }
+
+  /** Remove every limit set on one entity, e.g. a deleted credential. */
+  static async deleteForEntity(params: {
+    entityType: LimitEntityType;
+    entityId: string;
+  }): Promise<void> {
+    await db
+      .delete(schema.limitsTable)
+      .where(
+        and(
+          eq(schema.limitsTable.entityType, params.entityType),
+          eq(schema.limitsTable.entityId, params.entityId),
+        ),
+      );
   }
 
   /**
@@ -868,6 +988,19 @@ class LimitModel {
           .limit(1);
         return Boolean(hit);
       }
+      case "llm_oauth_client": {
+        const [hit] = await db
+          .select({ id: schema.oauthClientsTable.id })
+          .from(schema.oauthClientsTable)
+          .where(
+            and(
+              eq(schema.oauthClientsTable.id, entityId),
+              llmOauthClientInOrganization(organizationId),
+            ),
+          )
+          .limit(1);
+        return Boolean(hit);
+      }
     }
   }
 
@@ -928,18 +1061,31 @@ export class LimitValidationService {
     /** The agent row this request already read. */
     agent?: { environmentId: string | null };
     teamSource?: AgentTeamSource;
+    /** LLM OAuth client the request authenticated as, for its spend cap. */
+    llmOauthClientId?: string;
+    /**
+     * Team the calling credential is billed to. It replaces the agent's teams
+     * for team limits, and the caller's personal and default user limits do
+     * not apply: the team pays.
+     */
+    billingTeamId?: string;
   }): Promise<null | LimitViolationResponse> {
-    const { agentId, userId, virtualKeyId, passthroughVirtualKeyId } = params;
+    const { agentId, virtualKeyId, passthroughVirtualKeyId, llmOauthClientId } =
+      params;
+    const userId = params.billingTeamId ? undefined : params.userId;
 
     try {
       logger.debug(
         `[LimitValidation] Starting limit check for agent: ${agentId}`,
       );
 
-      // Get agent's teams to cleanup and check team and organization limits
-      const agentTeamIds = params.teamSource
-        ? await params.teamSource.agentTeamIds(agentId)
-        : await AgentTeamModel.getTeamsForAgent(agentId);
+      // Get the teams to cleanup and check team and organization limits: the
+      // credential's billing team when it has one, otherwise the agent's teams.
+      const agentTeamIds = params.billingTeamId
+        ? [params.billingTeamId]
+        : params.teamSource
+          ? await params.teamSource.agentTeamIds(agentId)
+          : await AgentTeamModel.getTeamsForAgent(agentId);
       logger.debug(
         `[LimitValidation] Agent ${agentId} belongs to teams: ${agentTeamIds.join(", ")}`,
       );
@@ -970,6 +1116,9 @@ export class LimitValidationService {
       };
       if (virtualKeyId) {
         entities.virtual_key = virtualKeyId;
+      }
+      if (llmOauthClientId) {
+        entities.llm_oauth_client = llmOauthClientId;
       }
       if (userId) {
         entities.user = userId;
@@ -1013,6 +1162,12 @@ export class LimitValidationService {
         entitiesToCheck.push({
           entityType: "virtual_key",
           entityId: virtualKeyId,
+        });
+      }
+      if (llmOauthClientId) {
+        entitiesToCheck.push({
+          entityType: "llm_oauth_client",
+          entityId: llmOauthClientId,
         });
       }
       if (userId) {
@@ -1073,6 +1228,21 @@ export class LimitValidationService {
         logger.debug(
           `[LimitValidation] Virtual-key-level limits OK for: ${virtualKeyId}`,
         );
+      }
+
+      if (llmOauthClientId) {
+        const clientLimitViolation =
+          LimitValidationService.evaluateEntityLimits(
+            "llm_oauth_client",
+            llmOauthClientId,
+            prefetch,
+          );
+        if (clientLimitViolation) {
+          logger.info(
+            `[LimitValidation] BLOCKED by OAuth-client-level limit for: ${llmOauthClientId}`,
+          );
+          return clientLimitViolation;
+        }
       }
 
       if (userId) {
@@ -1506,7 +1676,21 @@ export function buildOrganizationLimitScopeCondition(
           AND ${schema.environmentsTable.organizationId} = ${organizationId}
       )`,
     ),
+    and(
+      eq(schema.limitsTable.entityType, "llm_oauth_client"),
+      sql`EXISTS (
+        SELECT 1 FROM ${schema.oauthClientsTable}
+        WHERE ${schema.oauthClientsTable.id} = ${schema.limitsTable.entityId}
+          AND ${llmOauthClientInOrganization(organizationId)}
+      )`,
+    ),
   ) as SQL;
+}
+
+/** LLM OAuth clients live in the shared `oauth_client` table, scoped by metadata. */
+function llmOauthClientInOrganization(organizationId: string): SQL {
+  return sql`(${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}
+    AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${organizationId})`;
 }
 
 function buildCleanupDueCondition(): SQL {
@@ -1634,6 +1818,8 @@ async function getDefaultUserLimitUsage(params: {
     // the organization $0 and must not burn down default user limits — the
     // same rule updateUsageAfterInteraction applies to explicit limits.
     eq(schema.interactionsTable.billingMode, "metered"),
+    // Team-billed traffic is charged to the team, not to the caller.
+    isNull(schema.interactionsTable.billingTeamId),
     buildUsagePeriodStartCondition(params.cleanupInterval),
   ];
 
@@ -1792,6 +1978,7 @@ ${footer}`;
 
 /** Render a limit's entity type for human display, e.g. "virtual_key" -> "virtual key-level". */
 function formatLimitEntityType(entityType: LimitEntityType): string {
+  if (entityType === "llm_oauth_client") return "OAuth client-level";
   return `${entityType.replace(/_/g, " ")}-level`;
 }
 

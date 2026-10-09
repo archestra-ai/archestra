@@ -40,11 +40,6 @@ vi.mock("@/lib/connection-setup.query", () => ({
     mutateAsync: createSetupMock,
     isPending: false,
   }),
-  useConnectionPromptSession: (clientId?: string) => ({
-    data: clientId ? { expiresAt: "2099-01-01" } : undefined,
-    isError: false,
-    refetch: vi.fn(),
-  }),
 }));
 
 vi.mock("@/lib/skills/skill.query", () => ({

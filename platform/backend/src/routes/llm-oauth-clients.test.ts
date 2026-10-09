@@ -496,4 +496,60 @@ describe("llmOauthClientsRoutes", () => {
     );
     expect([...seen].sort()).toEqual(["page-a", "page-b", "page-c"]);
   });
+
+  test("bills a client-credentials client to a team and caps the whole client", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeTeam,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    const team = await makeTeam(organizationId, user.id, { name: "Platform" });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Batch jobs",
+        providerApiKeys: [{ provider: "openai", providerApiKeyId: apiKey.id }],
+        billingTeamId: team.id,
+        spendCap: { limitValue: 500, cleanupInterval: "calendar_month" },
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json()).toMatchObject({
+      billingTeam: { id: team.id, name: "Platform" },
+      spendCap: { limitValue: 500, currentUsage: 0 },
+    });
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/llm-oauth-clients",
+    });
+    expect(listed.json().data[0]).toMatchObject({
+      billingTeam: { id: team.id },
+      spendCap: { limitValue: 500 },
+    });
+  });
+
+  test("refuses a billing team on an authorization_code client", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-oauth-clients",
+      payload: {
+        name: "Portal",
+        grantType: "authorization_code",
+        redirectUris: ["https://portal.example.com/callback"],
+        billingTeamId: team.id,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
 });

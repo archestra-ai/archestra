@@ -167,6 +167,9 @@ export function ResourceAccessPicker({
   const activePreset = presets.find(
     (preset) => preset.value === permission && !preset.disabled,
   );
+  const organizationHasAccess = existing.has(
+    subjectKey({ type: "organization", id: "*" }),
+  );
   const label =
     categories.find((item) => item.type === category)?.label ??
     "Everyone in the organization";
@@ -294,15 +297,22 @@ export function ResourceAccessPicker({
           </div>
           <Button
             type="button"
-            variant="ghost"
-            className="h-auto w-full justify-start gap-3 whitespace-normal px-3 py-3"
-            disabled={existing.has(
-              subjectKey({ type: "organization", id: "*" }),
-            )}
+            variant="outline"
+            className="h-auto w-full justify-start gap-4 whitespace-normal p-5 text-left"
+            disabled={organizationHasAccess}
             onClick={() => chooseCategory("organization")}
           >
-            <Building2 className="size-5 text-muted-foreground" />
-            <span>Everyone in the organization</span>
+            <Building2 className="size-6 text-muted-foreground" />
+            <span className="space-y-1">
+              <span className="block font-medium">
+                Everyone in the organization
+              </span>
+              <span className="block text-xs font-normal text-muted-foreground">
+                {organizationHasAccess
+                  ? "Already has access"
+                  : "Include every current and future member"}
+              </span>
+            </span>
           </Button>
         </div>
       ) : (

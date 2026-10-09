@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1410,6 +1410,15 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
 - **`ARCHESTRA_BROWSER_STREAM_LOG_TAB_SYNC`** - Enables tab-synchronization debug logging for browser streaming.
   - Default: `false`
   - Values: `true` or `false`
+
+## Log Content
+
+Keep prompts and tool data out of the logs while usage, cost, and the audit trail stay complete.
+
+- **`ARCHESTRA_LOGS_CONTENT_MODE`** - What LLM proxy logs, MCP gateway logs, and Guardrails consult records store.
+  - Default: `full`
+  - Values: `full` stores prompts, responses, tool arguments, and tool results. `metadata_only` stores who, when, the model or tool, tokens, cost, and whether the call failed. Any other value stores metadata only.
+  - Applies to records written after a restart. Stored records keep their content.
 
 ## Data Retention
 

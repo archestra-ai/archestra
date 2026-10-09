@@ -61,6 +61,7 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
+import { getDocsSuggestedPrompts } from "@/services/docs-mcp-servers";
 import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
@@ -93,6 +94,7 @@ import {
   PatchAgentActivationSkillPolicySchema,
   RetiredSharingUpdateFieldSchema,
   SelectAgentSchema,
+  SuggestedPromptInputSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
@@ -785,6 +787,35 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       return reply.send(agent);
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/default-suggested-prompts",
+    {
+      schema: {
+        operationId: RouteId.GetAgentDefaultSuggestedPrompts,
+        description:
+          "Suggested prompts the platform offers for an agent that has none " +
+          "of its own. They are not stored on the agent.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.array(SuggestedPromptInputSchema)),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const agent = await requireReadableAgent({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(
+        await getDocsSuggestedPrompts({
+          agent,
+          userId: user.id,
+          organizationId,
+        }),
+      );
     },
   );
 

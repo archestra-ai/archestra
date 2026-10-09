@@ -25,6 +25,7 @@ import { createPaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
+  CredentialBilling,
   InteractionVirtualKey,
   ResourceVisibilityScope,
   SelectVirtualApiKey,
@@ -34,6 +35,7 @@ import type {
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import { VirtualApiKeyLabelModel } from "./entity-labels";
+import LimitModel from "./limit";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
@@ -76,6 +78,7 @@ type VirtualApiKeyAccessContext = {
   keyType: VirtualApiKeyType;
   scope: ResourceVisibilityScope;
   authorId: string | null;
+  billingTeamId: string | null;
   teamIds: string[];
 };
 
@@ -97,6 +100,8 @@ class VirtualApiKeyModel {
     initialPermissionGrants?: ResourcePermissionGrant[];
     /** Publish to the whole organization; for system callers only. */
     publishToOrganization?: boolean;
+    /** Team the key's spend is charged to. */
+    billingTeamId?: string | null;
   }): Promise<{
     virtualKey: SelectVirtualApiKey;
     value: string;
@@ -147,6 +152,7 @@ class VirtualApiKeyModel {
               scope,
               authorId,
               expiresAt: expiresAt ?? null,
+              billingTeamId: params.billingTeamId ?? null,
             },
             userIdField: "authorId",
             transaction: tx,
@@ -217,6 +223,8 @@ class VirtualApiKeyModel {
     authorId: string | null;
     teamIds: string[];
     providerApiKeys: ProviderApiKeyInput[];
+    /** Omit to keep the current billing team. */
+    billingTeamId?: string | null;
   }): Promise<SelectVirtualApiKey | null> {
     const { id, name, expiresAt, scope, authorId, teamIds, providerApiKeys } =
       params;
@@ -229,6 +237,9 @@ class VirtualApiKeyModel {
           expiresAt: expiresAt ?? null,
           scope,
           authorId,
+          ...(params.billingTeamId !== undefined
+            ? { billingTeamId: params.billingTeamId }
+            : {}),
         })
         .where(eq(schema.virtualApiKeysTable.id, id))
         .returning();
@@ -364,6 +375,7 @@ class VirtualApiKeyModel {
           createdByServiceAccountId:
             schema.virtualApiKeysTable.createdByServiceAccountId,
           expiresAt: schema.virtualApiKeysTable.expiresAt,
+          billingTeamId: schema.virtualApiKeysTable.billingTeamId,
           createdAt: schema.virtualApiKeysTable.createdAt,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
         })
@@ -513,6 +525,45 @@ class VirtualApiKeyModel {
   }
 
   /**
+   * The billing team and spend cap of each key. A key's spend cap is its
+   * all-models `token_cost` limit (see {@link LimitModel.findSpendCaps}).
+   */
+  static async getBillingMetadata(
+    keys: Array<{ id: string; billingTeamId: string | null }>,
+  ): Promise<Map<string, CredentialBilling>> {
+    const teamIds = [
+      ...new Set(keys.flatMap((key) => key.billingTeamId ?? [])),
+    ];
+    const [teams, caps] = await Promise.all([
+      teamIds.length > 0
+        ? db
+            .select({
+              id: schema.teamsTable.id,
+              name: schema.teamsTable.name,
+            })
+            .from(schema.teamsTable)
+            .where(inArray(schema.teamsTable.id, teamIds))
+        : [],
+      LimitModel.findSpendCaps({
+        entityType: "virtual_key",
+        entityIds: keys.map((key) => key.id),
+      }),
+    ]);
+    const teamsById = new Map(teams.map((team) => [team.id, team]));
+    return new Map(
+      keys.map((key) => [
+        key.id,
+        {
+          billingTeam: key.billingTeamId
+            ? (teamsById.get(key.billingTeamId) ?? null)
+            : null,
+          spendCap: caps.get(key.id) ?? null,
+        },
+      ]),
+    );
+  }
+
+  /**
    * Find a virtual key by ID with teams, author, and provider key mappings,
    * scoped to an organization.
    */
@@ -525,14 +576,16 @@ class VirtualApiKeyModel {
       return null;
     }
 
-    const [metadata, mappings, labels] = await Promise.all([
+    const [metadata, mappings, labels, billing] = await Promise.all([
       VirtualApiKeyModel.getVisibilityMetadata([id]),
       VirtualApiKeyModel.getProviderApiKeys(id),
       VirtualApiKeyLabelModel.getLabelsFor(id),
+      VirtualApiKeyModel.getBillingMetadata([virtualKey]),
     ]);
 
     return {
       ...virtualKey,
+      ...billingFor(billing, id),
       teams: metadata.teams.get(id) ?? [],
       authorName: metadata.authorName.get(id) ?? null,
       createdBy: await CreatedByModel.resolveOne(
@@ -588,6 +641,7 @@ class VirtualApiKeyModel {
         keyType: schema.virtualApiKeysTable.keyType,
         scope: schema.virtualApiKeysTable.scope,
         authorId: schema.virtualApiKeysTable.authorId,
+        billingTeamId: schema.virtualApiKeysTable.billingTeamId,
         createdByServiceAccountId:
           schema.virtualApiKeysTable.createdByServiceAccountId,
       })
@@ -855,6 +909,7 @@ class VirtualApiKeyModel {
           createdByServiceAccountId:
             schema.virtualApiKeysTable.createdByServiceAccountId,
           expiresAt: schema.virtualApiKeysTable.expiresAt,
+          billingTeamId: schema.virtualApiKeysTable.billingTeamId,
           lastUsedAt: schema.virtualApiKeysTable.lastUsedAt,
           createdAt: schema.virtualApiKeysTable.createdAt,
         })
@@ -870,15 +925,17 @@ class VirtualApiKeyModel {
     ]);
 
     const rowIds = rows.map((row) => row.id);
-    const [metadata, mappings, labelsByKey] = await Promise.all([
+    const [metadata, mappings, labelsByKey, billing] = await Promise.all([
       VirtualApiKeyModel.getVisibilityMetadata(rowIds),
       VirtualApiKeyModel.getProviderApiKeysForVirtualKeys(rowIds),
       VirtualApiKeyLabelModel.getLabelsForMany(rowIds),
+      VirtualApiKeyModel.getBillingMetadata(rows),
     ]);
 
     const data = await CreatedByModel.attach(
       rows.map((row) => ({
         ...row,
+        ...billingFor(billing, row.id),
         teams: metadata.teams.get(row.id) ?? [],
         authorName: metadata.authorName.get(row.id) ?? null,
         providerApiKeys: mappings.get(row.id) ?? [],
@@ -1065,7 +1122,7 @@ class VirtualApiKeyModel {
     const row = await VirtualApiKeyModel.findById(id);
     if (!row || row.organizationId !== organizationId) return null;
 
-    const [teamIds, providerKeyRows] = await Promise.all([
+    const [teamIds, providerKeyRows, spendCaps] = await Promise.all([
       VirtualApiKeyModel.getTeamIdsForVirtualApiKey(id),
       db
         .select({
@@ -1076,7 +1133,9 @@ class VirtualApiKeyModel {
         .where(
           eq(schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId, id),
         ),
+      LimitModel.findSpendCaps({ entityType: "virtual_key", entityIds: [id] }),
     ]);
+    const spendCap = spendCaps.get(id);
 
     return {
       id: row.id,
@@ -1089,6 +1148,13 @@ class VirtualApiKeyModel {
       providerApiKeyIds: providerKeyRows.map((r) => r.providerApiKeyId).sort(),
       tokenStart: row.tokenStart,
       expiresAt: row.expiresAt?.toISOString() ?? null,
+      billingTeamId: row.billingTeamId,
+      spendCap: spendCap
+        ? {
+            limitValue: spendCap.limitValue,
+            cleanupInterval: spendCap.cleanupInterval,
+          }
+        : null,
       createdAt: row.createdAt.toISOString(),
     };
   }
@@ -1335,4 +1401,11 @@ async function syncProviderApiKeys(params: {
       providerApiKeyId: mapping.providerApiKeyId,
     })),
   );
+}
+
+function billingFor(
+  billing: Map<string, CredentialBilling>,
+  id: string,
+): CredentialBilling {
+  return billing.get(id) ?? { billingTeam: null, spendCap: null };
 }

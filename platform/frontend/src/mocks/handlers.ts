@@ -418,6 +418,7 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
+  ...getJson("/api/agents/:id/default-suggested-prompts", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/:id/a2a-delegations", []),
   ...getJson("/api/a2a/remote-agents", []),

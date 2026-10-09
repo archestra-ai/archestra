@@ -2,10 +2,187 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.34"
+    "version": "1.4.0-rc.35"
   },
   "components": {
     "schemas": {
+      "LogContentNotStoredInput": {
+        "type": "object",
+        "properties": {
+          "__redacted": {
+            "type": "string",
+            "enum": [
+              "log_content_policy"
+            ]
+          },
+          "isError": {
+            "type": "boolean"
+          },
+          "errorType": {
+            "type": "string",
+            "enum": [
+              "auth_required",
+              "auth_expired",
+              "assigned_credential_unavailable",
+              "policy_denied",
+              "tool_state",
+              "cancelled",
+              "generic"
+            ]
+          },
+          "archestraExecutedAs": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "personal"
+                    ]
+                  },
+                  "ownerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "ownerName": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "ownerUserId",
+                  "ownerName"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "team"
+                    ]
+                  },
+                  "teamId": {
+                    "type": "string"
+                  },
+                  "teamName": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "teamId",
+                  "teamName"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "org"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "idp_exchange"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "idp_passthrough"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "caller_headers"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "platform"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "__redacted"
+        ]
+      },
       "TextSearchLanguageInput": {
         "type": "string",
         "enum": [
@@ -20819,6 +20996,184 @@
           "teams",
           "createdByUserName"
         ]
+      },
+      "LogContentNotStored": {
+        "type": "object",
+        "properties": {
+          "__redacted": {
+            "type": "string",
+            "enum": [
+              "log_content_policy"
+            ]
+          },
+          "isError": {
+            "type": "boolean"
+          },
+          "errorType": {
+            "type": "string",
+            "enum": [
+              "auth_required",
+              "auth_expired",
+              "assigned_credential_unavailable",
+              "policy_denied",
+              "tool_state",
+              "cancelled",
+              "generic"
+            ]
+          },
+          "archestraExecutedAs": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "personal"
+                    ]
+                  },
+                  "ownerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "ownerName": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "ownerUserId",
+                  "ownerName"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "team"
+                    ]
+                  },
+                  "teamId": {
+                    "type": "string"
+                  },
+                  "teamName": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "teamId",
+                  "teamName"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "org"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "idp_exchange"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "idp_passthrough"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "caller_headers"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "platform"
+                    ]
+                  },
+                  "callerUserId": {
+                    "nullable": true,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "callerUserId"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "__redacted"
+        ],
+        "additionalProperties": false
       },
       "TextSearchLanguage": {
         "type": "string",
@@ -60173,6 +60528,292 @@
         "x-required-permissions": {
           "kind": "dynamic",
           "note": "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
+          "permissions": []
+        }
+      }
+    },
+    "/api/agents/{id}/default-suggested-prompts": {
+      "get": {
+        "operationId": "getAgentDefaultSuggestedPrompts",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Suggested prompts the platform offers for an agent that has none of its own. They are not stored on the agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "summaryTitle": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 50
+                      },
+                      "prompt": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 5000
+                      }
+                    },
+                    "required": [
+                      "summaryTitle",
+                      "prompt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
           "permissions": []
         }
       }
@@ -150057,300 +150698,6 @@
         }
       }
     },
-    "/api/connection-setups/prompt-session": {
-      "post": {
-        "operationId": "beginConnectionPromptSession",
-        "tags": [
-          "Connection Setups"
-        ],
-        "description": "Begin a 10-minute connection setup window for the signed-in user without changing the prompt.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "clientId": {
-                    "type": "string",
-                    "enum": [
-                      "claude-code",
-                      "cursor",
-                      "codex",
-                      "claude-desktop",
-                      "copilot-cli",
-                      "opencode"
-                    ]
-                  },
-                  "origin": {
-                    "type": "string",
-                    "format": "uri"
-                  }
-                },
-                "required": [
-                  "clientId",
-                  "origin"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "expiresAt": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "expiresAt"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
-        }
-      }
-    },
     "/v1/health": {
       "get": {
         "operationId": "getConnectionHealth",
@@ -173605,6 +173952,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -173648,6 +173999,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -173667,7 +174021,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -174097,6 +174452,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -174239,6 +174595,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -174889,6 +175249,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -174908,7 +175271,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -175338,6 +175702,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -175480,6 +175845,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -175657,6 +176026,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -175676,7 +176048,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -176095,6 +176468,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -176237,6 +176611,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -176414,6 +176792,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -176433,7 +176814,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -176852,6 +177234,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -176994,6 +177377,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -177171,6 +177558,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -177190,7 +177580,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -177609,6 +178000,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -177751,6 +178143,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -177928,6 +178324,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -177947,7 +178346,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -178366,6 +178766,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -178511,6 +178912,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -178554,6 +178959,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -178573,7 +178981,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -179003,6 +179412,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -179148,6 +179558,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -179191,6 +179605,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -179210,7 +179627,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -179640,6 +180058,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -179782,6 +180201,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -181882,6 +182305,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -181901,7 +182327,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -182331,6 +182758,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -182473,6 +182901,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -185309,6 +185741,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -185328,7 +185763,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -185758,6 +186194,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -185903,6 +186340,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -185946,6 +186387,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -185965,7 +186409,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -186395,6 +186840,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -186540,6 +186986,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -186583,6 +187033,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -186602,7 +187055,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -187032,6 +187486,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -187177,6 +187632,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -187220,6 +187679,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -187239,7 +187701,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -187669,6 +188132,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -187814,6 +188278,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -187857,6 +188325,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -187876,7 +188347,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -188306,6 +188778,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -188451,6 +188924,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -188494,6 +188971,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -188513,7 +188993,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -188943,6 +189424,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -189088,6 +189570,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -189131,6 +189617,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -189150,7 +189639,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -189580,6 +190070,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -189725,6 +190216,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -189768,6 +190263,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -189787,7 +190285,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -190217,6 +190716,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -190362,6 +190862,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -190405,6 +190909,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -190424,7 +190931,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -190854,6 +191362,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -190999,6 +191508,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -191042,6 +191555,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -191061,7 +191577,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -191491,6 +192008,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -191636,6 +192154,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -191679,6 +192201,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -191698,7 +192223,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -192128,6 +192654,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -192273,6 +192800,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -192316,6 +192847,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -192335,7 +192869,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -192765,6 +193300,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -192910,6 +193446,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -192953,6 +193493,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -192972,7 +193515,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -193402,6 +193946,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -193544,6 +194089,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -195992,6 +196541,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -196011,7 +196563,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -196441,6 +196994,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -196583,6 +197137,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -199026,6 +199584,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -199045,7 +199606,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -199475,6 +200037,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -199617,6 +200180,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -202065,6 +202632,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -202084,7 +202654,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -202514,6 +203085,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -202659,6 +203231,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -202702,6 +203278,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -202721,7 +203300,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -203151,6 +203731,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -203293,6 +203874,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -203575,6 +204160,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -203594,7 +204182,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -204024,6 +204613,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -204166,6 +204756,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -204634,6 +205228,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -204653,7 +205250,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -205083,6 +205681,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -205225,6 +205824,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -205693,6 +206296,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -205712,7 +206318,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -206142,6 +206749,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -206284,6 +206892,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -206743,6 +207355,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -206762,7 +207377,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -207192,6 +207808,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -207337,6 +207954,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -207380,6 +208001,9 @@
                                   {
                                     "anyOf": [
                                       {
+                                        "$ref": "#/components/schemas/LogContentNotStored"
+                                      },
+                                      {
                                         "type": "object",
                                         "properties": {
                                           "__encryptedChatSealed": {
@@ -207399,7 +208023,8 @@
                                             "enum": [
                                               "encrypted_chat",
                                               "locked_chat",
-                                              "incognito"
+                                              "incognito",
+                                              "log_content_policy"
                                             ]
                                           }
                                         },
@@ -207822,6 +208447,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -209096,6 +209722,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "contentNotStored": {
+                            "type": "boolean",
+                            "description": "True when the session's latest turn was logged under the Metadata only Log Content mode, so it has no message preview."
+                          },
                           "conversationTitle": {
                             "nullable": true,
                             "type": "string"
@@ -209137,6 +209767,7 @@
                           "lastUserMessagePreview",
                           "lastInteractionId",
                           "lastInteractionType",
+                          "contentNotStored",
                           "conversationTitle",
                           "claudeCodeTitle"
                         ],
@@ -210399,6 +211030,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -210442,6 +211077,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -210461,7 +211099,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -210891,6 +211530,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -211033,6 +211673,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -211683,6 +212327,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -211702,7 +212349,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -212132,6 +212780,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -212274,6 +212923,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -212451,6 +213104,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -212470,7 +213126,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -212889,6 +213546,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -213031,6 +213689,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -213208,6 +213870,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -213227,7 +213892,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -213646,6 +214312,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -213788,6 +214455,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -213965,6 +214636,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -213984,7 +214658,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -214403,6 +215078,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -214545,6 +215221,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -214722,6 +215402,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -214741,7 +215424,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -215160,6 +215844,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -215305,6 +215990,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -215348,6 +216037,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -215367,7 +216059,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -215797,6 +216490,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -215942,6 +216636,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -215985,6 +216683,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -216004,7 +216705,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -216434,6 +217136,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -216576,6 +217279,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -218676,6 +219383,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -218695,7 +219405,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -219125,6 +219836,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -219267,6 +219979,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -222103,6 +222819,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -222122,7 +222841,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -222552,6 +223272,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -222697,6 +223418,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -222740,6 +223465,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -222759,7 +223487,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -223189,6 +223918,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -223334,6 +224064,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -223377,6 +224111,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -223396,7 +224133,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -223826,6 +224564,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -223971,6 +224710,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -224014,6 +224757,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -224033,7 +224779,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -224463,6 +225210,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -224608,6 +225356,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -224651,6 +225403,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -224670,7 +225425,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -225100,6 +225856,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -225245,6 +226002,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -225288,6 +226049,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -225307,7 +226071,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -225737,6 +226502,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -225882,6 +226648,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -225925,6 +226695,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -225944,7 +226717,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -226374,6 +227148,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -226519,6 +227294,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -226562,6 +227341,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -226581,7 +227363,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -227011,6 +227794,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -227156,6 +227940,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -227199,6 +227987,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -227218,7 +228009,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -227648,6 +228440,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -227793,6 +228586,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -227836,6 +228633,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -227855,7 +228655,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -228285,6 +229086,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -228430,6 +229232,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -228473,6 +229279,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -228492,7 +229301,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -228922,6 +229732,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -229067,6 +229878,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -229110,6 +229925,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -229129,7 +229947,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -229559,6 +230378,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -229704,6 +230524,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -229747,6 +230571,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -229766,7 +230593,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -230196,6 +231024,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -230338,6 +231167,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -232786,6 +233619,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -232805,7 +233641,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -233235,6 +234072,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -233377,6 +234215,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -235820,6 +236662,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -235839,7 +236684,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -236269,6 +237115,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -236411,6 +237258,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -238859,6 +239710,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -238878,7 +239732,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -239308,6 +240163,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -239453,6 +240309,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -239496,6 +240356,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -239515,7 +240378,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -239945,6 +240809,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -240087,6 +240952,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -240369,6 +241238,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -240388,7 +241260,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -240818,6 +241691,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -240960,6 +241834,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -241428,6 +242306,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -241447,7 +242328,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -241877,6 +242759,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -242019,6 +242902,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -242487,6 +243374,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -242506,7 +243396,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -242936,6 +243827,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -243078,6 +243970,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -243537,6 +244433,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -243556,7 +244455,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -243986,6 +244886,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -244131,6 +245032,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -244174,6 +245079,9 @@
                             {
                               "anyOf": [
                                 {
+                                  "$ref": "#/components/schemas/LogContentNotStored"
+                                },
+                                {
                                   "type": "object",
                                   "properties": {
                                     "__encryptedChatSealed": {
@@ -244193,7 +245101,8 @@
                                       "enum": [
                                         "encrypted_chat",
                                         "locked_chat",
-                                        "incognito"
+                                        "incognito",
+                                        "log_content_policy"
                                       ]
                                     }
                                   },
@@ -244616,6 +245525,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -288397,7 +289307,8 @@
                 "agent",
                 "user",
                 "virtual_key",
-                "environment"
+                "environment",
+                "llm_oauth_client"
               ]
             },
             "in": "query",
@@ -288458,7 +289369,8 @@
                           "agent",
                           "user",
                           "virtual_key",
-                          "environment"
+                          "environment",
+                          "llm_oauth_client"
                         ]
                       },
                       "entityId": {
@@ -288856,7 +289768,8 @@
                       "agent",
                       "user",
                       "virtual_key",
-                      "environment"
+                      "environment",
+                      "llm_oauth_client"
                     ]
                   },
                   "entityId": {
@@ -288971,7 +289884,8 @@
                         "agent",
                         "user",
                         "virtual_key",
-                        "environment"
+                        "environment",
+                        "llm_oauth_client"
                       ]
                     },
                     "entityId": {
@@ -289329,7 +290243,8 @@
                         "agent",
                         "user",
                         "virtual_key",
-                        "environment"
+                        "environment",
+                        "llm_oauth_client"
                       ]
                     },
                     "entityId": {
@@ -289833,7 +290748,8 @@
                         "agent",
                         "user",
                         "virtual_key",
-                        "environment"
+                        "environment",
+                        "llm_oauth_client"
                       ]
                     },
                     "entityId": {
@@ -294679,6 +295595,61 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "billingTeam": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "spendCap": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "limitValue": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "cleanupInterval": {
+                                "type": "string",
+                                "enum": [
+                                  "1h",
+                                  "12h",
+                                  "24h",
+                                  "1w",
+                                  "1m",
+                                  "calendar_day",
+                                  "calendar_week_sunday",
+                                  "calendar_week_monday",
+                                  "calendar_month"
+                                ]
+                              },
+                              "limitId": {
+                                "type": "string"
+                              },
+                              "currentUsage": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "limitValue",
+                              "cleanupInterval",
+                              "limitId",
+                              "currentUsage"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -294695,7 +295666,9 @@
                           "createdBy",
                           "labels",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "billingTeam",
+                          "spendCap"
                         ],
                         "additionalProperties": false
                       }
@@ -295095,6 +296068,41 @@
                       ]
                     }
                   },
+                  "billingTeamId": {
+                    "description": "Team a client_credentials client's spend is charged to. Omit to keep it; null stops billing a team. Signed-in users of an authorization_code client pay for themselves.",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "spendCap": {
+                    "description": "Spend cap for the whole client, stored as a token_cost limit on it. Omit to keep it; null removes it.",
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "limitValue": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "cleanupInterval": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m",
+                          "calendar_day",
+                          "calendar_week_sunday",
+                          "calendar_week_monday",
+                          "calendar_month"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "limitValue",
+                      "cleanupInterval"
+                    ]
+                  },
                   "initialGrants": {
                     "description": "Who else starts with access, beside the creator who always gets full access.",
                     "maxItems": 200,
@@ -295400,6 +296408,61 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
+                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -295419,6 +296482,8 @@
                     "labels",
                     "createdAt",
                     "updatedAt",
+                    "billingTeam",
+                    "spendCap",
                     "clientSecret"
                   ],
                   "additionalProperties": false
@@ -295773,6 +296838,41 @@
                         "value"
                       ]
                     }
+                  },
+                  "billingTeamId": {
+                    "description": "Team a client_credentials client's spend is charged to. Omit to keep it; null stops billing a team. Signed-in users of an authorization_code client pay for themselves.",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "spendCap": {
+                    "description": "Spend cap for the whole client, stored as a token_cost limit on it. Omit to keep it; null removes it.",
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "limitValue": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "cleanupInterval": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m",
+                          "calendar_day",
+                          "calendar_week_sunday",
+                          "calendar_week_monday",
+                          "calendar_month"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "limitValue",
+                      "cleanupInterval"
+                    ]
                   }
                 },
                 "required": [
@@ -295956,6 +297056,61 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -295972,7 +297127,9 @@
                     "createdBy",
                     "labels",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "billingTeam",
+                    "spendCap"
                   ],
                   "additionalProperties": false
                 }
@@ -296667,6 +297824,61 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
+                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -296686,6 +297898,8 @@
                     "labels",
                     "createdAt",
                     "updatedAt",
+                    "billingTeam",
+                    "spendCap",
                     "clientSecret"
                   ],
                   "additionalProperties": false
@@ -312763,7 +313977,8 @@
                                         "enum": [
                                           "encrypted_chat",
                                           "locked_chat",
-                                          "incognito"
+                                          "incognito",
+                                          "log_content_policy"
                                         ]
                                       }
                                     },
@@ -313229,7 +314444,8 @@
                                   "enum": [
                                     "encrypted_chat",
                                     "locked_chat",
-                                    "incognito"
+                                    "incognito",
+                                    "log_content_policy"
                                   ]
                                 }
                               },
@@ -340072,6 +341288,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "setupPullRequestNumber": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -340113,6 +341335,7 @@
                         "githubAppConfigId",
                         "revision",
                         "sourceCommit",
+                        "setupPullRequestNumber",
                         "lastSyncedAt",
                         "lastSyncError",
                         "declarationsPendingPublish",
@@ -340526,6 +341749,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "setupPullRequestNumber": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -340567,6 +341796,7 @@
                         "githubAppConfigId",
                         "revision",
                         "sourceCommit",
+                        "setupPullRequestNumber",
                         "lastSyncedAt",
                         "lastSyncError",
                         "declarationsPendingPublish",
@@ -340971,6 +342201,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "setupPullRequestNumber": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -341012,6 +342248,7 @@
                         "githubAppConfigId",
                         "revision",
                         "sourceCommit",
+                        "setupPullRequestNumber",
                         "lastSyncedAt",
                         "lastSyncError",
                         "declarationsPendingPublish",
@@ -341395,6 +342632,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "setupPullRequestNumber": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -341436,6 +342679,7 @@
                         "githubAppConfigId",
                         "revision",
                         "sourceCommit",
+                        "setupPullRequestNumber",
                         "lastSyncedAt",
                         "lastSyncError",
                         "declarationsPendingPublish",
@@ -341808,6 +343052,12 @@
                               "nullable": true,
                               "type": "string"
                             },
+                            "setupPullRequestNumber": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
                             "lastSyncedAt": {
                               "nullable": true,
                               "type": "string",
@@ -341849,6 +343099,7 @@
                             "githubAppConfigId",
                             "revision",
                             "sourceCommit",
+                            "setupPullRequestNumber",
                             "lastSyncedAt",
                             "lastSyncError",
                             "declarationsPendingPublish",
@@ -350517,6 +351768,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -350782,6 +352040,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -351620,6 +352879,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -351885,6 +353151,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -352978,6 +354245,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -353243,6 +354517,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -353933,6 +355208,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -354198,6 +355480,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -354888,6 +356171,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -355153,6 +356443,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -355855,6 +357146,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -356120,6 +357418,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -356419,6 +357718,14 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 64
+                  },
+                  "connectionClientOrder": {
+                    "nullable": true,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
                   },
                   "connectionShownClientIds": {
                     "nullable": true,
@@ -356885,6 +358192,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -357150,6 +358464,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -357930,6 +359245,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -358195,6 +359517,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -358955,6 +360278,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -359220,6 +360550,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -359924,6 +361255,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -360189,6 +361527,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -360924,6 +362263,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -361189,6 +362535,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -361861,6 +363208,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -362126,6 +363480,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -363986,6 +365341,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -364251,6 +365613,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -428926,6 +430289,10 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "billingTeamId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -429069,6 +430436,61 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "billingTeam": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "spendCap": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "limitValue": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "cleanupInterval": {
+                                "type": "string",
+                                "enum": [
+                                  "1h",
+                                  "12h",
+                                  "24h",
+                                  "1w",
+                                  "1m",
+                                  "calendar_day",
+                                  "calendar_week_sunday",
+                                  "calendar_week_monday",
+                                  "calendar_month"
+                                ]
+                              },
+                              "limitId": {
+                                "type": "string"
+                              },
+                              "currentUsage": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "limitValue",
+                              "cleanupInterval",
+                              "limitId",
+                              "currentUsage"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -429082,13 +430504,16 @@
                           "authorId",
                           "expiresAt",
                           "createdByServiceAccountId",
+                          "billingTeamId",
                           "createdAt",
                           "lastUsedAt",
                           "teams",
                           "authorName",
                           "createdBy",
                           "providerApiKeys",
-                          "labels"
+                          "labels",
+                          "billingTeam",
+                          "spendCap"
                         ],
                         "additionalProperties": false
                       }
@@ -429484,6 +430909,39 @@
                       ]
                     }
                   },
+                  "billingTeamId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "spendCap": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "limitValue": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "cleanupInterval": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m",
+                          "calendar_day",
+                          "calendar_week_sunday",
+                          "calendar_week_monday",
+                          "calendar_month"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "limitValue",
+                      "cleanupInterval"
+                    ]
+                  },
                   "ownerId": {
                     "type": "string"
                   },
@@ -429686,6 +431144,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "billingTeamId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -429832,6 +431294,61 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -429845,6 +431362,7 @@
                     "authorId",
                     "expiresAt",
                     "createdByServiceAccountId",
+                    "billingTeamId",
                     "createdAt",
                     "lastUsedAt",
                     "value",
@@ -429852,7 +431370,9 @@
                     "authorName",
                     "createdBy",
                     "providerApiKeys",
-                    "labels"
+                    "labels",
+                    "billingTeam",
+                    "spendCap"
                   ],
                   "additionalProperties": false
                 }
@@ -430174,6 +431694,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "billingTeamId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -430317,6 +431841,61 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -430330,13 +431909,16 @@
                     "authorId",
                     "expiresAt",
                     "createdByServiceAccountId",
+                    "billingTeamId",
                     "createdAt",
                     "lastUsedAt",
                     "teams",
                     "authorName",
                     "createdBy",
                     "providerApiKeys",
-                    "labels"
+                    "labels",
+                    "billingTeam",
+                    "spendCap"
                   ],
                   "additionalProperties": false
                 }
@@ -430683,6 +432265,39 @@
                         "value"
                       ]
                     }
+                  },
+                  "billingTeamId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "spendCap": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "limitValue": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "cleanupInterval": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m",
+                          "calendar_day",
+                          "calendar_week_sunday",
+                          "calendar_week_monday",
+                          "calendar_month"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "limitValue",
+                      "cleanupInterval"
+                    ]
                   }
                 },
                 "required": [
@@ -430762,6 +432377,10 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "billingTeamId": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -430906,6 +432525,61 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -430919,13 +432593,16 @@
                     "authorId",
                     "expiresAt",
                     "createdByServiceAccountId",
+                    "billingTeamId",
                     "createdAt",
                     "lastUsedAt",
                     "teams",
                     "authorName",
                     "createdBy",
                     "providerApiKeys",
-                    "labels"
+                    "labels",
+                    "billingTeam",
+                    "spendCap"
                   ],
                   "additionalProperties": false
                 }

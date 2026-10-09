@@ -49,6 +49,7 @@ import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
 } from "@/guardrails/dual-llm-progress-bus";
+import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import {
   AgentTeamModel,
@@ -171,10 +172,7 @@ import {
   connectionProxySetupContext,
   verifyConnectionProxySetupContext,
 } from "@/services/connection-proxy-setup-context";
-import {
-  nativeSetupClientFromProvenance,
-  resolveConnectionSetupScope,
-} from "@/services/connection-setup-scope";
+import { nativeSetupClientFromProvenance } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -305,6 +303,8 @@ export interface LLMProxyContext<TRequest> {
     name: string;
     clientId: string;
   };
+  /** Team the authenticating credential's spend is charged to. */
+  billingTeamId?: string;
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   virtualKeyId?: string;
@@ -360,6 +360,8 @@ export type LLMProxyAuthOverride = {
     clientId: string;
   };
   userId?: string;
+  /** Team the authenticating credential's spend is charged to. */
+  billingTeamId?: string;
 };
 
 function getProviderMessagesCount(messages: unknown): number | null {
@@ -771,6 +773,9 @@ export async function handleLLMProxy<
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
   let virtualKeyId = authOverride?.virtualKeyId;
   let passthroughVirtualKeyId: string | undefined;
+  // The first credential that names a billing team pays; the passthrough key
+  // resolves first, matching its precedence for per-key limits.
+  let billingTeamId = authOverride?.billingTeamId;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
   let jwksUserId: string | undefined;
@@ -924,6 +929,7 @@ export async function handleLLMProxy<
       });
       passthroughVirtualKeyId = passthroughResult.passthroughVirtualKeyId;
       passthroughUserId = passthroughResult.userId;
+      billingTeamId ??= passthroughResult.billingTeamId;
       // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
       userId = passthroughResult.userId;
       resolvedUser = await UserModel.getById(userId);
@@ -1065,6 +1071,7 @@ export async function handleLLMProxy<
       wasOAuthAuthenticated = true;
       authMethod = oauthResult.authMethod;
       authenticatedApp = oauthResult.authenticatedApp;
+      billingTeamId ??= oauthResult.billingTeamId;
       if (oauthResult.userId) {
         oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
@@ -1095,6 +1102,7 @@ export async function handleLLMProxy<
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
       virtualKeyId = virtualResult.virtualKeyId;
+      billingTeamId ??= virtualResult.billingTeamId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
       if (virtualResult.virtualKeyIsPersonal) {
@@ -1270,9 +1278,11 @@ export async function handleLLMProxy<
     userId,
     dek: readEncryptedChatDek(request),
   });
-  // Content never reaches spans or logs for an encrypted-chat session, whether it
-  // ends up encrypted or redacted.
-  const suppressContent = encryptedChat.kind !== "none";
+  // Content never reaches spans or logs for an encrypted-chat session or a
+  // deployment whose Log Content mode is Metadata only.
+  const isEncryptedChatSession = encryptedChat.kind !== "none";
+  const suppressContent =
+    isEncryptedChatSession || resolveLogContentMode() === "metadata_only";
   const {
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
@@ -1286,7 +1296,7 @@ export async function handleLLMProxy<
   // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
   if (
     appaActive &&
-    suppressContent &&
+    isEncryptedChatSession &&
     !(
       sessionId &&
       (await startedUnenforced({
@@ -1315,6 +1325,8 @@ export async function handleLLMProxy<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        llmOauthClientId: authenticatedApp?.id,
+        billingTeamId,
         agent: resolvedAgent,
         teamSource: lookups,
       });
@@ -1649,10 +1661,6 @@ export async function handleLLMProxy<
         "Connection setup APPA bypass active",
       );
     }
-    // Set once below, when a verified native-session setup scope resolves.
-    // connectionSetupBypass is derived from the two sources at a single
-    // point after the session block; no guard mutates it mid-flow.
-    let nativeSessionSetupBypass = false;
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
@@ -1894,48 +1902,19 @@ export async function handleLLMProxy<
             "OpenAPPA requires a valid client-native session ID",
           );
         }
-        if (
-          !isInternalChat &&
-          authenticatedUserId &&
-          appaIdentity.sessionId &&
-          hasNativeClientSession
-        ) {
-          const setupScope = await resolveConnectionSetupScope({
-            principal: {
-              userId: authenticatedUserId,
-              organizationId: resolvedAgent.organizationId,
-              targetOrganizationId: resolvedAgent.organizationId,
-              guardrailsActive: appaActive,
-            },
-            evidence: {
-              kind: "native-session",
-              identity: appaIdentity,
-              requestBody: body,
-            },
-          });
-          nativeSessionSetupBypass = setupScope !== null;
-          if (setupScope?.kind === "native-session") {
-            logger.info(
-              { clientId: setupScope.clientId },
-              "Connection setup APPA bypass active",
-            );
-          }
-        }
         // Receipts were stripped from history above, before any forwarding or
         // logging. APPA now resolves the collected codes into lineage evidence
         // owned by this caller.
-        const receiptSessions =
-          !nativeSessionSetupBypass && callerId
-            ? await sessionReceiptEvidence({
-                organizationId: resolvedAgent.organizationId,
-                callerId,
-                codes: strippedReceiptCodes,
-              })
-            : [];
+        const receiptSessions = callerId
+          ? await sessionReceiptEvidence({
+              organizationId: resolvedAgent.organizationId,
+              callerId,
+              codes: strippedReceiptCodes,
+            })
+          : [];
         // History carrying verified stamps or session receipts identifies
         // parent context. A new session opens as a fork of its deepest ancestor.
         const traceable =
-          !nativeSessionSetupBypass &&
           appaCallerId &&
           appaIdentity.sessionId &&
           appaFamily &&
@@ -1968,30 +1947,25 @@ export async function handleLLMProxy<
               })
             : undefined;
         fillAppaSessionHeaders(headersForExtraction, appaIdentity);
-        // Reading connect.md can taint the rest of setup, so the verified
-        // session bypasses APPA trust and invocation decisions together.
-        openappaSession = nativeSessionSetupBypass
-          ? undefined
-          : sessionFromHeaders({
-              headers: headersForExtraction,
-              organizationId: resolvedAgent.organizationId,
-              callerId,
-              // Chat sessions use conversation IDs with verified ownership.
-              ...(isInternalChat
-                ? {}
-                : {
-                    // Scope external sessions to the authenticated principal.
-                    scope:
-                      platformLoopback &&
-                      incomingAppaSessionHeader !== undefined
-                        ? undefined
-                        : callerId,
-                    // Bind fallback root if no session was provided.
-                    fallbackSessionId: callerId
-                      ? `${callerId}@${resolvedAgent.id}`
-                      : undefined,
-                  }),
-            });
+        openappaSession = sessionFromHeaders({
+          headers: headersForExtraction,
+          organizationId: resolvedAgent.organizationId,
+          callerId,
+          // Chat sessions use conversation IDs with verified ownership.
+          ...(isInternalChat
+            ? {}
+            : {
+                // Scope external sessions to the authenticated principal.
+                scope:
+                  platformLoopback && incomingAppaSessionHeader !== undefined
+                    ? undefined
+                    : callerId,
+                // Bind fallback root if no session was provided.
+                fallbackSessionId: callerId
+                  ? `${callerId}@${resolvedAgent.id}`
+                  : undefined,
+              }),
+        });
         // The executor signed the trajectory its spawn bound; the child's own
         // headers name the parent conversation and carry no authority here.
         if (subagentBinding) openappaSession = subagentBinding.session;
@@ -2005,7 +1979,7 @@ export async function handleLLMProxy<
           // The launcher stored the authenticated parent before giving the pod data.
           openappaSession = runtimeSession;
         }
-        if (!openappaSession && !nativeSessionSetupBypass)
+        if (!openappaSession)
           throw new ApiError(
             400,
             "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
@@ -2227,12 +2201,9 @@ export async function handleLLMProxy<
         };
       }
     }
-    // The single decision point for the connection-setup bypass. Both sources
-    // are settled above — the approved-installer proof before the guards, the
-    // native-session scope inside the session block — and neither is mutated
-    // past this line.
-    const connectionSetupBypass =
-      installerSetupBypass || nativeSessionSetupBypass;
+    // The connection-setup bypass: the approved-installer proof, settled
+    // before the guards and not mutated past them.
+    const connectionSetupBypass = installerSetupBypass;
     // Nothing OpenAPPA wrote for the client and the gateway goes on to the
     // provider, whether or not this request has a session (deployment switch
     // off, a connection-setup or unsupported-client bypass, a delegated run)
@@ -2513,6 +2484,7 @@ export async function handleLLMProxy<
       billingMode,
       getBillingMode: () => billingMode,
       authenticatedApp,
+      billingTeamId,
       userId,
       resolvedUser,
       virtualKeyId,
@@ -2576,8 +2548,12 @@ export async function handleLLMProxy<
     // Persist failed interactions so they appear in LLM logs
     try {
       const errorMessage = provider.extractErrorMessage(lifecycleError);
+      // Provider errors routinely echo the prompt back.
       logger.info(
-        { profileId: resolvedAgent.id, errorMessage },
+        {
+          profileId: resolvedAgent.id,
+          ...(suppressContent ? {} : { errorMessage }),
+        },
         "Persisting error interaction record",
       );
       const record: InsertInteraction = {
@@ -2594,6 +2570,7 @@ export async function handleLLMProxy<
         authMethod,
         authenticatedAppId: authenticatedApp?.id,
         authenticatedAppName: authenticatedApp?.name,
+        billingTeamId,
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
@@ -2718,6 +2695,7 @@ async function handleStreaming<
     billingMode: initialBillingMode,
     getBillingMode,
     authenticatedApp,
+    billingTeamId,
     userId,
     virtualKeyId,
     passthroughVirtualKeyId,
@@ -2891,6 +2869,7 @@ async function handleStreaming<
         authMethod,
         authenticatedAppId: authenticatedApp?.id,
         authenticatedAppName: authenticatedApp?.name,
+        billingTeamId,
         type: provider.interactionType,
         request: originalRequest as InteractionRequest,
         processedRequest: request as InteractionRequest,
@@ -3494,8 +3473,9 @@ async function handleStreaming<
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
       const errorMessage = provider.extractErrorMessage(lifecycleError);
+      // Provider errors routinely echo the prompt back.
       logger.info(
-        { profileId: agent.id, errorMessage },
+        { profileId: agent.id, ...(suppressContent ? {} : { errorMessage }) },
         "Persisting error interaction record for failed stream",
       );
       await recordUsagelessInteraction(
@@ -3608,6 +3588,7 @@ async function handleStreaming<
           authMethod,
           billingMode,
           authenticatedApp,
+          billingTeamId,
           runId,
           userId,
           virtualKeyId,
@@ -3687,6 +3668,7 @@ async function handleNonStreaming<
     billingMode: initialBillingMode,
     getBillingMode,
     authenticatedApp,
+    billingTeamId,
     userId,
     virtualKeyId,
     passthroughVirtualKeyId,
@@ -4062,6 +4044,7 @@ async function handleNonStreaming<
         authMethod,
         billingMode,
         authenticatedApp,
+        billingTeamId,
         runId,
         userId,
         virtualKeyId,
@@ -4207,6 +4190,7 @@ async function handleNonStreaming<
       authMethod,
       billingMode,
       authenticatedApp,
+      billingTeamId,
       runId,
       userId,
       virtualKeyId,

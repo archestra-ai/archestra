@@ -10,14 +10,11 @@
 // chosen agent: light server and skill rows, then status chips (routing,
 // guardrails). A future capability (budgets, audit...) is one more entry in
 // `statusChips` in ProfileCard.
-// Under the hero, spanning the page: the copy prompt, or the manual steps
-// themselves when Manual is chosen.
+// Under the hero, spanning the page: the app's way in. The installer command
+// for apps with one, Claude Desktop's download, the copy prompt for other
+// agents, or the manual steps themselves.
 
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
-import {
-  hasNativeSetupSession,
-  type NativeSessionClientId,
-} from "@archestra/shared/connection-setup";
 import {
   ArrowDown,
   BookOpen,
@@ -27,18 +24,14 @@ import {
   ChevronRight,
   Copy,
   Cpu,
-  Download,
   Gauge,
   Info,
-  ListOrdered,
-  MessageSquareText,
   MoreHorizontal,
   Puzzle,
   Settings,
   ShieldCheck,
   ShieldOff,
   SlidersHorizontal,
-  SquareTerminal,
   TriangleAlert,
   Wrench,
 } from "lucide-react";
@@ -55,7 +48,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,7 +65,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConnectedSignal } from "@/lib/connect-signal";
-import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -116,7 +107,12 @@ import {
   LastConnectedMark,
   useConnectedAgents,
 } from "./connected-agents";
-import { type SetupMode, setupModeFor, useManualSteps } from "./manual-setup";
+import {
+  readsPrompts,
+  type SetupMode,
+  setupModeFor,
+  useManualSteps,
+} from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
@@ -149,18 +145,16 @@ export function ConnectPage() {
   const { data: canSeeStatistics } = useHasPermissions(
     requiredPagePermissionsMap["/connections/logs"] ?? {},
   );
-  // Links (connect.md, docs) can open the page on an app, and on its manual
-  // setup with ?mode=manual. Picks and the Manual toggle are written back.
+  // Links (connect.md, docs) can open the page on an app. Picks are written
+  // back.
   const searchParams = useSearchParams();
   const updateUrlParams = useUpdateUrlParams();
   const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
-  // null until the user toggles: then ?mode=manual decides, for the app the
-  // page actually lands on.
-  const [manualChosen, setManualChosen] = useState<boolean | null>(null);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
-  // What the user leaves out, per agent. The prompt carries it, and this
-  // browser keeps it for a while (connect-choices.ts).
+  // What the user leaves out, per agent. The copied command (or prompt, for
+  // generic agents) carries it, and this browser keeps it for a while
+  // (connect-choices.ts).
   const [choices, setChoices] = useState<ConnectChoices>(ALL_INCLUDED);
 
   const skillsSorted = useMemo(
@@ -197,23 +191,10 @@ export function ConnectPage() {
   };
 
   const setup = setupModeFor(client);
-  const manualOn =
-    manualChosen ??
-    (searchParams.get("mode") === "manual" && setup === "prompt-or-manual");
-  const manual =
-    setup === "manual" || (setup === "prompt-or-manual" && manualOn);
-  // Apps with an installer can also run it straight from a terminal. Claude
-  // Desktop keeps its own download flow.
-  const scriptable = setup === "prompt" && client.id !== "claude-desktop";
-  const script = scriptable && manualOn;
-  // Claude Desktop installs from a downloaded installer by default; its
-  // Prompt (for Cowork) is the alternative, so the toggle reads inverted.
-  const download = client.id === "claude-desktop" && !manualOn;
-  const step = currentStep(client, manual, script, download);
+  const step = currentStep(client, setup);
 
   const pick = (id: string) => {
     setPickedId(id);
-    setManualChosen(false);
     // Manual steps bookmark a provider; providers vary per app.
     updateUrlParams({ clientId: id, mode: null, providerId: null });
   };
@@ -311,18 +292,8 @@ export function ConnectPage() {
             client={client}
             setup={setup}
             step={step}
-            manual={manual}
-            scriptable={scriptable}
-            script={script}
-            download={download}
             choices={choices}
             prompt={prompt}
-            onManual={(v) => {
-              setManualChosen(v);
-              // Only manual setup is bookmarkable; Script is a view of Prompt.
-              if (setup === "prompt-or-manual")
-                updateUrlParams({ mode: v ? "manual" : null });
-            }}
             onCursorNote={() => setDialog("cursor")}
           />
         </div>
@@ -398,10 +369,13 @@ function DotField() {
 // Up to this many tiles sit in one centered row instead of the grid.
 const ROW_MAX = 3;
 
-/** Non-featured agents the admin allows (Generic client alone doesn't count). */
+/** Agents offered behind the overflow tile. */
 function hasOtherAgents(data: ConnectPageData) {
   const featuredIds = new Set(data.featuredClients.map((c) => c.id));
-  return data.clients.some((c) => !featuredIds.has(c.id) && c.id !== "generic");
+  return data.clients.some(
+    (c) =>
+      !featuredIds.has(c.id) && (c.id !== "generic" || data.hasClientOrder),
+  );
 }
 
 function tileCount(data: ConnectPageData) {
@@ -613,56 +587,39 @@ function StepPill({ children }: { children: ReactNode }) {
   );
 }
 
-// === Connect area: prompt, or the manual steps in its place ===
+// === Connect area: the command, download, prompt or manual steps ===
 
 function ConnectArea({
   data,
   client,
   setup,
   step,
-  manual,
-  scriptable,
-  script,
-  download,
   choices,
   prompt,
-  onManual,
   onCursorNote,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
   setup: SetupMode;
   step: string;
-  manual: boolean;
-  /** The app has an installer, so it offers Prompt / Script. */
-  scriptable: boolean;
-  /** Script is chosen: show the installer command instead of the prompt. */
-  script: boolean;
-  /** Claude Desktop's installer download replaces the prompt. */
-  download: boolean;
   choices: ConnectChoices;
-  /** null when every part is left out. */
+  /** The generic prompt; null when every part is left out. */
   prompt: string | null;
-  onManual: (v: boolean) => void;
   onCursorNote: () => void;
 }) {
   const { copied, copy: copyText } = useCopy();
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
-  // Claude Code, Codex and OpenCode: copying opens a short setup window for
-  // this user, so the agent's setup can start without another sign-in.
-  const sessionClientId: NativeSessionClientId | undefined =
-    hasNativeSetupSession(client.id) ? client.id : undefined;
-  const session = useConnectionPromptSession(sessionClientId, origin);
   const [windows, setWindows] = useState(false);
   useEffect(() => setWindows(detectPlatform() === "windows"), []);
-  const command = scriptable
+  const manual = setup === "manual";
+  const script = setup === "script";
+  const download = setup === "download";
+  const command = script
     ? data.installerCommand(client, choices, windows)
     : null;
   // What the box shows and the button copies.
   const text = script ? command : prompt;
-  // Other agents read the generic prompt, with or without a manual option.
-  const generic = setup === "prompt-or-manual" || setup === "generic-prompt";
   const leftOutParts = (
     Object.keys(choices) as (keyof ConnectChoices)[]
   ).filter((part) => !choices[part]);
@@ -694,52 +651,13 @@ function ConnectArea({
   useConnectedSignal(phase === "waiting", () => setPhase("connected"));
 
   const copy = async () => {
-    if (!text) return;
-    // The terminal command asks for browser approval itself.
-    if (sessionClientId && !script) {
-      const refreshed = await session.refetch();
-      if (
-        refreshed.isError ||
-        !refreshed.data ||
-        Date.parse(refreshed.data.expiresAt) <= Date.now()
-      ) {
-        toast.error("Could not start connection setup. Try again.");
-        return;
-      }
-    }
-    if (await copyText(text)) startWaiting();
+    if (text && (await copyText(text))) startWaiting();
   };
 
   const band = (
     <Band busy={data.revalidating} dim={phase === "connected"}>
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         <StepHeading step={step} />
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {setup === "prompt-or-manual" && (
-            <ModeSwitch
-              alt={manual}
-              altIcon={<ListOrdered />}
-              altLabel="Manual setup"
-              onChange={onManual}
-            />
-          )}
-          {client.id === "claude-desktop" && (
-            <ModeSwitch
-              alt={download}
-              altIcon={<Download />}
-              altLabel="Download"
-              onChange={(v) => onManual(!v)}
-            />
-          )}
-          {scriptable && (
-            <ModeSwitch
-              alt={script}
-              altIcon={<SquareTerminal />}
-              altLabel="Script"
-              onChange={onManual}
-            />
-          )}
-        </div>
       </div>
 
       {download ? (
@@ -763,7 +681,7 @@ function ConnectArea({
           />
         </>
       ) : manual ? (
-        // The steps take the prompt's place, starting right here.
+        // The steps start right here, in the band.
         <div
           key={`manual-${client.id}`}
           className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300"
@@ -787,10 +705,8 @@ function ConnectArea({
                 </>
               ) : (
                 <>
-                  {sentenceNameOf(client)}{" "}
-                  {generic
-                    ? "checks what it supports and asks before changing anything."
-                    : "opens a browser page. Nothing changes until you approve."}
+                  {sentenceNameOf(client)} checks what it supports and asks
+                  before changing anything.
                 </>
               )}
             </p>
@@ -826,24 +742,8 @@ function ConnectArea({
           )}
 
           {script && (
-            <div className="mt-3 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
-              <div>
-                <p className="font-semibold text-foreground">
-                  When it finishes
-                </p>
-                <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-                  {scriptNextSteps(client).map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                  <li>
-                    The full next steps are printed at the end of the output.
-                  </li>
-                </ol>
-              </div>
-              <TextButton
-                onClick={() => setWindows(!windows)}
-                className="self-start"
-              >
+            <div className="mt-3 flex justify-end px-1 text-xs text-muted-foreground">
+              <TextButton onClick={() => setWindows(!windows)}>
                 {windows
                   ? "Use the macOS / Linux command"
                   : "Use the Windows command"}
@@ -863,8 +763,11 @@ function ConnectArea({
         client={run.client}
         script={run.script}
         welcome={origin ? welcomePrompt(origin, data.appName) : null}
-        // n8n has no prompt to follow up on; neither does "everything left out".
-        showLink={setup !== "manual" && prompt !== null}
+        // n8n has no agent to follow up with; "everything left out" has
+        // nothing to follow up on.
+        showLink={
+          readsPrompts(client) && (setup !== "prompt" || prompt !== null)
+        }
         onPhase={setPhase}
       />
     </>
@@ -912,59 +815,20 @@ function ScriptBlock({
   );
 }
 
-/**
- * The Script option's "When it finishes" list. Its meaning follows the setup
- * script's own Next steps (nextStepsFor in
- * backend/src/services/connection-setup-script.ts); the full list prints at
- * the end of the output.
- */
-function scriptNextSteps(client: ConnectClient): string[] {
-  switch (client.id) {
-    case "claude-code":
-      return [
-        "Open a new terminal and start claude.",
-        "Run /mcp, pick the gateway and sign in through the browser. Skills load on their own.",
-      ];
-    case "cursor":
-      return [
-        "Reload Cursor.",
-        "Open Customize > MCPs and sign in to the gateway.",
-        'If the output shows "Cursor model settings", enter them under Settings > Models > API Keys.',
-      ];
-    case "codex":
-      return [
-        "Open a new terminal and run codex.",
-        'If the output doesn\'t say "Successfully logged in.", run the codex mcp login command it prints.',
-        "For skills, run /plugins and install the plugin.",
-      ];
-    case "copilot-cli":
-      return [
-        "Restart Copilot. It opens the browser to sign in to the gateway.",
-        "If the output prints export lines, add them to your shell profile.",
-      ];
-    case "opencode":
-      return [
-        "Close OpenCode and start it again in a new terminal.",
-        "If the gateway isn't connected, run the opencode mcp auth command it prints.",
-      ];
-    default:
-      return [`Restart ${nameOf(client)}.`];
-  }
-}
-
 // === Connect band heading: the one instruction ===
 
-function currentStep(
-  client: ConnectClient,
-  manual: boolean,
-  script: boolean,
-  download: boolean,
-): string {
+function currentStep(client: ConnectClient, setup: SetupMode): string {
   const name = nameOf(client);
-  if (manual) return `Follow the steps for ${name}`;
-  if (script) return "Run the command in your terminal";
-  if (download) return `Download the installer for ${name}`;
-  return `Paste the prompt into ${name}`;
+  switch (setup) {
+    case "manual":
+      return `Follow the steps for ${name}`;
+    case "script":
+      return "Run the command in your terminal";
+    case "download":
+      return `Download the installer for ${name}`;
+    case "prompt":
+      return `Paste the prompt into ${name}`;
+  }
 }
 
 function Band({
@@ -1052,42 +916,6 @@ function ManualSteps({
   );
 }
 
-/** Prompt, or the app's other way in (Manual setup or Script). */
-function ModeSwitch({
-  alt,
-  altIcon,
-  altLabel,
-  onChange,
-}: {
-  alt: boolean;
-  altIcon: ReactNode;
-  altLabel: string;
-  onChange: (alt: boolean) => void;
-}) {
-  const option = (value: boolean, icon: ReactNode, label: string) => (
-    <UnstyledButton
-      type="button"
-      onClick={() => onChange(value)}
-      aria-pressed={alt === value}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-colors [&_svg]:size-3.5",
-        alt === value
-          ? "bg-background font-semibold text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {icon}
-      {label}
-    </UnstyledButton>
-  );
-  return (
-    <div className="inline-flex rounded-lg border bg-muted/60 p-0.5">
-      {option(false, <MessageSquareText />, "Prompt")}
-      {option(true, altIcon, altLabel)}
-    </div>
-  );
-}
-
 // === Guardrails status ===
 
 /**
@@ -1135,7 +963,7 @@ function guardrailsStatus(
     return {
       tone: "ok",
       label: "Enforced",
-      detail: `Guardrails recognize ${client.label}, so each of its tool calls is checked against your org's policy.`,
+      detail: `Each of ${client.label}'s tool calls is checked against your organization's policy.`,
     };
   return state === "block"
     ? {
@@ -1152,7 +980,7 @@ function guardrailsStatus(
 
 // === Profile card ===
 
-/** The card's one place to leave parts out; the prompt carries the result. */
+/** The card's one place to leave parts out; the command carries the result. */
 function IncludeMenu({
   skills,
   plugins,
@@ -1365,10 +1193,7 @@ function ProfileCard({
       label: "Guardrails",
       tip: (
         <InfoTip label="What the guardrails do">
-          <TipBody
-            reason={guard.detail}
-            about={`Guardrails check each tool call against your org's policy before it runs, to stop leaks like sending private data out after reading an untrusted page. A blocked call doesn't run. Powered by ${data.guardrails.name}.`}
-          />
+          <TipBody reason={guard.detail} />
         </InfoTip>
       ),
       state: guard.label,
@@ -1758,14 +1583,9 @@ function cardIntro(
   return "You left out every tool and skill, so your agent gets nothing yet.";
 }
 
-/** A status tooltip: why this state, then what the feature is. */
-function TipBody({ reason, about }: { reason: string; about?: string }) {
-  return (
-    <span className="block space-y-1.5">
-      <span className="block">{reason}</span>
-      {about && <span className="block opacity-75">{about}</span>}
-    </span>
-  );
+/** A status tooltip explaining why this state applies. */
+function TipBody({ reason }: { reason: string }) {
+  return <span className="block">{reason}</span>;
 }
 
 function InfoTip({ label, children }: { label: string; children: ReactNode }) {

@@ -56,7 +56,7 @@ import {
   plural,
   TextButton,
 } from "./connect-page-parts";
-import { setupModeFor } from "./manual-setup";
+import { readsPrompts } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
 
 /** No traffic for this long and the agent reads as idle in Manage. */
@@ -491,7 +491,7 @@ function DisconnectSteps({
   /** Step 2's body: how, or the button, to revoke access. */
   revoke: ReactNode | null;
 }) {
-  const manualOnly = setupModeFor(client) === "manual";
+  const manualOnly = !readsPrompts(client);
   const skills = data.footprintFor(client).skillsInstalled;
   const guard = startupGuardStem(client.id);
   const [origin, setOrigin] = useState("");

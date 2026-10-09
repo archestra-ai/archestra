@@ -175,6 +175,14 @@ const interactionsTable = pgTable(
      */
     authenticatedAppId: text("authenticated_app_id"),
     authenticatedAppName: varchar("authenticated_app_name"),
+    /**
+     * Team the credential's spend was charged to at request time (a virtual
+     * key's or LLM OAuth client's billing team). When set, team statistics
+     * attribute this row to that team instead of the LLM proxy's teams.
+     * Snapshot, not a foreign key: a later team deletion must not rewrite
+     * history on this write-hot table.
+     */
+    billingTeamId: text("billing_team_id"),
     request: jsonb("request").$type<InteractionRequest>().notNull(),
     processedRequest: jsonb("processed_request").$type<InteractionRequest>(),
     /**

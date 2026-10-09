@@ -1,6 +1,7 @@
 import { parseFullToolName } from "@archestra/shared";
 import { context, type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import config from "@/config";
+import { resolveLogContentMode } from "@/log-content";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { AgentType } from "@/types";
 import {
@@ -63,13 +64,20 @@ export async function startActiveMcpSpan<T>(params: {
   /**
    * Suppress tool argument/result content capture for this span even when
    * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (encrypted chat sessions). Metadata
-   * attributes (tool name, agent, session) are unaffected.
+   * attributes (tool name, agent, session) are unaffected. The deployment's
+   * Log Content mode suppresses it too, checked here so no caller can forget
+   * it.
    */
   suppressContent?: boolean;
   user?: SpanUserInfo | null;
   callback: (span: Span) => Promise<T>;
 }): Promise<T> {
   const tracer = trace.getTracer("archestra");
+  // Only consulted when content would otherwise be captured.
+  const recordContent =
+    captureContent &&
+    !params.suppressContent &&
+    resolveLogContentMode() === "full";
 
   // Inject session ID into context so it's available to the pino mixin for log correlation
   let ctx = context.active();
@@ -106,7 +114,7 @@ export async function startActiveMcpSpan<T>(params: {
 
       setUserAttributes(span, params.user);
 
-      if (captureContent && !params.suppressContent && params.toolArgs) {
+      if (recordContent && params.toolArgs) {
         span.addEvent(EVENT_GENAI_CONTENT_INPUT, {
           [ATTR_GENAI_TOOL_CALL_ARGUMENTS]: truncateContent(params.toolArgs),
         });
@@ -116,7 +124,7 @@ export async function startActiveMcpSpan<T>(params: {
         const result = await params.callback(span);
         span.setStatus({ code: SpanStatusCode.OK });
 
-        if (captureContent && !params.suppressContent) {
+        if (recordContent) {
           span.addEvent(EVENT_GENAI_CONTENT_OUTPUT, {
             [ATTR_GENAI_TOOL_CALL_RESULT]: truncateContent(result),
           });

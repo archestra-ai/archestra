@@ -137,7 +137,7 @@ import {
   resolveRunToolTargetName,
   type SubagentChildEntry,
 } from "./chat-messages.utils";
-import { CompactToolGroup, type ToolIconMap } from "./compact-tool-call";
+import { CompactToolGroup } from "./compact-tool-call";
 import { DualLlmAnalysisBlock } from "./dual-llm-analysis-block";
 import { EditableAssistantMessage } from "./editable-assistant-message";
 import { EditableUserMessage } from "./editable-user-message";
@@ -160,6 +160,7 @@ import { PolicyDeniedTool } from "./policy-denied-tool";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import { buildToolIconMap, type ToolIconMap } from "./tool-icon-map";
 import { ToolStatusRow } from "./tool-status-row";
 
 interface ChatMessagesProps {
@@ -329,23 +330,14 @@ export function ChatMessages({
   const { data: catalogItems } = useInternalMcpCatalog({
     enabled: !!agentId && !!canReadMcpRegistry,
   });
-  const toolIconMap = useMemo(() => {
-    const map = new Map<string, { icon?: string | null; catalogId?: string }>();
-    if (!agentTools || !catalogItems) return map;
-    const catalogMap = new Map(catalogItems.map((c) => [c.id, c]));
-    for (const tool of agentTools) {
-      if (tool.catalogId) {
-        const catalog = catalogMap.get(tool.catalogId);
-        if (catalog) {
-          map.set(tool.name, {
-            icon: catalog.icon,
-            catalogId: catalog.id,
-          });
-        }
-      }
-    }
-    return map;
-  }, [agentTools, catalogItems]);
+  const toolIconMap = useMemo(
+    () =>
+      buildToolIconMap({
+        agentTools: agentTools ?? [],
+        catalogItems: catalogItems ?? [],
+      }),
+    [agentTools, catalogItems],
+  );
 
   const updateChatMessageMutation = useUpdateChatMessage(conversationId);
   // Resolved once for the whole transcript: an encrypted chat's attachments cannot

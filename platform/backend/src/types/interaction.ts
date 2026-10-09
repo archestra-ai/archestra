@@ -3,6 +3,7 @@ import {
   ENCRYPTED_CHAT_REDACTED_VALUES,
   InteractionSourceSchema,
   isEncryptedChatUnavailableContent,
+  LogContentNotStoredSchema,
   SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -240,13 +241,16 @@ export const InteractionResponseSchema = z.union([
 ]);
 
 /**
- * The two shapes an encrypted chat's content takes when it is not
- * available to the reader: encrypted under the browser key (locked), or never
- * stored (redacted). Neither resembles a provider payload, so every read arm
+ * The shapes content takes when it is not available to the reader: an encrypted
+ * chat's, encrypted under the browser key (locked) or never stored (redacted),
+ * and content the Log Content mode kept out of storage. Neither resembles a provider payload, so every read arm
  * has to accept them explicitly — otherwise one encrypted-chat row 500s the whole
  * interactions list rather than rendering as unavailable.
  */
 const EncryptedChatUnavailableContentSchema = z.union([
+  // First, so the outcome it carries is not stripped by the generic
+  // `__redacted` arm below, which also admits its value.
+  LogContentNotStoredSchema,
   z.object({ __encryptedChatSealed: z.string() }),
   z.object({ __redacted: z.enum(ENCRYPTED_CHAT_REDACTED_VALUES) }),
 ]);
@@ -905,6 +909,15 @@ export const SessionSummarySchema = z.object({
   /** Interaction backing the preview and latest-conversation detail view. */
   lastInteractionId: z.string().uuid().nullable(),
   lastInteractionType: z.string().nullable(),
+  /**
+   * The session's latest turn was logged under Metadata only, so it has no
+   * preview to show.
+   */
+  contentNotStored: z
+    .boolean()
+    .describe(
+      "True when the session's latest turn was logged under the Metadata only Log Content mode, so it has no message preview.",
+    ),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
 });

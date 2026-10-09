@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import ToolModel from "@/models/tool";
+import { initialPolicy } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import routes from "./openappa-policy-tests.routes";
@@ -150,6 +153,59 @@ describe("policy replay runs", () => {
     expect(await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId)).toEqual(
       [],
     );
+  });
+  test("the shipped default replays through its annotators, stopping only at a step no offline answer covers", async () => {
+    const shipped = initialPolicy();
+    await GuardrailsPolicyModel.save({
+      organizationId: ctx.organizationId,
+      content: shipped,
+      contentHash: hash(shipped),
+      updatedBy: ctx.user.id,
+      expectedRevision: 1,
+    });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const scenarios = [
+      {
+        path: "traces/catch-all.appa",
+        content:
+          "mcp/notes/read {}\nexpect allow\nmcp/archestra/ask_user {}\nexpect allow\n",
+      },
+      {
+        path: "traces/wrong.appa",
+        content: "mcp/notes/read {}\nexpect deny\n",
+      },
+      {
+        path: "traces/sandbox.appa",
+        content:
+          "mcp/notes/read {}\nexpect allow\nmcp/archestra/run_command {}\nexpect deny\n",
+      },
+    ];
+    const sourceVersion = await saveFiles(scenarios);
+    const run = await ctx.app.inject({
+      method: "POST",
+      url: "/api/openappa/policy-tests/run",
+      payload: { files: scenarios, sourceVersion },
+    });
+    expect(run.statusCode, run.body).toBe(200);
+    expect(run.json()).toMatchObject({
+      validation: { valid: true },
+      files: [
+        { path: scenarios[0].path, status: "passed" },
+        {
+          path: scenarios[1].path,
+          status: "failed",
+          steps: [{ expected: "deny", actual: "allow" }],
+        },
+        {
+          path: scenarios[2].path,
+          status: "cannot_run",
+          steps: [
+            { line: 1, status: "passed" },
+            { line: 3, status: "cannot_run", actual: null },
+          ],
+        },
+      ],
+    });
   });
   test("uses real replay state and file isolation, stores outcomes and marks policy changes stale", async () => {
     const sourceVersion = await saveFiles();

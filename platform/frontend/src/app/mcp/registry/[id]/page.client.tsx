@@ -944,14 +944,14 @@ function ServerStatus({
     // No summary means no deployment entry for any of this server's ids. The
     // feed's own state decides what that means, never the absence of an entry
     // — the same rule the list's `installedStatusLabel` follows. A remote
-    // server has no pod at all, so "Installed" is its whole runtime story.
+    // server has no pod at all, and the page of an installed server needs no
+    // label that says so, so it shows nothing.
+    if (variant === "remote" || deploymentFeedState === "disabled") {
+      return null;
+    }
     return (
       <span className={typeRole({ role: "body" })}>
-        {variant === "remote" || deploymentFeedState === "disabled"
-          ? "Installed"
-          : deploymentFeedState === "loading"
-            ? "Checking…"
-            : "Status unavailable"}
+        {deploymentFeedState === "loading" ? "Checking…" : "Status unavailable"}
       </span>
     );
   }

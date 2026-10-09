@@ -557,6 +557,11 @@ export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultProviderKeys:
     ConnectionDefaultProviderKeysSchema.nullable().optional(),
   connectionDefaultClientId: z.string().max(64).nullable().optional(),
+  connectionClientOrder: z
+    .array(z.string().max(64))
+    .refine((ids) => new Set(ids).size === ids.length, "Duplicate client ID")
+    .nullable()
+    .optional(),
   connectionShownClientIds: z
     .array(z.string().max(64))
     .max(50)

@@ -373,11 +373,14 @@ class OpenAppaDeclarations {
    * Compose a document for its own sake: the same composition the recompose makes,
    * with the helper endpoints pointed at a placeholder, since a document that is
    * only being checked has no derived install row to serve its helpers from. A
-   * composition that returns content is a successful validation.
+   * composition that returns content is a successful validation. The batteries
+   * named in `held` compose as the empty battery, as a deployment holding them
+   * back composes them.
    */
   async composeForCheck(params: {
     root: string;
     resolution: PolicyResolution;
+    held?: ReadonlySet<string>;
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
@@ -385,10 +388,12 @@ class OpenAppaDeclarations {
       root: params.root,
       batteries: this.composeInputs({
         entries: params.resolution.entries,
-        helpers: (entry) =>
-          entry.battery && entry.battery.externals.length > 0
+        helpers: (entry) => {
+          if (params.held?.has(entry.name)) return "stub";
+          return entry.battery && entry.battery.externals.length > 0
             ? { urlBase: helperUrlBase(CHECKED_HELPER_OWNER), tokenEnv }
-            : null,
+            : null;
+        },
       }),
     });
   }

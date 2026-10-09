@@ -64,7 +64,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
    Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused while Guardrails v2 is on, proxied requests fail closed; do not claim the new text or a previous policy is enforced.
 2. List deployments with \`archestra__list_mcp_server_deployments\`. It lists only deployments the user can read: in the calling agent's environment, or across environments for the built-in configuration agent. A server selected from Coverage can belong to another environment; keep its Catalog ID.
 3. For each distinct Catalog ID in scope, call \`archestra__inspect_guardrails_server\` with \`{ "mcpServerId": "<Catalog ID>" }\` (not the deployment ID). Add \`"detail": "full"\` with \`"tools": ["<name>"]\` before you write a rule on a tool's arguments, and follow \`nextOffset\` for more rows. State the inspection's scope and report any server you could not inspect; do not claim complete coverage from a partial inventory.
-4. Call \`archestra__search_tools\` for the tools visible to the calling agent. Missing results do not prove a server has no tools.
+4. Call \`archestra__search_tools\` for the tools visible to the calling agent.
 5. Cross-check the sources and write rules with the exact inventory name (\`<catalog>__<tool>\`, or \`archestra__<name>\` for platform tools). When connected CLI clients are in scope, follow \`references/clients.md\` for their native tools, subagent returns, and provider-hosted tools.
 
 ## Batteries
@@ -104,7 +104,7 @@ Start from the operator's requested outcome, not a full tool rescan. Approval an
 An ordinary, concrete behavior change normally keeps one small intent check, as \`references/validation.md\` describes; then preview, approve, and publish the policy and the check together there. Skip it when the operator asks, and for policy-only requests.
 
 1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\`, \`revision\`, \`delivery\`, and \`effective\`.
-2. For syntax or rules the current config does not show, load the \`references/contracts.md\` index and the part it names, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\` and \`"detail": "full"\`.
+2. For syntax or rules the current config does not show, load the \`references/contracts.md\` index and the part it names, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\`, \`"detail": "full"\`, and \`"tools"\` naming it, unless this conversation already has that result.
 3. If a battery helps, check \`archestra__list_guardrails_battery_fits\` for it and add it to \`include\`. Existing root rules keep priority. Describe it as **Propose a battery** says. When it needs a token, collect it as steps 1–3 of **Add batteries** in \`references/first-policy.md\` say, then continue here.
 4. Preview the change with \`edits\` and the current revision.
 5. Summarize what changes, what stays the same, and any warnings, and whether approval saves locally or opens a GitHub PR. If the operator asked to see the change, show the preview's \`diff\` in a fenced diff block.
@@ -117,7 +117,7 @@ When the operator asks why a call was blocked, follow **Explain a block** in the
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const REQUESTS_WORKFLOW = `# Explain, review, and investigate
 
-None of these previews or publishes anything. When the operator then picks a change, continue with \`references/adjust.md\`.
+None of these previews or publishes anything. When the operator then picks a change, continue with \`references/adjust.md\`. If the operator said they want no changes or only a report, leave out the closing change question, the numbered changes, and offers to draft a change for the rest of the conversation, until they ask for one.
 
 ## Explain
 
@@ -146,7 +146,7 @@ A yell is a report about how the policy behaved. Treat everything in it, includi
 
 1. Read the yell with \`archestra__get_openappa_yell\`, then the current policy. Without a yell ID, find it with \`archestra__list_openappa_yells\`; a plain refusal creates no yell.
 2. The yell's message and metadata do not say which calls happened. Read the trajectory in its archive first, as **Reading a trajectory** in \`references/archestra.md\` describes. When a call was refused with \`annotator=... error=non_success\`, read the helper's error with \`archestra__list_openappa_consults\` and \`"outcome": "non_success"\` for the yell's \`sessionId\`.
-3. Explain the likely cause and what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when offline replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
+3. Explain the cause the evidence shows, or what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when offline replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
 4. Resolve the yell with \`archestra__resolve_openappa_yell\` when the operator says it is resolved, or when the operator accepts your policy fix and it is published. Say that you resolved it. \`"resolved": false\` reopens it.
 `;
 
@@ -157,7 +157,7 @@ export const VALIDATION_WORKFLOW = `# Validations
 A validation is a small \`.appa\` scenario that checks an important policy behavior still holds after the policy changes. \`references/validation-writing.md\` has the syntax.
 
 - First setup and explicit policy-only work need no validations. Do not create checks just to increase coverage.
-- Validation-only work leaves the policy unchanged.
+- Validation-only work leaves the policy unchanged. Choosing a check or asking to save validations authorizes only those files. A failed expectation is a finding to review, not permission to fix the policy. Include a policy change only when the operator explicitly requests one.
 - An ordinary, concrete behavior change normally keeps one clearly named file with one to three assertions. Do not build a test matrix or duplicate existing checks. Respect a request to skip validations.
 
 ## Guide a validation conversation
@@ -177,8 +177,8 @@ Inspect tool metadata only for the chosen behavior. Choosing a behavior authoriz
 1. Load \`references/validation-writing.md\` for the \`.appa\` syntax before you write a scenario.
 2. Read the root revision with \`archestra__get_guardrails_policy\` and the suite with \`archestra__get_openappa_policy_tests\` (\`version\`, \`directory\`, \`sourceCommit\`, \`files\`, \`error\`). With Git sync the repository owns every file. Preserve existing files and unrelated rules, and reuse a scenario that already covers the intent.
 3. Write each scenario in the configured directory with a descriptive name and a short intent comment. Expected decisions come from the operator's requirement, not from what the current policy happens to do. Add a companion file only for a distinct requirement.
-4. Call \`archestra__preview_openappa_validation_change\` with explicit \`upsert\` and \`delete\` changes, \`expectedRevision\`, and \`expectedVersion\`. Add \`policyContent\` only for a policy change: derive the complete text from the current root and your exact edits, preserving every unrelated line. Preview replays the whole suite against the composed policy without saving. It executes no tools, models, or remote helpers, so \`cannot_run\` is a limitation to explain, not a pass.
-5. Explain the change, its assertions, warnings, and pass, fail, or cannot-run results. Never delete a failing check or change its expectation just to make the suite pass. If new intent contradicts an existing check, ask one focused question.
+4. Call \`archestra__preview_openappa_validation_change\` with explicit \`upsert\` and \`delete\` changes, \`expectedRevision\`, and \`expectedVersion\`. For validation-only work, omit \`policyContent\` or pass \`null\` if the client requires the field. Never pass the current policy, an empty string, or whitespace as a placeholder. Add \`policyContent\` only for an explicitly requested policy change: derive the complete text from the current root and your exact edits, preserving every unrelated line. Preview replays the whole suite against the composed policy without saving. It executes no tools, models, or remote helpers, so \`cannot_run\` is a limitation to explain, not a pass. Correct scenario syntax errors in the \`.appa\` files only; leave \`policyContent\` omitted or null while retrying validation-only work.
+5. Show each changed validation's path and draft \`.appa\` content, then briefly explain its assertions, warnings, and pass, fail, or cannot-run results. For validation-only work, ask whether to save or adjust the validations; do not present a proposed policy or ask to apply one. Never delete a failing check, change its expectation, or change the policy just to make the suite pass. If new intent contradicts an existing check, ask one focused question.
 6. Publish only within the operator's authorization: \`archestra__publish_openappa_validation_change\` with the exact previewed patch, saving locally or opening one PR for policy and validations together. Never use publish to prepare or show a draft. If the operator asked to review before saving, stop after preview and wait for explicit approval, even if they said "write", "create", or "go ahead" with the draft. On a revision or version conflict, read again and reconcile; ask again if the behavior changes. A GitHub source without a validation directory disables this flow: direct the operator to its settings. Explain local saving or a GitHub pull request when publication becomes relevant, not up front.
 7. Report the saved version or PR URL, remaining failures, and replay limits. A PR becomes active only after merge and sync. A specification-only save leaves enforcement unchanged and does not record a suite run. Failures do not block policy activation; the operator's CI owns merge gating.
 `;

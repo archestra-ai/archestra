@@ -15,6 +15,7 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  A2AContextModel,
   AgentModel,
   AgentRunModel,
   ChatOpsChannelBindingModel,
@@ -71,9 +72,12 @@ import { watchChatOpsTask } from "./chatops-task-watcher";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
+  CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS,
   CHATOPS_CONTEXT_COMPACTED_NOTICE,
   CHATOPS_MESSAGE_RETENTION,
   CHATOPS_NO_REPLY_SENTINEL,
+  CHATOPS_SESSION_RESET_REPLY,
+  CHATOPS_SESSION_ROLLOVER_HINT,
   SLACK_DEFAULT_CONNECTION_MODE,
   THREAD_MUTE_HINT,
 } from "./constants";
@@ -87,6 +91,7 @@ import {
   buildSkippedAttachmentsNote,
   errorMessage,
   isLlmProviderAuthError,
+  isSessionResetCommand,
   isSlackDmChannel,
   stripAgentFooterChrome,
 } from "./utils";
@@ -875,11 +880,27 @@ export class ChatOpsManager {
       return { success: false, error: authResult.error };
     }
 
+    const serverSideSessions = usesServerSideSessions(provider, message);
+
+    // A chat without reply threads is one rolling session, so it needs an
+    // explicit way to start over. In a thread, a new thread does that.
+    if (
+      serverSideSessions &&
+      !message.threadId &&
+      isSessionResetCommand(cleanedMessageText)
+    ) {
+      return await this.resetChatSession({
+        provider,
+        message,
+        agentName: agentToUse.name,
+        sendReply,
+      });
+    }
+
     // Build context from thread history (includes downloading historical
     // image attachments). Server-side-session providers skip the platform
     // fetch: their history lives in the thread's persistent A2A context and
     // reaches the model as real prior turns instead of a text block.
-    const serverSideSessions = provider.usesServerSideSessions === true;
     const { contextMessages, historyAttachments } = serverSideSessions
       ? { contextMessages: [], historyAttachments: [] }
       : await this.fetchThreadHistory(message, provider);
@@ -1850,16 +1871,15 @@ export class ChatOpsManager {
     // earlier message in context. Only for server-side-session providers,
     // whose pre-execution persistence guarantees the superseded turn stays in
     // the thread history (stateless providers would lose it entirely).
-    const supersede =
-      provider.usesServerSideSessions === true
-        ? {
-            senderId: message.senderId,
-            sequence:
-              typeof message.metadata?.telegramMessageId === "number"
-                ? message.metadata.telegramMessageId
-                : message.timestamp.getTime(),
-          }
-        : undefined;
+    const supersede = usesServerSideSessions(provider, message)
+      ? {
+          senderId: message.senderId,
+          sequence:
+            typeof message.metadata?.telegramMessageId === "number"
+              ? message.metadata.telegramMessageId
+              : message.timestamp.getTime(),
+        }
+      : undefined;
     const { signal: abortSignal, unregister } = chatOpsRunRegistry.register(
       threadKey,
       { supersede },
@@ -1909,7 +1929,7 @@ export class ChatOpsManager {
         );
         execution = await this.executeMessage(executeParams);
       }
-      const { result, responseAgent } = execution;
+      const { result, responseAgent, session } = execution;
 
       // Drop the reply if the thread was muted while the run was in flight —
       // whether we aborted it here (abortSignal) or it ran to completion on
@@ -1928,6 +1948,7 @@ export class ChatOpsManager {
         provider,
         sendReply,
         result,
+        session,
       });
     } catch (error) {
       // A mute that aborted the run mid-flight (e.g. during the retry leg above)
@@ -2306,9 +2327,17 @@ export class ChatOpsManager {
     sendReply: boolean;
     currentApprovalId?: string; // if replying from an approval flow
     result: A2AProtocolSendMessageResponse;
+    session?: ChatSessionReplyInfo;
   }): Promise<ChatOpsProcessingResult> {
-    const { agent, message, provider, sendReply, currentApprovalId, result } =
-      params;
+    const {
+      agent,
+      message,
+      provider,
+      sendReply,
+      currentApprovalId,
+      result,
+      session,
+    } = params;
 
     const approvalRequests =
       extractApprovalRequestsFromSendMessageResult(result);
@@ -2349,12 +2378,21 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: agentResponse,
-        footer: buildAgentFooter(agent.name),
-        // Teach the off switch once per channel thread: sticky auto-reply only
-        // applies in channels, so the hint rides the bot's first reply there.
-        ...((await this.shouldHintThreadMute(provider, message)) && {
-          hint: THREAD_MUTE_HINT,
-        }),
+        footer: buildAgentFooter(
+          agent.name,
+          session?.ownerName
+            ? `conversation started by ${session.ownerName}`
+            : undefined,
+        ),
+        // The first reply of a rolled-over chat session says so: otherwise
+        // the agent forgetting the earlier topic reads as a bug. Otherwise,
+        // teach the off switch once per channel thread: sticky auto-reply
+        // only applies in channels, so the hint rides the bot's first reply.
+        ...(session?.rolledOver
+          ? { hint: CHATOPS_SESSION_ROLLOVER_HINT }
+          : (await this.shouldHintThreadMute(provider, message)) && {
+              hint: THREAD_MUTE_HINT,
+            }),
         conversationReference: message.metadata?.conversationReference,
       });
     } else if (
@@ -2520,6 +2558,8 @@ export class ChatOpsManager {
   }): Promise<{
     result: A2AProtocolSendMessageResponse;
     responseAgent: { id: string; name: string };
+    /** Set when the turn ran on a server-side session. */
+    session?: ChatSessionReplyInfo;
   }> {
     const {
       agent,
@@ -2550,17 +2590,20 @@ export class ChatOpsManager {
     };
 
     // Server-side sessions: every thread runs against its persistent A2A
-    // context, which carries the conversation history Telegram's API can't
-    // provide.
-    const contextId =
-      provider.usesServerSideSessions === true
-        ? await this.resolveThreadContextId({
-            provider,
-            message,
-            threadId: effectiveThreadId,
-            actor,
-          })
-        : undefined;
+    // context, which carries the conversation history the platform API can't
+    // provide (Telegram, MS Teams 1:1 and group chats).
+    const threadContext = usesServerSideSessions(provider, message)
+      ? await this.resolveThreadContextId({
+          provider,
+          message,
+          threadId: effectiveThreadId,
+          actor,
+          // Only a chat without reply threads rolls over. A thread is a
+          // conversation the user chose, so it never expires on its own.
+          rollOverWhenIdle: !message.threadId,
+        })
+      : undefined;
+    const contextId = threadContext?.contextId;
 
     const request = buildSendMessageRequest({
       contextId,
@@ -2609,20 +2652,37 @@ export class ChatOpsManager {
         : undefined,
     });
 
-    return { result: initialResult, responseAgent: agent };
+    return {
+      result: initialResult,
+      responseAgent: agent,
+      ...(threadContext && {
+        session: {
+          rolledOver: threadContext.rolledOver,
+          ownerName: await this.describeSessionOwner({
+            message,
+            contextId: threadContext.contextId,
+          }),
+        },
+      }),
+    };
   }
 
   /**
    * Resolve (or create) the persistent A2A context backing a chat thread.
    * The mapping is keyed like the LLM session id — thread id, falling back
-   * to channel id — so a Telegram DM or plain group is one long conversation.
+   * to channel id — so a DM or plain group chat is one long conversation.
+   *
+   * With `rollOverWhenIdle`, a context idle for longer than
+   * CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS is swapped for a fresh one, so a
+   * chat without reply threads does not carry yesterday's topic forever.
    */
   private async resolveThreadContextId(params: {
     provider: ChatOpsProvider;
     message: IncomingChatMessage;
     threadId: string;
     actor: { kind: "user"; id: string; organizationId: string };
-  }): Promise<string> {
+    rollOverWhenIdle: boolean;
+  }): Promise<{ contextId: string; rolledOver: boolean }> {
     const threadKey = {
       provider: params.provider.providerId,
       channelId: params.message.channelId,
@@ -2631,7 +2691,36 @@ export class ChatOpsManager {
     };
     const existing = await ChatOpsThreadContextModel.findByThread(threadKey);
     if (existing) {
-      return existing.contextId;
+      if (
+        !params.rollOverWhenIdle ||
+        !(await isContextIdle(existing.contextId))
+      ) {
+        return { contextId: existing.contextId, rolledOver: false };
+      }
+      const fresh = await A2AContextManager.createContext(params.actor);
+      const replaced = await ChatOpsThreadContextModel.replaceContext({
+        id: existing.id,
+        expectedContextId: existing.contextId,
+        contextId: fresh.id,
+      });
+      if (replaced) {
+        logger.info(
+          {
+            provider: threadKey.provider,
+            channelId: threadKey.channelId,
+            previousContextId: existing.contextId,
+            contextId: fresh.id,
+          },
+          "[ChatOps] Rolled an idle chat over to a new session",
+        );
+        return { contextId: replaced.contextId, rolledOver: true };
+      }
+      // A concurrent message rolled it over first: join that session. Only
+      // the winner's reply carries the rollover hint.
+      const current = await ChatOpsThreadContextModel.findByThread(threadKey);
+      if (current) {
+        return { contextId: current.contextId, rolledOver: false };
+      }
     }
 
     // The context's recorded owner is whoever spoke first; later access goes
@@ -2642,7 +2731,67 @@ export class ChatOpsManager {
       ...threadKey,
       contextId: context.id,
     });
-    return mapping.contextId;
+    return { contextId: mapping.contextId, rolledOver: false };
+  }
+
+  /**
+   * Handle a reset command in a chat without reply threads: drop the chat's
+   * session mapping, so the next message starts a new context. The old
+   * context is kept, so its history is not lost.
+   */
+  private async resetChatSession(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    agentName: string;
+    sendReply: boolean;
+  }): Promise<ChatOpsProcessingResult> {
+    const { provider, message, agentName, sendReply } = params;
+    const removed = await ChatOpsThreadContextModel.deleteByThread({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      workspaceId: message.workspaceId ?? null,
+      threadId: message.channelId,
+    });
+    logger.info(
+      {
+        provider: provider.providerId,
+        channelId: message.channelId,
+        previousContextId: removed?.contextId ?? null,
+      },
+      "[ChatOps] Chat session reset on request",
+    );
+
+    if (sendReply) {
+      await provider.sendReply({
+        originalMessage: message,
+        text: CHATOPS_SESSION_RESET_REPLY,
+        footer: buildAgentFooter(agentName),
+        conversationReference: message.metadata?.conversationReference,
+      });
+    }
+    return { success: true, agentResponse: CHATOPS_SESSION_RESET_REPLY };
+  }
+
+  /**
+   * The display name of a session's owner, for the reply footer of a group
+   * chat without reply threads. There, unlike a thread (owned by whoever
+   * started it), nothing on screen shows whose conversation it is. Null in
+   * every other conversation, and when the owner cannot be resolved.
+   */
+  private async describeSessionOwner(params: {
+    message: IncomingChatMessage;
+    contextId: string;
+  }): Promise<string | null> {
+    if (
+      params.message.threadId ||
+      params.message.metadata?.conversationType !== "groupChat"
+    ) {
+      return null;
+    }
+    const context = await A2AContextModel.findById(params.contextId);
+    if (!context || context.actorKind !== "user") return null;
+    const owner = await UserModel.getById(context.actorId);
+    return owner?.name?.trim() || null;
   }
 
   async handleInteractiveApprovalDecision(
@@ -2733,10 +2882,12 @@ export class ChatOpsManager {
       // the approval task lives under the shared thread context, whose
       // recorded owner may be another participant (trusted access), and the
       // resumed run must see the thread's history.
-      const approvalA2aManager =
-        provider.usesServerSideSessions === true
-          ? this.statefulA2aManager
-          : this.a2aManager;
+      const approvalA2aManager = usesServerSideSessions(
+        provider,
+        originalMessage,
+      )
+        ? this.statefulA2aManager
+        : this.a2aManager;
       const result = await approvalA2aManager.sendMessage({
         actor: {
           kind: "user" as const,
@@ -2881,6 +3032,43 @@ function isTransientProviderError(error: unknown): error is ProviderError {
     error instanceof ProviderError &&
     error.chatErrorResponse.isRetryable &&
     CHATOPS_AUTO_RETRYABLE_CODES.has(error.chatErrorResponse.code)
+  );
+}
+
+/** What the reply of a server-side-session turn says about the session. */
+interface ChatSessionReplyInfo {
+  /** This turn started a new session because the chat was idle. */
+  rolledOver: boolean;
+  /** Shown in the footer where nothing else shows whose conversation it is. */
+  ownerName: string | null;
+}
+
+/**
+ * Whether this message's conversation keeps its history server-side. Some
+ * providers decide per provider (Telegram), others per conversation (MS
+ * Teams: 1:1 and group chats yes, channel threads no).
+ */
+function usesServerSideSessions(
+  provider: ChatOpsProvider,
+  message: IncomingChatMessage,
+): boolean {
+  return (
+    provider.usesServerSideSessions === true ||
+    provider.usesServerSideSessionsFor?.(message) === true
+  );
+}
+
+/**
+ * Whether a session has had no message for longer than the rollover window.
+ * Every message write touches the context's `updatedAt`. A missing context
+ * counts as idle, so the chat gets a fresh one.
+ */
+async function isContextIdle(contextId: string): Promise<boolean> {
+  const context = await A2AContextModel.findById(contextId);
+  if (!context) return true;
+  return (
+    Date.now() - context.updatedAt.getTime() >
+    CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS
   );
 }
 

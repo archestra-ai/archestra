@@ -65,6 +65,7 @@ import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { RuntimeCredentialSetupTool } from "./runtime-credential-setup-tool";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import type { ToolIconMap } from "./tool-icon-map";
 import { ToolStatusRow } from "./tool-status-row";
 
 type CompactToolEntry = {
@@ -354,11 +355,6 @@ function HookCircle({
     </TooltipProvider>
   );
 }
-
-export type ToolIconMap = Map<
-  string,
-  { icon?: string | null; catalogId?: string }
->;
 
 export function CompactToolGroup({
   tools,

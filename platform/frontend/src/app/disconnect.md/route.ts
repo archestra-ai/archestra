@@ -16,10 +16,10 @@ import {
 /**
  * Agent instructions that undo what the connect setup installed in one client:
  * the MCP gateway entry, skills and plugins, the LLM proxy settings, and the
- * shell-profile startup check. The reverse steps mirror
- * backend/src/services/connection-setup-script.ts and the startup guard's own
- * disconnect actions (startup-guard.clients.ts); for clients with a guard, the
- * guard runs them itself via ARCHESTRA_GUARD_ACTION=disconnect.
+ * shell-profile startup check. The reverse steps mirror the setup scripts in
+ * backend/src/services/agent-connection-setup/agents/ and the startup guard's
+ * own disconnect actions (agent-connection-setup/guard/clients/); for clients
+ * with a guard, the guard runs them itself via ARCHESTRA_GUARD_ACTION=disconnect.
  */
 export function GET(request: Request) {
   const origin = requestOrigin(request);

@@ -2,7 +2,7 @@
 title: Agents
 description: Build agents with instructions, tools, skills, subagents, and triggers
 order: 2
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -44,7 +44,7 @@ This works the same for tools, knowledge sources, [skills](/docs/agents/skills),
 
 What to know:
 
-- Each person uses their own access. In **All** mode, two people can get different tools from one agent. In both modes, a tool that needs an account uses the person's own connection, unless you pin one.
+- Each person uses their own access, so two people can get different tools from one agent. In **Manual** mode, a person gets an assigned tool only if they can access its MCP server. In both modes, a tool that needs an account uses the person's own connection, unless you pin one.
 - Built-in platform tools are excluded by default in All mode. Review the exclusions before you give an agent tools that change Archestra itself.
 - The agent loads tools as it needs them. It starts with [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool), not the full list. In **Manual** mode, you can turn off **Progressive tool loading** to send every assigned tool.
 - <span id="missing-connections"></span>**Missing connections:** in **Manual** mode, choose when the agent prompts users to connect missing tool accounts (on call, on chat open, or required before chat). To use one account for everyone, pin a connection or [resolve credentials at call time](/docs/mcp/authentication/servers#resolve-at-call-time).

@@ -1,6 +1,6 @@
 import { archestraApiSdk } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,8 +8,17 @@ import {
   useChatAgents,
   useCreateProfile,
   usePinAgent,
+  useProfile,
+  useProfiles,
   useUpdateProfile,
 } from "@/lib/agent.query";
+import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
+import {
+  clearPersistedQueryCache,
+  PERSISTED_QUERY_META,
+  restorePersistedQueryCache,
+  syncPersistedQueryCacheScope,
+} from "@/lib/query-persistence";
 import { isReportedApiError } from "@/lib/utils/api";
 
 // Partial: `@/consts` (pulled in by agent.query.ts) reads real exports of this
@@ -22,6 +31,8 @@ vi.mock("@archestra/shared", async (importOriginal) => {
       ...actual.archestraApiSdk,
       createAgent: vi.fn(),
       getAllAgents: vi.fn(),
+      getAgent: vi.fn(),
+      getChatAgentMcpTools: vi.fn(),
       pinAgent: vi.fn(),
       unpinAgent: vi.fn(),
       updateAgent: vi.fn(),
@@ -33,10 +44,12 @@ vi.mock("sonner");
 
 const sdk = vi.mocked(archestraApiSdk);
 
-function setup<T>(hook: () => T) {
-  const queryClient = new QueryClient({
+function setup<T>(
+  hook: () => T,
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  }),
+) {
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
   return { ...renderHook(hook, { wrapper }), queryClient };
@@ -127,6 +140,106 @@ describe("agent write mutations", () => {
     });
 
     expect(toast.success).toHaveBeenCalledWith("System prompt saved");
+  });
+
+  it("does not revive an inactive gateway list when reloaded immediately after saving", async () => {
+    clearPersistedQueryCache();
+    const oldGateway = {
+      id: "gateway-1",
+      name: "Before",
+      toolExposureMode: "full",
+    };
+    const savedGateway = {
+      ...oldGateway,
+      name: "After",
+      toolExposureMode: "search_and_run_only",
+    };
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    await client.fetchQuery({
+      queryKey: ["agents", { agentTypes: ["mcp_gateway"] }],
+      queryFn: async () => ({ data: [oldGateway] }),
+      meta: PERSISTED_QUERY_META,
+    });
+    syncPersistedQueryCacheScope(client, "user-1:org-1");
+    sdk.updateAgent.mockResolvedValue({ data: savedGateway } as never);
+    sdk.getAgent.mockResolvedValue({ data: savedGateway } as never);
+    const mutation = setup(() => useUpdateProfile(), client);
+
+    try {
+      await act(() =>
+        mutation.result.current.mutateAsync({
+          id: oldGateway.id,
+          data: {
+            name: savedGateway.name,
+            toolExposureMode: "search_and_run_only",
+          },
+        }),
+      );
+      const reloadedClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      restorePersistedQueryCache(reloadedClient);
+      const detail = setup(() => useProfile(oldGateway.id), reloadedClient);
+      try {
+        await waitFor(() =>
+          expect(detail.result.current.data?.name).toBe("After"),
+        );
+      } finally {
+        detail.unmount();
+        reloadedClient.clear();
+      }
+    } finally {
+      mutation.unmount();
+      client.clear();
+      clearPersistedQueryCache();
+    }
+  });
+
+  it("refreshes an active gateway list and its tool estimate after saving", async () => {
+    const savedGateway = {
+      id: "gateway-1",
+      name: "Gateway",
+      toolExposureMode: "search_and_run_only",
+    };
+    const oldGateway = { ...savedGateway, toolExposureMode: "full" };
+    sdk.updateAgent.mockResolvedValue({ data: savedGateway } as never);
+    sdk.getAllAgents
+      .mockResolvedValueOnce({ data: [oldGateway] } as never)
+      .mockResolvedValue({ data: [savedGateway] } as never);
+    sdk.getChatAgentMcpTools
+      .mockResolvedValueOnce({
+        data: [{ name: "tools", tokens: 13000 }],
+      } as never)
+      .mockResolvedValue({ data: [{ name: "tools", tokens: 5763 }] } as never);
+    const hook = setup(() => ({
+      update: useUpdateProfile(),
+      list: useProfiles({ filters: { agentType: "mcp_gateway" } }),
+      tools: useChatProfileMcpTools(savedGateway.id),
+    }));
+    try {
+      await waitFor(() =>
+        expect(hook.result.current.tools.data?.[0].tokens).toBe(13000),
+      );
+      await act(() =>
+        hook.result.current.update.mutateAsync({
+          id: savedGateway.id,
+          data: { toolExposureMode: "search_and_run_only" },
+        }),
+      );
+      await waitFor(() =>
+        expect(hook.result.current.list.data?.[0].toolExposureMode).toBe(
+          "search_and_run_only",
+        ),
+      );
+      await waitFor(() =>
+        expect(hook.result.current.tools.data?.[0].tokens).toBe(5763),
+      );
+    } finally {
+      hook.unmount();
+      hook.queryClient.clear();
+    }
   });
 });
 

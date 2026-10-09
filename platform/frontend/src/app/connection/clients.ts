@@ -244,6 +244,10 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
     svg: ANTIGRAVITY_PATH,
     iconColor: "#3186ff",
     tileBg: "#eef4ff",
+    proxy: {
+      kind: "unsupported",
+      reason: "Antigravity sends its model requests to its own service.",
+    },
   },
   {
     id: "droid",
@@ -269,6 +273,10 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
     svg: KIRO_PATH,
     iconColor: "#9046ff",
     tileBg: "#f4eeff",
+    proxy: {
+      kind: "unsupported",
+      reason: "Kiro sends its model requests to its own service.",
+    },
   },
   {
     id: "openclaw",
@@ -980,20 +988,31 @@ export COPILOT_MODEL="<model-name>"`,
   },
 ];
 
-/**
- * Whether a client is set up from the generic instructions (a self-diagnosing
- * prompt, or the manual endpoints) rather than its own tailored steps.
- */
-/**
- * The apps the admin offers on the Connect page: all when no list is set.
- * "generic" (Generic client) is always offered.
- */
+export function orderedClients(
+  order: readonly string[] | null | undefined,
+): ConnectClient[] {
+  const remaining = new Map(
+    CONNECT_CLIENTS.map((client) => [client.id, client]),
+  );
+  const clients: ConnectClient[] = [];
+  for (const id of order ?? []) {
+    const client = remaining.get(id);
+    if (!client || id === "generic") continue;
+    clients.push(client);
+    remaining.delete(id);
+  }
+  return [...clients, ...remaining.values()];
+}
+
+/** Null visibility shows all clients; Generic client is always included. */
 export function visibleClients(
   shownIds: readonly string[] | null | undefined,
+  order?: readonly string[] | null,
 ): ConnectClient[] {
-  if (!shownIds) return CONNECT_CLIENTS;
+  const clients = orderedClients(order);
+  if (!shownIds) return clients;
   const shown = new Set(shownIds);
-  return CONNECT_CLIENTS.filter((c) => c.id === "generic" || shown.has(c.id));
+  return clients.filter((c) => c.id === "generic" || shown.has(c.id));
 }
 
 export function usesGenericInstructions(client: ConnectClient): boolean {

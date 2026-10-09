@@ -237,3 +237,219 @@ export function useUpdateSlackChatOpsConfig() {
     },
   });
 }
+
+export function useSlackAgentBots() {
+  return useQuery({
+    queryKey: ["chatops", "slack-agent-bots"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.listSlackAgentBots();
+      throwOnApiError(error);
+      return (
+        data ?? {
+          bots: [],
+          canCreateApps: false,
+          oneClickInstall: false,
+          unassignedApp: null,
+          workspaceName: null,
+        }
+      );
+    },
+  });
+}
+
+export function useUpdateSlackAgentBot(agentId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      body: NonNullable<archestraApiTypes.UpdateSlackAgentBotData["body"]>,
+    ) => {
+      if (!agentId) return null;
+      const { data, error } = await archestraApiSdk.updateSlackAgentBot({
+        path: { agentId },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      if (data?.success) {
+        await archestraApiSdk
+          .refreshChatOpsChannelDiscovery({ body: { provider: "slack" } })
+          .catch(() => {});
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      toast.success("Slack bot connected");
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
+export function useDeleteSlackAgentBot() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (agentId: string) => {
+      const { data, error } = await archestraApiSdk.deleteSlackAgentBot({
+        path: { agentId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      toast.success("Slack bot disconnected");
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
+    },
+  });
+}
+
+export function useSaveSlackAppConfigToken() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.UpdateSlackAppConfigTokenData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.updateSlackAppConfigToken({
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      toast.success("Archestra can now create Slack apps");
+      reportSlackAppMigration(data.migrated);
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
+    },
+  });
+}
+
+/** Turn the channel-routed Slack app into one agent's bot. */
+export function useConvertSlackAppToAgentBot() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (agentId: string) => {
+      const { data, error } = await archestraApiSdk.convertSlackAppToAgentBot({
+        body: { agentId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      toast.success("The Slack app now answers as this agent");
+      if (data.reinstallUrl) {
+        const reinstallUrl = data.reinstallUrl;
+        toast.warning("Reinstall the Slack app", {
+          description: "Its permissions changed. Reinstall it from Slack.",
+          action: {
+            label: "Open",
+            onClick: () => window.open(reinstallUrl, "_blank", "noopener"),
+          },
+        });
+      }
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
+    },
+  });
+}
+
+/** Bring every connected Slack app's settings up to date again. */
+export function useMigrateSlackApps() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.migrateSlackApps();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      reportSlackAppMigration(data.migrated);
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
+    },
+  });
+}
+
+function reportSlackAppMigration(
+  results: archestraApiTypes.MigrateSlackAppsResponses["200"]["migrated"],
+) {
+  if (results.length === 0) return;
+  const updated = results.filter((result) => result.ok);
+  const failed = results.filter((result) => !result.ok);
+  if (updated.length > 0) {
+    toast.success(
+      `Updated ${updated.length} Slack ${updated.length === 1 ? "app" : "apps"} to the agent experience`,
+    );
+  }
+  for (const result of updated.filter((r) => r.reinstallUrl)) {
+    toast.warning(`Slack app ${result.appId} needs a reinstall`, {
+      description: "Its permissions changed. Reinstall it from Slack.",
+      action: {
+        label: "Open",
+        onClick: () => window.open(result.reinstallUrl, "_blank", "noopener"),
+      },
+    });
+  }
+  for (const result of failed) {
+    toast.error(`Could not update Slack app ${result.appId}`, {
+      description: result.error,
+    });
+  }
+}
+
+export function useCreateSlackAgentBotApp() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: {
+      agentId: string;
+      body: archestraApiTypes.CreateSlackAgentBotAppData["body"];
+    }) => {
+      const { data, error } = await archestraApiSdk.createSlackAgentBotApp({
+        path: { agentId: params.agentId },
+        body: params.body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
+    },
+  });
+}

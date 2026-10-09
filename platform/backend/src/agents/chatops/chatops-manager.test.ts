@@ -1387,6 +1387,280 @@ describe("ChatOpsManager security validation", () => {
     expect(sendReplySpy).not.toHaveBeenCalled();
   });
 
+  describe("streamed replies", () => {
+    // A provider whose reply stream records what the manager does with it.
+    function createStreamingSetup() {
+      const pushed: unknown[] = [];
+      const stream = {
+        isLive: false,
+        push: vi.fn((chunk: unknown) => {
+          pushed.push(chunk);
+          stream.isLive = true;
+        }),
+        finish: vi.fn(async () => {
+          stream.isLive = false;
+        }),
+        abandon: vi.fn(async () => {
+          stream.isLive = false;
+        }),
+      };
+      const sendReply = vi.fn().mockResolvedValue("reply-id");
+      const provider: ChatOpsProvider = {
+        ...createMockProvider({
+          getUserEmail: async () => "stream@example.com",
+          sendReply,
+        }),
+        startReplyStream: vi.fn(() => stream),
+      };
+      return { provider, stream, sendReply, pushed };
+    }
+
+    function mockStreamingRun(finalText: string) {
+      return vi
+        .spyOn(a2aExecutor, "executeA2AMessage")
+        .mockImplementation(async (params) => {
+          await params.onUiMessageChunk?.({
+            type: "text-delta",
+            id: "t",
+            delta: finalText,
+          });
+          return {
+            text: finalText,
+            messageId: "streamed-message-id",
+            finishReason: "stop",
+            responseUiMessage: {
+              id: "streamed-message-id",
+              role: "assistant",
+              parts: [{ type: "text", text: finalText }],
+            },
+          };
+        });
+    }
+
+    async function setUpBoundAgent(params: {
+      makeUser: (o: { email: string }) => Promise<{ id: string }>;
+      makeOrganization: () => Promise<{ id: string }>;
+      makeTeam: (orgId: string, userId: string) => Promise<{ id: string }>;
+      makeTeamMember: (teamId: string, userId: string) => Promise<unknown>;
+      makeInternalAgent: (o: {
+        organizationId: string;
+      }) => Promise<{ id: string; name: string }>;
+    }) {
+      const user = await params.makeUser({ email: "stream@example.com" });
+      const org = await params.makeOrganization();
+      const team = await params.makeTeam(org.id, user.id);
+      await params.makeTeamMember(team.id, user.id);
+      const agent = await params.makeInternalAgent({ organizationId: org.id });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: agent.id,
+      });
+      return agent;
+    }
+
+    test("a DM reply streams live and is finished in place, not posted again", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const agent = await setUpBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+      mockStreamingRun("Here is the answer");
+      const { provider, stream, sendReply, pushed } = createStreamingSetup();
+
+      const result = await makeManagerWith(provider).processMessage({
+        message: createMockMessage({
+          metadata: { conversationType: "personal" },
+        }),
+        provider,
+      });
+
+      expect(result.success).toBe(true);
+      expect(pushed).toEqual([
+        { type: "text-delta", id: "t", delta: "Here is the answer" },
+      ]);
+      expect(stream.finish).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: "Here is the answer",
+          footer: expect.stringContaining(agent.name),
+        }),
+      );
+      expect(sendReply).not.toHaveBeenCalled();
+    });
+
+    test("text streamed before the agent chose silence is deleted", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      await setUpBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+      mockStreamingRun(`Not for me. ${CHATOPS_NO_REPLY_SENTINEL}`);
+      const { provider, stream, sendReply } = createStreamingSetup();
+
+      await makeManagerWith(provider).processMessage({
+        message: createMockMessage({
+          metadata: { conversationType: "channel", botMentioned: true },
+        }),
+        provider,
+      });
+
+      expect(stream.abandon).toHaveBeenCalledWith({ keepContent: false });
+      expect(stream.finish).not.toHaveBeenCalled();
+      expect(sendReply).not.toHaveBeenCalled();
+    });
+
+    test("an un-addressed channel message is not streamed", async ({
+      makeUser,
+      makeOrganization,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      await setUpBoundAgent({
+        makeUser,
+        makeOrganization,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+      mockStreamingRun("A plain answer");
+      const { provider, sendReply } = createStreamingSetup();
+
+      await makeManagerWith(provider).processMessage({
+        message: createMockMessage({
+          metadata: { conversationType: "channel", botMentioned: false },
+        }),
+        provider,
+      });
+
+      expect(provider.startReplyStream).not.toHaveBeenCalled();
+      expect(sendReply).toHaveBeenCalledWith(
+        expect.objectContaining({ text: "A plain answer" }),
+      );
+    });
+  });
+
+  test("a bot pinned to an agent answers as that agent, alongside the channel's own bot", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executeSpy = mockA2AExecutor();
+    const user = await makeUser({ email: "pinned@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const channelAgent = await makeInternalAgent({ organizationId: org.id });
+    const marketing = await makeInternalAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(channelAgent.id, [team.id]);
+    await AgentTeamModel.assignTeamsToAgent(marketing.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: channelAgent.id,
+    });
+
+    const mainReply = vi.fn().mockResolvedValue("reply-id");
+    const pinnedReply = vi.fn().mockResolvedValue("reply-id");
+    const main = createMockProvider({
+      getUserEmail: async () => "pinned@example.com",
+      sendReply: mainReply,
+    });
+    const pinned: ChatOpsProvider = {
+      ...createMockProvider({
+        getUserEmail: async () => "pinned@example.com",
+        sendReply: pinnedReply,
+      }),
+      pinnedAgentId: marketing.id,
+      stateScope: `agent:${marketing.id}`,
+    };
+    const manager = makeManagerWith(main);
+
+    // The same message reaches both bots; each one answers it.
+    const message = createMockMessage({ messageId: "shared-message-id" });
+    await manager.processMessage({ message, provider: pinned });
+    await manager.processMessage({ message, provider: main });
+
+    expect(executeSpy.mock.calls.map(([params]) => params.agentId)).toEqual([
+      marketing.id,
+      channelAgent.id,
+    ]);
+    expect(pinnedReply).toHaveBeenCalledTimes(1);
+    expect(mainReply).toHaveBeenCalledTimes(1);
+
+    // A redelivery is still answered only once per bot.
+    await manager.processMessage({ message, provider: pinned });
+    expect(executeSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test("a background result for a pinned bot's thread is posted by that bot", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_SHARED",
+      workspaceId: "T1",
+    });
+    const mainReply = vi.fn().mockResolvedValue("reply-id");
+    const pinnedReply = vi.fn().mockResolvedValue("reply-id");
+    const manager = new ChatOpsManager();
+    const internals = manager as unknown as {
+      slackProvider: ChatOpsProvider;
+      slackAgentBots: Map<string, ChatOpsProvider>;
+    };
+    internals.slackProvider = createMockProvider({ sendReply: mainReply });
+    internals.slackAgentBots.set(
+      "agent-marketing",
+      createMockProvider({ sendReply: pinnedReply }),
+    );
+
+    await manager.notifyBindingThread({
+      bindingId: binding.id,
+      threadId: "1.0",
+      text: "The report is ready",
+      pinnedAgentId: "agent-marketing",
+    });
+    await manager.notifyBindingThread({
+      bindingId: binding.id,
+      threadId: "2.0",
+      text: "Done",
+    });
+
+    expect(pinnedReply).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "The report is ready" }),
+    );
+    expect(mainReply).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Done" }),
+    );
+    expect(pinnedReply).toHaveBeenCalledTimes(1);
+    expect(mainReply).toHaveBeenCalledTimes(1);
+  });
+
   test("frames group conversations with speaker, mention state, and the no-reply sentinel", async ({
     makeUser,
     makeOrganization,

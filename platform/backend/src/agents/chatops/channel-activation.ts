@@ -43,6 +43,7 @@ export async function markChannelThreadActive(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<void> {
   await cacheManager.set(
     activationKey(params),
@@ -62,6 +63,7 @@ export async function isChannelThreadActive(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<boolean> {
   return (await cacheManager.get<boolean>(activationKey(params))) === true;
 }
@@ -81,6 +83,7 @@ export async function clearChannelThreadActive(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<boolean> {
   return await cacheManager.delete(activationKey(params));
 }
@@ -111,14 +114,15 @@ export async function clearChannelThreadActive(params: {
  * muteChannelThreadAndNotify, which every mute path goes through to decide
  * whether to confirm.
  *
- * @public — muteChannelThreadAndNotify is the only production caller; the
- * side effects have their own suite in channel-activation.test.ts, which
- * knip --production cannot see.
+ * @public — called by muteChannelThreadAndNotify and by Slack's Stop button
+ * handler; the side effects have their own suite in
+ * channel-activation.test.ts, which knip --production cannot see.
  */
 export async function muteChannelThread(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<boolean> {
   await recordThreadMute(params);
   chatOpsRunRegistry.cancelThread(params);
@@ -157,6 +161,7 @@ export async function muteChannelThreadAndNotify(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
   /** Whether this channel answers every message (see isChannelAnswerAllEnabled). */
   resolveAnswerAll: () => Promise<boolean>;
   postMutedNotice: () => Promise<void>;
@@ -165,6 +170,7 @@ export async function muteChannelThreadAndNotify(params: {
     provider: params.provider,
     channelId: params.channelId,
     threadId: params.threadId,
+    scope: params.scope,
   };
   const answerAll = await params.resolveAnswerAll().catch((error) => {
     logger.warn(
@@ -197,8 +203,8 @@ export async function muteChannelThreadAndNotify(params: {
  * off — is false (mentions-only). The cache is short-lived and also invalidated
  * on toggle (see invalidateChannelAnswerAll), so a change takes effect promptly.
  *
- * @public — called by applyChannelGate and by both providers' mute-reaction
- * paths, which resolve it to decide whether to confirm; also exercised directly
+ * @public — called by applyChannelGate and by the Teams mute-reaction path,
+ * which resolves it to decide whether to confirm; also exercised directly
  * in channel-activation.test.ts (knip --production can't see tests).
  */
 export async function isChannelAnswerAllEnabled(params: {
@@ -288,6 +294,7 @@ export async function markChannelThreadMuted(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<void> {
   await cacheManager.set(
     mutedKey(params),
@@ -308,6 +315,7 @@ export async function isChannelThreadMuted(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<boolean> {
   return (await cacheManager.get<boolean>(mutedKey(params))) === true;
 }
@@ -323,6 +331,7 @@ export async function clearChannelThreadMuted(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<boolean> {
   return await cacheManager.delete(mutedKey(params));
 }
@@ -342,6 +351,7 @@ export async function getThreadMuteMarker(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<string | null> {
   return (await cacheManager.get<string>(muteMarkerKey(params))) ?? null;
 }
@@ -365,6 +375,7 @@ export async function claimThreadMuteHint(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<boolean> {
   const key = muteHintKey(params);
   try {
@@ -436,11 +447,9 @@ export function mightBeAddressedMuteCommand(text: string): boolean {
  * (Slack `shushing_face`, Teams `lipssealed`). Matching a single shared Set
  * avoids a per-provider mapping.
  *
- * Whether the reacted message has to be the bot's own is the caller's business,
- * and the two providers differ: Teams only ever delivers reaction activities for
- * the bot's own messages, while Slack honors the reaction anywhere in a channel
- * thread (see handleMuteReaction) because a mute is about the thread, not about
- * the message carrying it.
+ * Only Teams mutes on a reaction (and only ever receives reactions on the
+ * bot's own messages). Slack threads are muted by the agent session's Stop
+ * button instead.
  */
 export function isMuteReaction(reactionId: string): boolean {
   return THREAD_MUTE_REACTIONS.has(reactionId.trim().toLowerCase());
@@ -515,6 +524,8 @@ export async function applyChannelGate(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  /** Separates this bot's thread state from other bots in the same thread. */
+  scope?: string;
   botMentioned: boolean;
   text: string;
   /**
@@ -523,14 +534,27 @@ export async function applyChannelGate(params: {
    * setting and can differ (or be white-labelled to something else entirely).
    */
   botDisplayName?: string | null;
+  /**
+   * Whether a "mute" message mutes the thread. Off for providers with a native
+   * Stop control (see ChatOpsProvider.hasNativeStopControl), where "mute" is
+   * just text for the agent. Defaults to on.
+   */
+  muteCommandsEnabled?: boolean;
+  /**
+   * Whether the channel's "answer all messages" setting applies. Off for a
+   * Slack bot pinned to one agent: in a channel shared by several such bots,
+   * every one of them would otherwise answer every message. Defaults to on.
+   */
+  honorAnswerAll?: boolean;
   postMutedNotice: () => Promise<void>;
   resolveAnswerAllWorkspaceId: () => Promise<string | null>;
 }): Promise<{ proceed: boolean; addressed: boolean }> {
-  const { provider, channelId, threadId, botMentioned, text } = params;
-  const activation = { provider, channelId, threadId };
+  const { provider, channelId, threadId, scope, botMentioned, text } = params;
+  const activation = { provider, channelId, threadId, scope };
+  const muteCommandsEnabled = params.muteCommandsEnabled ?? true;
 
-  let wantsMute = isThreadMuteCommand(text);
-  if (!wantsMute && mightBeAddressedMuteCommand(text)) {
+  let wantsMute = muteCommandsEnabled && isThreadMuteCommand(text);
+  if (muteCommandsEnabled && !wantsMute && mightBeAddressedMuteCommand(text)) {
     wantsMute = isThreadMuteCommand(text, [
       await OrganizationModel.getAppName(),
       ...(params.botDisplayName ? [params.botDisplayName] : []),
@@ -545,7 +569,10 @@ export async function applyChannelGate(params: {
   // cancelled the in-flight runs — a lost confirmation notice beats a late reply
   // arriving after someone asked for quiet.
   let answerAll = false;
-  if ((!botMentioned && !isActive) || wantsMute) {
+  if (
+    (params.honorAnswerAll ?? true) &&
+    ((!botMentioned && !isActive) || wantsMute)
+  ) {
     try {
       answerAll = await isChannelAnswerAllEnabled({
         provider,
@@ -610,36 +637,47 @@ function activationKey(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): AllowedCacheKey {
   const prefix =
     params.provider === "slack"
       ? CacheKey.SlackThreadActive
       : CacheKey.TeamsThreadActive;
-  return `${prefix}-${params.channelId}::${params.threadId}`;
+  return `${prefix}-${params.channelId}::${params.threadId}${scopeSuffix(params.scope)}`;
 }
 
 function muteHintKey(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): AllowedCacheKey {
   const prefix =
     params.provider === "slack"
       ? CacheKey.SlackThreadMuteHint
       : CacheKey.TeamsThreadMuteHint;
-  return `${prefix}-${params.channelId}::${params.threadId}`;
+  return `${prefix}-${params.channelId}::${params.threadId}${scopeSuffix(params.scope)}`;
 }
 
 function mutedKey(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): AllowedCacheKey {
   const prefix =
     params.provider === "slack"
       ? CacheKey.SlackThreadMuted
       : CacheKey.TeamsThreadMuted;
-  return `${prefix}-${params.channelId}::${params.threadId}`;
+  return `${prefix}-${params.channelId}::${params.threadId}${scopeSuffix(params.scope)}`;
+}
+
+/**
+ * Thread state is per bot: two Slack bots pinned to different agents can share
+ * a thread, and mentioning one must not wake (or stop) the other.
+ */
+function scopeSuffix(scope: string | undefined): string {
+  return scope ? `::${scope}` : "";
 }
 
 function answerAllKey(params: {
@@ -688,6 +726,7 @@ async function recordThreadMute(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): Promise<void> {
   await cacheManager.set(
     muteMarkerKey(params),
@@ -700,12 +739,13 @@ function muteMarkerKey(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   threadId: string;
+  scope?: string;
 }): AllowedCacheKey {
   const prefix =
     params.provider === "slack"
       ? CacheKey.SlackThreadMuteMarker
       : CacheKey.TeamsThreadMuteMarker;
-  return `${prefix}-${params.channelId}::${params.threadId}`;
+  return `${prefix}-${params.channelId}::${params.threadId}${scopeSuffix(params.scope)}`;
 }
 
 /**

@@ -2,7 +2,7 @@
 title: Slack
 description: Connect Archestra agents to Slack channels
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -48,7 +48,16 @@ To change the agent, run `/archestra-select-agent`, or [add the channel](/docs/a
 - In a direct message, it answers every message.
 - To answer every message in a channel, turn on **Answer all messages** in the channel's **Settings**.
 
-To quiet a thread, send `mute`, or react with 🔇 or 🤫. The bot stops, and cancels any reply in progress. Mention it again to wake it.
+To quiet a thread, press **Stop** while the bot is working. It drops the answer in progress and stops answering that thread. Mention it again to wake it.
+
+<span id="streaming"></span>
+
+## Watch the Answer Arrive
+
+The answer appears as the agent writes it, so a long one never leaves the thread silent. Each tool call shows as a step that turns done or failed, and the bot's suggested prompts wait at the top of its direct messages.
+
+- **Streaming:** in direct messages and threads where you mentioned the bot. Elsewhere the full answer posts at once, because the agent may decide to stay quiet.
+- **Suggested prompts:** the first four suggested prompts of the agent picked for your DMs.
 
 <span id="switching-agents-inline"></span>
 
@@ -61,6 +70,23 @@ Put the agent's name and `>` before your message:
 ```
 
 The channel keeps its agent. Names match without regard to case or spaces, so `salesteam >` finds "Sales Team". An unknown name goes to the channel's agent, with a notice.
+
+<span id="agent-bots"></span>
+
+## Give an Agent Its Own Bot
+
+Give an agent its own Slack bot, and people @mention it by name: `@archestra_marketing` and `@archestra_coding` can work in the same channel, even the same thread. Each bot always answers as its agent, whatever the channel's agent is.
+
+1. Connect the main Slack app first.
+2. Under **Agent bots** on the Slack settings page, pick the agent and click **Add Slack bot**.
+3. Follow the steps. They create a separate Slack app for that agent, with a manifest that already has its name.
+4. Invite the new bot to the channels where people should reach it.
+
+What to know:
+
+- **One app per agent:** Slack gives each app one bot, so each agent needs its own app. The same app cannot be connected twice.
+- **Threads:** mentioning one bot does not wake the other. **Stop** stops only the bot it belongs to.
+- **Answer all messages:** applies to the main app only. An agent bot answers when mentioned, then keeps answering its thread.
 
 <span id="channel-instructions"></span>
 
@@ -93,6 +119,7 @@ The prefix comes from the Slack app name you choose in the wizard.
 - **Files:** the agent reads images, PDFs, and text files such as CSV, JSON, and Markdown. Files posted earlier in the same thread count too. With a [code sandbox](/docs/agents#code-sandbox), it can open other files, such as ZIP archives.
 - **File access:** downloads need the `files:read` scope, which the app manifest includes. Reinstall an app created before that scope was added.
 - **File limits:** 20 files per message, 10 MB per file, 25 MB in total. Archestra skips larger files and tells the agent which files it did not get.
+- **Apps created before October 2026:** the **Stop** button and DM prompts need Slack's agent experience. In the Slack app settings, open **Agent** and update the app, then subscribe to the `agent_session_stopped` and `app_home_opened` bot events. Slack cannot switch an app back.
 
 ## Troubleshooting
 

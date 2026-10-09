@@ -29,6 +29,7 @@ import type {
   ChatOpsEventHandler,
   ChatOpsProvider,
   ChatOpsProviderType,
+  ChatOpsReplyStream,
   ChatReplyOptions,
   ChatThreadMessage,
   ChatThreadMessageFile,
@@ -46,19 +47,13 @@ import {
   ensureProvisionedUser,
   resolveSignupWelcomeMode,
 } from "./auto-provision";
-import {
-  applyChannelGate,
-  isChannelAnswerAllEnabled,
-  isChannelThreadActive,
-  isChannelThreadMuted,
-  isMuteReaction,
-  muteChannelThreadAndNotify,
-} from "./channel-activation";
+import { applyChannelGate, muteChannelThread } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
+import { SlackReplyStream } from "./slack-reply-stream";
 import {
   EventDedupMap,
   errorMessage,
@@ -78,9 +73,21 @@ import {
 class SlackProvider implements ChatOpsProvider {
   readonly providerId: ChatOpsProviderType = "slack";
   readonly displayName = "Slack";
+  /** Slack agent sessions show a Stop button while the bot works. */
+  readonly hasNativeStopControl = true;
+
+  readonly pinnedAgentId?: string;
+  readonly stateScope?: string;
 
   private client: WebClient | null = null;
   private botUserId: string | null = null;
+  /** The bot's bot id (B…), which marks its own messages in history. */
+  private botId: string | null = null;
+  /**
+   * User ids of the other Slack bots this deployment runs in the workspace. A
+   * message that @mentions one of them, and not this bot, is addressed to it.
+   */
+  private siblingBotUserIds = new Set<string>();
   /**
    * The bot's name as Slack shows it, which is what someone types when they
    * address it without an @mention ("Archestra mute"). auth.test can't provide
@@ -88,6 +95,8 @@ class SlackProvider implements ChatOpsProvider {
    * resolved from the bot's own profile.
    */
   private botDisplayName: string | null = null;
+  /** The bot's Slack username — what people type after @ to mention it. */
+  private botHandle: string | null = null;
   private teamId: string | null = null;
   private teamName: string | null = null;
   private config: SlackDbConfig;
@@ -99,9 +108,40 @@ class SlackProvider implements ChatOpsProvider {
     maxSize: 500,
     defaultTtl: TimeInMs.Hour,
   });
+  /**
+   * The suggested prompts last set per DM, so reopening the Messages tab does
+   * not re-send an unchanged list on every open.
+   */
+  private suggestedPromptsCache = new LRUCacheManager<string>({
+    maxSize: 1000,
+    defaultTtl: TimeInMs.Hour,
+  });
+  /**
+   * Set once agents.sessions.setStatus is rejected (an app not yet on the
+   * Agent messaging experience), so status updates go straight to the legacy
+   * assistant.threads.setStatus instead of failing first every time.
+   */
+  private useLegacyThreadStatus = false;
 
-  constructor(slackConfig: SlackDbConfig) {
+  /**
+   * @param options.pinnedAgentId - set for an additional Slack app that always
+   *   answers as this agent (see SlackAgentBotConfig)
+   */
+  constructor(
+    slackConfig: SlackDbConfig,
+    options: { pinnedAgentId?: string } = {},
+  ) {
     this.config = slackConfig;
+    if (options.pinnedAgentId) {
+      this.pinnedAgentId = options.pinnedAgentId;
+      this.stateScope = `agent:${options.pinnedAgentId}`;
+    }
+  }
+
+  setSiblingBotUserIds(userIds: string[]): void {
+    this.siblingBotUserIds = new Set(
+      userIds.filter((id) => id !== this.botUserId),
+    );
   }
 
   isConfigured(): boolean {
@@ -169,11 +209,15 @@ class SlackProvider implements ChatOpsProvider {
       }
 
       this.botUserId = (body.user_id as string) || null;
+      this.botId = (body.bot_id as string) || null;
       this.teamId = (body.team_id as string) || null;
       this.teamName = (body.team as string) || null;
       // Best-effort: without it the bot simply stops answering to its own name.
       this.botDisplayName = this.botUserId
         ? await this.getUserName(this.botUserId)
+        : null;
+      this.botHandle = this.botUserId
+        ? await this.fetchUserHandle(this.botUserId)
         : null;
       logger.info(
         {
@@ -203,6 +247,10 @@ class SlackProvider implements ChatOpsProvider {
     return this.teamId;
   }
 
+  getBotHandle(): string | null {
+    return this.botHandle;
+  }
+
   getWorkspaceName(): string | null {
     return this.teamName;
   }
@@ -223,7 +271,9 @@ class SlackProvider implements ChatOpsProvider {
     this.socketDedup.clear();
     this.client = null;
     this.botUserId = null;
+    this.botId = null;
     this.botDisplayName = null;
+    this.botHandle = null;
     this.teamId = null;
     this.teamName = null;
     logger.info("[SlackProvider] Cleaned up");
@@ -293,18 +343,36 @@ class SlackProvider implements ChatOpsProvider {
 
     const event = body.event;
 
-    // Reaction-based mute: a 🔇/🤫 reaction on any message in a channel thread
-    // mutes that thread. Pure side effect — never forwarded to the agent.
-    if (event.type === "reaction_added") {
-      await this.handleMuteReaction(event, body.team_id ?? null);
-      return null;
+    // Agent-session and DM lifecycle events are side effects, never forwarded
+    // to the agent: the Stop button, and the moments a DM opens (suggested
+    // prompts).
+    const workspaceId = body.team_id ?? this.teamId;
+    switch (event.type) {
+      case "agent_session_stopped":
+        await this.handleSessionStopped(event);
+        return null;
+      case "app_home_opened":
+        // Agent messaging experience: the DM's Messages tab was opened.
+        if (event.tab === "messages") {
+          await this.setSuggestedPrompts({
+            channelId: event.channel,
+            workspaceId,
+          });
+        }
+        return null;
+      case "assistant_thread_started":
+        // Legacy assistant experience: a new assistant thread was opened.
+        if (event.assistant_thread) {
+          await this.setSuggestedPrompts({
+            channelId: event.assistant_thread.channel_id,
+            threadTs: event.assistant_thread.thread_ts,
+            workspaceId,
+          });
+        }
+        return null;
     }
 
     // Only process message and app_mention events.
-    // assistant_thread_started and assistant_thread_context_changed events are
-    // subscribed in the manifest (required for "Agents & AI Apps" designation)
-    // but intentionally dropped here — handling them (e.g., welcome messages,
-    // suggested prompts) is deferred to a future phase.
     if (event.type !== "message" && event.type !== "app_mention") {
       return null;
     }
@@ -328,29 +396,40 @@ class SlackProvider implements ChatOpsProvider {
       Boolean(this.botUserId && text.includes(`<@${this.botUserId}>`));
     const cleanedText = this.cleanBotMention(text);
 
+    // Addressed to another of this deployment's bots (`@archestra_marketing`
+    // in a thread this bot is also in): that bot answers, this one stays out.
+    if (
+      !hasBotMention &&
+      [...text.matchAll(/<@([A-Z0-9]+)>/g)].some((match) =>
+        this.siblingBotUserIds.has(match[1]),
+      )
+    ) {
+      return null;
+    }
+
     // Channel auto-reply gate: in channels the bot stays quiet until
     // @mentioned (app_mention event or message text containing <@BOT_ID>),
     // then keeps replying to that thread without further mentions until the
     // activation TTL lapses. DMs are always processed without a mention.
     //
-    // A user can end the sticky behavior early by sending a mute command (e.g.
-    // "@bot mute"). It's honored both when the bot is mentioned and when the
-    // thread is already active (so muting needs no re-mention), then the bot
-    // stays quiet until @mentioned again.
+    // A user ends the sticky behavior early with the agent session's Stop
+    // button (see handleSessionStopped), after which the bot stays quiet until
+    // @mentioned again. A "mute" message is ordinary text here.
     //
     // A channel can also opt into answering EVERY message (a per-channel
     // "answer all messages" binding setting): a message the gate would normally
-    // ignore is processed instead, unless that thread was muted.
+    // ignore is processed instead, unless that thread was stopped.
     if (!isDM) {
       const { proceed } = await applyChannelGate({
         provider: this.providerId,
         channelId: event.channel,
         threadId: threadTs,
+        scope: this.stateScope,
         botMentioned: hasBotMention,
         text: cleanedText,
         botDisplayName: this.botDisplayName,
-        // The :mute: reaction (see isMuteReaction) is the only acknowledgement;
-        // no confirmation message is posted.
+        muteCommandsEnabled: false,
+        honorAnswerAll: !this.pinnedAgentId,
         postMutedNotice: async () => {},
         resolveAnswerAllWorkspaceId: async () => body.team_id || null,
       });
@@ -441,6 +520,47 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async sendReply(options: ChatReplyOptions): Promise<string> {
+    return await this.postReply(options);
+  }
+
+  startReplyStream(message: IncomingChatMessage): ChatOpsReplyStream {
+    const client = this.client;
+    if (!client) {
+      throw new Error("SlackProvider not initialized");
+    }
+    // Slack streams only into a thread; outside a DM it also needs the person
+    // the stream answers.
+    const isDM = message.metadata?.channelType === "im";
+    const teamId = message.workspaceId ?? this.teamId;
+    return new SlackReplyStream({
+      client,
+      channelId: message.channelId,
+      threadTs: message.threadId ?? message.messageId,
+      ...(!isDM &&
+        teamId && {
+          recipient: { userId: message.senderId, teamId },
+        }),
+      fitsOneMessage: (text) =>
+        text.length <= MARKDOWN_BLOCK_CHAR_LIMIT &&
+        estimateRenderedBlocks(text) <= MAX_ESTIMATED_RENDERED_BLOCKS,
+      buildTrailingBlocks: (options) => buildTrailingContextBlocks(options),
+      postReply: async (options, replaceTs) => {
+        await this.postReply(
+          { ...options, originalMessage: message },
+          replaceTs,
+        );
+      },
+    });
+  }
+
+  /**
+   * Post a reply as one or more messages. With `replaceTs`, the first message
+   * replaces that existing one (a streamed preview) instead of being posted.
+   */
+  private async postReply(
+    options: ChatReplyOptions,
+    replaceTs?: string,
+  ): Promise<string> {
     if (!this.client) {
       throw new Error("SlackProvider not initialized");
     }
@@ -487,23 +607,7 @@ class SlackProvider implements ChatOpsProvider {
           ],
         });
       } else {
-        // An even-more-subtle hint (e.g. the one-time mute tip) sits on its own
-        // context line ABOVE the agent footer, so the footer stays the last
-        // line of the reply.
-        if (options.hint) {
-          blocks.push({
-            type: "context",
-            elements: [{ type: "plain_text", text: options.hint, emoji: true }],
-          });
-        }
-        if (options.footer) {
-          blocks.push({
-            type: "context",
-            elements: [
-              { type: "plain_text", text: options.footer, emoji: true },
-            ],
-          });
-        }
+        blocks.push(...buildTrailingContextBlocks(options));
       }
 
       // Nothing to say and nothing to stamp — skip the post rather than send
@@ -522,6 +626,17 @@ class SlackProvider implements ChatOpsProvider {
       // thread, so we don't spam the channel with N top-level posts.
       const threadTs =
         options.originalMessage.threadId ?? (firstTs || undefined);
+
+      if (i === 0 && replaceTs) {
+        await this.client.chat.update({
+          channel: options.originalMessage.channelId,
+          ts: replaceTs,
+          text: fallbackText,
+          blocks,
+        });
+        firstTs = replaceTs;
+        continue;
+      }
 
       const postArgs = {
         channel: options.originalMessage.channelId,
@@ -715,8 +830,8 @@ class SlackProvider implements ChatOpsProvider {
                 "*Available commands:*\n" +
                 `\`${SLACK_SLASH_COMMANDS.SELECT_AGENT}\` — Change the default agent handling requests in the channel\n` +
                 `\`${SLACK_SLASH_COMMANDS.STATUS}\` — Check the current agent handling requests in the channel\n` +
-                `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands\n` +
-                "`mute` — Reply with this (or `mute` me directly) to stop auto-replies in a thread; @mention me to resume",
+                `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands\n\n` +
+                "Press *Stop* while I'm working to stop me and end auto-replies in that thread; @mention me to resume.",
             },
           },
           { type: "divider" },
@@ -848,10 +963,22 @@ class SlackProvider implements ChatOpsProvider {
             size: f.size,
           }));
 
-        const isFromBot = Boolean(msg.bot_id) || msg.user === this.botUserId;
+        // Only this bot's own messages are its side of the conversation.
+        // Another bot in the thread (a sibling agent, an integration) speaks
+        // under its own name, like a person.
+        const isFromBot = this.botId
+          ? msg.bot_id === this.botId || msg.user === this.botUserId
+          : Boolean(msg.bot_id) || msg.user === this.botUserId;
+        const otherBot = msg as {
+          bot_profile?: { name?: string };
+          username?: string;
+        };
+        const otherBotName = otherBot.bot_profile?.name ?? otherBot.username;
         const senderName = isFromBot
           ? msg.user || "Unknown"
-          : userNameMap.get(msg.user as string) || msg.user || "Unknown";
+          : msg.bot_id
+            ? otherBotName || msg.bot_id
+            : userNameMap.get(msg.user as string) || msg.user || "Unknown";
 
         return {
           messageId: msg.ts as string,
@@ -1202,8 +1329,8 @@ class SlackProvider implements ChatOpsProvider {
             "*Available commands:*\n" +
             `\`${slashCommands.SELECT_AGENT}\` — Change the default agent\n` +
             `\`${slashCommands.STATUS}\` — Show current agent binding\n` +
-            `\`${slashCommands.HELP}\` — Show this help message\n` +
-            "`mute` — Reply with this in a thread to stop auto-replies there; @mention me to resume\n\n" +
+            `\`${slashCommands.HELP}\` — Show this help message\n\n` +
+            "Press *Stop* while I'm working to stop me and end auto-replies in that thread; @mention me to resume.\n\n" +
             "Or just send a message to interact with the assigned agent.",
         };
 
@@ -1364,40 +1491,21 @@ class SlackProvider implements ChatOpsProvider {
     await this.client.chat.postMessage(postArgs);
   }
 
+  /**
+   * Put the thread's agent session into "processing": Slack shows a working
+   * indicator with a Stop button (see handleSessionStopped).
+   */
   async setTypingStatus(channelId: string, threadTs: string): Promise<void> {
-    if (!this.client) return;
-    try {
-      await this.client.assistant.threads.setStatus({
-        channel_id: channelId,
-        thread_ts: threadTs,
-        status: "is thinking...",
-      });
-    } catch (error) {
-      // Non-fatal: fails if "Agents & AI Apps" isn't enabled or scope missing
-      logger.debug(
-        { error: errorMessage(error) },
-        "[SlackProvider] setTypingStatus failed (non-fatal)",
-      );
-    }
+    await this.setSessionStatus(channelId, threadTs, "processing");
   }
 
+  /**
+   * Move the session back to "active". Agent sessions stay "processing" until
+   * told otherwise — posting a reply does not clear it — so every run ends
+   * here, replied or silent.
+   */
   async clearTypingStatus(channelId: string, threadTs: string): Promise<void> {
-    if (!this.client) return;
-    try {
-      // Slack clears the assistant status when an empty string is set. Without
-      // this, a deliberate no-reply leaves "is thinking..." spinning forever —
-      // Slack only auto-clears the status when a message is posted.
-      await this.client.assistant.threads.setStatus({
-        channel_id: channelId,
-        thread_ts: threadTs,
-        status: "",
-      });
-    } catch (error) {
-      logger.debug(
-        { error: errorMessage(error) },
-        "[SlackProvider] clearTypingStatus failed (non-fatal)",
-      );
-    }
+    await this.setSessionStatus(channelId, threadTs, "active");
   }
 
   async downloadFiles(
@@ -1431,6 +1539,46 @@ class SlackProvider implements ChatOpsProvider {
     return this.botUserId;
   }
 
+  /** Required bot scopes the token does not have (as of the last check). */
+  getMissingScopes(): string[] {
+    return [...this.missingScopes];
+  }
+
+  /**
+   * Where an admin reinstalls this app to grant scopes it lacks: its OAuth &
+   * Permissions page, with the Reinstall to Workspace button.
+   */
+  getReinstallUrl(): string {
+    return this.config.appId
+      ? `https://api.slack.com/apps/${this.config.appId}/oauth`
+      : "https://api.slack.com/apps";
+  }
+
+  /**
+   * Check the token's scopes again, so a reinstall shows up without a
+   * restart. Non-fatal: on failure the last known state stays.
+   */
+  async refreshGrantedScopes(): Promise<void> {
+    if (!this.config.botToken) return;
+    try {
+      const response = await fetch("https://slack.com/api/auth.test", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.config.botToken}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      });
+      if ((await response.json()).ok) {
+        this.parseGrantedScopes(response.headers.get("x-oauth-scopes"));
+      }
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] Could not re-check granted scopes",
+      );
+    }
+  }
+
   hasMissingScopes(): boolean {
     return this.missingScopes.length > 0;
   }
@@ -1442,31 +1590,25 @@ class SlackProvider implements ChatOpsProvider {
   async notifyMissingScopes(message: IncomingChatMessage): Promise<void> {
     if (this.missingScopes.length === 0 || !this.client) return;
 
-    const cacheKey: AllowedCacheKey = `${CacheKey.SlackScopeNotification}-${this.teamId ?? "unknown"}`;
+    // Per app: several Slack apps (one per agent) can share a workspace.
+    const cacheKey: AllowedCacheKey = `${CacheKey.SlackScopeNotification}-${this.teamId ?? "unknown"}-${this.config.appId || "main"}`;
     const alreadyNotified = await cacheManager.get<boolean>(cacheKey);
     if (alreadyNotified) return;
 
     const scopeList = this.missingScopes.map((s) => `  • \`${s}\``).join("\n");
 
-    const appSettingsUrl =
-      this.config.appId && this.teamId
-        ? `https://app.slack.com/app-settings/${this.teamId}/${this.config.appId}/oauth`
-        : "https://api.slack.com/apps";
-
     const appName = await OrganizationModel.getAppName();
     const text = [
-      `:warning: *Your ${appName} Slack app is missing required scopes*`,
+      `:warning: *Reinstall this Slack app to finish setting it up*`,
       "",
-      "The following scopes need to be added to your Slack app:",
+      `${appName} needs permissions this app has not been granted yet:`,
       scopeList,
       "",
-      "Until they're added, some features may not work fully.",
+      "Until then, some features may not work.",
       "",
-      "*To update your app:*",
-      `1. Open your <${appSettingsUrl}|Slack app settings>`,
-      "2. Go to *OAuth & Permissions* → *Scopes* → *Bot Token Scopes*",
-      "3. Add the missing scopes listed above",
-      "4. Click *Reinstall to Workspace* to apply the changes",
+      `1. Open the app's <${this.getReinstallUrl()}|OAuth & Permissions page>`,
+      "2. If a scope above is not listed under *Bot Token Scopes*, add it",
+      "3. Click *Reinstall to Workspace* and approve",
     ].join("\n");
 
     try {
@@ -1496,135 +1638,130 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
 
   /**
-   * Mute a channel thread, confirming only when the mute changed something —
-   * a cleared activation, or a first mute in an answer-all channel (see
-   * muteChannelThreadAndNotify). Redelivered events and repeat mutes find the
-   * state already set and stay silent, so no duplicate "muted" notices.
+   * The Stop button on an agent session: stop the work and end sticky
+   * auto-replies in the thread. muteChannelThread aborts this pod's runs for
+   * the thread and records the mute marker every other pod checks before
+   * replying, so a run elsewhere posts nothing either. Slack halts any live
+   * stream itself but leaves the session "processing" — moving it on is ours.
    */
-  private async muteThreadAndNotify(
+  private async handleSessionStopped(event: SlackEvent): Promise<void> {
+    const threadTs = event.thread_ts;
+    if (!event.channel || !threadTs) return;
+    logger.info(
+      { channelId: event.channel, threadTs, userId: event.user },
+      "[SlackProvider] Agent session stopped by user",
+    );
+    await muteChannelThread({
+      provider: this.providerId,
+      channelId: event.channel,
+      threadId: threadTs,
+      scope: this.stateScope,
+    });
+    await this.setSessionStatus(event.channel, threadTs, "active");
+  }
+
+  /**
+   * Offer the DM's agent's suggested prompts. In the Agent messaging
+   * experience they sit at the top of the Messages tab (no thread); in the
+   * legacy assistant experience they belong to the new assistant thread.
+   * Nothing is offered until the DM has an agent, or when it has no prompts.
+   * A bot pinned to an agent always offers that agent's prompts.
+   */
+  private async setSuggestedPrompts(params: {
+    channelId: string;
+    threadTs?: string;
+    workspaceId: string | null;
+  }): Promise<void> {
+    if (!this.client) return;
+    try {
+      const agentId =
+        this.pinnedAgentId ??
+        (
+          await ChatOpsChannelBindingModel.findByChannel({
+            provider: this.providerId,
+            channelId: params.channelId,
+            workspaceId: params.workspaceId,
+          })
+        )?.agentId;
+      if (!agentId) return;
+      const agent = await AgentModel.findById(agentId);
+      const prompts = (agent?.suggestedPrompts ?? [])
+        .slice(0, SLACK_MAX_SUGGESTED_PROMPTS)
+        .map((prompt) => ({
+          title: prompt.summaryTitle,
+          message: prompt.prompt,
+        }));
+      if (prompts.length === 0) return;
+
+      // The Messages-tab list persists, so an unchanged one is not re-sent.
+      const signature = JSON.stringify(prompts);
+      if (
+        !params.threadTs &&
+        this.suggestedPromptsCache.get(params.channelId) === signature
+      ) {
+        return;
+      }
+      await this.client.assistant.threads.setSuggestedPrompts({
+        channel_id: params.channelId,
+        prompts,
+        // thread_ts is legacy-only: an agent app's call silently fails with it.
+        ...(params.threadTs && { thread_ts: params.threadTs }),
+      } as Parameters<
+        WebClient["assistant"]["threads"]["setSuggestedPrompts"]
+      >[0]);
+      if (!params.threadTs) {
+        this.suggestedPromptsCache.set(params.channelId, signature);
+      }
+    } catch (error) {
+      // Non-fatal: e.g. static prompts configured in the app settings.
+      logger.debug(
+        { error: errorMessage(error), channelId: params.channelId },
+        "[SlackProvider] Failed to set suggested prompts (non-fatal)",
+      );
+    }
+  }
+
+  /**
+   * Set the thread's agent session status. Apps still on the legacy assistant
+   * experience reject agents.sessions.*, so they fall back to
+   * assistant.threads.setStatus, which Slack bridges to the same session
+   * (non-empty status = processing, empty = active).
+   */
+  private async setSessionStatus(
     channelId: string,
     threadTs: string,
-    workspaceId: string | null,
-  ): Promise<boolean> {
-    return await muteChannelThreadAndNotify({
-      provider: this.providerId,
-      channelId,
-      threadId: threadTs,
-      resolveAnswerAll: () =>
-        isChannelAnswerAllEnabled({
-          provider: this.providerId,
-          channelId,
-          workspaceId,
-        }),
-      postMutedNotice: async () => {},
-    });
-  }
-
-  /**
-   * Mute a thread when a 🔇/🤫 reaction lands on a message in a channel.
-   *
-   * The reaction says something about the THREAD, not about the message that
-   * happens to carry it, so it is honored wherever it lands — on one of the
-   * bot's replies, on a teammate's message, or on the message that started the
-   * thread. The previous `item_user === botUserId` gate dropped it in two very
-   * ordinary situations: `item_user` is optional on `reaction_added` and Slack
-   * does not populate it for every app-authored message, and reacting on the
-   * thread root (the message at the top, and the obvious thing to react to) was
-   * never the bot's own message to begin with. Both failed silently.
-   *
-   * Reacting where the bot was never engaged costs nothing: muting is
-   * idempotent, and muteThreadAndNotify stays quiet unless the mute actually
-   * changed something.
-   *
-   * Slack reaction events carry only the reacted message's ts, not its
-   * thread_ts, so the thread root (the activation key) is resolved separately.
-   */
-  private async handleMuteReaction(
-    event: SlackReactionEvent,
-    teamId: string | null,
+    status: "processing" | "active",
   ): Promise<void> {
-    if (
-      event.item?.type !== "message" ||
-      !isMuteReaction(event.reaction ?? "") ||
-      // The bot has no reason to mute itself, and reacting to its own replies
-      // is how an echo would start.
-      (this.botUserId !== null && event.user === this.botUserId)
-    ) {
-      return;
+    if (!this.client || !threadTs) return;
+    if (!this.useLegacyThreadStatus) {
+      try {
+        await this.client.apiCall("agents.sessions.setStatus", {
+          channel_id: channelId,
+          thread_ts: threadTs,
+          status,
+        });
+        return;
+      } catch (error) {
+        if (isRateLimitError(error)) return;
+        this.useLegacyThreadStatus = true;
+        logger.debug(
+          { error: errorMessage(error) },
+          "[SlackProvider] agents.sessions.setStatus unavailable; using assistant.threads.setStatus",
+        );
+      }
     }
-    const channelId = event.item.channel;
-    // DMs have no sticky activation to clear; skip the wasted API lookup.
-    if (isSlackDmChannel(channelId)) return;
-
-    const threadTs = await this.resolveThreadRoot(channelId, event.item.ts);
-    if (!threadTs) return; // couldn't resolve — never claim a false "muted"
-    // Bindings (and so the answer-all setting) are keyed on the workspace id
-    // the message path stores, which is the event envelope's team_id; fall back
-    // to the authenticated workspace when an envelope omits it, or the lookup
-    // would miss and an answer-all mute would go unconfirmed again.
-    await this.muteThreadAndNotify(channelId, threadTs, teamId ?? this.teamId);
-  }
-
-  /**
-   * Resolve the thread root ts a message belongs to — the value the activation
-   * key was written with. conversations.replies returns the thread's parent as
-   * messages[0]; its ts (or thread_ts) is the root. Returns null on failure so
-   * callers don't post a false confirmation.
-   *
-   * A thread we already track under this exact ts is its own root, so that case
-   * is answered from the cache: it is the likeliest target of a mute reaction
-   * (the message that started the thread), it saves an API round trip, and it
-   * keeps the mute working when that call would have failed — a transient
-   * conversations.replies error used to discard the mute outright.
-   */
-  private async resolveThreadRoot(
-    channelId: string,
-    ts: string,
-  ): Promise<string | null> {
-    if (await this.isTrackedThreadRoot(channelId, ts)) return ts;
-    if (!this.client) return null;
     try {
-      const result = await this.client.conversations.replies({
-        channel: channelId,
-        ts,
-        limit: 1,
+      await this.client.assistant.threads.setStatus({
+        channel_id: channelId,
+        thread_ts: threadTs,
+        status: status === "processing" ? "is thinking..." : "",
       });
-      const root = result.messages?.[0];
-      return (
-        (root?.thread_ts as string | undefined) ||
-        (root?.ts as string | undefined) ||
-        null
-      );
     } catch (error) {
-      logger.warn(
-        { error: errorMessage(error), channelId, ts },
-        "[SlackProvider] Failed to resolve thread root for mute reaction",
+      // Non-fatal: fails if the app isn't an agent/assistant or lacks the scope.
+      logger.debug(
+        { error: errorMessage(error) },
+        "[SlackProvider] assistant.threads.setStatus failed (non-fatal)",
       );
-      return null;
-    }
-  }
-
-  /**
-   * Whether we already hold sticky-auto-reply state for this exact
-   * channel+thread key — which only ever holds for a thread ROOT, since every
-   * key is written from a message's `thread_ts || ts`. A reply's own ts can
-   * never collide with it, so a hit is proof, not a guess.
-   *
-   * Purely an optimization on top of the API lookup, so a cache failure falls
-   * through to it rather than propagating.
-   */
-  private async isTrackedThreadRoot(
-    channelId: string,
-    threadId: string,
-  ): Promise<boolean> {
-    const activation = { provider: this.providerId, channelId, threadId };
-    try {
-      return (
-        (await isChannelThreadActive(activation)) ||
-        (await isChannelThreadMuted(activation))
-      );
-    } catch {
-      return false;
     }
   }
 
@@ -1763,8 +1900,8 @@ class SlackProvider implements ChatOpsProvider {
         switch (type) {
           case "events_api": {
             await safeAck();
-            // Messages carry event.ts; reaction events carry event.event_ts
-            // instead — fall back to it so reactions dedup on redelivery too.
+            // Messages carry event.ts; other events (Stop, DM opened) carry
+            // event.event_ts instead — fall back to it so they dedup too.
             const eventBody = body as {
               event?: { ts?: string; event_ts?: string };
             };
@@ -2161,8 +2298,9 @@ class SlackProvider implements ChatOpsProvider {
       (s) => !grantedScopes.has(s),
     );
 
+    // Reset either way: a reinstall that granted the scopes clears the warning.
+    this.missingScopes = missing;
     if (missing.length > 0) {
-      this.missingScopes = missing;
       logger.warn(
         { missingScopes: missing },
         "[SlackProvider] Bot token is missing required scopes. Some features (e.g., file downloads) may not work.",
@@ -2212,6 +2350,21 @@ class SlackProvider implements ChatOpsProvider {
     return result;
   }
 
+  /** A user's Slack username (the @handle), or null when it can't be read. */
+  private async fetchUserHandle(userId: string): Promise<string | null> {
+    if (!this.client) return null;
+    try {
+      const result = await this.client.users.info({ user: userId });
+      return result.user?.name || null;
+    } catch (error) {
+      logger.debug(
+        { error: errorMessage(error), userId },
+        "[SlackProvider] Could not read the bot's Slack handle",
+      );
+      return null;
+    }
+  }
+
   private cleanBotMention(text: string): string {
     if (!this.botUserId) return text;
     // Slack mentions are formatted as <@U12345678>
@@ -2246,6 +2399,32 @@ function decodeSlackEntities(text: string): string {
 // Slack's `markdown` block has a 12,000-char limit per block.
 const MARKDOWN_BLOCK_CHAR_LIMIT = 12_000;
 
+// assistant.threads.setSuggestedPrompts takes at most four prompts.
+const SLACK_MAX_SUGGESTED_PROMPTS = 4;
+
+/**
+ * The context lines that close a reply: an even-more-subtle hint (e.g. the
+ * session-rollover note) ABOVE the agent footer, so the footer stays the last
+ * line of the reply.
+ */
+function buildTrailingContextBlocks(
+  options: Pick<ChatReplyOptions, "hint" | "footer">,
+) {
+  return [options.hint, options.footer]
+    .filter((text): text is string => Boolean(text))
+    .map((text) => ({
+      type: "context" as const,
+      elements: [{ type: "plain_text" as const, text, emoji: true }],
+    }));
+}
+
+function isRateLimitError(error: unknown): boolean {
+  return (
+    (error as { code?: string } | null)?.code ===
+    "slack_webapi_rate_limited_error"
+  );
+}
+
 // Slack's chat.postMessage `text` is only a notification/accessibility fallback
 // — the rendered reply lives in `blocks`. Slack rejects oversized payloads with
 // `msg_too_large`, so cap the fallback well below Slack's ~40,000-char text
@@ -2259,7 +2438,7 @@ function truncateFallbackText(text: string): string {
 
 // Slack rejects chat.postMessage with more than 50 expanded blocks. Each
 // sendReply message reserves slots for context footers (a continuation hint, or
-// the agent footer plus an optional one-time mute hint — at most 2), so the
+// the agent footer plus an optional hint — at most 2), so the
 // markdown block's expansion is bounded to 45, keeping the worst case (45 + 2)
 // safely under the 50 ceiling against estimator drift.
 const MAX_ESTIMATED_RENDERED_BLOCKS = 45;
@@ -2557,15 +2736,15 @@ interface SlackEventPayload {
     ts: string;
     thread_ts?: string;
     files?: SlackFile[];
-    // reaction_added fields (channel/ts live under `item`, not at the top level)
-    reaction?: string;
-    item?: { type?: string; channel: string; ts: string };
+    // app_home_opened: which tab of the app's DM was opened
+    tab?: string;
+    // assistant_thread_started (legacy assistant experience)
+    assistant_thread?: { channel_id: string; thread_ts: string };
   };
   challenge?: string;
 }
 
-/** A Slack `reaction_added` event (subset we use). */
-type SlackReactionEvent = NonNullable<SlackEventPayload["event"]>;
+type SlackEvent = NonNullable<SlackEventPayload["event"]>;
 
 interface SlackInteractivePayload {
   type: string;

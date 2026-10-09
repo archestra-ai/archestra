@@ -157,6 +157,8 @@ export interface A2AExecuteParams {
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
 
@@ -231,6 +233,7 @@ export async function executeA2AMessage(
     attachments,
     chatOpsBindingId,
     chatOpsThreadId,
+    chatOpsPinnedAgentId,
     scheduleTriggerRunId,
     subagentToolStream,
     delegationToolCallId,
@@ -349,6 +352,7 @@ export async function executeA2AMessage(
       organizationId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsPinnedAgentId,
       sessionId,
       delegationChain,
       conversationId: params.conversationId,

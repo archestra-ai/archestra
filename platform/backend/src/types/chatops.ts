@@ -1,3 +1,4 @@
+import type { UIMessageChunk } from "ai";
 import { z } from "zod";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 
@@ -152,6 +153,36 @@ export interface ChatReplyOptions {
   hint?: string;
   /** Provider-specific conversation reference for reply routing */
   conversationReference?: unknown;
+}
+
+/**
+ * A reply that is streamed into the chat while the agent is still running:
+ * text appears as the model writes it, and each tool call shows as a progress
+ * card. The manager feeds it the run's UI message chunks, then either finishes
+ * it with the authoritative final reply or abandons it.
+ */
+export interface ChatOpsReplyStream {
+  /** Feed one chunk of the agent run. Never throws and never blocks. */
+  push(chunk: UIMessageChunk): void;
+  /**
+   * Whether the stream put a message in the chat that still needs a final
+   * reply. While false, the manager posts the reply the ordinary way.
+   */
+  readonly isLive: boolean;
+  /**
+   * End the stream with the final reply. The final text is authoritative:
+   * when it differs from what was streamed (thinking blocks, rewrites), the
+   * streamed message is replaced with it.
+   */
+  finish(
+    options: Pick<ChatReplyOptions, "text" | "footer" | "hint">,
+  ): Promise<void>;
+  /**
+   * End the stream without a final reply. `keepContent` leaves what was
+   * already shown (the user stopped it); otherwise the message is deleted (the
+   * agent chose silence, the run failed, or a follow-up superseded it).
+   */
+  abandon(options: { keepContent: boolean }): Promise<void>;
 }
 
 export interface AddApprovalRequestFormOptions {
@@ -315,6 +346,27 @@ export interface ChatOpsProvider {
   readonly typingRefreshIntervalMs?: number;
 
   /**
+   * The platform shows its own Stop control while the agent works (Slack
+   * agent sessions), and stopping also mutes the thread. Such providers need
+   * no text "mute" command and no one-time mute hint.
+   */
+  readonly hasNativeStopControl?: boolean;
+
+  /**
+   * The agent this connection always answers as (a Slack bot pinned to one
+   * agent). Such a connection skips channel agent assignment and inline
+   * "Agent >" routing.
+   */
+  readonly pinnedAgentId?: string;
+
+  /**
+   * Keeps this connection's per-thread state (sticky replies, stops, runs,
+   * processed messages) apart from other connections of the same provider
+   * that share a channel. Unset for a provider's main connection.
+   */
+  readonly stateScope?: string;
+
+  /**
    * Check if the provider is properly configured
    */
   isConfigured(): boolean;
@@ -454,6 +506,13 @@ export interface ChatOpsProvider {
    * only auto-clear the status once a message is posted to the thread.
    */
   clearTypingStatus?(channelId: string, threadTs: string): Promise<void>;
+
+  /**
+   * Open a reply stream for this message (optional). The stream posts nothing
+   * until the run produces content, so opening one is free when the agent ends
+   * up silent.
+   */
+  startReplyStream?(message: IncomingChatMessage): ChatOpsReplyStream;
 
   /**
    * Get thread/conversation history for context
@@ -655,6 +714,49 @@ export interface SlackDbConfig {
   appId: string;
   connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
+}
+
+/**
+ * An additional Slack app whose bot always answers as one agent, so people can
+ * @mention that agent by its own name (`@archestra_marketing`) in any channel.
+ */
+export interface SlackAgentBotConfig extends SlackDbConfig {
+  agentId: string;
+  /**
+   * OAuth client credentials of an app Archestra created itself (see
+   * SlackAppFactory): used to install it, and the mark that Archestra may
+   * delete it from Slack again.
+   */
+  clientId?: string;
+  clientSecret?: string;
+  /**
+   * Archestra manages this app's Slack settings: it created the app, or
+   * migrated an existing one (see SlackAppFactory.migrateExistingApps). Such
+   * an app is deleted from Slack when its bot is removed.
+   */
+  managed?: boolean;
+}
+
+/** What happened to one Slack app when Archestra brought it up to date. */
+export interface SlackAppMigrationResult {
+  appId: string;
+  /** Set for an agent bot; unset for the main Slack app. */
+  agentId?: string;
+  ok: boolean;
+  error?: string;
+  /** Slack wants the app reinstalled to grant changed scopes. */
+  reinstallUrl?: string;
+}
+
+/**
+ * A Slack app configuration token, which lets Archestra create Slack apps from
+ * a manifest. Slack expires it every 12 hours; the refresh token renews it.
+ */
+export interface SlackAppConfigToken {
+  accessToken: string;
+  refreshToken: string;
+  /** Epoch milliseconds. */
+  expiresAt: number;
 }
 
 /** Telegram config stored as a DB secret */

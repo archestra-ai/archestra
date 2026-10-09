@@ -1,6 +1,6 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import { type archestraApiTypes, buildSlackManifest } from "@archestra/shared";
 import { ExternalLink } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
@@ -13,12 +13,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SecretInput } from "@/components/ui/secret-input";
 import { useChatOpsStatus } from "@/lib/chatops/chatops.query";
-import { useUpdateSlackChatOpsConfig } from "@/lib/chatops/chatops-config.query";
+import {
+  useUpdateSlackAgentBot,
+  useUpdateSlackChatOpsConfig,
+} from "@/lib/chatops/chatops-config.query";
+import { slackHandleFor } from "@/lib/chatops/slack-handle";
 import { usePublicBaseUrl } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
-import { buildSlackManifest } from "@/lib/slack/slack-manifest";
 
 type ConnectionMode = NonNullable<
   NonNullable<
@@ -30,21 +33,31 @@ interface SlackSetupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   connectionMode: ConnectionMode;
+  /**
+   * Set up a separate Slack app whose bot always answers as this agent,
+   * instead of the main Slack app.
+   */
+  agent?: { id: string; name: string };
 }
 
 export function SlackSetupDialog({
   open,
   onOpenChange,
   connectionMode,
+  agent,
 }: SlackSetupDialogProps) {
   const docsUrl = getFrontendDocsUrl("agents/triggers-and-channels/slack");
   const configuredAppName = useAppName();
   const publicBaseUrl = usePublicBaseUrl();
 
-  const mutation = useUpdateSlackChatOpsConfig();
+  const mainMutation = useUpdateSlackChatOpsConfig();
+  const agentBotMutation = useUpdateSlackAgentBot(agent?.id);
+  const mutation = agent ? agentBotMutation : mainMutation;
   const { data: chatOpsProviders } = useChatOpsStatus();
   const slack = chatOpsProviders?.find((p) => p.id === "slack");
-  const creds = slack?.credentials;
+  // Saved credentials only count for the main app; an agent bot is set up
+  // from scratch each time.
+  const creds = agent ? undefined : slack?.credentials;
 
   const [saving, setSaving] = useState(false);
 
@@ -74,9 +87,16 @@ export function SlackSetupDialog({
     }
   };
 
-  const webhookUrl = `${publicBaseUrl}/api/webhooks/chatops/slack`;
-  const interactiveUrl = `${publicBaseUrl}/api/webhooks/chatops/slack/interactive`;
+  const webhookBase = agent
+    ? `${publicBaseUrl}/api/webhooks/chatops/slack/agents/${agent.id}`
+    : `${publicBaseUrl}/api/webhooks/chatops/slack`;
+  const webhookUrl = webhookBase;
+  const interactiveUrl = `${webhookBase}/interactive`;
   const slashCommandUrl = `${publicBaseUrl}/api/webhooks/chatops/slack/slash-command`;
+  // What people type after @ to reach the agent, e.g. archestra_marketing.
+  const defaultAppName = agent
+    ? slackHandleFor(configuredAppName, agent.name)
+    : configuredAppName;
 
   const steps = React.useMemo(() => {
     if (isSocket) {
@@ -84,6 +104,8 @@ export function SlackSetupDialog({
         <StepManifestSocket
           key="manifest-socket"
           stepNumber={1}
+          defaultAppName={defaultAppName}
+          slashCommands={!agent}
           appId={sharedAppId}
           onAppIdChange={setSharedAppId}
         />,
@@ -113,6 +135,8 @@ export function SlackSetupDialog({
         webhookUrl={webhookUrl}
         interactiveUrl={interactiveUrl}
         slashCommandUrl={slashCommandUrl}
+        defaultAppName={defaultAppName}
+        slashCommands={!agent}
         appId={sharedAppId}
         signingSecret={sharedSigningSecret}
         onAppIdChange={setSharedAppId}
@@ -135,6 +159,8 @@ export function SlackSetupDialog({
     webhookUrl,
     interactiveUrl,
     slashCommandUrl,
+    defaultAppName,
+    agent,
   ]);
 
   const lastStepAction = {
@@ -169,11 +195,20 @@ export function SlackSetupDialog({
     <SetupDialog
       open={open}
       onOpenChange={handleOpenChange}
-      title="Setup Slack"
+      title={agent ? `Slack bot for ${agent.name}` : "Setup Slack"}
       description={
         <>
-          Follow these steps to connect your {configuredAppName} agents to
-          Slack.
+          {agent ? (
+            <span>
+              Create a Slack app that always answers as {agent.name}, so people
+              can @mention it by name.
+            </span>
+          ) : (
+            <span>
+              Follow these steps to connect your {configuredAppName} agents to
+              Slack.
+            </span>
+          )}
           {docsUrl && (
             <>
               {" "}
@@ -421,6 +456,8 @@ function StepManifestWebhook({
   webhookUrl,
   interactiveUrl,
   slashCommandUrl,
+  defaultAppName,
+  slashCommands,
   appId,
   signingSecret,
   onAppIdChange,
@@ -430,13 +467,14 @@ function StepManifestWebhook({
   webhookUrl: string;
   interactiveUrl: string;
   slashCommandUrl: string;
+  defaultAppName: string;
+  slashCommands: boolean;
   appId: string;
   signingSecret: string;
   onAppIdChange: (v: string) => void;
   onSigningSecretChange: (v: string) => void;
 }) {
-  const configuredAppName = useAppName();
-  const [appName, setAppName] = useState(configuredAppName);
+  const [appName, setAppName] = useState(defaultAppName);
 
   const manifest = buildSlackManifest({
     appName,
@@ -444,6 +482,7 @@ function StepManifestWebhook({
     webhookUrl,
     interactiveUrl,
     slashCommandUrl,
+    slashCommands,
   });
 
   return (
@@ -461,7 +500,7 @@ function StepManifestWebhook({
             id="manifest-app-name"
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
-            placeholder={configuredAppName}
+            placeholder={defaultAppName}
           />
         </div>
 
@@ -547,15 +586,18 @@ function StepManifestWebhook({
 
 function StepManifestSocket({
   stepNumber,
+  defaultAppName,
+  slashCommands,
   appId,
   onAppIdChange,
 }: {
   stepNumber: number;
+  defaultAppName: string;
+  slashCommands: boolean;
   appId: string;
   onAppIdChange: (v: string) => void;
 }) {
-  const configuredAppName = useAppName();
-  const [appName, setAppName] = useState(configuredAppName);
+  const [appName, setAppName] = useState(defaultAppName);
 
   const manifest = buildSlackManifest({
     appName,
@@ -563,6 +605,7 @@ function StepManifestSocket({
     webhookUrl: "",
     interactiveUrl: "",
     slashCommandUrl: "",
+    slashCommands,
   });
 
   return (
@@ -580,7 +623,7 @@ function StepManifestSocket({
             id="manifest-app-name-socket"
             value={appName}
             onChange={(e) => setAppName(e.target.value)}
-            placeholder={configuredAppName}
+            placeholder={defaultAppName}
           />
         </div>
 

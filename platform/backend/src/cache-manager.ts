@@ -92,6 +92,7 @@ export const CacheKey = {
   RumIngestRateLimit: "rum-ingest-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
+  SlackAppInstallState: "slack-app-install-state",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
   /** Per-user group-token resolution for auto-sync-permissions KB connectors */

@@ -34,7 +34,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ChatOpsChannelBindingModel, UserModel } from "@/models";
-import { markChannelThreadActive } from "./channel-activation";
+import { chatOpsRunRegistry, wasRunSuperseded } from "./chatops-run-registry";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import SlackProvider from "./slack-provider";
 
@@ -794,234 +794,286 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
     expect(result).toBeNull();
   });
 
-  test("a mute command silences an answer-all thread until it is re-mentioned", async () => {
+  test("the Stop button silences an answer-all thread until it is re-mentioned", async () => {
     const provider = createProvider();
-    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+    const apiCall = vi.fn().mockResolvedValue({ ok: true });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
-    (provider as any).client = { chat: { postMessage } };
-    const channel = "C_ANSWER_ALL_MUTE";
+    (provider as any).client = { apiCall };
+    const channel = "C_ANSWER_ALL_STOP";
     const threadTs = "7777777777.000010";
     await seedAnswerAllChannel(channel);
 
-    // Un-mentioned message flows because the channel answers all.
-    const first = await provider.parseWebhookNotification(
-      makeEventPayload(
+    const message = (text: string, ts: string) =>
+      provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          { type: "message", channel, text, ts, thread_ts: threadTs },
+        ),
         {},
-        {
-          type: "message",
-          channel,
-          text: "hi",
-          ts: "7777777777.000011",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(first).not.toBeNull();
-
-    // A mute command gates the thread. The :mute: reaction is the only
-    // acknowledgement — no confirmation message is posted.
-    const mute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "mute",
-          ts: "7777777777.000012",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(mute).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-
-    // Later un-mentioned messages stay quiet despite answer-all.
-    const afterMute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "still there?",
-          ts: "7777777777.000013",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(afterMute).toBeNull();
-
-    // A fresh mention lifts the mute...
-    const reMention = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          channel,
-          text: "<@UBOT123> back please",
-          ts: "7777777777.000014",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(reMention).not.toBeNull();
-
-    // ...and un-mentioned messages flow again.
-    const afterReMention = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "more",
-          ts: "7777777777.000015",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(afterReMention).not.toBeNull();
-  });
-
-  async function expectLiteralMuteTokenMutes(
-    text: string,
-    channel: string,
-  ): Promise<void> {
-    const provider = createProvider();
-    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
-    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
-    (provider as any).client = { chat: { postMessage } };
-    const threadTs = "7777777777.000030";
-    await seedAnswerAllChannel(channel);
+      );
 
     // Un-mentioned message flows because the channel answers all.
-    const first = await provider.parseWebhookNotification(
-      makeEventPayload(
+    expect(await message("hi", "7777777777.000011")).not.toBeNull();
+
+    expect(
+      await provider.parseWebhookNotification(
+        stopPayload({ channel, thread_ts: threadTs }),
         {},
-        {
-          type: "message",
-          channel,
-          text: "hi",
-          ts: "7777777777.000031",
-          thread_ts: threadTs,
-        },
       ),
-      {},
-    );
-    expect(first).not.toBeNull();
+    ).toBeNull();
 
-    // The literal shortcode text — not a reaction — gates the thread the same
-    // as the bare "mute" command, with no confirmation message posted.
-    const mute = await provider.parseWebhookNotification(
-      makeEventPayload(
+    // Later un-mentioned messages stay quiet despite answer-all...
+    expect(await message("still there?", "7777777777.000013")).toBeNull();
+
+    // ...until a fresh mention lifts the stop.
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            channel,
+            text: "<@UBOT123> back please",
+            ts: "7777777777.000014",
+            thread_ts: threadTs,
+          },
+        ),
         {},
-        {
-          type: "message",
-          channel,
-          text,
-          ts: "7777777777.000032",
-          thread_ts: threadTs,
-        },
       ),
-      {},
-    );
-    expect(mute).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-
-    // Later un-mentioned messages stay quiet despite answer-all.
-    const afterMute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "still there?",
-          ts: "7777777777.000033",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
-    );
-    expect(afterMute).toBeNull();
-  }
-
-  test("a literal ':mute:' message (not a reaction) mutes an answer-all thread", async () => {
-    await expectLiteralMuteTokenMutes(":mute:", "C_ANSWER_ALL_MUTE_TEXT_1");
-  });
-
-  test("a literal ':shushing_face:' message (not a reaction) mutes an answer-all thread", async () => {
-    await expectLiteralMuteTokenMutes(
-      ":shushing_face:",
-      "C_ANSWER_ALL_MUTE_TEXT_2",
-    );
+    ).not.toBeNull();
+    expect(await message("more", "7777777777.000015")).not.toBeNull();
   });
 });
 
-describe("SlackProvider.parseWebhookNotification — thread mute command", () => {
-  // Wire a real postMessage mock so we can assert the muted-thread notice.
-  function createProviderWithPostMessage(): {
-    provider: SlackProvider;
-    postMessage: ReturnType<typeof vi.fn>;
-  } {
-    const provider = createProvider();
-    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
+describe("SlackProvider — bots pinned to an agent sharing a channel", () => {
+  const CHANNEL = "C_SHARED";
+  const THREAD = "5555555555.000001";
+  const MAIN_BOT = "UBOT123";
+  const MARKETING_BOT = "UMARKETING";
+
+  // The main app and a bot pinned to the Marketing agent, both in CHANNEL.
+  function createBots() {
+    const main = createProvider({ botUserId: MAIN_BOT });
+    const marketing = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-marketing",
+        signingSecret: SIGNING_SECRET,
+        appId: "A_MARKETING",
+      },
+      { pinnedAgentId: "11111111-1111-4111-8111-111111111111" },
+    );
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
+    (marketing as any).botUserId = MARKETING_BOT;
+    const apiCall = vi.fn().mockResolvedValue({ ok: true });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
-    (provider as any).client = { chat: { postMessage } };
-    return { provider, postMessage };
+    (marketing as any).client = { apiCall };
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (main as any).client = { apiCall };
+    for (const bot of [main, marketing]) {
+      bot.setSiblingBotUserIds([MAIN_BOT, MARKETING_BOT]);
+    }
+    return { main, marketing };
   }
 
-  test("'@bot mute' in an active thread mutes it: returns null and gates later replies", async () => {
-    const { provider, postMessage } = createProviderWithPostMessage();
-    const channel = "C_MUTE_MENTION";
-    const threadTs = "6666666666.000001";
-
-    // Activate via a mention.
-    const mention = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        { channel, text: "<@UBOT123> help me", thread_ts: threadTs },
-      ),
+  const message = (text: string, ts: string, type = "message") =>
+    makeEventPayload(
       {},
+      { type, channel: CHANNEL, text, ts, thread_ts: THREAD },
     );
-    expect(mention).not.toBeNull();
 
-    // "@bot mute" → muted. Nothing is handed to the agent, and no
-    // confirmation message is posted (the :mute: reaction is the only
-    // acknowledgement).
-    const mute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        { channel, text: "<@UBOT123> mute", thread_ts: threadTs },
-      ),
-      {},
-    );
-    expect(mute).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
+  test("mentioning one bot wakes only that bot for the rest of the thread", async () => {
+    const { main, marketing } = createBots();
 
-    // A subsequent un-mentioned reply in the thread is gated again.
-    const afterMute = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel,
-          text: "are you still there?",
-          ts: "6666666666.000002",
-          thread_ts: threadTs,
-        },
-      ),
-      {},
+    // Marketing is mentioned: it answers; the main app leaves it to Marketing.
+    const mention = message(
+      `<@${MARKETING_BOT}> draft a launch post`,
+      "5555555555.000002",
     );
-    expect(afterMute).toBeNull();
+    expect(
+      await marketing.parseWebhookNotification(mention, {}),
+    ).not.toBeNull();
+    expect(await main.parseWebhookNotification(mention, {})).toBeNull();
+
+    // A follow-up without a mention reaches Marketing only.
+    const followUp = message("make it shorter", "5555555555.000003");
+    expect((await marketing.parseWebhookNotification(followUp, {}))?.text).toBe(
+      "make it shorter",
+    );
+    expect(await main.parseWebhookNotification(followUp, {})).toBeNull();
   });
 
-  test("bare 'mute' (no mention) in an active thread mutes it without a re-mention", async () => {
-    const { provider, postMessage } = createProviderWithPostMessage();
-    const channel = "C_MUTE_BARE";
-    const threadTs = "6666666666.000003";
+  test("a bot already active in a thread stays out of a message for its sibling", async () => {
+    const { main } = createBots();
+    await main.parseWebhookNotification(
+      message(`<@${MAIN_BOT}> hello`, "5555555555.000010"),
+      {},
+    );
 
+    expect(
+      await main.parseWebhookNotification(
+        message(`<@${MARKETING_BOT}> your turn`, "5555555555.000011"),
+        {},
+      ),
+    ).toBeNull();
+  });
+
+  test("Stop on one bot leaves the other answering the thread", async () => {
+    const { main, marketing } = createBots();
+    await main.parseWebhookNotification(
+      message(`<@${MAIN_BOT}> start`, "5555555555.000020"),
+      {},
+    );
+    await marketing.parseWebhookNotification(
+      message(`<@${MARKETING_BOT}> start`, "5555555555.000021"),
+      {},
+    );
+
+    await marketing.parseWebhookNotification(
+      stopPayload({ channel: CHANNEL, thread_ts: THREAD }),
+      {},
+    );
+
+    const next = message("anyone there?", "5555555555.000022");
+    expect(await marketing.parseWebhookNotification(next, {})).toBeNull();
+    expect(await main.parseWebhookNotification(next, {})).not.toBeNull();
+  });
+
+  test("a pinned bot ignores the channel's answer-all setting", async () => {
+    const { main, marketing } = createBots();
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId: "org-shared",
+      provider: "slack",
+      channelId: CHANNEL,
+      workspaceId: "T12345",
+    });
+    await ChatOpsChannelBindingModel.update(binding.id, {
+      answerAllMessages: true,
+    });
+
+    const chatter = makeEventPayload(
+      {},
+      {
+        type: "message",
+        channel: CHANNEL,
+        text: "just chatting",
+        ts: "5555555555.000030",
+      },
+    );
+    expect(await main.parseWebhookNotification(chatter, {})).not.toBeNull();
+    expect(await marketing.parseWebhookNotification(chatter, {})).toBeNull();
+  });
+});
+
+describe("SlackProvider.parseWebhookNotification — Stop button", () => {
+  function createStopProvider(apiCall = vi.fn().mockResolvedValue({})) {
+    const provider = createProvider();
+    const setStatus = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+    (provider as any).client = {
+      apiCall,
+      assistant: { threads: { setStatus } },
+    };
+    return { provider, apiCall, setStatus };
+  }
+
+  test("Stop in an active thread ends auto-replies and moves the session out of processing", async () => {
+    const { provider, apiCall } = createStopProvider();
+    const channel = "C_STOP";
+    const threadTs = "6666666666.000001";
+
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          { channel, text: "<@UBOT123> help me", thread_ts: threadTs },
+        ),
+        {},
+      ),
+    ).not.toBeNull();
+
+    await provider.parseWebhookNotification(
+      stopPayload({ channel, thread_ts: threadTs }),
+      {},
+    );
+
+    // Slack leaves the session "processing" after Stop; moving it on is ours.
+    expect(apiCall).toHaveBeenCalledWith("agents.sessions.setStatus", {
+      channel_id: channel,
+      thread_ts: threadTs,
+      status: "active",
+    });
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            channel,
+            text: "are you still there?",
+            ts: "6666666666.000002",
+            thread_ts: threadTs,
+          },
+        ),
+        {},
+      ),
+    ).toBeNull();
+  });
+
+  test("Stop aborts the thread's in-flight runs as stopped, not superseded", async () => {
+    const { provider } = createStopProvider();
+    const key = {
+      provider: "slack" as const,
+      channelId: "D_STOP",
+      threadId: "6666666666.000010",
+    };
+    const run = chatOpsRunRegistry.register(key);
+    const otherThread = chatOpsRunRegistry.register({
+      ...key,
+      threadId: "6666666666.000099",
+    });
+    try {
+      await provider.parseWebhookNotification(
+        stopPayload({ channel: key.channelId, thread_ts: key.threadId }),
+        {},
+      );
+      expect(run.signal.aborted).toBe(true);
+      expect(wasRunSuperseded(run.signal)).toBe(false);
+      expect(otherThread.signal.aborted).toBe(false);
+    } finally {
+      run.unregister();
+      otherThread.unregister();
+    }
+  });
+
+  test("an app not yet on agent sessions falls back to assistant.threads.setStatus", async () => {
+    const apiCall = vi.fn().mockRejectedValue(
+      Object.assign(new Error("An API error occurred: not_agent_app"), {
+        code: "slack_webapi_platform_error",
+      }),
+    );
+    const { provider, setStatus } = createStopProvider(apiCall);
+
+    await provider.setTypingStatus("C_LEGACY", "6666666666.000020");
+    await provider.clearTypingStatus("C_LEGACY", "6666666666.000020");
+
+    expect(setStatus).toHaveBeenNthCalledWith(1, {
+      channel_id: "C_LEGACY",
+      thread_ts: "6666666666.000020",
+      status: "is thinking...",
+    });
+    expect(setStatus).toHaveBeenNthCalledWith(2, {
+      channel_id: "C_LEGACY",
+      thread_ts: "6666666666.000020",
+      status: "",
+    });
+    // The rejection is remembered rather than retried on every status change.
+    expect(apiCall).toHaveBeenCalledTimes(1);
+  });
+
+  test("a 'mute' message is ordinary text for the agent, not a command", async () => {
+    const { provider } = createStopProvider();
+    const channel = "C_MUTE_TEXT";
+    const threadTs = "6666666666.000030";
     await provider.parseWebhookNotification(
       makeEventPayload(
         {},
@@ -1030,312 +1082,53 @@ describe("SlackProvider.parseWebhookNotification — thread mute command", () =>
       {},
     );
 
-    const mute = await provider.parseWebhookNotification(
+    const result = await provider.parseWebhookNotification(
       makeEventPayload(
         {},
         {
           type: "message",
           channel,
           text: "mute",
-          ts: "6666666666.000004",
+          ts: "6666666666.000031",
           thread_ts: threadTs,
         },
       ),
       {},
     );
-    expect(mute).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
+    expect(result?.text).toBe("mute");
   });
 
-  test("'mute' in an inactive, un-mentioned thread is just a gated message — no mute notice", async () => {
-    const { provider, postMessage } = createProviderWithPostMessage();
-
+  test("reactions are not events the bot acts on", async () => {
+    const { provider, apiCall } = createStopProvider();
     const result = await provider.parseWebhookNotification(
       makeEventPayload(
         {},
         {
-          type: "message",
-          channel: "C_MUTE_INACTIVE",
-          text: "mute",
-          thread_ts: "6666666666.000005",
+          type: "reaction_added",
+          reaction: "mute",
+          item: { type: "message", channel: "C_REACT", ts: "1.0" },
         },
       ),
       {},
     );
     expect(result).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("a normal request mentioning the bot is not swallowed as a mute", async () => {
-    const { provider } = createProviderWithPostMessage();
-
-    const result = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          channel: "C_MUTE_REAL_REQUEST",
-          text: "<@UBOT123> mute the alerts channel for me",
-          thread_ts: "6666666666.000006",
-        },
-      ),
-      {},
-    );
-    expect(result).not.toBeNull();
-    expect(result?.text).toBe("mute the alerts channel for me");
+    expect(apiCall).not.toHaveBeenCalled();
   });
 });
 
-describe("SlackProvider.parseWebhookNotification — mute reaction", () => {
-  const BOT = "UBOT123";
-  const CHANNEL = "C_REACT";
-  const ROOT = "7777777777.000001";
-  const BOT_REPLY_TS = "7777777777.000002";
-
-  // These tests reuse one channel/thread; the fake cache resets before each
-  // test automatically, so no manual clearing is needed here.
-
-  // Client with a postMessage spy and a conversations.replies that resolves the
-  // thread root (messages[0].ts) for the reacted message.
-  function createReactionProvider(rootTs: string | null = ROOT): {
-    provider: SlackProvider;
-    postMessage: ReturnType<typeof vi.fn>;
-    replies: ReturnType<typeof vi.fn>;
-  } {
-    const provider = createProvider({ botUserId: BOT });
-    const postMessage = vi.fn().mockResolvedValue({ ts: "1.0" });
-    const replies = vi.fn().mockResolvedValue({
-      messages: rootTs ? [{ ts: rootTs }] : [],
-    });
-    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
-    (provider as any).client = {
-      chat: { postMessage },
-      conversations: { replies },
-    };
-    return { provider, postMessage, replies };
-  }
-
-  function reactionPayload(
-    reaction: string,
-    overrides: Record<string, unknown> = {},
-  ) {
-    return makeEventPayload(
-      {},
-      {
-        type: "reaction_added",
-        // reaction events carry channel/ts under `item`, not at the top.
-        channel: undefined,
-        ts: undefined,
-        reaction,
-        item: { type: "message", channel: CHANNEL, ts: BOT_REPLY_TS },
-        ...overrides,
-      },
-    );
-  }
-
-  async function enableAnswerAll(): Promise<void> {
-    const binding = await ChatOpsChannelBindingModel.create({
-      organizationId: `org-${CHANNEL}-${Math.random()}`,
-      provider: "slack",
-      channelId: CHANNEL,
-      // Must match makeEventPayload's team_id: the setting is stored per
-      // workspace, and a reaction has to look it up under the same key.
-      workspaceId: "T12345",
-    });
-    await ChatOpsChannelBindingModel.update(binding.id, {
-      answerAllMessages: true,
-    });
-  }
-
-  // reactionPayload deliberately carries no `item_user`: the field is optional
-  // on reaction_added and Slack does not populate it for every app-authored
-  // message, so muting must not depend on it.
-  test("🔇 on a bot reply in an active thread mutes it with no confirmation message", async () => {
-    const { provider, postMessage, replies } = createReactionProvider();
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute"),
-      {},
-    );
-
-    expect(result).toBeNull();
-    expect(replies).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: CHANNEL, ts: BOT_REPLY_TS }),
-    );
-    expect(postMessage).not.toHaveBeenCalled();
-    expect(
-      await cacheManager.get(
-        `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
-      ),
-    ).toBeUndefined();
-  });
-
-  test("🤫 (shushing_face) is also a mute reaction", async () => {
-    const { provider, postMessage } = createReactionProvider();
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    await provider.parseWebhookNotification(
-      reactionPayload("shushing_face"),
-      {},
-    );
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("🔇 on a teammate's message mutes the thread it belongs to", async () => {
-    // The reaction is about the thread, not about whoever wrote the message
-    // carrying it — reacting on a colleague's reply has to work.
-    const { provider, postMessage } = createReactionProvider();
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute", {
-        item: { type: "message", channel: CHANNEL, ts: "7777777777.000042" },
-      }),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-    expect(
-      await cacheManager.get(
-        `${CacheKey.SlackThreadActive}-${CHANNEL}::${ROOT}`,
-      ),
-    ).toBeUndefined();
-  });
-
-  test("the bot's own 🔇 reaction is ignored", async () => {
-    const { provider, postMessage, replies } = createReactionProvider();
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute", { user: BOT }),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(replies).not.toHaveBeenCalled();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("🔇 on the thread root itself needs no API lookup", async () => {
-    // The likeliest target of a mute reaction is the message that started the
-    // thread; resolving it from state also keeps the mute working when
-    // conversations.replies is unavailable.
-    const { provider, postMessage, replies } = createReactionProvider(null);
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    await provider.parseWebhookNotification(
-      reactionPayload("mute", {
-        item: { type: "message", channel: CHANNEL, ts: ROOT },
-      }),
-      {},
-    );
-    expect(replies).not.toHaveBeenCalled();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("a non-mute reaction is ignored", async () => {
-    const { provider, postMessage, replies } = createReactionProvider();
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("thumbsup"),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(replies).not.toHaveBeenCalled();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("🔇 in an answer-all channel mutes it with no confirmation message", async () => {
-    // An answer-all thread has no activation to clear, so the mute relies on
-    // the mute marker instead of an activation flag — the 🔇 reaction itself
-    // is the only acknowledgement, same as elsewhere.
-    const { provider, postMessage } = createReactionProvider();
-    await enableAnswerAll();
-
-    await provider.parseWebhookNotification(reactionPayload("mute"), {});
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("a repeated 🔇 in an answer-all channel still posts no notice", async () => {
-    const { provider, postMessage } = createReactionProvider();
-    await enableAnswerAll();
-
-    await provider.parseWebhookNotification(reactionPayload("mute"), {});
-    await provider.parseWebhookNotification(reactionPayload("mute"), {});
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("mute reaction on an inactive thread posts no notice (transition rule)", async () => {
-    const { provider, postMessage } = createReactionProvider();
-    // Thread was never activated → clearing is a no-op → no confirmation.
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute"),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("thread-root resolution failure posts no false 'muted'", async () => {
-    const { provider, postMessage } = createReactionProvider(null);
-    await markChannelThreadActive({
-      provider: "slack",
-      channelId: CHANNEL,
-      threadId: ROOT,
-    });
-
-    const result = await provider.parseWebhookNotification(
-      reactionPayload("mute"),
-      {},
-    );
-    expect(result).toBeNull();
-    expect(postMessage).not.toHaveBeenCalled();
-  });
-
-  test("🔇 keeps an answer-all thread quiet on the following message", async () => {
-    const { provider } = createReactionProvider();
-    await enableAnswerAll();
-
-    await provider.parseWebhookNotification(reactionPayload("mute"), {});
-
-    // An answer-all channel has no activation for the mute to clear, so the
-    // reaction has to leave a marker behind or the next un-mentioned message
-    // gets answered as if nothing was asked.
-    const next = await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        {
-          type: "message",
-          channel: CHANNEL,
-          text: "still talking after the mute",
-          ts: "7777777777.000099",
-          thread_ts: ROOT,
-        },
-      ),
-      {},
-    );
-
-    expect(next).toBeNull();
-  });
-});
+function stopPayload(event: { channel: string; thread_ts: string }) {
+  return {
+    type: "event_callback",
+    team_id: "T12345",
+    event: {
+      type: "agent_session_stopped",
+      user: "U_SENDER",
+      event_ts: "6666666666.999999",
+      streaming_message_ts: [],
+      ...event,
+    },
+  };
+}
 
 // =============================================================================
 // sendReply
@@ -1418,7 +1211,7 @@ describe("SlackProvider.sendReply", () => {
     );
   });
 
-  test("renders the mute hint as its own subtle context block above the footer", async () => {
+  test("renders a hint as its own subtle context block above the footer", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
@@ -1439,7 +1232,7 @@ describe("SlackProvider.sendReply", () => {
       },
       text: "hi there",
       footer: "🤖 Agent",
-      hint: 'Reply "mute" to stop',
+      hint: "Started a new conversation",
     });
 
     const { blocks } = postMessage.mock.calls[0][0];
@@ -1449,7 +1242,11 @@ describe("SlackProvider.sendReply", () => {
       {
         type: "context",
         elements: [
-          { type: "plain_text", text: 'Reply "mute" to stop', emoji: true },
+          {
+            type: "plain_text",
+            text: "Started a new conversation",
+            emoji: true,
+          },
         ],
       },
       {
@@ -1481,7 +1278,7 @@ describe("SlackProvider.sendReply", () => {
       // The model copied the footer off an earlier bot reply in the thread.
       text: "Here you go.\n\n🤖 Agent",
       footer: "🤖 Agent",
-      hint: 'Reply "mute" to stop',
+      hint: "Started a new conversation",
     });
 
     const { blocks, text } = postMessage.mock.calls[0][0];
@@ -1490,7 +1287,11 @@ describe("SlackProvider.sendReply", () => {
       {
         type: "context",
         elements: [
-          { type: "plain_text", text: 'Reply "mute" to stop', emoji: true },
+          {
+            type: "plain_text",
+            text: "Started a new conversation",
+            emoji: true,
+          },
         ],
       },
       {
@@ -3584,10 +3385,9 @@ describe("SlackProvider.notifyMissingScopes", () => {
     expect(callArgs.channel).toBe("C12345");
     expect(callArgs.thread_ts).toBe("1111111111.000000");
     expect(callArgs.text).toContain("`files:read`");
-    expect(callArgs.text).toContain("missing required scopes");
-    expect(callArgs.text).toContain(
-      "https://app.slack.com/app-settings/T12345/A12345/oauth",
-    );
+    expect(callArgs.text).toContain("Reinstall this Slack app");
+    expect(callArgs.text).toContain("https://api.slack.com/apps/A12345/oauth");
+    expect(callArgs.text).toContain("Reinstall to Workspace");
   });
 
   test("does not send notification when already notified (cache hit)", async () => {
@@ -3611,7 +3411,7 @@ describe("SlackProvider.notifyMissingScopes", () => {
     await provider.notifyMissingScopes(fakeMessage);
 
     expect(setSpy).toHaveBeenCalledWith(
-      `${CacheKey.SlackScopeNotification}-T12345`,
+      `${CacheKey.SlackScopeNotification}-T12345-A12345`,
       true,
       30 * 24 * 60 * 60 * 1000, // 30 days in ms
     );
@@ -3659,6 +3459,26 @@ describe("SlackProvider.notifyMissingScopes", () => {
     await provider.notifyMissingScopes(fakeMessage);
   });
 
+  test("a reinstall that granted the scopes clears the warning on the next check", async () => {
+    const provider = createProviderWithMissingScopes(["files:write"]);
+    expect(provider.getReinstallUrl()).toBe(
+      "https://api.slack.com/apps/A12345/oauth",
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ ok: true }), {
+          headers: { "x-oauth-scopes": SLACK_REQUIRED_BOT_SCOPES.join(",") },
+        }),
+      ),
+    );
+
+    await provider.refreshGrantedScopes();
+
+    expect(provider.getMissingScopes()).toEqual([]);
+    expect(provider.hasMissingScopes()).toBe(false);
+  });
+
   test("uses fallback URL when appId is not set", async () => {
     const provider = new SlackProvider({
       enabled: true,
@@ -3685,7 +3505,7 @@ describe("SlackProvider.notifyMissingScopes", () => {
 
     const callArgs = mockPostMessage.mock.calls[0][0];
     expect(callArgs.text).toContain(
-      "<https://api.slack.com/apps|Slack app settings>",
+      "<https://api.slack.com/apps|OAuth & Permissions page>",
     );
     expect(callArgs.text).not.toContain("A12345");
   });

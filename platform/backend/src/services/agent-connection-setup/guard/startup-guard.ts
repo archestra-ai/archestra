@@ -1330,6 +1330,17 @@ ${client.binary}() {
   else`
         : ""
   }
+  ${
+    // OpenAPPA protects (and draws its statusline in) only sessions launched
+    // with APPA_GATE=1, which `clappa` sets. Plain `claude` turns it on when
+    // appa is installed; the plugin hooks find appa through PATH the same way.
+    // An APPA_GATE the user already set wins, so `APPA_GATE=0 claude` opts out.
+    client.clientId === "claude-code"
+      ? `if [ -z "\${APPA_GATE:-}" ] && command -v appa >/dev/null 2>&1; then
+    local -x APPA_GATE=1
+  fi`
+      : ""
+  }
   command ${client.binary} "$@"
   ${handoffEnabled && (client.clientId === "copilot-cli" || client.clientId === "opencode") ? "fi" : ""}
   archestra_client_status=$?

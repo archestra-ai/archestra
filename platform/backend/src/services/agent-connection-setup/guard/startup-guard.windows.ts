@@ -1158,7 +1158,15 @@ function ${client.binary} {
     } else {
       & $archReal.Source @args
     }`
-        : `& $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}`
+        : client.clientId === "claude-code"
+          ? // Same OpenAPPA gate as the bash wrapper. $env: is not function
+            // scoped, so the previous value is restored after the launch.
+            `$archPreviousAppaGate = $env:APPA_GATE
+    try {
+      if (-not $archPreviousAppaGate -and (Get-Command appa -CommandType Application -ErrorAction SilentlyContinue)) { $env:APPA_GATE = '1' }
+      & $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}
+    } finally { $env:APPA_GATE = $archPreviousAppaGate }`
+          : `& $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}`
     }
     ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.clientId === "opencode" ? `} finally { $env:OPENCODE_CONFIG_CONTENT = $archPreviousConfigContent }` : ""}
     ${refreshCall}

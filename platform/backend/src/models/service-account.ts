@@ -14,12 +14,15 @@ import {
   getTableColumns,
   gt,
   inArray,
+  isNotNull,
   isNull,
+  lt,
   max,
   or,
   sql,
 } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
+import { secretManager } from "@/secrets-manager";
 import type {
   LabelWithDetails,
   SelectServiceAccount,
@@ -89,11 +92,15 @@ class ServiceAccountModel {
       .from(schema.serviceAccountsTable)
       .leftJoin(
         tokens,
-        eq(tokens.serviceAccountId, schema.serviceAccountsTable.id),
+        and(
+          eq(tokens.serviceAccountId, schema.serviceAccountsTable.id),
+          isNull(tokens.secretId),
+        ),
       )
       .where(
         and(
           eq(schema.serviceAccountsTable.organizationId, organizationId),
+          eq(schema.serviceAccountsTable.isSystem, false),
           ...(labelFilteredIds
             ? [inArray(schema.serviceAccountsTable.id, labelFilteredIds)]
             : []),
@@ -160,6 +167,7 @@ class ServiceAccountModel {
         and(
           eq(schema.serviceAccountsTable.id, id),
           eq(schema.serviceAccountsTable.organizationId, organizationId),
+          eq(schema.serviceAccountsTable.isSystem, false),
         ),
       )
       .limit(1);
@@ -169,7 +177,12 @@ class ServiceAccountModel {
     const tokens = await db
       .select()
       .from(schema.serviceAccountTokensTable)
-      .where(eq(schema.serviceAccountTokensTable.serviceAccountId, id))
+      .where(
+        and(
+          eq(schema.serviceAccountTokensTable.serviceAccountId, id),
+          isNull(schema.serviceAccountTokensTable.secretId),
+        ),
+      )
       .orderBy(desc(schema.serviceAccountTokensTable.createdAt));
 
     return {
@@ -183,6 +196,28 @@ class ServiceAccountModel {
       ),
       tokens: tokens.map(normalizeToken),
     };
+  }
+
+  /**
+   * The account row as the platform sees it, built-in system account
+   * included. For acting as an account, not for showing one: routes use
+   * {@link findById}, which hides the system account.
+   */
+  static async findAccount(
+    id: string,
+    organizationId: string,
+  ): Promise<SelectServiceAccount | null> {
+    const [row] = await db
+      .select()
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.id, id),
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   /**
@@ -225,6 +260,7 @@ class ServiceAccountModel {
       organizationId: serviceAccount.organizationId,
       name: serviceAccount.name,
       role: serviceAccount.role,
+      teamId: serviceAccount.teamId,
       disabled: serviceAccount.disabled,
       tokenCount: serviceAccount.tokenCount,
       createdAt: serviceAccount.createdAt.toISOString(),
@@ -236,6 +272,7 @@ class ServiceAccountModel {
     organizationId: string;
     name: string;
     role: string;
+    teamId?: string | null;
     labels?: LabelWithDetails[];
     /**
      * Required, but nullable: every interactive create knows its user, and
@@ -258,6 +295,7 @@ class ServiceAccountModel {
               organizationId: params.organizationId,
               name: params.name,
               role: params.role,
+              teamId: params.teamId ?? null,
               createdBy: params.createdBy,
             },
             userIdField: "createdBy",
@@ -307,7 +345,9 @@ class ServiceAccountModel {
   static async update(
     id: string,
     organizationId: string,
-    data: Partial<Pick<SelectServiceAccount, "name" | "role" | "disabled">> & {
+    data: Partial<
+      Pick<SelectServiceAccount, "name" | "role" | "disabled" | "teamId">
+    > & {
       labels?: LabelWithDetails[];
     },
   ): Promise<ServiceAccountDetailResponse | null> {
@@ -325,6 +365,7 @@ class ServiceAccountModel {
         and(
           eq(schema.serviceAccountsTable.id, id),
           eq(schema.serviceAccountsTable.organizationId, organizationId),
+          eq(schema.serviceAccountsTable.isSystem, false),
         ),
       )
       .returning();
@@ -348,6 +389,7 @@ class ServiceAccountModel {
           and(
             eq(schema.serviceAccountsTable.id, id),
             eq(schema.serviceAccountsTable.organizationId, organizationId),
+            eq(schema.serviceAccountsTable.isSystem, false),
           ),
         )
         .returning({ id: schema.serviceAccountsTable.id });
@@ -425,6 +467,7 @@ class ServiceAccountModel {
             schema.serviceAccountTokensTable.serviceAccountId,
             params.serviceAccountId,
           ),
+          isNull(schema.serviceAccountTokensTable.secretId),
         ),
       )
       .returning({ id: schema.serviceAccountTokensTable.id });
@@ -456,11 +499,137 @@ class ServiceAccountModel {
             schema.serviceAccountTokensTable.serviceAccountId,
             params.serviceAccountId,
           ),
+          isNull(schema.serviceAccountTokensTable.secretId),
         ),
       )
       .returning();
 
     return updated ? normalizeToken(updated) : null;
+  }
+
+  /**
+   * The organization's built-in account for work with no user behind it,
+   * created on first use. Concurrent first calls converge on one row through
+   * the partial unique index.
+   */
+  static async ensureSystemServiceAccount(
+    organizationId: string,
+  ): Promise<SelectServiceAccount> {
+    const existing = await findSystemServiceAccount(organizationId);
+    if (existing) return existing;
+
+    await db
+      .insert(schema.serviceAccountsTable)
+      .values({
+        organizationId,
+        name: SYSTEM_SERVICE_ACCOUNT_NAME,
+        role: MEMBER_ROLE_NAME,
+        isSystem: true,
+        createdBy: null,
+      })
+      .onConflictDoNothing();
+
+    const created = await findSystemServiceAccount(organizationId);
+    if (!created) {
+      throw new Error("Failed to create the system service account");
+    }
+    return created;
+  }
+
+  /**
+   * Value of the account's platform-held token, minted on first use. The
+   * platform presents it to its own MCP gateway when it runs work as this
+   * account; it is never shown to anyone.
+   */
+  static async ensurePlatformTokenValue(
+    serviceAccountId: string,
+  ): Promise<{ tokenId: string; value: string }> {
+    const existing = await readPlatformToken(serviceAccountId);
+    if (existing) return existing;
+
+    const value = createTokenValue();
+    const secret = await secretManager().createSecret(
+      { token: value },
+      `service-account-platform-token-${serviceAccountId}`,
+      // Platform tokens are minted on demand, which a read-only BYOS vault
+      // cannot take, so they always live in the database.
+      true,
+    );
+    const [created] = await db
+      .insert(schema.serviceAccountTokensTable)
+      .values({
+        serviceAccountId,
+        name: PLATFORM_TOKEN_NAME,
+        tokenHash: hashToken(value),
+        tokenStart: value.slice(0, 16),
+        secretId: secret.id,
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.serviceAccountTokensTable.id });
+
+    if (created) return { tokenId: created.id, value };
+
+    // A concurrent call won the race; drop the secret nothing references.
+    await secretManager().deleteSecret(secret.id);
+    const winner = await readPlatformToken(serviceAccountId);
+    if (!winner) {
+      throw new Error("Failed to create the service account platform token");
+    }
+    return winner;
+  }
+
+  /**
+   * Adopt an existing token value as one of the account's keys, so a client
+   * already configured with it keeps working. Returns false when that value
+   * already belongs to a service account, which makes re-running an import a
+   * no-op.
+   */
+  static async importToken(params: {
+    serviceAccountId: string;
+    name: string;
+    value: string;
+    lastUsedAt: Date | null;
+    createdAt: Date;
+  }): Promise<boolean> {
+    const inserted = await db
+      .insert(schema.serviceAccountTokensTable)
+      .values({
+        serviceAccountId: params.serviceAccountId,
+        name: params.name,
+        tokenHash: hashToken(params.value),
+        tokenStart: params.value.slice(0, 16),
+        lastUsedAt: params.lastUsedAt,
+        createdAt: params.createdAt,
+      })
+      .onConflictDoNothing()
+      .returning({ id: schema.serviceAccountTokensTable.id });
+    return inserted.length > 0;
+  }
+
+  static async isNameTaken(
+    organizationId: string,
+    name: string,
+  ): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.serviceAccountsTable.id })
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+          eq(schema.serviceAccountsTable.name, name),
+        ),
+      )
+      .limit(1);
+    return Boolean(row);
+  }
+
+  static async isTokenImported(value: string): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.serviceAccountTokensTable.id })
+      .from(schema.serviceAccountTokensTable)
+      .where(eq(schema.serviceAccountTokensTable.tokenHash, hashToken(value)))
+      .limit(1);
+    return Boolean(row);
   }
 
   static async verifyToken(token: string): Promise<{
@@ -500,10 +669,23 @@ class ServiceAccountModel {
       return null;
     }
 
-    await db
-      .update(schema.serviceAccountTokensTable)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(schema.serviceAccountTokensTable.id, row.token.id));
+    // Every gateway request on a token lands here, so an unconditional write
+    // would turn the row into a lock hot spot. A burst refreshes it once.
+    const cutoff = new Date(Date.now() - LAST_USED_REFRESH_INTERVAL_MS);
+    if (!row.token.lastUsedAt || row.token.lastUsedAt < cutoff) {
+      await db
+        .update(schema.serviceAccountTokensTable)
+        .set({ lastUsedAt: new Date() })
+        .where(
+          and(
+            eq(schema.serviceAccountTokensTable.id, row.token.id),
+            or(
+              isNull(schema.serviceAccountTokensTable.lastUsedAt),
+              lt(schema.serviceAccountTokensTable.lastUsedAt, cutoff),
+            ),
+          ),
+        );
+    }
 
     return row;
   }
@@ -538,6 +720,7 @@ function normalizeServiceAccount(
     organizationId: serviceAccount.organizationId,
     name: serviceAccount.name,
     role: serviceAccount.role,
+    teamId: serviceAccount.teamId,
     disabled: serviceAccount.disabled,
     createdAt: serviceAccount.createdAt,
     updatedAt: serviceAccount.updatedAt,
@@ -603,6 +786,48 @@ function normalizeToken(
     expiresAt: token.expiresAt,
     createdAt: token.createdAt,
   };
+}
+
+const SYSTEM_SERVICE_ACCOUNT_NAME = "System (built-in)";
+const PLATFORM_TOKEN_NAME = "Platform gateway token";
+const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
+
+async function findSystemServiceAccount(
+  organizationId: string,
+): Promise<SelectServiceAccount | null> {
+  const [row] = await db
+    .select()
+    .from(schema.serviceAccountsTable)
+    .where(
+      and(
+        eq(schema.serviceAccountsTable.organizationId, organizationId),
+        eq(schema.serviceAccountsTable.isSystem, true),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+async function readPlatformToken(
+  serviceAccountId: string,
+): Promise<{ tokenId: string; value: string } | null> {
+  const [row] = await db
+    .select({
+      id: schema.serviceAccountTokensTable.id,
+      secretId: schema.serviceAccountTokensTable.secretId,
+    })
+    .from(schema.serviceAccountTokensTable)
+    .where(
+      and(
+        eq(schema.serviceAccountTokensTable.serviceAccountId, serviceAccountId),
+        isNotNull(schema.serviceAccountTokensTable.secretId),
+      ),
+    )
+    .limit(1);
+  if (!row?.secretId) return null;
+  const secret = await secretManager().getSecret(row.secretId);
+  const value = (secret?.secret as { token?: unknown } | undefined)?.token;
+  return typeof value === "string" ? { tokenId: row.id, value } : null;
 }
 
 function createTokenValue(): string {

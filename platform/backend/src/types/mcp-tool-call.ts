@@ -14,6 +14,7 @@ export const MCPGatewayAuthMethodSchema = z.enum([
   "user_token",
   "org_token",
   "team_token",
+  "service_account_token",
   "external_idp",
   "session",
 ]);

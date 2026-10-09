@@ -8,11 +8,15 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getPermissionsForUserContext } from "@/auth/utils";
-import { ServiceAccountLabelModel } from "@/models";
+import {
+  getPermissionsForUserContext,
+  userHasPermission,
+} from "@/auth/utils";
+import { ServiceAccountLabelModel, TeamModel } from "@/models";
 import OrganizationRoleModel from "@/models/organization-role";
 import ServiceAccountModel from "@/models/service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { canManageTeamMembers } from "@/services/team-authorization";
 import {
   ApiError,
   CreateServiceAccountBodySchema,
@@ -130,6 +134,11 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
         userId: request.user.id,
       });
+      await validateTeamLinkOrThrow({
+        teamId: request.body.teamId,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
       if (request.body.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -151,6 +160,7 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: request.organizationId,
         name: request.body.name,
         role: request.body.role,
+        teamId: request.body.teamId,
         labels: request.body.labels,
         createdBy: request.user.id,
         // SPDX-SnippetBegin
@@ -190,6 +200,11 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: request.user.id,
         });
       }
+      await validateTeamLinkOrThrow({
+        teamId: request.body.teamId,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
 
       const serviceAccount = await ServiceAccountModel.update(
         request.params.id,
@@ -650,6 +665,43 @@ async function validateRoleOrThrow(params: {
     throw new ApiError(
       403,
       `You cannot grant permissions you don't have: ${missingPermissions.join(", ")}`,
+    );
+  }
+}
+
+/**
+ * Linking an account to a team hands every holder of its keys the team's
+ * grants and the team's MCP connections, so it takes the same standing that
+ * managing the team's membership does: an organization-level team manager, or
+ * an admin of that team. Unlinking (`null`) takes nothing beyond the update
+ * permission already checked.
+ */
+async function validateTeamLinkOrThrow(params: {
+  teamId: string | null | undefined;
+  organizationId: string;
+  userId: string;
+}) {
+  if (!params.teamId) return;
+  const team = await TeamModel.findById(params.teamId);
+  if (!team || team.organizationId !== params.organizationId) {
+    throw new ApiError(400, "Team not found");
+  }
+  const isOrgTeamManager = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "team",
+    "update",
+  );
+  if (
+    !(await canManageTeamMembers({
+      isOrgTeamManager,
+      userId: params.userId,
+      teamId: params.teamId,
+    }))
+  ) {
+    throw new ApiError(
+      403,
+      "You must be a team admin to link a service account to this team",
     );
   }
 }

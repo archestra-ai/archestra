@@ -320,6 +320,7 @@ export async function injectExternalMcpSkillActivation({
             tokenId: gatewayToken.tokenId,
             teamId: gatewayToken.teamId,
             isOrganizationToken: gatewayToken.isOrganizationToken,
+            serviceAccountId: gatewayToken.serviceAccountId,
             organizationId,
             isUserToken: gatewayToken.isUserToken,
             userId,

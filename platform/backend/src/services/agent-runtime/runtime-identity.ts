@@ -5,6 +5,7 @@ import {
   AgentRunModel,
   AgentWorkspaceModel,
   OpenAppaSessionModel,
+  ServiceAccountModel,
 } from "@/models";
 import { scopedSessionId } from "@/openappa/actor";
 import type { OpenAppaSession } from "@/openappa/service";
@@ -80,8 +81,7 @@ type RuntimeBindingClaims = {
 
 type GatewayTokenActor = {
   userId?: string;
-  teamId?: string | null;
-  isOrganizationToken: boolean;
+  serviceAccountId?: string;
 };
 
 /** @public — principal constructor shared with review and gateway callers */
@@ -375,7 +375,7 @@ export async function resolveGatewayRuntimeSession(params: {
     return { kind: "reject", message: "Invalid runtime binding" };
   }
   if (
-    !tokenOwnsActor(params.token, claims, params.organizationId) ||
+    !(await tokenOwnsActor(params.token, claims, params.organizationId)) ||
     runtimeSessionConflicts({
       workloadName: claims.workloadName,
       presentedSession: params.sessionName,
@@ -593,33 +593,51 @@ function associationFrom(
   };
 }
 
-function tokenOwnsActor(
+async function tokenOwnsActor(
   token: GatewayTokenActor,
   claims: RuntimeBindingClaims,
   organizationId: string,
-): boolean {
+): Promise<boolean> {
   if (token.userId) {
     return claims.actorKind === "user" && claims.actorId === token.userId;
   }
-  if (token.teamId && !token.isOrganizationToken) {
-    return claims.actorKind === "team" && claims.actorId === token.teamId;
+  if (!token.serviceAccountId) return false;
+  if (claims.actorKind === "serviceAccount") {
+    return claims.actorId === token.serviceAccountId;
   }
-  if (token.isOrganizationToken) {
-    if (
-      claims.actorKind === "organization" &&
-      claims.actorId === organizationId
-    ) {
-      return true;
-    }
-    // Host-created system runs use the organization gateway token. The
-    // signed binding, not the token alone, names that workload.
-    return (
-      claims.actorKind === "system" &&
-      claims.actorId === "system" &&
-      claims.organizationId === organizationId
-    );
-  }
-  return false;
+  return actorRunsAsSystemAccount({
+    actorKind: claims.actorKind,
+    actorId: claims.actorId,
+    serviceAccountId: token.serviceAccountId,
+    organizationId,
+  });
+}
+
+/**
+ * Host-created runs with no user behind them ("system", and "organization"
+ * runs started before organization tokens were retired) present the
+ * organization's built-in system account token. The signed binding, not the
+ * token alone, names that workload.
+ * @public — shared with the gateway's run-attention check
+ */
+export async function actorRunsAsSystemAccount(params: {
+  actorKind: AgentRunActorKind;
+  actorId: string;
+  serviceAccountId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const expectedActorId =
+    params.actorKind === "system"
+      ? "system"
+      : params.actorKind === "organization"
+        ? params.organizationId
+        : null;
+  if (!expectedActorId || params.actorId !== expectedActorId) return false;
+  const account = await ServiceAccountModel.findAccount(
+    params.serviceAccountId,
+    params.organizationId,
+  );
+  return account?.isSystem === true;
 }
 
 function bindingClaimsComplete(params: {

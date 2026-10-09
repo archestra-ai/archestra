@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
-import { addedGrants, openappaDeclarations } from "@/openappa/declarations";
+import {
+  addedGrants,
+  openappaDeclarations,
+  type PolicyResolution,
+} from "@/openappa/declarations";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import {
   guardrailsPolicyService,
@@ -324,8 +328,8 @@ export async function getOpenAppaPolicyChangeStatus(params: {
  * dialog, so an agent may not add a line, or change its key, for a variable an
  * included battery reads. Removing a line is allowed. A credential a root
  * external or profile reads as its `token_env` has no stored binding, so adding
- * or rekeying it, or pointing another reader at it, takes `credential:update` as it does
- * on the Policy route.
+ * or rekeying it, or pointing another reader at it, takes `credential:update`
+ * as it does on the Policy route.
  */
 export async function refuseCredentialLines(params: {
   organizationId: string;
@@ -333,22 +337,7 @@ export async function refuseCredentialLines(params: {
   before: string;
   after: string;
 }): Promise<void> {
-  const [previous, submitted] = await Promise.all([
-    openappaDeclarations.resolve({
-      organizationId: params.organizationId,
-      content: params.before,
-    }),
-    batteryCredentialLines(params.organizationId, params.after),
-  ]);
-  const written = [...submitted]
-    .filter(([variable, key]) => previous.credentials[variable] !== key)
-    .map(([variable]) => variable);
-  if (written.length > 0)
-    throw new ApiError(
-      400,
-      `Bind ${written.join(", ")} with bind_guardrails_credential instead of a [credentials] line; the policy text is for rules and includes.`,
-    );
-  const [bound, proposed] = await Promise.all(
+  const [previous, submitted] = await Promise.all(
     [params.before, params.after].map((content) =>
       openappaDeclarations.resolveWithBindings({
         organizationId: params.organizationId,
@@ -356,12 +345,23 @@ export async function refuseCredentialLines(params: {
       }),
     ),
   );
+  const before = textLines(previous);
+  const written = [
+    ...batteryLines(submitted.resolution.entries, textLines(submitted)),
+  ]
+    .filter(([variable, key]) => before[variable] !== key)
+    .map(([variable]) => variable);
+  if (written.length > 0)
+    throw new ApiError(
+      400,
+      `Bind ${written.join(", ")} with bind_guardrails_credential instead of a [credentials] line; the policy text is for rules and includes.`,
+    );
   await requireGrantPermission({
     organizationId: params.organizationId,
     userId: params.userId,
     granted: addedGrants(
-      openappaDeclarations.rootGrants(bound.resolution),
-      openappaDeclarations.rootGrants(proposed.resolution),
+      openappaDeclarations.rootGrants(previous.resolution),
+      openappaDeclarations.rootGrants(submitted.resolution),
     ),
   });
 }
@@ -630,10 +630,28 @@ async function batteryCredentialLines(
     organizationId,
     content,
   });
+  return batteryLines(entries, credentials);
+}
+
+function batteryLines(
+  entries: PolicyResolution["entries"],
+  credentials: Record<string, string>,
+): Map<string, string> {
   const read = new Set(
     entries.flatMap((entry) => entry.battery?.credentials ?? []),
   );
   return new Map(
     Object.entries(credentials).filter(([variable]) => read.has(variable)),
+  );
+}
+
+/** The `[credentials]` lines the text itself spells, without stored bindings. */
+function textLines(
+  bound: Awaited<ReturnType<typeof openappaDeclarations.resolveWithBindings>>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(bound.resolution.credentials).filter(
+      ([variable]) => bound.credentialSource[variable] === "policy",
+    ),
   );
 }

@@ -118,7 +118,7 @@ function quoteCommand(ctx: SetupScriptContext, command: string[]): string {
 
 /**
  * The ending as plain text, for a script run on its own. The Node installer
- * prints the same sections, and asks before running the commands.
+ * prints the same sections, and asks before running the sign-in.
  */
 export function renderEndingText(ending: SetupEnding): string {
   const lines = [`${ending.label} is connected to ${ending.appName}.`];
@@ -138,13 +138,6 @@ export function renderEndingText(ending: SetupEnding): string {
       `  ${ending.signIn.text}`,
     );
   }
-  if (ending.launch) {
-    lines.push(
-      "",
-      `Start ${ending.label} in a new terminal:`,
-      `  ${ending.launch.text}`,
-    );
-  }
   if (ending.notes.length > 0) {
     lines.push(
       "",
@@ -152,6 +145,12 @@ export function renderEndingText(ending: SetupEnding): string {
       ...ending.notes.map((note) => `  - ${note}`),
     );
   }
+  lines.push(
+    "",
+    ending.launch
+      ? `You're all set. Open a new terminal and start ${ending.label} with a first question for it:\n  ${ending.launch.text}`
+      : `You're all set. Open ${ending.label} to start using ${ending.appName}.`,
+  );
   if (ending.disconnect) lines.push("", ending.disconnect);
   return lines.join("\n");
 }

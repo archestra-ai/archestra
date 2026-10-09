@@ -224,8 +224,9 @@ async function applySetup({ scriptPath, origin, platform }) {
 // Tells the script to leave its ending to finishSetup.
 const installerEnv = { ...process.env, ARCHESTRA_CONNECT_INSTALLER: '1' };
 // The end of a run: what was set up, then what is left. With a terminal it
-// offers to run the sign-in and start the agent; without one (an agent or CI
-// ran the installer) it prints the commands instead.
+// offers to run the sign-in; without one (an agent or CI ran the installer) it
+// prints the command instead. Starting the agent is left to the person: run
+// from here, its TUI lost the keyboard.
 function finishSetup(ending, platform) {
   if (!ending) return;
   const paint = (code, text) => process.stdout.isTTY && !process.env.NO_COLOR ? '\x1b[' + code + 'm' + text + '\x1b[0m' : text;
@@ -235,7 +236,6 @@ function finishSetup(ending, platform) {
     console.log('\n' + ending.parts.map(part => '  ' + paint('1', part.name.padEnd(width)) + '   ' + part.detail).join('\n'));
   }
   if (ending.notes.length) console.log('\nGood to know:\n' + ending.notes.map(note => '  - ' + note).join('\n'));
-  if (ending.disconnect) console.log('\n' + ending.disconnect);
   const terminal = openTerminal();
   try {
     if (ending.signIn) {
@@ -245,18 +245,11 @@ function finishSetup(ending, platform) {
         console.log(!child.error && child.status === 0 ? paint('1;32', '  Signed in.') : '  Sign-in did not finish. ' + ending.signIn.howTo);
       } else console.log('  ' + ending.signIn.text);
     }
-    if (ending.launch) {
-      console.log('\n' + paint('1', 'Start ' + ending.label));
-      if (terminal !== null && ask(terminal, '  Start ' + ending.label + ' now with a first prompt? [Y/n] ')) {
-        // Through the user's own shell, so its profile loads the launch check
-        // the script just installed, exactly as in a new terminal.
-        const child = platform === 'windows'
-          ? spawnSync('powershell.exe', ['-NoLogo', '-Command', ending.launch.text], { stdio: [terminal, 'inherit', 'inherit'] })
-          : spawnSync(process.env.SHELL || 'bash', ['-i', '-c', ending.launch.text], { stdio: [terminal, 'inherit', 'inherit'] });
-        if (child.error) console.log('  Could not start it. In a new terminal, run: ' + ending.launch.text);
-      } else console.log('  In a new terminal, run: ' + ending.launch.text);
-    }
   } finally { if (terminal !== null) closeSync(terminal); }
+  console.log('\n' + paint('1;32', "You're all set.") + ' ' + (ending.launch
+    ? 'Open a new terminal and start ' + ending.label + ' with a first question for it:\n  ' + ending.launch.text
+    : 'Open ' + ending.label + ' to start using ' + ending.appName + '.'));
+  if (ending.disconnect) console.log('\n' + ending.disconnect);
 }
 // stdin is the download pipe, so questions go to the terminal itself.
 function openTerminal() {

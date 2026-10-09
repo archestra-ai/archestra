@@ -86,9 +86,7 @@ If the request is unclear, ask with one \`archestra__ask_user\` question what th
 
 ## Tool-call human approval
 
-For per-call human review, use \`requires = { attention = ["human-approval"] }\` in the tool's static rule. A rule with an annotator must instead have that annotator require \`human-approval\` and admit it in its \`marks\`. Read the current policy first: the starting policy's \`hitl\` authority permits only \`human-approval\`. It cannot waive trust, audience, effects, or other attention requirements. Do not substitute \`hitl\` or a custom mark for \`human-approval\` when relying on this authority.
-
-Preserve the existing authority's permissions unless the operator explicitly requests broader exceptions. These Archestra-specific limits override shared battery-support advice to expand an existing HITL authority. If a battery needs other permissions, explain the gap and propose it separately. See \`references/archestra.md\` for executing an offered review.
+Use \`human-approval\` for potentially destructive actions or publishing/sharing outside the company, not every tool call. Scope it with argument selectors or annotators when only some calls need review. The default \`hitl\` authority covers only this mark; preserve its permissions unless the operator explicitly requests broader exceptions, overriding shared battery-support advice to expand them.
 
 ## Approval in Archestra
 

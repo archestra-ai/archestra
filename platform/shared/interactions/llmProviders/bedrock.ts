@@ -1,5 +1,5 @@
 import type { PartialUIMessage } from "../types";
-import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
+import type { Interaction, InteractionUtils } from "./common";
 
 /**
  * Bedrock Converse API request/response types
@@ -130,10 +130,6 @@ class BedrockConverseInteraction implements InteractionUtils {
     return Array.from(toolsUsed);
   }
 
-  getToolNamesRefused(): string[] {
-    return [];
-  }
-
   getToolNamesRequested(): string[] {
     const toolsRequested = new Set<string>();
     const responseContent = this.response.output?.message?.content;
@@ -148,10 +144,6 @@ class BedrockConverseInteraction implements InteractionUtils {
     }
 
     return Array.from(toolsRequested);
-  }
-
-  getToolRefusedCount(): number {
-    return 0;
   }
 
   getLastUserMessage(): string {
@@ -197,7 +189,6 @@ class BedrockConverseInteraction implements InteractionUtils {
     message:
       | BedrockMessage
       | { role: "assistant"; content: BedrockResponseContentBlock[] },
-    _dualLlmAnalyses?: DualLlmAnalysis[],
   ): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];
     const { content, role } = message;
@@ -229,7 +220,7 @@ class BedrockConverseInteraction implements InteractionUtils {
     };
   }
 
-  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
+  mapToUiMessages(): PartialUIMessage[] {
     const uiMessages: PartialUIMessage[] = [];
     const messages = this.request.messages;
 
@@ -260,7 +251,7 @@ class BedrockConverseInteraction implements InteractionUtils {
         continue;
       }
 
-      const uiMessage = this.mapToUiMessage(msg, dualLlmAnalyses);
+      const uiMessage = this.mapToUiMessage(msg);
 
       // If this is an assistant message with toolUse blocks, look ahead for tool results
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -332,27 +323,6 @@ class BedrockConverseInteraction implements InteractionUtils {
                   } else {
                     toolCallParts.push(outputPart);
                   }
-
-                  // Check for dual LLM result
-                  const dualLlmResultForTool = dualLlmAnalyses?.find(
-                    (result) => result.toolCallId === block.toolUse?.toolUseId,
-                  );
-
-                  if (dualLlmResultForTool) {
-                    toolCallParts.push({
-                      type: "dual-llm-analysis",
-                      toolCallId: dualLlmResultForTool.toolCallId,
-                      safeResult: dualLlmResultForTool.result,
-                      conversations: Array.isArray(
-                        dualLlmResultForTool.conversations,
-                      )
-                        ? (dualLlmResultForTool.conversations as Array<{
-                            role: "user" | "assistant";
-                            content: string | unknown;
-                          }>)
-                        : [],
-                    });
-                  }
                 }
               }
             }
@@ -374,10 +344,7 @@ class BedrockConverseInteraction implements InteractionUtils {
     const responseContent = this.response.output?.message?.content;
     if (responseContent) {
       uiMessages.push(
-        this.mapToUiMessage(
-          { role: "assistant", content: responseContent },
-          dualLlmAnalyses,
-        ),
+        this.mapToUiMessage({ role: "assistant", content: responseContent }),
       );
     }
 

@@ -74,7 +74,7 @@ describe("scoped RBAC final cutover", () => {
         project: ["admin", "read"],
         log: ["read", "admin"],
         // Never carried an admin action, so it must come through untouched.
-        toolPolicy: ["read", "create", "update"],
+        llmLimit: ["read", "create", "update"],
       },
     });
     await runMigration();
@@ -93,7 +93,7 @@ describe("scoped RBAC final cutover", () => {
       knowledgeSource: ["read"],
       project: ["read"],
       log: ["read", "admin"],
-      toolPolicy: ["read", "create", "update"],
+      llmLimit: ["read", "create", "update"],
     });
     await runMigration();
     const [replayed] = await db

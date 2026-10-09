@@ -105,7 +105,6 @@ export async function importAgentFromPayload(
       systemPrompt: data.agent.systemPrompt,
       icon: data.agent.icon,
       scope: "personal", // Always personal on import
-      considerContextUntrusted: data.agent.considerContextUntrusted,
       toolExposureMode: data.agent.toolExposureMode,
       missingCredentialBehavior:
         data.agent.missingCredentialBehavior ?? "allow",

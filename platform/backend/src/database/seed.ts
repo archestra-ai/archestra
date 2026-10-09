@@ -7,17 +7,11 @@ import {
   BUILT_IN_AGENT_NAMES,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
-  DUAL_LLM_DEFAULT_MAX_ROUNDS,
-  DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS,
-  DUAL_LLM_MAIN_SYSTEM_PROMPT,
-  DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
   isSubscriptionCredential,
   OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
   PLAYWRIGHT_MCP_CATALOG_ID,
   PLAYWRIGHT_MCP_ICON,
   PLAYWRIGHT_MCP_SERVER_NAME,
-  POLICY_CONFIG_SYSTEM_PROMPT,
-  PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT,
   PROVIDERS_REQUIRING_BASE_URL,
   type PredefinedRoleName,
   providerRequiresPerUserCredential,
@@ -138,38 +132,6 @@ export async function syncBuiltInAgents(
         ),
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-        } as const,
-      },
-      {
-        builtInAgentId: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
-        description:
-          "Analyzes tool metadata with AI to generate deterministic security policies for handling untrusted data",
-        systemPrompt: POLICY_CONFIG_SYSTEM_PROMPT,
-        builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: false,
-        } as const,
-      },
-      {
-        builtInAgentId: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-        name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
-        description:
-          "Privileged built-in agent that questions quarantined tool results and writes the final safe summary",
-        systemPrompt: DUAL_LLM_MAIN_SYSTEM_PROMPT,
-        builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-          maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
-        } as const,
-      },
-      {
-        builtInAgentId: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-        name: BUILT_IN_AGENT_NAMES.DUAL_LLM_QUARANTINE,
-        description:
-          "Quarantine built-in agent that inspects untrusted tool output and returns constrained answers only",
-        systemPrompt: DUAL_LLM_QUARANTINE_SYSTEM_PROMPT,
-        builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
         } as const,
       },
       {
@@ -1388,20 +1350,6 @@ async function syncBuiltInAgentRow(params: {
     updates.description = builtInAgent.description;
   }
 
-  // Migrate configs still sitting exactly on the old shipped default;
-  // any other value is a deliberate admin choice and is left alone
-  // (mirrors the legacy-system-prompt rewrite below).
-  if (
-    builtInAgent.builtInAgentId === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN &&
-    existing.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN &&
-    existing.builtInAgentConfig.maxRounds === DUAL_LLM_LEGACY_DEFAULT_MAX_ROUNDS
-  ) {
-    updates.builtInAgentConfig = {
-      ...existing.builtInAgentConfig,
-      maxRounds: DUAL_LLM_DEFAULT_MAX_ROUNDS,
-    };
-  }
-
   if (
     shouldSyncBuiltInAgentSystemPrompt({
       builtInAgentId: builtInAgent.builtInAgentId,
@@ -1452,19 +1400,10 @@ function shouldSyncBuiltInAgentSystemPrompt(params: {
   builtInAgentId: string;
   systemPrompt: string | null;
 }): boolean {
-  if (params.builtInAgentId === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG) {
-    return (
-      params.systemPrompt === null ||
-      SUPERSEDED_OPENAPPA_CONFIG_SYSTEM_PROMPTS.includes(params.systemPrompt)
-    );
-  }
-  if (params.systemPrompt === null) {
-    return false;
-  }
-
   return (
-    params.builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG &&
-    SUPERSEDED_POLICY_CONFIG_SYSTEM_PROMPTS.includes(params.systemPrompt)
+    params.builtInAgentId === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG &&
+    (params.systemPrompt === null ||
+      SUPERSEDED_OPENAPPA_CONFIG_SYSTEM_PROMPTS.includes(params.systemPrompt))
   );
 }
 
@@ -1601,42 +1540,4 @@ const SUPERSEDED_OPENAPPA_CONFIG_SYSTEM_PROMPTS: readonly string[] = [
   FULL_TEXT_ONLY_OPENAPPA_CONFIG_SYSTEM_PROMPT,
   YELL_TRAJECTORY_OPENAPPA_CONFIG_SYSTEM_PROMPT,
   COMBINED_VALIDATION_OPENAPPA_CONFIG_SYSTEM_PROMPT,
-];
-
-const LEGACY_POLICY_CONFIG_SYSTEM_PROMPT = `Analyze this MCP tool and determine security policies:
-
-Tool: {tool.name}
-Description: {tool.description}
-MCP Server: {mcpServerName}
-Parameters: {tool.parameters}
-
-Determine:
-
-1. toolInvocationAction (enum) - When should this tool be allowed?
-   - "allow_when_context_is_untrusted": Safe to invoke even with untrusted data (read-only, doesn't leak sensitive data)
-   - "block_when_context_is_untrusted": Only invoke when context is trusted (could leak data if untrusted input is present)
-   - "block_always": Never invoke automatically (writes data, executes code, sends data externally)
-
-2. trustedDataAction (enum) - How should the tool's results be treated?
-   - "mark_as_trusted": Internal systems (databases, APIs, dev tools like list-endpoints/get-config)
-   - "mark_as_untrusted": External/filesystem data where exact values are safe to use directly
-   - "sanitize_with_dual_llm": Untrusted data that needs summarization without exposing exact values
-   - "block_always": Highly sensitive or dangerous output that should be blocked entirely
-
-Examples:
-- Internal dev tools: invocation="allow_when_context_is_untrusted", result="mark_as_trusted"
-- Database queries: invocation="allow_when_context_is_untrusted", result="mark_as_trusted"
-- File reads (code/config): invocation="allow_when_context_is_untrusted", result="mark_as_untrusted"
-- Web search/scraping: invocation="allow_when_context_is_untrusted", result="sanitize_with_dual_llm"
-- File writes: invocation="block_always", result="mark_as_trusted"
-- External APIs (raw data): invocation="block_when_context_is_untrusted", result="mark_as_untrusted"
-- Code execution: invocation="block_always", result="mark_as_untrusted"`;
-
-// Shipped policy-config prompts we have since replaced. An org still on any of
-// these is pristine (never customized) and is auto-upgraded to the current
-// POLICY_CONFIG_SYSTEM_PROMPT on startup; any other stored prompt is treated as
-// admin-edited and left untouched.
-const SUPERSEDED_POLICY_CONFIG_SYSTEM_PROMPTS: readonly string[] = [
-  LEGACY_POLICY_CONFIG_SYSTEM_PROMPT,
-  PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT,
 ];

@@ -209,21 +209,6 @@ describe("tool display helpers", () => {
     ).toBe(true);
   });
 
-  it("keeps policy denials as full cards", () => {
-    expect(
-      isCompactEligible({
-        toolName: "linear__create_issue",
-        part: {
-          type: "tool-linear__create_issue",
-          state: "input-available",
-          errorText:
-            'I tried to invoke the linear__create_issue tool with the following arguments: {"title":"Blocked"}.\n\nHowever, I was denied by a tool invocation policy:\n\nTool invocation blocked: sensitive data detected',
-        } as never,
-        toolResultPart: null,
-      }),
-    ).toBe(false);
-  });
-
   it("keeps auth-required responses as full cards", () => {
     expect(
       isCompactEligible({
@@ -403,37 +388,4 @@ describe("reviewed remedy rulings", () => {
     expect(getCompactToolState({ part, toolResultPart: null })).toBe("error");
     expect(getHumanRulingDisplay({ part, toolResultPart: null })).toBeNull();
   });
-});
-
-it("keeps structured OpenAPPA denials out of generic compact error details", () => {
-  const part = {
-    type: "tool-archestra__whoami" as const,
-    toolCallId: "blocked-attempt",
-    state: "output-available" as const,
-    input: {},
-    output: {
-      isError: true,
-      content: [
-        { type: "text", text: "Accept the session restriction using offer-1" },
-      ],
-      _meta: {
-        appaBlockedReceipt: "opaque-receipt",
-        archestraError: {
-          type: "policy_denied",
-          toolName: "archestra__whoami",
-          input: {},
-          reason: "Session trust would fall",
-          message: "Accept the session restriction using offer-1",
-        },
-      },
-    },
-  };
-  expect(
-    isCompactEligible({
-      part,
-      toolResultPart: null,
-      toolName: "archestra__whoami",
-    }),
-  ).toBe(false);
-  expect(getToolErrorText({ part, toolResultPart: null })).toContain("offer-1");
 });

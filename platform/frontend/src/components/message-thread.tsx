@@ -3,21 +3,13 @@
 import {
   type archestraApiTypes,
   type BlockedToolPart,
-  type DualLlmPart,
   extractMcpToolError,
   foldCitationSources,
   type PartialUIMessage,
-  type PolicyDeniedPart,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
-import {
-  Check,
-  Paperclip,
-  RefreshCcwIcon,
-  ShieldCheck,
-  TriangleAlert,
-} from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Paperclip, RefreshCcwIcon, TriangleAlert } from "lucide-react";
+import { Fragment, useMemo } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -54,19 +46,9 @@ import {
   KnowledgeGraphCitations,
 } from "@/components/chat/knowledge-graph-citations";
 import { MessageActions } from "@/components/chat/message-actions";
-import {
-  findScrollContainer,
-  PreexistingUnsafeContextDivider,
-  SensitiveContextStickyIndicator,
-  shouldShowStickyBoundaryIndicator,
-  UnsafeContextStartsHereDivider,
-} from "@/components/chat/message-boundary-divider";
-import { PolicyDeniedTool } from "@/components/chat/policy-denied-tool";
 import { UserMessageText } from "@/components/chat/user-message-text";
 import Divider from "@/components/divider";
 import { Button } from "@/components/ui/button";
-import { getToolNameFromPart } from "@/lib/chat/chat-tools-display.utils";
-import { parsePolicyDenied } from "@/lib/chat/mcp-error-ui";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -86,10 +68,8 @@ const MessageThread = ({
   containerClassName,
   topPart,
   hideDivider,
-  profileId,
   agentName,
   selectedModel,
-  unsafeContextBoundary,
 }: {
   messages: PartialUIMessage[];
   chatErrors?: PersistedChatError[];
@@ -99,10 +79,8 @@ const MessageThread = ({
   containerClassName?: string;
   topPart?: React.ReactNode;
   hideDivider?: boolean;
-  profileId?: string;
   agentName?: string;
   selectedModel?: string;
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
 }) => {
   const status: ChatStatus = "streaming" as ChatStatus;
   const { data: organization } = useOrganization();
@@ -117,47 +95,6 @@ const MessageThread = ({
     }
     return -1;
   }, [messages]);
-  const unsafeBoundaryRef = useRef<HTMLDivElement>(null);
-  const [showStickyUnsafeIndicator, setShowStickyUnsafeIndicator] =
-    useState(false);
-
-  useEffect(() => {
-    const boundaryElement = unsafeBoundaryRef.current;
-    if (!boundaryElement) {
-      setShowStickyUnsafeIndicator(false);
-      return;
-    }
-
-    const scrollContainer = findScrollContainer(boundaryElement);
-    if (!scrollContainer) {
-      setShowStickyUnsafeIndicator(false);
-      return;
-    }
-
-    const updateStickyState = () => {
-      const boundaryRect = boundaryElement.getBoundingClientRect();
-      const containerRect = scrollContainer.getBoundingClientRect();
-      setShowStickyUnsafeIndicator(
-        shouldShowStickyBoundaryIndicator({
-          boundaryTop: boundaryRect.top,
-          boundaryBottom: boundaryRect.bottom,
-          containerTop: containerRect.top,
-        }),
-      );
-    };
-
-    updateStickyState();
-    scrollContainer.addEventListener("scroll", updateStickyState, {
-      passive: true,
-    });
-    window.addEventListener("resize", updateStickyState);
-
-    return () => {
-      scrollContainer.removeEventListener("scroll", updateStickyState);
-      window.removeEventListener("resize", updateStickyState);
-    };
-  });
-
   return (
     <div
       className={cn(
@@ -169,12 +106,6 @@ const MessageThread = ({
         <Conversation className="h-full">
           <ConversationContent>
             {topPart}
-            <SensitiveContextStickyIndicator
-              visible={showStickyUnsafeIndicator}
-            />
-            {unsafeContextBoundary?.kind === "preexisting_untrusted" && (
-              <PreexistingUnsafeContextDivider dividerRef={unsafeBoundaryRef} />
-            )}
             {!hideDivider && <Divider className="my-4" />}
             <div className="max-w-4xl mx-auto">
               {timelineItems.map((item) => {
@@ -248,20 +179,6 @@ const MessageThread = ({
                           }
                         }
 
-                        // Skip dual-llm-analysis parts that follow a tool (invocation or result)
-                        // They will be rendered together with the tool
-                        if (_isDualLlmPart(part) && i > 0) {
-                          const prevPart = message.parts[i - 1];
-                          if (
-                            prevPart.type === "dynamic-tool" ||
-                            ("type" in prevPart &&
-                              prevPart.type === "tool-invocation") ||
-                            _isToolPrefixedPart(prevPart)
-                          ) {
-                            return null;
-                          }
-                        }
-
                         switch (part.type) {
                           case "text": {
                             // Some models emit whitespace-only text alongside
@@ -269,39 +186,6 @@ const MessageThread = ({
                             // produce an empty message bubble
                             if (!part.text.trim()) {
                               return null;
-                            }
-                            const policyDenied = parsePolicyDenied(part.text);
-                            const shouldRenderUnsafeContextDivider =
-                              message.role === "assistant" &&
-                              shouldRenderToolResultUnsafeBoundary({
-                                message,
-                                partIndex: i,
-                                unsafeContextBoundary,
-                              });
-                            const shouldRenderPolicyDeniedUnsafeBoundary =
-                              policyDenied?.unsafeContextActiveAtRequestStart &&
-                              !hasUnsafeBoundaryBefore({
-                                messages,
-                                beforeMessageIndex: idx,
-                                beforePartIndex: i,
-                                unsafeContextBoundary,
-                              });
-                            if (policyDenied) {
-                              return (
-                                <Fragment key={partKey}>
-                                  {shouldRenderPolicyDeniedUnsafeBoundary && (
-                                    <PreexistingUnsafeContextDivider
-                                      dividerRef={unsafeBoundaryRef}
-                                    />
-                                  )}
-                                  <PolicyDeniedTool
-                                    policyDenied={policyDenied}
-                                    {...(profileId
-                                      ? { editable: true, profileId }
-                                      : { editable: false })}
-                                  />
-                                </Fragment>
-                              );
                             }
                             const isLastAssistantMessage =
                               message.role === "assistant" &&
@@ -355,11 +239,6 @@ const MessageThread = ({
 
                             return (
                               <Fragment key={partKey}>
-                                {shouldRenderUnsafeContextDivider && (
-                                  <UnsafeContextStartsHereDivider
-                                    dividerRef={unsafeBoundaryRef}
-                                  />
-                                )}
                                 <Message from={message.role}>
                                   <MessageContent>
                                     {message.role === "system" && (
@@ -441,18 +320,12 @@ const MessageThread = ({
                               "send_email",
                               "analyze_email_blocked",
                             ].includes(part.toolCallId);
-                            const isShield =
-                              part.toolCallId === "dual_llm_activated";
                             const isSuccess =
                               part.toolCallId === "attack_blocked";
                             const getIcon = () => {
                               if (isDanger)
                                 return (
                                   <TriangleAlert className="size-4 text-muted-foreground" />
-                                );
-                              if (isShield)
-                                return (
-                                  <ShieldCheck className="size-4 text-muted-foreground" />
                                 );
                               if (isSuccess)
                                 return (
@@ -462,14 +335,12 @@ const MessageThread = ({
                             };
                             const getColorClass = () => {
                               if (isDanger) return "bg-red-500/30";
-                              if (isShield) return "bg-sky-400/60";
                               if (isSuccess) return "bg-emerald-700/60";
                               return "";
                             };
 
-                            // Look ahead for tool result and dual LLM analysis
+                            // Look ahead for the tool result
                             let toolResultPart = null;
-                            let dualLlmPart: DualLlmPart | null = null;
 
                             // Check if next part is a tool result (same tool call ID)
                             const nextPart = message.parts[i + 1];
@@ -481,17 +352,6 @@ const MessageThread = ({
                               nextPart.toolCallId === part.toolCallId
                             ) {
                               toolResultPart = nextPart;
-
-                              // Check if there's a dual LLM part after the tool result
-                              const dualLlmPartCandidate = message.parts[i + 2];
-                              if (_isDualLlmPart(dualLlmPartCandidate)) {
-                                dualLlmPart = dualLlmPartCandidate;
-                              }
-                            } else {
-                              // Check if the next part is directly a dual LLM analysis
-                              if (_isDualLlmPart(nextPart)) {
-                                dualLlmPart = nextPart;
-                              }
                             }
 
                             return (
@@ -506,11 +366,9 @@ const MessageThread = ({
                                       toolResultPart?.output ?? part.output,
                                     )
                                       ? "output-cancelled"
-                                      : dualLlmPart
-                                        ? "output-available-dual-llm"
-                                        : toolResultPart
-                                          ? "output-available"
-                                          : part.state
+                                      : toolResultPart
+                                        ? "output-available"
+                                        : part.state
                                   }
                                   icon={getIcon()}
                                 />
@@ -528,9 +386,7 @@ const MessageThread = ({
                                           ? "Cancelled"
                                           : toolResultPart.errorText
                                             ? "Error"
-                                            : dualLlmPart
-                                              ? "Unsafe result"
-                                              : "Result"
+                                            : "Result"
                                       }
                                       output={toolResultPart.output as unknown}
                                       errorText={toolResultPart.errorText}
@@ -543,28 +399,11 @@ const MessageThread = ({
                                           ? "Cancelled"
                                           : part.errorText
                                             ? "Error"
-                                            : dualLlmPart
-                                              ? "Unsafe result"
-                                              : "Result"
+                                            : "Result"
                                       }
                                       output={part.output as unknown}
                                       errorText={part.errorText}
                                     />
-                                  )}
-                                  {dualLlmPart && (
-                                    <>
-                                      <ToolOutput
-                                        label="Safe result"
-                                        output={dualLlmPart.safeResult}
-                                      />
-                                      <ToolOutput
-                                        label="Questions and Answers"
-                                        output={undefined}
-                                        conversations={dualLlmPart.conversations.slice(
-                                          1,
-                                        )}
-                                      />
-                                    </>
                                   )}
                                 </ToolContent>
                               </Tool>
@@ -580,10 +419,9 @@ const MessageThread = ({
                             // One accordion per part, deliberately. Chat folds
                             // adjacent thinking into runs, but that helper
                             // models chat's visible-part set, which this view
-                            // does not share — it draws blocked-tool, dual-LLM
-                            // and policy-denied blocks the helper would treat
-                            // as invisible and merge across, reordering the
-                            // transcript. Tool cards here separate thinking
+                            // does not share — it draws blocked-tool blocks the
+                            // helper would treat as invisible and merge across,
+                            // reordering the transcript. Tool cards here separate thinking
                             // anyway, so the folding has little to do.
                             return (
                               <Reasoning
@@ -644,9 +482,8 @@ const MessageThread = ({
 
                             // Handle tool-* prefixed parts (persisted tool calls from DB)
                             if (_isToolPrefixedPart(part)) {
-                              // Look ahead for tool result and dual LLM analysis
+                              // Look ahead for the tool result
                               let toolResultPart = null;
-                              let dualLlmPart: DualLlmPart | null = null;
 
                               const nextPart = message.parts[i + 1];
                               if (
@@ -656,12 +493,6 @@ const MessageThread = ({
                                 nextPart.toolCallId === part.toolCallId
                               ) {
                                 toolResultPart = nextPart;
-                                const dualLlmCandidate = message.parts[i + 2];
-                                if (_isDualLlmPart(dualLlmCandidate)) {
-                                  dualLlmPart = dualLlmCandidate;
-                                }
-                              } else if (_isDualLlmPart(nextPart)) {
-                                dualLlmPart = nextPart;
                               }
 
                               return (
@@ -673,11 +504,9 @@ const MessageThread = ({
                                         toolResultPart?.output ?? part.output,
                                       )
                                         ? "output-cancelled"
-                                        : dualLlmPart
-                                          ? "output-available-dual-llm"
-                                          : toolResultPart
-                                            ? "output-available"
-                                            : part.state
+                                        : toolResultPart
+                                          ? "output-available"
+                                          : part.state
                                     }
                                   />
                                   <ToolContent>
@@ -697,9 +526,7 @@ const MessageThread = ({
                                             ? "Cancelled"
                                             : toolResultPart.errorText
                                               ? "Error"
-                                              : dualLlmPart
-                                                ? "Unsafe result"
-                                                : "Result"
+                                              : "Result"
                                         }
                                         output={
                                           toolResultPart.output as unknown
@@ -719,9 +546,7 @@ const MessageThread = ({
                                               ? "Cancelled"
                                               : part.errorText
                                                 ? "Error"
-                                                : dualLlmPart
-                                                  ? "Unsafe result"
-                                                  : "Result"
+                                                : "Result"
                                           }
                                           output={part.output as unknown}
                                           errorText={
@@ -729,68 +554,16 @@ const MessageThread = ({
                                           }
                                         />
                                       )}
-                                    {dualLlmPart && (
-                                      <>
-                                        <ToolOutput
-                                          label="Safe result"
-                                          output={dualLlmPart.safeResult}
-                                        />
-                                        <ToolOutput
-                                          label="Questions and Answers"
-                                          output={undefined}
-                                          conversations={dualLlmPart.conversations.slice(
-                                            1,
-                                          )}
-                                        />
-                                      </>
-                                    )}
                                   </ToolContent>
                                 </Tool>
                               );
                             }
 
-                            // Handle custom dual-llm-analysis type (standalone, not following a tool)
-                            if (_isDualLlmPart(part)) {
-                              const dualLlmPart = part as DualLlmPart;
-
-                              return (
-                                <Tool key={partKey} className="bg-sky-400/20">
-                                  <ToolHeader
-                                    type="tool-dual-llm-action"
-                                    state="output-available-dual-llm"
-                                    icon={
-                                      <ShieldCheck className="size-4 text-muted-foreground" />
-                                    }
-                                  />
-                                  <ToolContent>
-                                    <ToolOutput
-                                      label="Safe result"
-                                      output={dualLlmPart.safeResult}
-                                    />
-                                    <ToolOutput
-                                      label="Questions and answers"
-                                      output={undefined}
-                                      conversations={dualLlmPart.conversations.slice(
-                                        1,
-                                      )}
-                                    />
-                                  </ToolContent>
-                                </Tool>
-                              );
-                            }
                             return null;
                           }
                         }
                       });
                     })()}
-                    {shouldRenderUnsafeContextDividerAfterMessage({
-                      message,
-                      unsafeContextBoundary,
-                    }) && (
-                      <UnsafeContextStartsHereDivider
-                        dividerRef={unsafeBoundaryRef}
-                      />
-                    )}
                   </div>
                 );
               })}
@@ -813,12 +586,7 @@ const MessageThread = ({
   );
 };
 
-export type {
-  BlockedToolPart,
-  DualLlmPart,
-  PolicyDeniedPart,
-  PartialUIMessage,
-};
+export type { BlockedToolPart, PartialUIMessage };
 
 // Type guard for tool-* prefixed parts (persisted tool calls from DB)
 function _isToolPrefixedPart(part: unknown): part is {
@@ -839,16 +607,7 @@ function _isToolPrefixedPart(part: unknown): part is {
   );
 }
 
-// Type guards for custom part types
-function _isDualLlmPart(part: unknown): part is DualLlmPart {
-  return (
-    typeof part === "object" &&
-    part !== null &&
-    "type" in part &&
-    (part as { type: string }).type === "dual-llm-analysis"
-  );
-}
-
+// Type guard for custom part types
 function _isBlockedToolPart(part: unknown): part is BlockedToolPart {
   return (
     typeof part === "object" &&
@@ -905,160 +664,6 @@ function getMessageCreatedAt(message: PartialUIMessage): number | null {
 
   const createdAt = Date.parse(metadata.createdAt);
   return Number.isNaN(createdAt) ? null : createdAt;
-}
-
-function shouldRenderToolResultUnsafeBoundary(params: {
-  message: PartialUIMessage;
-  partIndex: number;
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
-}): boolean {
-  const { message, partIndex, unsafeContextBoundary } = params;
-
-  if (unsafeContextBoundary?.kind !== "tool_result") {
-    return false;
-  }
-
-  let sawBoundaryToolResult = false;
-  for (let i = 0; i < (message.parts?.length ?? 0); i++) {
-    const part = message.parts[i];
-    if (
-      "toolCallId" in part &&
-      "state" in part &&
-      part.state === "output-available" &&
-      toolPartMatchesUnsafeContextBoundary(part, unsafeContextBoundary)
-    ) {
-      sawBoundaryToolResult = true;
-      continue;
-    }
-
-    if (
-      sawBoundaryToolResult &&
-      part.type === "text" &&
-      typeof part.text === "string" &&
-      part.text.trim().length > 0
-    ) {
-      return i === partIndex;
-    }
-  }
-
-  return false;
-}
-
-function shouldRenderUnsafeContextDividerAfterMessage(params: {
-  message: PartialUIMessage;
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
-}): boolean {
-  const { message, unsafeContextBoundary } = params;
-
-  if (unsafeContextBoundary?.kind !== "tool_result") {
-    return false;
-  }
-
-  let sawBoundaryToolResult = false;
-  for (const part of message.parts ?? []) {
-    if (
-      "toolCallId" in part &&
-      "state" in part &&
-      part.state === "output-available" &&
-      toolPartMatchesUnsafeContextBoundary(part, unsafeContextBoundary)
-    ) {
-      sawBoundaryToolResult = true;
-      continue;
-    }
-
-    if (
-      sawBoundaryToolResult &&
-      part.type === "text" &&
-      typeof part.text === "string" &&
-      part.text.trim().length > 0
-    ) {
-      return false;
-    }
-  }
-
-  return sawBoundaryToolResult;
-}
-
-function hasUnsafeBoundaryBefore(params: {
-  messages: PartialUIMessage[];
-  beforeMessageIndex: number;
-  beforePartIndex: number;
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"];
-}): boolean {
-  if (params.unsafeContextBoundary?.kind === "preexisting_untrusted") {
-    return true;
-  }
-
-  for (
-    let messageIndex = 0;
-    messageIndex <= params.beforeMessageIndex;
-    messageIndex++
-  ) {
-    const message = params.messages[messageIndex];
-    const lastPartIndex =
-      messageIndex === params.beforeMessageIndex
-        ? params.beforePartIndex - 1
-        : (message.parts?.length ?? 0) - 1;
-
-    for (let partIndex = 0; partIndex <= lastPartIndex; partIndex++) {
-      const part = message.parts?.[partIndex];
-      if (!part) {
-        continue;
-      }
-
-      if (
-        part.type === "text" &&
-        parsePolicyDenied(part.text)?.unsafeContextActiveAtRequestStart
-      ) {
-        return true;
-      }
-
-      if (
-        "state" in part &&
-        part.state === "output-available" &&
-        toolPartMatchesUnsafeContextBoundaryInThread(
-          part,
-          params.unsafeContextBoundary,
-        )
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function toolPartMatchesUnsafeContextBoundaryInThread(
-  part: PartialUIMessage["parts"][number],
-  unsafeContextBoundary?: archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"],
-): boolean {
-  if (!("type" in part) || typeof part.type !== "string") {
-    return false;
-  }
-
-  if (unsafeContextBoundary?.kind !== "tool_result") {
-    return false;
-  }
-
-  return toolPartMatchesUnsafeContextBoundary(part, unsafeContextBoundary);
-}
-
-function toolPartMatchesUnsafeContextBoundary(
-  part: PartialUIMessage["parts"][number],
-  boundary: Extract<
-    NonNullable<
-      archestraApiTypes.GetInteractionResponses["200"]["unsafeContextBoundary"]
-    >,
-    { kind: "tool_result" }
-  >,
-): boolean {
-  if ("toolCallId" in part && part.toolCallId === boundary.toolCallId) {
-    return true;
-  }
-
-  const partToolName = getToolNameFromPart(part);
-  return partToolName === boundary.toolName;
 }
 
 function getPartKey(

@@ -25,8 +25,8 @@ type McpListTool = ListToolsResult["tools"][number];
  * route's `mcpServerId`, with no agent/owner context. `resources/read` refuses
  * any non-`ui://` URI so sandboxed app code cannot read the installed server's
  * model-facing data resources through the install's own credentials. Access
- * (`mcpServerInstallation:read`), the `_meta.ui.visibility` model-only tool
- * gate, and tool-invocation policy are enforced by the route before here.
+ * (`mcpServerInstallation:read`) and the `_meta.ui.visibility` model-only tool
+ * gate are enforced by the route before here.
  */
 export function createServerScopedServer(params: {
   mcpServerId: string;

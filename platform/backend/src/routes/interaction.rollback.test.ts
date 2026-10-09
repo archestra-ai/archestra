@@ -250,7 +250,6 @@ describe("interaction routes", () => {
     ]);
     expect(response.json().data[0]).not.toHaveProperty("request");
     expect(response.json().data[0]).not.toHaveProperty("response");
-    expect(response.json().data[0]).not.toHaveProperty("dualLlmAnalyses");
   });
 
   test("lists interactions whose response carries a non-standard finish_reason", async ({

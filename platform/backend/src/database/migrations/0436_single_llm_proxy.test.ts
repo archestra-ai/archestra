@@ -24,7 +24,20 @@ async function runMigration() {
   if (statements.length !== 1) {
     throw new Error("Migration data DO block not found");
   }
+  // The DO block reads and writes `consider_context_untrusted`, which a later
+  // migration dropped. Restore it for the replay only, so the rest of the
+  // historical data migration can still be exercised against today's schema.
+  await db.execute(
+    sql.raw(
+      'ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "consider_context_untrusted" boolean DEFAULT false NOT NULL',
+    ),
+  );
   await db.execute(sql.raw(statements[0]));
+  await db.execute(
+    sql.raw(
+      'ALTER TABLE "agents" DROP COLUMN IF EXISTS "consider_context_untrusted"',
+    ),
+  );
   // The DO block's temporary election table lives for the duration of the
   // connection, and the test suite runs on a single PGlite connection — drop
   // it so the block can be replayed within one test run.
@@ -185,7 +198,7 @@ describe("0436 single llm proxy", () => {
     }
   });
 
-  test("absorbs donor settings: context-untrusted ORs across donors and a lone donor identity provider is adopted", async ({
+  test("absorbs donor settings: a lone donor identity provider is adopted", async ({
     makeOrganization,
     makeIdentityProvider,
   }) => {
@@ -194,19 +207,16 @@ describe("0436 single llm proxy", () => {
     const elected = await insertAgentRow({
       organizationId: org.id,
       isDefault: true,
-      considerContextUntrusted: false,
     });
     const profileDonor = await insertAgentRow({
       organizationId: org.id,
       agentType: "profile",
-      considerContextUntrusted: true,
       identityProviderId: idp.id,
     });
 
     await runMigration();
 
     expect(await getAgent(elected.id)).toMatchObject({
-      considerContextUntrusted: true,
       identityProviderId: idp.id,
     });
     // Donor rows keep their own provider (still used on the gateway side).

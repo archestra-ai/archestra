@@ -194,10 +194,10 @@ class InternalMcpCatalogModel {
       createdItem.id,
     );
 
-    // A clone copies the source's tools + guardrails as provisional rows, and
+    // A clone copies the source's tools as provisional rows, and
     // its secrets as independent copies (see cloneSecretsFromSource).
     if (createdItem.clonedFrom) {
-      await ToolModel.cloneToolsAndPoliciesFromCatalog({
+      await ToolModel.cloneToolsFromCatalog({
         sourceCatalogId: createdItem.clonedFrom,
         targetCatalogId: createdItem.id,
         targetCatalogName: createdItem.name,

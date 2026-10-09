@@ -65,7 +65,7 @@ Using `references/entity-mapping.md`, turn the inventory into `migration_plan.js
 ```json
 { "schema_version": 1, "default_scope": "personal",
   "decisions": [ { "source_id": "<inventory id>", "action": "migrate|skip|manual",
-                   "target_kind": "agent|skill|mcp_catalog|mcp_install|llm_key|tool_policy|hook",
+                   "target_kind": "agent|skill|mcp_catalog|mcp_install|llm_key|hook",
                    "scope": "personal", "name_override": null, "notes": "...",
                    "user_answers": { } } ] }
 ```
@@ -93,8 +93,6 @@ Use `AskUserQuestion` only for genuine ambiguities, e.g.:
     (the default; a native lifecycle hook). Usually no `user_answers` needed — `apply.py` bundles the
     script, carries PEP-723 requirements, and attaches it to the primary agent. Optional `user_answers`:
     `agentId` (UUID), `fileName` (override), `requirements` (override; a `.sh` hook must have none);
-  - a simple declarative `guard` whose tool exists in Archestra → optionally **`tool_policy`** instead,
-    extracting `{tool_name, key, operator, value, action?, reason?}` into `user_answers`;
   - event unmapped, or `data.source == "unresolved"` → `action:"manual"` with a `notes` explanation.
   Surface the behavior differences (no matcher, Archestra tool names, sandbox `cwd`, dropped env/argv).
 
@@ -156,8 +154,7 @@ exits non-zero if any op failed/was invalid.
 ## Step 5 — Report
 From `migration_result.json`, write `report.md` using `references/report-template.md`. The report is
 for deciding whether the converted pilot is ready to try in Archestra, not for producing an exhaustive
-command transcript. For a `guard` hook you mapped to a `tool_policy` whose target tool doesn't exist yet,
-include the exact policy JSON to paste once it does. For hooks migrated as native lifecycle hooks, note
+command transcript. For hooks migrated as native lifecycle hooks, note
 the behavior differences (no matcher, Archestra tool names, sandbox `cwd`, dropped env/argv), and whether
 the agent-hooks feature is on: `apply.py` records a warning op when it is off, in which case migrated
 hooks are saved but never fire until an admin enables it.

@@ -6,7 +6,7 @@
 
 import type { archestraApiTypes } from "../../index";
 import type { PartialUIMessage } from "../types";
-import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
+import type { Interaction, InteractionUtils } from "./common";
 
 class CohereChatInteraction implements InteractionUtils {
   private request: archestraApiTypes.CohereChatRequest;
@@ -67,11 +67,6 @@ class CohereChatInteraction implements InteractionUtils {
     return Array.from(toolsUsed);
   }
 
-  getToolNamesRefused(): string[] {
-    // TODO: Implement tool refusal detection for Cohere if needed
-    return [];
-  }
-
   getToolNamesRequested(): string[] {
     const toolsRequested = new Set<string>();
 
@@ -83,10 +78,6 @@ class CohereChatInteraction implements InteractionUtils {
     }
 
     return Array.from(toolsRequested);
-  }
-
-  getToolRefusedCount(): number {
-    return 0;
   }
 
   getLastUserMessage(): string {
@@ -144,7 +135,7 @@ class CohereChatInteraction implements InteractionUtils {
     return "";
   }
 
-  mapToUiMessages(_dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
+  mapToUiMessages(): PartialUIMessage[] {
     const uiMessages: PartialUIMessage[] = [];
     const messages = this.request.messages ?? [];
     const response = this.response;

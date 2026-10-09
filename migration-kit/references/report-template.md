@@ -39,19 +39,8 @@ exhaustive command transcript.
 | --- | --- | --- |
 | `<path or source_id>` | `<no direct Archestra equivalent>` | `<specific action>` |
 
-For a `guard` hook you chose to map to a `tool_policy` but whose target tool does not exist yet, include
-the exact policy JSON to create once it does.
-
-```json
-{
-  "toolId": "<fill once tool exists>",
-  "conditions": [
-    { "key": "command", "operator": "regex", "value": "<pattern>" }
-  ],
-  "action": "block_always",
-  "reason": "<why this guard existed in the source setup>"
-}
-```
+If the source relied on a guard as an org-wide tool-call rule, list it here for an admin to add to the
+OpenAPPA [guardrails policy](https://archestra.ai/docs/agents/guardrails); this kit does not write it.
 
 ## Behavior differences
 
@@ -63,7 +52,6 @@ List only the differences that apply to this migration.
 - Hooks migrated as native lifecycle hooks lose their `matcher` (they fire on every tool call of the
   event), assume Archestra tool names rather than Claude built-ins, run with `cwd` = the sandbox home,
   and drop any env/argv the original command set. Hooks for unsupported events were left for manual work.
-- Tool policies only enforce when the organization tool policy mode is restrictive.
 - Prompt-only filename or artifact conventions migrated as instructions, not hard runtime checks.
 - Telemetry: any source telemetry (OTEL env, observability hooks/scripts) is reported, not migrated —
   Archestra emits OTEL spans + Prometheus metrics natively. To keep an existing collector/Grafana,

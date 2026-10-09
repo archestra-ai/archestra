@@ -11,12 +11,7 @@ import {
 import type { OpenAppaSession } from "@/openappa/service";
 import { withoutTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { canonicalJson } from "@/openappa/wire";
-import type {
-  CommonToolResult,
-  DualLlmAnalysis,
-  HostedToolCall,
-  UnsafeContextBoundary,
-} from "@/types";
+import type { CommonToolResult, HostedToolCall } from "@/types";
 import { ApiError } from "@/types";
 
 /**
@@ -145,20 +140,12 @@ export type LlmProxyToolResultsContext = LlmProxyRequestContext & {
   toolResults: readonly LlmProxyToolResult[];
 };
 
-export type LlmProxyContextTrust = {
-  contextIsTrusted: boolean;
-  dualLlmAnalyses: DualLlmAnalysis[];
-  unsafeContextBoundary: UnsafeContextBoundary | undefined;
-};
-
 /**
  * Uses the request adapter's existing provider-wire update path. Later plugins
  * receive the cumulative updates from earlier plugins in registration order.
  */
 export type LlmProxyToolResultsOutcome = {
   toolResultUpdates: Readonly<Record<string, string>>;
-  /** The final plugin-provided context trust decision, if one was made. */
-  contextTrust?: LlmProxyContextTrust;
 };
 
 export type LlmProxyModelResponseContext = LlmProxyRequestContext & {
@@ -185,7 +172,7 @@ export type LlmProxyErrorContext = LlmProxyRequestContext & {
 
 export interface LlmProxyPlugin {
   readonly id: string;
-  /** Finalizers reserve approved calls and run after the host's policy check. */
+  /** Finalizers reserve approved calls and run after rewriters and preparers. */
   readonly finalizesToolCalls?: boolean;
   onSessionInit?(context: LlmProxyRequestContext): Promise<void>;
   onPrompt?(context: LlmProxyPromptContext): Promise<void>;
@@ -303,14 +290,11 @@ export class LlmProxyPluginRegistry {
 
   async onToolCalls(
     context: LlmProxyToolCallsContext,
-    validate?: (
-      toolCalls: LlmProxyToolCallsContext["toolCalls"],
-    ) => Promise<LlmProxyToolCallRefusal | null>,
   ): Promise<LlmProxyToolCallsOutcome> {
     let toolCalls = context.toolCalls;
     const plugins = this.hasPlugins() ? this.getSessionPlugins(context) : [];
-    // Rewriters run first. The host checks exactly those calls before a
-    // finalizer such as APPA records any reservation for execution.
+    // Rewriters run first, then preparers; a finalizer such as APPA sees
+    // exactly those calls before it records any reservation for execution.
     for (const plugin of plugins.filter(
       (plugin) => !plugin.finalizesToolCalls,
     )) {
@@ -331,8 +315,6 @@ export class LlmProxyPluginRegistry {
       if (prepared.decision === "refuse") return prepared;
       toolCalls = prepared.toolCalls;
     }
-    const refusal = await validate?.(toolCalls);
-    if (refusal) return { decision: "refuse", refusal };
     let blocked: readonly { id: string; name: string; reason: string }[] = [];
     for (const plugin of plugins.filter(
       (plugin) => plugin.finalizesToolCalls,
@@ -472,7 +454,6 @@ export class LlmProxyPluginRegistry {
     if (!this.hasPlugins()) return EMPTY_TOOL_RESULTS_OUTCOME;
     const updates: Record<string, string> = {};
     let toolResults = context.toolResults;
-    let contextTrust: LlmProxyContextTrust | undefined;
     for (const plugin of this.getSessionPlugins(context)) {
       const result = await this.invoke(plugin, "onToolResults", {
         ...context,
@@ -480,16 +461,12 @@ export class LlmProxyPluginRegistry {
       });
       if (!result) continue;
       Object.assign(updates, result.toolResultUpdates);
-      if (result.contextTrust) contextTrust = result.contextTrust;
       toolResults = toolResults.map((toolResult) => ({
         ...toolResult,
         content: result.toolResultUpdates[toolResult.id] ?? toolResult.content,
       }));
     }
-    return {
-      toolResultUpdates: updates,
-      ...(contextTrust ? { contextTrust } : {}),
-    };
+    return { toolResultUpdates: updates };
   }
 
   governsHostedToolCalls(context: LlmProxyRequestContext): boolean {

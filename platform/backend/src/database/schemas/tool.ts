@@ -78,17 +78,6 @@ const toolsTable = softDeletablePgTable(
     clonedPendingDiscovery: boolean("cloned_pending_discovery")
       .notNull()
       .default(false),
-    policiesAutoConfiguredAt: timestamp("policies_auto_configured_at", {
-      mode: "date",
-    }),
-    policiesAutoConfiguringStartedAt: timestamp(
-      "policies_auto_configuring_started_at",
-      {
-        mode: "date",
-      },
-    ),
-    policiesAutoConfiguredReasoning: text("policies_auto_configured_reasoning"),
-    policiesAutoConfiguredModel: text("policies_auto_configured_model"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { mode: "date" })
       .notNull()

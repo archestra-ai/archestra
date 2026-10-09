@@ -101,17 +101,10 @@ function LogDetail({
   // Metadata only keeps no response, so which tools it called is unknown.
   const toolsNotStored = isLogContentNotStored(dynamicInteraction.response);
   const failed = isFailedResponse(dynamicInteraction.response);
-  const toolsBlocked = interaction.getToolNamesRefused();
-  const isDualLlmRelevant = interaction.isLastMessageToolCall();
-  const lastToolCallId = interaction.getLastToolCallId();
-  const allDualLlmAnalyses = dynamicInteraction.dualLlmAnalyses ?? [];
-  const dualLlmResult = allDualLlmAnalyses.find(
-    (r) => r.toolCallId === lastToolCallId,
-  );
 
   const requestMessages = new DynamicInteraction(
     dynamicInteraction,
-  ).mapToUiMessages(allDualLlmAnalyses);
+  ).mapToUiMessages();
   const chatErrors = dynamicInteraction.chatErrors ?? [];
   const authMethod = dynamicInteraction.authMethod
     ? formatAuthMethod(dynamicInteraction.authMethod)
@@ -282,38 +275,6 @@ function LogDetail({
           </span>
         ),
     },
-    ...(toolsBlocked.length > 0
-      ? [
-          {
-            label: "Tools blocked",
-            value: (
-              <div className="flex flex-wrap gap-1">
-                {toolsBlocked.map((toolName) => (
-                  <Badge
-                    key={toolName}
-                    variant="destructive"
-                    className="text-xs"
-                  >
-                    {toolName}
-                  </Badge>
-                ))}
-              </div>
-            ),
-          },
-        ]
-      : []),
-    ...(isDualLlmRelevant
-      ? [
-          {
-            label: "Dual LLM analysis",
-            value: dualLlmResult ? (
-              <Badge className="bg-green-600">Analyzed</Badge>
-            ) : (
-              <span className="text-muted-foreground">Not analyzed</span>
-            ),
-          },
-        ]
-      : []),
   ];
 
   return (
@@ -358,10 +319,8 @@ function LogDetail({
                 conversationId={dynamicInteraction.sessionId ?? undefined}
                 containerClassName="h-auto"
                 hideDivider={true}
-                profileId={agent?.id}
                 agentName={agent?.name ?? undefined}
                 selectedModel={interaction.modelName}
-                unsafeContextBoundary={dynamicInteraction.unsafeContextBoundary}
               />
             </div>
           </div>
@@ -412,8 +371,7 @@ function LogDetail({
                     />
                   )}
                   <p className="text-xs text-muted-foreground mt-2">
-                    This shows the request after trusted data filtering and
-                    other policy updates.
+                    This shows the request after policy updates.
                   </p>
                 </AccordionContent>
               </AccordionItem>

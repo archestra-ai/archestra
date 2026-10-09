@@ -21,7 +21,6 @@ import {
   resolveRuntimeSessionForWorkspace,
 } from "@/services/agent-runtime/runtime-identity";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
-import { CONNECTION_SETUP_CONTEXT_PARAM } from "@/services/connection-setup-context";
 import {
   AgentRunAttentionStateSchema,
   type AgentRunRecord,
@@ -441,10 +440,6 @@ async function handleMcpPostRequest(
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
       openappaSession,
-      connectionSetupContext:
-        new URL(request.url, "http://localhost").searchParams.get(
-          CONNECTION_SETUP_CONTEXT_PARAM,
-        ) ?? undefined,
       currentToolCallId,
       agentId: profileId,
       tokenAuth: tokenAuthContext,

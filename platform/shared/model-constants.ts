@@ -1165,22 +1165,6 @@ const ANTHROPIC_DEFAULT_THINKING_MODEL_MARKERS = [
 ];
 
 /**
- * True when a thinks-by-default Anthropic model accepts
- * `thinking: {type: "disabled"}`. Opus 5 and Sonnet 5 do (Opus 5 only at
- * effort high or below, which is the request default); the Fable/Mythos
- * class thinks unconditionally and 400s on `disabled` at any effort — the
- * only lever there is `output_config.effort`. Models that don't think by
- * default never need the field, so callers should gate on
- * {@link anthropicThinksByDefault} first.
- */
-export function anthropicSupportsThinkingDisabled(modelId: string): boolean {
-  const id = modelId.toLowerCase();
-  return !ANTHROPIC_UNCONDITIONAL_THINKING_MODEL_MARKERS.some((marker) =>
-    id.includes(marker),
-  );
-}
-
-/**
  * True when a chosen reasoning depth is worth offering for an Anthropic model.
  *
  * Deliberately the same set as {@link anthropicThinksByDefault}, and delegating

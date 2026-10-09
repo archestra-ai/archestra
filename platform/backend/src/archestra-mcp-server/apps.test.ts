@@ -2180,8 +2180,6 @@ describe("preview_app_tool", () => {
         agent: { id: agent.id, name: agent.name },
         organizationId,
         userId: user.id,
-        // the interactive chat harness sets this after the approval click
-        approvalRequiredPoliciesHandled: true,
       };
 
       const catalog = await makeInternalMcpCatalog({ organizationId });
@@ -2237,17 +2235,6 @@ describe("preview_app_tool", () => {
     const result = await preview({ appId, toolName: "hf__not_assigned" });
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not assigned");
-  });
-
-  test("is refused server-side without the approval flag (raw gateway / A2A)", async () => {
-    // the chat carve-out cannot be the only gate: any context that did not pass
-    // through the approval click is refused in the handler itself
-    const result = await preview(
-      { appId, toolName },
-      { ...context, approvalRequiredPoliciesHandled: false },
-    );
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("human approval");
   });
 
   test("a member who cannot modify the app is refused", async ({
@@ -4055,25 +4042,6 @@ describe("pre-load guard precedence", () => {
     expect(res.isError).toBe(true);
     const text = (res.content[0] as any).text as string;
     expect(text).toContain("teams is only valid");
-    expect(text).not.toContain("No app found");
-  });
-
-  test("preview_app_tool: no approval on a missing app returns the approval error", async ({
-    makeAgent,
-    makeUser,
-    makeMember,
-  }) => {
-    // The context deliberately omits approvalRequiredPoliciesHandled so the
-    // server-side approval backstop fires before the app is ever loaded.
-    const ctx = await adminContext(makeAgent, makeUser, makeMember);
-    const res = await executeArchestraTool(
-      getArchestraToolFullName(TOOL_PREVIEW_APP_TOOL_SHORT_NAME),
-      { appId: MISSING_APP_ID, toolName: "some__tool" },
-      ctx,
-    );
-    expect(res.isError).toBe(true);
-    const text = (res.content[0] as any).text as string;
-    expect(text).toContain("requires human approval");
     expect(text).not.toContain("No app found");
   });
 

@@ -224,7 +224,6 @@ class AgentVersionModel {
       description: agent.description ?? null,
       icon: agent.icon ?? null,
       systemPrompt: agent.systemPrompt ?? null,
-      considerContextUntrusted: agent.considerContextUntrusted,
       toolExposureMode: agent.toolExposureMode,
       missingCredentialBehavior: agent.missingCredentialBehavior,
       accessAllTools: agent.accessAllTools,

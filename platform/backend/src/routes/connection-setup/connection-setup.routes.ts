@@ -32,10 +32,7 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
-import {
-  CONNECTION_SETUP_TOKEN_PREFIX,
-  CONNECTION_SETUP_TOKEN_TTL_MS,
-} from "@/models/connection-setup";
+import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import {
   buildSetupCommand,
@@ -44,7 +41,6 @@ import {
   type SetupScriptContext,
 } from "@/services/agent-connection-setup";
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
-import { clientConnectionService } from "@/services/client-connection";
 import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
 import {
   type ConnectionCreditWarning,
@@ -52,11 +48,6 @@ import {
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
-import {
-  CONNECTION_SETUP_CONTEXT_PARAM,
-  issueConnectionSetupContext,
-} from "@/services/connection-setup-context";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   isReservedMarketplaceName,
@@ -831,31 +822,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Desktop configuration requires a Claude Desktop setup.",
           );
         const { context, marketplaceRender } = await buildScriptContext(setup);
-        if (
-          context.mcp &&
-          setup.mcpGatewayId &&
-          token.startsWith(CONNECTION_SETUP_TOKEN_PREFIX) &&
-          (
-            await clientConnectionService.poll(
-              token.slice(CONNECTION_SETUP_TOKEN_PREFIX.length),
-            )
-          ).status === "approved" &&
-          config.openappa.offerSigningSecret &&
-          (await isGuardrailsV2Active())
-        ) {
-          const url = new URL(context.mcp.url);
-          url.searchParams.set(
-            CONNECTION_SETUP_CONTEXT_PARAM,
-            issueConnectionSetupContext({
-              userId: setup.userId,
-              organizationId: setup.organizationId,
-              gatewayId: setup.mcpGatewayId,
-              setupId: setup.id,
-              secret: config.openappa.offerSigningSecret,
-            }),
-          );
-          context.mcp.url = url.toString();
-        }
 
         // Skill-link creation + attach + render commit together: a rendered
         // clone URL exists iff its link row committed.

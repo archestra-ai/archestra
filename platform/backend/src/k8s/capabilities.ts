@@ -2,6 +2,10 @@ import type * as k8s from "@kubernetes/client-node";
 import logger from "@/logging";
 import type { K8sCapabilities } from "@/types";
 import {
+  inspectAgentSandboxApi,
+  uninspectedAgentSandboxCapabilities,
+} from "./agent-runtime/sandbox-api";
+import {
   type NetworkPolicyProbeVerdict,
   networkPolicyProbeReader,
 } from "./network-policy-probe";
@@ -45,6 +49,7 @@ export async function getK8sCapabilitiesFromApi(
     gkeFqdnNetworkPolicy,
     awsApplicationNetworkPolicy,
     probe,
+    agentSandbox,
   ] = await Promise.all([
     hasCalicoNetworkPolicyResource(customObjectsApi),
     hasCiliumNetworkPolicyResource(customObjectsApi),
@@ -56,6 +61,7 @@ export async function getK8sCapabilitiesFromApi(
           probeSource.namespace,
         )
       : Promise.resolve(NO_PROBE),
+    inspectAgentSandboxApi(customObjectsApi),
   ]);
   const supportsFqdn =
     ciliumNetworkPolicy || gkeFqdnNetworkPolicy || awsApplicationNetworkPolicy;
@@ -143,6 +149,7 @@ export async function getK8sCapabilitiesFromApi(
       probe: probe.result,
       probedAt: probe.probedAt,
     },
+    agentSandbox,
   };
   apiCapabilitiesCache.set(customObjectsApi, createCacheEntry(capabilities));
   return capabilities;
@@ -368,5 +375,6 @@ function unavailableCapabilities(): K8sCapabilities {
       probe: "absent",
       probedAt: null,
     },
+    agentSandbox: uninspectedAgentSandboxCapabilities(),
   };
 }

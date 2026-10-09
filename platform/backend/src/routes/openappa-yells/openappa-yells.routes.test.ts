@@ -481,7 +481,7 @@ describe("OpenAPPA yells", () => {
   }) => {
     const yell = await record("Shared report");
     const role = await makeCustomRole(organizationId, {
-      permission: { log: ["read"], toolPolicy: ["read", "update"] },
+      permission: { log: ["read"], openappaPolicy: ["read", "update"] },
     });
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: role.role });

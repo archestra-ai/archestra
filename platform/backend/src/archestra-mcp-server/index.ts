@@ -97,10 +97,6 @@ import {
   tools as pluginTools,
 } from "./plugins";
 import {
-  toolEntries as policyToolEntries,
-  tools as policyTools,
-} from "./policies";
-import {
   toolEntries as projectToolEntries,
   tools as projectTools,
 } from "./projects";
@@ -189,7 +185,6 @@ function getToolEntries(): Partial<
       ...mcpServerToolEntries,
       ...teamToolEntries,
       ...limitToolEntries,
-      ...policyToolEntries,
       ...toolAssignmentToolEntries,
       ...knowledgeManagementToolEntries,
       ...chatToolEntries,
@@ -228,7 +223,6 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...mcpServerTools,
       ...teamTools,
       ...limitTools,
-      ...policyTools,
       ...toolAssignmentTools,
       ...knowledgeManagementTools,
       ...chatTools,

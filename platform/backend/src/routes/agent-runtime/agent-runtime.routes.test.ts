@@ -8,6 +8,7 @@ import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   A2AContextModel,
@@ -50,8 +51,6 @@ describe("Agent Runtime routes", () => {
   let agent: Agent;
   let user: User;
   let organizationId: string;
-  let previousFeatureEnabled: boolean;
-  let previousClusterReachable: unknown;
 
   beforeEach(async ({ makeAgent, makeAdmin, makeMember, makeOrganization }) => {
     const organization = await makeOrganization();
@@ -125,13 +124,7 @@ describe("Agent Runtime routes", () => {
     registerAuditLogHook(app);
     const { default: routes } = await import("./agent-runtime.routes");
     await app.register(routes);
-    previousFeatureEnabled = config.agentRuntime.enabled;
-    previousClusterReachable = Reflect.get(
-      agentRuntimeManager,
-      "clusterReachable",
-    );
-    config.agentRuntime.enabled = true;
-    Reflect.set(agentRuntimeManager, "clusterReachable", true);
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
     vi.spyOn(agentRuntimeManager, "getStartupProgress").mockResolvedValue({
       phase: "scheduling",
       message: "Waiting for a node with room for this run",
@@ -141,12 +134,6 @@ describe("Agent Runtime routes", () => {
   });
 
   afterEach(async () => {
-    config.agentRuntime.enabled = previousFeatureEnabled;
-    Reflect.set(
-      agentRuntimeManager,
-      "clusterReachable",
-      previousClusterReachable,
-    );
     vi.restoreAllMocks();
     await app.close();
   });
@@ -585,7 +572,7 @@ describe("Agent Runtime routes", () => {
   });
 
   test("keeps every run endpoint unavailable when no run backend is enabled", async () => {
-    config.agentRuntime.enabled = false;
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
 
     const response = await app.inject({
       method: "GET",

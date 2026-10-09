@@ -77,7 +77,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_BETA`** - Turns on beta features.
   - Default: `false`
   - Values: `true`, `false`
-  - Turns on [Guardrails](#guardrails) and plugins directly.
+  - Turns on plugins directly. Guardrails and Agent Runtime do not use this switch.
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
@@ -585,9 +585,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
 
 - **`ARCHESTRA_LLM_PROXY_PLUGINS`** - LLM proxy plugins loaded at startup.
-  - Default: unset (no plugins)
+  - Default: `appa` (always loaded)
   - Values: comma-separated; the only plugin is `appa`. An unknown name or a duplicate stops startup.
-  - [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) adds `appa` automatically. Listing `appa` without [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) has no effect.
+  - OpenAPPA is always loaded, independently of [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA).
 
 ## Chat
 
@@ -932,12 +932,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 ## Agent Runtime
 
-Agent Runtime needs the orchestrator configured. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
-
-- **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime.
-  - Default: `false`
-  - Values: `true`, `false`
-  - Does not follow [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA).
+Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, and OpenClaw images are pulled from.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
@@ -1439,7 +1434,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 ## Guardrails
 
-[Guardrails](/docs/agents/guardrails) are a beta feature: set [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) to show them. Enforcement is a separate switch on the Guardrails page and starts off.
+[Guardrails](/docs/agents/guardrails) are available on every deployment. Enforcement is a separate switch on the Guardrails page and starts off.
 
 - **`ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`** - Key that signs delegation bindings, child-session recovery receipts, and peer proofs.
   - Default: generated and kept across upgrades by the Helm chart. Without Helm, derived from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SESSION_SECRET).

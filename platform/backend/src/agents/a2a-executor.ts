@@ -157,13 +157,8 @@ export interface A2AExecuteParams {
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
-  /** Whether the parent execution context was still trusted at delegation time */
-  parentContextIsTrusted?: boolean;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
-
-  /** Whether to block execution when an approval-required tool is called (defaults to true) */
-  blockOnApprovalRequired?: boolean;
 
   /**
    * History of UI messages needed for persistance at new UIMessage generation
@@ -236,7 +231,6 @@ export async function executeA2AMessage(
     attachments,
     chatOpsBindingId,
     chatOpsThreadId,
-    parentContextIsTrusted,
     scheduleTriggerRunId,
     subagentToolStream,
     delegationToolCallId,
@@ -360,7 +354,6 @@ export async function executeA2AMessage(
       conversationId: params.conversationId,
       isolationKey,
       abortSignal,
-      blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
       // Forward the same bridge so a nested delegation's tool calls surface too,
       // attributed to the nested delegation call (recursion through the chain).
@@ -406,7 +399,6 @@ export async function executeA2AMessage(
         source,
         externalAgentId: delegationChain,
         agentLlmApiKeyId: llmApiKeyId,
-        contextIsTrusted: parentContextIsTrusted,
         appaSubagentToken: params.appaSubagent?.token,
       });
 
@@ -564,7 +556,6 @@ export async function executeA2AMessage(
               source: "a2a:tool_call_repair",
               externalAgentId: delegationChain,
               agentLlmApiKeyId: llmApiKeyId,
-              contextIsTrusted: parentContextIsTrusted,
               appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,

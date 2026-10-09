@@ -86,8 +86,7 @@ export const ChatCompletionRequestSchema = z
     // field must be declared here to reach the adapter. Reasoning models
     // reject `max_tokens` and take `max_completion_tokens` instead (the
     // AI-SDK converts automatically), and `reasoning_effort` is how callers
-    // bound or disable reasoning — the dual LLM guardrail calls depend on
-    // both surviving this schema.
+    // bound or disable reasoning — both have to survive this schema.
     max_completion_tokens: z.number().int().positive().nullable().optional(),
     // Some OpenAI-compatible providers accept "max" reasoning effort.
     // Forward it unchanged; the upstream model decides which efforts it supports.

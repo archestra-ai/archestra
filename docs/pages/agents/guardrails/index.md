@@ -2,8 +2,8 @@
 title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
-alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-07
+alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

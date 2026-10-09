@@ -40,9 +40,6 @@ import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
-import ToolModel from "@/models/tool";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 
@@ -174,17 +171,16 @@ export const AUDIT_DECISIONS = {
   skillsTable: { audited: true, model: SkillModel },
   teamsTable: { audited: true, model: TeamModel },
   teamTokensTable: { audited: true, model: TeamTokenModel },
-  toolsTable: { audited: true, model: ToolModel },
-  toolInvocationPoliciesTable: {
-    audited: true,
-    model: ToolInvocationPolicyModel,
+  toolsTable: {
+    audited: false,
+    reason:
+      "derived from MCP server discovery and catalog sync; no route mutates tools directly, and the install/catalog routes that drive discovery are audited",
   },
   toolObservationsTable: {
     audited: false,
     reason:
       "runtime attribution metadata written by the LLM proxy (who observed a tool, via which client); not admin-mutable state",
   },
-  trustedDataPoliciesTable: { audited: true, model: TrustedDataPolicyModel },
   userTokensTable: { audited: true, model: UserTokenModel },
   virtualApiKeysTable: { audited: true, model: VirtualApiKeyModel },
 
@@ -946,11 +942,6 @@ export const AUDIT_DECISIONS = {
   chatActiveRunEventsTable: {
     audited: false,
     reason: "chat active run event stream; child of chatActiveRunsTable",
-  },
-  chatToolExecutionClaimsTable: {
-    audited: false,
-    reason:
-      "per-tool-call idempotency ledger; runtime dedup state, mcp_tool_calls audits the execution",
   },
 
   // =========================================================================

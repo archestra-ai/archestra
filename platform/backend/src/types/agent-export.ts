@@ -69,7 +69,6 @@ const ExportAgentConfigSchema = z.object({
   scope: AgentScopeSchema.describe(
     "Original scope; imports always default to personal",
   ),
-  considerContextUntrusted: z.boolean(),
   toolExposureMode: ToolExposureModeSchema,
   // Optional so payloads exported before this setting existed still import.
   missingCredentialBehavior: MissingCredentialBehaviorSchema.optional(),

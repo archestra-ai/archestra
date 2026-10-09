@@ -91,7 +91,6 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
     "messaging channels triggers automation webhooks slack ms teams email",
   "/mcp/registry": "mcp catalog registry servers",
   "/mcp/gateways": "gateways security mcp",
-  "/mcp/tool-guardrails": "tools guardrails policies permissions security",
   "/openappa": "openappa guardrails v2 policy toml",
   "/llm/proxy": "proxy llm network",
   "/llm/proxy/virtual-keys": "virtual keys credentials",
@@ -139,9 +138,6 @@ function useNavigationDestinations() {
         }
         if (item.url === "/plugins") return pluginsEnabled === true;
         if (item.url === "/openappa" && openappaEnabled !== true) return false;
-        // Legacy guardrails step aside once OpenAPPA is on, as in the sidebar.
-        if (item.url === "/mcp/tool-guardrails" && openappaEnabled !== false)
-          return false;
         return isNavItemPermitted(item, permissionMap);
       })
       .map((item) => ({

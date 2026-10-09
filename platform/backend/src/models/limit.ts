@@ -1045,8 +1045,7 @@ class LimitModel {
 }
 
 /**
- * Service for validating if current usage has exceeded limits
- * Similar to tool invocation policies but for token cost limits
+ * Service for validating if current usage has exceeded token cost limits
  */
 export class LimitValidationService {
   /**

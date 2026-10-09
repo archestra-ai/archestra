@@ -29,16 +29,8 @@ class JevDecisionsInteraction implements InteractionUtils {
     return [];
   }
 
-  getToolNamesRefused(): string[] {
-    return [];
-  }
-
   getToolNamesRequested(): string[] {
     return [];
-  }
-
-  getToolRefusedCount(): number {
-    return 0;
   }
 
   getLastUserMessage(): string {

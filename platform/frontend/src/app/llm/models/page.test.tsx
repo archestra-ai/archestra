@@ -201,6 +201,7 @@ describe("ModelsPage", () => {
             resource: "llmModel",
             scope: model.id,
             name: model.modelId,
+            ownerId: null,
             revision: 1,
             grants: [],
             inheritedGrants: [],

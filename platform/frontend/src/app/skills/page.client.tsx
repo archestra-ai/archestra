@@ -51,7 +51,6 @@ import {
   ResourceDeletedStatusFilter,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -661,9 +660,7 @@ function SkillsList() {
           },
         ];
     return (
-      <ResourceTableRowActions
-        kind="skill"
-        resource={isDeletedView ? null : skill}
+      <TableRowActions
         permissionScope={"id" in skill ? skill.id : undefined}
         actions={actions}
         dropdownActions={dropdownActions}

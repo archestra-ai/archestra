@@ -58,7 +58,6 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
@@ -223,11 +222,6 @@ function CatalogItemDetails({
   onDeleted: () => void;
 }) {
   const router = useRouter();
-  const ownership = useResourceOwnershipTransfer({
-    kind: "catalog",
-    resource: item,
-    onTransferred: () => router.push("/mcp/registry"),
-  });
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [permissionsDirty, setPermissionsDirty] = useState(false);
@@ -575,7 +569,6 @@ function CatalogItemDetails({
                     {cloneAction.label}
                   </DropdownMenuItem>
                 )}
-                {ownership.menuItem}
                 {canModify && !isPlaywright && (
                   <>
                     <DropdownMenuSeparator />
@@ -591,7 +584,6 @@ function CatalogItemDetails({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          {ownership.dialog}
         </div>
       }
     >

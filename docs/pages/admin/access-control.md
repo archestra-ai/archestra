@@ -116,6 +116,18 @@ Use the service account ID, not an API-key ID. `PUT` replaces all direct grants:
 
 Creation requires the kind's organization-level create permission. Most resources give their creator full direct access. That grant can be revoked. Ownership does not override revocation.
 
+### Ownership
+
+The owner is the person who created the resource. **Mine** and the **Owner** filter use it. The owner's grant shows as Full access and cannot be removed from the list.
+
+To hand a resource to another person, use **Make owner** on their row:
+
+- The new owner gets Full access.
+- The previous owner keeps Full access. Remove them as a separate change.
+- Other grants do not change.
+
+Only someone with edit and Full access on the resource can make another person the owner. Plugins require edit access to every plugin.
+
 ### Team Roles
 
 A team **member** receives shared access. A team **admin** can manage its members and settings without organization-wide [`team:update`](/docs/reference/permissions#team:update). The creator becomes the first team admin. This role does not authorize creating or deleting teams, managing other teams, or editing shared MCP connections.

@@ -37,6 +37,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import { useMakeOwner } from "@/components/use-make-owner";
 import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import {
@@ -302,6 +303,15 @@ function PermissionsEditor({
   });
   const blocked = dirty && safety?.blocked === true;
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const ownership = useMakeOwner({
+    resource: policy.resource,
+    scope: policy.scope,
+    effectiveActions: policy.effectiveActions,
+  });
+  const [pendingOwner, setPendingOwner] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const reset = () =>
     form.reset({ revision: policy.revision, grants: policy.grants });
   const persist = (values: { revision: number; grants: Policy["grants"] }) => {
@@ -422,61 +432,96 @@ function PermissionsEditor({
           Nobody has access yet.
         </p>
       )}
-      {fields.map((grant, index) => (
-        <div
-          key={grant.id}
-          className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2.5 py-2 sm:flex sm:gap-2 sm:py-0"
-        >
-          <div className="col-span-2 flex min-w-0 flex-1 flex-col items-start gap-x-2 sm:flex-row sm:flex-wrap sm:items-baseline">
-            <p className="break-words font-medium">{grant.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {subjectLabels[grant.subject.type]}
-            </p>
-            {grant.subject.type === "user" &&
-              grant.subject.id === session?.user.id && <YouPill />}
-          </div>
-          <PermissionLevelSelect
-            disabled={!canManage || mutation.isPending}
-            value={presetFor(grant.actions, policy.resource)}
-            onValueChange={(preset) => {
-              const choice = Object.entries(presets).find(
-                ([key]) => key === preset,
-              )?.[1];
-              if (choice)
-                update(index, { ...grant, actions: [...choice.actions] });
-            }}
-            options={levelOptions}
-            ariaLabel={`Permission for ${grant.name}`}
-            title={actionDetail(grant.actions, policy.resource)}
-            valueLabel={
-              presetFor(grant.actions, policy.resource) === "custom"
-                ? actionSummary(grant.actions, policy.resource)
-                : undefined
-            }
-            extraOption={
-              presetFor(grant.actions, policy.resource) === "custom"
-                ? {
-                    value: "custom",
-                    label: actionSummary(grant.actions, policy.resource),
-                  }
-                : undefined
-            }
-            inline
-            className="h-11 min-h-11 text-[13px] sm:h-7 sm:min-h-7"
-          />
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="size-11 shrink-0 text-muted-foreground sm:size-7"
-            disabled={!canManage || mutation.isPending}
-            aria-label={`Remove direct access for ${grant.name}`}
-            onClick={() => remove(index)}
+      {fields.map((grant, index) => {
+        const isOwner =
+          grant.subject.type === "user" && grant.subject.id === policy.ownerId;
+        return (
+          <div
+            key={grant.id}
+            data-testid={isOwner ? "owner-grant" : undefined}
+            className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2.5 py-2 sm:flex sm:gap-2 sm:py-0"
           >
-            <X className="size-3.5" />
-          </Button>
-        </div>
-      ))}
+            <div className="col-span-2 flex min-w-0 flex-1 flex-col items-start gap-x-2 sm:flex-row sm:flex-wrap sm:items-baseline">
+              <p className="break-words font-medium">{grant.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {subjectLabels[grant.subject.type]}
+              </p>
+              {isOwner && <OwnerPill />}
+              {grant.subject.type === "user" &&
+                grant.subject.id === session?.user.id && <YouPill />}
+            </div>
+            {isOwner ? (
+              // The owner always keeps their grant: handing the object on is
+              // "Make owner" on another person's row, not an edit of this one.
+              <span className="px-2 pr-[3.25rem] text-muted-foreground sm:pr-11">
+                {levelOptions.find(
+                  (option) =>
+                    option.value === presetFor(grant.actions, policy.resource),
+                )?.label ?? actionSummary(grant.actions, policy.resource)}
+              </span>
+            ) : (
+              <>
+                <PermissionLevelSelect
+                  disabled={!canManage || mutation.isPending}
+                  value={presetFor(grant.actions, policy.resource)}
+                  onValueChange={(preset) => {
+                    const choice = Object.entries(presets).find(
+                      ([key]) => key === preset,
+                    )?.[1];
+                    if (choice)
+                      update(index, { ...grant, actions: [...choice.actions] });
+                  }}
+                  options={levelOptions}
+                  ariaLabel={`Permission for ${grant.name}`}
+                  title={actionDetail(grant.actions, policy.resource)}
+                  valueLabel={
+                    presetFor(grant.actions, policy.resource) === "custom"
+                      ? actionSummary(grant.actions, policy.resource)
+                      : undefined
+                  }
+                  extraOption={
+                    presetFor(grant.actions, policy.resource) === "custom"
+                      ? {
+                          value: "custom",
+                          label: actionSummary(grant.actions, policy.resource),
+                        }
+                      : undefined
+                  }
+                  inline
+                  action={
+                    grant.subject.type === "user" && ownership.available
+                      ? {
+                          label: "Make owner",
+                          description: dirty
+                            ? "Save your changes first."
+                            : "Gets Full access. The current owner keeps Full access.",
+                          disabled: dirty || ownership.isPending,
+                          onSelect: () =>
+                            setPendingOwner({
+                              id: grant.subject.id,
+                              name: grant.name,
+                            }),
+                        }
+                      : undefined
+                  }
+                  className="h-11 min-h-11 text-[13px] sm:h-7 sm:min-h-7"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-11 shrink-0 text-muted-foreground sm:size-7"
+                  disabled={!canManage || mutation.isPending}
+                  aria-label={`Remove direct access for ${grant.name}`}
+                  onClick={() => remove(index)}
+                >
+                  <X className="size-3.5" />
+                </Button>
+              </>
+            )}
+          </div>
+        );
+      })}
       {addField && <div className="p-1.5">{addField}</div>}
     </div>
   );
@@ -687,7 +732,52 @@ function PermissionsEditor({
           </span>
         </p>
       </StandardDialog>
+      <StandardDialog
+        open={pendingOwner !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingOwner(null);
+        }}
+        size="small"
+        className="w-[calc(100%-2rem)] max-h-[90dvh]"
+        headerClassName="text-left [&_[data-slot=dialog-title]]:pr-6 [&_[data-slot=dialog-title]]:leading-snug"
+        footerClassName="[&_button]:min-h-11 sm:[&_button]:min-h-9"
+        title={`Make ${pendingOwner?.name ?? ""} the owner?`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setPendingOwner(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={ownership.isPending}
+              onClick={() => {
+                if (!pendingOwner) return;
+                void ownership
+                  .makeOwner(pendingOwner.id)
+                  .then(() => setPendingOwner(null))
+                  // The mutation already reported the failure.
+                  .catch(() => {});
+              }}
+            >
+              {ownership.isPending ? "Saving…" : "Make owner"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          {pendingOwner?.name} becomes the owner and gets Full access. The
+          current owner keeps Full access. Other grants do not change.
+        </p>
+      </StandardDialog>
     </>
+  );
+}
+
+/** Marks the owner's row in a grant list. */
+function OwnerPill() {
+  return (
+    <span className="self-center rounded-full bg-primary px-1.5 text-[11px] leading-4 font-medium text-primary-foreground">
+      Owner
+    </span>
   );
 }
 

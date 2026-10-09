@@ -3,6 +3,7 @@
 
 import type { ResourcePermissionAction } from "@archestra/shared";
 import {
+  Crown,
   Eye,
   KeyRound,
   type LucideIcon,
@@ -16,6 +17,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -45,6 +47,7 @@ export function PermissionLevelSelect({
   title,
   extraOption,
   inline = false,
+  action,
   className,
 }: {
   value: string;
@@ -60,6 +63,16 @@ export function PermissionLevelSelect({
   extraOption?: { value: string; label: string };
   /** Text-only trigger for a grant row: the level and a chevron, no icon or box. */
   inline?: boolean;
+  /**
+   * One command after the levels, such as "Make owner". Choosing it runs
+   * `onSelect` and leaves the level as it is.
+   */
+  action?: {
+    label: string;
+    description: string;
+    disabled?: boolean;
+    onSelect: () => void;
+  };
   className?: string;
 }) {
   // The level the detail explains: the highlighted one while the list is
@@ -74,7 +87,10 @@ export function PermissionLevelSelect({
     <Select
       disabled={disabled}
       value={value}
-      onValueChange={onValueChange}
+      onValueChange={(next) => {
+        if (next === ACTION_VALUE) action?.onSelect();
+        else onValueChange(next);
+      }}
       onOpenChange={() => setHighlighted(null)}
     >
       <SelectTrigger
@@ -126,6 +142,20 @@ export function PermissionLevelSelect({
           <SelectItem value={extraOption.value} disabled>
             {extraOption.label}
           </SelectItem>
+        )}
+        {action && (
+          <>
+            <SelectSeparator />
+            <SelectItem
+              value={ACTION_VALUE}
+              disabled={action.disabled}
+              description={action.description}
+              icon={<Crown className="size-4" />}
+              onFocus={() => setHighlighted(null)}
+            >
+              {action.label}
+            </SelectItem>
+          </>
         )}
         {shown && <LevelDetail option={shown} options={options} />}
       </SelectContent>
@@ -231,6 +261,9 @@ function levelIcon(option: Pick<PermissionLevelOption, "actions">): LucideIcon {
   if (has("use")) return Play;
   return Eye;
 }
+
+// The action item's value: never a level, so the select never shows it.
+const ACTION_VALUE = "__action";
 
 const actionOrder: ResourcePermissionAction[] = [
   "read",

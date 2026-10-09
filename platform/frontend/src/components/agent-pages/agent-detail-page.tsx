@@ -17,7 +17,6 @@ import {
   PackageX,
   TerminalSquare,
   Trash2,
-  UserRoundCog,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -41,7 +40,6 @@ import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourcePermissions } from "@/components/resource-permissions";
-import { TransferAgentOwnershipDialog } from "@/components/transfer-agent-ownership-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -247,7 +245,6 @@ function AgentDetails({
     resource,
     canModify,
     canEdit,
-    canTransferOwnership,
     canCreate,
     canDelete,
     isBuiltIn,
@@ -444,7 +441,6 @@ function AgentDetails({
     searchParams.get("openTools") === "true" &&
     !agent.accessAllTools;
 
-  const [transferring, setTransferring] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteRequested, setDeleteRequested] = useState(false);
@@ -635,23 +631,6 @@ function AgentDetails({
                 reason={historyReason}
                 onSelect={() => setHistoryOpen(true)}
               />
-              {!isBuiltIn &&
-                !agent.isPersonalGateway &&
-                !agent.isPersonalProxy &&
-                agent.agentType !== "llm_proxy" && (
-                  <KebabItem
-                    icon={<UserRoundCog className="h-4 w-4" />}
-                    label="Transfer ownership"
-                    reason={
-                      !canTransferOwnership
-                        ? "Only the owner or a resource admin can transfer ownership"
-                        : isDirty
-                          ? "Save or discard your changes first"
-                          : undefined
-                    }
-                    onSelect={() => setTransferring(true)}
-                  />
-                )}
               <DropdownMenuSeparator />
               <KebabItem
                 variant="destructive"
@@ -669,16 +648,6 @@ function AgentDetails({
         <div className="mb-4 empty:hidden">
           <AgentSavedSetupBanner agentId={agent.id} canEditAgent={canEdit} />
         </div>
-      )}
-      {transferring && (
-        <TransferAgentOwnershipDialog
-          agent={agent}
-          onClose={() => setTransferring(false)}
-          onTransferred={() => {
-            setTransferring(false);
-            router.push(backHref);
-          }}
-        />
       )}
       <div className="min-w-0">
         {section === "runs" ? (
@@ -788,7 +757,14 @@ function AgentDetails({
                 />
               </div>
             )}
-            {showPermissions && <div ref={setFooterSlot} />}
+            {showPermissions && (
+              // The slot, not the row inside it, sticks: a sticky element
+              // only sticks within its parent, and the row's parent is this.
+              <div
+                ref={setFooterSlot}
+                className="sm:sticky sm:bottom-0 sm:z-10"
+              />
+            )}
           </div>
         )}
       </div>

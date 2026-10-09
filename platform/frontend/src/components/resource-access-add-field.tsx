@@ -94,7 +94,7 @@ export function ResourceAccessAddField({
           onKeyDown={navigation.onTriggerKeyDown}
           // Dashed while it waits, solid while the picker is open.
           className={cn(
-            "h-[34px] w-full justify-start gap-2 rounded-md bg-card px-2.5 text-[13px] font-normal text-muted-foreground shadow-none hover:bg-muted dark:bg-card",
+            "h-11 w-full justify-start gap-2 rounded-md bg-card sm:h-[34px] px-2.5 text-[13px] font-normal text-muted-foreground shadow-none hover:bg-muted dark:bg-card",
             open ? "border-primary" : "border-dashed",
           )}
         >

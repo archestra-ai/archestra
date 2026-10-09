@@ -35,7 +35,7 @@ Pause a schedule to stop automatic runs. You can still run it manually. Deleting
 
 Manage the project's audience in its settings, under its permissions. Access to the project lets members work with its files and start their own chats and sessions. Access to another member's chats or runs requires a separate permission. Only a runtime session's author can attach to its shell.
 
-You can transfer ownership to another organization member. Files, instructions, schedules, and sharing stay with the project. Existing chats and scheduled tasks retain their authors and execution identities.
+You can make another organization member the owner from the project's permissions. You keep Full access. Files, instructions, schedules, and sharing stay with the project. Existing chats and scheduled tasks retain their authors and execution identities.
 
 ## Labels
 
@@ -43,6 +43,6 @@ Add key-value labels under **Advanced** when creating or editing a project: `sta
 
 ## Deleting and Restoring
 
-Deleting a project moves it to the trash. Its chats and runtime sessions return to the main list; its files and schedules are hidden. A project administrator can select the **Deleted** status filter and restore it.
+Deleting a project moves it to the trash. Its chats and runtime sessions return to the main list. Its files and schedules are hidden. A project administrator can select the **Deleted** status filter and restore it.
 
 **Delete permanently** destroys the project's files and schedules. Chats and runtime sessions remain. See [Access Control](/docs/admin/access-control) for the permissions required.

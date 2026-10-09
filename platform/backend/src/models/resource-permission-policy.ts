@@ -1008,11 +1008,12 @@ export default class ResourcePermissionPolicyModel {
   }
 
   /**
-   * Move one subject's direct grant to another subject, unioning any actions
-   * the recipient already holds. Ownership transfer uses this so the previous
-   * owner's creator grant follows the record; unrelated grants are untouched.
+   * Give another subject the actions of one subject's direct grant, unioned
+   * with any actions the recipient already holds. The source keeps its grant.
+   * Ownership transfer uses this so the new owner gets the creator grant and
+   * the previous owner keeps theirs; unrelated grants are untouched.
    */
-  static async transferSubjectGrant(
+  static async copySubjectGrant(
     params: PolicyKey & {
       from: PermissionSubject;
       to: PermissionSubject;
@@ -1043,9 +1044,7 @@ export default class ResourcePermissionPolicyModel {
     ).sort();
     const grants: ResourcePermissionGrant[] = [
       ...policy.grants.filter(
-        (grant) =>
-          !sameSubject(grant.subject, params.from) &&
-          !sameSubject(grant.subject, params.to),
+        (grant) => !sameSubject(grant.subject, params.to),
       ),
       { subject: params.to, actions },
     ];

@@ -46,6 +46,7 @@ beforeEach(() => {
     resource: "agent",
     scope: "*",
     name: "All agents",
+    ownerId: null,
     revision: 1,
     grants: [
       {

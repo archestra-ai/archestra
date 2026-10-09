@@ -39,7 +39,6 @@ import {
   ActiveFilterBadges,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -49,6 +48,7 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import type { TableRowAction } from "@/components/table-row-actions";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -327,9 +327,7 @@ function PluginsList() {
       },
     ];
     return (
-      <ResourceTableRowActions
-        kind="plugin"
-        resource={{ ...plugin, name: plugin.displayName }}
+      <TableRowActions
         actions={actions}
         dropdownActions={dropdownActions}
         itemName={plugin.displayName}

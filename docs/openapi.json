@@ -444541,6 +444541,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "ownerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 0,
@@ -444860,6 +444864,7 @@
                     "resource",
                     "scope",
                     "name",
+                    "ownerId",
                     "revision",
                     "grants",
                     "inheritedGrants",
@@ -445368,6 +445373,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "ownerId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "revision": {
                       "type": "integer",
                       "minimum": 0,
@@ -445687,6 +445696,7 @@
                     "resource",
                     "scope",
                     "name",
+                    "ownerId",
                     "revision",
                     "grants",
                     "inheritedGrants",

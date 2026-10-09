@@ -28,6 +28,7 @@ beforeEach(() => {
     resource: "mcpRegistry",
     scope: "00000000-0000-4000-8000-000000000010",
     name: "Example server",
+    ownerId: null,
     revision: 1,
     grants: [
       {
@@ -358,6 +359,58 @@ it("moves the audience chip with the draft grants before saving", async () => {
     screen.getByRole("button", { name: "Remove direct access for Editor" }),
   );
   expect(chip).toHaveTextContent("Team-wide");
+});
+
+it("shows the owner row and makes another person the owner", async () => {
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.scrollIntoView = vi.fn();
+  policy.ownerId = "owner-1";
+  policy.grants = [
+    {
+      subject: { type: "user", id: "owner-1" },
+      name: "Sam Owner",
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    },
+    {
+      subject: { type: "user", id: "user-2" },
+      name: "Alex Reader",
+      actions: ["read", "use"],
+    },
+  ];
+  let transferred: unknown;
+  server.use(
+    http.post(
+      `${origin}/api/internal_mcp_catalog/${policy.scope}/transfer-ownership`,
+      async ({ request }) => {
+        transferred = await request.json();
+        return HttpResponse.json({ success: true });
+      },
+    ),
+  );
+  const user = userEvent.setup();
+  renderEditor();
+  const owner = await screen.findByTestId("owner-grant");
+  expect(owner).toHaveTextContent("Sam OwnerUserOwner");
+  expect(owner).toHaveTextContent("Full access");
+  // The owner keeps their grant: no level menu and no remove button.
+  expect(
+    screen.queryByRole("combobox", { name: "Permission for Sam Owner" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", {
+      name: "Remove direct access for Sam Owner",
+    }),
+  ).not.toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("combobox", { name: "Permission for Alex Reader" }),
+  );
+  await user.click(await screen.findByRole("option", { name: /Make owner/ }));
+  expect(
+    await screen.findByText("Make Alex Reader the owner?"),
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Make owner" }));
+  await waitFor(() => expect(transferred).toEqual({ ownerId: "user-2" }));
 });
 
 async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {

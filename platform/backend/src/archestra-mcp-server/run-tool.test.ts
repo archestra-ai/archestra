@@ -80,7 +80,9 @@ describe("run_tool", () => {
         tokenAuth: {
           tokenId: "token-1",
           teamId: null,
-          isOrganizationToken: true,
+          isOrganizationToken: false,
+          isUserToken: true,
+          userId: user.id,
           organizationId: org.id,
         },
       };
@@ -811,7 +813,7 @@ describe("run_tool", () => {
       expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
     });
 
-    test("does not run for sessions without a user (org/team tokens)", async ({
+    test("does not run for sessions without a user (service-account tokens)", async ({
       makeInternalMcpCatalog,
       makeTool,
     }) => {

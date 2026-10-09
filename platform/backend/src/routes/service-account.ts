@@ -8,10 +8,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import {
-  getPermissionsForUserContext,
-  userHasPermission,
-} from "@/auth/utils";
+import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import { ServiceAccountLabelModel, TeamModel } from "@/models";
 import OrganizationRoleModel from "@/models/organization-role";
 import ServiceAccountModel from "@/models/service-account";

@@ -9,6 +9,7 @@ import {
   type UIMessage,
 } from "ai";
 import { z } from "zod";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
   A2AArtifactModel,
@@ -22,7 +23,6 @@ import {
   UserModel,
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
-import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import {
   resolveAgentRuntime,
@@ -1759,22 +1759,6 @@ export class A2AManager {
       return {
         id: user.id,
         kind: "user",
-        organizationId,
-      };
-    } else if (tokenAuth.teamId) {
-      const team = await TeamModel.findById(tokenAuth.teamId);
-      if (!team) {
-        throw new A2AError(A2AErrorKind.TeamNotFound);
-      }
-      return {
-        id: tokenAuth.teamId,
-        kind: "team",
-        organizationId,
-      };
-    } else if (tokenAuth.isOrganizationToken) {
-      return {
-        id: tokenAuth.organizationId,
-        kind: "organization",
         organizationId,
       };
     }

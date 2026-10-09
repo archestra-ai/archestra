@@ -107,14 +107,14 @@ describe("a2a routes", () => {
     });
   });
 
-  test("a team token carries its team id into execution", async () => {
+  test("a service-account token runs the turn as that account", async () => {
     const agentId = (app as FastifyInstanceWithZod & { __agentId: string })
       .__agentId;
     const agent = await AgentModel.findById(agentId);
     mockValidateMCPGatewayToken.mockResolvedValue({
       organizationId: agent?.organizationId,
-      userId: null,
       teamId: "team-1",
+      serviceAccountId: "sa-1",
       isOrganizationToken: false,
     });
 
@@ -128,8 +128,7 @@ describe("a2a routes", () => {
     expect(response.statusCode).toBe(200);
     expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
     const call = mockExecuteA2AMessage.mock.calls[0][0];
-    expect(call.userId).toBe("system");
-    expect(call.actorTeamId).toBe("team-1");
+    expect(call.userId).toBe("service-account:sa-1");
   });
 
   test("passes through stringified body when payload is not JSON-RPC", async () => {

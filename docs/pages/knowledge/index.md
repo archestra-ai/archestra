@@ -112,6 +112,6 @@ Set **Can use** in the permissions of each connector, file, or Knowledge Base. S
 
 - Sharing a Knowledge Base does not share its connectors or files. Each one needs its own grant.
 - Grant changes apply at once. Source permission changes apply at the connector's next permission sync.
-- A team or organization token has no person behind it. It finds only sources shared with everyone in the organization.
+- A service account key has no person behind it. It finds only sources shared with everyone in the organization.
 
 Granular access and permission sync are Enterprise features. See [Pricing Model](/docs/get-started/pricing-model).

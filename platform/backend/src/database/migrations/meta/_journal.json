@@ -3669,6 +3669,13 @@
       "when": 1791490501912,
       "tag": "0523_colorful_black_cat",
       "breakpoints": true
+    },
+    {
+      "idx": 524,
+      "version": "7",
+      "when": 1791580888577,
+      "tag": "0524_furry_korath",
+      "breakpoints": true
     }
   ]
 }

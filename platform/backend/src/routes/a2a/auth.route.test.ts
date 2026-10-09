@@ -4,7 +4,7 @@
 // real token validation was previously untested.
 //
 // A2A accepts the same inbound auth methods the MCP gateway and LLM proxy do:
-// static Archestra tokens (personal / team / org), external-IdP JWTs (JWKS,
+// static Archestra tokens (personal / service account), external-IdP JWTs (JWKS,
 // when the agent is bound to an identity provider), and platform OAuth (client
 // credentials + user-bound). IdP binding and OAuth-client scoping are
 // configurable for A2A agents (agentType="agent"). Only the LLM run
@@ -21,7 +21,6 @@ import { createFastifyInstance } from "@/fastify-instance";
 import {
   McpOauthClientModel,
   OAuthAccessTokenModel,
-  TeamTokenModel,
   UserTokenModel,
 } from "@/models";
 import type { JwksValidationResult } from "@/services/jwks-validator";
@@ -138,17 +137,15 @@ describe("a2a route-level authentication", () => {
 
   // === v2: static tokens ===
 
-  test("v2 SendMessage accepts a static organization token", async ({
+  test("v2 SendMessage accepts a service-account token for an org-wide agent", async ({
     makeOrganization,
     makeInternalAgent,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeInternalAgent({ organizationId: org.id });
-    const { value } = await TeamTokenModel.create({
+    const { value } = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
 
     const res = await app.inject({
@@ -186,11 +183,12 @@ describe("a2a route-level authentication", () => {
     expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
   });
 
-  test("v2 SendMessage accepts a team token for an agent shared with that team", async ({
+  test("v2 SendMessage accepts a team service-account token for an agent shared with that team", async ({
     makeOrganization,
     makeUser,
     makeTeam,
     makeInternalAgent,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const user = await makeUser();
@@ -199,9 +197,8 @@ describe("a2a route-level authentication", () => {
       organizationId: org.id,
       access: { teams: [team.id] },
     });
-    const { value } = await TeamTokenModel.create({
+    const { value } = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Team Token",
       teamId: team.id,
     });
 
@@ -385,17 +382,15 @@ describe("a2a route-level authentication", () => {
 
   // === v1: the same validator authenticates the legacy endpoint ===
 
-  test("v1 accepts a static organization token", async ({
+  test("v1 accepts a service-account token for an org-wide agent", async ({
     makeOrganization,
     makeInternalAgent,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeInternalAgent({ organizationId: org.id });
-    const { value } = await TeamTokenModel.create({
+    const { value } = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
 
     const res = await app.inject({

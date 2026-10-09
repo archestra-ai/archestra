@@ -61,7 +61,7 @@ To set it up:
 2. On the server, pick **IdP token exchange**, or **IdP signed JWT** if the server checks your provider's tokens itself.
 3. Set the server's tools to **Resolve at call time**.
 
-The person must sign in through OAuth, an identity provider JWT, or a personal token, and hold a usable token from your provider. A team or organization token has no person to exchange.
+The person must sign in through OAuth, an identity provider JWT, or a personal token, and hold a usable token from your provider. A service account key has no person to exchange.
 
 ## What to Know
 

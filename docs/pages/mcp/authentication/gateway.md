@@ -49,13 +49,13 @@ Authorization: Bearer arch_<token>
 | Token | Find it under | Calls act as |
 | --- | --- | --- |
 | **Personal Token** | Your name in the sidebar | You, with your own server accounts |
-| **Team** | **Settings → Teams** | The team, with its shared accounts |
-| **Organization Token** | **Settings → Auth** | The organization, with its shared accounts |
+| **Service account key** | **Settings → Service Accounts** | The [service account](/docs/reference/api#service-accounts), with what is shared with it or its team |
 
-The gateway's **Connect** tab also shows your tokens, ready to copy.
+The gateway's **Connect** tab also shows your personal token, ready to copy.
 
-- Keep a token secret. Anyone who has it acts as its owner. Click **Rotate Token** if it leaks.
-- Team and organization tokens have no person behind them. They cannot use per-person tools, such as knowledge search.
+- Keep a token secret. Anyone who has it acts as its owner. Click **Rotate Token** if your personal token leaks. For a service account key, create a new key and delete the old one.
+- To let a script act for a team, pick that team on the service account. It reaches what is shared with the team and uses the team's server accounts.
+- A service account has no person behind it. It cannot use per-person tools, such as knowledge search.
 - For your own app, use an [OAuth client](/docs/mcp/authentication/applications) instead. Its tokens expire, and you can limit what it reaches.
 
 <span id="identity-provider-jwks"></span>

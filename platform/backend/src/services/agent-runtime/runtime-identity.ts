@@ -9,7 +9,12 @@ import {
 } from "@/models";
 import { scopedSessionId } from "@/openappa/actor";
 import type { OpenAppaSession } from "@/openappa/service";
-import { type AgentRunActorKind, type AgentRunRecord, ApiError } from "@/types";
+import {
+  type AgentRunActorKind,
+  AgentRunActorKindSchema,
+  type AgentRunRecord,
+  ApiError,
+} from "@/types";
 import type { AgentWorkspace } from "@/types/agent-workspace";
 
 /**
@@ -36,12 +41,7 @@ const BINDING_VERSION = 1;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const ACTOR_KINDS = new Set<AgentRunActorKind>([
-  "user",
-  "team",
-  "organization",
-  "system",
-]);
+const ACTOR_KINDS = new Set<AgentRunActorKind>(AgentRunActorKindSchema.options);
 
 /** @public — association returned to review and crossing callers */
 export type VerifiedRuntimeAssociation = {

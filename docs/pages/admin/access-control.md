@@ -174,7 +174,7 @@ Sharing an agent does not share its MCP servers. A person who can use an agent g
 
 What to know:
 
-- Team tokens, organization tokens, and service accounts keep every tool assigned to the agent.
+- Service accounts keep every tool assigned to the agent.
 - [Credential resolution](/docs/mcp/authentication/servers#credential-resolution) picks the connection for a tool the person can use, including a connection pinned to the tool.
 
 ## Log Visibility

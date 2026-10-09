@@ -9,15 +9,7 @@ import {
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronDown,
-  Copy,
-  Key,
-  RefreshCw,
-  Trash2,
-  Users,
-} from "lucide-react";
+import { ChevronDown, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import {
   type ComponentType,
@@ -49,7 +41,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useMemberSearch } from "@/lib/member.query";
@@ -59,16 +50,12 @@ import {
   formatTeamPath,
   getTeamDescendantIds,
 } from "@/lib/teams/team-hierarchy";
-import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
-import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { cn } from "@/lib/utils/tailwind";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type TeamDialogSection =
   | "team"
   | "members"
-  | "token"
   | "vault-folder"
   | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
@@ -105,11 +92,6 @@ type TeamManagementDialogProps =
       onOpenChange: (open: boolean) => void;
       team: Team;
       /**
-       * Section to open on instead of "team" — used by deep links (e.g.
-       * "Manage your team token" on connection instructions).
-       */
-      initialSection?: TeamDialogSection;
-      /**
        * View-only access for callers who can read identity-provider
        * configuration but not manage the team: only the External Group Sync
        * section is shown, without its mutation controls.
@@ -122,11 +104,6 @@ const editNavItems = [
   { id: "members", label: "Members" },
   { id: "external-groups", label: "External Group Sync" },
 ] satisfies Array<{ id: TeamDialogSection; label: string }>;
-
-const tokenNavItem = {
-  id: "token",
-  label: "MCP/A2A Gateway Token",
-} satisfies { id: TeamDialogSection; label: string };
 
 const vaultFolderNavItem = {
   id: "vault-folder",
@@ -143,8 +120,6 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const mode = props.mode ?? "edit";
   const [createdTeam, setCreatedTeam] = useState<Team | null>(null);
   const editTeam = "team" in props ? props.team : null;
-  const initialSection =
-    "initialSection" in props ? props.initialSection : undefined;
   const readOnly = ("readOnly" in props && props.readOnly) || false;
   const team = editTeam ?? createdTeam;
   const queryClient = useQueryClient();
@@ -170,13 +145,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
   const { data: organizationTeams = [] } = useTeams({
     enabled: open && (mode === "create" || canUpdateTeams),
   });
-  const { data: tokensData } = useTokens({
-    enabled: open && mode === "edit" && canUpdateTeams,
-  });
   const byosEnabled = useFeature("byosEnabled");
-  const teamToken = tokensData?.tokens.find(
-    (token) => token.team?.id === team?.id,
-  );
   const navItems = useMemo(() => {
     if (mode === "create") {
       return team ? [editNavItems[0], editNavItems[1]] : createNavItems;
@@ -191,13 +160,12 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     }
 
     if (!byosEnabled) {
-      return [editNavItems[0], editNavItems[1], tokenNavItem, editNavItems[2]];
+      return editNavItems;
     }
 
     return [
       editNavItems[0],
       editNavItems[1],
-      tokenNavItem,
       vaultFolderNavItem,
       editNavItems[2],
     ];
@@ -212,13 +180,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
 
   useEffect(() => {
     if (!open) return;
-    setActiveSection(
-      readOnly
-        ? "external-groups"
-        : mode === "edit" && initialSection
-          ? initialSection
-          : "team",
-    );
+    setActiveSection(readOnly ? "external-groups" : "team");
     setMemberChanges(new Map());
     if (mode === "create") {
       setCreatedTeam(null);
@@ -235,14 +197,13 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     setRoles((editTeam?.roles ?? []).join(","));
     setParentId(editTeam?.parentId ?? null);
     setLabels(editTeam?.labels ?? []);
-  }, [editTeam, initialSection, mode, open, readOnly]);
+  }, [editTeam, mode, open, readOnly]);
 
   useEffect(() => {
     const canShowActiveSection =
       (activeSection === "team" && !readOnly) ||
       (activeSection === "members" && !!team && !readOnly) ||
       activeSection === "external-groups" ||
-      (activeSection === "token" && canUpdateTeams && !readOnly) ||
       (activeSection === "vault-folder" &&
         canUpdateTeams &&
         byosEnabled &&
@@ -326,7 +287,6 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     }) => {
       queryClient.invalidateQueries({ queryKey: ["auth"] });
       queryClient.invalidateQueries({ queryKey: ["teams"] });
-      queryClient.invalidateQueries({ queryKey: ["tokens"] });
       if (hadMemberChanges && savedTeam) {
         queryClient.invalidateQueries({
           queryKey: ["teamMembers", savedTeam.id],
@@ -378,7 +338,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       open={open}
       onOpenChange={onOpenChange}
       title={title}
-      description="Manage team details, members, token access, and external group sync."
+      description="Manage team details, members, and external group sync."
       sidebarLabel={name.trim() || (mode === "create" ? "New team" : "Team")}
       sidebarDescription="Team"
       sidebarIcon={<Users className="h-4 w-4 text-muted-foreground" />}
@@ -444,9 +404,6 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           onMemberChangesChange={setMemberChanges}
           onGoToExternalGroups={() => setActiveSection("external-groups")}
         />
-      )}
-      {activeSection === "token" && mode === "edit" && (
-        <TokenSection token={teamToken} />
       )}
       {activeSection === "vault-folder" && mode === "edit" && team && (
         <TeamManagementVaultFolderSection open={open} team={team} />
@@ -618,7 +575,7 @@ function TeamMembersSection(props: {
             <span className="font-medium text-foreground">
               Able to edit team:
             </span>{" "}
-            manage members and rotate this team&apos;s token.
+            manage members.
           </p>
           <p>
             <span className="font-medium text-foreground">
@@ -880,148 +837,6 @@ function MembersSection({
           </FieldDescription>
         )}
       </div>
-    </div>
-  );
-}
-
-function TokenSection({ token }: { token?: TeamToken }) {
-  const queryClient = useQueryClient();
-  const [showValue, setShowValue] = useState(false);
-  const [displayedValue, setDisplayedValue] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [confirmRotate, setConfirmRotate] = useState(false);
-
-  const fetchValue = useMutation({
-    mutationFn: async () => {
-      if (!token) return null;
-      const { data, error } = await archestraApiSdk.getTokenValue({
-        path: { tokenId: token.id },
-      });
-      if (error) throw new Error(error.error.message);
-      return data?.value ?? null;
-    },
-    onSuccess: (value) => {
-      if (!value) return;
-      setDisplayedValue(value);
-      setShowValue(true);
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  const rotate = useMutation({
-    mutationFn: async () => {
-      if (!token) return null;
-      const { data, error } = await archestraApiSdk.rotateToken({
-        path: { tokenId: token.id },
-      });
-      if (error) throw new Error(error.error.message);
-      return data?.value ?? null;
-    },
-    onSuccess: async (value) => {
-      if (!value) return;
-      await copyToClipboard(value);
-      setDisplayedValue(value);
-      setShowValue(true);
-      setConfirmRotate(false);
-      queryClient.invalidateQueries({ queryKey: ["tokens"] });
-      toast.success("Token rotated and copied to clipboard");
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
-  if (!token) {
-    return (
-      <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-        <span>No token found for this team.</span>
-      </div>
-    );
-  }
-
-  const handleShowToken = () => {
-    if (showValue) {
-      setShowValue(false);
-      return;
-    }
-    fetchValue.mutate();
-  };
-
-  const handleCopy = async () => {
-    if (!displayedValue) return;
-    await copyToClipboard(displayedValue);
-    setCopied(true);
-    toast.success("Token copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="space-y-4 max-w-3xl">
-      <div className="space-y-2">
-        <Label>Token</Label>
-        <div className="flex gap-2">
-          <Input
-            aria-label="Token"
-            readOnly
-            value={
-              showValue && displayedValue
-                ? displayedValue
-                : `${displayedValue ? displayedValue.substring(0, 14) : token.tokenStart}...`
-            }
-            className="font-mono"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            onClick={handleShowToken}
-          >
-            <Key className="h-4 w-4" />
-            <span className="sr-only">
-              {showValue ? "Hide token" : "Show token"}
-            </span>
-          </Button>
-          {showValue && displayedValue && (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={handleCopy}
-            >
-              {copied ? (
-                <Check className="h-4 w-4 text-green-500" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
-              <span className="sr-only">Copy token</span>
-            </Button>
-          )}
-        </div>
-      </div>
-      <div className="space-y-1 text-sm text-muted-foreground">
-        <p>
-          <strong>Created:</strong> {formatRelativeTimeFromNow(token.createdAt)}
-        </p>
-        <p>
-          <strong>Last used:</strong>{" "}
-          {formatRelativeTimeFromNow(token.lastUsedAt)}
-        </p>
-      </div>
-      <Button
-        type="button"
-        variant={confirmRotate ? "destructive" : "outline"}
-        onClick={() => {
-          if (!confirmRotate) {
-            setConfirmRotate(true);
-            return;
-          }
-          rotate.mutate();
-        }}
-        disabled={rotate.isPending}
-      >
-        <RefreshCw
-          className={cn("h-4 w-4", rotate.isPending && "animate-spin")}
-        />
-        {confirmRotate ? "Confirm Rotate" : "Rotate Token"}
-      </Button>
     </div>
   );
 }

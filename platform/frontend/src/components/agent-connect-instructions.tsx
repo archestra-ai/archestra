@@ -205,7 +205,6 @@ function GatewayCredentialSteps({
       detail: "Send it in the Authorization header as a bearer token.",
       children: (
         <GenericAuthRow
-          gatewayId={gateway.id}
           placeholder={SECRET_PLACEHOLDER_TOKEN}
           onTokenChange={onTokenChange}
         />

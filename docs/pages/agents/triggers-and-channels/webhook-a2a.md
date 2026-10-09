@@ -30,8 +30,7 @@ Send a bearer token in the `Authorization` header of every request. A2A takes th
 | Credential | Where to get it | Runs as |
 | --- | --- | --- |
 | Personal token | Click your name in the sidebar to open **Personal Settings** | You |
-| Team token | **Settings → Teams**, then the team's token | The team |
-| Organization token | **Settings → Auth** | The organization |
+| Service account key | **Settings → Service Accounts** | The service account, or the team it acts for |
 | OAuth access token | An [OAuth client](/docs/mcp/authentication) that lists the agent | The client, or the signed-in user |
 | Identity provider JWT | Bind the agent to an [identity provider](/docs/admin/identity) | The user in the JWT |
 

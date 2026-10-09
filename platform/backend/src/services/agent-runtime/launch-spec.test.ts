@@ -10,8 +10,8 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  ServiceAccountModel,
   SkillModel,
-  TeamTokenModel,
   ToolModel,
   UserCredentialModel,
   VirtualApiKeyModel,
@@ -312,12 +312,6 @@ describe("buildAgentRunLaunchSpec", () => {
       makeLlmProviderApiKey,
       makeAgent,
     });
-    await TeamTokenModel.create({
-      organizationId: setup.agent.organizationId,
-      isOrganizationToken: true,
-      name: "Automation token",
-    });
-
     const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: runtime(setup.agent, "openai_responses"),
       taskId: crypto.randomUUID(),
@@ -336,9 +330,14 @@ describe("buildAgentRunLaunchSpec", () => {
       task: "Process an incoming message.",
     });
 
-    expect(spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN).toEqual(
-      expect.any(String),
+    // The run acts as the organization's built-in system service account.
+    const systemAccount = await ServiceAccountModel.ensureSystemServiceAccount(
+      setup.agent.organizationId,
     );
+    const systemToken = await ServiceAccountModel.ensurePlatformTokenValue(
+      systemAccount.id,
+    );
+    expect(spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN).toBe(systemToken.value);
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -350,6 +349,95 @@ describe("buildAgentRunLaunchSpec", () => {
     assert(virtualApiKeyId);
     const virtualKey = await VirtualApiKeyModel.findById(virtualApiKeyId);
     expect(virtualKey).toMatchObject({ scope: "org", authorId: null });
+  });
+
+  test("uses the service account's own token for a service-account run actor", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+    makeServiceAccountToken,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "gemini",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const { serviceAccount } = await makeServiceAccountToken({
+      organizationId: setup.agent.organizationId,
+    });
+
+    const { spec } = await buildAgentRunLaunchSpec({
+      runtime: runtime(setup.agent, "openai_responses"),
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: serviceAccount.id,
+        kind: "serviceAccount",
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+      task: "Process an incoming message.",
+    });
+
+    const platformToken = await ServiceAccountModel.ensurePlatformTokenValue(
+      serviceAccount.id,
+    );
+    expect(spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN).toBe(
+      platformToken.value,
+    );
+  });
+
+  test("refuses a team run actor now that team tokens are retired", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+    makeTeam,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "gemini",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const team = await makeTeam(setup.agent.organizationId, setup.user.id);
+
+    await expect(
+      buildAgentRunLaunchSpec({
+        runtime: runtime(setup.agent, "openai_responses"),
+        taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: team.id,
+          kind: "team",
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+        task: "Process an incoming message.",
+      }),
+    ).rejects.toThrow("Could not resolve an MCP gateway token");
   });
 
   test("uses the Agent-scoped Anthropic endpoint for an Anthropic image", async ({

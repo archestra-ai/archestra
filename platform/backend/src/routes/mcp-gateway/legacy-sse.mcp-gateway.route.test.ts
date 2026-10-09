@@ -7,7 +7,6 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
@@ -36,6 +35,7 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -44,12 +44,7 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
       agentType: "mcp_gateway",
     });
     await seedAndAssignArchestraTools(agent.id);
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Gateway token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     let streamsOpened = 0;
     app.addHook("onRequest", async (request) => {
       if (request.method === "GET") streamsOpened += 1;
@@ -96,6 +91,7 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -104,12 +100,7 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
       agentType: "mcp_gateway",
     });
     await seedAndAssignArchestraTools(agent.id);
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Gateway token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     // A second plugin instance is a second replica: its own stream registry,
     // the same database.
     const otherReplica = buildGatewayApp();
@@ -194,18 +185,14 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
   test("shutting the server down ends a held stream instead of draining forever", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
     });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Gateway token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     const origin = await app.listen({ host: "127.0.0.1", port: 0 });
     const streamAbort = new AbortController();
 
@@ -233,6 +220,7 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -240,19 +228,13 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
       agentType: "mcp_gateway",
     });
     await seedAndAssignArchestraTools(agent.id);
-    const streamToken = await TeamTokenModel.create({
+    const streamToken = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Stream token",
-      teamId: null,
-      isOrganizationToken: true,
     });
     // A second credential for the same organization and the same profile:
     // authorized for the gateway, but not for this stream.
-    const otherToken = await TeamTokenModel.create({
+    const otherToken = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Other token",
-      teamId: null,
-      isOrganizationToken: true,
     });
     const origin = await app.listen({ host: "127.0.0.1", port: 0 });
     const streamAbort = new AbortController();
@@ -296,6 +278,7 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
     makeAgent,
     makeOrganization,
     seedAndAssignArchestraTools,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
@@ -303,12 +286,7 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
       agentType: "mcp_gateway",
     });
     await seedAndAssignArchestraTools(agent.id);
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Gateway token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     const origin = await app.listen({ host: "127.0.0.1", port: 0 });
 
     const posted = await postMessage({
@@ -323,18 +301,14 @@ describe("MCP Gateway legacy HTTP+SSE transport", () => {
   test("refuses a message POSTed after its stream closed", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
     });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Gateway token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     const origin = await app.listen({ host: "127.0.0.1", port: 0 });
     const streamAbort = new AbortController();
 

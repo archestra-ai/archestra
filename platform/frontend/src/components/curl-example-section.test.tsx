@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { useFetchTeamTokenValue } from "@/lib/teams/team-token.query";
 import type { useFetchUserTokenValue } from "@/lib/user-token.query";
 import { CurlExampleSection } from "./curl-example-section";
 
@@ -18,9 +17,8 @@ vi.mock("@/components/ai-elements/code-block", () => ({
   ),
 }));
 
-const { fetchUserTokenValueMock, fetchTeamTokenValueMock } = vi.hoisted(() => ({
+const { fetchUserTokenValueMock } = vi.hoisted(() => ({
   fetchUserTokenValueMock: vi.fn(),
-  fetchTeamTokenValueMock: vi.fn(),
 }));
 
 const MASKED = "archestra_abc***";
@@ -33,20 +31,12 @@ function renderSection(
     <CurlExampleSection
       code={CODE}
       tokenForDisplay={MASKED}
-      isPersonalTokenSelected
-      hasAdminPermission={false}
-      selectedTeamToken={null}
+      hasPersonalToken
       fetchUserTokenMutation={
         {
           mutateAsync: fetchUserTokenValueMock,
           isPending: false,
         } as unknown as ReturnType<typeof useFetchUserTokenValue>
-      }
-      fetchTeamTokenMutation={
-        {
-          mutateAsync: fetchTeamTokenValueMock,
-          isPending: false,
-        } as unknown as ReturnType<typeof useFetchTeamTokenValue>
       }
       {...overrides}
     />,
@@ -120,16 +110,14 @@ describe("secret-aware copy menu", () => {
     expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
   });
 
-  it("offers only a plain placeholder copy when no real token is selectable", async () => {
+  it("offers only a plain placeholder copy without a personal token", async () => {
     const user = userEvent.setup();
     const writeText = vi.spyOn(navigator.clipboard, "writeText");
     const placeholderCode = CODE.replace(MASKED, "ask-admin-for-access-token");
     renderSection({
       code: placeholderCode,
       tokenForDisplay: "ask-admin-for-access-token",
-      isPersonalTokenSelected: false,
-      hasAdminPermission: false,
-      selectedTeamToken: null,
+      hasPersonalToken: false,
     });
 
     // No menu: the button copies the placeholder form directly.
@@ -145,6 +133,5 @@ describe("secret-aware copy menu", () => {
     );
     expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
     expect(fetchUserTokenValueMock).not.toHaveBeenCalled();
-    expect(fetchTeamTokenValueMock).not.toHaveBeenCalled();
   });
 });

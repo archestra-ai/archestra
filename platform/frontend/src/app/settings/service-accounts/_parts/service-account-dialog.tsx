@@ -80,8 +80,13 @@ import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
+import { ServiceAccountTeamSelect } from "./service-account-team-select";
 
-type ServiceAccountFormValues = { name: string; role: string };
+type ServiceAccountFormValues = {
+  name: string;
+  role: string;
+  teamId: string | null;
+};
 
 type TokenFormValues = {
   name: string;
@@ -167,7 +172,11 @@ export function ServiceAccountDialog({
   );
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const editForm = useForm<ServiceAccountFormValues>({
-    defaultValues: { name: account.name, role: account.role },
+    defaultValues: {
+      name: account.name,
+      role: account.role,
+      teamId: account.teamId,
+    },
   });
 
   const apiDocsUrl = getFrontendDocsUrl("reference/api");
@@ -386,6 +395,9 @@ export function ServiceAccountDialog({
       body: {
         name: values.name.trim(),
         role: values.role,
+        // Only when changed: linking is checked against team admin rights,
+        // which someone editing just the name may not hold.
+        ...(values.teamId !== account.teamId ? { teamId: values.teamId } : {}),
         labels: finalLabels,
       },
     });
@@ -554,6 +566,13 @@ export function ServiceAccountDialog({
                   account&apos;s keys.
                 </FieldDescription>
               </div>
+              <ServiceAccountTeamSelect
+                id="edit-service-account-team"
+                value={editForm.watch("teamId")}
+                onChange={(teamId) =>
+                  editForm.setValue("teamId", teamId, { shouldDirty: true })
+                }
+              />
             </fieldset>
           ) : activeTab === "keys" ? (
             <BulkActionsScope>

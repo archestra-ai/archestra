@@ -2468,21 +2468,6 @@ class McpClient {
       };
     }
 
-    // Org-wide token is incompatible with dynamic credential resolution
-    if (tokenAuth.isOrganizationToken) {
-      return {
-        error: await this.createErrorResult({
-          toolCall,
-          owner,
-          error:
-            "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
-          mcpServerName: fallbackName,
-          authInfo,
-          encryptedChatContent,
-        }),
-      };
-    }
-
     // Fallback for external IdP users if earlier resolution didn't match.
     // Another user's personal install is never eligible — its stored
     // credentials must not serve other callers; JWKS deployments share
@@ -2548,7 +2533,7 @@ class McpClient {
   // Picks which of a catalog's installs the calling identity routes through, using
   // the runtime credential-resolution scope priority: a user token prefers its own
   // personal install, then a team the user belongs to, then an org-scoped install;
-  // a team token prefers the team's install, then org-scoped. Returns undefined when
+  // a service account prefers its team's install, then org-scoped. Returns undefined when
   // none match. Shared by dynamic resolution and by a retained static assignment
   // whose pinned install was uninstalled (its mcpServerId is null).
   private async pickInstallForCaller(

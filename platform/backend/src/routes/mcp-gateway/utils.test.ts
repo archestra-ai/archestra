@@ -43,7 +43,7 @@ import {
   AgentTeamModel,
   McpCatalogLabelModel,
   McpToolCallModel,
-  TeamTokenModel,
+  ServiceAccountModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
@@ -151,35 +151,35 @@ describe("validateMCPGatewayToken", () => {
     });
   });
 
-  describe("team token validation", () => {
-    test("validates org token for an organization-granted profile", async ({
+  describe("service account token validation", () => {
+    test("a member-role account reaches an org-wide-shared gateway as itself, not as a user", async ({
       makeAgent,
       makeOrganization,
+      makeServiceAccountToken,
     }) => {
       const org = await makeOrganization();
-
-      const { token, value } = await TeamTokenModel.create({
+      const { serviceAccount, tokenId, value } = await makeServiceAccountToken({
         organizationId: org.id,
-        name: "Org Token",
-        teamId: null,
-        isOrganizationToken: true,
       });
 
       const profile = await makeAgent({ organizationId: org.id });
       const result = await validateMCPGatewayToken(profile.id, value);
 
       expect(result).not.toBeNull();
-      expect(result?.tokenId).toBe(token.id);
-      expect(result?.isOrganizationToken).toBe(true);
+      expect(result?.tokenId).toBe(tokenId);
+      expect(result?.serviceAccountId).toBe(serviceAccount.id);
+      expect(result?.userId).toBeUndefined();
+      expect(result?.isOrganizationToken).toBe(false);
       expect(result?.teamId).toBeNull();
       expect(result?.organizationId).toBe(org.id);
     });
 
-    test("validates team token when profile is assigned to that team", async ({
+    test("an account linked to a team reaches a gateway shared only with that team", async ({
       makeOrganization,
       makeUser,
       makeTeam,
       makeAgent,
+      makeServiceAccountToken,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
@@ -189,46 +189,100 @@ describe("validateMCPGatewayToken", () => {
         access: { teams: [team.id] },
       });
 
-      const { token, value } = await TeamTokenModel.create({
+      const { serviceAccount, tokenId, value } = await makeServiceAccountToken({
         organizationId: org.id,
-        name: "Team Token",
         teamId: team.id,
       });
 
       const result = await validateMCPGatewayToken(agent.id, value);
 
       expect(result).not.toBeNull();
-      expect(result?.tokenId).toBe(token.id);
-      expect(result?.isOrganizationToken).toBe(false);
+      expect(result?.tokenId).toBe(tokenId);
+      expect(result?.serviceAccountId).toBe(serviceAccount.id);
       expect(result?.teamId).toBe(team.id);
     });
 
-    test("returns null when team token used for profile not in that team", async ({
+    test("an account without the team cannot reach a team-only gateway", async ({
       makeOrganization,
       makeUser,
       makeTeam,
       makeAgent,
+      makeServiceAccountToken,
     }) => {
       const org = await makeOrganization();
       const user = await makeUser();
       const team1 = await makeTeam(org.id, user.id, { name: "Team 1" });
       const team2 = await makeTeam(org.id, user.id, { name: "Team 2" });
-
-      // Agent assigned to team2 only
       const agent = await makeAgent({
         organizationId: org.id,
         access: { teams: [team2.id] },
       });
 
-      // Token for team1
-      const { value } = await TeamTokenModel.create({
+      const unlinked = await makeServiceAccountToken({
         organizationId: org.id,
-        name: "Team 1 Token",
+      });
+      const otherTeam = await makeServiceAccountToken({
+        organizationId: org.id,
         teamId: team1.id,
       });
 
-      const result = await validateMCPGatewayToken(agent.id, value);
-      expect(result).toBeNull();
+      expect(
+        await validateMCPGatewayToken(agent.id, unlinked.value),
+      ).toBeNull();
+      expect(
+        await validateMCPGatewayToken(agent.id, otherTeam.value),
+      ).toBeNull();
+    });
+
+    test("refuses a disabled account", async ({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    }) => {
+      const org = await makeOrganization();
+      const profile = await makeAgent({ organizationId: org.id });
+      const { serviceAccount, value } = await makeServiceAccountToken({
+        organizationId: org.id,
+      });
+      await ServiceAccountModel.update(serviceAccount.id, org.id, {
+        disabled: true,
+      });
+
+      expect(await validateMCPGatewayToken(profile.id, value)).toBeNull();
+    });
+
+    test("refuses a disabled key and an expired key", async ({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    }) => {
+      const org = await makeOrganization();
+      const profile = await makeAgent({ organizationId: org.id });
+      const disabledKey = await makeServiceAccountToken({
+        organizationId: org.id,
+      });
+      await ServiceAccountModel.updateToken({
+        serviceAccountId: disabledKey.serviceAccount.id,
+        tokenId: disabledKey.tokenId,
+        organizationId: org.id,
+        data: { disabled: true },
+      });
+      const expiredKey = await makeServiceAccountToken({
+        organizationId: org.id,
+      });
+      await ServiceAccountModel.updateToken({
+        serviceAccountId: expiredKey.serviceAccount.id,
+        tokenId: expiredKey.tokenId,
+        organizationId: org.id,
+        data: { expiresAt: new Date(Date.now() - 60_000) },
+      });
+
+      expect(
+        await validateMCPGatewayToken(profile.id, disabledKey.value),
+      ).toBeNull();
+      expect(
+        await validateMCPGatewayToken(profile.id, expiredKey.value),
+      ).toBeNull();
     });
 
     test("does not cache negative per-profile auth results", async ({
@@ -236,6 +290,7 @@ describe("validateMCPGatewayToken", () => {
       makeUser,
       makeTeam,
       makeAgent,
+      makeServiceAccountToken,
     }) => {
       // Regression coverage for the "negative cache treadmill": when a
       // per-profile auth check returned null, the result used to be cached
@@ -252,16 +307,12 @@ describe("validateMCPGatewayToken", () => {
         organizationId: org.id,
         access: { teams: [team2.id] },
       });
-      const { value } = await TeamTokenModel.create({
+      const { value } = await makeServiceAccountToken({
         organizationId: org.id,
-        name: "Team 1 Token",
         teamId: team1.id,
       });
 
-      const teamHasAgentAccessSpy = vi.spyOn(
-        AgentTeamModel,
-        "credentialHasAgentAccess",
-      );
+      const agentAccessSpy = vi.spyOn(AgentTeamModel, "userHasAgentAccess");
 
       const firstResult = await validateMCPGatewayToken(agent.id, value);
       const secondResult = await validateMCPGatewayToken(agent.id, value);
@@ -270,23 +321,21 @@ describe("validateMCPGatewayToken", () => {
       expect(secondResult).toBeNull();
       // Both calls must re-run the per-profile check; if negative caching
       // were reintroduced this would drop to 1.
-      expect(teamHasAgentAccessSpy).toHaveBeenCalledTimes(2);
+      expect(agentAccessSpy).toHaveBeenCalledTimes(2);
 
-      teamHasAgentAccessSpy.mockRestore();
+      agentAccessSpy.mockRestore();
     });
 
-    test("reuses resolved team tokens across profiles", async ({
+    test("reuses resolved service account tokens across profiles", async ({
       makeAgent,
       makeOrganization,
+      makeServiceAccountToken,
     }) => {
       const org = await makeOrganization();
-      const { value } = await TeamTokenModel.create({
+      const { value } = await makeServiceAccountToken({
         organizationId: org.id,
-        name: "Org Token",
-        teamId: null,
-        isOrganizationToken: true,
       });
-      const validateTeamTokenSpy = vi.spyOn(TeamTokenModel, "validateToken");
+      const verifyTokenSpy = vi.spyOn(ServiceAccountModel, "verifyToken");
 
       const firstResult = await validateMCPGatewayToken(
         (await makeAgent({ organizationId: org.id })).id,
@@ -299,9 +348,9 @@ describe("validateMCPGatewayToken", () => {
 
       expect(firstResult).not.toBeNull();
       expect(secondResult).not.toBeNull();
-      expect(validateTeamTokenSpy).toHaveBeenCalledTimes(1);
+      expect(verifyTokenSpy).toHaveBeenCalledTimes(1);
 
-      validateTeamTokenSpy.mockRestore();
+      verifyTokenSpy.mockRestore();
     });
   });
 
@@ -502,7 +551,7 @@ describe("validateMCPGatewayToken", () => {
   });
 
   describe("edge cases", () => {
-    test("profile with no teams - team token fails, admin user token succeeds", async ({
+    test("profile with no teams - admin user token succeeds", async ({
       makeOrganization,
       makeUser,
       makeMember,

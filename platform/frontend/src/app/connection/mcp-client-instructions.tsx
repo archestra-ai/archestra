@@ -3,7 +3,6 @@
 import { resolveMcpClientServerName } from "@archestra/shared";
 import {
   AlertTriangle,
-  ChevronDown,
   ExternalLink,
   Eye,
   EyeOff,
@@ -20,20 +19,10 @@ import {
   terminalActionClass,
   terminalCodeClass,
 } from "@/components/terminal-surface";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { ServiceAccountHint } from "@/components/tokens/service-account-hint";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import {
-  useFetchTeamTokenValue,
-  useTokens,
-} from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ClientIcon } from "./client-icon";
@@ -46,7 +35,6 @@ import { TerminalBlock } from "./terminal-block";
 
 interface McpClientInstructionsProps {
   client: ConnectClient;
-  gatewayId: string;
   gatewaySlug: string;
   gatewayName: string;
   /**
@@ -68,7 +56,6 @@ function authTabs(supported: McpSupportedAuth): AuthMethod[] {
 
 export function McpClientInstructions({
   client,
-  gatewayId,
   gatewaySlug,
   gatewayName,
   isPersonalGateway,
@@ -148,10 +135,7 @@ export function McpClientInstructions({
                   </code>{" "}
                   header.
                 </p>
-                <GenericAuthRow
-                  gatewayId={gatewayId}
-                  placeholder={SECRET_PLACEHOLDER_TOKEN}
-                />
+                <GenericAuthRow placeholder={SECRET_PLACEHOLDER_TOKEN} />
               </>
             )}
           </div>
@@ -194,7 +178,6 @@ export function McpClientInstructions({
               mcpUrl={mcpUrl}
               token={null}
               serverName={serverName}
-              gatewayId={gatewayId}
               isQuick={isQuick}
             />
           </TabsContent>
@@ -205,7 +188,6 @@ export function McpClientInstructions({
               mcpUrl={mcpUrl}
               token={SECRET_PLACEHOLDER_TOKEN}
               serverName={serverName}
-              gatewayId={gatewayId}
               isQuick={isQuick}
             />
           </TabsContent>
@@ -216,7 +198,6 @@ export function McpClientInstructions({
           mcpUrl={mcpUrl}
           token={null}
           serverName={serverName}
-          gatewayId={gatewayId}
           isQuick={isQuick}
         />
       ) : (
@@ -225,7 +206,6 @@ export function McpClientInstructions({
           mcpUrl={mcpUrl}
           token={SECRET_PLACEHOLDER_TOKEN}
           serverName={serverName}
-          gatewayId={gatewayId}
           isQuick={isQuick}
         />
       )}
@@ -238,18 +218,10 @@ interface McpBodyProps {
   mcpUrl: string;
   token: string | null;
   serverName: string;
-  gatewayId: string;
   isQuick: boolean;
 }
 
-function McpBody({
-  client,
-  mcpUrl,
-  token,
-  serverName,
-  gatewayId,
-  isQuick,
-}: McpBodyProps) {
+function McpBody({ client, mcpUrl, token, serverName, isQuick }: McpBodyProps) {
   if (client.mcp.kind !== "custom") return null;
 
   const mcp = client.mcp;
@@ -296,18 +268,14 @@ function McpBody({
                   <TerminalBlock code={s.buildCommand(ctaParams)} />
                 )}
                 {s.showAuthHeader && token && (
-                  <GenericAuthRow
-                    gatewayId={gatewayId}
-                    placeholder={token}
-                    bare={s.authHeaderBare}
-                  />
+                  <GenericAuthRow placeholder={token} bare={s.authHeaderBare} />
                 )}
               </div>
             </li>
           ))}
         </ol>
         {token && !stepsHaveAuthHeader && (
-          <GenericAuthRow gatewayId={gatewayId} placeholder={token} />
+          <GenericAuthRow placeholder={token} />
         )}
       </div>
     );
@@ -407,93 +375,40 @@ export type SelectedGatewayToken = {
 };
 
 /**
- * Auth-header row for the generic "Any Client" flow. Lets the user pick
- * which token (personal / team / org) to embed, and reveal the real value
- * on demand.
+ * Auth-header row for the generic "Any Client" flow. Shows the caller's
+ * personal token masked and reveals or copies the real value on demand.
+ * Automation is pointed at service account keys instead.
  */
 export function GenericAuthRow({
-  gatewayId,
   placeholder,
   bare = false,
   onTokenChange,
 }: {
-  gatewayId: string;
   placeholder: string;
   /** When true, render just the raw token (no `Bearer ` prefix). Used by clients
    *  whose credential UI prepends the scheme automatically (e.g. n8n Bearer Auth). */
   bare?: boolean;
   /**
-   * Told which token is selected, so an example elsewhere can use it: its
-   * masked form and how to read its value; null while none is selected.
+   * Told about the personal token, so an example elsewhere can use it: its
+   * masked form and how to read its value; null while there is none.
    */
   onTokenChange?: (token: SelectedGatewayToken | null) => void;
 }) {
   const { data: userToken } = useUserToken();
-  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
-  const { data: tokensData } = useTokens({
-    profileId: gatewayId,
-    enabled: !!canReadTeams,
-  });
-  const tokens = tokensData?.tokens ?? [];
-
-  // Mirror the original defaulting logic: personal > org > first team token
-  // that can actually authenticate against this gateway.
-  const orgToken = tokens.find((t) => t.isOrganizationToken);
-  const firstUsableToken = tokens.find((t) => t.worksWithProfile !== false);
-  const defaultTokenId: string | null = userToken
-    ? PERSONAL_TOKEN_ID
-    : (orgToken?.id ?? firstUsableToken?.id ?? null);
-  const [selectedId, setSelectedId] = useState<string | null>(defaultTokenId);
-  useEffect(() => {
-    if (selectedId === null && defaultTokenId) setSelectedId(defaultTokenId);
-  }, [selectedId, defaultTokenId]);
-
   const [exposedValue, setExposedValue] = useState<string | null>(null);
+  const [isCopying, setIsCopying] = useState(false);
   const fetchUserTokenMutation = useFetchUserTokenValue();
-  const fetchTeamTokenMutation = useFetchTeamTokenValue();
-  const isLoading =
-    fetchUserTokenMutation.isPending || fetchTeamTokenMutation.isPending;
-
-  const isPersonal = selectedId === PERSONAL_TOKEN_ID;
-  const selectedTeamToken = isPersonal
-    ? null
-    : (tokens.find((t) => t.id === selectedId) ?? null);
-
-  const selectedLabel = isPersonal
-    ? "Personal Token"
-    : selectedTeamToken
-      ? selectedTeamToken.isOrganizationToken
-        ? "Organization Token"
-        : selectedTeamToken.team?.name
-          ? `Team Token (${selectedTeamToken.team.name})`
-          : selectedTeamToken.name
-      : "Select token";
-  const _selectedDescription = isPersonal
-    ? "The most secure option."
-    : selectedTeamToken?.isOrganizationToken
-      ? "To share org-wide"
-      : "To share with your teammates";
+  const isLoading = fetchUserTokenMutation.isPending;
 
   const previewValue = exposedValue
     ? exposedValue
-    : isPersonal && userToken
+    : userToken
       ? `${userToken.tokenStart}***`
-      : selectedTeamToken
-        ? `${selectedTeamToken.tokenStart}***`
-        : placeholder;
+      : placeholder;
 
   const fetchTokenValue = async (): Promise<string | null> => {
-    if (isPersonal) {
-      const res = await fetchUserTokenMutation.mutateAsync();
-      return res?.value ?? null;
-    }
-    if (selectedTeamToken) {
-      const res = await fetchTeamTokenMutation.mutateAsync(
-        selectedTeamToken.id,
-      );
-      return res?.value ?? null;
-    }
-    return null;
+    const res = await fetchUserTokenMutation.mutateAsync();
+    return res?.value ?? null;
   };
 
   const handleToggleExpose = async () => {
@@ -505,54 +420,49 @@ export function GenericAuthRow({
     if (value) setExposedValue(value);
   };
 
-  const hasAnyToken = !!userToken || tokens.length > 0;
   const headerValue = bare ? previewValue : `Bearer ${previewValue}`;
-  const [isCopying, setIsCopying] = useState(false);
-  // The on-screen value is masked once a token is selected, so putting the
-  // real token on the clipboard is an explicit menu choice (SecretCopyButton).
-  const canResolveToken = isPersonal || !!selectedTeamToken;
-  const selectedTokenStart = isPersonal
-    ? userToken?.tokenStart
-    : selectedTeamToken?.tokenStart;
+  const tokenStart = userToken?.tokenStart;
   const fetchTokenValueRef = useRef(fetchTokenValue);
   fetchTokenValueRef.current = fetchTokenValue;
   useEffect(() => {
     onTokenChange?.(
-      canResolveToken && selectedTokenStart
+      tokenStart
         ? {
-            id: selectedId ?? "",
-            tokenStart: selectedTokenStart,
+            id: PERSONAL_TOKEN_ID,
+            tokenStart,
             resolve: () => fetchTokenValueRef.current(),
           }
         : null,
     );
-  }, [onTokenChange, canResolveToken, selectedId, selectedTokenStart]);
+  }, [onTokenChange, tokenStart]);
+  // The on-screen value is masked, so putting the real token on the clipboard
+  // is an explicit menu choice (SecretCopyButton).
   const getSecretText = async (): Promise<string | null> => {
     const value = exposedValue ?? (await fetchTokenValue());
     if (!value) return null; // fetch failed; the mutation already surfaced a toast
     return bare ? value : `Bearer ${value}`;
   };
 
-  const teamTokens = tokens.filter((t) => !t.isOrganizationToken);
-  const orgTokens = tokens.filter((t) => t.isOrganizationToken);
-
-  if (!hasAnyToken) {
+  if (!userToken) {
     return (
-      <div className="text-xs text-muted-foreground">
-        No tokens available — provision one from{" "}
-        <Link
-          href="/account?highlight=personal-token"
-          className="underline hover:text-foreground"
-        >
-          Personal Settings
-        </Link>
-        .
+      <div className="space-y-2">
+        <div className="text-xs text-muted-foreground">
+          No token yet — provision one from{" "}
+          <Link
+            href="/account?highlight=personal-token"
+            className="underline hover:text-foreground"
+          >
+            Personal Settings
+          </Link>
+          .
+        </div>
+        <ServiceAccountHint />
       </div>
     );
   }
 
   return (
-    <DropdownMenu>
+    <div className="space-y-2">
       <TerminalCard className="relative">
         <div className="absolute right-2 top-2 flex items-center gap-1">
           <UnstyledButton
@@ -572,99 +482,20 @@ export function GenericAuthRow({
           </UnstyledButton>
           <SecretCopyButton
             variant="terminal"
-            getSecretText={canResolveToken ? getSecretText : null}
+            getSecretText={getSecretText}
             placeholderText={bare ? placeholder : `Bearer ${placeholder}`}
             disabled={isLoading}
             onBusyChange={setIsCopying}
           />
-          {/* Switching tokens mid-fetch would copy the old token while the
-              row already shows the new one, so lock the switcher too. */}
-          <DropdownMenuTrigger asChild>
-            <UnstyledButton
-              type="button"
-              disabled={isLoading || isCopying}
-              aria-label="Switch token"
-              className={cn(terminalActionClass, "h-7 gap-1 px-2 text-[11px]")}
-            >
-              {selectedLabel}
-              <ChevronDown className="size-3" strokeWidth={2} />
-            </UnstyledButton>
-          </DropdownMenuTrigger>
         </div>
         <pre
-          className={cn("m-0 overflow-auto px-5 py-4 pr-36", terminalCodeClass)}
+          className={cn("m-0 overflow-auto px-5 py-4 pr-24", terminalCodeClass)}
         >
           {headerValue}
         </pre>
       </TerminalCard>
-      <DropdownMenuContent align="end" className="w-[280px]">
-        {userToken && (
-          <TokenOption
-            active={selectedId === PERSONAL_TOKEN_ID}
-            label="Personal Token"
-            description="The most secure option."
-            onSelect={() => {
-              setSelectedId(PERSONAL_TOKEN_ID);
-              setExposedValue(null);
-            }}
-          />
-        )}
-        {teamTokens.map((t) => (
-          <TokenOption
-            key={t.id}
-            active={selectedId === t.id}
-            label={t.team?.name ? `Team Token (${t.team.name})` : t.name}
-            description={
-              t.worksWithProfile === false
-                ? "This team can't access this gateway"
-                : "To share with your teammates"
-            }
-            disabled={t.worksWithProfile === false}
-            onSelect={() => {
-              setSelectedId(t.id);
-              setExposedValue(null);
-            }}
-          />
-        ))}
-        {orgTokens.map((t) => (
-          <TokenOption
-            key={t.id}
-            active={selectedId === t.id}
-            label="Organization Token"
-            description="To share org-wide"
-            onSelect={() => {
-              setSelectedId(t.id);
-              setExposedValue(null);
-            }}
-          />
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function TokenOption({
-  active,
-  label,
-  description,
-  disabled,
-  onSelect,
-}: {
-  active: boolean;
-  label: string;
-  description: string;
-  disabled?: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <DropdownMenuItem
-      onSelect={onSelect}
-      disabled={disabled}
-      className={cn("flex flex-col items-start gap-0.5", active && "bg-accent")}
-    >
-      <span>{label}</span>
-      <span className="text-xs text-muted-foreground">{description}</span>
-    </DropdownMenuItem>
+      <ServiceAccountHint />
+    </div>
   );
 }
 

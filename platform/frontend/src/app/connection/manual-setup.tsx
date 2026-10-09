@@ -70,7 +70,6 @@ export function useManualSteps(
       content: (
         <McpClientInstructions
           client={client}
-          gatewayId={gateway.id}
           gatewaySlug={gateway.slug ?? gateway.id}
           gatewayName={gateway.name}
           isPersonalGateway={gateway.isPersonalGateway}

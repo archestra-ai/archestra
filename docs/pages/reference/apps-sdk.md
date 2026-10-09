@@ -175,7 +175,7 @@ Each render captures runtime errors, unhandled rejections, `console.error` outpu
 
 ## External MCP Clients
 
-Each app is also an MCP server at [`POST /api/mcp/app/<app-id>`](/docs/reference/api#/mcp-proxy/mcpAppProxyPost). Connect an external MCP client there with a personal token; organization and team tokens are rejected, because an app needs a viewer. The client sees:
+Each app is also an MCP server at [`POST /api/mcp/app/<app-id>`](/docs/reference/api#/mcp-proxy/mcpAppProxyPost). Connect an external MCP client there with a personal token; service account keys are rejected, because an app needs a viewer. The client sees:
 
 - `tools/list` - The app's assigned tools, its storage tools, and an `open` tool whose result carries the app's `ui://` resource.
 - `resources/read` - The app's HTML.

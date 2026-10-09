@@ -29,7 +29,15 @@ To create one, click your name in the sidebar, go to **API Keys**, and click **C
 
 A service account is an organization-owned identity for CI, scheduled jobs, and shared integrations. Its keys keep working when the person who created them leaves.
 
-Go to **Settings → Service Accounts**, click **Create service account**, and assign it a role. Then open the account and click **Create API key**. Disabling or deleting the account stops all of its keys. To rotate a key, create a new one, switch your clients to it, and delete the old one. See [LLM API Permissions](/docs/admin/access-control#llm-api-permissions) for the roles that export costs and logs.
+1. Go to **Settings → Service Accounts** and click **Create service account**.
+2. Assign it a role. To have it act for a team, pick the team.
+3. Open the account and click **Create API key**. The key works for the REST API, the [MCP Gateway](/docs/mcp/authentication/gateway#bearer-token), and A2A.
+
+What to know:
+
+- An account that acts for a team reaches what is shared with that team and uses the team's MCP server accounts. Linking one takes team admin or organization team management.
+- Disabling or deleting the account stops all of its keys. To rotate a key, create a new one, switch your clients to it, and delete the old one.
+- See [LLM API Permissions](/docs/admin/access-control#llm-api-permissions) for the roles that export costs and logs.
 
 ## Endpoints
 

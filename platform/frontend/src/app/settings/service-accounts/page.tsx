@@ -77,15 +77,18 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction } from "../layout";
 import { ServiceAccountDialog } from "./_parts/service-account-dialog";
+import { ServiceAccountTeamSelect } from "./_parts/service-account-team-select";
 
 type ServiceAccountFormValues = {
   name: string;
   role: string;
+  teamId: string | null;
 };
 
 const DEFAULT_FORM_VALUES: ServiceAccountFormValues = {
   name: "",
   role: "member",
+  teamId: null,
 };
 
 const ALL = "all";
@@ -370,6 +373,7 @@ export default function ServiceAccountsSettingsPage() {
     const account = await createMutation.mutateAsync({
       name: values.name.trim(),
       role: values.role,
+      ...(values.teamId ? { teamId: values.teamId } : {}),
       labels: finalLabels,
     });
     if (!account) return;
@@ -649,6 +653,11 @@ export default function ServiceAccountsSettingsPage() {
                 determine which objects this account can reach.
               </FieldDescription>
             </div>
+            <ServiceAccountTeamSelect
+              id="service-account-team"
+              value={form.watch("teamId")}
+              onChange={(teamId) => form.setValue("teamId", teamId)}
+            />
             <AdvancedLabelsSection
               ref={labelsRef}
               labels={newLabels}

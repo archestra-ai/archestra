@@ -18,7 +18,7 @@ import { vi } from "vitest";
 
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
-import { McpGatewayTaskModel, TeamTokenModel } from "@/models";
+import { McpGatewayTaskModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./index";
 
@@ -55,14 +55,14 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog: (a: object) => Promise<{ id: string }>;
     makeTool: (a: object) => Promise<{ id: string }>;
     makeAgentTool: (a: string, b: string) => Promise<unknown>;
+    makeServiceAccountToken: (a: {
+      organizationId: string;
+    }) => Promise<{ value: string; tokenId: string }>;
   }) {
     const org = await fixtures.makeOrganization();
     const agent = await fixtures.makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
+    const token = await fixtures.makeServiceAccountToken({
       organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
     const catalog = await fixtures.makeInternalMcpCatalog({
       organizationId: org.id,
@@ -168,6 +168,7 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const { agent, token } = await seed({
       makeAgent,
@@ -175,6 +176,7 @@ describe("MCP Gateway - Tasks extension", () => {
       makeInternalMcpCatalog,
       makeTool,
       makeAgentTool,
+      makeServiceAccountToken,
     });
     mockUpstream(250);
 
@@ -214,6 +216,7 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const { agent, token } = await seed({
       makeAgent,
@@ -221,6 +224,7 @@ describe("MCP Gateway - Tasks extension", () => {
       makeInternalMcpCatalog,
       makeTool,
       makeAgentTool,
+      makeServiceAccountToken,
     });
     mockUpstream(5);
 
@@ -256,6 +260,7 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const { agent, token } = await seed({
       makeAgent,
@@ -263,6 +268,7 @@ describe("MCP Gateway - Tasks extension", () => {
       makeInternalMcpCatalog,
       makeTool,
       makeAgentTool,
+      makeServiceAccountToken,
     });
     mockUpstream(250);
 
@@ -282,6 +288,7 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const { agent, token } = await seed({
       makeAgent,
@@ -289,6 +296,7 @@ describe("MCP Gateway - Tasks extension", () => {
       makeInternalMcpCatalog,
       makeTool,
       makeAgentTool,
+      makeServiceAccountToken,
     });
     const captured = mockUpstream(2_000);
 
@@ -327,6 +335,7 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const { agent, org, token } = await seed({
       makeAgent,
@@ -334,6 +343,7 @@ describe("MCP Gateway - Tasks extension", () => {
       makeInternalMcpCatalog,
       makeTool,
       makeAgentTool,
+      makeServiceAccountToken,
     });
     mockUpstream(400);
 
@@ -346,11 +356,8 @@ describe("MCP Gateway - Tasks extension", () => {
     ).json();
     expect(result.resultType).toBe("task");
 
-    const otherToken = await TeamTokenModel.create({
+    const otherToken = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Other Token",
-      teamId: null,
-      isOrganizationToken: true,
     });
 
     const response = await taskMethod({
@@ -369,6 +376,7 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const { agent, token } = await seed({
       makeAgent,
@@ -376,13 +384,14 @@ describe("MCP Gateway - Tasks extension", () => {
       makeInternalMcpCatalog,
       makeTool,
       makeAgentTool,
+      makeServiceAccountToken,
     });
 
     // Minted directly with an already-passed expiry: the row exists, and
     // expiry alone must make it unservable.
     const expired = await McpGatewayTaskModel.create({
       agentId: agent.id,
-      principal: `token:${token.token.id}`,
+      principal: `token:${token.tokenId}`,
       toolName: TOOL_NAME,
       ttlMs: -1_000,
     });
@@ -402,6 +411,7 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const { agent, token } = await seed({
       makeAgent,
@@ -409,6 +419,7 @@ describe("MCP Gateway - Tasks extension", () => {
       makeInternalMcpCatalog,
       makeTool,
       makeAgentTool,
+      makeServiceAccountToken,
     });
 
     // Upstream asks for interactive input only after the call has already
@@ -459,6 +470,7 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const { agent, token } = await seed({
       makeAgent,
@@ -466,6 +478,7 @@ describe("MCP Gateway - Tasks extension", () => {
       makeInternalMcpCatalog,
       makeTool,
       makeAgentTool,
+      makeServiceAccountToken,
     });
 
     const response = await app.inject({
@@ -499,6 +512,7 @@ describe("MCP Gateway - Tasks extension", () => {
     makeInternalMcpCatalog,
     makeTool,
     makeAgentTool,
+    makeServiceAccountToken,
   }) => {
     const { agent, token } = await seed({
       makeAgent,
@@ -506,6 +520,7 @@ describe("MCP Gateway - Tasks extension", () => {
       makeInternalMcpCatalog,
       makeTool,
       makeAgentTool,
+      makeServiceAccountToken,
     });
 
     const response = await app.inject({

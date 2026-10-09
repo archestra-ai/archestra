@@ -1,4 +1,8 @@
-import { ADMIN_ROLE_NAME, ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  ARCHESTRA_TOKEN_PREFIX,
+  MEMBER_ROLE_NAME,
+} from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -6,6 +10,7 @@ import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
+import TeamModel from "@/models/team";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
@@ -286,6 +291,166 @@ describe("service account routes", () => {
         type: "api_validation_error",
       },
     });
+  });
+
+  test("links an account to a team and audits the change", async ({
+    makeTeam,
+  }) => {
+    const team = await makeTeam(organizationId, user.id);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "team-bot", role: MEMBER_ROLE_NAME, teamId: team.id },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().teamId).toBe(team.id);
+
+    const fetched = await app.inject({
+      method: "GET",
+      url: `/api/service-accounts/${created.json().id}`,
+    });
+    expect(fetched.json().teamId).toBe(team.id);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+    });
+    expect(
+      listed.json().find((a: { id: string }) => a.id === created.json().id)
+        .teamId,
+    ).toBe(team.id);
+
+    const unlinked = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${created.json().id}`,
+      payload: { teamId: null },
+    });
+    expect(unlinked.statusCode).toBe(200);
+    expect(unlinked.json().teamId).toBeNull();
+
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceId: created.json().id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          before: expect.objectContaining({ teamId: team.id }),
+          after: expect.objectContaining({ teamId: null }),
+        }),
+      ]),
+    );
+  });
+
+  test("rejects a team outside the organization or an unknown team", async ({
+    makeOrganization,
+    makeTeam,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const foreignTeam = await makeTeam(otherOrganization.id, user.id);
+
+    for (const teamId of [foreignTeam.id, crypto.randomUUID()]) {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/service-accounts",
+        payload: { name: `bot-${teamId}`, role: MEMBER_ROLE_NAME, teamId },
+      });
+      expect(created.statusCode).toBe(400);
+    }
+
+    const account = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "unlinked-bot", role: MEMBER_ROLE_NAME },
+    });
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${account.json().id}`,
+      payload: { teamId: foreignTeam.id },
+    });
+    expect(updated.statusCode).toBe(400);
+  });
+
+  test("lets only an org team manager or the team's admin link an account to a team", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const admin = user;
+    const team = await makeTeam(organizationId, admin.id);
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await makeTeamMember(team.id, member.id, { role: "member" });
+    user = member;
+
+    const refused = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "member-bot", role: MEMBER_ROLE_NAME, teamId: team.id },
+    });
+    expect(refused.statusCode).toBe(403);
+
+    const unlinked = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "member-bot", role: MEMBER_ROLE_NAME },
+    });
+    expect(unlinked.statusCode).toBe(200);
+    const refusedUpdate = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${unlinked.json().id}`,
+      payload: { teamId: team.id },
+    });
+    expect(refusedUpdate.statusCode).toBe(403);
+
+    // Promoted to the team's admin, the same member may link it.
+    await TeamModel.removeMember(team.id, member.id);
+    await makeTeamMember(team.id, member.id, { role: "admin" });
+    const linked = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${unlinked.json().id}`,
+      payload: { teamId: team.id },
+    });
+    expect(linked.statusCode).toBe(200);
+    expect(linked.json().teamId).toBe(team.id);
+  });
+
+  test("hides the built-in system account from list, get, update and delete", async () => {
+    const system =
+      await ServiceAccountModel.ensureSystemServiceAccount(organizationId);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().map((a: { id: string }) => a.id)).not.toContain(
+      system.id,
+    );
+
+    const fetched = await app.inject({
+      method: "GET",
+      url: `/api/service-accounts/${system.id}`,
+    });
+    expect(fetched.statusCode).toBe(404);
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${system.id}`,
+      payload: { name: "renamed" },
+    });
+    expect(updated.statusCode).toBe(404);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/service-accounts/${system.id}`,
+    });
+    expect(deleted.statusCode).toBe(404);
+    expect(
+      await ServiceAccountModel.findAccount(system.id, organizationId),
+    ).toMatchObject({ id: system.id, isSystem: true });
   });
 });
 

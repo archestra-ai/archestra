@@ -474,7 +474,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           tokenValue: "test-token",
           tokenId: "test-token-id",
           teamId: null,
-          isOrganizationToken: true,
+          isOrganizationToken: false,
         },
         considerContextUntrusted: false,
         repeatTracker: new ToolCallRepeatTracker(),

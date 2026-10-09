@@ -254,7 +254,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Get user info - for user tokens we have userId, for team tokens we use system context
+      // Who the turn runs as: the token's user, or the service account
       let userId: string;
       const organizationId = tokenAuth.organizationId;
 

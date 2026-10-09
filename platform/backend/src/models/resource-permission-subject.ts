@@ -366,7 +366,9 @@ export default class ResourcePermissionSubjectModel {
           organizationId: params.organizationId,
           teamId: account.teamId,
         });
-        subjects.push(...teams.map(({ id }) => ({ type: "team" as const, id })));
+        subjects.push(
+          ...teams.map(({ id }) => ({ type: "team" as const, id })),
+        );
       }
       identifiers = account.role.split(",");
     } else {

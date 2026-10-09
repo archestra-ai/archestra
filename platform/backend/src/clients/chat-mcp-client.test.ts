@@ -15,7 +15,7 @@ import { jsonSchema, type Tool } from "ai";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
-import { AgentModel, TeamTokenModel } from "@/models";
+import { AgentModel, ServiceAccountModel } from "@/models";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
@@ -347,7 +347,6 @@ describe("chat-mcp-client health check", () => {
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({});
       await makeTeamMember(team.id, user.id);
-      await TeamTokenModel.createTeamToken(team.id, team.name);
 
       const cacheKey = chatClient.__test.getCacheKey(
         agent.id,
@@ -406,7 +405,6 @@ describe("chat-mcp-client health check", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -460,7 +458,6 @@ describe("chat-mcp-client health check", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -521,7 +518,6 @@ describe("chat-mcp-client health check", () => {
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({});
       await makeTeamMember(team.id, user.id);
-      await TeamTokenModel.createTeamToken(team.id, team.name);
 
       const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
       chatClient.clearChatMcpClient(agent.id);
@@ -581,7 +577,6 @@ describe("getChatMcpTools failure-vs-empty contract", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -1084,7 +1079,6 @@ describe("chat-mcp-client tool caching", () => {
     await makeTeamMember(team.id, user.id);
 
     // Create team token for the team
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
 
@@ -1152,7 +1146,6 @@ describe("chat-mcp-client tool caching", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -1783,7 +1776,10 @@ describe("getChatMcpClient", () => {
       rawToken: "external-idp-jwt",
     });
 
-    const teamTokenSpy = vi.spyOn(TeamTokenModel, "findAll");
+    const platformTokenSpy = vi.spyOn(
+      ServiceAccountModel,
+      "ensurePlatformTokenValue",
+    );
 
     const agentId = crypto.randomUUID();
     const userId = crypto.randomUUID();
@@ -1798,7 +1794,7 @@ describe("getChatMcpClient", () => {
     );
 
     expect(client).not.toBeNull();
-    expect(teamTokenSpy).not.toHaveBeenCalled();
+    expect(platformTokenSpy).not.toHaveBeenCalled();
 
     const [, options] = vi.mocked(StreamableHTTPClientTransport).mock
       .calls[0] as [URL, { requestInit?: RequestInit }];
@@ -2772,49 +2768,7 @@ describe("throwIfApprovalRequired", () => {
 });
 
 describe("selectMCPGatewayToken synthetic principals", () => {
-  test("service-account principal does not mint a personal user token and falls back to the org token", async ({
-    makeOrganization,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id });
-    await TeamTokenModel.create({
-      organizationId: org.id,
-      isOrganizationToken: true,
-      name: "Org Token",
-    });
-
-    const result = await chatClient.selectMCPGatewayToken(
-      agent.id,
-      `service-account:${crypto.randomUUID()}`,
-      org.id,
-    );
-
-    expect(result).toMatchObject({ isOrganizationToken: true });
-
-    // No personal user token row may be created for the synthetic principal
-    // (previously this path failed on the user_id foreign key).
-    const userTokens = await db.select().from(schema.userTokensTable);
-    expect(userTokens).toHaveLength(0);
-  });
-
-  test("service-account principal without any org token gets null instead of an error", async ({
-    makeOrganization,
-    makeAgent,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id });
-
-    const result = await chatClient.selectMCPGatewayToken(
-      agent.id,
-      `service-account:${crypto.randomUUID()}`,
-      org.id,
-    );
-
-    expect(result).toBeNull();
-  });
-
-  test("team actor uses its own team token over the org token", async ({
+  test("a service-account principal presents its own platform token, never a personal one", async ({
     makeOrganization,
     makeUser,
     makeTeam,
@@ -2824,28 +2778,90 @@ describe("selectMCPGatewayToken synthetic principals", () => {
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({ organizationId: org.id });
-
-    await TeamTokenModel.create({
+    const account = await ServiceAccountModel.create({
       organizationId: org.id,
-      isOrganizationToken: true,
-      name: "Org Token",
+      name: "automation",
+      role: "member",
+      teamId: team.id,
+      createdBy: null,
     });
-    const { token: teamToken } = await TeamTokenModel.createTeamToken(
-      team.id,
-      team.name,
+
+    const first = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      `service-account:${account.id}`,
+      org.id,
     );
+    const again = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      `service-account:${account.id}`,
+      org.id,
+    );
+
+    expect(first).toMatchObject({
+      serviceAccountId: account.id,
+      teamId: team.id,
+      isOrganizationToken: false,
+    });
+    expect(again?.tokenValue).toBe(first?.tokenValue);
+    // No personal user token row may be created for the synthetic principal
+    // (that path fails on the user_id foreign key).
+    const userTokens = await db.select().from(schema.userTokensTable);
+    expect(userTokens).toHaveLength(0);
+    // The platform token is the account's to use, not one of its listed keys.
+    expect(
+      (await ServiceAccountModel.findById(account.id, org.id))?.tokens,
+    ).toEqual([]);
+  });
+
+  test("a disabled or unknown service account gets no token", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const account = await ServiceAccountModel.create({
+      organizationId: org.id,
+      name: "retired",
+      role: "member",
+      createdBy: null,
+    });
+    await ServiceAccountModel.update(account.id, org.id, { disabled: true });
+
+    expect(
+      await chatClient.selectMCPGatewayToken(
+        agent.id,
+        `service-account:${account.id}`,
+        org.id,
+      ),
+    ).toBeNull();
+    expect(
+      await chatClient.selectMCPGatewayToken(
+        agent.id,
+        `service-account:${crypto.randomUUID()}`,
+        org.id,
+      ),
+    ).toBeNull();
+  });
+
+  test("the system sentinel acts as the organization's hidden built-in account", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
 
     const result = await chatClient.selectMCPGatewayToken(
       agent.id,
       "system",
       org.id,
-      team.id,
     );
+    const system = await ServiceAccountModel.ensureSystemServiceAccount(org.id);
 
-    expect(result).toMatchObject({
-      tokenId: teamToken.id,
-      teamId: team.id,
-      isOrganizationToken: false,
-    });
+    expect(result).toMatchObject({ serviceAccountId: system.id });
+    expect(
+      (await ServiceAccountModel.listByOrganizationId(org.id)).map(
+        (account) => account.id,
+      ),
+    ).not.toContain(system.id);
   });
 });

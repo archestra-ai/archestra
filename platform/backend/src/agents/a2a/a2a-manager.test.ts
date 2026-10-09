@@ -313,7 +313,7 @@ describe("A2AManager.sendMessage", () => {
     expect(executeA2AMessage.mock.calls[0][0].message).toBe("first\nsecond");
   });
 
-  test("a team actor passes its team id to execution", async ({
+  test("a service-account actor runs the turn as that account", async ({
     makeAgent,
   }) => {
     const agent = await makeAgent({ name: "agent1" });
@@ -329,7 +329,7 @@ describe("A2AManager.sendMessage", () => {
     });
 
     await manager.sendMessage({
-      actor: { id: "team1", kind: "team", organizationId: "org1" },
+      actor: { id: "sa1", kind: "serviceAccount", organizationId: "org1" },
       agentId: agent.id,
       request: {
         message: {
@@ -344,8 +344,7 @@ describe("A2AManager.sendMessage", () => {
 
     expect(executeA2AMessage).toHaveBeenCalledTimes(1);
     const call = executeA2AMessage.mock.calls[0][0];
-    expect(call.userId).toBe("system");
-    expect(call.actorTeamId).toBe("team1");
+    expect(call.userId).toBe("service-account:sa1");
   });
 
   test("a blank text part does not pad the joined turn", async ({

@@ -63,8 +63,9 @@ async function listed(params: {
       : {
           tokenId: crypto.randomUUID(),
           teamId: null,
-          isOrganizationToken: true,
+          isOrganizationToken: false,
           organizationId: params.organizationId,
+          serviceAccountId: crypto.randomUUID(),
         },
   });
   const handler = (

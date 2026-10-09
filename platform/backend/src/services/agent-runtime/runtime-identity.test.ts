@@ -6,6 +6,7 @@ import {
   A2ATaskModel,
   AgentRunModel,
   AgentWorkspaceModel,
+  ServiceAccountModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { openappaActor, scopedSessionId } from "@/openappa/actor";
@@ -28,7 +29,7 @@ const SECRET = "test-runtime-binding-secret-32chars";
 async function persistWorkspace(params: {
   organizationId: string;
   agentId: string;
-  actorKind: "user" | "team" | "organization" | "system";
+  actorKind: "user" | "team" | "organization" | "serviceAccount" | "system";
   actorId: string;
   actorUserId?: string | null;
   workloadName?: string;
@@ -321,20 +322,29 @@ describe("runtime OpenAPPA identity", () => {
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const actorId = randomUUID();
+    const account = await ServiceAccountModel.create({
+      organizationId: org.id,
+      name: "runner",
+      role: "member",
+      createdBy: null,
+    });
+    const actorId = account.id;
     const owned = await persistWorkspace({
       organizationId: org.id,
       agentId: agent.id,
-      actorKind: "team",
+      actorKind: "serviceAccount",
       actorId,
     });
     const sibling = await persistWorkspace({
       organizationId: org.id,
       agentId: agent.id,
-      actorKind: "team",
+      actorKind: "serviceAccount",
       actorId,
     });
-    const otherTeam = randomUUID();
+    const otherAccount = randomUUID();
+    const systemAccount = await ServiceAccountModel.ensureSystemServiceAccount(
+      org.id,
+    );
     const binding = issueRuntimeBinding({
       secret: SECRET,
       organizationId: org.id,
@@ -342,15 +352,12 @@ describe("runtime OpenAPPA identity", () => {
       workloadName: owned.workspace.workloadName,
       taskId: owned.task.id,
       agentId: agent.id,
-      actorKind: "team",
+      actorKind: "serviceAccount",
       actorId,
       expiresAt: Date.now() + 60_000,
     });
     if (!binding) throw new Error("runtime binding was not issued");
-    const token = {
-      teamId: actorId,
-      isOrganizationToken: false,
-    };
+    const token = { serviceAccountId: actorId };
 
     expect(
       await resolveGatewayRuntimeSession({
@@ -391,7 +398,7 @@ describe("runtime OpenAPPA identity", () => {
       await resolveGatewayRuntimeSession({
         organizationId: org.id,
         agentId: agent.id,
-        token: { teamId: otherTeam, isOrganizationToken: false },
+        token: { serviceAccountId: otherAccount },
         bindingToken: binding,
         secret: SECRET,
         sessionName: owned.workspace.workloadName,
@@ -402,7 +409,7 @@ describe("runtime OpenAPPA identity", () => {
       await resolveGatewayRuntimeSession({
         organizationId: org.id,
         agentId: agent.id,
-        token: { teamId: null, isOrganizationToken: true },
+        token: { serviceAccountId: systemAccount.id },
         bindingToken: binding,
         secret: SECRET,
       }),

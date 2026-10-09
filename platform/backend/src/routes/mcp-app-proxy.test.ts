@@ -27,12 +27,7 @@ import { vi } from "vitest";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
 import db, { schema } from "@/database";
-import {
-  AppDataModel,
-  AppModel,
-  TeamTokenModel,
-  UserTokenModel,
-} from "@/models";
+import { AppDataModel, AppModel, UserTokenModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import {
   appConnectorAudienceRef,
@@ -996,15 +991,13 @@ describe("mcpAppProxyRoutes POST /api/mcp/app/:appId", () => {
     ).toMatchObject({ value: { v: 1 } });
   });
 
-  test("rejects an organization token (no viewer) with a clear error", async ({
+  test("rejects a service-account token (no viewer) with a clear error", async ({
     makeApp,
+    makeServiceAccountToken,
   }) => {
     const created = await makeApp();
-    const { value } = await TeamTokenModel.create({
+    const { value } = await makeServiceAccountToken({
       organizationId: created.organizationId,
-      teamId: null,
-      isOrganizationToken: true,
-      name: "Org Token",
     });
     app = await buildBearerApp();
 

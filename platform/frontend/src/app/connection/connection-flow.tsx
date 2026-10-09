@@ -154,7 +154,6 @@ export function ConnectionFlow({
           selectedMcp && effectiveMcpId ? (
             <McpClientInstructions
               client={manualClient}
-              gatewayId={effectiveMcpId}
               gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
               gatewayName={selectedMcp.name}
               isPersonalGateway={selectedMcp.isPersonalGateway}

@@ -139,7 +139,6 @@ const MOTION_CSS = `
 
 export function ConnectPage() {
   usePageTitle("Connect");
-  const data = useConnectPageData();
   const connected = useConnectedAgents();
   // Same access as the Agent connections log it links to.
   const { data: canSeeStatistics } = useHasPermissions(
@@ -150,6 +149,7 @@ export function ConnectPage() {
   const searchParams = useSearchParams();
   const updateUrlParams = useUpdateUrlParams();
   const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
+  const data = useConnectPageData(pickedId);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   // What the user leaves out, per agent. The copied command (or prompt, for
@@ -180,7 +180,7 @@ export function ConnectPage() {
   const parts = data.partsFor(client);
   const routed = parts.proxy && choices.proxy;
   const servers = choices.tools ? data.servers : [];
-  const tools = servers.reduce((n, s) => n + s.toolCount, 0);
+  const tools = choices.tools ? data.totalTools : 0;
   const skills = data.skillsEnabled ? skillsSorted : [];
   const plugins = parts.plugins ? data.pluginsFor(client) : [];
   const prompt = data.connectPrompt(client, choices);
@@ -1131,7 +1131,7 @@ function ProfileCard({
   plugins: ConnectPlugin[];
   pluginsOff: boolean;
   servers: ConnectServer[];
-  tools: number;
+  tools: number | null;
   choices: ConnectChoices;
   onChoice: (part: keyof ConnectChoices, value: boolean) => void;
   /** Opens a dialog; for servers and skills, on one row's item. */
@@ -1247,25 +1247,31 @@ function ProfileCard({
           )}
         >
           <li className="relative min-w-0">
-            {data.servers.length === 0 ? (
+            {data.servers.length === 0 && tools === 0 ? (
               <ListBlock
                 icon={<Wrench />}
                 title="MCP servers"
-                sub="none yet"
+                sub="0 tools"
                 muted
-                empty="Your admin hasn't added any MCP servers yet. Their tools show up here."
+                empty="No tools are available to your account through this gateway."
               />
             ) : (
               <ListBlock
                 icon={<Wrench />}
                 title={`${fmt(servers.length)} MCP ${plural(servers.length, "server")}`}
-                // Many tools reads as a cost; on demand says it isn't.
-                sub={`${fmt(tools)} ${plural(tools, "tool")}${data.progressive ? ", loaded on demand" : ""}`}
+                sub={
+                  tools === null
+                    ? data.toolPreviewError
+                      ? "Tool counts unavailable"
+                      : "Loading tool counts…"
+                    : `${fmt(tools)} ${plural(tools, "tool")}${data.progressive ? " loaded, more on demand" : ""}`
+                }
                 // The context cost sits on the header, across from the count.
                 aside={
-                  tools > 0 && data.toolTokens?.total ? (
+                  tools !== null && tools > 0 && data.toolTokens ? (
                     <ToolLoadingNote
                       progressive={data.progressive}
+                      clientId={client.id}
                       tools={tools}
                       tokens={data.toolTokens.total}
                     />
@@ -1529,10 +1535,12 @@ function ListRow({
 
 /** What the included tools cost in context, beside the servers' header. */
 function ToolLoadingNote({
+  clientId,
   progressive,
   tools,
   tokens,
 }: {
+  clientId: string;
   progressive: boolean;
   tools: number;
   /** Estimated tokens of the tool list the agent starts with. */
@@ -1550,12 +1558,13 @@ function ToolLoadingNote({
       {label}
       <InfoTip label="How tools load">
         {progressive
-          ? "Your agent starts with a small fixed set of tools and finds the rest when a task needs them. Adding servers doesn't grow it."
+          ? `Your agent starts with ${fmt(tools)} ${plural(tools, "tool")} and finds more when a task needs them.`
           : `All ${fmt(tools)} ${plural(tools, "tool")} load at the start of each session. More tools take more of your agent's working memory.`}
         <span hidden={!tokens}>
           {" "}
-          The token count is an estimate; your agent's model may count a little
-          differently.
+          {clientId === "claude-code"
+            ? "Uses Claude Code's local fallback estimate, including its tool names and description limit. Its provider-measured count, tool search settings, and other connections can differ."
+            : "Estimated from this gateway's tool definitions. Your agent's formatting, model, and other connections can change the count."}
         </span>
       </InfoTip>
     </span>

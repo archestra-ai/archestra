@@ -651,8 +651,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
-  // Tool exclusions: agent-type read/update permission checked dynamically in handler
+  // Tool previews/exclusions: agent-type read/update permission checked in handler
   [RouteId.GetAgentToolExclusions]: {},
+  [RouteId.GetAgentMcpToolPreview]: {},
   [RouteId.UpdateAgentToolExclusions]: {},
   // Subagent (delegation-target) exclusions: agent-type read/update permission checked dynamically in handler
   [RouteId.GetAgentSubagentExclusions]: {},

@@ -23,8 +23,8 @@ vi.mock("@/lib/agent.query", () => ({
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),
 }));
-vi.mock("@/lib/chat/chat.query", () => ({
-  useChatProfileMcpTools: () => ({ data: undefined }),
+vi.mock("@/lib/mcp/gateway-tool-preview.query", () => ({
+  useGatewayToolPreview: () => ({ data: undefined }),
 }));
 vi.mock("@/lib/config/config.query", () => ({
   useConfig: () => ({ data: undefined }),

@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * An MCP server a client connected on its own, seen through the tools the LLM
  * proxy observed it declaring: one per label in the organization, whichever
- * clients declared it. Its id, `detected.<label>`, is also the alias target a
+ * clients declared it. Its id, `observed.<label>`, is also the alias target a
  * policy names to govern it.
  */
 export const DetectedMcpServerSchema = z.object({

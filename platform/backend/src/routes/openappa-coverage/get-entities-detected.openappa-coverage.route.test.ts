@@ -80,9 +80,9 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
         ],
       ),
     ).toEqual([
-      ["detected_mcp_server", "detected.github", "github", 1],
-      ["detected_mcp_server", "detected.linear", "linear", 1],
-      ["detected_mcp_server", "detected.slack", "slack", 2],
+      ["detected_mcp_server", "observed.github", "github", 1],
+      ["detected_mcp_server", "observed.linear", "linear", 1],
+      ["detected_mcp_server", "observed.slack", "slack", 2],
     ]);
   });
 
@@ -118,14 +118,14 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
       first.data.map((row: { type: string; id: string }) => [row.type, row.id]),
     ).toEqual([
       ["mcp_server", catalog.id],
-      ["detected_mcp_server", "detected.linear"],
+      ["detected_mcp_server", "observed.linear"],
     ]);
     expect(
       second.data.map((row: { type: string; id: string }) => [
         row.type,
         row.id,
       ]),
-    ).toEqual([["detected_mcp_server", "detected.slack"]]);
+    ).toEqual([["detected_mcp_server", "observed.slack"]]);
 
     const registryOnly = (
       await ctx.app.inject({
@@ -145,7 +145,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
       })
     ).json();
     expect(searched.data.map((row: { id: string }) => row.id)).toEqual([
-      "detected.slack",
+      "observed.slack",
     ]);
   });
 
@@ -169,7 +169,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     });
 
     expect(response.json().data).toMatchObject([
-      { id: "detected.slack", toolCount: 1 },
+      { id: "observed.slack", toolCount: 1 },
     ]);
   });
 
@@ -251,7 +251,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     });
 
     expect(response.json().data).toMatchObject([
-      { id: "detected.slack", toolCount: 1 },
+      { id: "observed.slack", toolCount: 1 },
     ]);
   });
 });

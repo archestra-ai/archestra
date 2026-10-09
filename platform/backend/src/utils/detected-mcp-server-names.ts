@@ -26,10 +26,10 @@ export function parseDetectedToolName(
 }
 
 /** The prefix of every detected server's id. */
-const DETECTED_SERVER_ID_PREFIX = "detected.";
+const DETECTED_SERVER_ID_PREFIX = "observed.";
 
 /**
- * `detected.<label>`: the detected server's id and its alias target. The
+ * `observed.<label>`: the observed server's id and its alias target. The
  * prefix keeps it apart from a gateway server of the same label.
  */
 export function detectedServerId(label: string): string {
@@ -37,7 +37,7 @@ export function detectedServerId(label: string): string {
 }
 
 /**
- * A label is valid when `detected.<label>` is a segment OpenAPPA's alias
+ * A label is valid when `observed.<label>` is a segment OpenAPPA's alias
  * grammar accepts: ASCII letters, digits, `_`, `.`, `-`, and no `__`, which
  * the runtime reads as a server/tool separator. Invalid labels are never
  * normalised; the row is skipped.

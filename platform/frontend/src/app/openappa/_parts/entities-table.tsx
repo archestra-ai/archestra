@@ -6,7 +6,7 @@ import {
   ChevronDown,
   ChevronUp,
   MessageCircle,
-  Radar,
+  Network,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
@@ -120,7 +120,7 @@ export function EntitiesTable() {
           return isDetected(entity) ? (
             // Laid out like the registry rows' button: icon, then name.
             <span className="flex min-w-0 items-center gap-2">
-              <Radar className="size-4 shrink-0 text-muted-foreground" />
+              <Network className="size-4 shrink-0 text-muted-foreground" />
               <span className="flex min-w-0 flex-col">
                 <span className="truncate" title={entity.name}>
                   {entity.name}
@@ -152,7 +152,7 @@ export function EntitiesTable() {
         size: 210,
         cell: ({ row }) =>
           isDetected(row.original) ? (
-            <span>Detected</span>
+            <span>Observed</span>
           ) : (
             <span className="flex items-center gap-2">
               <span>{entityTypeLabel(row.original.type)}</span>
@@ -258,7 +258,7 @@ export function EntitiesTable() {
             items={[
               { value: DEFAULT_FILTER_ALL, label: "All types" },
               { value: "mcp_server", label: "MCP server" },
-              { value: "detected", label: "Detected" },
+              { value: "detected", label: "Observed" },
             ]}
           />
         </FilterBar>

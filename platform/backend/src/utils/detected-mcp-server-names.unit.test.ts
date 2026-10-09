@@ -37,7 +37,7 @@ describe("parseDetectedToolName", () => {
 });
 
 describe("detectedServerId", () => {
-  test("prefixes the label with detected, whichever client declared it", () => {
-    expect(detectedServerId("my.server")).toBe("detected.my.server");
+  test("prefixes the label with observed, whichever client declared it", () => {
+    expect(detectedServerId("my.server")).toBe("observed.my.server");
   });
 });

@@ -61,7 +61,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
    - \`unrouted\`: no tool rule uses this organization-wide battery's annotator.
    - \`refused\`: the runtime rejected the composition.
 
-   Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused while Guardrails v2 is on, proxied requests fail closed; do not claim the new text or a previous policy is enforced.
+   Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` keeps the last composition that opened, if one did; do not claim the new text is enforced.
 2. List deployments with \`archestra__list_mcp_server_deployments\`. It lists only deployments the user can read: in the calling agent's environment, or across environments for the built-in configuration agent. A server selected from Coverage can belong to another environment; keep its Catalog ID.
 3. For each distinct Catalog ID in scope, call \`archestra__inspect_guardrails_server\` with \`{ "mcpServerId": "<Catalog ID>" }\` (not the deployment ID). Add \`"detail": "full"\` with \`"tools": ["<name>"]\` before you write a rule on a tool's arguments, and follow \`nextOffset\` for more rows. State the inspection's scope and report any server you could not inspect; do not claim complete coverage from a partial inventory.
 4. Call \`archestra__search_tools\` for the tools visible to the calling agent.
@@ -101,7 +101,7 @@ export const ADJUST_WORKFLOW = `# Adjust the current config (\`adjust\`)
 
 Start from the operator's requested outcome, not a full tool rescan. Approval and publishing follow **Approval in Archestra** and **Publish** in the skill body. If the outcome is ambiguous, ask one focused question and wait.
 
-An ordinary, concrete behavior change normally keeps one small intent check, as \`references/validation.md\` describes; then preview, approve, and publish the policy and the check together there. Skip it when the operator asks, and for policy-only requests.
+An ordinary, concrete behavior change normally keeps one small intent check, as \`references/validation.md\` describes; then preview, approve, and publish the policy and the check together there, with the complete policy text rather than \`edits\`. Skip it when the operator asks, and for policy-only requests.
 
 1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\`, \`revision\`, \`delivery\`, and \`effective\`.
 2. For syntax or rules the current config does not show, load the \`references/contracts.md\` index and the part it names, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\`, \`"detail": "full"\`, and \`"tools"\` naming it, unless this conversation already has that result.

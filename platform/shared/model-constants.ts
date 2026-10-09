@@ -910,7 +910,7 @@ export const PROVIDER_MODEL_TIERS: Record<
   deepseek: { normal: "deepseek-v4-pro" },
   bedrock: {
     fast: "claude-haiku-5-5",
-    normal: "anthropic.claude-opus-4-8",
+    normal: "anthropic.claude-sonnet-5-5",
     smart: "claude-opus-5-5",
   },
   minimax: { normal: "MiniMax-M3" },

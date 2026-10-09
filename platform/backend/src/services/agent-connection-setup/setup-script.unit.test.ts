@@ -926,8 +926,6 @@ ${binary} "$@"
       // Secrets are injected.
       expect(script).toContain(PROXY.virtualKey);
       expect(script).toContain(SKILLS.cloneUrl);
-      // Revocation guidance present.
-      expect(script).toContain(PROXY.virtualKeyName);
       expect(script).toContain(SKILLS.marketplaceName);
     });
 
@@ -2572,8 +2570,6 @@ describe("renderSetupScript (windows)", () => {
       // Secrets are injected.
       expect(script).toContain(PROXY.virtualKey);
       expect(script).toContain(SKILLS.cloneUrl);
-      // Revocation guidance present.
-      expect(script).toContain(PROXY.virtualKeyName);
       expect(script).toContain(SKILLS.marketplaceName);
     });
 
@@ -3179,13 +3175,10 @@ describe("migrating a gateway registered under an older name", () => {
 });
 
 describe("ending", () => {
-  test("links to the disconnect steps and hands the installer the commands", () => {
-    const script = renderSetupScript({
-      ...fullContext("claude-code"),
-      connectPageUrl: "https://archestra.example.com/connection",
-    });
+  test("ends on the launch command and hands the installer the commands", () => {
+    const script = renderSetupScript(fullContext("claude-code"));
     expect(script).toContain(
-      "Disconnect anytime: https://archestra.example.com/connection?clientId=claude-code&disconnect=1",
+      "Next: open a new terminal and run:\n\n  claude 'What can you do with my Archestra tools?'\nARCHESTRA_NEXT",
     );
     // Run on its own, the script prints the ending; the installer reads it
     // from the marker instead.

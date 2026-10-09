@@ -94,11 +94,6 @@ export interface SetupScriptContext {
   skills: SetupScriptSkillsSection | null;
   /** Copied locally by setup, never fetched from the platform at launch. */
   runtimeHandoffInstructions?: string | null;
-  /**
-   * The Connect page, e.g. https://host/connection. The ending links to its
-   * disconnect steps; without it the ending says what to revoke instead.
-   */
-  connectPageUrl?: string | null;
 }
 
 /** One script language's renderer for an agent. */
@@ -149,8 +144,6 @@ export interface SetupEnding {
   /** `text` is `command` quoted for the person's shell. */
   launch: { command: string[]; text: string } | null;
   notes: string[];
-  /** Where to disconnect, or what to revoke; null when nothing to undo. */
-  disconnect: string | null;
 }
 
 /**

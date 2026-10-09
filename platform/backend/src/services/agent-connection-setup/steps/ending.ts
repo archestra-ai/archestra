@@ -74,7 +74,6 @@ export function buildEnding(
       ? { command: agent.launch, text: quote(agent.launch) }
       : null,
     notes: agent.notes ?? [],
-    disconnect: disconnectLine(ctx),
   };
 }
 
@@ -83,29 +82,6 @@ function defaultProxyDetail(ctx: SetupScriptContext, label: string): string {
   if (!ctx.proxy) return base;
   if (ctx.proxy.virtualKey) return `${base} with a virtual key made for you`;
   return `${base}; your ${ctx.proxy.providerLabel} sign-in is unchanged`;
-}
-
-function disconnectLine(ctx: SetupScriptContext): string | null {
-  if (ctx.connectPageUrl) {
-    const url = new URL(ctx.connectPageUrl);
-    url.searchParams.set("clientId", ctx.clientId);
-    url.searchParams.set("disconnect", "1");
-    return `Disconnect anytime: ${url.toString()}`;
-  }
-  const revocation: string[] = [];
-  if (ctx.proxy?.virtualKeyName) {
-    revocation.push(
-      `delete the "${ctx.proxy.virtualKeyName}" key on the Virtual API Keys page`,
-    );
-  }
-  if (ctx.skills) {
-    revocation.push(
-      `revoke the "${ctx.skills.marketplaceName}" marketplace share link`,
-    );
-  }
-  return revocation.length > 0
-    ? `To disconnect later in ${ctx.appName}: ${revocation.join("; ")}.`
-    : null;
 }
 
 /** A command as the person would type it in their shell. */
@@ -131,13 +107,6 @@ export function renderEndingText(ending: SetupEnding): string {
       ),
     );
   }
-  if (ending.signIn) {
-    lines.push(
-      "",
-      `Sign in to ${ending.appName} tools:`,
-      `  ${ending.signIn.text}`,
-    );
-  }
   if (ending.notes.length > 0) {
     lines.push(
       "",
@@ -145,13 +114,19 @@ export function renderEndingText(ending: SetupEnding): string {
       ...ending.notes.map((note) => `  - ${note}`),
     );
   }
+  if (ending.signIn) {
+    lines.push(
+      "",
+      `Sign in to ${ending.appName} tools:`,
+      `  ${ending.signIn.text}`,
+    );
+  }
   lines.push(
     "",
-    ending.launch
-      ? `You're all set. Open a new terminal and start ${ending.label} with a first question for it:\n  ${ending.launch.text}`
-      : `You're all set. Open ${ending.label} to start using ${ending.appName}.`,
+    ...(ending.launch
+      ? ["Next: open a new terminal and run:", "", `  ${ending.launch.text}`]
+      : [`Next: open ${ending.label} to start using ${ending.appName}.`]),
   );
-  if (ending.disconnect) lines.push("", ending.disconnect);
   return lines.join("\n");
 }
 

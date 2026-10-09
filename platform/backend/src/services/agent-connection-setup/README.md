@@ -25,13 +25,13 @@ routes render inside their claim transaction, and tests assert exact output.
 4. **Render.** `renderSetupScript` (`index.ts`) picks the agent module for
    `ctx.clientId`. It renders bash for macOS and Linux and PowerShell for
    Windows: the shared header, the agent's sections, then the shared ending
-   (`steps/ending.ts`): what was set up, the sign-in, a launch command with a
-   first prompt, and a link to the disconnect steps.
+   (`steps/ending.ts`): what was set up, the sign-in, and last, a command that
+   starts the agent with a first question.
 5. **Run.** The installer saves the script to a private temporary directory,
    runs it with bash or PowerShell, and deletes it. The script registers the
    gateway, routes the proxy, installs skills, and installs the startup guard.
    The installer then prints the ending itself and, in a terminal, offers to
-   run the sign-in and start the agent. A script run on its own prints the
+   run the sign-in. A script run on its own prints the
    ending as text.
 
 Claude Desktop takes its own path. `agents/claude-desktop.ts` renders a Python

@@ -10,7 +10,6 @@ import {
   startupGuardStem,
 } from "@archestra/shared/connection-setup";
 import { ChevronDown, History, Unplug } from "lucide-react";
-import { useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
@@ -59,7 +58,6 @@ import {
 } from "./connect-page-parts";
 import { readsPrompts } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
-import { useUpdateUrlParams } from "./use-update-url-params";
 
 /** No traffic for this long and the agent reads as idle in Manage. */
 const IDLE_DAYS = 7;
@@ -359,16 +357,7 @@ export function DisconnectLine({
   picked: ConnectClient;
   agents: ConnectedAgent[];
 }) {
-  // The installer's "Disconnect anytime" link opens the steps (?disconnect=1).
-  const searchParams = useSearchParams();
-  const updateUrlParams = useUpdateUrlParams();
-  const [howTo, setHowTo] = useState(
-    () => searchParams.get("disconnect") === "1",
-  );
-  const showHowTo = (open: boolean) => {
-    setHowTo(open);
-    if (!open) updateUrlParams({ disconnect: null });
-  };
+  const [howTo, setHowTo] = useState(false);
   return (
     <span className="text-xs text-muted-foreground">
       You can disconnect at any time ·{" "}
@@ -388,7 +377,7 @@ export function DisconnectLine({
         data={data}
         picked={picked}
         open={howTo}
-        onOpenChange={showHowTo}
+        onOpenChange={setHowTo}
       />
     </span>
   );

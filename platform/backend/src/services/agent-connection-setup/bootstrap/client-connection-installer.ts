@@ -246,10 +246,9 @@ function finishSetup(ending, platform) {
       } else console.log('  ' + ending.signIn.text);
     }
   } finally { if (terminal !== null) closeSync(terminal); }
-  console.log('\n' + paint('1;32', "You're all set.") + ' ' + (ending.launch
-    ? 'Open a new terminal and start ' + ending.label + ' with a first question for it:\n  ' + ending.launch.text
-    : 'Open ' + ending.label + ' to start using ' + ending.appName + '.'));
-  if (ending.disconnect) console.log('\n' + ending.disconnect);
+  // The command is the last thing printed, so it is the first thing seen.
+  if (ending.launch) console.log('\n' + paint('1', 'Next: open a new terminal and run:') + '\n\n  ' + paint('1;36', ending.launch.text));
+  else console.log('\n' + paint('1', 'Next: open ' + ending.label + ' to start using ' + ending.appName + '.'));
 }
 // stdin is the download pipe, so questions go to the terminal itself.
 function openTerminal() {

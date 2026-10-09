@@ -1205,7 +1205,6 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       clientId: setup.clientId,
       platform: setup.platform,
       appName,
-      connectPageUrl: `${config.frontendBaseUrl}/connection`,
       toolPrefix: archestraMcpBranding.toolPrefix,
       mcp,
       proxy,

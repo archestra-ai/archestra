@@ -244,6 +244,10 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
     svg: ANTIGRAVITY_PATH,
     iconColor: "#3186ff",
     tileBg: "#eef4ff",
+    proxy: {
+      kind: "unsupported",
+      reason: "Antigravity sends its model requests to its own service.",
+    },
   },
   {
     id: "droid",

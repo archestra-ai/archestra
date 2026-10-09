@@ -603,6 +603,8 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route.
    */
   [RouteId.GetConnectionHealth]: {},
+  // Installation credential and live access are checked by the refresh handler.
+  [RouteId.GetConnectionInstructions]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)

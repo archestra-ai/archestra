@@ -60,7 +60,7 @@ A limit blocks matching requests once spend reaches it. Requests run again when 
 3. Pick models, or **All models**.
 4. Enter **Limit value ($)**, choose the **Cleanup interval**, and click **Create limit**.
 
-Use an organization limit for a shared budget across all LLM requests, including proxy traffic.
+Use an organization limit to cap total LLM spend.
 
 The table shows each limit's use so far, and when it resets.
 

@@ -6,8 +6,10 @@ import {
   INLINE_TEXT_MAX_BYTES,
   type InteractionSource,
   isInlineableTextMimeType,
+  type ModelSelection,
   PLAYWRIGHT_MCP_CATALOG_ID,
   requiresOpenAiResponsesApi,
+  type SubagentModelTier,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ModelMessage, UIMessage, UIMessageChunk, UserContent } from "ai";
@@ -62,7 +64,10 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import type { ChatMessage } from "@/types";
-import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
+import {
+  resolveConversationLlmSelectionForAgent,
+  resolveSubagentTierSelection,
+} from "@/utils/llm-resolution";
 import {
   stripThinkingBlocks,
   THINKING_ONLY_NOTICE,
@@ -132,6 +137,10 @@ export interface A2AExecuteParams {
    * repeat its direct parent in the chain once, and never forks again.
    */
   selfFork?: boolean;
+  /** The model and key the forking parent runs on; a fork starts from it. */
+  parentLlm?: ModelSelection;
+  /** The model tier a fork runs on, relative to `parentLlm`. */
+  tier?: SubagentModelTier;
   /** The child trajectory an OpenAPPA-governed spawn bound this run to. */
   appaSubagent?: SubagentBinding;
   /**
@@ -307,20 +316,16 @@ export async function executeA2AMessage(
   }
 
   const {
+    modelId: resolvedModelId,
     selectedModel,
     selectedProvider: provider,
     chatApiKeyId: resolvedApiKeyId,
-  } = await resolveConversationLlmSelectionForAgent({
-    agent: {
-      llmApiKeyId: agent.llmApiKeyId,
-      modelId: agent.modelId,
-    },
+  } = await resolveRunLlmSelection({
+    agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
     organizationId,
     userId,
-    // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
-    // the user driving the /chat model selector, so they resolve from the
-    // agent's own configuration rather than the caller's personal chat default.
-    includeMemberChatDefault: false,
+    parentLlm: params.parentLlm,
+    tier: params.tier,
   });
   // Run on the key that was selected with the model (the agent's own, or the
   // organization default's). Without it, key lookup prefers the caller's
@@ -360,6 +365,9 @@ export async function executeA2AMessage(
       subagentToolStream,
       repeatTracker,
       appaSubagent: params.appaSubagent,
+      parentLlm: resolvedModelId
+        ? { modelId: resolvedModelId, apiKeyId: llmApiKeyId }
+        : undefined,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({
@@ -1203,6 +1211,41 @@ export async function buildUserContent(
 // ============================================================================
 // Internal helper functions
 // ============================================================================
+
+/**
+ * A fork starts from its parent's model; any run without one resolves from the
+ * agent's own configuration. A2A runs (chatops, scheduled triggers, external
+ * A2A, delegation) are not the user driving the /chat model selector, so the
+ * caller's personal chat default never participates.
+ */
+async function resolveRunLlmSelection(params: {
+  agent: { llmApiKeyId: string | null; modelId: string | null };
+  organizationId: string;
+  userId: string;
+  parentLlm?: ModelSelection;
+  tier?: SubagentModelTier;
+}) {
+  const resolve = (explicit?: ModelSelection) =>
+    resolveConversationLlmSelectionForAgent({
+      agent: params.agent,
+      organizationId: params.organizationId,
+      userId: params.userId,
+      ...(explicit && {
+        explicitModelId: explicit.modelId,
+        explicitApiKeyId: explicit.apiKeyId,
+      }),
+      includeMemberChatDefault: false,
+    });
+
+  const base = await resolve(params.parentLlm);
+  if (!params.tier || !base.modelId || !base.chatApiKeyId) return base;
+  const tiered = await resolveSubagentTierSelection({
+    tier: params.tier,
+    parent: { modelId: base.modelId, apiKeyId: base.chatApiKeyId },
+    organizationId: params.organizationId,
+  });
+  return tiered.modelId === base.modelId ? base : resolve(tiered);
+}
 
 /** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */
 function estimateAttachmentBytes(att: A2AAttachment): number {

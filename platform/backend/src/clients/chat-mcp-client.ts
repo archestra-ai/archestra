@@ -4,6 +4,7 @@ import {
   isBrowserMcpTool,
   LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  type ModelSelection,
   SOURCE_HEADER,
   TimeInMs,
 } from "@archestra/shared";
@@ -855,6 +856,7 @@ export async function getChatMcpTools({
   encryptedChatAudit,
   modelAcceptsImageToolResults,
   appaSubagent,
+  parentLlm,
 }: {
   agentName: string;
   agentId: string;
@@ -941,6 +943,8 @@ export async function getChatMcpTools({
    * one spawn's.
    */
   appaSubagent?: SubagentBinding;
+  /** The model and key this run is on, which a fork starts from. */
+  parentLlm?: ModelSelection;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -967,6 +971,7 @@ export async function getChatMcpTools({
     cached.context.repeatTracker = repeatTracker ?? new ToolCallRepeatTracker();
     cached.context.modelAcceptsImageToolResults =
       modelAcceptsImageToolResults ?? true;
+    cached.context.parentLlm = parentLlm;
     logger.info(
       {
         agentId,
@@ -1103,6 +1108,7 @@ export async function getChatMcpTools({
       // repeat counts never carry across runs.
       repeatTracker: repeatTracker ?? new ToolCallRepeatTracker(),
       appaSubagent,
+      parentLlm,
     };
     const aiTools: Record<string, Tool> = {};
 

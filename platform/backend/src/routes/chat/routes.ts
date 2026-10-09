@@ -950,6 +950,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 organizationId,
                 modelAcceptsImageToolResults:
                   selected.inputModalities?.includes("image") === true,
+                // A per-user provider model has no stored key; the fork then
+                // re-resolves the acting user's own credential for it.
+                parentLlm: conversation.modelId
+                  ? {
+                      modelId: conversation.modelId,
+                      apiKeyId: conversation.chatApiKeyId,
+                    }
+                  : undefined,
                 hookSessionContext,
                 projectInstructions,
                 openedApp,

@@ -992,4 +992,81 @@ describe("self-fork and attested returns", () => {
       }),
     );
   });
+
+  test("only a fork runs on a model tier, starting from the parent's model", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, target } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "m",
+      text: "done",
+      finishReason: "stop",
+    });
+    const parentLlm = {
+      modelId: crypto.randomUUID(),
+      apiKeyId: crypto.randomUUID(),
+    };
+    const context = {
+      userId: user.id,
+      agent: { id: parent.id, name: parent.name },
+      agentId: parent.id,
+      organizationId: organization.id,
+      parentLlm,
+    };
+
+    await executeArchestraTool(
+      SELF_FORK_TOOL_NAME,
+      { message: "Grep the transcripts.", tier: "fast" },
+      context,
+    );
+    expect(mockExecuteA2AMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selfFork: true, tier: "fast", parentLlm }),
+    );
+
+    await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+      { message: "Configure the policy.", tier: "smart" },
+      context,
+    );
+    const specialistRun = mockExecuteA2AMessage.mock.lastCall?.[0];
+    expect(specialistRun).toMatchObject({ agentId: target.id });
+    expect(specialistRun).not.toHaveProperty("tier");
+    expect(specialistRun).not.toHaveProperty("parentLlm");
+  });
+
+  test("rejects an unknown tier", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    const result = await executeArchestraTool(
+      SELF_FORK_TOOL_NAME,
+      { message: "Think hard.", tier: "genius" },
+      {
+        userId: user.id,
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
 });

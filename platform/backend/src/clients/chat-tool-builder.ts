@@ -10,6 +10,7 @@ import {
   isBrowserMcpTool,
   MCP_EXECUTED_AS_META_KEY,
   MCP_HUMAN_RULING_META_KEY,
+  type ModelSelection,
   OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   parseFullToolName,
   platformExecutedAs,
@@ -155,6 +156,8 @@ export interface ChatToolContext {
   repeatTracker: ToolCallRepeatTracker;
   /** Keep rich UI media, but send it to the model only when its row allows it. */
   modelAcceptsImageToolResults: boolean;
+  /** The model and key this run is on, which a fork starts from. Rebound per run. */
+  parentLlm?: ModelSelection;
 }
 
 /**
@@ -450,6 +453,7 @@ export function buildAgentDelegationTool(params: {
             // attributed to this delegation call (options.toolCallId).
             subagentToolStream: ctx.subagentToolStream,
             currentToolCallId: options.toolCallId,
+            parentLlm: ctx.parentLlm,
           });
 
           span.setAttribute(

@@ -273,6 +273,16 @@ export type ConnectionDefaultProviderKeys = z.infer<
   typeof ConnectionDefaultProviderKeysSchema
 >;
 
+/** Per-provider model overrides (models.id) for the `fast` and `smart` subagent tiers. */
+export const SubagentModelTiersSchema = z.partialRecord(
+  SupportedProvidersSchema,
+  z.object({
+    fast: z.string().uuid().optional(),
+    smart: z.string().uuid().optional(),
+  }),
+);
+export type SubagentModelTiers = z.infer<typeof SubagentModelTiersSchema>;
+
 export const OnboardingWizardPageSchema = z.object({
   image: Base64ImageSchema.optional(),
   content: z.string(),
@@ -346,6 +356,7 @@ const extendedFields = {
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
   connectionDefaultProviderKeys: ConnectionDefaultProviderKeysSchema.nullable(),
+  subagentModelTiers: SubagentModelTiersSchema.nullable(),
   // The stored (lenient) shapes: a jsonb value written by an older build must
   // not 500 the organization read.
   popularAgentOverrides: StoredPopularAgentOverridesSchema.nullable(),
@@ -451,6 +462,7 @@ export const UpdateAgentSettingsSchema = z.object({
   defaultModelId: z.string().uuid().nullable().optional(),
   defaultLlmApiKeyId: z.string().uuid().nullable().optional(),
   defaultAgentId: z.string().uuid().nullable().optional(),
+  subagentModelTiers: SubagentModelTiersSchema.nullable().optional(),
 });
 
 export const UpdateKnowledgeSettingsSchema = z.object({

@@ -27,6 +27,7 @@ import type {
   NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
+  SubagentModelTiers,
   TrustedImageRegistries,
 } from "@/types";
 import modelsTable from "./model";
@@ -169,6 +170,9 @@ const organizationsTable = pgTable("organization", {
    * FK to chat_api_keys(id) ON DELETE SET NULL — enforced by migration only (same circular issue).
    */
   defaultLlmApiKeyId: uuid("default_llm_api_key_id"),
+
+  /** Per-provider `fast`/`smart` model overrides for forked subagents. */
+  subagentModelTiers: jsonb("subagent_model_tiers").$type<SubagentModelTiers>(),
 
   /** Default token-cost limit value applied to every organization member. */
   defaultUserLimitValue: integer("default_user_limit_value"),

@@ -974,6 +974,66 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
 };
 
 /**
+ * Model tier a forked subagent runs on. `normal` is the parent's own model;
+ * `smart` and `fast` stay on the parent's provider key and resolve to the
+ * organization's override for that provider, else to the provider default
+ * (`smart` = the best-model markers above, `fast` = FAST_MODEL_PATTERNS).
+ */
+export const SubagentModelTierSchema = z.enum(["fast", "normal", "smart"]);
+export type SubagentModelTier = z.infer<typeof SubagentModelTierSchema>;
+
+/**
+ * Default `fast` subagent tier per provider: substrings matched like
+ * MODEL_MARKER_PATTERNS (first listed pattern present on the key wins).
+ * A provider without an entry runs `fast` forks on the parent's model.
+ */
+export const FAST_MODEL_PATTERNS: Partial<Record<SupportedProvider, string[]>> =
+  {
+    anthropic: ["haiku-5", "haiku-4-5", "haiku"],
+    bedrock: [
+      "claude-haiku-5",
+      "claude-haiku-4-5",
+      "claude-haiku",
+      "nova-lite",
+    ],
+    openai: ["gpt-6-luna", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5-mini"],
+    azure: ["gpt-6-luna", "gpt-5.6-luna", "gpt-5.4-mini", "gpt-5-mini"],
+    gemini: [
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite",
+      "gemini-2.5-flash-lite",
+    ],
+    xai: ["grok-4-fast"],
+    deepseek: ["deepseek-v4-flash"],
+    mistral: ["mistral-small"],
+    openrouter: [
+      "anthropic/claude-haiku",
+      "google/gemini-3.5-flash-lite",
+      "openai/gpt-5.4-mini",
+    ],
+    "github-copilot": ["claude-haiku", "gpt-5-mini"],
+    archestra: ["haiku", "luna", "flash-lite", "mini"],
+  };
+
+/**
+ * The first model whose id contains a pattern, honoring pattern order (first
+ * pattern = highest priority); ties within a pattern go to the lowest id.
+ */
+export function findFirstModelByPatterns<T extends { modelId: string }>(
+  models: T[],
+  patterns: readonly string[],
+): T | undefined {
+  const sorted = [...models].sort((a, b) => a.modelId.localeCompare(b.modelId));
+  for (const pattern of patterns) {
+    const match = sorted.find((m) =>
+      m.modelId.toLowerCase().includes(pattern.toLowerCase()),
+    );
+    if (match) return match;
+  }
+  return undefined;
+}
+
+/**
  * Default model for each provider when no synced "best" model is available.
  * Using Record<SupportedProvider, string> ensures a compile-time error when a new provider is added.
  */

@@ -866,6 +866,7 @@ class OrganizationModel {
         : null,
       defaultLlmProvider: defaultKeyRows[0]?.provider ?? null,
       defaultAgentId: org.defaultAgentId ?? null,
+      subagentModelTiers: org.subagentModelTiers ?? null,
       rerankerModel: org.rerankerModel ?? null,
       ocrModel: org.ocrModel ?? null,
       requireTwoFactor: org.requireTwoFactor,

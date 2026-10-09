@@ -1,6 +1,7 @@
 import {
   AGENT_TOOL_PREFIX,
   SELF_FORK_TOOL_NAME,
+  SubagentModelTierSchema,
   slugify,
 } from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -53,6 +54,16 @@ export const delegationToolArgsSchema = z.object({
 // The canonical delegation input schema, reused for Auto-mode synthesized
 // delegation tools so they are indistinguishable from explicit ones.
 const DELEGATION_INPUT_JSON_SCHEMA = z.toJSONSchema(delegationToolArgsSchema, {
+  io: "input",
+}) as Tool["inputSchema"];
+
+export const selfForkToolArgsSchema = delegationToolArgsSchema.extend({
+  tier: SubagentModelTierSchema.optional().describe(
+    "Model the copy runs on. `smart`: a stronger model, for hard reasoning or checking a conclusion. `fast`: a cheaper, quicker model, for bulk reading, searching, or extraction. `normal` (default): your own model.",
+  ),
+});
+
+const SELF_FORK_INPUT_JSON_SCHEMA = z.toJSONSchema(selfForkToolArgsSchema, {
   io: "input",
 }) as Tool["inputSchema"];
 
@@ -212,6 +223,11 @@ export async function handleDelegation(
     return errorResult("message is required.");
   }
 
+  const tier = SubagentModelTierSchema.optional().safeParse(args?.tier);
+  if (!tier.success) {
+    return errorResult("tier must be one of: fast, normal, smart.");
+  }
+
   if (!agentId) {
     return errorResult("No agent context available.");
   }
@@ -352,6 +368,7 @@ export async function handleDelegation(
     const run = {
       agentId: target.id,
       selfFork,
+      ...(selfFork ? { parentLlm: context.parentLlm, tier: tier.data } : {}),
       ...(spawn.binding ? { appaSubagent: spawn.binding.child } : {}),
       organizationId,
       userId: userId || "system",
@@ -801,7 +818,7 @@ async function finishDelegationTools(
             ...buildDelegationToolDescriptor({
               name: SELF_FORK_TOOL_NAME,
               targetAgent: { id: caller.id, name: caller.name },
-              inputSchema: DELEGATION_INPUT_JSON_SCHEMA,
+              inputSchema: SELF_FORK_INPUT_JSON_SCHEMA,
               attestable,
             }),
             title: "Fork yourself",

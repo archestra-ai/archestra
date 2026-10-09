@@ -1,12 +1,17 @@
 import {
+  type CompleteModelSelection,
   DEFAULT_MODELS,
+  FAST_MODEL_PATTERNS,
+  findFirstModelByPatterns,
   isCompleteModelSelection,
   isSubscriptionCredential,
+  MODEL_MARKER_PATTERNS,
   type ModelInputModality,
   type ModelSelection,
   providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   resolveModelSelection,
+  type SubagentModelTier,
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
@@ -23,6 +28,7 @@ import {
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import type { Model } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /** A fully dereferenced selection ready for an LLM call. */
@@ -175,6 +181,50 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     selectedModel: fallback.model,
     selectedProvider: fallback.provider,
   };
+}
+
+/**
+ * The model a forked subagent runs on for `tier`. It always stays on the
+ * parent's key, so a fork never reaches a credential its parent was not already
+ * using: the organization's override for the key's provider when that key
+ * serves it, else the provider default. Falls back to the parent's own model.
+ */
+export async function resolveSubagentTierSelection(params: {
+  tier: SubagentModelTier;
+  parent: CompleteModelSelection;
+  organizationId: string;
+}): Promise<CompleteModelSelection> {
+  const { tier, parent } = params;
+  if (tier === "normal") return parent;
+
+  const [parentModel, organization, keyModels] = await Promise.all([
+    ModelModel.findById(parent.modelId),
+    OrganizationModel.getById(params.organizationId),
+    LlmProviderApiKeyModelLinkModel.getModelsForApiKey(parent.apiKeyId),
+  ]);
+  if (!parentModel) return parent;
+
+  const candidates = keyModels.filter(isSubagentTierCandidate);
+  const overrideId =
+    organization?.subagentModelTiers?.[parentModel.provider]?.[tier];
+  const tierModel =
+    candidates.find((model) => model.id === overrideId) ??
+    findFirstModelByPatterns(
+      candidates,
+      tier === "smart"
+        ? MODEL_MARKER_PATTERNS[parentModel.provider]
+        : (FAST_MODEL_PATTERNS[parentModel.provider] ?? []),
+    );
+  return tierModel
+    ? { modelId: tierModel.id, apiKeyId: parent.apiKeyId }
+    : parent;
+}
+
+/** A fork runs the parent's tools, so its model must chat and call tools. */
+export function isSubagentTierCandidate(model: Model): boolean {
+  return (
+    ModelModel.supportsTextChat(model) && model.supportsToolCalling !== false
+  );
 }
 
 /**

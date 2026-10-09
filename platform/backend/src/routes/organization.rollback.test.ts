@@ -397,6 +397,74 @@ describe("organization routes", () => {
     });
   });
 
+  describe("PATCH /api/organization/agent-settings - subagent model tiers", () => {
+    function createTierModel(
+      provider: "anthropic" | "openai",
+      modelId: string,
+      supportsToolCalling = true,
+    ) {
+      return ModelModel.create({
+        externalId: `${provider}/${modelId}`,
+        provider,
+        modelId,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        supportsToolCalling,
+        lastSyncedAt: new Date(),
+      });
+    }
+
+    test("saves a tool-capable override of the matching provider and records the audit change", async () => {
+      const haiku = await createTierModel("anthropic", "tier-test-haiku");
+      const subagentModelTiers = { anthropic: { fast: haiku.id } };
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { subagentModelTiers },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().subagentModelTiers).toEqual(subagentModelTiers);
+      await vi.waitFor(async () => {
+        const [audit] = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.action, "organization.updated"));
+        expect(audit?.before).toMatchObject({ subagentModelTiers: null });
+        expect(audit?.after).toMatchObject({ subagentModelTiers });
+      });
+    });
+
+    test("rejects an override filed under another provider", async () => {
+      const gpt = await createTierModel("openai", "tier-test-mini");
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { subagentModelTiers: { anthropic: { fast: gpt.id } } },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    test("rejects an override that cannot call tools", async () => {
+      const noTools = await createTierModel(
+        "anthropic",
+        "tier-test-no-tools",
+        false,
+      );
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/agent-settings",
+        payload: { subagentModelTiers: { anthropic: { smart: noTools.id } } },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
   describe("PATCH /api/organization/auth-settings - default member role", () => {
     test("persists multiple default roles and records the audit change", async ({
       makeCustomRole,

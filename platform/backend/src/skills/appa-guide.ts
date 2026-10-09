@@ -84,6 +84,10 @@ If the request is unclear, ask with one \`archestra__ask_user\` question what th
 | Find a blocked call | The ruling in this conversation, or a yell: the one the operator names (\`archestra__get_openappa_yell\`), or found with \`archestra__list_openappa_yells\` (\`status\`, \`sessionId\`, \`search\`; pass \`nextCursor\` while \`hasMore\`) |
 | Tuning options | Archestra ships none; work out each stricter or looser request from the source and sink questions |
 
+## Tool-call human approval
+
+Use \`human-approval\` for potentially destructive actions or publishing/sharing outside the company, not every tool call. Scope it with argument selectors or annotators when only some calls need review. The default \`hitl\` authority covers only this mark; preserve its permissions unless the operator explicitly requests broader exceptions, overriding shared battery-support advice to expand them.
+
 ## Approval in Archestra
 
 These rules replace the shared rules on ending a turn with the proposal: in Archestra the \`archestra__ask_user\` card ends the turn, and its answer is the later message that approves.

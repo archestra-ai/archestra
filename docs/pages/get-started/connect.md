@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,7 +37,7 @@ To leave out the proxy or the skills, click **Customize setup** before you appro
 For Claude Code, Codex, Cursor, Copilot CLI, and OpenCode:
 
 - Node.js 18 or newer, and a terminal on the computer where you use the client.
-- The client's CLI on your `PATH`: `claude`, `codex`, `copilot`, or `opencode`. OpenCode must be 1.17 or newer.
+- The client's CLI on your `PATH`: `claude`, `codex`, `copilot`, or `opencode`. OpenCode must be 1.17 or newer. Copilot CLI proxy setup requires 1.0.95 or newer.
 - Python 3 for Claude Code. Git for Cursor and OpenCode skills.
 - An Archestra URL on HTTPS. Plain HTTP works only on `localhost`.
 
@@ -61,7 +61,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 - **Claude Code:** if you skipped the sign-in, start Claude Code, run `/mcp`, select the gateway, and choose **Authenticate**.
 - **Codex:** if you skipped the sign-in, run `codex mcp login <gateway>`.
 - **Cursor:** sign in to the gateway under **Customize → MCPs** in Cursor, then reload Cursor to load the skills. Cursor keeps its own models unless you set up the proxy. To do that, find **Cursor model settings (manual step)** in the installer output. Enter the proxy URL and key it shows under **Settings → Models → API Keys**. Turn on **Use OpenAI API Key** and **Override OpenAI Base URL**. A Cursor subscription cannot be the key.
-- **Copilot CLI:** on Windows, setup sets the proxy variables for your user. On macOS and Linux, add the `export` lines the installer prints to your shell profile.
+- **Copilot CLI:** setup saves your provider settings and available key in `providers.json` and selects the model in `settings.json`. If setup reports a missing key, add it to `providers.json`. The environment variables printed at the end are optional.
 - **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`.
 
 <span id="startup-guard"></span>

@@ -31,10 +31,14 @@ export type EffectivePolicy =
   archestraApiTypes.GetOpenappaEffectivePolicyResponses["200"];
 export type BatteryPolicySource =
   archestraApiTypes.GetOpenappaBatteryPolicySourceResponses["200"];
-/** What an attach names: the battery, and the catalog unless it governs the organization. */
+/** What an attach names: the battery, and the server unless it governs the organization. */
 type CreateInstallParams = Pick<
   archestraApiTypes.CreateOpenappaBatteryInstallData["body"],
-  "batteryName" | "catalogId"
+  "batteryName" | "attachment"
+>;
+/** A server a battery attaches to: a catalog entry, or a client's own detected server. */
+export type BatteryServerAttachment = NonNullable<
+  CreateInstallParams["attachment"]
 >;
 
 /** Why a catalog cannot take a battery yet, for the surfaces that offer one. */
@@ -48,10 +52,51 @@ export const ATTACH_NOTES: Record<
     "This server cannot take a battery: one of its tool prefixes holds a double underscore, which an alias cannot target.",
 };
 
-export const batteryMatchesQueryKey = (catalogId: string) => [
+/** The server an install row is attached to; an organization-wide row has none. */
+export function installAttachment(
+  install: Pick<
+    BatterySummary["installs"][number],
+    "kind" | "catalogId" | "detectedId"
+  >,
+): BatteryServerAttachment | null {
+  switch (install.kind) {
+    case "catalog":
+      return install.catalogId === null
+        ? null
+        : { kind: "catalog", catalogId: install.catalogId };
+    case "detected":
+      return install.detectedId === null
+        ? null
+        : { kind: "detected", detectedId: install.detectedId };
+    case "organization":
+      return null;
+    default:
+      // A row from a backend that stamps no kind attaches to nothing here.
+      return null;
+  }
+}
+
+export function sameAttachment(
+  a: BatteryServerAttachment,
+  b: BatteryServerAttachment,
+): boolean {
+  return a.kind === "catalog"
+    ? b.kind === "catalog" && a.catalogId === b.catalogId
+    : b.kind === "detected" && a.detectedId === b.detectedId;
+}
+
+export const batteryMatchesQueryKey = (attachment: BatteryServerAttachment) => [
   batteryMatchesPrefix,
-  catalogId,
+  attachment.kind,
+  attachment.kind === "catalog" ? attachment.catalogId : attachment.detectedId,
 ];
+
+/** The query the matches endpoint takes for one server. */
+function matchesQuery(attachment: BatteryServerAttachment) {
+  return attachment.kind === "catalog"
+    ? { catalogId: attachment.catalogId }
+    : { detectedId: attachment.detectedId };
+}
 
 /**
  * What the organization's policy text declares and what came of it: every
@@ -116,13 +161,16 @@ export function useBatteries(enabled = true) {
  * The guardrails batteries a catalog entry stands for, with their installs,
  * and whether the entry can take one at all.
  */
-export function useBatteryMatches(catalogId: string, enabled: boolean) {
+export function useBatteryMatches(
+  attachment: BatteryServerAttachment,
+  enabled: boolean,
+) {
   return useQuery({
-    queryKey: batteryMatchesQueryKey(catalogId),
+    queryKey: batteryMatchesQueryKey(attachment),
     enabled,
     queryFn: async (): Promise<BatteryMatches> => {
       const { data, error } = await archestraApiSdk.getOpenappaBatteryMatches({
-        query: { catalogId },
+        query: matchesQuery(attachment),
       });
       throwOnApiError(error, { toastOnError: false });
       return answered(data);
@@ -130,8 +178,8 @@ export function useBatteryMatches(catalogId: string, enabled: boolean) {
   });
 }
 
-/** Turns a matched battery on or off for a catalog entry, installing it on first use. */
-export function useSetBatteryEnabled(catalogId: string) {
+/** Turns a matched battery on or off for a server, installing it on first use. */
+export function useSetBatteryEnabled(attachment: BatteryServerAttachment) {
   const client = useQueryClient();
   return useBatteryMutation(
     async (params: { match: BatteryMatch; enabled: boolean }) => {
@@ -142,14 +190,14 @@ export function useSetBatteryEnabled(catalogId: string) {
       if (!enabled) return null;
       const created = await createInstall(client, {
         batteryName: match.battery,
-        catalogId,
+        attachment,
       });
       if (getApiErrorType(created.error) !== "api_conflict_error")
         return settled(created);
       // A concurrent write attached it first: carry the choice over to its row.
       const matches = settled(
         await archestraApiSdk.getOpenappaBatteryMatches({
-          query: { catalogId },
+          query: matchesQuery(attachment),
         }),
       );
       const install = matches.matches.find(
@@ -162,7 +210,7 @@ export function useSetBatteryEnabled(catalogId: string) {
   );
 }
 
-/** Include a battery for a catalog entry, spelling the package the policy governs. */
+/** Include a battery for a server, spelling the package the policy governs. */
 export function useCreateBatteryInstall() {
   const client = useQueryClient();
   return useBatteryMutation(

@@ -1,4 +1,10 @@
-import { clientForExternalAgentIds } from "@archestra/shared";
+import {
+  CLAUDE_CLIENT_FILTER,
+  type ClientFilter,
+  clientFilterToAgentIds,
+  clientForExternalAgentIds,
+  OPENCODE_MCP_TOOL_NAME_PREFIX,
+} from "@archestra/shared";
 import { ToolObservationModel } from "@/models";
 import type { ProxyToolObservation } from "@/models/tool-observation";
 import {
@@ -10,6 +16,7 @@ import {
   type DetectedClientFamily,
   detectedServerId,
   isDetectedClientFamily,
+  parseDetectedServerId,
   parseDetectedToolName,
 } from "@/utils/detected-mcp-server-names";
 
@@ -31,7 +38,55 @@ export async function listDetectedMcpServers(
   return groupDetectedServers(observations, openCodeLabels);
 }
 
+/**
+ * One detected server by id, read from the observations of its client family
+ * whose tool names carry its label, or null when the organization has none.
+ */
+export async function findDetectedMcpServer(
+  organizationId: string,
+  id: string,
+): Promise<DetectedMcpServer | null> {
+  const parsed = parseDetectedServerId(id);
+  if (!parsed) return null;
+  const label = escapeLike(parsed.label);
+  // The policy's labels, not the asked-for one: a label nobody declared
+  // splits no `<label>_<tool>` name, and a longer declared label still wins.
+  const openCodeLabels =
+    parsed.family === "opencode"
+      ? await declaredOpenCodeLabels(organizationId)
+      : [];
+  const observations = await ToolObservationModel.listProxyToolObservations(
+    organizationId,
+    {
+      externalAgentIds: clientFilterToAgentIds(clientFilterOf(parsed.family)),
+      toolNameLike:
+        parsed.family === "opencode"
+          ? [
+              `${OPENCODE_MCP_TOOL_NAME_PREFIX}${label}:%`,
+              ...(openCodeLabels.includes(parsed.label)
+                ? [`${label}\\_%`]
+                : []),
+            ]
+          : [`mcp\\_\\_${label}\\_\\_%`],
+    },
+  );
+  return (
+    groupDetectedServers(observations, openCodeLabels).find(
+      (server) => server.id === id,
+    ) ?? null
+  );
+}
+
 // === Internal helpers ===
+
+function clientFilterOf(family: DetectedClientFamily): ClientFilter {
+  return family === "claude-code" ? CLAUDE_CLIENT_FILTER : family;
+}
+
+/** A literal for a LIKE pattern whose escape character is `\`. */
+function escapeLike(literal: string): string {
+  return literal.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
 
 /**
  * OpenCode spells a local tool `<label>_<tool>`, which only a declared

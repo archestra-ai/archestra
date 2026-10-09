@@ -334125,7 +334125,16 @@
             },
             "in": "query",
             "name": "catalogId",
-            "required": true
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "detectedId",
+            "required": false
           }
         ],
         "responses": {
@@ -334157,7 +334166,8 @@
                             "enum": [
                               "host",
                               "image",
-                              "name"
+                              "name",
+                              "tool"
                             ]
                           },
                           "install": {
@@ -334525,6 +334535,49 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100
+                  },
+                  "attachment": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "catalog"
+                            ]
+                          },
+                          "catalogId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "catalogId"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "detected"
+                            ]
+                          },
+                          "detectedId": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "detectedId"
+                        ]
+                      }
+                    ]
                   },
                   "catalogId": {
                     "type": "string",

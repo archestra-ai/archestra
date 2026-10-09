@@ -4,7 +4,7 @@ sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,6 +17,14 @@ Guardrails check the tool calls of any client that sends its traffic through Arc
 2. For a client without built-in support, add the [session headers](#session-headers).
 
 The **Client coverage** card on **Guardrails → Overview** lists the supported clients, and sets what happens to [unrecognized ones](#unrecognized-clients).
+
+## Servers Connected to a Client
+
+A battery covers an MCP server someone connected straight to their coding client, such as a Slack server in Claude Code's own config, the same way it covers that server installed from the registry. Once a request from the client has gone through the LLM Proxy, the server appears under **MCP servers** on **Guardrails → Overview** with the client's name, and its row's **Attach** offers the batteries whose rules name its tools. A hand-written rule reaches it too: bind the rule's server to the server's id, such as `claude-code.slack`, in `[server_aliases]`.
+
+- A server is known by its client and label, so everyone in the organization who connects a server under that label is covered by the same battery.
+- The configuration agent lists these servers and their fitting batteries, and proposes the attachment for approval.
+- OpenCode spells a server's tools without a separator, such as `slack_send`, so an OpenCode server is listed once the policy names it: add `opencode.<label>` to `[server_aliases]` first.
 
 ## Session Headers
 

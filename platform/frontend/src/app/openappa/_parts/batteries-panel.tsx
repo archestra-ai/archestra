@@ -1,6 +1,6 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
+import { CLIENT_FILTER_OPTIONS, DocsPage, getDocsUrl } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -13,6 +13,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Radar,
   RefreshCw,
   Trash2,
   Unlink,
@@ -26,6 +27,7 @@ import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
+import { ClientSourceBadge } from "@/components/client-source-badge";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FileDropInput } from "@/components/files/file-drop-input";
@@ -75,10 +77,13 @@ import {
 } from "@/lib/mcp/mcp-server.query";
 import {
   ATTACH_NOTES,
+  type BatteryServerAttachment,
   type BatterySummary,
   batteryMatchesQueryKey,
+  installAttachment,
   type PolicyBattery,
   type PolicyDeclarations,
+  sameAttachment,
   useAcceptHeldPull,
   useBatteries,
   useBatteryMatches,
@@ -90,7 +95,11 @@ import {
   useUpdateBatteryInstall,
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
-import { useCoverageSummary } from "@/lib/openappa-coverage.query";
+import {
+  type DetectedCoverageEntity,
+  useCoverageSummary,
+  useDetectedMcpServers,
+} from "@/lib/openappa-coverage.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { aliasesWithoutIncludedBattery } from "@/lib/openappa-policy-views";
 import {
@@ -625,11 +634,25 @@ function BatteryDialog({
   const badge = status ? batteryStatusBadge(status) : null;
   const installs = summary?.installs ?? [];
   const servers = included?.servers ?? [];
-  const governed = new Set(
-    servers
-      .map((server) => attachedCatalogId(server))
-      .filter((id): id is string => id !== null),
+  // Every server the battery already governs, catalog or detected, by the id
+  // the picker offers it under.
+  const governedTargets = new Set(
+    servers.flatMap((server) => {
+      const attachment = serverAttachment(server);
+      return attachment === null
+        ? []
+        : [
+            attachment.kind === "catalog"
+              ? attachment.catalogId
+              : attachment.detectedId,
+          ];
+    }),
   );
+  // The picker alone reads these; a dialog that cannot show it asks for nothing.
+  const detectedQuery = useDetectedMcpServers({
+    enabled: writable && !organizationWide && summary !== null,
+  });
+  const detectedServers = detectedQuery.data ?? [];
   // An entry not in the policy yet reads the organization's credential table
   // like any other: a variable another battery binds already has its key.
   const credentials: BatteryCredential[] =
@@ -712,12 +735,16 @@ function BatteryDialog({
             <ul className="divide-y rounded-md border">
               {servers.map((server) => {
                 const catalogId = attachedCatalogId(server);
-                const install =
-                  installs.find(
-                    (candidate) =>
-                      catalogId !== null && candidate.catalogId === catalogId,
-                  ) ?? null;
                 const attachment = serverAttachment(server);
+                const install =
+                  installs.find((candidate) => {
+                    const attached = installAttachment(candidate);
+                    return (
+                      attachment !== null &&
+                      attached !== null &&
+                      sameAttachment(attached, attachment)
+                    );
+                  }) ?? null;
                 const name =
                   attachment === null
                     ? "Removed server"
@@ -733,7 +760,7 @@ function BatteryDialog({
                     name={name}
                     detail={`${server.target}__*`}
                     action={
-                      writable && install !== null && catalogId ? (
+                      writable && install !== null ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -763,11 +790,14 @@ function BatteryDialog({
               batteryName={summary.name}
               catalog={catalog}
               installedCatalogIds={installedCatalogIds}
-              taken={governed}
+              detected={detectedServers}
+              detectedFailed={detectedQuery.isError}
+              onRetryDetected={() => detectedQuery.refetch()}
+              taken={governedTargets}
               pending={pending}
-              onAttach={(catalogId, onSuccess) =>
+              onAttach={(attachment, onSuccess) =>
                 create.mutate(
-                  { batteryName: row.name, catalogId },
+                  { batteryName: row.name, attachment },
                   { onSuccess },
                 )
               }
@@ -873,11 +903,17 @@ function ServerRow({
   );
 }
 
-/** Pick an installed server the battery does not govern yet and add it to the list. */
+/**
+ * Pick a server the battery does not govern yet and add it to the list: an
+ * installed catalog server, or one a client connected on its own.
+ */
 function AttachServerPicker({
   batteryName,
   catalog,
   installedCatalogIds,
+  detected,
+  detectedFailed,
+  onRetryDetected,
   taken,
   pending,
   onAttach,
@@ -885,19 +921,64 @@ function AttachServerPicker({
   batteryName: string;
   catalog: CatalogEntry[];
   installedCatalogIds: Set<string> | null;
+  detected: DetectedCoverageEntity[];
+  /** The detected servers could not be read: their absence says nothing. */
+  detectedFailed: boolean;
+  onRetryDetected: () => void;
   taken: Set<string>;
   pending: boolean;
-  onAttach: (catalogId: string, onSuccess: () => void) => void;
+  onAttach: (
+    attachment: BatteryServerAttachment,
+    onSuccess: () => void,
+  ) => void;
 }) {
-  const [catalogId, setCatalogId] = useState("");
-  const readiness = useBatteryMatches(catalogId, catalogId !== "");
+  const [selected, setSelected] = useState("");
+  const attachment = pickedAttachment(selected);
+  const readiness = useBatteryMatches(
+    attachment ?? { kind: "catalog", catalogId: "" },
+    attachment !== null,
+  );
   const attach = readiness.data?.attach ?? null;
-  const options = catalog.filter(
+  const catalogOptions = catalog.filter(
     (entry) =>
       (installedCatalogIds === null || installedCatalogIds.has(entry.id)) &&
       !taken.has(entry.id),
   );
-  if (installedCatalogIds?.size === 0)
+  const detectedOptions = detected.filter((server) => !taken.has(server.id));
+  const options = [
+    ...catalogOptions.map((entry) => ({
+      value: `catalog:${entry.id}`,
+      label: entry.name,
+      content: <ServerOption entry={entry} />,
+      selectedContent: <ServerOption entry={entry} />,
+    })),
+    ...detectedOptions.map((server) => ({
+      value: `detected:${server.id}`,
+      label: server.name,
+      content: <DetectedServerOption server={server} />,
+      selectedContent: <DetectedServerOption server={server} />,
+    })),
+  ];
+  const detectedNotice = detectedFailed ? (
+    <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <span>Servers connected to a client could not be loaded.</span>
+      <Button
+        type="button"
+        variant="link"
+        size="sm"
+        className="h-auto p-0"
+        aria-label="Retry loading servers connected to a client"
+        onClick={onRetryDetected}
+      >
+        Retry
+      </Button>
+    </p>
+  ) : null;
+  if (
+    !detectedFailed &&
+    installedCatalogIds?.size === 0 &&
+    detectedOptions.length === 0
+  )
     return (
       <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         <span>No MCP server is installed yet.</span>
@@ -908,13 +989,16 @@ function AttachServerPicker({
     );
   if (options.length === 0)
     return (
-      <p className="text-sm text-muted-foreground">
-        Every installed server already has this battery.
-      </p>
+      detectedNotice ?? (
+        <p className="text-sm text-muted-foreground">
+          Every server already has this battery.
+        </p>
+      )
     );
   const id = `battery-server-${batteryName}`;
   return (
     <div className="space-y-2">
+      {detectedNotice}
       <div className="space-y-0.5">
         <Label htmlFor={id}>Attach to a server</Label>
         <p className="text-xs text-muted-foreground">
@@ -927,25 +1011,20 @@ function AttachServerPicker({
           id={id}
           ariaLabel="MCP server"
           className="min-w-0 flex-1"
-          value={catalogId}
-          onValueChange={setCatalogId}
+          value={selected}
+          onValueChange={setSelected}
           placeholder="Select a server…"
-          items={options.map((entry) => ({
-            value: entry.id,
-            label: entry.name,
-            content: <ServerOption entry={entry} />,
-            selectedContent: <ServerOption entry={entry} />,
-          }))}
+          items={options}
         />
         <Button
           type="button"
           variant="outline"
-          disabled={pending || !catalogId || attach !== "ready"}
+          disabled={pending || attachment === null || attach !== "ready"}
           onClick={() => {
-            onAttach(catalogId, () => setCatalogId(""));
+            if (attachment) onAttach(attachment, () => setSelected(""));
           }}
         >
-          {catalogId && readiness.isFetching ? (
+          {attachment && readiness.isFetching ? (
             <Loader2 className="size-4 animate-spin" />
           ) : (
             <Plus className="size-4" />
@@ -959,7 +1038,9 @@ function AttachServerPicker({
           className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
         >
           <span>{ATTACH_NOTES[attach]}</span>
-          {attach === "unsynced" && <SyncToolsButton catalogId={catalogId} />}
+          {attach === "unsynced" && attachment?.kind === "catalog" && (
+            <SyncToolsButton catalogId={attachment.catalogId} />
+          )}
         </p>
       )}
       {readiness.isError && (
@@ -1448,7 +1529,10 @@ function SyncToolsButton({ catalogId }: { catalogId: string }) {
           {
             onSuccess: () =>
               client.invalidateQueries({
-                queryKey: batteryMatchesQueryKey(catalogId),
+                queryKey: batteryMatchesQueryKey({
+                  kind: "catalog",
+                  catalogId,
+                }),
               }),
           },
         )
@@ -1600,4 +1684,26 @@ function serverAttachment(
 function attachedCatalogId(server: ServerView): string | null {
   const attachment = serverAttachment(server);
   return attachment?.kind === "catalog" ? attachment.catalogId : null;
+}
+
+/** The attachment a picker value stands for: `catalog:<id>` or `detected:<id>`. */
+function pickedAttachment(value: string): BatteryServerAttachment | null {
+  if (value.startsWith("catalog:"))
+    return { kind: "catalog", catalogId: value.slice("catalog:".length) };
+  if (value.startsWith("detected:"))
+    return { kind: "detected", detectedId: value.slice("detected:".length) };
+  return null;
+}
+
+function DetectedServerOption({ server }: { server: DetectedCoverageEntity }) {
+  const client = CLIENT_FILTER_OPTIONS.find(
+    (option) => option.value === server.clientFamily,
+  );
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <Radar className="size-4 shrink-0 text-muted-foreground" />
+      <span className="truncate">{server.name}</span>
+      {client && <ClientSourceBadge client={client} />}
+    </span>
+  );
 }

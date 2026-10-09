@@ -257,6 +257,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "resolve_openappa_yell",
   "list_openappa_consults",
   "list_guardrails_battery_fits",
+  "list_detected_mcp_servers",
   "inspect_guardrails_server",
   "validate_guardrails_policy",
   "preview_guardrails_policy_change",
@@ -479,6 +480,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   resolve_openappa_yell: "openappa",
   list_openappa_consults: "openappa",
   list_guardrails_battery_fits: "openappa",
+  list_detected_mcp_servers: "openappa",
   inspect_guardrails_server: "openappa",
   validate_guardrails_policy: "openappa",
   preview_guardrails_policy_change: "openappa",
@@ -882,6 +884,7 @@ export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
 export const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES = [
   "get_guardrails_policy",
   "list_guardrails_battery_fits",
+  "list_detected_mcp_servers",
   "inspect_guardrails_server",
   "validate_guardrails_policy",
   "preview_guardrails_policy_change",

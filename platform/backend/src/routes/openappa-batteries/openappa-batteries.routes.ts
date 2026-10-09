@@ -5,6 +5,7 @@ import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaEnabled } from "@/openappa/service";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
+  BatteryMatchesQuerySchema,
   BatteryMatchesSchema,
   BatteryPolicySourceSchema,
   BatterySummarySchema,
@@ -28,7 +29,6 @@ const PackageNameParamsSchema = z.object({
 const PackageHashParamsSchema = z.object({
   contentHash: z.string().regex(/^[0-9a-f]{64}$/),
 });
-const MatchesQuerySchema = z.object({ catalogId: z.uuid() });
 const PolicySourceQuerySchema = z.object({ entry: z.string().min(1).max(512) });
 const DeletedSchema = z.object({ success: z.literal(true) });
 
@@ -95,15 +95,24 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaBatteryMatches,
         tags: ["OpenAPPA"],
-        querystring: MatchesQuerySchema,
+        querystring: BatteryMatchesQuerySchema,
         response: constructResponseSchema(BatteryMatchesSchema),
       },
     },
-    async (request) =>
-      openappaBatteriesService.matchesForCatalog({
-        organizationId: request.organizationId,
-        catalogId: request.query.catalogId,
-      }),
+    async (request) => {
+      const { catalogId, detectedId } = request.query;
+      if (detectedId !== undefined)
+        return openappaBatteriesService.matchesForDetected({
+          organizationId: request.organizationId,
+          detectedId,
+        });
+      if (catalogId !== undefined)
+        return openappaBatteriesService.matchesForCatalog({
+          organizationId: request.organizationId,
+          catalogId,
+        });
+      throw new ApiError(400, "Name exactly one of catalogId and detectedId");
+    },
   );
   app.post(
     "/api/openappa/battery-installs",

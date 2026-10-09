@@ -6,6 +6,7 @@ import {
   openappaEffectivePoliciesTable,
 } from "@/database/schemas/openappa-batteries";
 import { HeldPullReasonSchema } from "@/types/openappa-github-sync";
+import { isDetectedServerId } from "@/utils/detected-mcp-server-names";
 
 export const BatteryPackageFileSchema = z.strictObject({
   path: z.string().min(1).max(512),
@@ -57,10 +58,19 @@ export const BatteryAttachmentKindSchema = z.enum([
 ]);
 export type BatteryAttachmentKind = z.infer<typeof BatteryAttachmentKindSchema>;
 
+/** A detected server's id, `<client-family>.<label>`, as a policy names it. */
+export const DetectedServerIdSchema = z
+  .string()
+  .min(1)
+  .refine(
+    isDetectedServerId,
+    "Expected a detected server id, <client>.<label>",
+  );
+
 /** An attachment to one server: the kinds an alias target can resolve to. */
 export const BatteryServerAttachmentSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("catalog"), catalogId: z.string().uuid() }),
-  z.object({ kind: z.literal("detected"), detectedId: z.string().min(1) }),
+  z.object({ kind: z.literal("detected"), detectedId: DetectedServerIdSchema }),
 ]);
 export type BatteryServerAttachment = z.infer<
   typeof BatteryServerAttachmentSchema
@@ -175,8 +185,16 @@ export const BatteryPolicySourceSchema = z.object({
   content: z.string(),
 });
 
-/** What a catalog entry was matched on; a name alone is a weak signal. */
-export const BatteryMatchEvidenceSchema = z.enum(["host", "image", "name"]);
+/**
+ * What a server was matched on: a catalog entry's host or image, its name
+ * alone (weak), or, for a detected server, the tools its battery's rules name.
+ */
+export const BatteryMatchEvidenceSchema = z.enum([
+  "host",
+  "image",
+  "name",
+  "tool",
+]);
 export type BatteryMatchEvidence = z.infer<typeof BatteryMatchEvidenceSchema>;
 
 /** A battery a catalog entry stands for, with the install it already has. */
@@ -199,7 +217,19 @@ export const AttachReadinessSchema = z.enum([
 ]);
 export type AttachReadiness = z.infer<typeof AttachReadinessSchema>;
 
-/** The batteries a catalog entry stands for, and whether one can be attached. */
+/** The server whose batteries are asked for: a catalog entry or a detected server, one of the two. */
+export const BatteryMatchesQuerySchema = z
+  .object({
+    catalogId: z.uuid().optional(),
+    detectedId: DetectedServerIdSchema.optional(),
+  })
+  .refine(
+    (query) =>
+      (query.catalogId === undefined) !== (query.detectedId === undefined),
+    "Name exactly one of catalogId and detectedId",
+  );
+
+/** The batteries a server stands for, and whether one can be attached. */
 export const BatteryMatchesSchema = z.object({
   attach: AttachReadinessSchema,
   matches: z.array(BatteryMatchSchema),
@@ -304,17 +334,35 @@ export type UploadedBatteryPackage = z.infer<
   typeof UploadedBatteryPackageSchema
 >;
 
-export const CreateBatteryInstallSchema = z.strictObject({
-  batteryName: z.string().min(1).max(100),
-  /** The catalog to govern; absent for a battery made of annotators alone. */
-  catalogId: z.string().uuid().optional(),
-  /** The stored package to include; absent spells the bundled battery. */
-  packageHash: z
-    .string()
-    .regex(/^[0-9a-f]{64}$/)
-    .nullable()
-    .default(null),
-});
+export const CreateBatteryInstallSchema = z
+  .strictObject({
+    batteryName: z.string().min(1).max(100),
+    /** The server to govern; absent for a battery made of annotators alone. */
+    attachment: BatteryServerAttachmentSchema.optional(),
+    /**
+     * Deprecated: the catalog entry to govern, as clients from before
+     * `attachment` send it. Read as `{ kind: "catalog", catalogId }`.
+     */
+    catalogId: z.uuid().optional(),
+    /** The stored package to include; absent spells the bundled battery. */
+    packageHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .nullable()
+      .default(null),
+  })
+  .refine(
+    (body) => body.attachment === undefined || body.catalogId === undefined,
+    "Name the server once: attachment or the former catalogId, not both",
+  )
+  .transform(({ catalogId, ...body }) => ({
+    ...body,
+    attachment:
+      body.attachment ??
+      (catalogId === undefined
+        ? undefined
+        : { kind: "catalog" as const, catalogId }),
+  }));
 export type CreateBatteryInstall = z.infer<typeof CreateBatteryInstallSchema>;
 
 export const UpdateBatteryInstallSchema = z.strictObject({

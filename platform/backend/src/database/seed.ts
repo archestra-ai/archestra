@@ -391,6 +391,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "resolve_openappa_yell",
     "list_openappa_consults",
     "list_guardrails_battery_fits",
+    "list_detected_mcp_servers",
     "validate_guardrails_policy",
     "preview_guardrails_policy_change",
     "update_guardrails_policy",

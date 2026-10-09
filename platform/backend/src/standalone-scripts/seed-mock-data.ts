@@ -7,7 +7,11 @@ import {
 import { getTableName, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import db, { initializeDatabase, schema } from "@/database";
-import { seedDefaultUserAndOrg } from "@/database/seed";
+import {
+  seedArchestraCatalogAndTools,
+  seedDefaultUserAndOrg,
+  syncBuiltInAgents,
+} from "@/database/seed";
 import logger from "@/logging";
 import {
   AgentLabelModel,
@@ -151,6 +155,10 @@ async function seedMockData() {
 
   // Always ensure the LLM Proxy exists
   await AgentModel.ensureLlmProxiesForAllOrganizations();
+  await syncBuiltInAgents();
+  // The TRUNCATE above dropped the built-in catalog; without it every
+  // starter policy is refused until the backend restarts.
+  await seedArchestraCatalogAndTools();
 
   const sharedUsers = [
     { id: editorUser.id, name: "editor" },
@@ -320,11 +328,6 @@ async function seedMockData() {
   const agentToolData = toolData.map((tool) => ({
     agentId: tool.agentId,
     toolId: tool.id,
-    allowUsageWhenUntrustedDataIsPresent:
-      tool.allowUsageWhenUntrustedDataIsPresent || false,
-    toolResultTreatment: (tool.dataIsTrustedByDefault
-      ? "trusted"
-      : "untrusted") as "trusted" | "untrusted" | "sanitize_with_dual_llm",
   }));
 
   await db.insert(schema.agentToolsTable).values(agentToolData);
@@ -344,29 +347,11 @@ async function seedMockData() {
     agentIds,
     toolsByAgent,
     200, // number of interactions
-    0.3, // 30% block probability
   );
 
   // biome-ignore lint/suspicious/noExplicitAny: Mock data generation requires flexible interaction structure
   await db.insert(schema.interactionsTable).values(interactionData as any);
   logger.info(`✅ Created ${interactionData.length} interactions`);
-
-  // Show statistics
-  const blockedCount = interactionData.filter((i) => {
-    const response = i.response as { choices?: Array<{ message?: unknown }> };
-    if (Array.isArray(response.choices)) {
-      const message = response.choices[0]?.message;
-      return (
-        !!message &&
-        typeof message === "object" &&
-        "refusal" in message &&
-        Boolean(message.refusal)
-      );
-    }
-    return false;
-  }).length;
-  logger.info(`   - ${blockedCount} blocked by policy`);
-  logger.info(`   - ${interactionData.length - blockedCount} allowed`);
 }
 
 /**

@@ -32,7 +32,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import {
   type PinAppTarget,
   useOpenAppInChat,
@@ -143,10 +142,6 @@ function OwnedAppCard({
   selection?: BulkCardSelectionProps;
 }) {
   const router = useRouter();
-  const ownership = useResourceOwnershipTransfer({
-    kind: "app",
-    resource: app,
-  });
   const openApp = useOpenAppInChat();
   const pinApp = usePinApp();
   const encryptedChatEnabled = useFeature("encryptedChatEnabled") ?? false;
@@ -267,15 +262,11 @@ function OwnedAppCard({
         }
         description={app.description}
         actions={
-          <>
-            <TableRowActions
-              dropdownContent={ownership.menuItem}
-              actions={actions}
-              dropdownActions={dropdownActions}
-              itemName={app.name}
-            />
-            {ownership.dialog}
-          </>
+          <TableRowActions
+            actions={actions}
+            dropdownActions={dropdownActions}
+            itemName={app.name}
+          />
         }
         selected={selection?.selected}
         selectionDisabled={selection?.selectionDisabled || !access.canEdit}

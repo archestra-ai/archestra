@@ -60,6 +60,9 @@ export function makeVirtualKey(
     teams: [],
     authorName: "Test Admin",
     providerApiKeys: [],
+    billingTeamId: null,
+    billingTeam: null,
+    spendCap: null,
     ...overrides,
   };
 }

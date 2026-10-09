@@ -14,7 +14,7 @@ import {
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
-import { vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 import config from "@/config";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
@@ -68,6 +68,10 @@ type SearchToolsStructuredContent = {
 };
 
 describe("search_tools", () => {
+  beforeEach(() => {
+    // Search ranking tests control their candidate set; OpenAPPA tests opt in.
+    config.openappa.enabled = false;
+  });
   test("returns ranked matching tools with compact parameter summaries", async ({
     makeAgent,
     makeInternalMcpCatalog,
@@ -672,12 +676,12 @@ describe("search_tools", () => {
       userId: user.id,
     };
 
-    // "trusted data policy" matches only policy tools (trusted-data /
-    // tool-invocation / autonomy), all of which require permissions this
-    // agent:read role lacks, so RBAC filters them all out before ranking.
+    // "guardrails policy" matches only the guardrails policy tools, all of
+    // which require permissions this agent:read role lacks, so RBAC filters
+    // them all out before ranking.
     const result = await executeArchestraTool(
       TOOL_SEARCH_TOOLS_FULL_NAME,
-      { query: "trusted data policy", limit: 10 },
+      { query: "guardrails policy", limit: 10 },
       context,
     );
 
@@ -686,7 +690,7 @@ describe("search_tools", () => {
       total: 0,
       matchCount: 0,
       truncated: false,
-      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: trusted, data, policy.",
+      hint: "No tools matched. Try broader or different keywords, or switch mode. No tool text matches these query terms: guardrails, policy.",
       tools: [],
     });
   });

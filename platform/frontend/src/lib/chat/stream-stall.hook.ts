@@ -1,7 +1,6 @@
 "use client";
 
 import type { UIMessage } from "@ai-sdk/react";
-import { DUAL_LLM_ANALYSIS_PART_TYPE } from "@archestra/shared";
 import type { ChatStatus } from "ai";
 import { useEffect, useRef, useState } from "react";
 
@@ -139,8 +138,6 @@ function hasRenderedAssistantOutput(messages: UIMessage[]): boolean {
     if (part.type === "text" || part.type === "reasoning") {
       return part.text.trim().length > 0;
     }
-    // Kept in step with `rendersNothing` in chat-messages.utils.ts, which
-    // counts a dual LLM analysis as a drawn block of its own.
-    return part.type === "file" || part.type === DUAL_LLM_ANALYSIS_PART_TYPE;
+    return part.type === "file";
   });
 }

@@ -80,6 +80,7 @@ import {
   FINISH_OAUTH_FLOW_TITLE,
   type InstallerClientId,
 } from "./clients";
+import { ConnectionConsentOptions } from "./connection-consent-options";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
@@ -150,7 +151,7 @@ export function useConnectSkills(enabled: boolean): {
 interface ConnectCommandPanelProps {
   client: ConnectClient;
   /** null when the user can't read MCP gateways. */
-  mcpGateways: AgentSelectorAgent[] | null;
+  mcpGateways: (AgentSelectorAgent & { slug?: string | null })[] | null;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
   /** The org's single LLM Proxy id; null when the user can't read it (or it hasn't loaded). */
@@ -165,8 +166,10 @@ interface ConnectCommandPanelProps {
   skillsEnabled?: boolean;
   /** When false, plugins are not offered in the setup. */
   pluginsEnabled?: boolean;
-  /** Parts the user left out on the Connect page; they stay off. */
+  /** Optional parts initially left out on the Connect page; editable here. */
   exclude?: readonly ConnectSetupPart[];
+  /** Plugins the user kept on the Connect page, by slug; omitted = all. */
+  pluginSlugs?: readonly string[];
   /**
    * "download": only the Claude Desktop installer download, for the Connect
    * page's band. The full review flow is what the approval page shows.
@@ -194,14 +197,13 @@ export function ConnectCommandPanel({
   skillsEnabled = true,
   pluginsEnabled = true,
   exclude,
+  pluginSlugs,
   variant = "full",
 }: ConnectCommandPanelProps) {
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
-  // The gateway and the LLM Proxy join the setup unless the prompt flow's
-  // review step switched them off (only the approval page can be told that).
-  const [includeGateway, setIncludeGateway] = useState(true);
+  // Optional portions start from the Connect page choices and remain editable.
   const [includeProxy, setIncludeProxy] = useState(true);
   const activeLlmProxyId = includeProxy ? llmProxyId : null;
   const showSetupSummary = !connectRequest && client.id !== "claude-desktop";
@@ -280,8 +282,8 @@ export function ConnectCommandPanel({
         : toPlatformOption(detectPlatform()),
     );
   }, [requestedPlatform]);
-  // Parts the copied prompt left out. The deployment won't approve a setup
-  // that includes one, so they start off here and stay off.
+  // Exclusions seed the optional choices; they do not restrict customization.
+  // Legacy tools exclusions cannot remove the required gateway.
   const { data: connection } = useClientConnection(connectRequest ?? "");
   const excludeKey = (connection?.exclude ?? exclude ?? []).join(",");
   const excluded = useMemo(
@@ -289,7 +291,6 @@ export function ConnectCommandPanel({
     [excludeKey],
   );
   useEffect(() => {
-    if (excluded.has("tools")) setIncludeGateway(false);
     if (excluded.has("proxy")) setIncludeProxy(false);
     if (excluded.has("skills")) setSelectedSkillIds(new Set());
     if (excluded.has("plugins")) {
@@ -299,6 +300,48 @@ export function ConnectCommandPanel({
     }
     if (excluded.size > 0) setCustomizing(true);
   }, [excluded, client.id]);
+  // A gateway and plugins picked on the Connect page start selected, once
+  // each list has loaded; after that the selection is the user's.
+  const presetGateway = connection?.gateway ?? null;
+  const presetPluginsKey = (connection?.plugins ?? pluginSlugs ?? null)?.join(
+    ",",
+  );
+  const appliedPresets = useRef({ gateway: false, plugins: false });
+  useEffect(() => {
+    // An empty list is one still loading on the approval page.
+    if (
+      !presetGateway ||
+      !mcpGateways?.length ||
+      appliedPresets.current.gateway
+    )
+      return;
+    appliedPresets.current.gateway = true;
+    const picked = mcpGateways.find(
+      (g) => g.slug === presetGateway || g.id === presetGateway,
+    );
+    if (picked && picked.id !== mcpGatewayId) onMcpGatewaySelect(picked.id);
+    setCustomizing(true);
+  }, [presetGateway, mcpGateways, mcpGatewayId, onMcpGatewaySelect]);
+  useEffect(() => {
+    if (
+      presetPluginsKey === undefined ||
+      pluginsLoading ||
+      excluded.has("plugins") ||
+      appliedPresets.current.plugins
+    )
+      return;
+    appliedPresets.current.plugins = true;
+    const slugs = new Set(presetPluginsKey.split(","));
+    setPluginSelections((current) =>
+      new Map(current).set(
+        client.id,
+        new Set(
+          plugins.filter((p) => slugs.has(p.pluginSlug)).map((p) => p.id),
+        ),
+      ),
+    );
+    setCustomizing(true);
+  }, [presetPluginsKey, pluginsLoading, excluded, plugins, client.id]);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
@@ -385,9 +428,7 @@ export function ConnectCommandPanel({
   const openCodeProviderPassthrough =
     client.id === "opencode" && effectiveProxyAuth === "provider-key";
 
-  const gateway = includeGateway
-    ? (mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null)
-    : null;
+  const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The LLM Proxy may be available without a usable provider (e.g. virtual-key
   // mode with no configured providers); keep it for the row/editor, but it
   // only joins the command when a provider is also resolved.
@@ -841,7 +882,6 @@ export function ConnectCommandPanel({
       >
         <Checkbox
           id="connect-include-skills"
-          disabled={excluded.has("skills")}
           // All or nothing: the shared marketplace URL has no per-skill knob,
           // so "all" (null) and "none" (empty set) are the only honest states.
           checked={selectedSkills.length > 0}
@@ -867,7 +907,6 @@ export function ConnectCommandPanel({
         >
           <Checkbox
             id="connect-include-plugins"
-            disabled={excluded.has("plugins")}
             checked={
               selectedPlugins.length === compatiblePlugins.length
                 ? true
@@ -895,7 +934,6 @@ export function ConnectCommandPanel({
               >
                 <Checkbox
                   id={`connect-plugin-${plugin.id}`}
-                  disabled={excluded.has("plugins")}
                   checked={
                     selectedPluginIds === null ||
                     selectedPluginIds.has(plugin.id)
@@ -1168,7 +1206,54 @@ export function ConnectCommandPanel({
         }
         last={!showOAuthStep && !showDesktopGatewayStep}
       >
-        {!showSetupSummary && (
+        {!showSetupSummary && connectRequest && (
+          <ConnectionConsentOptions
+            open={customizing}
+            onOpenChange={setCustomizing}
+            gateway={
+              mcpGatewayId && mcpGateways !== null ? (
+                <>
+                  <IncludeCheckbox
+                    id="connect-include-gateway"
+                    disabled
+                    checked
+                  >
+                    Connect the MCP gateway (required)
+                  </IncludeCheckbox>
+                  {gatewayEditor}
+                </>
+              ) : null
+            }
+            proxy={
+              llmProxyId ? (
+                <>
+                  <IncludeCheckbox
+                    id="connect-include-proxy"
+                    checked={includeProxy}
+                    onCheckedChange={setIncludeProxy}
+                  >
+                    Route model requests through the LLM Proxy
+                  </IncludeCheckbox>
+                  {proxyEditor}
+                  {proxyActive && modelEditor}
+                </>
+              ) : null
+            }
+            skills={skillsEligible ? skillsEditor : null}
+            plugins={pluginsEnabled ? pluginsEditor : null}
+            platform={
+              <div className="max-[360px]:[&_[data-slot=tabs-list]]:h-auto max-[360px]:[&_[data-slot=tabs-list]]:max-w-full max-[360px]:[&_[data-slot=tabs-list]]:flex-wrap">
+                <ConnectionPlatformToggle
+                  value={platform}
+                  onValueChange={setPlatform}
+                  ariaLabel="Select a platform"
+                  dataTestId="connect-platform-select"
+                />
+              </div>
+            }
+          />
+        )}
+        {!showSetupSummary && !connectRequest && (
           <Collapsible
             open={customizing}
             onOpenChange={setCustomizing}
@@ -1185,27 +1270,10 @@ export function ConnectCommandPanel({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 grid max-w-lg gap-4">
-              {excluded.size > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Your prompt left some parts out. They stay off for this
-                  connection.
-                </p>
-              )}
-              {connectRequest && mcpGatewayId && mcpGateways !== null && (
-                <IncludeCheckbox
-                  id="connect-include-gateway"
-                  disabled={excluded.has("tools")}
-                  checked={includeGateway}
-                  onCheckedChange={setIncludeGateway}
-                >
-                  Connect the MCP gateway
-                </IncludeCheckbox>
-              )}
               {gatewayEditor}
-              {connectRequest && llmProxyId && (
+              {llmProxyId && (
                 <IncludeCheckbox
                   id="connect-include-proxy"
-                  disabled={excluded.has("proxy")}
                   checked={includeProxy}
                   onCheckedChange={setIncludeProxy}
                 >
@@ -1781,7 +1849,7 @@ function IncludeCheckbox({
   id: string;
   disabled?: boolean;
   checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  onCheckedChange?: (checked: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
@@ -1790,7 +1858,7 @@ function IncludeCheckbox({
         id={id}
         disabled={disabled}
         checked={checked}
-        onCheckedChange={(value) => onCheckedChange(value === true)}
+        onCheckedChange={(value) => onCheckedChange?.(value === true)}
       />
       {children}
     </label>

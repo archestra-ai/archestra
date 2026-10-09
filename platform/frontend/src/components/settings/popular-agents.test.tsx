@@ -116,7 +116,7 @@ function renderFlow({
       <AgentCatalog
         canAddExternalAgent
         canCreateAgent
-        showPopularAgents
+        runtimeAvailable
         onStartFromScratch={vi.fn()}
         onAddExternalAgent={vi.fn()}
         onSelect={vi.fn()}

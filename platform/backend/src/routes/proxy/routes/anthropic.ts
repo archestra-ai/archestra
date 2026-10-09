@@ -1,4 +1,4 @@
-import { RouteId } from "@archestra/shared";
+import { CLAUDE_CODE_CLIENT_ID, RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -7,10 +7,12 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import config from "@/config";
 import logger from "@/logging";
 import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
+import { claudeCodeToolTokenCountObserver } from "@/services/claude-code-tool-token-count";
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
 import { anthropicAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { getExternalAgentId } from "../utils/headers/external-agent-id";
 import {
   AnthropicModelsHeadersSchema,
   AnthropicModelsListResponseSchema,
@@ -34,19 +36,34 @@ function summarizeAnthropicRequestHeaders(headers: FastifyRequest["headers"]) {
 const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
   const ANTHROPIC_PREFIX = `${PROXY_API_PREFIX}/anthropic`;
   const MESSAGES_SUFFIX = "/messages";
+  const upstream = config.llm.anthropic.baseUrl;
 
   logger.debug("[UnifiedProxy] Registering unified Anthropic routes");
 
   await fastify.register(fastifyHttpProxy, {
-    upstream: config.llm.anthropic.baseUrl,
+    upstream,
     prefix: ANTHROPIC_PREFIX,
     rewritePrefix: "",
     preHandler: createProxyPreHandler({
       apiPrefix: ANTHROPIC_PREFIX,
       endpointSuffix: MESSAGES_SUFFIX,
-      upstream: config.llm.anthropic.baseUrl,
+      upstream,
       providerName: "Anthropic",
       rewritePrefix: "",
+      beforeCleanBody: async (request, body) => {
+        if (
+          request.method === "POST" &&
+          getExternalAgentId(request.headers) === CLAUDE_CODE_CLIENT_ID &&
+          request.url.split("?")[0] ===
+            `${ANTHROPIC_PREFIX}/v1/messages/count_tokens`
+        ) {
+          await claudeCodeToolTokenCountObserver.prepare(
+            request,
+            body,
+            upstream,
+          );
+        }
+      },
       skipErrorResponse: {
         type: "error",
         error: {
@@ -56,6 +73,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     }),
+    replyOptions: { onResponse: claudeCodeToolTokenCountObserver.onResponse },
   });
 
   /**
@@ -72,7 +90,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Proxy"],
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
-        response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
+        response: constructResponseSchema(
+          Anthropic.API.MessagesResponseWireSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -113,7 +133,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
-        response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
+        response: constructResponseSchema(
+          Anthropic.API.MessagesResponseWireSchema,
+        ),
       },
     },
     async (request, reply) => {

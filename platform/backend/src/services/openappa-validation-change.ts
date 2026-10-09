@@ -7,6 +7,7 @@ import {
 } from "@/services/openappa-policy-change";
 import {
   getOpenAppaPolicyTests,
+  inspectOpenAppaPolicyTests,
   replayOpenAppaValidationProposal,
 } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
@@ -73,30 +74,52 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
     [...filesByPath.values()].sort((a, b) => a.path.localeCompare(b.path)),
   );
   const policyContent = request.policyContent ?? root.content;
-  if (request.policyContent !== undefined)
+  const policyChanged =
+    request.policyContent != null &&
+    (root.revision === 0 || policyContent !== root.content);
+  if (policyChanged)
     await refuseCredentialLines({
       organizationId,
-      before: root.content,
-      after: request.policyContent,
-    });
-  const tests = await replayOpenAppaValidationProposal(
-    {
-      organizationId,
       userId,
-      files,
-      sourceVersion: collection.version,
-      directory: collection.directory,
-      ...(request.policyContent !== undefined
-        ? {
-            proposedPolicy: {
-              content: policyContent,
-              expectedRevision: root.revision,
-            },
-          }
-        : {}),
-    },
-    collection,
+      before: root.content,
+      after: policyContent,
+    });
+  const [replayed, inspection] = await Promise.all([
+    replayOpenAppaValidationProposal(
+      {
+        organizationId,
+        userId,
+        files,
+        sourceVersion: collection.version,
+        directory: collection.directory,
+        ...(policyChanged
+          ? {
+              proposedPolicy: {
+                content: policyContent,
+                expectedRevision: root.revision,
+              },
+            }
+          : {}),
+      },
+      collection,
+    ),
+    request.changes.upsert.length
+      ? inspectOpenAppaPolicyTests(request.changes.upsert)
+      : { files: [] },
+  ]);
+  const parseErrors = inspection.files.flatMap((file) =>
+    file.error === null ? [] : [file.error],
   );
+  const tests = parseErrors.length
+    ? {
+        ...replayed,
+        validation: {
+          ...replayed.validation,
+          valid: false,
+          errors: [...replayed.validation.errors, ...parseErrors],
+        },
+      }
+    : replayed;
   const [currentRoot, currentSource, currentSuite] = await Promise.all([
     guardrailsPolicyService.get(organizationId),
     OpenAppaGithubSyncModel.find(organizationId),
@@ -126,9 +149,7 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
     tests,
     counts,
     policyContent,
-    policyChanged:
-      request.policyContent !== undefined &&
-      (root.revision === 0 || policyContent !== root.content),
+    policyChanged,
   };
 }
 
@@ -143,10 +164,14 @@ export async function previewOpenAppaValidationChange(
         ? ("pull_request" as const)
         : ("revision" as const),
     policy: {
-      before: proposal.root.content,
-      after: proposal.policyContent,
       revision: proposal.root.revision,
       changed: proposal.policyChanged,
+      ...(proposal.policyChanged
+        ? {
+            before: proposal.root.content,
+            after: proposal.policyContent,
+          }
+        : {}),
     },
     changes: proposal.request.changes,
     tests: proposal.tests,

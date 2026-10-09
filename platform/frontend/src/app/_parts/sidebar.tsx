@@ -543,13 +543,6 @@ export function AppSidebar() {
           .filter(
             (item) => item.url !== "/openappa" || openappaEnabled === true,
           )
-          // The legacy guardrails page steps aside once OpenAPPA is on: the
-          // flag alone decides, so turning it off brings the page back with
-          // its policies untouched. Waits for the flag answer like Plugins.
-          .filter(
-            (item) =>
-              item.url !== "/mcp/tool-guardrails" || openappaEnabled === false,
-          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.

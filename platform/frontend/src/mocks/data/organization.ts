@@ -26,8 +26,6 @@ export function makeOrganization(
     appsHackathonRecorderEnabled: true,
     newAppsDisabledByDefault: false,
     newAppsLockedByDefault: false,
-    defaultDiscoveredToolInvocationPolicy: "allow_when_context_is_untrusted",
-    defaultDiscoveredToolResultPolicy: "mark_as_untrusted",
     allowChatFileUploads: false,
     allowToolAutoAssignment: true,
     // Configured, so the knowledge section renders its pages rather than the
@@ -76,6 +74,7 @@ export function makeOrganization(
     connectionDefaultLlmProxyId: null,
     connectionDefaultClientId: null,
     connectionShownClientIds: null,
+    connectionClientOrder: null,
     connectionShownProviders: null,
     connectionBaseUrls: null,
     connectionDefaultProviderKeys: null,

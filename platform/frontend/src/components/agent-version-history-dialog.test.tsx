@@ -58,7 +58,6 @@ const snapshot = (
   description: null,
   icon: null,
   systemPrompt: "be helpful",
-  considerContextUntrusted: false,
   toolExposureMode: "full",
   missingCredentialBehavior: "allow",
   accessAllTools: false,

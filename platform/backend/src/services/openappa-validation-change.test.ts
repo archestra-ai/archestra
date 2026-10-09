@@ -121,10 +121,15 @@ describe("source-aware validation proposals", () => {
       updatedBy: ctx.user.id,
     });
     const candidate = `include = ["batteries/github/appa.toml"]\n\n${policy}`;
+    const repository = {
+      path: "traces/repository.appa",
+      content:
+        'mcp/files/read {}\nexpect allow\nmcp/github/list_branches {\n  owner: "acme"\n  repo: "app"\n}\nexpect allow\n',
+    };
     const preview = await previewOpenAppaValidationChange({
       ...request(),
       policyContent: candidate,
-      changes: { upsert: [], delete: [] },
+      changes: { upsert: [repository], delete: [] },
     });
     const declared = `${candidate}\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "stored-github"\n`;
     const composed = await openappaDeclarations.composeForCheck({
@@ -140,11 +145,16 @@ describe("source-aware validation proposals", () => {
     );
     expect(preview.tests.policyHash).toBe(hash(candidate));
     expect(preview.tests.validation.valid).toBe(true);
+    // Offline, only the call routed to the battery's helper-backed annotator cannot run.
     expect(preview.tests.files).toMatchObject([
+      { path: existing.path, status: "passed" },
       {
-        path: existing.path,
+        path: repository.path,
         status: "cannot_run",
-        error: expect.stringMatching(/\S/),
+        steps: [
+          { line: 1, status: "passed" },
+          { line: 3, status: "cannot_run", error: expect.stringMatching(/\S/) },
+        ],
       },
     ]);
     expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
@@ -184,6 +194,26 @@ describe("source-aware validation proposals", () => {
     expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
       { revision: 1, content: policy },
     );
+    expect(
+      await OpenAppaPolicyTestsModel.find(ctx.organizationId),
+    ).toMatchObject({ version, files: [existing] });
+  });
+
+  test("an unparseable scenario makes the proposal invalid and publication refuses it", async () => {
+    const broken = {
+      path: "traces/broken.appa",
+      content: "mcp/files/read {}\nexpect maybe\n",
+    };
+    const changes = { upsert: [broken], delete: [] };
+    const preview = await previewOpenAppaValidationChange({
+      ...request(),
+      changes,
+    });
+    expect(preview.tests.validation.valid).toBe(false);
+    expect(preview.tests.validation.errors).toHaveLength(1);
+    await expect(
+      publishOpenAppaValidationChange({ ...publish(), changes }),
+    ).rejects.toMatchObject({ statusCode: 400 });
     expect(
       await OpenAppaPolicyTestsModel.find(ctx.organizationId),
     ).toMatchObject({ version, files: [existing] });

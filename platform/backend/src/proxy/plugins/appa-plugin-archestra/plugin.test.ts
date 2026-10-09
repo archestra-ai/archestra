@@ -479,9 +479,6 @@ describe("asking through the client's own question tool", () => {
             outputSource: "runtime",
           },
         },
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const request = { instructions: "Base", input: [] };
 
@@ -583,9 +580,6 @@ describe("asking through the client's own question tool", () => {
         toolResultUpdates: {
           quoted: { content: quoted, outputSource: "tool" },
         },
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const endTurn = vi.spyOn(appaService, "endTurn").mockResolvedValue();
     const request = {
@@ -760,9 +754,6 @@ describe("asking through the client's own question tool", () => {
                 : {}),
             },
           },
-          contextIsTrusted: true,
-          dualLlmAnalyses: [],
-          unsafeContextBoundary: undefined,
         });
       const after =
         mode === "own remedy alias"
@@ -1049,9 +1040,6 @@ describe("asking through the client's own question tool", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const request = { system: "Base instructions", messages: [] };
     await stageHitlReview({
@@ -1384,9 +1372,6 @@ describe("asking through the client's own question tool", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
@@ -1756,9 +1741,6 @@ describe("asking through the client's own question tool", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
@@ -2118,9 +2100,6 @@ describe("asking through the client's own question tool", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const answer = {
       id: "chat-answer",
@@ -2162,9 +2141,6 @@ describe("asking through the client's own question tool", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     try {
       await plugin.onSessionInit(context);
@@ -2266,9 +2242,6 @@ describe("asking through the client's own question tool", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const wrongSession = requestContext({
       sessionId: "user:user|other-legacy-question",
@@ -3509,9 +3482,6 @@ describe("rendering runtime text for this client", () => {
             outputSource: "tool",
           },
         },
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       } as never);
     try {
       await plugin.onSessionInit(context);
@@ -3557,9 +3527,6 @@ describe("rendering runtime text for this client", () => {
       .spyOn(appaService, "processProxyResults")
       .mockResolvedValue({
         toolResultUpdates: {},
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       } as never);
     const declined = {
       id: "declined",
@@ -4270,9 +4237,6 @@ describe("child return contract delivery", () => {
       .mockResolvedValue({
         toolResultUpdates: {},
         returnContract: contract,
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const first = request();
     const retry = request();
@@ -4307,9 +4271,6 @@ describe("child return contract delivery", () => {
       .mockResolvedValue({
         toolResultUpdates: {},
         returnContract: contract,
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const request = {
       system: "Base",
@@ -4338,9 +4299,6 @@ describe("child return contract delivery", () => {
       .mockResolvedValue({
         toolResultUpdates: {},
         returnContract: contract,
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const request = { system: "Base", messages: [] };
 
@@ -4387,9 +4345,6 @@ describe("child return contract delivery", () => {
       .mockResolvedValue({
         toolResultUpdates: {},
         returnContract: contract,
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
 
     try {
@@ -4880,12 +4835,10 @@ describe("AppaPluginArchestra", () => {
       ];
       try {
         await registry.onSessionInit(context);
-        const validate = vi.fn(async () => null);
-        const outcome = await registry.onToolCalls(
-          { ...context, toolCalls: calls },
-          validate,
-        );
-        expect(validate).toHaveBeenCalledWith(calls);
+        const outcome = await registry.onToolCalls({
+          ...context,
+          toolCalls: calls,
+        });
         expect(outcome.decision).toBe("allow");
         if (outcome.decision !== "allow") throw new Error("Expected approval");
         const released = outcome.toolCalls[0].arguments as Record<
@@ -4974,9 +4927,6 @@ describe("AppaPluginArchestra", () => {
         toolResultUpdates: {
           foreign: { content: quoted, outputSource: "tool" },
         },
-        contextIsTrusted: true,
-        dualLlmAnalyses: [],
-        unsafeContextBoundary: undefined,
       });
     const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
     const organization = await makeOrganization();
@@ -6029,12 +5979,6 @@ describe("delegation markers", () => {
             arguments: JSON.stringify(args),
           })),
         ),
-        async (calls) => {
-          expect(
-            calls.map((call) => JSON.parse(String(call.arguments))),
-          ).toEqual(expected);
-          return null;
-        },
       );
       expect(
         evaluate.mock.calls
@@ -6182,9 +6126,6 @@ describe("delegation markers", () => {
         },
       });
       await registry.onSessionInit(context);
-      const validate = vi.fn(
-        async (_calls: LlmProxyToolCallsContext["toolCalls"]) => null,
-      );
 
       const outcome = await registry.onToolCalls(
         toolCalls(context, [
@@ -6231,14 +6172,10 @@ describe("delegation markers", () => {
             }),
           },
         ]),
-        validate,
       );
 
       const evaluated = evaluate.mock.calls.at(-1)?.[1];
-      expect(validate).toHaveBeenCalledOnce();
-      const validated = validate.mock.calls[0][0];
-      expect(validated[0].namespace).toBe("collaboration");
-      expect(JSON.parse(String(validated[0].arguments))).toEqual(authorized);
+      expect(evaluated?.[0]?.namespace).toBe("collaboration");
       expect(
         evaluated?.map((call) => JSON.parse(String(call.arguments))),
       ).toEqual([
@@ -6297,69 +6234,6 @@ describe("delegation markers", () => {
       expect(changedOptions.task_name).toBe("reader");
     });
 
-    test.each([
-      "message",
-      "items",
-    ])("does not prepare a restored %s spawn that host validation refuses", async (promptField) => {
-      const registry = new LlmProxyPluginRegistry();
-      registry.register(new AppaPluginArchestra([new AppaCodexAdapter()]));
-      const authorized = {
-        ...(promptField === "items"
-          ? { items: [{ type: "text", text: "Read the bounded report" }] }
-          : { message: "Read the bounded report" }),
-        task_name: "reader",
-      };
-      const context = clientContext({
-        sessionId: "user:user|t0",
-        tools: true,
-        interactionType: "openai:responses",
-        headers: {
-          "user-agent": "codex_cli_rs/0.159.2",
-          "x-codex-turn-metadata": JSON.stringify({ thread_id: "t0" }),
-        },
-        body: {
-          prompt_cache_key: "t0",
-          input: [
-            {
-              type: "function_call_output",
-              call_id: "call_remedy",
-              output: `[appa] Authorized. Call the collaboration.spawn_agent tool again with exactly these arguments: ${JSON.stringify(authorized)}`,
-            },
-          ],
-        },
-      });
-      await registry.onSessionInit(context);
-      const outcome = await registry.onToolCalls(
-        toolCalls(context, [
-          {
-            id: "call_retry",
-            name: "spawn_agent",
-            namespace: "collaboration",
-            arguments: JSON.stringify({
-              ...authorized,
-              ...(promptField === "items"
-                ? { items: [{ type: "text", text: "Rewritten task" }] }
-                : { message: "Rewritten task" }),
-            }),
-          },
-        ]),
-        async (calls) => {
-          expect(calls[0].namespace).toBe("collaboration");
-          expect(JSON.parse(String(calls[0].arguments))).toEqual(authorized);
-          return {
-            refusalMessage: "Host policy refuses this spawn",
-            contentMessage: "Host policy refuses this spawn",
-            reason: "host_policy",
-            blockedToolName: calls[0].name,
-            toolInput: authorized,
-            allToolCallNames: calls.map((call) => call.name),
-          };
-        },
-      );
-      expect(outcome.decision).toBe("refuse");
-      expect(evaluate).not.toHaveBeenCalled();
-    });
-
     test("does not restore items spawns with different task names, options, or prompt carriers", async () => {
       const registry = new LlmProxyPluginRegistry();
       registry.register(new AppaPluginArchestra([new AppaCodexAdapter()]));
@@ -6406,9 +6280,6 @@ describe("delegation markers", () => {
         },
       });
       await registry.onSessionInit(context);
-      const validate = vi.fn(
-        async (_calls: LlmProxyToolCallsContext["toolCalls"]) => null,
-      );
       await registry.onToolCalls(
         toolCalls(context, [
           ...unmatched.map((argumentsValue, index) => ({
@@ -6424,14 +6295,8 @@ describe("delegation markers", () => {
             arguments: JSON.stringify(rewrite),
           },
         ]),
-        validate,
       );
       const expected = [...unmatched, authorized];
-      expect(
-        validate.mock.calls[0][0].map((call) =>
-          JSON.parse(String(call.arguments)),
-        ),
-      ).toEqual(expected);
       expect(
         evaluate.mock.calls
           .at(-1)?.[1]
@@ -6495,10 +6360,6 @@ describe("delegation markers", () => {
             arguments: JSON.stringify(rewrite),
           },
         ]),
-        async (calls) => {
-          expect(JSON.parse(String(calls[0].arguments))).toEqual(rewrite);
-          return null;
-        },
       );
       expect(
         JSON.parse(String(evaluate.mock.calls.at(-1)?.[1]?.[0]?.arguments)),
@@ -7813,14 +7674,14 @@ describe("Codex spawn declarations", () => {
     };
 
     try {
-      const first = await registry.onToolCalls(
-        { ...context, toolCalls: [call] },
-        async () => null,
-      );
-      const second = await registry.onToolCalls(
-        { ...context, toolCalls: [call] },
-        async () => null,
-      );
+      const first = await registry.onToolCalls({
+        ...context,
+        toolCalls: [call],
+      });
+      const second = await registry.onToolCalls({
+        ...context,
+        toolCalls: [call],
+      });
       expect(evaluateToolCalls).not.toHaveBeenCalled();
       for (const outcome of [first, second]) {
         expect(outcome.decision).toBe("refuse");

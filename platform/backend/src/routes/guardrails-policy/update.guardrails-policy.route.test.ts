@@ -600,6 +600,128 @@ describe("guardrails policy authoring", () => {
     expect(spelled.statusCode, spelled.body).toBe(200);
   });
 
+  test("a credential a root profile reads is a grant: adding, rekeying or renaming it needs credential update", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+    makeSession,
+  }) => {
+    const author = await makeUser();
+    const role = await makeCustomRole(orgId, {
+      permission: { openappaPolicy: ["read", "update"] },
+    });
+    await makeMember(author.id, orgId, { role: role.role });
+    const authorSession = await makeSession(author.id, {
+      activeOrganizationId: orgId,
+    });
+    const actAs = (user: typeof author, session: typeof authorSession) =>
+      vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+        response: { user, session },
+        headers: new Headers(),
+      } as never);
+    const put = (body: string, expectedRevision: number) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/guardrails-policy",
+        payload: { content: body, expectedRevision },
+      });
+    const reader = (key: string, extra = "") =>
+      `${content}${extra}\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = "${key}"\n[externals.jev]\ntoken_env = "APPA_PROVIDER_JEV_API_KEY"\n`;
+
+    actAs(author, authorSession);
+    expect((await put(reader("jev-key"), 0)).statusCode).toBe(403);
+    expect(await GuardrailsPolicyModel.findLatest(orgId)).toBeNull();
+
+    const admin = await makeUser();
+    await makeMember(admin.id, orgId, { role: "admin" });
+    actAs(admin, await makeSession(admin.id, { activeOrganizationId: orgId }));
+    const granted = await put(reader("jev-key"), 0);
+    expect(granted.statusCode, granted.body).toBe(200);
+    // Only a profile can read a [credentials] line: an endpoint naming a url is
+    // refused one, so a reader's path fixes where the credential goes.
+    const elsewhere = await put(
+      `${reader("jev-key")}[externals.authorities.review]\nurl = "https://elsewhere.example/review"\ntoken_env = "APPA_PROVIDER_JEV_API_KEY"\n`,
+      1,
+    );
+    expect(elsewhere.statusCode).toBe(400);
+
+    actAs(author, authorSession);
+    // Rules around an unchanged line stay the author's to write.
+    const unrelated = '\n[[policy.tool]]\nname = "write"\ndelta = {}\n';
+    const kept = await put(reader("jev-key", unrelated), 1);
+    expect(kept.statusCode, kept.body).toBe(200);
+    expect((await put(reader("other-key", unrelated), 2)).statusCode).toBe(403);
+    const renamed = reader("jev-key", unrelated).replaceAll(
+      "APPA_PROVIDER_JEV_API_KEY",
+      "APPA_PROVIDER_JEV_OTHER_KEY",
+    );
+    expect((await put(renamed, 2)).statusCode).toBe(403);
+    expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(2);
+
+    const removed = await put(`${content}${unrelated}`, 2);
+    expect(removed.statusCode, removed.body).toBe(200);
+  });
+
+  test("a root profile reading a variable a stored binding fills is a grant of that binding", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+    makeSession,
+  }) => {
+    await OpenAppaCredentialBindingModel.upsert({
+      organizationId: orgId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      credentialKey: "github-token",
+      updatedBy: userId,
+    });
+    const declared = `include = ["batteries/github/appa.toml"]\n\n${content}`;
+    const included = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: declared, expectedRevision: 0 },
+    });
+    expect(included.statusCode, included.body).toBe(200);
+
+    const author = await makeUser();
+    const role = await makeCustomRole(orgId, {
+      permission: { openappaPolicy: ["read", "update"] },
+    });
+    await makeMember(author.id, orgId, { role: role.role });
+    vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+      response: {
+        user: author,
+        session: await makeSession(author.id, { activeOrganizationId: orgId }),
+      },
+      headers: new Headers(),
+    } as never);
+    // The jev profile would send the github battery's bound token to its own
+    // endpoint, though the text names no credential.
+    const reread = `${declared}\n[externals.jev]\ntoken_env = "APPA_PROVIDER_GITHUB_TOKEN"\n`;
+    const refused = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: reread, expectedRevision: 1 },
+    });
+    expect(refused.statusCode).toBe(403);
+    expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
+
+    const admin = await makeUser();
+    await makeMember(admin.id, orgId, { role: "admin" });
+    vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+      response: {
+        user: admin,
+        session: await makeSession(admin.id, { activeOrganizationId: orgId }),
+      },
+      headers: new Headers(),
+    } as never);
+    const granted = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: reread, expectedRevision: 1 },
+    });
+    expect(granted.statusCode, granted.body).toBe(200);
+  });
+
   test("an entry spelling bytes nobody stored is refused when it is added and unavailable when it stays", async () => {
     const unknown = `include = ["batteries/acme@sha256-${"a".repeat(64)}/appa.toml"]\n\n${content}`;
     const added = await app.inject({

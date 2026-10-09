@@ -5,11 +5,10 @@ import {
   TOOL_POST_RUN_FILE_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
 } from "@archestra/shared";
-import { onTestFinished, vi } from "vitest";
+import { vi } from "vitest";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
-import config from "@/config";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   A2AContextModel,
@@ -90,11 +89,6 @@ describe("run tools", () => {
   test("returns a setup link and every missing credential before starting a run", async ({
     makeAgent,
   }) => {
-    const originalEnabled = config.agentRuntime.enabled;
-    config.agentRuntime.enabled = true;
-    onTestFinished(() => {
-      config.agentRuntime.enabled = originalEnabled;
-    });
     const target = await makeAgent({
       organizationId,
       authorId: actorId,

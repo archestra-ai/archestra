@@ -6,6 +6,7 @@ import {
   buildSkippedAttachmentsNote,
   formatApprovalToolArgs,
   isLlmProviderAuthError,
+  isSessionResetCommand,
   Semaphore,
   stripAgentFooterChrome,
   stripDuplicateAgentFooter,
@@ -445,5 +446,32 @@ describe("Semaphore", () => {
     const next = track(semaphore.acquire());
     await flush();
     expect(next.settled).toBe(true);
+  });
+});
+
+describe("isSessionResetCommand", () => {
+  test("accepts each command, with a slash, a Telegram bot suffix, or trailing punctuation", () => {
+    for (const text of [
+      "reset",
+      "Reset!",
+      "  /reset  ",
+      "/reset@acme_bot",
+      "new chat",
+      "New   Conversation.",
+      "start over",
+    ]) {
+      expect(isSessionResetCommand(text), text).toBe(true);
+    }
+  });
+
+  test("rejects requests that only contain a command word", () => {
+    for (const text of [
+      "new",
+      "reset the staging cluster",
+      "please start over with the report",
+      "",
+    ]) {
+      expect(isSessionResetCommand(text), text).toBe(false);
+    }
   });
 });

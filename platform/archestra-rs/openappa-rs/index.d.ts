@@ -235,6 +235,8 @@ export interface PolicyDeclarations {
    * their values in `DispatchPolicy.credentials`.
    */
   runtimeCredentials: Array<string>
+  /** Every root external or profile naming a `token_env`, bound or not. */
+  tokenEnvReaders: Array<TokenEnvReader>
   /**
    * A shape the reader could not make sense of, naming the key and its line. An
    * unparsable document is one error and no declarations.
@@ -262,7 +264,8 @@ export declare function readPeerMessage(input: string, policy: DispatchPolicy): 
 
 /**
  * Evaluate bounded `.appa` scenarios against the supplied effective policy. The
- * replay core refuses live consults and keeps every trajectory in memory.
+ * replay core answers consults through an in-process stand-in, never a live party,
+ * and keeps every trajectory in memory.
  */
 export declare function replayOpenappaPolicy(input: string): Promise<string>
 
@@ -277,6 +280,15 @@ export interface ServerAliasDeclaration {
   namespace: string
   servers: Array<string>
   line: number
+}
+
+/**
+ * A root external or profile naming a `token_env`; `reader` is its `externals`
+ * path.
+ */
+export interface TokenEnvReader {
+  variable: string
+  reader: string
 }
 
 /**

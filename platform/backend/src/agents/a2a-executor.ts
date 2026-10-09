@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import {
-  BUILT_IN_AGENT_IDS,
   type ChatUploadRejectionReason,
   chatUploadRejectionReason,
   getModelReadableMimeTypes,
@@ -54,6 +53,7 @@ import {
   ProviderError,
   SubagentProviderError,
 } from "@/routes/chat/errors";
+import { usesStepPromptCache } from "@/routes/chat/normalization/apply-prompt-cache";
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
@@ -157,19 +157,8 @@ export interface A2AExecuteParams {
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
-  /** Whether the parent execution context was still trusted at delegation time */
-  parentContextIsTrusted?: boolean;
-  /**
-   * Environment of the delegating caller (null = Default). Only consumed when
-   * the executed agent is the advisor built-in: its own row is org-wide and
-   * env-less, so consultations bill to the caller's environment instead.
-   */
-  callerEnvironmentId?: string | null;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
-
-  /** Whether to block execution when an approval-required tool is called (defaults to true) */
-  blockOnApprovalRequired?: boolean;
 
   /**
    * History of UI messages needed for persistance at new UIMessage generation
@@ -242,7 +231,6 @@ export async function executeA2AMessage(
     attachments,
     chatOpsBindingId,
     chatOpsThreadId,
-    parentContextIsTrusted,
     scheduleTriggerRunId,
     subagentToolStream,
     delegationToolCallId,
@@ -318,27 +306,26 @@ export async function executeA2AMessage(
     await assertCallerMayStartTurn({ agentId, userId });
   }
 
-  // The advisor's row is env-less, so without this its spend would escape
-  // environment budgets entirely; every other agent bills to its own row's
-  // environment as usual.
-  const delegationBillingEnvironmentId =
-    agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
-      ? (params.callerEnvironmentId ?? null)
-      : null;
-
-  const { selectedModel, selectedProvider: provider } =
-    await resolveConversationLlmSelectionForAgent({
-      agent: {
-        llmApiKeyId: agent.llmApiKeyId,
-        modelId: agent.modelId,
-      },
-      organizationId,
-      userId,
-      // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
-      // the user driving the /chat model selector, so they resolve from the
-      // agent's own configuration rather than the caller's personal chat default.
-      includeMemberChatDefault: false,
-    });
+  const {
+    selectedModel,
+    selectedProvider: provider,
+    chatApiKeyId: resolvedApiKeyId,
+  } = await resolveConversationLlmSelectionForAgent({
+    agent: {
+      llmApiKeyId: agent.llmApiKeyId,
+      modelId: agent.modelId,
+    },
+    organizationId,
+    userId,
+    // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
+    // the user driving the /chat model selector, so they resolve from the
+    // agent's own configuration rather than the caller's personal chat default.
+    includeMemberChatDefault: false,
+  });
+  // Run on the key that was selected with the model (the agent's own, or the
+  // organization default's). Without it, key lookup prefers the caller's
+  // personal key and the run sends a key the selection never chose.
+  const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -367,7 +354,6 @@ export async function executeA2AMessage(
       conversationId: params.conversationId,
       isolationKey,
       abortSignal,
-      blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
       // Forward the same bridge so a nested delegation's tool calls surface too,
       // attributed to the nested delegation call (recursion through the chain).
@@ -401,7 +387,7 @@ export async function executeA2AMessage(
     // Create LLM model using shared service
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
-    // Pass agent's llmApiKeyId so it can be used without user access check
+    // Pass the resolved key so it can be used without user access check
     const { model, anthropicNativeEndpoint, chatApiKeyId } =
       await createLLMModelForAgent({
         organizationId,
@@ -412,9 +398,7 @@ export async function executeA2AMessage(
         sessionId,
         source,
         externalAgentId: delegationChain,
-        agentLlmApiKeyId: agent.llmApiKeyId,
-        contextIsTrusted: parentContextIsTrusted,
-        delegationBillingEnvironmentId,
+        agentLlmApiKeyId: llmApiKeyId,
         appaSubagentToken: params.appaSubagent?.token,
       });
 
@@ -571,9 +555,7 @@ export async function executeA2AMessage(
               sessionId,
               source: "a2a:tool_call_repair",
               externalAgentId: delegationChain,
-              agentLlmApiKeyId: agent.llmApiKeyId,
-              contextIsTrusted: parentContextIsTrusted,
-              delegationBillingEnvironmentId,
+              agentLlmApiKeyId: llmApiKeyId,
               appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,
@@ -635,16 +617,15 @@ export async function executeA2AMessage(
         logContext: { agentId: agent.id, sessionId },
         // runAgentStream marks only the initial messages. Without a breakpoint
         // that moves with the tool loop, every later step pays the full input
-        // price for all earlier tool calls and results. Native Anthropic only,
-        // as in the chat route.
-        ...(provider === "anthropic" &&
-          anthropicNativeEndpoint && {
-            promptCache: {
-              provider,
-              model: selectedModel,
-              anthropicNativeEndpoint,
-            },
-          }),
+        // price for all earlier tool calls and results. Same providers as the
+        // chat route.
+        ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
+          promptCache: {
+            provider,
+            model: selectedModel,
+            anthropicNativeEndpoint,
+          },
+        }),
       }),
     };
     const currentTurn: { role: "user"; content: UserContent } | null =

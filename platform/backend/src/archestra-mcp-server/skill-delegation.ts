@@ -258,7 +258,6 @@ export async function handleSkillDelegation(
       chatOpsThreadId: context.chatOpsThreadId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,
       abortSignal: context.abortSignal,
-      parentContextIsTrusted: context.contextIsTrusted,
       subagentToolStream: context.subagentToolStream,
       delegationToolCallId: context.currentToolCallId,
     });

@@ -88,7 +88,6 @@ import {
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
-  toolCallsForPolicyEvaluation,
   toSpanUserInfo,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -681,122 +680,6 @@ describe("normalizeToolCallsForPolicy", () => {
 });
 
 // --------------------------------------------------------------------------
-// toolCallsForPolicyEvaluation
-// --------------------------------------------------------------------------
-describe("toolCallsForPolicyEvaluation", () => {
-  const issueWrite = JSON.stringify({
-    tool_name: "github__issue_write",
-    tool_args: { title: "hello" },
-  });
-
-  // The same gateway registered twice in one client: both run_tool spellings
-  // carry one marker, so both are demoted, and the client still routes each
-  // to the gateway, which runs the target.
-  test("rules on the target of a demoted run_tool, as well as on the wrapper", async () => {
-    const identity = await attestedIdentity([
-      attested({ name: "mcp__gw__archestra__run_tool" }, "archestra__run_tool"),
-      attested(
-        { name: "mcp__archestra__archestra__run_tool" },
-        "archestra__run_tool",
-      ),
-    ]);
-    expect(identity.attestationOf("mcp__gw__archestra__run_tool")).toBe(
-      undefined,
-    );
-
-    expect(
-      toolCallsForPolicyEvaluation({
-        toolCalls: [
-          { name: "mcp__gw__archestra__run_tool", arguments: issueWrite },
-        ],
-        toolIdentity: identity,
-        discoveredToolDefault: "block_when_context_is_untrusted",
-      }),
-    ).toEqual([
-      {
-        toolCallName: "mcp__gw__archestra__run_tool",
-        toolCallArgs: issueWrite,
-      },
-      {
-        toolCallName: "github__issue_write",
-        toolCallArgs: '{"title":"hello"}',
-        isRunToolDispatchTarget: true,
-      },
-    ]);
-  });
-
-  test("unwraps an attested run_tool once, and never adds a built-in target", async () => {
-    const identity = await attestedIdentity([
-      attested({ name: "mcp__gw__archestra__run_tool" }, "archestra__run_tool"),
-      { name: "mcp__evil__archestra__run_tool" },
-    ]);
-
-    expect(
-      toolCallsForPolicyEvaluation({
-        toolCalls: [
-          { name: "mcp__gw__archestra__run_tool", arguments: issueWrite },
-          {
-            name: "mcp__evil__archestra__run_tool",
-            arguments: { tool_name: "whoami" },
-          },
-        ],
-        toolIdentity: identity,
-        discoveredToolDefault: "block_when_context_is_untrusted",
-      }),
-    ).toEqual([
-      {
-        toolCallName: "github__issue_write",
-        toolCallArgs: '{"title":"hello"}',
-        isRunToolDispatchTarget: true,
-      },
-      {
-        toolCallName: "mcp__evil__archestra__run_tool",
-        toolCallArgs: '{"tool_name":"whoami"}',
-      },
-    ]);
-  });
-
-  // No tool row is ever persisted under these names, so without the org's
-  // default they would be allowed in any context.
-  test("rules a foreign lookalike and an unattested namespace member under the org's default", async () => {
-    const identity = await attestedIdentity([
-      attested({ name: "archestra__run_tool" }, "archestra__run_tool"),
-      attested({ name: "gw_github__list_repos" }, "github__list_repos"),
-      { name: "archestra__read_file" },
-      { name: "exfiltrate", namespace: "mcp__evil" },
-      { name: "mcp__evil__notes" },
-    ]);
-
-    const entries = toolCallsForPolicyEvaluation({
-      toolCalls: [
-        { name: "archestra__read_file", arguments: "{}" },
-        { name: "exfiltrate", namespace: "mcp__evil", arguments: "{}" },
-        { name: "mcp__evil__notes", arguments: "{}" },
-        { name: "gw_github__list_repos", arguments: "{}" },
-      ],
-      toolIdentity: identity,
-      discoveredToolDefault: "block_always",
-    });
-
-    expect(entries).toEqual([
-      {
-        toolCallName: "foreign:archestra__read_file",
-        toolCallArgs: "{}",
-        actionWithoutToolRow: "block_always",
-      },
-      {
-        toolCallName: "mcp__evil__exfiltrate",
-        toolCallArgs: "{}",
-        actionWithoutToolRow: "block_always",
-      },
-      // Discovered under its own name, like any tool the client declares.
-      { toolCallName: "mcp__evil__notes", toolCallArgs: "{}" },
-      { toolCallName: "github__list_repos", toolCallArgs: "{}" },
-    ]);
-  });
-});
-
-// --------------------------------------------------------------------------
 // calculateInteractionCosts
 // --------------------------------------------------------------------------
 describe("calculateInteractionCosts", () => {
@@ -880,20 +763,11 @@ describe("buildInteractionRecord", () => {
       cacheCost: 0.0002,
       cacheSavings: 0.0018,
     },
-    dualLlmAnalyses: [],
     billingMode: "metered" as const,
   };
 
   test("builds correct record with all fields", () => {
-    const record = buildInteractionRecord({
-      ...baseParams,
-      unsafeContextBoundary: {
-        kind: "tool_result",
-        reason: "tool_result_marked_untrusted",
-        toolCallId: "call-1",
-        toolName: "read_email",
-      },
-    });
+    const record = buildInteractionRecord(baseParams);
 
     expect(record.profileId).toBe("agent-1");
     expect(record.externalAgentId).toBe("ext-1");
@@ -911,12 +785,6 @@ describe("buildInteractionRecord", () => {
     expect(record.billingMode).toBe("metered");
     expect(record.inputTokens).toBe(100);
     expect(record.outputTokens).toBe(50);
-    expect(record.unsafeContextBoundary).toEqual({
-      kind: "tool_result",
-      reason: "tool_result_marked_untrusted",
-      toolCallId: "call-1",
-      toolName: "read_email",
-    });
   });
 
   test("carries a subscription billing mode through to the record", () => {

@@ -2,7 +2,7 @@
 title: Agents
 description: Build agents with instructions, tools, skills, subagents, and triggers
 order: 2
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -44,7 +44,7 @@ This works the same for tools, knowledge sources, [skills](/docs/agents/skills),
 
 What to know:
 
-- Each person uses their own access. In **All** mode, two people can get different tools from one agent. In both modes, a tool that needs an account uses the person's own connection, unless you pin one.
+- Each person uses their own access, so two people can get different tools from one agent. In **Manual** mode, a person gets an assigned tool only if they can access its MCP server. In both modes, a tool that needs an account uses the person's own connection, unless you pin one.
 - Built-in platform tools are excluded by default in All mode. Review the exclusions before you give an agent tools that change Archestra itself.
 - The agent loads tools as it needs them. It starts with [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool), not the full list. In **Manual** mode, you can turn off **Progressive tool loading** to send every assigned tool.
 - <span id="missing-connections"></span>**Missing connections:** in **Manual** mode, choose when the agent prompts users to connect missing tool accounts (on call, on chat open, or required before chat). To use one account for everyone, pin a connection or [resolve credentials at call time](/docs/mcp/authentication/servers#resolve-at-call-time).
@@ -98,12 +98,12 @@ What to know:
 Each conversation gets a private Linux container, so the agent can run shell commands and Python with [`run_command`](/docs/reference/archestra-mcp-server#run_command).
 
 - **Files you attach** appear under `/home/sandbox/attachments/`.
-- **Large tool results** go to `/home/sandbox/tool-results/`. When a tool returns more than 100,000 characters, the agent sees only the beginning, plus the file's path to grep the rest.
+- **Large tool results** go to `/home/sandbox/tool-results/`. When a tool returns more than 64 KB of text, the agent sees only the beginning, plus the file's path to grep the rest.
 - **Files the agent saves** appear in the conversation's **Files** panel.
 - **Network access** follows the [egress policy](/docs/admin/environments#network-egress-policies) of the agent's environment.
 
 What to know:
 
 - Files stay between commands. Running processes do not.
-- Without the sandbox, or in an encrypted chat, a large tool result is cut to its first 100,000 characters.
+- Without the sandbox, or in an encrypted chat, a large tool result is cut to its first 64 KB.
 - The sandbox is on by default. To turn it off, set [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED). For setup, see [Code Sandbox deployment](/docs/admin/deployment#code-sandbox).

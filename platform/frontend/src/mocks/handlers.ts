@@ -8,7 +8,12 @@ import {
   clientFilterToAgentIds,
 } from "@archestra/shared/interactions/client";
 import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
-import { agentsSeed, makeAgent, makeAgentCatalog } from "./data/agents";
+import {
+  agentsSeed,
+  builtInAgentsSeed,
+  makeAgent,
+  makeAgentCatalog,
+} from "./data/agents";
 import {
   adminPermissionsSeed,
   adminScopedCapabilitiesSeed,
@@ -136,6 +141,74 @@ export const handlers: HttpHandler[] = [
       { name: "self", kind: "builtin" },
     ],
   }),
+  ...getJson("/api/openappa/remedies", {
+    authorities: [
+      {
+        kind: "authority",
+        name: "human",
+        source: { entry: null, battery: null, line: 12 },
+        implementation: { kind: "hitl", detail: "hitl" },
+        tags: [],
+        permits: {
+          attention: ["*"],
+          audienceMissing: [],
+          trustBelow: null,
+          effectsContaining: [],
+        },
+        lastConsult: null,
+      },
+    ],
+    sanitizers: [
+      {
+        kind: "sanitizer",
+        name: "attest-schema",
+        source: { entry: null, battery: null, line: 20 },
+        implementation: { kind: "builtin", detail: "attest-schema" },
+        tags: [],
+        on: ["tool_output"],
+        permits: { kind: "trust", from: "suspicious", to: "trusted" },
+        lastConsult: null,
+      },
+    ],
+    blocks: [
+      {
+        kind: "trust",
+        level: "suspicious",
+        approvers: [],
+        cleaners: ["attest-schema"],
+        unservedMarks: [],
+        covered: true,
+      },
+      {
+        kind: "audience",
+        level: "internal",
+        approvers: [],
+        cleaners: [],
+        unservedMarks: [],
+        covered: false,
+      },
+      {
+        kind: "audience",
+        level: "self",
+        approvers: [],
+        cleaners: [],
+        unservedMarks: [],
+        covered: false,
+      },
+    ],
+  }),
+  ...getJson("/api/openappa/remedies/activity", {
+    timeZone: "UTC",
+    days: [
+      { date: "2026-10-02", blocked: 1, approved: 3, cleaned: 2 },
+      { date: "2026-10-03", blocked: 0, approved: 0, cleaned: 0 },
+      { date: "2026-10-04", blocked: 2, approved: 5, cleaned: 6 },
+      { date: "2026-10-05", blocked: 3, approved: 2, cleaned: 1 },
+      { date: "2026-10-06", blocked: 0, approved: 4, cleaned: 3 },
+      { date: "2026-10-07", blocked: 1, approved: 1, cleaned: 5 },
+      { date: "2026-10-08", blocked: 1, approved: 2, cleaned: 2 },
+    ],
+  }),
   ...getJson("/api/openappa/policy-tests/runs", []),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
   ...getJson("/api/openappa/yells", {
@@ -235,8 +308,13 @@ export const handlers: HttpHandler[] = [
   }),
   ...getJson("/api/organization/mcp-preset-entries", []),
   ...getJson("/api/connected-clients", []),
-  // The Connect page reads the gateway's tool list for its token estimate.
   ...getJson("/api/chat/agents/:agentId/mcp-tools", []),
+  // Connect reads the gateway's served tool list and initial context cost.
+  ...getJson("/api/agents/:id/mcp-tool-preview", {
+    toolExposureMode: "full",
+    tools: [],
+    tokenCount: { total: 0, source: "estimate", model: null, observedAt: null },
+  }),
   ...getJson("/api/projects", []),
   ...getJson("/api/apps", {
     data: [],
@@ -299,6 +377,16 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
   ...getJson("/api/k8s/capabilities", {
+    agentSandbox: {
+      installed: false,
+      missingResources: [
+        "sandboxes.agents.x-k8s.io",
+        "sandboxclaims.extensions.agents.x-k8s.io",
+        "sandboxtemplates.extensions.agents.x-k8s.io",
+        "sandboxwarmpools.extensions.agents.x-k8s.io",
+      ],
+      message: "The Agent Sandbox controller is not installed.",
+    },
     networkPolicy: {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
@@ -332,7 +420,23 @@ export const handlers: HttpHandler[] = [
 
   // Agents
   ...getJson("/api/agents", agentsSeed),
-  ...getJson("/api/agent-catalog", makeAgentCatalog()),
+  ...paths("/api/agent-catalog").map((url) =>
+    http.get(url, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const includeBuiltIn =
+        params.get("includeBuiltIn") === "true" ||
+        params.get("scope") === "built_in";
+      const agents =
+        includeBuiltIn && params.get("pinned") !== "true"
+          ? builtInAgentsSeed.filter((agent) =>
+              agent.name
+                .toLowerCase()
+                .includes((params.get("name") ?? "").toLowerCase()),
+            )
+          : [];
+      return HttpResponse.json(makeAgentCatalog({ agents }));
+    }),
+  ),
   ...getJson("/api/agents/all", []),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
@@ -351,6 +455,7 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/agents/:id", makeAgent()),
   ...getJson("/api/agents/:id/export", {}),
   ...getJson("/api/agents/:id/tools", []),
+  ...getJson("/api/agents/:id/default-suggested-prompts", []),
   ...getJson("/api/agents/:id/delegations", []),
   ...getJson("/api/agents/:id/a2a-delegations", []),
   ...getJson("/api/a2a/remote-agents", []),
@@ -474,6 +579,11 @@ export const handlers: HttpHandler[] = [
   ),
 
   // LLM proxy logs (/llm/logs list, session detail, interaction detail).
+  ...getJson("/api/interactions/sessions/:sessionId/lineage", {
+    forkedFrom: null,
+    forks: [],
+    forksTruncated: false,
+  }),
   // The sessions handler is query-aware: it filters the seed by the params the
   // frontend actually sends (sessionId / client / source), so the Client/Source
   // filter specs genuinely exercise the request wiring rather than asserting

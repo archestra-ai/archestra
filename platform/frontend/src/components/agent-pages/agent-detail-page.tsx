@@ -1,6 +1,11 @@
 "use client";
 
-import { DocsPage, E2eTestId, getDocsUrl } from "@archestra/shared";
+import {
+  DocsPage,
+  E2eTestId,
+  getDocsUrl,
+  grantsAudience,
+} from "@archestra/shared";
 import {
   Copy,
   Download,
@@ -12,17 +17,18 @@ import {
   PackageX,
   TerminalSquare,
   Trash2,
-  UserRoundCog,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime-credentials-dialog";
 import { AgentSavedSetupBanner } from "@/components/agent-saved-setup-banner";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { AudienceChip } from "@/components/audience-chip";
 import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
@@ -34,7 +40,6 @@ import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourcePermissions } from "@/components/resource-permissions";
-import { TransferAgentOwnershipDialog } from "@/components/transfer-agent-ownership-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,6 +79,7 @@ import {
 } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
 import { useDefaultEnvironment } from "@/lib/organization.query";
+import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { agentAction, getAgentActionModel } from "./agent-actions-model";
 import { AgentConnectContent } from "./agent-connect-content";
 import {
@@ -239,13 +245,20 @@ function AgentDetails({
     resource,
     canModify,
     canEdit,
-    canTransferOwnership,
     canCreate,
     canDelete,
     isBuiltIn,
     isPending: isAccessPending,
   } = useAgentAccess(agent, kind);
   const runtimeEnabled = useFeature("agentRuntime") === true;
+  const permissionResource =
+    agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
+  // The same query as the Permissions tab, so the header chip reflects what
+  // is saved and updates once a permissions save lands.
+  const savedPolicy = useResourcePermissions(permissionResource, agent.id);
+  const audience = savedPolicy.data
+    ? grantsAudience(savedPolicy.data.grants)
+    : null;
   const actionModel = getAgentActionModel({
     kind,
     agent,
@@ -326,11 +339,16 @@ function AgentDetails({
             : []),
         ]),
     ...(hasRuns ? (["runs"] as const) : []),
-    ...(!isBuiltIn ? (["permissions"] as const) : []),
     ...(showConnect && !connectFirst ? (["connect"] as const) : []),
   ];
-  const sectionParam = searchParams.get("section");
+  // Permissions live at the foot of the configuration tab now. Old links
+  // that ask for them land there.
+  const configurationSection = oneSettingsTab ? "settings" : "general";
+  const rawSectionParam = searchParams.get("section");
+  const sectionParam =
+    rawSectionParam === "permissions" ? configurationSection : rawSectionParam;
   const section = resolveAgentDetailSection(sections, sectionParam);
+  const showPermissions = !isBuiltIn && section === configurationSection;
   // Which form group is on screen, if any. Connect and Runs are not the
   // form's, so they answer undefined and it is not mounted at all.
   const activeFormGroups: readonly AgentFormSection[] =
@@ -345,11 +363,12 @@ function AgentDetails({
   // Correct the URL to match, so a reload, a copied link or the back button
   // does not keep asking for a section that is not on this page.
   useEffect(() => {
-    if (!sectionParam || sectionParam === section) return;
+    if (!rawSectionParam || rawSectionParam === section) return;
     if (sectionParam === "runs" && hasAgentRuntime && runsQuery.isPending)
       return;
     router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
   }, [
+    rawSectionParam,
     sectionParam,
     section,
     kind,
@@ -362,8 +381,31 @@ function AgentDetails({
   // Unsaved edits guard every way off the current tab that is not a save:
   // another tab, the back link, the header's own links. The pending
   // destination is parked here and taken once the guard lets go.
-  const [isDirty, setIsDirty] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  const isDirty = formDirty || permissionsDirty;
   useBeforeUnloadWhileDirty(isDirty);
+  // The permissions block saves through the configuration's own footer, so
+  // one "Save changes" covers both. The footer is portaled below the block.
+  const savePermissionsRef = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      savePermissionsRef.current = save;
+    },
+    [],
+  );
+  const [footerSlot, setFooterSlot] = useState<HTMLDivElement | null>(null);
+  const [savingPermissions, setSavingPermissions] = useState(false);
+  const savePermissions = useCallback(async () => {
+    const save = savePermissionsRef.current;
+    if (!save) return;
+    setSavingPermissions(true);
+    try {
+      await save();
+    } finally {
+      setSavingPermissions(false);
+    }
+  }, []);
   const pendingHrefRef = useRef<string | null>(null);
   const guard = useUnsavedChangesGuard({
     isDirty,
@@ -399,7 +441,6 @@ function AgentDetails({
     searchParams.get("openTools") === "true" &&
     !agent.accessAllTools;
 
-  const [transferring, setTransferring] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteRequested, setDeleteRequested] = useState(false);
@@ -470,11 +511,7 @@ function AgentDetails({
       // A scrolling box would trap the sticky save footer, so it could not
       // pin to the bottom of the window. Only the wide sections, such as
       // Runs, need one.
-      contentOverflowX={
-        activeFormGroups.length > 0 || section === "permissions"
-          ? "clip"
-          : "auto"
-      }
+      contentOverflowX={activeFormGroups.length > 0 ? "clip" : "auto"}
       icon={
         <AgentIcon
           icon={agent.icon}
@@ -486,6 +523,7 @@ function AgentDetails({
         <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate">{agent.name}</span>
           {isBuiltIn && <BuiltInAgentBadge className="font-normal" />}
+          {audience && <AudienceChip audience={audience} />}
           {/* Hidden below sm: the header is one clipped line, and the Start
               run button below already carries the glyph. */}
           {hasAgentRuntime && (
@@ -593,23 +631,6 @@ function AgentDetails({
                 reason={historyReason}
                 onSelect={() => setHistoryOpen(true)}
               />
-              {!isBuiltIn &&
-                !agent.isPersonalGateway &&
-                !agent.isPersonalProxy &&
-                agent.agentType !== "llm_proxy" && (
-                  <KebabItem
-                    icon={<UserRoundCog className="h-4 w-4" />}
-                    label="Transfer ownership"
-                    reason={
-                      !canTransferOwnership
-                        ? "Only the owner or a resource admin can transfer ownership"
-                        : isDirty
-                          ? "Save or discard your changes first"
-                          : undefined
-                    }
-                    onSelect={() => setTransferring(true)}
-                  />
-                )}
               <DropdownMenuSeparator />
               <KebabItem
                 variant="destructive"
@@ -628,27 +649,8 @@ function AgentDetails({
           <AgentSavedSetupBanner agentId={agent.id} canEditAgent={canEdit} />
         </div>
       )}
-      {transferring && (
-        <TransferAgentOwnershipDialog
-          agent={agent}
-          onClose={() => setTransferring(false)}
-          onTransferred={() => {
-            setTransferring(false);
-            router.push(backHref);
-          }}
-        />
-      )}
       <div className="min-w-0">
-        {section === "permissions" ? (
-          <ResourcePermissions
-            layout="settings"
-            resource={
-              agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent"
-            }
-            scope={agent.id}
-            onDirtyChange={setIsDirty}
-          />
-        ) : section === "runs" ? (
+        {section === "runs" ? (
           <AgentRuns agentId={agent.id} />
         ) : section === "connect" ? (
           <AgentConnectContent kind={kind} agent={agent} />
@@ -687,27 +689,39 @@ function AgentDetails({
                 sections={activeFormGroups}
                 readOnly={!canEdit}
                 openToolsCombobox={openToolsCombobox}
-                onDirtyChange={setIsDirty}
+                onDirtyChange={setFormDirty}
+                // The form saves first; its grants follow once it has.
+                onSaved={
+                  showPermissions ? () => void savePermissions() : undefined
+                }
                 footer={({
                   formId,
-                  isSaving,
-                  isDirty: formDirty,
+                  isSaving: formSaving,
+                  isDirty: fieldsDirty,
                   canSubmit,
                   readOnly,
-                }) =>
+                }) => {
+                  const isSaving = formSaving || savingPermissions;
                   // Share the create flow's sticky row and primary-action
                   // alignment so saving stays in reach on long forms.
                   // Nothing to save onto once the record is gone; the PUT would
                   // only come back 404. A reader who cannot change it has no
                   // save row at all — the alert above already says why.
-                  readOnly ? null : (
+                  const row = readOnly ? null : (
                     <WizardFooter className="sm:justify-end">
                       <Button
-                        type="submit"
+                        // With only the grants changed there is no form to
+                        // submit, so the button saves them directly.
+                        type={fieldsDirty ? "submit" : "button"}
                         size="sm"
-                        form={formId}
+                        form={fieldsDirty ? formId : undefined}
+                        onClick={
+                          fieldsDirty ? undefined : () => void savePermissions()
+                        }
                         disabled={
-                          !canSubmit || isGone || isSaving || !formDirty
+                          isGone ||
+                          isSaving ||
+                          (fieldsDirty ? !canSubmit : !permissionsDirty)
                         }
                         data-testid={E2eTestId.AgentSetupSubmitButton}
                       >
@@ -721,8 +735,34 @@ function AgentDetails({
                         )}
                       </Button>
                     </WizardFooter>
-                  )
-                }
+                  );
+                  // Below the permissions block when it is on this tab.
+                  if (showPermissions)
+                    return footerSlot ? createPortal(row, footerSlot) : null;
+                  return row;
+                }}
+              />
+            )}
+            {showPermissions && (
+              // Just the block, inline with the fields above it. It takes
+              // back the form's bottom padding to sit at field spacing.
+              <div className="-mt-6">
+                <ResourcePermissions
+                  embedded
+                  standalone
+                  resource={permissionResource}
+                  scope={agent.id}
+                  onDirtyChange={setPermissionsDirty}
+                  registerSave={registerPermissionsSave}
+                />
+              </div>
+            )}
+            {showPermissions && (
+              // The slot, not the row inside it, sticks: a sticky element
+              // only sticks within its parent, and the row's parent is this.
+              <div
+                ref={setFooterSlot}
+                className="sm:sticky sm:bottom-0 sm:z-10"
               />
             )}
           </div>

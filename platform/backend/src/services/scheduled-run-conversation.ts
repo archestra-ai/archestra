@@ -332,7 +332,6 @@ function buildMessagesFromInteractions(
     request: unknown;
     response: unknown;
     model?: string | null;
-    dualLlmAnalyses?: unknown;
   }>,
   messageTemplate: string,
 ): PartialUIMessage[] {

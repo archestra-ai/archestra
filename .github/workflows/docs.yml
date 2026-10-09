@@ -133,10 +133,12 @@ jobs:
 
       # Reuses the platform image CI built for this tree when there is one,
       # otherwise builds it. The docs show beta features (Plugins, OpenAPPA),
-      # whose routes 404 unless the beta master switch is on.
+      # whose routes 404 unless the beta master switch is on, and Agent
+      # Runtime, which has its own switch.
       - name: Start Archestra (e2e-lite stack)
         env:
           ARCHESTRA_BETA: "true"
+          ARCHESTRA_AGENT_RUNTIME_ENABLED: "true"
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Seed demo data and capture screenshots
@@ -145,6 +147,16 @@ jobs:
           ARCHESTRA_URL: http://localhost:3000
           DOCS_SCREENSHOTS_ONLY: ${{ inputs.only }}
         run: pnpm docs:screenshots
+
+      # Each failed shot leaves the page's ARIA snapshot (error-context.md),
+      # enough to see what the page showed instead.
+      - name: Upload capture results
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docs-screenshots-results
+          path: platform/docs-screenshots/test-results
+          retention-days: 7
 
       - name: Docs image policy
         run: python3 .github/scripts/check-docs-image-policy.py

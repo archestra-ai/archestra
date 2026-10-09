@@ -16,7 +16,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature, useProviderBaseUrls } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
@@ -157,6 +157,9 @@ beforeEach(() => {
     data: false,
     isPending: false,
   } as unknown as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: null,
+  } as unknown as ReturnType<typeof useSession>);
   vi.mocked(useFeature).mockReturnValue(false);
   vi.mocked(useProviderBaseUrls).mockReturnValue({
     data: {},
@@ -198,6 +201,7 @@ describe("ModelsPage", () => {
             resource: "llmModel",
             scope: model.id,
             name: model.modelId,
+            ownerId: null,
             revision: 1,
             grants: [],
             inheritedGrants: [],
@@ -217,11 +221,12 @@ describe("ModelsPage", () => {
       screen.getByRole("button", { name: `Edit ${model.modelId}` }),
     );
     const dialog = screen.getByRole("dialog");
-    await user.click(
-      within(dialog).getByRole("button", { name: "Permissions" }),
-    );
+    // Access sits on the dialog's first page, not behind a tab of its own.
     expect(
-      await within(dialog).findByRole("button", { name: "Add access" }),
+      within(dialog).queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await within(dialog).findByRole("combobox", { name: "Add access" }),
     ).toBeVisible();
   });
 

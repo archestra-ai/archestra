@@ -106,7 +106,6 @@ import type {
   LlmProxyBeforeModelContext,
   LlmProxyBufferedModelResponseContext,
   LlmProxyBufferedModelResponseOutcome,
-  LlmProxyContextTrust,
   LlmProxyHostedToolCallsContext,
   LlmProxyHostedToolCallsOutcome,
   LlmProxyModelResponseContext,
@@ -479,11 +478,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     return {
       // Use runtime-approved output for tool results.
       toolResultUpdates,
-      contextTrust: {
-        contextIsTrusted: result.contextIsTrusted,
-        dualLlmAnalyses: result.dualLlmAnalyses,
-        unsafeContextBoundary: result.unsafeContextBoundary,
-      } satisfies LlmProxyContextTrust,
     };
   }
 

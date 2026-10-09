@@ -78,7 +78,6 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
-  countGateways,
   useAllMatchingProfiles,
   useBulkDeleteProfiles,
   useDeleteProfile,
@@ -265,6 +264,8 @@ function McpGateways({
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     access: scopeFilter.access,
+    sharedWith: scopeFilter.sharedWith,
+    owner: scopeFilter.owner,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
   } satisfies Omit<
@@ -716,6 +717,8 @@ function McpGateways({
                 authorIds: null,
                 excludeAuthorIds: null,
                 access: null,
+                sharedWith: null,
+                owner: null,
                 labels: null,
                 status: null,
                 page: "1",
@@ -818,6 +821,8 @@ function McpGateways({
                 authorIds: null,
                 excludeAuthorIds: null,
                 access: null,
+                sharedWith: null,
+                owner: null,
                 labels: null,
                 status: null,
                 page: "1",
@@ -929,14 +934,7 @@ function McpGateways({
                   />
                 }
               >
-                <ResourceAccessFilter
-                  resource="mcpGateway"
-                  noun="gateways"
-                  countItems={(params) =>
-                    countGateways({ ...params, agentTypes: gatewayAgentTypes })
-                  }
-                  countKey={gatewayAgentTypes}
-                />
+                <ResourceAccessFilter resource="mcpGateway" noun="gateways" />
                 <ResourceScopeFilter showLabels />
                 <ResourceDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}

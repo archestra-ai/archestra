@@ -155,7 +155,7 @@ describe("invitation routes", () => {
       makeCustomRole,
     }) => {
       const customRole = await makeCustomRole(organizationId, {
-        permission: { agent: ["read"], toolPolicy: ["read"] },
+        permission: { agent: ["read"], mcpRegistry: ["read"] },
       });
 
       const invitation = await makeInvitation(organizationId, user.id, {

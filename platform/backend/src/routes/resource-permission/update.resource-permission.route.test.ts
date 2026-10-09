@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
@@ -166,53 +164,6 @@ describe("resource permission routes", () => {
     expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
   });
 
-  test("the advisor stays shared with the whole organization", async ({
-    makeInternalAgent,
-    makeTeam,
-  }) => {
-    const advisor = await makeInternalAgent({
-      organizationId,
-      access: "org",
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-    });
-    const team = await makeTeam(organizationId, user.id);
-    const key = {
-      organizationId,
-      resource: "agent" as const,
-      scope: advisor.id,
-    };
-    const before = await ResourcePermissionPolicyModel.find(key);
-
-    const narrowed = await app.inject({
-      method: "PUT",
-      url: `/api/resource-permissions/agent/${advisor.id}`,
-      payload: {
-        revision: before?.revision ?? 0,
-        grants: [
-          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
-        ],
-      },
-    });
-    expect(narrowed.statusCode, narrowed.body).toBe(400);
-    expect((await ResourcePermissionPolicyModel.find(key))?.grants).toEqual(
-      before?.grants,
-    );
-
-    // Adding a recipient keeps the organization, so it is allowed.
-    const widened = await app.inject({
-      method: "PUT",
-      url: `/api/resource-permissions/agent/${advisor.id}`,
-      payload: {
-        revision: before?.revision ?? 0,
-        grants: [
-          ...(before?.grants ?? []),
-          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
-        ],
-      },
-    });
-    expect(widened.statusCode, widened.body).toBe(200);
-  });
-
   test("service accounts remain available for explicit all-resource grants", async () => {
     const account = await ServiceAccountModel.create({
       organizationId,
@@ -361,6 +312,29 @@ describe("resource permission routes", () => {
         }),
       ).toBe(false);
     }
+  });
+
+  test("names the object's owner, and no owner for the all-objects policy", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: user.id,
+      access: "personal",
+    });
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/resource-permissions/agent/${agent.id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().ownerId).toBe(user.id);
+    const global = await app.inject({
+      method: "GET",
+      url: "/api/resource-permissions/agent/*",
+    });
+    expect(global.statusCode, global.body).toBe(200);
+    expect(global.json().ownerId).toBeNull();
   });
 
   test("a permission manager who is not the owner can revoke access while preserving the owner's grant", async ({

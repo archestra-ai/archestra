@@ -1,7 +1,7 @@
 /**
  * `references/archestra.md` of the built-in appa-guide skill: what an OpenAPPA
  * policy looks like in Archestra. OpenAPPA's own semantics live in the
- * verbatim `references/contracts.md`; this file holds only what Archestra adds.
+ * `references/contracts/` parts; this file holds only what Archestra adds.
  */
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const ARCHESTRA_REFERENCE = `# OpenAPPA in Archestra
@@ -42,7 +42,9 @@ annotator = "noop"
 
 Keep the existing \`[externals.annotators.noop]\` URL. It also declares the \`archestra.run-command\` annotator (\`builtin = "archestra"\`) and routes \`archestra__run_command\` to it, so the organization's default model ranks each sandbox command \`suspicious\` or \`trusted\`. Explicit rules take precedence over the catch-all, and the first matching rule for a tool applies, so put a narrow rule with an argument selector before the broad rule for the same tool.
 
-Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
+A rule declares either \`annotator\` or static fields such as \`requires\`, never both. To block \`archestra__run_command\` outright, replace its annotator rule with \`delta = {}\` and \`requires = { attention = ["blocked"] }\`; to block only some commands, put a selector rule with \`requires\` before the annotated rule.
+
+Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, \`mcp/appa/yell\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
 
 ## Batteries
 
@@ -60,6 +62,8 @@ Each credential variable a battery reads is bound to a runtime credential key wi
 A battery governs calls only when \`effective.batteries\` marks it \`active\`. Removing its \`include\` entry turns it off.
 
 ## Approvals and remedies
+
+The default \`hitl\` authority covers only \`human-approval\`. Require that mark for potentially destructive actions or publishing/sharing outside the company; do not add it to every tool call.
 
 An approval needs an authority whose permits cover the requirement, and a review channel. Do not invent an authority. When a ruling offers a remedy, call \`archestra__execute_remedy_plan\` with the exact \`offer_id\`; it requests the review itself when the policy requires one, or returns the review to ask with \`archestra__ask_user\`.
 

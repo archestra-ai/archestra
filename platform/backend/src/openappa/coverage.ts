@@ -52,11 +52,16 @@ class OpenAppaCoverageService {
     params: { organizationId: string; catalogId: string } & CoverageVisibility,
   ): Promise<CoverageTool[]> {
     if (!params.visibleCatalogIds?.includes(params.catalogId)) return [];
-    const { tools } = await buildReport(params.organizationId, {
-      ...params,
-      visibleCatalogIds: [params.catalogId],
-      includeAutoModeTools: false,
-    });
+    const { tools } = await buildReport(
+      params.organizationId,
+      {
+        ...params,
+        visibleCatalogIds: [params.catalogId],
+        includeAutoModeTools: false,
+        includeAppCatalogs: true,
+      },
+      params.catalogId,
+    );
     return tools
       .map((row) => row.tool)
       .filter((tool) => tool.catalogId === params.catalogId);
@@ -435,6 +440,8 @@ type CoverageVisibility = {
   autoModePage?: CoverageEntitiesQuery;
   /** Only resolve Auto-mode access for the target whose tools are requested. */
   autoModeEntityId?: string;
+  /** Per-catalog inspection reads app catalogs too; the overview leaves them out. */
+  includeAppCatalogs?: boolean;
 };
 
 /** A rule as it applies to one full tool name, battery rules once per alias target. */
@@ -445,15 +452,20 @@ type Candidate = {
   kind: Exclude<CoverageKind, "unlisted">;
 };
 
+/**
+ * `catalogId` reads only that catalog's tools and assignments. Each tool's row
+ * depends on its own catalog, assignments and the policy alone, so the rows
+ * for that catalog are the same as an organization-wide report's.
+ */
 async function buildReport(
   organizationId: string,
   visibility?: CoverageVisibility,
+  catalogId?: string,
 ): Promise<Report> {
   const [snapshot, inventory] = await Promise.all([
     openappaBatteriesService.coverageSnapshot(organizationId),
-    ToolModel.findCoverageInventory(
-      organizationId,
-      visibility?.userId
+    ToolModel.findCoverageInventory(organizationId, {
+      visibility: visibility?.userId
         ? {
             userId: visibility.userId,
             agentTypes: visibility.agentTypes ?? ["agent", "mcp_gateway"],
@@ -461,7 +473,9 @@ async function buildReport(
               visibility.excludeOtherPersonalTypes ?? [],
           }
         : undefined,
-    ),
+      includeAppCatalogs: visibility?.includeAppCatalogs,
+      catalogId,
+    }),
   ]);
   const { resolution, rootContent } = snapshot;
   const refused = snapshot.lastError !== null;

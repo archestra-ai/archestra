@@ -18,7 +18,6 @@ import manager from "./manager";
 // including the opt-in tests that exercise a real Kubernetes controller.
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
-    agentRuntime: { enabled: true },
     orchestrator: {
       kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
     },

@@ -11,6 +11,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   addedGrants,
   bundledEntry,
@@ -66,6 +67,54 @@ function duplicateEntryErrors(resolution: PolicyResolution): string[] {
     );
 }
 
+/**
+ * What this deployment's recompose would make of a document that composes on
+ * its own: a battery the deployment holds back composes as empty, and the root
+ * may name what it declares. A refusal the revision being replaced already
+ * meets is a warning, so a write that leaves it as it was is never blocked by
+ * it; one the document introduces is an error. Either way the held-back
+ * batteries are named with it, since they are what the refusal is fixed by.
+ * A held-back battery the document composes without is no refusal; its status
+ * is the effective policy's to report.
+ */
+async function deploymentRefusal(params: {
+  organizationId: string;
+  content: string;
+  previous: string;
+}): Promise<{ errors: string[]; warnings: string[] }> {
+  const { organizationId, content, previous } = params;
+  const submitted = await openappaBatteriesService.composeInDeployment({
+    organizationId,
+    content,
+  });
+  if (submitted.refusal.length === 0) return { errors: [], warnings: [] };
+  const kept = new Set(
+    previous === content
+      ? submitted.refusal
+      : (
+          await openappaBatteriesService.composeInDeployment({
+            organizationId,
+            content: previous,
+          })
+        ).refusal,
+  );
+  const introduced = submitted.refusal.filter((error) => !kept.has(error));
+  const inDeployment = (line: string) => `in this deployment: ${line}`;
+  const keptNote =
+    " (the current revision is refused the same way; the runtime keeps enforcing the last composition that opened)";
+  if (introduced.length > 0)
+    return {
+      errors: [...introduced, ...submitted.heldBack].map(inDeployment),
+      warnings: [],
+    };
+  return {
+    errors: [],
+    warnings: [...submitted.refusal, ...submitted.heldBack].map(
+      (line) => inDeployment(line) + keptNote,
+    ),
+  };
+}
+
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
 export const GUARDRAILS_REVISION_CONFLICT = "guardrails_policy_revision_stale";
 
@@ -97,6 +146,11 @@ export const guardrailsPolicyService = {
     };
   },
 
+  /** The no-op annotator endpoint and the answer it serves, for offline replay. */
+  noopAnnotator() {
+    return { url: noopAnnotatorUrl(), response: this.annotate() };
+  },
+
   /**
    * Check a document by composing it, the way a recompose composes it: the
    * batteries its `include` list names are resolved and composed under it, and the
@@ -125,13 +179,11 @@ export const guardrailsPolicyService = {
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
     const { organizationId } = params;
+    const previous =
+      params.previous ?? (await this.get(organizationId)).content;
     const resolved =
       params.resolved ??
-      (await resolveBoth({
-        organizationId,
-        content,
-        previous: params.previous ?? (await this.get(organizationId)).content,
-      }));
+      (await resolveBoth({ organizationId, content, previous }));
     const resolution = resolved.submitted;
     const errors = [...resolution.errors];
     const kept = new Set(resolved.previous.entries.map((entry) => entry.entry));
@@ -150,6 +202,15 @@ export const guardrailsPolicyService = {
         resolution,
       });
       if ((composed.content ?? null) === null) errors.push(...composed.errors);
+      else {
+        const deployed = await deploymentRefusal({
+          organizationId,
+          content,
+          previous,
+        });
+        errors.push(...deployed.errors);
+        warnings.push(...deployed.warnings);
+      }
     }
     return { valid: errors.length === 0, errors, warnings };
   },
@@ -158,8 +219,8 @@ export const guardrailsPolicyService = {
    * Save a new revision of the organization's policy.
    *
    * Every user-driven write of the text passes here, so this is where a credential
-   * grant — an organization credential's value reaching a battery's helper sandbox
-   * — is authorized. A grant the submitted text adds, or whose key it changes
+   * grant — an organization credential's value reaching a battery's helper sandbox,
+   * or a root external or profile that names it as its `token_env` — is authorized. A grant the submitted text adds, or whose key it changes
    * against the latest revision, takes `credential:update`; removing one takes
    * nothing beyond the route's own permission. The diff runs against the latest
    * revision, so a stale `expectedRevision` still ends in the save's own conflict.
@@ -184,20 +245,14 @@ export const guardrailsPolicyService = {
       content,
       previous: latest.content,
     });
-    const granted = addedGrants(
-      openappaDeclarations.grants(resolved.previous),
-      openappaDeclarations.grants(resolved.submitted),
-    );
-    if (
-      granted.length > 0 &&
-      !(await userHasPermission(userId, organizationId, "credential", "update"))
-    )
-      throw new ApiError(
-        403,
-        `Credential update permission is required: this policy hands ${granted
-          .map((grant) => `${grant.variable} to ${grant.battery}`)
-          .join(", ")}`,
-      );
+    await requireGrantPermission({
+      organizationId,
+      userId,
+      granted: addedGrants(
+        openappaDeclarations.grants(resolved.previous),
+        openappaDeclarations.grants(resolved.submitted),
+      ),
+    });
     const validation = await this.validate(content, {
       organizationId,
       previous: latest.content,
@@ -236,9 +291,31 @@ export const guardrailsPolicyService = {
   },
 };
 
+/** A write that adds or rekeys a credential grant takes `credential:update`. */
+export async function requireGrantPermission(params: {
+  organizationId: string;
+  userId: string;
+  granted: ReturnType<typeof addedGrants>;
+}): Promise<void> {
+  const { organizationId, userId, granted } = params;
+  if (
+    granted.length > 0 &&
+    !(await userHasPermission(userId, organizationId, "credential", "update"))
+  )
+    throw new ApiError(
+      403,
+      `Credential update permission is required: this policy hands ${granted
+        .map((grant) => `${grant.variable} to ${grant.battery}`)
+        .join(", ")}`,
+    );
+}
+
 function requireEnabled() {
   if (!config.openappa.enabled)
     throw new ApiError(404, "Guardrails v2 is disabled");
+}
+function noopAnnotatorUrl() {
+  return `http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}`;
 }
 function hash(content: string) {
   return createHash("sha256").update(content).digest("hex");
@@ -302,7 +379,18 @@ delta = {}
 name = "*"
 annotator = "noop"
 
+# Review one exact call that explicitly requires human approval.
+[[policy.authority]]
+name = "hitl"
+hint = "Ask the person running this session to approve this exact call."
+
+[policy.authority.permits]
+attention = ["human-approval"]
+
+[externals.authorities.hitl]
+builtin = "hitl"
+
 [externals.annotators.noop]
-url = "http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}"
+url = "${noopAnnotatorUrl()}"
 `;
 }

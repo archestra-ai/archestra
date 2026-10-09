@@ -339,18 +339,6 @@ export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
 export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
 
 /**
- * Environment the delegating caller runs in, set by the in-process A2A
- * executor on advisor consultations so the proxy bills the spend to the
- * caller's environment (the advisor's own row is org-wide and env-less).
- * Honored only over the loopback socket, only when the executing agent is
- * the advisor built-in, and only for an environment of the agent's own
- * organization — external clients cannot use it to shift spend between
- * environment budgets.
- */
-export const DELEGATION_BILLING_ENVIRONMENT_HEADER =
-  "X-Archestra-Delegation-Environment-Id";
-
-/**
  * MCP App whose runtime is making this LLM call (`archestra.llm.complete()`),
  * set by the in-process app-runtime tool so the interaction records which app
  * spent the tokens instead of collapsing into the shared App Runtime agent.
@@ -403,12 +391,6 @@ export const LAZY_MODEL_SYNC_STATUS_PENDING: LazyModelSyncStatus = "pending";
 export const SOURCE_HEADER = "X-Archestra-Source";
 
 /**
- * Header used by internal delegated agent calls to indicate that the parent
- * execution context was already untrusted/sensitive.
- */
-export const UNTRUSTED_CONTEXT_HEADER = "X-Archestra-Context-Untrusted";
-
-/**
  * Header name for a run ID.
  * Clients can pass this header to associate interactions with a specific run.
  */
@@ -438,32 +420,6 @@ export const PROVIDER_BASE_URL_HEADER = "X-Archestra-Provider-Base-Url";
  * clients from spoofing arbitrary key IDs.
  */
 export const CHAT_API_KEY_ID_HEADER = "X-Archestra-Chat-Api-Key-Id";
-
-/**
- * Requests the strongest thinking-off configuration the Anthropic model
- * supports: `thinking: {type: "disabled"}` where accepted (Opus 5, Sonnet 5),
- * or an `output_config.effort` floor on the Fable/Mythos class, which thinks
- * unconditionally. Set per call (dual LLM interrogation); consumed and
- * removed by the backend's Anthropic fetch wrapper before the request is
- * sent. A header rather than a providerOptions value because the installed
- * @ai-sdk/anthropic serializes `thinking` only for the enabled/adaptive
- * variants, so no providerOptions value can carry a disable to the wire.
- */
-export const ANTHROPIC_THINKING_OFF_HEADER =
-  "x-archestra-anthropic-thinking-off";
-
-/**
- * Header used to pass a per-turn dual LLM progress channel id from chat → LLM
- * proxy (loopback). When present, the proxy publishes structured dual LLM
- * analysis events (start / Q&A / complete / failure) on the in-process
- * progress bus under this channel instead of injecting narration text into
- * the response stream — injected narration is indistinguishable from model
- * output on chat-completions streams and fuses into the assistant's answer.
- * Clients without the header receive protocol-level SSE keep-alive comments
- * while an analysis holds the stream idle.
- */
-export const DUAL_LLM_PROGRESS_CHANNEL_HEADER =
-  "X-Archestra-Dual-Llm-Progress-Channel";
 
 export const DEFAULT_VAULT_TOKEN = "dev-root-token";
 

@@ -62,9 +62,6 @@ const agentsTable = softDeletablePgTable(
     isDefault: boolean("is_default").notNull().default(false),
     isPersonalGateway: boolean("is_personal_gateway").notNull().default(false),
     isPersonalProxy: boolean("is_personal_proxy").notNull().default(false),
-    considerContextUntrusted: boolean("consider_context_untrusted")
-      .notNull()
-      .default(false),
     agentType: text("agent_type")
       .$type<AgentType>()
       .notNull()

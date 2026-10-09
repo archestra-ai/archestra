@@ -4,7 +4,6 @@ import {
   getArchestraToolFullName,
   MCP_EXECUTED_AS_META_KEY,
   MCP_HUMAN_RULING_META_KEY,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_WHOAMI_SHORT_NAME,
@@ -624,7 +623,6 @@ describe("executeMcpTool error handling", () => {
     organizationId: "00000000-0000-4000-8000-000000000003",
     userIsAgentAdmin: false,
     mcpGwToken: null,
-    considerContextUntrusted: false,
   };
 
   const mockResult = (overrides: Record<string, unknown>) => ({
@@ -779,47 +777,6 @@ describe("executeMcpTool error handling", () => {
       },
     ]);
   });
-
-  test("attaches unsafe-context boundary metadata when a tool result is marked untrusted", async ({
-    makeAgent,
-    makeTool,
-    makeTrustedDataPolicy,
-  }) => {
-    const agent = await makeAgent();
-    const tool = await makeTool({ name: "test_tool" });
-
-    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
-      id: "call-1",
-      name: "test_tool",
-      content: [{ type: "text", text: "ARCH_TEST = secret-value" }],
-      isError: false,
-    } as never);
-
-    await makeTrustedDataPolicy(tool.id, {
-      conditions: [],
-      action: "mark_as_untrusted",
-    });
-
-    const result = await toolBuilderTest.executeMcpTool({
-      ...baseCtx,
-      agentId: agent.id,
-    });
-
-    expect(result.unsafeContextBoundary).toMatchObject({
-      kind: "tool_result",
-      reason: "tool_result_marked_untrusted",
-      toolCallId: expect.any(String),
-      toolName: "test_tool",
-    });
-    expect(result._meta).toMatchObject({
-      unsafeContextBoundary: {
-        kind: "tool_result",
-        reason: "tool_result_marked_untrusted",
-        toolCallId: expect.any(String),
-        toolName: "test_tool",
-      },
-    });
-  });
 });
 
 describe("chat-mcp-client tool caching", () => {
@@ -840,7 +797,7 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Run Tool Agent",
     });
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const targetTool = await makeTool({
       name: "workspace__find_projects",
       catalogId: catalog.id,
@@ -926,140 +883,6 @@ describe("chat-mcp-client tool caching", () => {
         isOrganizationToken: false,
         tokenId: expect.any(String),
       }),
-      { conversationId },
-    );
-
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-  });
-
-  test("requests approval for run_tool when the target tool requires approval", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeUser,
-    makeOrganization,
-    makeMember,
-    makeTool,
-    makeToolPolicy,
-    makeConversation,
-  }) => {
-    const org = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, org.id, { role: "admin" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      name: "Chat Wrapped Approval Agent",
-    });
-    const catalog = await makeInternalMcpCatalog();
-    const targetTool = await makeTool({
-      name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
-      catalogId: catalog.id,
-    });
-    await makeAgentTool(agent.id, targetTool.id);
-    await makeToolPolicy(targetTool.id, {
-      action: "require_approval",
-      conditions: [
-        { key: "destination", operator: "equal", value: "external" },
-      ],
-    });
-
-    const conversation = await makeConversation(agent.id, {
-      organizationId: org.id,
-      userId: user.id,
-    });
-    const conversationId = conversation.id;
-    const cacheKey = chatClient.__test.getCacheKey(
-      agent.id,
-      user.id,
-      conversationId,
-    );
-    chatClient.clearChatMcpClient(agent.id);
-    await chatClient.__test.clearToolCache();
-
-    const mockClient = {
-      ping: vi.fn().mockResolvedValue({}),
-      listTools: vi.fn().mockResolvedValue({
-        tools: [
-          {
-            name: getArchestraToolFullName("run_tool"),
-            description: "Run tool",
-            inputSchema: {
-              type: "object",
-              properties: {
-                tool_name: { type: "string" },
-                tool_args: { type: "object" },
-              },
-              required: ["tool_name"],
-            },
-          },
-        ],
-      }),
-      callTool: vi.fn(),
-      close: vi.fn(),
-    };
-
-    chatClient.__test.setCachedClient(
-      cacheKey,
-      mockClient as unknown as Client,
-    );
-
-    const tools = await chatClient.getChatMcpTools({
-      agentName: agent.name,
-      agentId: agent.id,
-      userId: user.id,
-      organizationId: org.id,
-      conversationId,
-    });
-
-    const runTool = tools[getArchestraToolFullName("run_tool")];
-    expect(typeof runTool.needsApproval).toBe("function");
-    const needsApproval = runTool.needsApproval as NonNullable<
-      Exclude<typeof runTool.needsApproval, boolean>
-    >;
-    await expect(
-      needsApproval(
-        {
-          tool_name: targetTool.name,
-          tool_args: { destination: "external" },
-        },
-        // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
-        { messages: [] } as any,
-      ),
-    ).resolves.toBe(true);
-
-    await expect(
-      needsApproval(
-        {
-          tool_name: targetTool.name,
-          tool_args: { destination: "internal" },
-        },
-        // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
-        { messages: [] } as any,
-      ),
-    ).resolves.toBe(false);
-
-    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValueOnce({
-      content: [{ type: "text", text: "Export queued" }],
-      isError: false,
-    } as never);
-    const result = await runTool.execute?.(
-      {
-        tool_name: targetTool.name,
-        tool_args: { destination: "external" },
-      },
-      // biome-ignore lint/suspicious/noExplicitAny: minimal AI SDK execution context for this unit test
-      { messages: [] } as any,
-    );
-
-    expect(result).toMatchObject({ content: "Export queued" });
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: targetTool.name,
-        arguments: { destination: "external" },
-      }),
-      agentOwner(agent.id),
-      expect.anything(),
       { conversationId },
     );
 
@@ -2686,88 +2509,6 @@ describe("buildArchestraToolOutput", () => {
     });
 
     expect(result).toMatchObject({ content: "Error: rate limited." });
-  });
-});
-
-describe("throwIfApprovalRequired", () => {
-  const { resolveApprovalPolicyTarget, throwIfApprovalRequired } =
-    toolBuilderTest;
-
-  test("does not throw when tool has no require_approval policy", async ({
-    makeTool,
-    makeToolPolicy,
-  }) => {
-    const tool = await makeTool({ name: "allowed-tool" });
-    await makeToolPolicy(tool.id, {
-      action: "allow_when_context_is_untrusted",
-      conditions: [],
-    });
-
-    await expect(
-      throwIfApprovalRequired("allowed-tool", {}),
-    ).resolves.toBeUndefined();
-  });
-
-  test("throws when tool has require_approval policy", async ({
-    makeTool,
-    makeToolPolicy,
-  }) => {
-    const tool = await makeTool({ name: "restricted-tool" });
-    await makeToolPolicy(tool.id, {
-      action: "require_approval",
-      conditions: [],
-    });
-
-    await expect(
-      throwIfApprovalRequired("restricted-tool", {}),
-    ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-  });
-
-  test("throws for run_tool when target tool requires approval", async ({
-    makeTool,
-    makeToolPolicy,
-  }) => {
-    const tool = await makeTool({ name: "wrapped-restricted-tool" });
-    await makeToolPolicy(tool.id, {
-      action: "require_approval",
-      conditions: [
-        { key: "destination", operator: "equal", value: "external" },
-      ],
-    });
-
-    await expect(
-      throwIfApprovalRequired(getArchestraToolFullName("run_tool"), {
-        tool_name: tool.name,
-        tool_args: { destination: "external" },
-      }),
-    ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-  });
-
-  test("does not throw when tool is not found in DB", async () => {
-    await expect(
-      throwIfApprovalRequired("nonexistent-tool", {}),
-    ).resolves.toBeUndefined();
-  });
-
-  test("resolves approval policy target from run_tool arguments", () => {
-    expect(
-      resolveApprovalPolicyTarget(getArchestraToolFullName("run_tool"), {
-        tool_name: "workspace__export",
-        tool_args: { destination: "external" },
-      }),
-    ).toEqual({
-      toolName: "workspace__export",
-      toolInput: { destination: "external" },
-    });
-
-    expect(
-      resolveApprovalPolicyTarget("workspace__export", {
-        destination: "external",
-      }),
-    ).toEqual({
-      toolName: "workspace__export",
-      toolInput: { destination: "external" },
-    });
   });
 });
 

@@ -62,7 +62,7 @@ const CreateLimitToolArgsSchema = z
       "The type of entity to apply the limit to.",
     ),
     entity_id: UuidIdSchema.describe(
-      "The ID of the entity (organization, team, agent, user, virtual_key, or environment).",
+      "The ID of the entity (organization, team, agent, user, virtual_key, environment, or llm_oauth_client).",
     ),
     limit_type: LimitTypeSchema.describe("The type of limit to apply."),
     limit_value: z
@@ -115,7 +115,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_LIMIT_SHORT_NAME,
     title: "Create Limit",
     description:
-      "Create a new cost or usage limit for an organization, team, agent, user, virtual key, environment, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
+      "Create a new cost or usage limit for an organization, team, agent, user, virtual key, environment, LLM OAuth client, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
     schema: CreateLimitToolArgsSchema,
     outputSchema: z.object({
       limit: LimitOutputItemSchema,

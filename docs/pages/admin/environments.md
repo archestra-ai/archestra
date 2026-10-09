@@ -2,7 +2,7 @@
 title: "Environments"
 description: "Isolate tools, knowledge, skills, subagents, runtimes, and cost limits across deployment environments"
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,7 +32,7 @@ A creator who may not deploy into the landing environment gets Default instead, 
 
 ## Deploy Permissions
 
-Deploying into an environment requires a `use` grant on it. Set grants on the environment's **Permissions** tab — the same control you use to share an agent or a skill.
+Deploying into an environment requires a `use` grant on it. Set grants in the environment's permissions, the same control you use to share an agent or a skill.
 
 A new environment is open to the whole organization. To lock one down, remove the organization grant and grant `use` to the people or teams who may deploy there. You can let a team deploy to `staging` without letting them near `production`, for example. One grant covers everything deployed there: MCP servers, agents, apps, gateways, and knowledge connectors.
 
@@ -54,7 +54,7 @@ An agent or MCP gateway assigned to **Production** can only see and use:
 - [Agent Skills](/docs/agents/skills) restricted to Production, or restricted to no environment at all
 - [subagent delegation targets](/docs/agents#delegation) in Production
 
-Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. [MCP Apps](/docs/chat/apps) differ too: an app accepts Default-environment tools alongside its own environment's, so Default acts as a shared baseline for apps. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available. The [Advisor](/docs/agents/subagents/built-in#advisor) is the one delegation exception — the organization has a single Advisor, and agents in every environment can consult it. Its spend counts against the consulting agent's environment.
+Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. [MCP Apps](/docs/chat/apps) differ too: an app accepts Default-environment tools alongside its own environment's, so Default acts as a shared baseline for apps. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
 
 An agent creates in its own environment. When an agent adds an MCP server to the registry, or builds an [app](/docs/chat/apps), that resource lands in the agent's environment — so the agent can still see it afterwards. A new app created from the Apps page follows the same rule: it lands in the environment of the chat agent that opens with it. An agent with no environment of its own uses the landing environment configured for that kind of resource. You can name a different environment explicitly when adding a server.
 

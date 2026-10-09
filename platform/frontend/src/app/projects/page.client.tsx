@@ -78,7 +78,6 @@ import {
 } from "@/lib/projects/project-permissions";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
-  countProjects,
   useBulkDeleteProjects,
   useCreateProject,
   useDeleteProject,
@@ -113,6 +112,8 @@ function ProjectsList() {
     authorIds,
     excludeAuthorIds,
     access,
+    sharedWith,
+    owner,
     hasActiveScopeFilters,
   } = useScopeFilterParams();
   const search = searchParams.get("search") ?? undefined;
@@ -133,6 +134,8 @@ function ProjectsList() {
     authorIds,
     excludeAuthorIds,
     access,
+    sharedWith,
+    owner,
     status: isDeletedView ? "deleted" : undefined,
     labels: labelsFilter,
     toastOnError: false,
@@ -311,11 +314,7 @@ function ProjectsList() {
               {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
               {!isDeletedView && (
-                <ResourceAccessFilter
-                  resource="project"
-                  noun="projects"
-                  countItems={countProjects}
-                />
+                <ResourceAccessFilter resource="project" noun="projects" />
               )}
               {!isDeletedView && (
                 <EntityLabelFilter
@@ -647,7 +646,6 @@ function ProjectCard({
       description={project.description}
       actions={
         <ProjectActionsMenu
-          project={project}
           pinned={!!project.pinnedAt}
           canPin={project.viewerRole !== "admin"}
           canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}

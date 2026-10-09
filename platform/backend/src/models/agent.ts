@@ -8,7 +8,6 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
-  type ResourceAccessRelation,
   type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -92,6 +91,7 @@ import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
   type PrincipalSource,
+  type ResourceAccessSelection,
 } from "./resource-permission-subject";
 import ToolModel from "./tool";
 
@@ -107,8 +107,11 @@ type AgentListFilters = {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonalAgents?: boolean;
-  /** The list's "Show" filter; see {@link ResourceAccessRelation}. */
-  access?: ResourceAccessRelation[];
+  /**
+   * The list's "Show", "Shared with", and "Owner" filters; see
+   * {@link ResourceAccessSelection}.
+   */
+  access?: ResourceAccessSelection;
   /**
    * Add the built-in agents to the list. The `access` filter does not apply to
    * them: they have no author and are listed only to agent admins.
@@ -704,16 +707,6 @@ class AgentModel {
        * onto the new agent.
        */
       skipCreationDefaultTools?: boolean;
-      /**
-       * Delegation targets the new agent starts with excluded from its
-       * Auto-subagent surface (today: the Advisor, which is opt-in). Applied
-       * inside create so version 1's snapshot already records them — a
-       * follow-up write from the caller would fork a second version, and one
-       * made by the client silently never happens for roles without
-       * `agent:read`. Which ids these are is the caller's rule; see
-       * `agentSubagentExclusionsService.getCreationDefaultExclusions`.
-       */
-      defaultExcludedSubagentIds?: string[];
       /** Caller will fork version 1 after completing a staged create policy. */
       deferInitialVersionFork?: boolean;
     },
@@ -882,30 +875,6 @@ class AgentModel {
       }
     }
 
-    // Seed the caller's default Auto-mode subagent exclusions. Before the
-    // version-1 fork below, so the first snapshot carries them like any other
-    // part of the created config. Best-effort, like the fork itself: the agent
-    // row and its junctions are already committed (create is not transactional,
-    // and this write is a delete+insert of its own), so throwing here would
-    // leave a half-made agent behind. One that starts with the Advisor
-    // reachable is degraded, not broken.
-    if (
-      options?.defaultExcludedSubagentIds &&
-      options.defaultExcludedSubagentIds.length > 0
-    ) {
-      try {
-        await AgentExcludedSubagentModel.replaceForAgent(
-          createdAgent.id,
-          options.defaultExcludedSubagentIds,
-        );
-      } catch (error) {
-        logger.warn(
-          { error, agentId: createdAgent.id },
-          "Default subagent exclusions were not seeded; agent created without them",
-        );
-      }
-    }
-
     // Fork version 1 once the full config of this create (row, junctions,
     // auto-assigned tools, exclusion pre-fill) is in place. A caller that
     // defers this fork must capture version 1 after it finishes its remaining
@@ -960,13 +929,6 @@ class AgentModel {
       authorization?: { organizationId: string; baseReadTypes: AgentType[] };
       agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
-      /**
-       * Keep the advisor in the results even while built-ins are excluded.
-       * It is the one built-in another agent is meant to reach, so the
-       * subagent picker needs it without also offering the platform
-       * machinery — dual-LLM, compaction, title generation.
-       */
-      includeAdvisor?: boolean;
       scope?: AgentScope;
       excludeOtherPersonalAgents?: boolean;
       status?: AgentRecordStatus;
@@ -1048,8 +1010,6 @@ class AgentModel {
       const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
       if (isChatView && config.openappa.enabled) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
-      } else if (!isChatView && options?.includeAdvisor) {
-        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.ADVISOR));
       }
       whereConditions.push(or(...visibleAgents) as SQL);
     }
@@ -1425,8 +1385,8 @@ class AgentModel {
    * per-agent gateway check against each one. Keeping the two apart means the
    * registry cannot disagree with what a direct card fetch would allow.
    *
-   * Built-in agents are left out: title generation, context compaction and the
-   * dual-LLM pair are machinery this platform runs on, not collaborators
+   * Built-in agents are left out: title generation and context compaction are
+   * machinery this platform runs on, not collaborators
    * anyone would address over A2A. Personal agents stay in — one belongs to
    * somebody, and the per-agent check decides whether that is the caller.
    */
@@ -1634,7 +1594,7 @@ class AgentModel {
       const externalAccessCondition = await externalAgentAccessCondition({
         userId: params.userId,
         organizationId: params.filters.organizationId,
-        relations: params.filters.access,
+        selection: params.filters.access,
       });
       if (externalAccessCondition)
         externalWhereConditions.push(externalAccessCondition);
@@ -2115,14 +2075,7 @@ class AgentModel {
     const includeBuiltIn =
       filters?.includeBuiltIn === true && isAgentAdmin && !filters?.scope;
     if (filters?.scope === "built_in") {
-      whereConditions.push(listedBuiltInAgentCondition());
-    } else if (includeBuiltIn) {
-      whereConditions.push(
-        or(
-          eq(schema.agentsTable.builtIn, false),
-          listedBuiltInAgentCondition(),
-        ) as SQL,
-      );
+      whereConditions.push(eq(schema.agentsTable.builtIn, true));
     } else if (
       filters?.scope === "personal" ||
       filters?.scope === "team" ||
@@ -2132,7 +2085,7 @@ class AgentModel {
         agentAudienceIs(filters.scope),
         eq(schema.agentsTable.builtIn, false),
       );
-    } else {
+    } else if (!includeBuiltIn) {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
     if (!isAgentAdmin) {
@@ -2162,7 +2115,7 @@ class AgentModel {
       const accessCondition = agentAccessCondition({
         userId,
         principals,
-        relations: filters.access,
+        selection: filters.access,
       });
       if (accessCondition)
         whereConditions.push(
@@ -2544,32 +2497,6 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
-  /**
-   * Agents a toolset backfill may assign to. Everything in the organization
-   * except the advisor, which answers questions and must not act: a tool it
-   * holds is one a consultation can call, and the advisor's whole contract is
-   * that it returns a recommendation and edits nothing.
-   */
-  static async findToolAssignableIdsByOrganizationId(
-    organizationId: string,
-  ): Promise<string[]> {
-    const agents = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          ne(
-            sql`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
-            BUILT_IN_AGENT_IDS.ADVISOR,
-          ),
-          notDeleted(schema.agentsTable),
-        ),
-      );
-
-    return agents.map((agent) => agent.id);
-  }
-
   static async findAllIds(): Promise<string[]> {
     const agents = await db
       .select({ id: schema.agentsTable.id })
@@ -2655,10 +2582,7 @@ class AgentModel {
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
    *
-   * Built-in agents are excluded with one exception: the advisor exists to be
-   * consulted, so it is the only built-in offered as a delegation target. The
-   * rest back platform machinery — dual-LLM, compaction, title generation —
-   * and delegating to them means driving an internal mechanism by hand.
+   * Built-in agents back platform machinery and are excluded.
    */
   static async findAccessibleDelegationTargets(params: {
     userId: string;
@@ -2668,8 +2592,6 @@ class AgentModel {
     /**
      * The calling agent's environment: delegation never crosses environment
      * boundaries (null is the Default environment), mirroring tool isolation.
-     * The advisor is the one exception — its org-wide (env-less) row is
-     * reachable from every environment.
      */
     environmentId: string | null;
     lookups?: PrincipalSource;
@@ -2679,34 +2601,14 @@ class AgentModel {
     const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
       params;
 
-    // The env-less advisor is reachable from every environment; scoping to the
-    // caller's organization keeps that exception from surfacing another org's
-    // advisor (the admin branch below has no other org fence).
-    const advisorException = and(
-      isNull(schema.agentsTable.environmentId),
-      eq(
-        sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-        BUILT_IN_AGENT_IDS.ADVISOR,
-      ),
-    );
-
     const baseConditions = [
       eq(schema.agentsTable.organizationId, organizationId),
       eq(schema.agentsTable.agentType, "agent"),
-      or(
-        eq(schema.agentsTable.builtIn, false),
-        eq(
-          sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-          BUILT_IN_AGENT_IDS.ADVISOR,
-        ),
-      ),
+      eq(schema.agentsTable.builtIn, false),
       ne(schema.agentsTable.id, excludeAgentId),
-      or(
-        environmentId === null
-          ? isNull(schema.agentsTable.environmentId)
-          : eq(schema.agentsTable.environmentId, environmentId),
-        advisorException,
-      ),
+      environmentId === null
+        ? isNull(schema.agentsTable.environmentId)
+        : eq(schema.agentsTable.environmentId, environmentId),
       notDeleted(schema.agentsTable),
     ];
 
@@ -3925,6 +3827,18 @@ class AgentModel {
   }
 
   /**
+   * The member's personal chat agent (their oldest live one), without seeding
+   * one. Null when they have none.
+   */
+  static async findPersonalChatAgentId(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<string | null> {
+    const [id] = await AgentModel.findOwnPersonalChatAgentIds(params);
+    return id ?? null;
+  }
+
+  /**
    * Live personal chat agents this member authored in the organization,
    * oldest first, excluding `excludeId`.
    */
@@ -4339,7 +4253,6 @@ class AgentModel {
           // Skill policy rules are copied below. Start closed so a partial
           // clone can never transiently widen a Manual source to All.
           activationSkillMode: "manual",
-          considerContextUntrusted: sourceAgent.considerContextUntrusted,
           incomingEmailEnabled: sourceAgent.incomingEmailEnabled,
           incomingEmailSecurityMode: sourceAgent.incomingEmailSecurityMode,
           incomingEmailAllowedDomain: sourceAgent.incomingEmailAllowedDomain,
@@ -4681,7 +4594,6 @@ class AgentModel {
           }
         : null,
       icon: row.icon ?? null,
-      considerContextUntrusted: row.considerContextUntrusted,
       toolExposureMode: row.toolExposureMode,
       accessAllTools: row.accessAllTools,
       accessAllSubagents: row.accessAllSubagents,
@@ -4939,13 +4851,15 @@ function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
 /**
  * {@link ResourcePermissionPolicyModel.accessRelationCondition} for every
  * agent kind. The organization's LLM proxy has no grant namespace and serves
- * the whole organization, so it is always `org`.
+ * the whole organization, so it is always `org`, counts as shared with the
+ * organization, and has no owner.
  */
 function agentAccessCondition(params: {
   userId: string;
   principals: GrantPrincipal[];
-  relations: ResourceAccessRelation[];
+  selection: ResourceAccessSelection;
 }): SQL | undefined {
+  const { relations, sharedWith, ownerIds } = params.selection;
   const table = schema.agentsTable;
   const subjects = params.principals.flatMap((principal) => principal.subjects);
   const byResource = (resource: "agent" | "mcpGateway") =>
@@ -4956,10 +4870,15 @@ function agentAccessCondition(params: {
       ownerColumn: table.authorId,
       userId: params.userId,
       subjects,
-      relations: params.relations,
+      ...params.selection,
     });
   const agentCondition = byResource("agent");
   if (!agentCondition) return undefined;
+  const llmProxyMatches =
+    (!relations?.length || relations.includes("org")) &&
+    (!sharedWith?.length ||
+      sharedWith.some((subject) => subject.type === "organization")) &&
+    !ownerIds?.length;
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -4968,7 +4887,7 @@ function agentAccessCondition(params: {
     and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
     and(
       eq(table.agentType, "llm_proxy"),
-      params.relations.includes("org") ? sql`true` : sql`false`,
+      llmProxyMatches ? sql`true` : sql`false`,
     ),
   ) as SQL;
   // SPDX-SnippetEnd
@@ -4981,7 +4900,7 @@ function agentAccessCondition(params: {
 async function externalAgentAccessCondition(params: {
   userId: string;
   organizationId?: string;
-  relations: ResourceAccessRelation[];
+  selection: ResourceAccessSelection;
 }): Promise<SQL | undefined> {
   const table = schema.a2aRemoteAgentsTable;
   const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
@@ -4998,7 +4917,7 @@ async function externalAgentAccessCondition(params: {
     ownerColumn: table.authorId,
     userId: params.userId,
     subjects: principals.flatMap((principal) => principal.subjects),
-    relations: params.relations,
+    ...params.selection,
   });
   // SPDX-SnippetEnd
 }
@@ -5079,21 +4998,4 @@ function agentGrantedTeamIds() {
         AND team_entry->'subject'->>'type' = 'team'
     ) granted_team
   ), array[]::text[])`;
-}
-
-/**
- * The built-in agents the Agents page lists. With OpenAPPA on, the policy
- * configuration and dual-LLM agents are internal and stay hidden.
- */
-function listedBuiltInAgentCondition(): SQL {
-  const builtIn = eq(schema.agentsTable.builtIn, true);
-  if (!config.openappa.enabled) return builtIn;
-  return and(
-    builtIn,
-    notInArray(sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`, [
-      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-      BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-      BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-    ]),
-  ) as SQL;
 }

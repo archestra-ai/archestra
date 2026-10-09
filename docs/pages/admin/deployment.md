@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.34" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.35" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml
@@ -278,7 +278,7 @@ Admins configure the page under **Settings → Connect Page**, or with **Connect
 
 | Setting | Effect |
 | --- | --- |
-| Available clients | The clients the page offers. **Any Client** is always shown. |
+| Available agents | Search **Add an agent** to choose agents, remove any you do not offer, and drag their pills to set the order. The dropdown shows **All agents added** when there is nothing left to add. Click **Save** to apply the list. **Generic client** is always shown last. |
 | LLM Proxy, Skills, and Plugins on Connect | Turning one off removes it from new setups. Existing setups keep working. |
 | Default MCP Gateway, Default client | Pre-selected for everyone. Users can still switch. |
 | Default provider keys | The provider key a setup's virtual key maps to, per provider. |

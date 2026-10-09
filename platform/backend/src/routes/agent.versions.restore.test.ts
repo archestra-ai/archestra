@@ -158,7 +158,9 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     const withTool = (await AgentVersionModel.forkIfChanged(agent.id))?.version;
 
     await AgentToolModel.delete({ agentId: agent.id, toolId: doomed.id });
-    await ToolModel.delete(doomed.id);
+    await db
+      .delete(schema.toolsTable)
+      .where(eq(schema.toolsTable.id, doomed.id));
     await AgentModel.update(agent.id, { description: "after" });
 
     const response = await restore(agent.id, withTool as number);

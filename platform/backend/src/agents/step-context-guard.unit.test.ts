@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai";
 import { describe, expect, test, vi } from "vitest";
+import { MAX_TOOL_RESULT_CONTEXT_BYTES } from "@/utils/tool-result-cap";
 import { createStepContextGuard } from "./step-context-guard";
 
 type SummarizeParams = { transcript: string; previousSummary: string | null };
@@ -61,7 +62,7 @@ describe("createStepContextGuard — tool result capping", () => {
 
   test("leaves a text result at the cap intact, keeping its tail", async () => {
     const atCap = `${'"q"\n'.repeat(25_000)}[hook feedback] stop`.slice(
-      -100_000,
+      -MAX_TOOL_RESULT_CONTEXT_BYTES,
     );
     const messages: ModelMessage[] = [
       { role: "user", content: "list the workflow runs" },
@@ -107,7 +108,6 @@ describe("createStepContextGuard — summarization compaction", () => {
     expect(call.transcript).toContain("a".repeat(300));
 
     expect(result[0].role).toBe("user");
-    expect(result[0].content).toContain("untrusted conversation history");
     expect(result[0].content).toContain("the compact summary");
     expect(result[result.length - 1].content).toBe("c".repeat(300));
     // the summarized turns are gone from the step payload

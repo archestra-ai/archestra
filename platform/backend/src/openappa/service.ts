@@ -18,6 +18,7 @@ import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
+import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
 import OpenAppaYellModel from "@/models/openappa-yell";
@@ -278,8 +279,12 @@ export async function executeYell(params: {
   toolCallId: string;
   args: { message: string; with_trajectory: boolean };
 }): Promise<CallToolResult> {
-  if (!openappaYellEnabled())
-    throw new ApiError(404, "OpenAPPA reporting is disabled");
+  if (!openappaYellEnabled()) {
+    return {
+      isError: true,
+      content: [{ type: "text", text: "OpenAPPA reporting is disabled" }],
+    };
+  }
   const record = await OpenAppaYellModel.record({
     organizationId: params.session.organization_id,
     callerId: params.session.caller_id ?? "unknown",
@@ -396,11 +401,26 @@ async function dispatch(
     session.organization_id,
     (module, policy) =>
       module.dispatchHook(
-        JSON.stringify({ ...session, ...event, ...principal }),
+        JSON.stringify({
+          ...session,
+          ...event,
+          ...principal,
+          // Last, so nothing spread above can override the host's reading.
+          withhold_consult_content: withholdConsultContent(),
+        }),
         policy,
       ),
     policy,
   );
+}
+
+/**
+ * Whether the deployment's Log Content mode keeps content out of the consult
+ * rows a dispatch writes. Passed on each dispatch, so the native runtime never
+ * reads host configuration itself.
+ */
+function withholdConsultContent(): boolean {
+  return resolveLogContentMode() === "metadata_only";
 }
 
 /**
@@ -830,9 +850,6 @@ export async function processProxyResults(params: {
   return {
     toolResultUpdates: updates,
     ...(returnContract ? { returnContract } : {}),
-    contextIsTrusted: true,
-    dualLlmAnalyses: [],
-    unsafeContextBoundary: undefined,
   };
 }
 
@@ -1446,6 +1463,7 @@ export async function executeRemedyByOffer(params: {
         ...(params.precheckRefusal
           ? { precheck_refusal: params.precheckRefusal }
           : {}),
+        withhold_consult_content: withholdConsultContent(),
       }),
       policy,
     ),
@@ -1497,16 +1515,11 @@ export async function loadChildReturns(params: {
             operationPrefix: params.operationPrefix,
           }
         : undefined;
-    const records = lookup
-      ? await module.loadChildReturns(
-          params.organizationId,
-          params.parentSessionId,
-          lookup,
-        )
-      : await module.loadChildReturns(
-          params.organizationId,
-          params.parentSessionId,
-        );
+    const records = await module.loadChildReturns(
+      params.organizationId,
+      params.parentSessionId,
+      lookup,
+    );
     return records.map((record) => ({
       childSessionId: record.childSessionId,
       ...(record.operationId ? { operationId: record.operationId } : {}),
@@ -1982,23 +1995,9 @@ async function peerResponse<T>(
   schema: z.ZodType<T>,
 ): Promise<T> {
   try {
-    return schema.parse(await peerJson(session, call));
-  } catch (error) {
-    throw openappaFailure(error);
-  }
-}
-
-async function peerJson(
-  session: OpenAppaSession,
-  call: (
-    module: Awaited<ReturnType<typeof binding>>,
-    policy: DispatchPolicy,
-  ) => Promise<string>,
-): Promise<unknown> {
-  try {
     const policy = await effectivePolicy(session.organization_id);
     const module = await binding();
-    return JSON.parse(await call(module, policy));
+    return schema.parse(JSON.parse(await call(module, policy)));
   } catch (error) {
     throw openappaFailure(error);
   }

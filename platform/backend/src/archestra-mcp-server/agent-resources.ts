@@ -37,7 +37,6 @@ import {
   assertAgentRuntimeModelCompatibility,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
-import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
@@ -462,17 +461,6 @@ export async function handleCreateResource<
       if (args.icon) createParams.icon = args.icon;
     }
 
-    // Same Advisor default as the REST create path — the rule belongs to the
-    // record, not to the surface that created it. Without an organization in
-    // context there is no Advisor row to resolve, so nothing is seeded.
-    const defaultExcludedSubagentIds = context.organizationId
-      ? await agentSubagentExclusionsService.getCreationDefaultExclusions({
-          organizationId: context.organizationId,
-          agentType: targetAgentType,
-          accessAllSubagents: createParams.accessAllSubagents === true,
-        })
-      : [];
-
     if (args.initialGrants !== undefined) {
       if (!context.userId || !context.organizationId)
         return errorResult(
@@ -495,7 +483,6 @@ export async function handleCreateResource<
       // SPDX-SnippetEnd
     }
     const created = await AgentModel.create(createParams, context.userId, {
-      defaultExcludedSubagentIds,
       initialPermissionGrants: args.initialGrants ?? [],
     });
 

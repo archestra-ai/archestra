@@ -3,24 +3,34 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import {
+  BudgetFields,
+  describeWindow,
+  type SpendCapValue,
+} from "@/components/credential-billing/budget-fields";
+import { ExpirySelect } from "@/components/credential-billing/expiry-select";
+import { ProviderKeyPicker } from "@/components/credential-billing/provider-key-picker";
+import {
+  ReviewList,
+  ReviewListRow,
+} from "@/components/credential-billing/review-list";
+import { WizardSteps } from "@/components/credential-billing/wizard-steps";
 import { FormDialog } from "@/components/form-dialog";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import { shouldShowOwnerField } from "@/components/owner-select-field";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
 import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
-import {
-  type ReviewRowName,
-  VirtualKeyReviewFields,
-} from "@/components/virtual-key-review-fields";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
   useAllVirtualApiKeys,
@@ -70,10 +80,6 @@ export function CreateVirtualKeyDialogWithData({
     enabled: open && keyType === "standard",
     toastOnError: false,
   });
-  const { data: isVirtualKeyAdmin } = useHasPermissions(
-    { llmVirtualKey: ["update"] },
-    "*",
-  );
   const defaultExpirationSeconds = useFeature(
     "virtualKeyDefaultExpirationSeconds",
   );
@@ -86,7 +92,6 @@ export function CreateVirtualKeyDialogWithData({
       parentableKeys={apiKeys}
       connectionBaseUrl={connectionBaseUrl}
       defaultExpirationSeconds={defaultExpirationSeconds ?? null}
-      isVirtualKeyAdmin={!!isVirtualKeyAdmin}
       currentUser={
         session?.user
           ? {
@@ -110,7 +115,6 @@ export function CreateVirtualKeyDialog({
   parentableKeys,
   connectionBaseUrl,
   defaultExpirationSeconds,
-  isVirtualKeyAdmin,
   currentUser,
   existingKeys,
   initialProviderApiKeys,
@@ -123,7 +127,6 @@ export function CreateVirtualKeyDialog({
   parentableKeys: LlmProviderApiKeyResponse[];
   connectionBaseUrl: string;
   defaultExpirationSeconds: number | null;
-  isVirtualKeyAdmin: boolean;
   currentUser: { id: string; name: string | null } | null;
   existingKeys: VirtualKeySummary[];
   initialProviderApiKeys?: ProviderApiKeyMappings;
@@ -133,19 +136,10 @@ export function CreateVirtualKeyDialog({
   const createMutation = useCreateVirtualApiKey();
 
   const [newKeyName, setNewKeyName] = useState("");
-  const [ownerId, setOwnerId] = useState("");
-  const [selectedOwnerName, setSelectedOwnerName] = useState<string | null>(
-    null,
-  );
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
-  const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  // Each opening starts a fresh review, with the row that still needs input
-  // (a passthrough key's empty name, a standard key with no provider key) open.
-  const [reviewSession, setReviewSession] = useState(0);
-  const [initialOpenRow, setInitialOpenRow] = useState<ReviewRowName | null>(
-    null,
-  );
-  const labelsRef = useRef<ProfileLabelsRef>(null);
+  const [step, setStep] = useState<CreateStep>("key");
+  const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
+  const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
   const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
@@ -161,23 +155,18 @@ export function CreateVirtualKeyDialog({
   const generatedNameRef = useRef("");
 
   const isPassthrough = keyType === "passthrough";
-  // Passthrough keys are always personal. Admins can mint a key on behalf of
-  // another org member; left unset, the key belongs to the creator.
-  const showOwnerField = shouldShowOwnerField(isVirtualKeyAdmin, "personal");
-  const effectiveOwnerId =
-    showOwnerField && ownerId ? ownerId : currentUser?.id;
-  const effectiveOwnerName =
-    showOwnerField && ownerId ? selectedOwnerName : currentUser?.name;
+  // A new key belongs to its creator. Who else may use it is set by its
+  // permissions, and who pays for it by its billing team.
   const generatedName = useMemo(
     () =>
       isPassthrough
         ? ""
         : getGeneratedVirtualKeyName({
-            ownerId: effectiveOwnerId,
-            ownerName: effectiveOwnerName,
+            ownerId: currentUser?.id,
+            ownerName: currentUser?.name,
             existingKeys,
           }),
-    [effectiveOwnerId, effectiveOwnerName, existingKeys, isPassthrough],
+    [currentUser?.id, currentUser?.name, existingKeys, isPassthrough],
   );
 
   useEffect(() => {
@@ -191,29 +180,22 @@ export function CreateVirtualKeyDialog({
       setNewKeyName(generatedName);
       generatedNameRef.current = generatedName;
       setExpiresAt(initialExpiresAt);
-      setLabels([]);
+
       const initialMappings =
         keyType === "passthrough"
           ? []
           : (initialProviderApiKeysRef.current ?? []);
       setProviderApiKeyIds(initialMappings);
-      setInitialOpenRow(
-        keyType === "passthrough"
-          ? "name"
-          : initialMappings.length === 0
-            ? "uses"
-            : null,
-      );
-      setReviewSession((session) => session + 1);
-      setOwnerId("");
-      setSelectedOwnerName(null);
+      setStep("key");
+      setBillingTeamId(null);
+      setSpendCap(null);
       initialSnapshotRef.current = {
         keyType,
         newKeyName: generatedName,
-        ownerId: "",
         expiresAt: initialExpiresAt,
         providerApiKeyIds: initialMappings,
-        labels: [],
+        billingTeamId: null,
+        spendCap: null,
       };
     }
   }, [open, defaultExpirationSeconds, keyType, generatedName]);
@@ -235,10 +217,9 @@ export function CreateVirtualKeyDialog({
     });
   }, [createdKeyValue, generatedName, open]);
   const standardReady = providerApiKeyIds.length > 0;
-  const canSubmit =
-    newKeyName.trim().length > 0 &&
-    (isPassthrough || standardReady) &&
-    !createMutation.isPending;
+  const keyStepReady =
+    newKeyName.trim().length > 0 && (isPassthrough || standardReady);
+  const canSubmit = keyStepReady && !createMutation.isPending;
 
   // Once the key is created the form is replaced by the reveal view, so there
   // is nothing left to lose — only guard the editable form.
@@ -248,16 +229,15 @@ export function CreateVirtualKeyDialog({
     hasUnsavedChanges(initialSnapshotRef.current, {
       keyType,
       newKeyName,
-      ownerId,
       expiresAt,
       providerApiKeyIds,
-      labels,
+
+      billingTeamId,
+      spendCap,
     });
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;
-    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
-    const owner = showOwnerField && ownerId ? ownerId : undefined;
     try {
       const result = await createMutation.mutateAsync({
         data: isPassthrough
@@ -265,16 +245,18 @@ export function CreateVirtualKeyDialog({
               name: newKeyName.trim(),
               keyType: "passthrough",
               expiresAt: expiresAt ?? undefined,
-              ownerId: owner,
-              labels: finalLabels,
+              labels: [],
+              billingTeamId: billingTeamId ?? undefined,
+              spendCap: spendCap ?? undefined,
             }
           : {
               name: newKeyName.trim(),
               keyType: "standard",
               expiresAt: expiresAt ?? undefined,
               providerApiKeys: providerApiKeyIds,
-              ownerId: owner,
-              labels: finalLabels,
+              labels: [],
+              billingTeamId: billingTeamId ?? undefined,
+              spendCap: spendCap ?? undefined,
             },
       });
       setNewKeyName("");
@@ -293,21 +275,33 @@ export function CreateVirtualKeyDialog({
     createMutation,
     expiresAt,
     isPassthrough,
-    labels,
+
     providerApiKeyIds,
     newKeyName,
-    showOwnerField,
-    ownerId,
     onCreated,
     onOpenChange,
+    billingTeamId,
+    spendCap,
   ]);
 
-  // Creation stays a compact form: who else can use the key is managed from
-  // its Permissions tab once it exists, as for provider API keys.
+  // Opening focuses the name, not the first step bar above it.
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const steps = [
+    { id: "key" as const, title: "Key" },
+    { id: "budget" as const, title: "Budget" },
+    { id: "review" as const, title: "Review" },
+  ];
+  const stepIndex = steps.findIndex((item) => item.id === step);
+  const goNext = () => setStep(steps[stepIndex + 1]?.id ?? step);
+  const goBack = () => setStep(steps[stepIndex - 1]?.id ?? step);
+
+  // Who else can use the key is managed from its settings once it
+  // exists, as for provider API keys.
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
+      initialFocusRef={nameInputRef}
       title={
         createdKeyValue
           ? isPassthrough
@@ -321,17 +315,22 @@ export function CreateVirtualKeyDialog({
         createdKeyValue
           ? undefined
           : isPassthrough
-            ? "Name it, then create it. It links requests that carry your own provider key to you."
-            : "Ready to create. Change anything below, or just create it."
+            ? "It links requests that carry your own provider key to you."
+            : "Pick the provider keys it uses, then who pays for it."
       }
       size={createdKeyValue ? "large" : "small"}
-      className={createdKeyValue ? "max-w-4xl" : "sm:max-w-xl"}
+      className={createdKeyValue ? "max-w-4xl" : "sm:max-w-[680px]"}
       isDirty={isDirty}
     >
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void handleCreate();
+          if (createdKeyValue) return;
+          if (!isPassthrough && step !== "review") {
+            if (keyStepReady) goNext();
+            return;
+          }
+          if (canSubmit) void handleCreate();
         }}
         className="flex min-h-0 flex-col"
       >
@@ -347,46 +346,101 @@ export function CreateVirtualKeyDialog({
               connectionBaseUrl={connectionBaseUrl}
               name={createdKey.name}
               expiration={formatExpiration(createdKey.expiresAt)}
-              visibleTo={getVisibleToLabel({
-                keyType: createdKey.keyType,
-                ownerName: ownerId ? selectedOwnerName : null,
-              })}
+              visibleTo={
+                createdKey.keyType === "passthrough" ? null : "Only you"
+              }
             />
           ) : (
-            <VirtualKeyReviewFields
-              key={reviewSession}
-              initialOpen={initialOpenRow}
-              keyType={keyType}
-              name={newKeyName}
-              onNameChange={setNewKeyName}
-              providerApiKeyIds={providerApiKeyIds}
-              onProviderApiKeyIdsChange={setProviderApiKeyIds}
-              providerApiKeys={parentableKeys}
-              expiresAt={expiresAt}
-              onExpiresAtChange={setExpiresAt}
-              formatExpiration={formatExpiration}
-              showOwnerField={showOwnerField}
-              ownerId={ownerId}
-              ownerName={ownerId ? selectedOwnerName : null}
-              onOwnerChange={setOwnerId}
-              onSelectedOwnerChange={(owner) =>
-                setSelectedOwnerName(
-                  owner.userId === currentUser?.id
-                    ? null
-                    : (owner.name ?? owner.email ?? null),
-                )
-              }
-              labels={labels}
-              onLabelsChange={setLabels}
-              labelsRef={labelsRef}
-            />
+            <>
+              {!isPassthrough && (
+                <WizardSteps
+                  steps={steps}
+                  activeStep={step}
+                  onStepClick={setStep}
+                  canVisitStep={(next) => next === "key" || keyStepReady}
+                />
+              )}
+              {step === "key" && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="virtual-key-name">Name</Label>
+                    <Input
+                      id="virtual-key-name"
+                      ref={nameInputRef}
+                      value={newKeyName}
+                      onChange={(event) => setNewKeyName(event.target.value)}
+                      placeholder={
+                        isPassthrough ? "My passthrough key" : "My virtual key"
+                      }
+                    />
+                  </div>
+                  {!isPassthrough && (
+                    <div className="space-y-2">
+                      <span className="font-medium text-sm">Provider keys</span>
+                      <ProviderKeyPicker
+                        value={providerApiKeyIds}
+                        onChange={setProviderApiKeyIds}
+                        providerApiKeys={parentableKeys}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+              {(isPassthrough || step === "budget") && (
+                <>
+                  <BudgetFields
+                    subject="key"
+                    idPrefix="virtual-key"
+                    billingTeamId={billingTeamId}
+                    onBillingTeamIdChange={setBillingTeamId}
+                    spendCap={spendCap}
+                    onSpendCapChange={setSpendCap}
+                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="virtual-key-expires">Expires</Label>
+                    <ExpirySelect
+                      id="virtual-key-expires"
+                      value={expiresAt}
+                      onChange={setExpiresAt}
+                    />
+                  </div>
+                </>
+              )}
+              {step === "review" && (
+                <VirtualKeyReview
+                  isPassthrough={isPassthrough}
+                  name={newKeyName}
+                  providerApiKeyIds={providerApiKeyIds}
+                  providerApiKeys={parentableKeys}
+                  billingTeamId={billingTeamId}
+                  spendCap={spendCap}
+                  expiresAt={expiresAt}
+                  onEdit={setStep}
+                />
+              )}
+            </>
           )}
         </DialogBody>
         <DialogStickyFooter className="mt-0">
+          {!createdKeyValue && !isPassthrough && stepIndex > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="mr-auto"
+              onClick={goBack}
+            >
+              Back
+            </Button>
+          )}
           <DialogCancelButton>
             {createdKeyValue ? "Close" : "Cancel"}
           </DialogCancelButton>
-          {!createdKeyValue && (
+          {!createdKeyValue && !isPassthrough && step !== "review" && (
+            <Button type="submit" disabled={!keyStepReady}>
+              Continue
+            </Button>
+          )}
+          {!createdKeyValue && (isPassthrough || step === "review") && (
             <Button type="submit" disabled={!canSubmit}>
               {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -400,16 +454,69 @@ export function CreateVirtualKeyDialog({
   );
 }
 
-/**
- * Who can use a freshly created key. A new key is shared with no one yet: its
- * owner grants access from the Permissions tab afterwards.
- */
-function getVisibleToLabel(params: {
-  keyType: VirtualKeyType;
-  ownerName: string | null;
-}): string | null {
-  if (params.keyType === "passthrough") return null;
-  return params.ownerName ? `Only ${params.ownerName}` : "Only you";
+type CreateStep = "key" | "budget" | "review";
+
+/** The last step: everything chosen so far, each with a way back to change it. */
+function VirtualKeyReview({
+  isPassthrough,
+  name,
+  providerApiKeyIds,
+  providerApiKeys,
+  billingTeamId,
+  spendCap,
+  expiresAt,
+  onEdit,
+}: {
+  isPassthrough: boolean;
+  name: string;
+  providerApiKeyIds: ProviderApiKeyMappings;
+  providerApiKeys: LlmProviderApiKeyResponse[];
+  billingTeamId: string | null;
+  spendCap: SpendCapValue;
+  expiresAt: Date | null;
+  onEdit: (step: CreateStep) => void;
+}) {
+  const catalog = useModelProviderCatalog();
+  const { data: teams = [] } = useTeams({ enabled: !!billingTeamId });
+  const teamName = teams.find((team) => team.id === billingTeamId)?.name;
+  const keyName = (id: string) =>
+    providerApiKeys.find((key) => key.id === id)?.name ?? "Unknown key";
+
+  return (
+    <div className="space-y-4">
+      <ReviewList>
+        <ReviewListRow label="Name" onEdit={() => onEdit("key")}>
+          {name}
+        </ReviewListRow>
+        {!isPassthrough && (
+          <ReviewListRow label="Provider keys" onEdit={() => onEdit("key")}>
+            <span className="flex flex-wrap gap-1.5">
+              {providerApiKeyIds.map((mapping) => (
+                <span
+                  key={mapping.provider}
+                  className="rounded-full border bg-muted px-2 py-0.5 text-xs"
+                >
+                  {catalog.label(mapping.provider)} ·{" "}
+                  {keyName(mapping.providerApiKeyId)}
+                </span>
+              ))}
+            </span>
+          </ReviewListRow>
+        )}
+        <ReviewListRow label="Billed to" onEdit={() => onEdit("budget")}>
+          {billingTeamId ? (teamName ?? "A team") : "No team"}
+        </ReviewListRow>
+        <ReviewListRow label="Spend cap" onEdit={() => onEdit("budget")}>
+          {spendCap
+            ? `$${spendCap.limitValue.toLocaleString("en-US")} ${describeWindow(spendCap.cleanupInterval)}`
+            : "No cap"}
+        </ReviewListRow>
+        <ReviewListRow label="Expires" onEdit={() => onEdit("budget")}>
+          {expiresAt ? formatExpiration(expiresAt) : "Never"}
+        </ReviewListRow>
+      </ReviewList>
+    </div>
+  );
 }
 
 export function formatExpiration(date: Date | string | null): string {

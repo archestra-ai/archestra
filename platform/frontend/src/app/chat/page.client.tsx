@@ -95,7 +95,11 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Version } from "@/components/version";
-import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
+import {
+  useAgentDefaultSuggestedPrompts,
+  useChatAgents,
+  useDefaultAgentId,
+} from "@/lib/agent.query";
 import {
   useAgentRuntimePreflight,
   useStartAgentRun,
@@ -973,11 +977,20 @@ export function ChatPageContent({
   const initialAgent = internalAgents.find(
     (agent) => agent.id === initialAgentId,
   );
+  const initialAgentHasOwnPrompts =
+    (initialAgent?.suggestedPrompts?.length ?? 0) > 0;
+  const { data: defaultSuggestedPrompts } = useAgentDefaultSuggestedPrompts(
+    initialAgentId,
+    { enabled: Boolean(initialAgent) && !initialAgentHasOwnPrompts },
+  );
+  const initialSuggestedPrompts = initialAgentHasOwnPrompts
+    ? initialAgent?.suggestedPrompts
+    : defaultSuggestedPrompts;
   const activeSelectionAgent = conversationId
     ? conversationAgent
     : initialAgent;
   const suggestionPreview = resolveSuggestionPreview(
-    initialAgent?.suggestedPrompts,
+    initialSuggestedPrompts,
     hoveredSuggestionPrompt,
   );
   const {
@@ -3661,7 +3674,7 @@ export function ChatPageContent({
                       </div>
                       {(() => {
                         if (isInitialRuntimeMode) return null;
-                        const prompts = initialAgent?.suggestedPrompts;
+                        const prompts = initialSuggestedPrompts;
                         if (!prompts || prompts.length === 0) return null;
                         return (
                           <SuggestedPromptPills

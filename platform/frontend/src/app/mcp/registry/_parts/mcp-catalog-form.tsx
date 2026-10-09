@@ -685,10 +685,7 @@ export function McpCatalogForm({
   useEffect(() => {
     if (hasEnvRuleViolations) setAdvancedOpen(true);
   }, [hasEnvRuleViolations]);
-  const advancedSummary =
-    mode === "create"
-      ? "Environment, permissions, and labels"
-      : "Environment and labels";
+  const advancedSummary = "Environment and labels";
   const addHeaderButton = (
     <AddListItemButton
       label="Add Header"
@@ -984,11 +981,8 @@ export function McpCatalogForm({
               </InlineNotice>
             )}
 
-            <SettingsSectionGroup>
-              <SettingsSection
-                title="Details"
-                description="How this server appears in the registry."
-              >
+            <SettingsSectionGroup stacked>
+              <SettingsSection>
                 <FormField
                   control={form.control}
                   name="name"
@@ -1050,6 +1044,25 @@ export function McpCatalogForm({
                   )}
                 />
               </SettingsSection>
+
+              {/* Who can use it: its own full-width block under the details,
+                  as on the agent form. */}
+              {mode === "create" && (
+                <SettingsSection>
+                  <FormField
+                    control={form.control}
+                    name="initialGrants"
+                    render={({ field }) => (
+                      <InitialResourcePermissions
+                        standalone
+                        resource="mcpRegistry"
+                        grants={field.value ?? []}
+                        onChange={field.onChange}
+                      />
+                    )}
+                  />
+                </SettingsSection>
+              )}
 
               <SettingsSection
                 title={
@@ -2347,20 +2360,6 @@ export function McpCatalogForm({
                         )}
                       />
                     </SettingsSection>
-                    {mode === "create" && (
-                      <FormField
-                        control={form.control}
-                        name="initialGrants"
-                        render={({ field }) => (
-                          <InitialResourcePermissions
-                            layout="settings"
-                            resource="mcpRegistry"
-                            grants={field.value ?? []}
-                            onChange={field.onChange}
-                          />
-                        )}
-                      />
-                    )}
                     <SettingsSection
                       title="Labels"
                       description="Key-value labels to organize and filter servers."

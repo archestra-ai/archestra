@@ -1,7 +1,4 @@
-import type {
-  ResourceAccessRelation,
-  ResourcePermissionGrant,
-} from "@archestra/shared";
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import {
   and,
   count,
@@ -26,7 +23,9 @@ import type {
 import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessSelection,
+} from "./resource-permission-subject";
 
 /**
  * Filters shared by the list and its count, so a page can never show N rows
@@ -52,7 +51,7 @@ async function buildOrgFilters(params: {
   excludeAuthorIds?: string[];
   excludeOtherPersonal?: boolean;
   /** The list's "Show" filter, read against `viewerUserId`. */
-  access?: ResourceAccessRelation[];
+  access?: ResourceAccessSelection;
 }) {
   const normalizedSearch = params.search?.trim();
   const viewer = params.viewerUserId
@@ -122,7 +121,7 @@ async function buildOrgFilters(params: {
             ...ownAudienceContext(params.organizationId),
             userId: params.viewerUserId,
             subjects: viewer.subjects,
-            relations: params.access,
+            ...params.access,
           }),
         ]
       : []),
@@ -195,7 +194,7 @@ class KnowledgeBaseModel {
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
     /** The list's "Show" filter, read against `viewerUserId`. */
-    access?: ResourceAccessRelation[];
+    access?: ResourceAccessSelection;
   }): Promise<KnowledgeBase[]> {
     const filters = await buildOrgFilters(params);
 
@@ -460,7 +459,7 @@ class KnowledgeBaseModel {
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
     /** The list's "Show" filter, read against `viewerUserId`. */
-    access?: ResourceAccessRelation[];
+    access?: ResourceAccessSelection;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })

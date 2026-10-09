@@ -21,6 +21,7 @@ import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import {
   BOOTSTRAP_QUERY_RETRY,
+  flushPersistedQueryCache,
   PERSISTED_QUERY_META,
 } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
@@ -32,6 +33,7 @@ const {
   deleteAgent,
   exportAgent,
   getAgentCredentialReadiness,
+  getAgentDefaultSuggestedPrompts,
   getAgents,
   getAllAgents,
   getDefaultMcpGateway,
@@ -47,18 +49,6 @@ const {
   pinAgent,
   unpinAgent,
 } = archestraApiSdk;
-
-/** How many gateways a "Show" selection holds, for the filter's counts. */
-export async function countGateways(params: {
-  access: ResourceAccessRelation[];
-  agentTypes: Array<"mcp_gateway" | "profile">;
-}): Promise<number> {
-  const { data, error } = await getAgents({
-    query: { limit: 1, offset: 0, ...params },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.pagination.total ?? 0;
-}
 
 /**
  * The roster, without each agent's tools. No consumer of this list reads them
@@ -102,14 +92,8 @@ async function fetchChatAgents() {
 const delegationTargetAgentsQuery = {
   agentType: "agent",
   excludeBuiltIn: true,
-  includeAdvisor: true,
 } as const;
 
-/**
- * Agents that can be picked as a subagent. Separate from
- * {@link useInternalAgents} because the advisor belongs here and nowhere else:
- * it is a target to delegate to, not an agent to start a conversation with.
- */
 export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["agents", "all", delegationTargetAgentsQuery],
@@ -214,6 +198,8 @@ export function useProfilesPaginated(
     excludeAuthorIds,
     excludeOtherPersonalAgents,
     access,
+    sharedWith,
+    owner,
     labels,
     status,
     includeActivationSkillsCount,
@@ -236,6 +222,8 @@ export function useProfilesPaginated(
     excludeAuthorIds === undefined &&
     excludeOtherPersonalAgents === initialDataExcludeOtherPersonalAgents &&
     isSameResourceAccess(access, initialDataAccess) &&
+    sharedWith === undefined &&
+    owner === undefined &&
     pinned === initialDataPinned &&
     labels === undefined &&
     status === undefined &&
@@ -259,6 +247,8 @@ export function useProfilesPaginated(
         excludeAuthorIds,
         excludeOtherPersonalAgents,
         access,
+        sharedWith,
+        owner,
         labels,
         status,
         includeActivationSkillsCount,
@@ -281,6 +271,8 @@ export function useProfilesPaginated(
           excludeAuthorIds,
           excludeOtherPersonalAgents,
           access,
+          sharedWith,
+          owner,
           labels,
           status,
           includeActivationSkillsCount,
@@ -445,10 +437,14 @@ export function useUpdateProfile(options?: { successMessage?: string }) {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
+      queryClient.removeQueries({ queryKey: ["agents"], type: "inactive" });
       // Immediately update the specific agent's cache so navigating to
       // chat (or any other page using useProfile) shows fresh data
       queryClient.setQueryData(["agents", variables.id], data);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents", variables.id, "mcp-tools"],
+      });
       if (options?.successMessage) {
         toast.success(options.successMessage);
       }
@@ -465,6 +461,7 @@ export function useUpdateProfile(options?: { successMessage?: string }) {
       if (variables.data?.knowledgeBaseIds !== undefined) {
         queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       }
+      flushPersistedQueryCache(queryClient);
     },
   });
 }
@@ -622,6 +619,28 @@ export function useDefaultAgentId() {
       throwOnApiError(error, { toastOnError: false });
       return data?.defaultAgentId ?? null;
     },
+  });
+}
+
+/**
+ * Suggested prompts the platform offers for an agent with none of its own
+ * (today: the docs servers' prompts on the caller's personal assistant). The
+ * backend decides which apply. They are never stored on the agent.
+ */
+export function useAgentDefaultSuggestedPrompts(
+  agentId: string | null | undefined,
+  params: { enabled: boolean },
+) {
+  return useQuery({
+    queryKey: ["agents", agentId, "default-suggested-prompts"],
+    queryFn: async () => {
+      const { data, error } = await getAgentDefaultSuggestedPrompts({
+        path: { id: agentId as string },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: params.enabled && Boolean(agentId),
   });
 }
 

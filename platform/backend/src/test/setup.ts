@@ -47,15 +47,9 @@ process.env.ARCHESTRA_FILE_STORAGE_FILESYSTEM_ROOT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_ENABLED = "false";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_PROJECT = "";
 process.env.ARCHESTRA_GEMINI_VERTEX_AI_LOCATION = "";
-// Native/OpenAPPA tests opt in explicitly; local policy settings must not
-// switch unrelated PGlite suites away from the existing guardrails.
-//
-// The beta master switch is pinned for the same reason as Vertex AI above: a
-// developer's .env reaches these tests through dotenv, and OpenAPPA now rides
-// this switch. Left to the .env it would turn the legacy trusted-data
-// guardrail off on a beta machine and leave it on in CI, so the same suite
-// would assert different behavior in the two places. A test that wants a beta
-// feature stubs its own gate.
+// Keep unrelated beta features off even when a developer's .env enables them.
+// OpenAPPA is always available; enforcement tests opt in through the deployment
+// Guardrails setting. A test of another beta feature stubs its own gate.
 process.env.ARCHESTRA_BETA = "false";
 process.env.ARCHESTRA_LLM_PROXY_PLUGINS = "";
 
@@ -210,6 +204,17 @@ beforeEach(async ({ task }) => {
   if (enterpriseTier) {
     enterpriseTier.setUserCountForTesting(0);
   }
+
+  // Agent Runtime availability is detected from whatever cluster the default
+  // kubeconfig points at, so a developer machine with the Agent Sandbox
+  // controller would answer differently from CI. Default to "not installed";
+  // a test that needs it either overrides this spy or restores it to exercise
+  // real detection. Imported here, after the test file's mocks are applied.
+  const { agentSandboxApi } = await import(
+    "../k8s/agent-runtime/sandbox-api.js"
+  );
+  agentSandboxApi.reset();
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
 
   if (
     pgliteClient &&

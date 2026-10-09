@@ -338,7 +338,7 @@ export function resolveAgentRuntime(
     "id" | "organizationId" | "environmentId" | "runtime" | "runtimeSecretId"
   >,
 ): ResolvedAgentRuntime | null {
-  if (!config.agentRuntime.enabled || !agent.runtime) {
+  if (!agent.runtime) {
     return null;
   }
   return {

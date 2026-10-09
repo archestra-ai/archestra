@@ -1147,16 +1147,8 @@ function CredentialRow({
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            <span>
-              Set by a [credentials] line in the policy text. Remove it on the{" "}
-            </span>
-            <Link
-              href="/openappa/policy"
-              className="underline underline-offset-2 hover:no-underline"
-            >
-              Policy tab
-            </Link>
-            <span> to manage it here.</span>
+            Set by a [credentials] line in the policy text. Ask the
+            configuration agent to remove it to manage it here.
           </p>
         ))}
       {others.length > 0 && (

@@ -5,7 +5,6 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { policyConfigurationService } from "@/agents/subagents/policy-configuration";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeAdminPermission,
@@ -16,7 +15,6 @@ import {
 } from "@/auth";
 import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import db, { type Transaction } from "@/database";
-import logger from "@/logging";
 import {
   AgentModel,
   AgentToolModel,
@@ -31,6 +29,7 @@ import {
   type ToolAssignmentError,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
+import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
 import type { InternalMcpCatalog, Tool, ToolOwnerContext } from "@/types";
 import {
   AgentToolAssignmentBodySchema,
@@ -467,95 +466,6 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
-  fastify.post(
-    "/api/agent-tools/auto-configure-policies",
-    {
-      schema: {
-        operationId: RouteId.AutoConfigureAgentToolPolicies,
-        description:
-          "Automatically configure security policies for tools using LLM analysis",
-        tags: ["Agent Tools"],
-        body: z.object({
-          toolIds: z.array(z.string().uuid()).min(1),
-        }),
-        response: constructResponseSchema(
-          z.object({
-            success: z.boolean(),
-            results: z.array(
-              z.object({
-                toolId: z.string().uuid(),
-                success: z.boolean(),
-                config: z
-                  .object({
-                    toolInvocationAction: z.enum([
-                      "allow_when_context_is_sensitive",
-                      "block_when_context_is_sensitive",
-                      "require_approval",
-                      "block_always",
-                    ]),
-                    trustedDataAction: z.enum([
-                      "mark_as_safe",
-                      "mark_as_sensitive",
-                      "sanitize_with_dual_llm",
-                      "block_always",
-                    ]),
-                    reasoning: z.string(),
-                  })
-                  .optional(),
-                error: z.string().optional(),
-              }),
-            ),
-          }),
-        ),
-      },
-    },
-    async ({ body, organizationId, user }, reply) => {
-      const { toolIds } = body;
-
-      logger.info(
-        { organizationId, userId: user.id, count: toolIds.length },
-        "POST /api/agent-tools/auto-configure-policies: request received",
-      );
-
-      // Pre-resolve LLM to give a clear 400 error if no API key is configured.
-      // This resolved config is then threaded through to avoid redundant DB queries.
-      const resolvedLlm = await policyConfigurationService.resolveLlm({
-        organizationId,
-        userId: user.id,
-      });
-      if (!resolvedLlm) {
-        logger.warn(
-          { organizationId, userId: user.id },
-          "POST /api/agent-tools/auto-configure-policies: service not available",
-        );
-        throw new ApiError(
-          400,
-          "Auto-policy requires an LLM API key to be configured in LLM API Keys settings",
-        );
-      }
-
-      const result = await policyConfigurationService.configurePoliciesForTools(
-        {
-          toolIds,
-          organizationId,
-          userId: user.id,
-        },
-      );
-
-      logger.info(
-        {
-          organizationId,
-          userId: user.id,
-          success: result.success,
-          resultsCount: result.results.length,
-        },
-        "POST /api/agent-tools/auto-configure-policies: completed",
-      );
-
-      return reply.send(result);
-    },
-  );
-
   fastify.delete(
     "/api/agents/:agentId/tools/:toolId",
     {
@@ -633,7 +543,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      if (!checker.isAdmin(agent.agentType)) {
+      const isAgentTypeAdmin = checker.isAdmin(agent.agentType);
+      if (!isAgentTypeAdmin) {
         const filteredAgent = await AgentModel.findById(
           agentId,
           user.id,
@@ -646,7 +557,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const tools = await ToolModel.getToolsByAgent(agentId);
 
-      return reply.send(tools);
+      // A user who can only use the agent sees the tools the gateway would
+      // serve them: an assigned tool whose MCP server they cannot access is
+      // left out, as it is from their tools/list.
+      return reply.send(
+        isAgentTypeAdmin
+          ? tools
+          : await filterToolsByCallerCatalogAccess(tools, {
+              userId: user.id,
+              organizationId,
+            }),
+      );
     },
   );
 

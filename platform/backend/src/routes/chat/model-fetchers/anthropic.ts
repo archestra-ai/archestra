@@ -4,6 +4,10 @@ import {
   getAzureAiFoundryBearerTokenProvider,
   isAnthropicAzureFoundryEntraIdEnabled,
 } from "@/clients/azure-openai-credentials";
+import {
+  buildAzureFoundryDeploymentsUrl,
+  isAzureAiFoundryBaseUrl,
+} from "@/clients/azure-url";
 import config from "@/config";
 import logger from "@/logging";
 import type { Anthropic } from "@/types";
@@ -20,6 +24,9 @@ export async function fetchAnthropicModels(
   }
 
   const baseUrl = baseUrlOverride || config.llm.anthropic.baseUrl;
+  if (isAzureAiFoundryBaseUrl(baseUrl)) {
+    return fetchAnthropicFoundryDeployments({ apiKey, baseUrl, extraHeaders });
+  }
   const url = joinBaseUrl(baseUrl, "/v1/models?limit=100");
 
   const response = await fetch(url, {
@@ -124,6 +131,60 @@ export async function getAnthropicAuthHeaders(
   }
 
   return { "x-api-key": "" };
+}
+
+/**
+ * Claude on Microsoft Foundry answers `/anthropic/v1/models` with
+ * `api_not_supported`, so list the resource's deployments instead and keep the
+ * Claude ones. Requests then name the deployment in `model`, as Foundry
+ * expects. The listing takes the key in `api-key` (it rejects `x-api-key`) or
+ * the same Entra ID bearer the Messages API takes.
+ */
+async function fetchAnthropicFoundryDeployments(params: {
+  apiKey: string;
+  baseUrl: string;
+  extraHeaders?: Record<string, string> | null;
+}): Promise<ModelInfo[]> {
+  const url = buildAzureFoundryDeploymentsUrl(params.baseUrl);
+  if (!url) {
+    return [];
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      ...(params.extraHeaders ?? {}),
+      ...(params.apiKey
+        ? { "api-key": params.apiKey }
+        : await getAnthropicAuthHeaders(params.apiKey)),
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error(
+      { status: response.status, error: errorText },
+      "Failed to fetch Anthropic deployments from Microsoft Foundry",
+    );
+    throw modelFetchError("Anthropic models", response.status);
+  }
+
+  const data = (await response.json()) as {
+    data?: { id: string; model?: string; status?: string }[];
+  };
+
+  return (data.data ?? [])
+    .filter(
+      (deployment) =>
+        deployment.status !== "failed" &&
+        (deployment.model ?? deployment.id).toLowerCase().startsWith("claude"),
+    )
+    .map((deployment) => ({
+      id: deployment.id,
+      displayName: deployment.id,
+      provider: "anthropic" as const,
+      // The deployment name is free-form; the backing model drives pricing.
+      ...(deployment.model ? { underlyingModelName: deployment.model } : {}),
+    }));
 }
 
 interface VertexPublisherModelsResponse {

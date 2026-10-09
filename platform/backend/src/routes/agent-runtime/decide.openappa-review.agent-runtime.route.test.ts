@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { afterEach, beforeEach, vi } from "vitest";
-import config from "@/config";
+import { afterEach, beforeEach, type MockInstance, vi } from "vitest";
 import db, { schema } from "@/database";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   A2AContextModel,
@@ -33,25 +33,17 @@ const routesWithAudit: FastifyPluginAsyncZod = async (app) => {
 };
 describe("agent run OpenAPPA review", () => {
   const ctx = useRouteTestApp(routesWithAudit);
-  const previousFeatureEnabled = config.agentRuntime.enabled;
-  const previousClusterReachable = Reflect.get(
-    agentRuntimeManager,
-    "clusterReachable",
-  );
+  let sandboxInstalled: MockInstance<() => boolean>;
 
   beforeEach(() => {
-    config.agentRuntime.enabled = true;
-    Reflect.set(agentRuntimeManager, "clusterReachable", true);
+    sandboxInstalled = vi
+      .spyOn(agentSandboxApi, "isInstalled", "get")
+      .mockReturnValue(true);
     vi.mocked(startDetachedAgentTask).mockClear();
   });
 
   afterEach(() => {
-    config.agentRuntime.enabled = previousFeatureEnabled;
-    Reflect.set(
-      agentRuntimeManager,
-      "clusterReachable",
-      previousClusterReachable,
-    );
+    sandboxInstalled.mockRestore();
   });
 
   test("the owner records an approval the runtime consumes, and a lost steer does not start a workspace", async ({

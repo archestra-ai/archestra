@@ -83,7 +83,12 @@ import {
   structuredToolErrorResult,
   successResult,
 } from "./helpers";
-import { resourceAccessToolArg } from "./resource-access-tool-arg";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -283,6 +288,8 @@ const QueryKnowledgeSourcesToolArgsSchema = z
 const GetKnowledgeBasesToolArgsSchema = z
   .object({
     access: resourceAccessToolArg({ examplePlural: "knowledge bases" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
   })
   .strict();
 
@@ -909,7 +916,7 @@ async function handleGetKnowledgeBases(params: {
       viewerTeamIds: access?.teamIds ?? [],
       viewerUserId: context.userId,
       organizationId: context.organizationId,
-      access: args.access,
+      access: toolAccessSelection(args),
     });
     if (kbs.length === 0) {
       return structuredSuccessResult(

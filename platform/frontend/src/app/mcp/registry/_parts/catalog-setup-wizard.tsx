@@ -5,7 +5,6 @@ import {
   parseFullToolName,
 } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
-import type { RowSelectionState } from "@tanstack/react-table";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -18,19 +17,13 @@ import {
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ToolDetailsDialog } from "@/app/mcp/tool-guardrails/_parts/tool-details-dialog";
-import { CallPolicyToggle } from "@/components/call-policy-toggle";
-import { LoadingState } from "@/components/loading";
 import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
-import { WithPermissions } from "@/components/roles/with-permissions";
 import { SearchInput } from "@/components/search-input";
-import { ToolPolicyBulkActionsBar } from "@/components/tool-policy-bulk-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Collapsible,
   CollapsibleContent,
@@ -43,15 +36,7 @@ import {
   EmptyHeader,
   EmptyMedia,
 } from "@/components/ui/empty";
-import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useSession } from "@/lib/auth/auth.query";
@@ -64,8 +49,6 @@ import {
   setOAuthState,
   setOAuthTeamId,
 } from "@/lib/auth/oauth-session";
-import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
-import { useFeature } from "@/lib/config/config.query";
 import {
   useInstallMcpServer,
   useMcpDeploymentStatuses,
@@ -75,22 +58,6 @@ import {
 } from "@/lib/mcp/mcp-server.query";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import { batteryMatchesQueryKey } from "@/lib/openappa-batteries.query";
-import {
-  prefetchOperators,
-  prefetchToolInvocationPolicies,
-  prefetchToolResultPolicies,
-  useCallPolicyMutation,
-  useResultPolicyMutation,
-  useToolInvocationPolicies,
-  useToolResultPolicies,
-} from "@/lib/policy.query";
-import {
-  type CallPolicyAction,
-  getCallPolicyActionFromPolicies,
-  getResultPolicyActionFromPolicies,
-  RESULT_POLICY_ACTION_OPTIONS,
-  type ResultPolicyAction,
-} from "@/lib/policy.utils";
 import {
   type ToolWithAssignmentsData,
   useToolsWithAssignments,
@@ -393,69 +360,22 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
 
 /**
  * Combined review step: every discovered tool with its description, schema,
- * annotations, raw definition, and inline guardrail controls.
+ * annotations, and raw definition, plus the OpenAPPA batteries that govern
+ * this server's tools.
  */
 export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
-  // The legacy guardrails table is gone once OpenAPPA is on.
-  const openappaEnabled = useFeature("openappaEnabled");
   const queryClient = useQueryClient();
-  const [selectedTool, setSelectedTool] =
-    useState<ToolWithAssignmentsData | null>(null);
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    prefetchOperators(queryClient);
-    prefetchToolInvocationPolicies(queryClient);
-    prefetchToolResultPolicies(queryClient);
-  }, [queryClient]);
 
   const { data: toolsData, isPending } = useToolsWithAssignments({
     pagination: { limit: TOOLS_REVIEW_LIMIT, offset: 0 },
     sorting: { sortBy: "name", sortDirection: "asc" },
     filters: { origin: item.id, excludeArchestraTools: true },
   });
-  const { data: invocationPolicies } = useToolInvocationPolicies();
-  const { data: resultPolicies } = useToolResultPolicies();
-  const callPolicyMutation = useCallPolicyMutation();
-  const resultPolicyMutation = useResultPolicyMutation();
   // Same install the Test Connection step reports on — the reload endpoint
   // needs a concrete server install, not the catalog item.
   const { target: reloadTarget } = useTestConnectionTarget(item);
   const reloadTools = useReloadMcpServerTools();
-  // `${toolId}:${field}` entries for in-flight policy updates.
-  const [updating, setUpdating] = useState<ReadonlySet<string>>(new Set());
-  const [selectedToolIds, setSelectedToolIds] = useState<ReadonlySet<string>>(
-    new Set(),
-  );
-  const rangeSelection = useRef(new BulkRangeSelectionController());
-
-  const updatePolicy = async (
-    toolId: string,
-    field: "callPolicy" | "resultPolicyAction",
-    value: CallPolicyAction | ResultPolicyAction,
-  ) => {
-    const key = `${toolId}:${field}`;
-    setUpdating((prev) => new Set(prev).add(key));
-    try {
-      if (field === "callPolicy") {
-        await callPolicyMutation.mutateAsync({
-          toolId,
-          action: value as CallPolicyAction,
-        });
-      } else {
-        await resultPolicyMutation.mutateAsync({
-          toolId,
-          action: value as ResultPolicyAction,
-        });
-      }
-    } finally {
-      setUpdating((prev) => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
-  };
 
   if (isPending) {
     return (
@@ -526,62 +446,11 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
     ? tools.filter((tool) => tool.name.toLowerCase().includes(normalizedSearch))
     : tools;
 
-  // Selection may reference tools removed by a refresh; count only live ones.
-  const selectedTools = tools.filter((tool) => selectedToolIds.has(tool.id));
-  const selectedVisibleCount = visibleTools.filter((tool) =>
-    selectedToolIds.has(tool.id),
-  ).length;
-  const allVisibleSelected =
-    visibleTools.length > 0 && selectedVisibleCount === visibleTools.length;
-  const selectAllLabel = normalizedSearch
-    ? `Select all matching (${visibleTools.length})`
-    : `Select all (${visibleTools.length})`;
-
-  // Select-all toggles the currently visible (filtered) tools, keeping any
-  // selection made outside the filter intact.
-  const toggleAllVisible = (checked: boolean) => {
-    setSelectedToolIds((prev) => {
-      const next = new Set(prev);
-      for (const tool of visibleTools) {
-        if (checked) {
-          next.add(tool.id);
-        } else {
-          next.delete(tool.id);
-        }
-      }
-      return next;
-    });
-  };
-
-  const toggleTool = (
-    toolId: string,
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
-    event.preventDefault();
-    setSelectedToolIds((prev) => {
-      const current: RowSelectionState = Object.fromEntries(
-        [...prev].map((id) => [id, true]),
-      );
-      return new Set(
-        Object.keys(
-          rangeSelection.current.update({
-            current,
-            orderedIds: visibleTools.map((tool) => tool.id),
-            targetId: toolId,
-            range: event.shiftKey,
-          }),
-        ),
-      );
-    });
-  };
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {tools.length} {tools.length === 1 ? "tool" : "tools"} discovered. Set
-          guardrails per tool, in bulk for a selection, or let a subagent
-          configure sensible defaults.
+          {tools.length} {tools.length === 1 ? "tool" : "tools"} discovered.
         </p>
         {refreshToolsButton}
       </div>
@@ -596,78 +465,15 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
           debounceMs={0}
         />
       )}
-      <ToolPolicyBulkActionsBar
-        selectedToolIds={selectedTools.map((tool) => tool.id)}
-        onClear={() => setSelectedToolIds(new Set())}
-      />
-      {/* 1px card border + p-4, so the checkbox column lines up with the cards */}
-      <div className="flex items-center gap-2 text-sm pl-[calc(1rem+1px)]">
-        <Checkbox
-          id="select-all-tools"
-          aria-label="Select all tools"
-          checked={
-            allVisibleSelected
-              ? true
-              : selectedVisibleCount > 0
-                ? "indeterminate"
-                : false
-          }
-          onCheckedChange={(checked) => toggleAllVisible(checked === true)}
-        />
-        <Label htmlFor="select-all-tools" className="font-normal">
-          {selectAllLabel}
-        </Label>
-      </div>
       {total > tools.length && (
         <p className="text-sm text-muted-foreground">
           Showing the first {tools.length} of {total} tools.
-          {openappaEnabled === false && (
-            <>
-              {" "}
-              <Link
-                href={`/mcp/tool-guardrails?origin=${item.id}`}
-                className="underline underline-offset-4"
-              >
-                Open the full guardrails table
-              </Link>{" "}
-              for the rest.
-            </>
-          )}
         </p>
       )}
 
       {visibleTools.map((tool) => (
-        <ToolReviewCard
-          key={tool.id}
-          tool={tool}
-          selected={selectedToolIds.has(tool.id)}
-          onSelectionClick={(event) => toggleTool(tool.id, event)}
-          callAction={getCallPolicyActionFromPolicies(
-            tool.id,
-            invocationPolicies ?? { byProfileToolId: {} },
-          )}
-          resultAction={getResultPolicyActionFromPolicies(
-            tool.id,
-            resultPolicies ?? { byProfileToolId: {} },
-          )}
-          hasCustomCallPolicy={(
-            invocationPolicies?.byProfileToolId[tool.id] ?? []
-          ).some((policy) => policy.conditions.length > 0)}
-          hasCustomResultPolicy={(
-            resultPolicies?.byProfileToolId[tool.id] ?? []
-          ).some((policy) => policy.conditions.length > 0)}
-          callUpdating={updating.has(`${tool.id}:callPolicy`)}
-          resultUpdating={updating.has(`${tool.id}:resultPolicyAction`)}
-          onUpdate={updatePolicy}
-          onOpenDetails={() => setSelectedTool(tool)}
-        />
+        <ToolReviewCard key={tool.id} tool={tool} />
       ))}
-
-      <ToolDetailsDialog
-        tool={selectedTool}
-        open={!!selectedTool}
-        onOpenChange={(open: boolean) => !open && setSelectedTool(null)}
-      />
     </div>
   );
 }
@@ -690,35 +496,7 @@ const ANNOTATION_BADGES: Array<{
   { key: "openWorldHint", label: "Open world" },
 ];
 
-function ToolReviewCard({
-  tool,
-  selected,
-  onSelectionClick,
-  callAction,
-  resultAction,
-  hasCustomCallPolicy,
-  hasCustomResultPolicy,
-  callUpdating,
-  resultUpdating,
-  onUpdate,
-  onOpenDetails,
-}: {
-  tool: ToolWithAssignmentsData;
-  selected: boolean;
-  onSelectionClick: React.MouseEventHandler<HTMLButtonElement>;
-  callAction: CallPolicyAction;
-  resultAction: ResultPolicyAction;
-  hasCustomCallPolicy: boolean;
-  hasCustomResultPolicy: boolean;
-  callUpdating: boolean;
-  resultUpdating: boolean;
-  onUpdate: (
-    toolId: string,
-    field: "callPolicy" | "resultPolicyAction",
-    value: CallPolicyAction | ResultPolicyAction,
-  ) => void;
-  onOpenDetails: () => void;
-}) {
+function ToolReviewCard({ tool }: { tool: ToolWithAssignmentsData }) {
   // MCP tool names are slugified with the server name; show the short name.
   const displayName = tool.catalogId
     ? parseFullToolName(tool.name).toolName || tool.name
@@ -738,121 +516,30 @@ function ToolReviewCard({
     (badge) => annotations?.[badge.key] === true,
   );
 
-  const resultLabel =
-    RESULT_POLICY_ACTION_OPTIONS.find((opt) => opt.value === resultAction)
-      ?.label ?? resultAction;
-
   return (
     <div className="rounded-lg border">
-      <div className="flex flex-wrap items-start justify-between gap-4 p-4">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <Checkbox
-            aria-label={`Select ${displayName}`}
-            className="mt-1"
-            checked={selected}
-            onClick={onSelectionClick}
-          />
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <code className="text-sm font-semibold">{displayName}</code>
-              {annotationBadges.map(({ key, label, destructive }) => (
-                <Badge
-                  key={key}
-                  variant={destructive ? "destructive" : "outline"}
-                  className="font-normal"
-                >
-                  {label}
-                </Badge>
-              ))}
-              {tool.assignmentCount > 0 && (
-                <Badge variant="secondary" className="font-normal">
-                  {tool.assignmentCount}{" "}
-                  {tool.assignmentCount === 1 ? "assignment" : "assignments"}
-                </Badge>
-              )}
-            </div>
-            {tool.description && (
-              <p className="text-sm text-muted-foreground">
-                {tool.description}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <WithPermissions
-          permissions={{ toolPolicy: ["update"] }}
-          noPermissionHandle="tooltip"
-        >
-          {({ hasPermission }) => (
-            <div className="flex shrink-0 flex-wrap items-end gap-x-4 gap-y-2">
-              <div className="space-y-1">
-                <div className="text-xs text-muted-foreground">Call policy</div>
-                {hasCustomCallPolicy ? (
-                  <Button variant="outline" size="sm" onClick={onOpenDetails}>
-                    Custom
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <CallPolicyToggle
-                      value={callAction}
-                      onChange={(action) =>
-                        onUpdate(tool.id, "callPolicy", action)
-                      }
-                      disabled={callUpdating || !hasPermission}
-                      size="sm"
-                    />
-                    {callUpdating && <LoadingState variant="inline" />}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <div className="text-xs text-muted-foreground">Results are</div>
-                {hasCustomResultPolicy ? (
-                  <Button variant="outline" size="sm" onClick={onOpenDetails}>
-                    Custom
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Select
-                      value={resultAction}
-                      disabled={resultUpdating || !hasPermission}
-                      onValueChange={(value) => {
-                        if (value === resultAction) return;
-                        onUpdate(
-                          tool.id,
-                          "resultPolicyAction",
-                          value as ResultPolicyAction,
-                        );
-                      }}
-                    >
-                      <SelectTrigger
-                        className="h-8 w-[150px] text-xs"
-                        size="sm"
-                      >
-                        <SelectValue>{resultLabel}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RESULT_POLICY_ACTION_OPTIONS.map(
-                          ({ value, label }) => (
-                            <SelectItem key={value} value={value}>
-                              {label}
-                            </SelectItem>
-                          ),
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {resultUpdating && <LoadingState variant="inline" />}
-                  </div>
-                )}
-              </div>
-
-              <Button variant="ghost" size="sm" onClick={onOpenDetails}>
-                Edit policies
-              </Button>
-            </div>
+      <div className="min-w-0 space-y-1 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <code className="text-sm font-semibold">{displayName}</code>
+          {annotationBadges.map(({ key, label, destructive }) => (
+            <Badge
+              key={key}
+              variant={destructive ? "destructive" : "outline"}
+              className="font-normal"
+            >
+              {label}
+            </Badge>
+          ))}
+          {tool.assignmentCount > 0 && (
+            <Badge variant="secondary" className="font-normal">
+              {tool.assignmentCount}{" "}
+              {tool.assignmentCount === 1 ? "assignment" : "assignments"}
+            </Badge>
           )}
-        </WithPermissions>
+        </div>
+        {tool.description && (
+          <p className="text-sm text-muted-foreground">{tool.description}</p>
+        )}
       </div>
 
       <div className="divide-y border-t">

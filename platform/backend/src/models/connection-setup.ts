@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
-import { and, eq, gt, isNull, notExists, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { ConnectionSetup, InsertConnectionSetup } from "@/types";
 
@@ -79,13 +78,10 @@ class ConnectionSetupModel {
     tokenHash: string;
     tokenStart: string;
     expiresAt: Date;
-    /** Parts the copied prompt left out; a setup that includes one won't bind. */
-    exclude?: readonly ConnectSetupPart[];
     /** Machine the installer reported; null for installers that predate it. */
     deviceName?: string;
   }): Promise<boolean> {
     const table = schema.connectionSetupsTable;
-    const exclude = new Set(params.exclude ?? []);
     const [row] = await db
       .update(table)
       .set({
@@ -103,22 +99,6 @@ class ConnectionSetupModel {
           eq(table.platform, params.platform),
           isNull(table.consumedAt),
           gt(table.expiresAt, sql`now()`),
-          exclude.has("tools") ? isNull(table.mcpGatewayId) : undefined,
-          exclude.has("proxy") ? isNull(table.llmProxyId) : undefined,
-          exclude.has("skills") ? eq(table.includeSkills, false) : undefined,
-          exclude.has("plugins")
-            ? notExists(
-                db
-                  .select({ id: schema.connectionSetupPluginsTable.pluginId })
-                  .from(schema.connectionSetupPluginsTable)
-                  .where(
-                    eq(
-                      schema.connectionSetupPluginsTable.connectionSetupId,
-                      table.id,
-                    ),
-                  ),
-              )
-            : undefined,
         ),
       )
       .returning({ id: table.id });

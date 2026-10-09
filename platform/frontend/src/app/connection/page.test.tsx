@@ -1,14 +1,28 @@
+import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
+  cleanup,
   fireEvent,
   render as rtlRender,
   screen,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
 import type { ReactElement, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   useDefaultMcpGateway,
   useProfile,
@@ -16,6 +30,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
+import { postConnected } from "@/lib/connect-signal";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
@@ -36,6 +51,7 @@ const connectionFlowMock = vi.fn((_props: unknown) => (
 const refetchOrganizationMock = vi.fn();
 
 vi.mock("next/navigation");
+vi.mock("@/lib/clipboard");
 vi.mock("@/lib/agent.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
@@ -46,7 +62,13 @@ vi.mock("@/lib/plugins/plugin.query", async (importOriginal) => ({
 }));
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/llm-proxy.query");
-vi.mock("@/lib/mcp/internal-mcp-catalog.query");
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/mcp/internal-mcp-catalog.query")
+  >()),
+  useAllCatalogTools: vi.fn(),
+  useInternalMcpCatalog: vi.fn(),
+}));
 vi.mock("@/lib/organization.query");
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -115,6 +137,7 @@ function mockOrganization(overrides: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(useAppName).mockReturnValue("Example Platform");
   vi.mocked(useHasPermissions).mockReturnValue({
     data: false,
@@ -153,6 +176,261 @@ beforeEach(() => {
   vi.mocked(useGuardrailsDeployment).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useGuardrailsDeployment>);
+});
+
+describe("ConnectPage gateway footprint", () => {
+  const api = setupServer();
+  const previewUrl = "http://localhost:9000/api/agents/gw-1/mcp-tool-preview";
+
+  beforeAll(() => api.listen({ onUnhandledRequest: "bypass" }));
+  afterEach(() => api.resetHandlers());
+  afterAll(() => api.close());
+
+  function show(progressive = false) {
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=claude-code") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useProfile).mockReturnValue({
+      data: {
+        id: "gw-1",
+        name: "Team gateway",
+        slug: "team",
+        accessAllTools: progressive,
+        toolExposureMode: progressive ? "search_and_run_only" : "full",
+        tools: ["read", "write", "hidden"].map((name) => ({
+          name: `example__${name}`,
+          catalogId: "catalog-1",
+          description: name,
+        })),
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      data: [
+        {
+          id: "catalog-1",
+          name: "Example server",
+          serverType: "remote",
+          toolCount: 3,
+        },
+      ],
+    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    mockOrganization({
+      data: {
+        connectionDefaultMcpGatewayId: "gw-1",
+        connectionShownClientIds: ["claude-code", "codex"],
+      },
+    });
+    return render(<ConnectionPage />);
+  }
+
+  const listed = (tokens: number) => ({
+    toolExposureMode: "full",
+    tools: [
+      {
+        name: "example__read",
+        catalogId: "catalog-1",
+        description: "Read items",
+        tokens,
+      },
+      {
+        name: "example__write",
+        catalogId: "catalog-1",
+        description: "Write items",
+        tokens,
+      },
+    ],
+  });
+
+  it("counts served tools instead of catalog rows and changes the estimate with the client", async () => {
+    api.use(
+      http.get(previewUrl, ({ request }) =>
+        HttpResponse.json(
+          listed(
+            new URL(request.url).searchParams.get("client") === "claude-code"
+              ? 1200
+              : 550,
+          ),
+        ),
+      ),
+    );
+    show();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(await within(summary).findByText("2 tools")).toBeVisible();
+    expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
+    expect(within(summary).queryByText("3 tools")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Codex$/ }));
+    expect(await screen.findByText("~1.1K tokens")).toBeVisible();
+  });
+
+  it("uses the preview's loading mode even when the cached profile has the old mode", async () => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({
+          ...listed(1200),
+          toolExposureMode: "search_and_run_only",
+        }),
+      ),
+    );
+    show();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(
+      await within(summary).findByText("2 tools loaded, more on demand"),
+    ).toBeVisible();
+    expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
+  });
+
+  it.each([
+    [11732, "~11.7K tokens"],
+    [0, "~0 tokens"],
+  ])("shows provider total %i instead of summing fallback estimates", async (total, label) => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({
+          ...listed(8443),
+          tokenCount: {
+            total,
+            source: "claude-provider",
+            model: "claude-sonnet-5-5",
+            observedAt: "2026-10-09T12:00:00.000Z",
+          },
+        }),
+      ),
+    );
+    show();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(await within(summary).findByText(label)).toBeVisible();
+    await userEvent.hover(
+      within(summary).getByRole("button", { name: "How tools load" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Last matching provider count for claude-sonnet-5-5",
+    );
+    await userEvent.click(
+      within(summary).getByRole("button", { name: "1 MCP server" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Example server")).toBeVisible();
+    expect(within(dialog).queryByText(/16\.9K tokens/)).toBeNull();
+  });
+
+  it("shows an empty gateway instead of retaining catalog counts", async () => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({ toolExposureMode: "full", tools: [] }),
+      ),
+    );
+    show();
+    expect(await screen.findByText("0 tools")).toBeVisible();
+    expect(screen.queryByText("3 tools")).toBeNull();
+    expect(screen.queryByText("Example server")).toBeNull();
+  });
+
+  it("does not substitute catalog totals when the preview fails", async () => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json(
+          { error: { message: "Unavailable" } },
+          { status: 503 },
+        ),
+      ),
+    );
+    show();
+    expect(await screen.findByText("Tool counts unavailable")).toBeVisible();
+    expect(screen.queryByText("3 tools")).toBeNull();
+  });
+});
+
+describe("ConnectPage saved agent order", () => {
+  it("renders saved order in tiles, including agents previously in Other agents", async () => {
+    const user = userEvent.setup();
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    mockOrganization({
+      data: {
+        connectionClientOrder: ["n8n", "codex", "claude-code"],
+        connectionDefaultClientId: "codex",
+        connectionShownClientIds: ["claude-code", "n8n", "codex"],
+      },
+    });
+    render(<ConnectionPage />);
+    const names = screen
+      .getAllByRole("button")
+      .map((button) => button.textContent?.trim());
+    const tileNames = names.filter((name) =>
+      ["n8n", "Codex", "Claude Code"].includes(name ?? ""),
+    );
+    expect(tileNames).toEqual(["n8n", "Codex", "Claude Code"]);
+    expect(screen.getByRole("button", { name: /Codex$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await user.click(screen.getByRole("button", { name: "Other agents" }));
+    await user.click(screen.getByRole("option", { name: /Generic client/ }));
+    expect(
+      screen.getByRole("button", { name: "Generic client, change agent" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps saved order in the overflow search when tiles do not fit", async () => {
+    const width = vi
+      .spyOn(Element.prototype, "clientWidth", "get")
+      .mockReturnValue(320);
+    try {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams() as ReturnType<typeof useSearchParams>,
+      );
+      mockOrganization({
+        data: {
+          connectionClientOrder: [
+            "n8n",
+            "codex",
+            "openclaw",
+            "cursor",
+            "claude-code",
+          ],
+          connectionShownClientIds: [
+            "claude-code",
+            "cursor",
+            "codex",
+            "n8n",
+            "openclaw",
+          ],
+        },
+      });
+      render(<ConnectionPage />);
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Other agents" }));
+      expect(
+        screen
+          .getAllByRole("option")
+          .map((option) => option.getAttribute("data-value")),
+      ).toEqual(["openclaw", "cursor", "claude-code", "generic"]);
+      await user.type(screen.getByPlaceholderText("Search agents"), "cl");
+      expect(
+        screen
+          .getAllByRole("option")
+          .map((option) => option.getAttribute("data-value")),
+      ).toEqual(["openclaw", "claude-code", "generic"]);
+    } finally {
+      width.mockRestore();
+    }
+  });
 });
 
 describe("ConnectPage guardrails chip", () => {
@@ -308,7 +586,7 @@ describe("ConnectPage (no connect request)", () => {
     expect(connectionFlowMock).not.toHaveBeenCalled();
   });
 
-  it("carries what the user left out in the installer prompt", () => {
+  it("carries what the user left out in the installer command", () => {
     window.localStorage.clear();
     saveConnectChoices("cursor", {
       tools: false,
@@ -320,10 +598,11 @@ describe("ConnectPage (no connect request)", () => {
     render(<ConnectionPage />);
     // Tools are always included, whatever was saved.
     expect(
-      screen.getByText(
-        /connect\.md\?client=cursor&exclude=skills,plugins and connect Cursor\./,
-      ),
+      screen.getByText(/--client cursor --exclude skills,plugins$/),
     ).toBeVisible();
+    expect(screen.getByText("Run the command in your terminal")).toBeVisible();
+    // The installer is the only way in: no prompt to switch to.
+    expect(screen.queryByRole("button", { name: "Prompt" })).toBeNull();
   });
 
   it("shows the LLM proxy as on for supported agents, not active when the admin turned it off", () => {
@@ -389,10 +668,13 @@ describe("ConnectPage (no connect request)", () => {
       );
       await userEvent.click(screen.getByRole("switch", { name: /LLM proxy/ }));
       expect(screen.getByText("Off")).toBeVisible();
+      expect(
+        screen.getByText(/^Off\. .+ calls its model provider directly\.$/),
+      ).toBeVisible();
       // Other agents' prompt is covered by the generic prompt tests.
       if (id === "claude-code")
         expect(
-          screen.getByText(/connect\.md\?client=claude-code&exclude=proxy/),
+          screen.getByText(/--client claude-code --exclude proxy$/),
         ).toBeVisible();
       unmount();
     }
@@ -409,30 +691,29 @@ describe("ConnectPage (no connect request)", () => {
     } as unknown as ReturnType<typeof useProfile>);
     mockOrganization({
       data: {
-        connectionShownClientIds: ["generic"],
+        connectionShownClientIds: ["hermes-agent"],
         connectionDefaultMcpGatewayId: "gw-1",
       },
     });
     render(<ConnectionPage />);
     expect(
       screen.getByText(
-        /connect\.md\?client=generic&gateway=team&exclude=skills,proxy(&base=[^ ]+)? and connect /,
+        /connect\.md\?client=generic&gateway=team&exclude=skills,proxy(&base=[^ ]+)? and connect Hermes Agent\./,
       ),
     ).toBeVisible();
   });
 
-  it("opens a linked agent on its manual setup", () => {
+  it("sets the generic client up by hand", () => {
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("clientId=generic&mode=manual") as ReturnType<
+      new URLSearchParams("clientId=generic") as ReturnType<
         typeof useSearchParams
       >,
     );
     mockOrganization({});
     render(<ConnectionPage />);
-    expect(
-      screen.getByRole("button", { name: "Manual setup", pressed: true }),
-    ).toBeVisible();
     expect(screen.getByText("Follow the steps for your agent")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Prompt" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
   });
 
   it("gives other agents the prompt only, even when linked to manual setup", () => {
@@ -679,6 +960,81 @@ describe("ConnectPage guardrails for members", () => {
   });
 });
 
+describe("ConnectPage gateway pick", () => {
+  const api = setupServer();
+  beforeAll(() => api.listen({ onUnhandledRequest: "bypass" }));
+  afterEach(() => api.resetHandlers());
+  afterAll(() => api.close());
+
+  it("connects through and counts the gateway picked over the default", async () => {
+    api.use(
+      http.get(
+        "http://localhost:9000/api/agents/:id/mcp-tool-preview",
+        ({ params, request }) => {
+          expect(new URL(request.url).searchParams.get("client")).toBe(
+            "claude-code",
+          );
+          return HttpResponse.json({
+            toolExposureMode: "full",
+            tools: [
+              {
+                name: "example__read",
+                catalogId: null,
+                description: "Read",
+                tokens: params.id === "coding-gateway" ? 2300 : 100,
+              },
+            ],
+          });
+        },
+      ),
+    );
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    const gateway = (id: string, name: string) => ({
+      id,
+      name,
+      slug: id,
+      agentType: "mcp_gateway",
+      tools: [],
+      accessAllTools: false,
+    });
+    const gateways = [
+      gateway("default-gateway", "Default gateway"),
+      gateway("coding-gateway", "Coding gateway"),
+    ];
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: gateways[0],
+    } as unknown as ReturnType<typeof useDefaultMcpGateway>);
+    vi.mocked(useProfiles).mockReturnValue({
+      data: gateways,
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfiles>);
+    vi.mocked(useProfile).mockImplementation(
+      (id) =>
+        ({
+          data: gateways.find((g) => g.id === id),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useProfile>,
+    );
+    mockOrganization({ data: { connectionShownClientIds: ["claude-code"] } });
+    saveConnectChoices(
+      "claude-code",
+      { tools: true, skills: true, proxy: true, plugins: true },
+      { gatewayId: "coding-gateway", pluginIds: null },
+    );
+    render(<ConnectionPage />);
+    expect(
+      await screen.findByText(/--client claude-code --gateway coding-gateway$/),
+    ).toBeVisible();
+    expect(await screen.findByText("~2.3K tokens")).toBeVisible();
+  });
+});
+
 describe("ConnectPage plugins", () => {
   const plugin = (
     id: string,
@@ -686,6 +1042,7 @@ describe("ConnectPage plugins", () => {
     supportedPlatforms: string[],
   ) => ({
     id,
+    pluginSlug: `plugin-${id}`,
     displayName: `Plugin ${id}`,
     description: null,
     clientType,
@@ -695,7 +1052,7 @@ describe("ConnectPage plugins", () => {
     approvedContentHash: "h",
   });
 
-  function setup(clientId: string) {
+  function setup(clientId: string, extra: ReturnType<typeof plugin>[] = []) {
     window.localStorage.clear();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -711,6 +1068,7 @@ describe("ConnectPage plugins", () => {
         plugin("a", "claude-code", ["posix", "windows"]),
         plugin("b", "claude-code", ["windows"]),
         plugin("c", "codex", ["posix"]),
+        ...extra,
       ],
     } as unknown as ReturnType<typeof usePlugins>);
     mockOrganization({
@@ -729,7 +1087,7 @@ describe("ConnectPage plugins", () => {
     expect(screen.queryByText("Plugin b")).toBeNull();
   });
 
-  it("leaves plugins out of the prompt when switched off", async () => {
+  it("leaves plugins out of the command when switched off", async () => {
     setup("claude-code");
     await userEvent.click(
       screen.getByRole("button", { name: "Choose what to include" }),
@@ -737,9 +1095,42 @@ describe("ConnectPage plugins", () => {
     await userEvent.click(screen.getByRole("switch", { name: /Plugins/ }));
     expect(screen.getByText("Plugins off")).toBeVisible();
     expect(
-      screen.getByText(
-        /connect\.md\?client=claude-code&exclude=plugins and connect Claude Code\./,
-      ),
+      screen.getByText(/--client claude-code --exclude plugins$/),
+    ).toBeVisible();
+  });
+
+  it("keeps only the plugins picked in the dialog", async () => {
+    setup("claude-code", [plugin("d", "claude-code", ["posix", "windows"])]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Choose what to include" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(/All 2 plugins your org approved/),
+    ).toBeVisible();
+    // Only these starts from nothing picked, in the pane over the dialog.
+    await userEvent.click(
+      within(dialog).getByRole("radio", { name: /Only these/ }),
+    );
+    const pane = screen.getByRole("region", { name: "Pick plugins" });
+    await userEvent.click(
+      within(pane).getByRole("checkbox", { name: /Plugin a/ }),
+    );
+    await userEvent.click(within(pane).getByRole("button", { name: "Done" }));
+    expect(within(dialog).getByText(/1 of 2 plugins/)).toBeVisible();
+    expect(
+      screen.getByText(/--client claude-code --plugins plugin-a$/),
+    ).toBeVisible();
+    // Removing the last pick is leaving plugins out.
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Remove Plugin a" }),
+    );
+    expect(within(dialog).getByText("No plugins picked")).toBeVisible();
+    expect(
+      within(dialog).getByText(/^Off\. Claude Code gets none of the 2 plugins/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/--client claude-code --exclude plugins$/),
     ).toBeVisible();
   });
 
@@ -801,6 +1192,140 @@ describe("ConnectPage loading", () => {
     render(<ConnectionPage />);
     expect(
       screen.queryByRole("heading", { name: /Connect your agent/ }),
+    ).toBeNull();
+  });
+});
+
+describe("ConnectPage after copying the command", () => {
+  const welcome =
+    "Read http://localhost:3000/welcome.md and show me what I can do with Example Platform.";
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  function show(clientIds: string[], query = "") {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(query) as ReturnType<typeof useSearchParams>,
+    );
+    // A gateway, so other agents' prompt has something to set up.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useProfile).mockReturnValue({
+      data: { id: "gw-1", name: "Team gateway", slug: "team", tools: [] },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: clientIds,
+        connectionDefaultMcpGatewayId: "gw-1",
+      },
+    });
+    render(<ConnectionPage />);
+  }
+
+  const copyCommand = () =>
+    userEvent.click(screen.getByRole("button", { name: /^(Copy|Copied)$/ }));
+  const status = () =>
+    screen.queryByRole("region", { name: "Connection status" });
+  const approveElsewhere = async () => {
+    postConnected();
+    await screen.findByText(/^Connected\./);
+  };
+
+  it("waits for approval once the command is copied, then offers the welcome prompt", async () => {
+    show(["cursor"]);
+    expect(status()).toBeNull();
+    await copyCommand();
+    expect(status()).toHaveTextContent(
+      "Waiting for approvalThe command opens a browser page. Approve there and this card moves on by itself.",
+    );
+
+    await approveElsewhere();
+    expect(status()).toHaveTextContent(
+      "Connected. Next, ask Cursor what it can do now",
+    );
+    expect(status()).toHaveTextContent(
+      "Once your terminal says setup is done, paste this into a new Cursor session.",
+    );
+    expect(screen.getByText(welcome)).toBeVisible();
+    // The connect band steps back.
+    expect(screen.getByRole("region", { name: "Connect" })).toHaveClass(
+      "opacity-50",
+    );
+    // Copying the welcome prompt doesn't start waiting again.
+    await userEvent.click(
+      within(status() as HTMLElement).getByRole("button", {
+        name: "Copy prompt",
+      }),
+    );
+    expect(status()).toHaveTextContent("Connected.");
+
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(status()).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Show the starter prompt" }),
+    ).toBeVisible();
+  });
+
+  it("starts waiting when the command text is copied by hand", () => {
+    show(["cursor"]);
+    fireEvent.copy(screen.getByText(/--client cursor$/));
+    expect(status()).toHaveTextContent("Waiting for approval");
+  });
+
+  it("moves on with Done, and goes back to the link on Cancel", async () => {
+    show(["cursor"]);
+    await copyCommand();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(status()).toBeNull();
+
+    await copyCommand();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Done? Show the next step" }),
+    );
+    expect(status()).toHaveTextContent("Connected.");
+  });
+
+  it("stops waiting when the agent changes, but keeps a connection it saw", async () => {
+    show(["cursor", "codex"]);
+    await copyCommand();
+    await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
+    expect(status()).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: /Cursor/ }));
+    await copyCommand();
+    await approveElsewhere();
+    await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
+    expect(status()).toHaveTextContent(
+      "Connected. Next, ask Cursor what it can do now",
+    );
+  });
+
+  it("shows the starter prompt from the link", async () => {
+    show(["generic"]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show the starter prompt" }),
+    );
+    const card = screen.getByRole("region", { name: "Starter prompt" });
+    expect(card).toHaveTextContent(
+      "Works once your agent is connected. If it isn't yet, it points you back to the Connect page.",
+    );
+    expect(within(card).getByText(welcome)).toBeVisible();
+    await userEvent.click(within(card).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region", { name: "Starter prompt" })).toBeNull();
+  });
+
+  it("offers the starter prompt in manual setup, but not for n8n", () => {
+    show(["generic"]);
+    expect(
+      screen.getByRole("button", { name: "Show the starter prompt" }),
+    ).toBeVisible();
+    cleanup();
+    show(["n8n"]);
+    expect(
+      screen.queryByRole("button", { name: "Show the starter prompt" }),
     ).toBeNull();
   });
 });

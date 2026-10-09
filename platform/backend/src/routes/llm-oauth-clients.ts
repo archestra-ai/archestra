@@ -19,9 +19,11 @@ import {
   OauthClientLabelModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import { credentialBilling } from "@/services/credential-billing";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
+  CredentialSpendCapInputSchema,
   constructResponseSchema,
   LabelWithDetailsSchema,
   LlmOauthClientGrantTypeSchema,
@@ -63,6 +65,21 @@ const LlmOauthClientFields = z
         "Key/value labels. Omit to leave existing labels untouched; pass [] " +
           "to clear them.",
       ),
+    billingTeamId: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "Team a client_credentials client's spend is charged to. Omit to " +
+          "keep it; null stops billing a team. Signed-in users of an " +
+          "authorization_code client pay for themselves.",
+      ),
+    spendCap: CredentialSpendCapInputSchema.nullable()
+      .optional()
+      .describe(
+        "Spend cap for the whole client, stored as a token_cost limit on it. " +
+          "Omit to keep it; null removes it.",
+      ),
   })
   .strict();
 
@@ -77,6 +94,14 @@ const validateLlmOauthClientBody = (
         path: ["redirectUris"],
         message:
           "At least one redirect URI is required for authorization_code clients",
+      });
+    }
+    if (value.billingTeamId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["billingTeamId"],
+        message:
+          "authorization_code clients cannot bill a team: each signed-in user pays for their own usage",
       });
     }
     return;
@@ -194,7 +219,12 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? (body.providerApiKeys ?? [])
             : [],
       });
-      const { oauthClient, clientSecret } = await LlmOauthClientModel.create({
+      await credentialBilling.assertCanSetBillingTeam({
+        organizationId,
+        userId: user.id,
+        teamId: body.billingTeamId,
+      });
+      const created = await LlmOauthClientModel.create({
         organizationId,
         name: body.name,
         grantType: body.grantType,
@@ -202,15 +232,27 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         redirectUris: body.redirectUris,
         authorId: user.id,
         initialGrants: body.initialGrants,
+        billingTeamId: body.billingTeamId,
       });
       if (body.labels?.length) {
-        await OauthClientLabelModel.syncLabels(oauthClient.id, body.labels);
+        await OauthClientLabelModel.syncLabels(
+          created.oauthClient.id,
+          body.labels,
+        );
       }
-      return reply.send({
-        ...oauthClient,
-        labels: await OauthClientLabelModel.getLabelsFor(oauthClient.id),
-        clientSecret,
+      await credentialBilling.applySpendCap({
+        entityType: "llm_oauth_client",
+        entityId: created.oauthClient.id,
+        cap: body.spendCap,
       });
+      const oauthClient = await LlmOauthClientModel.findById({
+        id: created.oauthClient.id,
+        organizationId,
+      });
+      if (!oauthClient) {
+        throw new ApiError(500, "LLM OAuth client disappeared after creation");
+      }
+      return reply.send({ ...oauthClient, clientSecret: created.clientSecret });
     },
   );
 
@@ -243,16 +285,48 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             ? (body.providerApiKeys ?? [])
             : [],
       });
-      const oauthClient = await LlmOauthClientModel.update({
+      const existing = await LlmOauthClientModel.findById({
+        id: params.id,
+        organizationId,
+      });
+      if (!existing) {
+        throw new ApiError(404, "LLM OAuth client not found");
+      }
+      await credentialBilling.assertCanSetBillingTeam({
+        organizationId,
+        userId: user.id,
+        teamId: body.billingTeamId,
+        currentTeamId: existing.billingTeamId,
+      });
+      await credentialBilling.assertCanSetSpendCap({
+        organizationId,
+        userId: user.id,
+        cap: body.spendCap,
+        current: existing.spendCap,
+      });
+      const updated = await LlmOauthClientModel.update({
         id: params.id,
         organizationId,
         name: body.name,
         providerApiKeys: body.providerApiKeys,
         redirectUris: body.redirectUris,
+        billingTeamId: body.billingTeamId,
       });
-      if (!oauthClient) {
+      if (!updated) {
         throw new ApiError(404, "LLM OAuth client not found");
       }
+      await credentialBilling.applySpendCap({
+        entityType: "llm_oauth_client",
+        entityId: params.id,
+        cap: body.spendCap,
+      });
+      const oauthClient =
+        body.spendCap === undefined
+          ? updated
+          : ((await LlmOauthClientModel.findById({
+              id: params.id,
+              organizationId,
+            })) ?? updated);
       // Only touch labels when the caller sent them, so an update that omits
       // the field leaves existing labels alone.
       if (body.labels !== undefined) {

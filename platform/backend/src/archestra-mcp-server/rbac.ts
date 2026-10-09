@@ -44,6 +44,7 @@ export const TOOL_PERMISSIONS: Record<
     resource: "openappaDiagnostics",
     action: "update",
   },
+  list_openappa_yells: { resource: "openappaDiagnostics", action: "read" },
   list_openappa_consults: { resource: "openappaDiagnostics", action: "read" },
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
@@ -152,19 +153,6 @@ export const TOOL_PERMISSIONS: Record<
   delete_limit: { resource: "llmLimit", action: "delete" },
   get_agent_token_usage: { resource: "llmLimit", action: "read" },
   get_llm_proxy_token_usage: { resource: "llmLimit", action: "read" },
-
-  // Policies
-  get_autonomy_policy_operators: { resource: "toolPolicy", action: "read" },
-  get_tool_invocation_policies: { resource: "toolPolicy", action: "read" },
-  create_tool_invocation_policy: { resource: "toolPolicy", action: "create" },
-  get_tool_invocation_policy: { resource: "toolPolicy", action: "read" },
-  update_tool_invocation_policy: { resource: "toolPolicy", action: "update" },
-  delete_tool_invocation_policy: { resource: "toolPolicy", action: "delete" },
-  get_trusted_data_policies: { resource: "toolPolicy", action: "read" },
-  create_trusted_data_policy: { resource: "toolPolicy", action: "create" },
-  get_trusted_data_policy: { resource: "toolPolicy", action: "read" },
-  update_trusted_data_policy: { resource: "toolPolicy", action: "update" },
-  delete_trusted_data_policy: { resource: "toolPolicy", action: "delete" },
 
   // Tool Assignment
   bulk_assign_tools_to_agents: { resource: "agent", action: "update" },

@@ -2,7 +2,6 @@ import type { UIMessage } from "@ai-sdk/react";
 import {
   type ArchestraToolShortName,
   type ChatOpenedAppMetadata,
-  DUAL_LLM_ANALYSIS_PART_TYPE,
   getArchestraAppResourceUri,
   HOOK_RUN_PART_TYPE,
   isAppRenderingArchestraToolShortName,
@@ -891,7 +890,6 @@ export function identifyReasoningRuns(params: {
         if (isToolPart(part)) return false;
         if (isHookRunPart(part)) return false;
         if (part.type.startsWith("data-tool-ui-start")) return false;
-        if (part.type.startsWith(DUAL_LLM_ANALYSIS_PART_TYPE)) return false;
         return true;
       }
     }

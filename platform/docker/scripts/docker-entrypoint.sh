@@ -341,9 +341,10 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     # Agent Runtime runs each task as a Sandbox resource of the upstream Agent
     # Sandbox controller. Real deployments install it as a cluster
     # prerequisite; the quickstart installs the version pinned in the
-    # Dockerfile. On failure the backend still starts and rejects runs with a
-    # message naming the missing controller.
-    if [ "${ARCHESTRA_AGENT_RUNTIME_ENABLED:-false}" = "true" ]; then
+    # Dockerfile. Agent Runtime turns on once the backend detects it; until
+    # then, or on failure, the UI reports the controller as missing.
+    # Installed in the background so it never delays startup.
+    (
         echo "Installing Agent Sandbox controller for Agent Runtime..."
         if [ ! -f /app/agent-sandbox.quickstart.yaml ]; then
             echo "WARNING: Agent Sandbox controller manifest missing from this image; Agent Runtime runs will fail"
@@ -363,7 +364,7 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         else
             echo "WARNING: Agent Sandbox controller did not become ready; Agent Runtime runs will fail until it is installed"
         fi
-    fi
+    ) &
 fi
 
 # Check if using external database (ARCHESTRA_DATABASE_URL or DATABASE_URL is set)

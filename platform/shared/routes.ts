@@ -26,6 +26,7 @@ export const RouteId = {
   CreateAgent: "createAgent",
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
+  GetAgentDefaultSuggestedPrompts: "getAgentDefaultSuggestedPrompts",
   PinAgent: "pinAgent",
   UnpinAgent: "unpinAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
@@ -49,6 +50,7 @@ export const RouteId = {
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
   GetAgentToolExclusions: "getAgentToolExclusions",
+  GetAgentMcpToolPreview: "getAgentMcpToolPreview",
   UpdateAgentToolExclusions: "updateAgentToolExclusions",
   GetAgentSubagentExclusions: "getAgentSubagentExclusions",
   UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",
@@ -81,7 +83,6 @@ export const RouteId = {
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
-  AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
   UnassignToolFromAgent: "unassignToolFromAgent",
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
@@ -205,12 +206,8 @@ export const RouteId = {
   BulkDeleteRoles: "bulkDeleteRoles",
 
   // Tool Routes
-  GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
-  GetToolObservers: "getToolObservers",
-  GetUnassignedTools: "getUnassignedTools",
-  DeleteTool: "deleteTool",
 
   // Interaction Routes
   GetInteractions: "getInteractions",
@@ -224,21 +221,6 @@ export const RouteId = {
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",
   GetMcpToolCall: "getMcpToolCall",
-
-  // Autonomy Policy Routes
-  GetOperators: "getOperators",
-  GetToolInvocationPolicies: "getToolInvocationPolicies",
-  CreateToolInvocationPolicy: "createToolInvocationPolicy",
-  GetToolInvocationPolicy: "getToolInvocationPolicy",
-  UpdateToolInvocationPolicy: "updateToolInvocationPolicy",
-  DeleteToolInvocationPolicy: "deleteToolInvocationPolicy",
-  GetTrustedDataPolicies: "getTrustedDataPolicies",
-  CreateTrustedDataPolicy: "createTrustedDataPolicy",
-  GetTrustedDataPolicy: "getTrustedDataPolicy",
-  UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
-  DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
-  BulkUpsertDefaultCallPolicy: "bulkUpsertDefaultCallPolicy",
-  BulkUpsertDefaultResultPolicy: "bulkUpsertDefaultResultPolicy",
 
   // Proxy Routes - OpenAI
   OpenAiChatCompletionsWithDefaultAgent:
@@ -873,6 +855,8 @@ export const RouteId = {
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
   GetOpenappaCoverageSummary: "getOpenappaCoverageSummary",
   GetOpenappaTrustAudience: "getOpenappaTrustAudience",
+  GetOpenappaRemedies: "getOpenappaRemedies",
+  GetOpenappaRemediesActivity: "getOpenappaRemediesActivity",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",
@@ -957,7 +941,6 @@ export const RouteId = {
   GetClientConnection: "getClientConnection",
   DecideClientConnection: "decideClientConnection",
   CreateConnectionSetup: "createConnectionSetup",
-  BeginConnectionPromptSession: "beginConnectionPromptSession",
   GetMfilesVafAddOnScript: "getMfilesVafAddOnScript",
   GetMfilesVafAddOnPackage: "getMfilesVafAddOnPackage",
   GetMfilesVafAddOnDistribution: "getMfilesVafAddOnDistribution",

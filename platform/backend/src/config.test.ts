@@ -63,6 +63,7 @@ import config, {
   parseK8sResourceQuantity,
   parseKeepAliveTimeoutMs,
   parseLlmProxyPlugins,
+  parseLogContentMode,
   parseLogFormat,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -3249,6 +3250,30 @@ describe("betaFeatureEnabled", () => {
   });
 });
 
+describe("parseLogContentMode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("defaults to full content when unset", () => {
+    expect(parseLogContentMode(undefined)).toBe("full");
+    expect(parseLogContentMode("  ")).toBe("full");
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test("accepts both modes, ignoring case and whitespace", () => {
+    expect(parseLogContentMode("full")).toBe("full");
+    expect(parseLogContentMode(" METADATA_ONLY ")).toBe("metadata_only");
+  });
+
+  test("an unrecognized value stores metadata only and warns", () => {
+    expect(parseLogContentMode("metadata-only")).toBe("metadata_only");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("ARCHESTRA_LOGS_CONTENT_MODE"),
+    );
+  });
+});
+
 describe("parseLogFormat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -3579,118 +3604,94 @@ describe("parseOtelCaptureContent", () => {
 });
 
 describe("OpenAPPA feature configuration", () => {
-  test("reporting defaults on for OpenAPPA and supports an explicit opt-out", () => {
-    expect(parseOpenAppaConfig("true").yellEnabled).toBe(true);
-    expect(parseOpenAppaConfig("true", "true").yellEnabled).toBe(true);
-    for (const [enabled, reporting] of [
-      [undefined, "true"],
-      ["false", "true"],
-      ["true", "false"],
-      ["true", ""],
-      ["true", "TRUE"],
-    ]) {
-      expect(parseOpenAppaConfig(enabled, reporting).yellEnabled).toBe(false);
+  test("reporting defaults on and supports an explicit opt-out", () => {
+    expect(parseOpenAppaConfig().yellEnabled).toBe(true);
+    expect(parseOpenAppaConfig({ yellEnabled: "true" }).yellEnabled).toBe(true);
+    for (const reporting of ["false", "", "TRUE"]) {
+      expect(parseOpenAppaConfig({ yellEnabled: reporting }).yellEnabled).toBe(
+        false,
+      );
     }
-  });
-  test("gates APPA registration on the beta switch, regardless of the explicit plugin list", () => {
-    expect(parseLlmProxyPlugins(undefined)).toEqual([]);
-    expect(parseLlmProxyPlugins(" appa ")).toEqual([]);
-    expect(parseLlmProxyPlugins(undefined, true)).toEqual(["appa"]);
-    expect(parseLlmProxyPlugins("", true)).toEqual(["appa"]);
-    expect(parseLlmProxyPlugins(" appa ", true)).toEqual(["appa"]);
-  });
-
-  test.each([
-    false,
-    true,
-  ])("rejects invalid plugin configuration (APPA enabled=%s)", (enabled) => {
-    expect(() => parseLlmProxyPlugins("unknown", enabled)).toThrow(
-      "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
-    );
-    expect(() => parseLlmProxyPlugins("appa,appa", enabled)).toThrow(
-      "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
-    );
   });
 
   test.each([
     undefined,
     "false",
-    "TRUE",
-    "1",
-  ])("stays off unless ARCHESTRA_BETA is exactly true (value=%s)", (beta) => {
-    expect(parseOpenAppaConfig(beta)).toEqual({
-      enabled: false,
-      yellEnabled: false,
-      offerSigningSecret: "",
-      postgresMaxConnections: 4,
-    });
+    "true",
+  ])("makes OpenAPPA available independently of the beta switch (value=%s)", (beta) => {
+    vi.stubEnv("ARCHESTRA_BETA", beta);
+    expect(parseOpenAppaConfig().enabled).toBe(true);
+    expect(parseLlmProxyPlugins(undefined)).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins("")).toEqual(["appa"]);
+    expect(parseLlmProxyPlugins(" appa ")).toEqual(["appa"]);
   });
+
+  test("rejects invalid plugin configuration", () => {
+    expect(() => parseLlmProxyPlugins("unknown")).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS contains unsupported plugin names",
+    );
+    expect(() => parseLlmProxyPlugins("appa,appa")).toThrow(
+      "ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates",
+    );
+  });
+
   test("enables database policies without a container path", () => {
-    expect(parseOpenAppaConfig("true")).toEqual({
+    expect(parseOpenAppaConfig()).toEqual({
       enabled: true,
       yellEnabled: true,
       offerSigningSecret: "",
       postgresMaxConnections: 4,
     });
     expect(
-      parseOpenAppaConfig("true", "true", "offer-signing-secret-at-least-32ch")
-        .offerSigningSecret,
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        offerSigningSecret: "offer-signing-secret-at-least-32ch",
+      }).offerSigningSecret,
     ).toBe("offer-signing-secret-at-least-32ch");
-    expect(() => parseOpenAppaConfig("true", "true", "short")).toThrow(
+    expect(() =>
+      parseOpenAppaConfig({ yellEnabled: "true", offerSigningSecret: "short" }),
+    ).toThrow(
       "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least 32 characters",
     );
   });
 
   test("derives the offer signing secret from the auth secret when unset", () => {
-    const derived = parseOpenAppaConfig(
-      "true",
-      "true",
-      undefined,
-      undefined,
-      "auth-secret-for-derivation",
-    ).offerSigningSecret;
+    const derived = parseOpenAppaConfig({
+      yellEnabled: "true",
+      authSecret: "auth-secret-for-derivation",
+    }).offerSigningSecret;
     expect(derived.length).toBeGreaterThanOrEqual(32);
     expect(derived).not.toContain("auth-secret-for-derivation");
     // Deterministic: every replica with the same auth secret signs alike.
     expect(
-      parseOpenAppaConfig(
-        "true",
-        "true",
-        undefined,
-        undefined,
-        "auth-secret-for-derivation",
-      ).offerSigningSecret,
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        authSecret: "auth-secret-for-derivation",
+      }).offerSigningSecret,
     ).toBe(derived);
     // Domain-separated: a different auth secret gives a different key.
     expect(
-      parseOpenAppaConfig(
-        "true",
-        "true",
-        undefined,
-        undefined,
-        "other-auth-secret",
-      ).offerSigningSecret,
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        authSecret: "other-auth-secret",
+      }).offerSigningSecret,
     ).not.toBe(derived);
   });
 
   test("prefers the dedicated offer signing secret over the derivation", () => {
     expect(
-      parseOpenAppaConfig(
-        "true",
-        "true",
-        "offer-signing-secret-at-least-32ch",
-        undefined,
-        "auth-secret-for-derivation",
-      ).offerSigningSecret,
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        offerSigningSecret: "offer-signing-secret-at-least-32ch",
+        authSecret: "auth-secret-for-derivation",
+      }).offerSigningSecret,
     ).toBe("offer-signing-secret-at-least-32ch");
     expect(() =>
-      parseOpenAppaConfig(
-        "true",
-        "true",
-        "short",
-        undefined,
-        "auth-secret-for-derivation",
-      ),
+      parseOpenAppaConfig({
+        yellEnabled: "true",
+        offerSigningSecret: "short",
+        authSecret: "auth-secret-for-derivation",
+      }),
     ).toThrow(
       "ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET must be at least 32 characters",
     );
@@ -3705,7 +3706,7 @@ describe("OpenAPPA feature configuration", () => {
     ["many", 4],
   ])("reads the ledger pool size (value=%s)", (value, expected) => {
     expect(
-      parseOpenAppaConfig("true", undefined, undefined, value)
+      parseOpenAppaConfig({ postgresMaxConnections: value })
         .postgresMaxConnections,
     ).toBe(expected);
   });

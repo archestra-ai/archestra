@@ -84,6 +84,7 @@ import {
   buildAgentRuntimeEnvironmentEgressPolicies,
 } from "./network-policy";
 import { resolvePlatformServiceDestination } from "./platform-service";
+import { agentSandboxApi } from "./sandbox-api";
 import {
   type AgentRuntimeStartupProgress,
   type AgentRuntimeStartupProgressReporter,
@@ -112,40 +113,21 @@ type K8sClients = ReturnType<typeof createK8sClients>;
  */
 class AgentRuntimeManager {
   private clients: K8sClients | null = null;
-  /** Cached: loading a kubeconfig touches the filesystem. */
-  private clusterReachable: boolean | null = null;
-  /** Only a positive answer is cached, so installing the controller needs no restart. */
-  private sandboxApiInstalled = false;
 
+  /** Whether the cluster serves the Agent Sandbox API; see `agentSandboxApi`. */
   get isEnabled(): boolean {
-    return config.agentRuntime.enabled && this.canReachCluster();
+    return agentSandboxApi.isInstalled;
   }
 
   /**
    * Reject a run on a cluster without the upstream Agent Sandbox controller.
    * Every run is a `Sandbox` custom resource; without its CRD the create
-   * returns a bare 404 and the run fails before writing any output. API
-   * discovery needs no RBAC, so this works with namespaced runtime permissions.
+   * returns a bare 404 and the run fails before writing any output.
    */
   async assertSandboxApiInstalled(): Promise<void> {
-    if (this.sandboxApiInstalled) return;
-    const resources = await this.requireClients()
-      .customObjectsApi.getAPIResources({
-        group: AGENT_SANDBOX_API.group,
-        version: AGENT_SANDBOX_API.version,
-      })
-      .catch((error) => {
-        if (isK8sNotFoundError(error)) return null;
-        throw error;
-      });
-    if (
-      !resources?.resources.some(
-        (resource) => resource.name === AGENT_SANDBOX_API.plural,
-      )
-    ) {
+    if (!(await agentSandboxApi.refresh())) {
       throw new ApiError(503, AGENT_SANDBOX_CONTROLLER_MISSING_MESSAGE);
     }
-    this.sandboxApiInstalled = true;
   }
 
   /**
@@ -1779,27 +1761,6 @@ done`
       await delay(AGENT_RUNTIME_INPUT_STAGING_POLL_MS);
     }
     throw new Error("Timed out waiting for the Agent terminal");
-  }
-
-  /**
-   * Whether a Kubernetes client can be built at all.
-   *
-   * Deliberately not `isK8sConfigured()`, which only reports whether the two
-   * orchestrator environment variables are set: the loader also falls back to
-   * the ambient `~/.kube/config`, which is how a developer machine runs MCP
-   * server pods. Gating on the env vars alone made AgentRuntimes invisible on every
-   * setup where the rest of the Kubernetes runtime works.
-   */
-  private canReachCluster(): boolean {
-    if (this.clusterReachable === null) {
-      try {
-        loadKubeConfig();
-        this.clusterReachable = true;
-      } catch {
-        this.clusterReachable = false;
-      }
-    }
-    return this.clusterReachable;
   }
 
   private requireClients(): K8sClients {

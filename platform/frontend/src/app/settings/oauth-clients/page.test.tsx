@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -116,7 +116,94 @@ describe("OauthClientsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens a client's permissions from its row actions", async () => {
+  it("shows who pays for an LLM client and opens a client from its row", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-oauth-clients`, () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: "llm-row-1",
+              clientId: "llm_oauth_ci",
+              name: "ci-runner",
+              organizationId: "org-1",
+              grantType: "client_credentials",
+              providerApiKeys: [],
+              redirectUris: [],
+              disabled: false,
+              authorId: "user-1",
+              authorName: "Ada",
+              createdBy: null,
+              labels: [],
+              billingTeam: { id: "team-1", name: "Data Science" },
+              spendCap: {
+                limitId: "limit-1",
+                limitValue: 200,
+                cleanupInterval: "calendar_month",
+                currentUsage: 34,
+              },
+              createdAt: "2026-09-01T00:00:00.000Z",
+              updatedAt: "2026-09-01T00:00:00.000Z",
+            },
+          ],
+          pagination: {
+            currentPage: 1,
+            limit: 100,
+            total: 1,
+            totalPages: 1,
+            hasNext: false,
+            hasPrev: false,
+          },
+        }),
+      ),
+      http.get(`${API_ORIGIN}/api/mcp-oauth-clients`, () =>
+        HttpResponse.json([
+          {
+            id: "mcp-row-1",
+            clientId: "mcp_oauth_portal",
+            name: "internal-portal",
+            organizationId: "org-1",
+            grantType: "authorization_code",
+            allowedGatewayIds: [],
+            redirectUris: ["https://portal.example.com/cb"],
+            disabled: false,
+            authorId: "user-1",
+            authorName: "Ada",
+            createdBy: null,
+            labels: [],
+            createdAt: "2026-09-01T00:00:00.000Z",
+            updatedAt: "2026-09-01T00:00:00.000Z",
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <OauthClientsPage />
+      </QueryClientProvider>,
+    );
+
+    const llmRow = (await screen.findByText("ci-runner")).closest("tr");
+    if (!llmRow) throw new Error("Missing LLM client row");
+    expect(within(llmRow).getByText("As itself")).toBeVisible();
+    expect(within(llmRow).getByText("Data Science")).toBeVisible();
+    expect(within(llmRow).getByText("$200/month cap")).toBeVisible();
+
+    const mcpRow = screen.getByText("internal-portal").closest("tr");
+    if (!mcpRow) throw new Error("Missing MCP client row");
+    expect(within(mcpRow).getByText("For its users")).toBeVisible();
+    expect(within(mcpRow).getByText("What each user can reach")).toBeVisible();
+    await user.click(within(mcpRow).getByText("For its users"));
+
+    expect(
+      await screen.findByRole("dialog", { name: /internal-portal/ }),
+    ).toBeVisible();
+  });
+
+  it("keeps a client's permissions in its edit dialog, not its row actions", async () => {
     const requested: string[] = [];
     server.use(
       http.get(`${API_ORIGIN}/api/mcp-oauth-clients`, () =>
@@ -167,12 +254,17 @@ describe("OauthClientsPage", () => {
 
     const row = (await screen.findByText("Deploy bot")).closest("tr");
     if (!row) throw new Error("Missing client row");
-    await user.click(within(row).getByRole("button", { name: /Permissions/ }));
+    expect(
+      within(row).queryByRole("button", { name: /Permissions/ }),
+    ).not.toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: /Edit/ }));
 
     expect(
-      await screen.findByRole("dialog", { name: /Deploy bot permissions/ }),
+      await screen.findByRole("dialog", { name: /Deploy bot/ }),
     ).toBeVisible();
-    expect(requested).toContain("mcpOauthClient/client-row-1");
+    await waitFor(() =>
+      expect(requested).toContain("mcpOauthClient/client-row-1"),
+    );
   });
 
   it("offers the permissions of both client kinds from the header menu", async () => {

@@ -11,12 +11,6 @@ export type NativeSessionClientId = keyof typeof NATIVE_SESSION_CLIENT_LABELS;
 
 export const CONNECTION_SETUP_WINDOW_MS = 10 * 60 * 1000;
 
-export function hasNativeSetupSession(
-  clientId: string,
-): clientId is NativeSessionClientId {
-  return Object.hasOwn(NATIVE_SESSION_CLIENT_LABELS, clientId);
-}
-
 /** Parts of a setup the user can leave out on the connect page's review step. */
 export const CONNECT_SETUP_PARTS = [
   "tools",
@@ -35,22 +29,10 @@ export function parseConnectExclude(
   return CONNECT_SETUP_PARTS.filter((part) => listed.has(part));
 }
 
-export function buildConnectionPrompt(params: {
-  origin: string;
-  clientId: string;
-  label: string;
-  /** Parts the user turned off; the link carries them to connect.md. */
-  exclude?: readonly ConnectSetupPart[];
-}): string {
-  const listed = new Set(params.exclude);
-  const exclude = CONNECT_SETUP_PARTS.filter((part) => listed.has(part));
-  const excludeParam = exclude.length ? `&exclude=${exclude.join(",")}` : "";
-  return `Read ${params.origin}/connect.md?client=${encodeURIComponent(params.clientId)}${excludeParam} and connect ${params.label}.`;
-}
-
 /**
- * Apps with a setup installer: connect.md, disconnect.md and the installer
- * accept these. The Connect page features them, in this order.
+ * Apps with a setup installer: the installer and disconnect.md accept these,
+ * and connect.md points them to the Connect page. The Connect page features
+ * them, in this order.
  */
 export const INSTALLER_CLIENT_IDS = [
   "claude-code",
@@ -199,11 +181,14 @@ export const OAUTH_AGENTS = {
       { clientId: "https://github.com/copilot/cli/client-metadata.json" },
     ],
   },
-  // DCR as "OpenCode"; its redirect port is configurable (sst/opencode,
-  // mcp/oauth-provider.ts).
+  // CIMD at opencode.ai (captured 2026-10-08), or DCR as "OpenCode" on a
+  // configurable redirect port (sst/opencode, mcp/oauth-provider.ts).
   opencode: {
     label: "OpenCode",
-    identities: [{ clientNamePattern: "^OpenCode$" }],
+    identities: [
+      { clientId: "https://opencode.ai/oauth/opencode/client.json" },
+      { clientNamePattern: "^OpenCode$" },
+    ],
   },
   // Registers each install as "Amp MCP Client (<server name>)" with this
   // redirect (captured from amp 0.0.1791201662).

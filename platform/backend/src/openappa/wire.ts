@@ -556,15 +556,6 @@ export function stripAppaTools(params: {
 }
 
 /**
- * Every tool this request declares, in every container and namespace.
- *
- * Codex groups an MCP server's tools under one `namespace` declaration and
- * calls a member by its own name, so a namespace's members are returned under
- * those names, each with the namespace that declares it: the name alone does
- * not say which server a member belongs to.
- */
-
-/**
  * Tool name → the namespace this request declares it in, for the tools Codex
  * declares inside a `namespace` block. The provider expects a call to such a
  * tool to name its namespace, so a notice records it for restoration.

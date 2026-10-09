@@ -6,6 +6,7 @@ import {
 } from "@/models";
 import type { Agent, AgentRuntime, AgentType } from "@/types";
 import { ApiError } from "@/types";
+import { isAnyAgentRuntimeBackendDriverEnabled } from "./backends";
 import { getResolvedAgentRuntimeModelCompatibility } from "./model-compatibility";
 
 // Checks every surface that writes an Agent's runtime or model must run. The
@@ -18,8 +19,11 @@ export function requireAgentRuntimePermission(params: {
   isAdmin: boolean;
 }): void {
   if (params.runtime == null) return;
-  if (!config.agentRuntime.enabled) {
-    throw new ApiError(400, "Agent Runtime is not enabled");
+  if (!isAnyAgentRuntimeBackendDriverEnabled()) {
+    throw new ApiError(
+      400,
+      "Agent Runtime is unavailable: this cluster does not have the Agent Sandbox controller installed",
+    );
   }
   if (params.agentType !== "agent") {
     throw new ApiError(400, "Agent Runtime can only be configured for Agents");

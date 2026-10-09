@@ -13,13 +13,11 @@ export { default as appRecordingRoutes } from "./app-recording/app-recording.rou
 export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-proxy";
 export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
 export { default as authRoutes } from "./auth";
-export { default as autonomyPolicyRoutes } from "./autonomy-policies";
 export { default as chatRoutes } from "./chat/routes";
 export { default as chatopsRoutes } from "./chatops";
 export { default as clientConnectionRoutes } from "./client-connection/client-connection.routes";
 export { default as configRoutes } from "./config";
 export { default as connectedClientRoutes } from "./connected-client/connected-client.routes";
-export { default as connectionPromptSessionRoutes } from "./connection-prompt-session/connection-prompt-session.routes";
 export { default as connectionSetupRoutes } from "./connection-setup/connection-setup.routes";
 export { default as defaultUserLimitRoutes } from "./default-user-limit";
 export { default as environmentRoutes } from "./environment";
@@ -63,6 +61,7 @@ export { default as openappaExternalConsultsRoutes } from "./openappa-external-c
 export { default as openappaGithubSyncRoutes } from "./openappa-github-sync/openappa-github-sync.routes";
 export { default as openappaHelpersRoutes } from "./openappa-helpers/openappa-helpers.routes";
 export { default as openappaPolicyTestsRoutes } from "./openappa-policy-tests/openappa-policy-tests.routes";
+export { default as openappaRemediesRoutes } from "./openappa-remedies/openappa-remedies.routes";
 export { default as openappaTrustAudienceRoutes } from "./openappa-trust-audience/openappa-trust-audience.routes";
 export { default as openappaYellsRoutes } from "./openappa-yells/openappa-yells.routes";
 export { default as organizationRoutes } from "./organization";

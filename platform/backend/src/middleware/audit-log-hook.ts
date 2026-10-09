@@ -305,11 +305,6 @@ type AuditDenylistEntry = {
   value: string;
 };
 
-/** Exact route patterns audited despite a prefix denylist entry. */
-const AUDIT_DENYLIST_EXEMPT_ROUTES = new Set([
-  "/api/connection-setups/prompt-session",
-]);
-
 const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   { kind: "prefix", value: "/api/auth/" },
   { kind: "prefix", value: "/api/health" },
@@ -356,7 +351,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
   // Deliberately-unaudited resource families (audited:false in AUDIT_DECISIONS):
   // ephemeral connection-setup render tickets (installer secrets), incoming-email
   // subscription config, oauth grant runtime (tokens are runtime state).
-  // POST /api/connection-setups/prompt-session is the sole exemption.
   { kind: "prefix", value: "/api/connection-setups" },
   { kind: "prefix", value: "/api/incoming-email" },
   { kind: "exact", value: "/api/oauth/initiate" },
@@ -403,9 +397,6 @@ const AUDIT_DENYLIST: readonly AuditDenylistEntry[] = [
 ];
 
 function isDenylisted(url: string, routePattern: string | undefined): boolean {
-  if (routePattern && AUDIT_DENYLIST_EXEMPT_ROUTES.has(routePattern)) {
-    return false;
-  }
   return AUDIT_DENYLIST.some((entry) => {
     switch (entry.kind) {
       case "exact":

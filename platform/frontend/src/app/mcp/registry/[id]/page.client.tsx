@@ -58,7 +58,6 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
@@ -223,11 +222,6 @@ function CatalogItemDetails({
   onDeleted: () => void;
 }) {
   const router = useRouter();
-  const ownership = useResourceOwnershipTransfer({
-    kind: "catalog",
-    resource: item,
-    onTransferred: () => router.push("/mcp/registry"),
-  });
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [permissionsDirty, setPermissionsDirty] = useState(false);
@@ -575,7 +569,6 @@ function CatalogItemDetails({
                     {cloneAction.label}
                   </DropdownMenuItem>
                 )}
-                {ownership.menuItem}
                 {canModify && !isPlaywright && (
                   <>
                     <DropdownMenuSeparator />
@@ -591,7 +584,6 @@ function CatalogItemDetails({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          {ownership.dialog}
         </div>
       }
     >
@@ -944,14 +936,14 @@ function ServerStatus({
     // No summary means no deployment entry for any of this server's ids. The
     // feed's own state decides what that means, never the absence of an entry
     // — the same rule the list's `installedStatusLabel` follows. A remote
-    // server has no pod at all, so "Installed" is its whole runtime story.
+    // server has no pod at all, and the page of an installed server needs no
+    // label that says so, so it shows nothing.
+    if (variant === "remote" || deploymentFeedState === "disabled") {
+      return null;
+    }
     return (
       <span className={typeRole({ role: "body" })}>
-        {variant === "remote" || deploymentFeedState === "disabled"
-          ? "Installed"
-          : deploymentFeedState === "loading"
-            ? "Checking…"
-            : "Status unavailable"}
+        {deploymentFeedState === "loading" ? "Checking…" : "Status unavailable"}
       </span>
     );
   }

@@ -32,15 +32,6 @@ const {
   validateDeploymentYaml,
 } = archestraApiSdk;
 
-/** How many registry servers a "Show" selection holds, for the filter's counts. */
-export async function countInternalMcpCatalog(params: {
-  access: ResourceAccessRelation[];
-}): Promise<number> {
-  const { data, error } = await getInternalMcpCatalog({ query: params });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.length ?? 0;
-}
-
 type InternalMcpCatalogParams = {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   enabled?: boolean;
@@ -113,20 +104,31 @@ export function useInternalMcpCatalog(
 }
 
 /**
- * Ids of the catalog items the registry's "Show" filter keeps. The registry
+ * Ids of the catalog items the registry's access filters keep. The registry
  * filters its rows in the browser over the shared catalog list; only the
- * access relation needs the server, which reads the grants. Disabled when
- * `access` is undefined, meaning every relation is selected.
+ * access relation, recipient, and owner filters need the server, which reads
+ * the grants. Disabled when no filter is given, meaning every row is kept.
  */
-export function useInternalMcpCatalogAccessIds(
-  access: ResourceAccessRelation[] | undefined,
-) {
+export function useInternalMcpCatalogAccessIds(filters: {
+  access?: ResourceAccessRelation[];
+  sharedWith?: string[];
+  owner?: string[];
+}) {
+  const { access, sharedWith, owner } = filters;
   return useQuery({
-    queryKey: ["mcp-catalog", "access-ids", access ?? null],
-    enabled: !!access,
+    queryKey: [
+      "mcp-catalog",
+      "access-ids",
+      {
+        access: access ?? null,
+        sharedWith: sharedWith ?? null,
+        owner: owner ?? null,
+      },
+    ],
+    enabled: !!access || !!sharedWith || !!owner,
     queryFn: async () => {
       const { data, error } = await getInternalMcpCatalog({
-        query: { access },
+        query: { access, sharedWith, owner },
       });
       throwOnApiError(error, { toastOnError: false });
       return new Set((data ?? []).map((item) => item.id));

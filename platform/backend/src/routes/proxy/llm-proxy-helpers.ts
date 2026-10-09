@@ -24,7 +24,6 @@ import {
   resolveRunToolDispatch,
   resolveRunToolTarget,
   resolveRunToolTargetName,
-  resolveUnprovenRunToolTarget,
 } from "@/archestra-mcp-server/run-tool-target";
 import { isNativeAnthropicModelShape } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
@@ -35,16 +34,12 @@ import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
   CommonMcpToolDefinition,
-  CommonMessage,
-  DualLlmAnalysis,
   GatewayAgent,
   InsertInteraction,
   InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
   ToolCallBlock,
-  ToolInvocation,
-  UnsafeContextBoundary,
   UsageView,
 } from "@/types";
 import {
@@ -57,7 +52,6 @@ import { estimateToolTokens } from "./utils/cost-optimization";
 import {
   FOREIGN_TOOL_NAME_PREFIX,
   type GatewayToolIdentity,
-  type ToolNameCanonicalizer,
   type ToolNameResolution,
 } from "./utils/gateway-tool-names";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -90,7 +84,7 @@ export function shouldForwardAnthropicBeta(
 
 /**
  * Normalize tool calls from either streaming or non-streaming responses
- * into the shape expected by `evaluatePolicies`.
+ * into the shape OpenAPPA rules on.
  *
  * - String arguments: validated as JSON, wrapped in `{ raw: ... }` if invalid
  * - Object arguments: serialized with JSON.stringify
@@ -149,66 +143,6 @@ export function normalizeToolCallsForPolicy(
 }
 
 /**
- * Prepares tool calls for policy evaluation.
- * Returns normalized entries from {@link normalizeToolCallsForPolicy}
- * and adds enforcement rules for declarations without verified attestations:
- *
- * - Calls using unverified `run_tool` wrappers evaluate both the wrapper
- *   and the named target tool. If a gateway is registered under multiple labels
- *   or uses replayed markers, evaluating the target prevents blocked actions
- *   from running unreviewed (see {@link resolveUnprovenRunToolTarget}).
- * - Names without persisted tool rows (such as foreign lookalikes or unattested
- *   Codex namespace members) use the organization default policy for discovered tools.
- */
-export function toolCallsForPolicyEvaluation(params: {
-  toolCalls: Array<{
-    name: string;
-    arguments: string | object;
-    namespace?: string;
-  }>;
-  toolIdentity: ToolNameResolution & Pick<GatewayToolIdentity, "attestationOf">;
-  /** The org's default invocation policy for a discovered tool. */
-  discoveredToolDefault: ToolInvocation.ToolInvocationPolicyAction;
-}): Array<{
-  toolCallName: string;
-  toolCallArgs: string;
-  isRunToolDispatchTarget?: boolean;
-  actionWithoutToolRow?: ToolInvocation.ToolInvocationPolicyAction;
-}> {
-  const { toolCalls, toolIdentity } = params;
-  const normalized = normalizeToolCallsForPolicy(toolCalls, toolIdentity);
-  return toolCalls.flatMap((toolCall, index) => {
-    const entry = normalized[index];
-    if (
-      entry.isRunToolDispatchTarget ||
-      toolIdentity.attestationOf(toolCall.name, toolCall.namespace)
-    ) {
-      return [entry];
-    }
-    const ruled =
-      toolCall.namespace ||
-      entry.toolCallName.startsWith(FOREIGN_TOOL_NAME_PREFIX)
-        ? { ...entry, actionWithoutToolRow: params.discoveredToolDefault }
-        : entry;
-    const target = resolveUnprovenRunToolTarget({
-      toolName: spelledName(toolCall.name, toolCall.namespace),
-      args: JSON.parse(entry.toolCallArgs),
-    });
-    if (!target) {
-      return [ruled];
-    }
-    return [
-      ruled,
-      {
-        toolCallName: target.toolName,
-        toolCallArgs: JSON.stringify(target.toolInput),
-        isRunToolDispatchTarget: true,
-      },
-    ];
-  });
-}
-
-/**
  * A tool call as the stream/response adapters accumulate it, in the shape
  * {@link planDispatchModeToolCallRewrites} reads and rewrites.
  */
@@ -252,7 +186,7 @@ export interface AccumulatedToolCall {
  * (such as `mcp__<label>__<tool>`, `<label>_<tool>`, or Codex namespaces),
  * `run_tool` expects the undecorated target name. Verified `run_tool` attestations
  * identify the client prefix so the proxy can remove it before dispatch.
- * Policy evaluation continues to evaluate the target tool identity.
+ * Plugins still rule on the target tool identity.
  *
  * Returns `null` when there is nothing to do — no dispatch pair in the tool
  * list (`full` exposure, where a missing tool really is disabled), or every
@@ -403,31 +337,6 @@ function isAlwaysDirectlyCallableBuiltIn(toolName: string): boolean {
 }
 
 /**
- * Return a copy of the request's common messages with every tool-call name
- * canonicalized, so trusted-data evaluation sees the platform's own tool
- * names instead of the client-decorated twins (which match no tool row and
- * would flip every gateway conversation to untrusted — including over
- * platform-authored built-in results like `search_tools`).
- */
-export function canonicalizeCommonMessageToolNames(
-  messages: CommonMessage[],
-  canonicalize: ToolNameCanonicalizer,
-): CommonMessage[] {
-  return messages.map((message) => {
-    if (!message.toolCalls || message.toolCalls.length === 0) {
-      return message;
-    }
-    return {
-      ...message,
-      toolCalls: message.toolCalls.map((toolCall) => ({
-        ...toolCall,
-        name: canonicalize(toolCall.name, toolCall.namespace),
-      })),
-    };
-  });
-}
-
-/**
  * Calculate the costs recorded on an interaction.
  */
 export async function calculateInteractionCosts(params: {
@@ -547,6 +456,7 @@ export function buildInteractionRecord(params: {
     name: string;
     clientId: string;
   };
+  billingTeamId?: string;
   runId?: string;
   userId?: string;
   virtualKeyId?: string;
@@ -567,8 +477,6 @@ export function buildInteractionRecord(params: {
     cacheCost: number | undefined;
     cacheSavings: number | undefined;
   };
-  dualLlmAnalyses: DualLlmAnalysis[];
-  unsafeContextBoundary?: UnsafeContextBoundary;
   toolCallBlock?: ToolCallBlock;
 }): InsertInteraction {
   return {
@@ -578,6 +486,7 @@ export function buildInteractionRecord(params: {
     billingMode: params.billingMode,
     authenticatedAppId: params.authenticatedApp?.id,
     authenticatedAppName: params.authenticatedApp?.name,
+    billingTeamId: params.billingTeamId,
     runId: params.runId,
     userId: params.userId,
     virtualKeyId: params.virtualKeyId,
@@ -590,8 +499,6 @@ export function buildInteractionRecord(params: {
     request: params.request as InteractionRequest,
     processedRequest: params.processedRequest as InteractionRequest,
     response: params.response as InteractionResponse,
-    dualLlmAnalyses: params.dualLlmAnalyses,
-    unsafeContextBoundary: params.unsafeContextBoundary,
     toolCallBlock: params.toolCallBlock,
     model: params.actualModel,
     // `baseline_model` / `baseline_cost` predate the removal of optimization
@@ -646,8 +553,8 @@ export function withProviderToolCallIds<T>(
 
 /**
  * Record OTEL spans and Prometheus metrics for blocked tool calls.
- * Used by both streaming and non-streaming paths when tool invocation
- * policies refuse tool calls.
+ * Used by both streaming and non-streaming paths when guardrails refuse
+ * tool calls.
  */
 /**
  * The row-level marker for a turn whose tool calls a guardrail refused.

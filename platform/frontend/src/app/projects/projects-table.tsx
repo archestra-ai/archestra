@@ -18,8 +18,6 @@ import { useRouter } from "next/navigation";
 import { AgentIcon } from "@/components/agent-icon";
 import { LabelTags } from "@/components/label-tags";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
-import { projectVisibilityToScope } from "@/components/projects/project-visibility";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import {
   type TableRowAction,
   TableRowActions,
@@ -286,14 +284,7 @@ function ProjectTableActions({
   actions: TableRowAction[];
 }) {
   return (
-    <ResourceTableRowActions
-      kind="project"
-      resource={{
-        id: project.id,
-        name: project.name,
-        authorId: project.createdBy?.id ?? null,
-        scope: projectVisibilityToScope(project.visibility),
-      }}
+    <TableRowActions
       itemName={project.name}
       actions={actions.filter((action) => action.variant !== "destructive")}
       dropdownActions={actions.filter(

@@ -74,28 +74,6 @@ export const TOOL_DELETE_LIMIT_SHORT_NAME = "delete_limit";
 export const TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME = "get_agent_token_usage";
 export const TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME =
   "get_llm_proxy_token_usage";
-export const TOOL_GET_AUTONOMY_POLICY_OPERATORS_SHORT_NAME =
-  "get_autonomy_policy_operators";
-export const TOOL_GET_TOOL_INVOCATION_POLICIES_SHORT_NAME =
-  "get_tool_invocation_policies";
-export const TOOL_CREATE_TOOL_INVOCATION_POLICY_SHORT_NAME =
-  "create_tool_invocation_policy";
-export const TOOL_GET_TOOL_INVOCATION_POLICY_SHORT_NAME =
-  "get_tool_invocation_policy";
-export const TOOL_UPDATE_TOOL_INVOCATION_POLICY_SHORT_NAME =
-  "update_tool_invocation_policy";
-export const TOOL_DELETE_TOOL_INVOCATION_POLICY_SHORT_NAME =
-  "delete_tool_invocation_policy";
-export const TOOL_GET_TRUSTED_DATA_POLICIES_SHORT_NAME =
-  "get_trusted_data_policies";
-export const TOOL_CREATE_TRUSTED_DATA_POLICY_SHORT_NAME =
-  "create_trusted_data_policy";
-export const TOOL_GET_TRUSTED_DATA_POLICY_SHORT_NAME =
-  "get_trusted_data_policy";
-export const TOOL_UPDATE_TRUSTED_DATA_POLICY_SHORT_NAME =
-  "update_trusted_data_policy";
-export const TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME =
-  "delete_trusted_data_policy";
 export const TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME =
   "bulk_assign_tools_to_agents";
 export const TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME =
@@ -266,6 +244,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "publish_openappa_validation_change",
   "get_openappa_yell",
   "resolve_openappa_yell",
+  "list_openappa_yells",
   "list_openappa_consults",
   "list_guardrails_battery_fits",
   "inspect_guardrails_server",
@@ -323,17 +302,6 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_DELETE_LIMIT_SHORT_NAME,
   TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME,
   TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME,
-  TOOL_GET_AUTONOMY_POLICY_OPERATORS_SHORT_NAME,
-  TOOL_GET_TOOL_INVOCATION_POLICIES_SHORT_NAME,
-  TOOL_CREATE_TOOL_INVOCATION_POLICY_SHORT_NAME,
-  TOOL_GET_TOOL_INVOCATION_POLICY_SHORT_NAME,
-  TOOL_UPDATE_TOOL_INVOCATION_POLICY_SHORT_NAME,
-  TOOL_DELETE_TOOL_INVOCATION_POLICY_SHORT_NAME,
-  TOOL_GET_TRUSTED_DATA_POLICIES_SHORT_NAME,
-  TOOL_CREATE_TRUSTED_DATA_POLICY_SHORT_NAME,
-  TOOL_GET_TRUSTED_DATA_POLICY_SHORT_NAME,
-  TOOL_UPDATE_TRUSTED_DATA_POLICY_SHORT_NAME,
-  TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME,
   TOOL_BULK_REMOVE_TOOLS_FROM_AGENTS_SHORT_NAME,
   TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_SHORT_NAME,
@@ -451,7 +419,6 @@ export const ARCHESTRA_TOOL_GROUPS = [
   { id: "mcp_servers", label: "MCP Servers" },
   { id: "teams", label: "Teams" },
   { id: "limits", label: "Limits" },
-  { id: "policies", label: "Policies" },
   { id: "tool_assignment", label: "Tool Assignment" },
   { id: "knowledge_management", label: "Knowledge Management" },
   { id: "chat", label: "Chat" },
@@ -495,6 +462,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   publish_openappa_validation_change: "openappa",
   get_openappa_yell: "openappa",
   resolve_openappa_yell: "openappa",
+  list_openappa_yells: "openappa",
   list_openappa_consults: "openappa",
   list_guardrails_battery_fits: "openappa",
   inspect_guardrails_server: "openappa",
@@ -557,18 +525,6 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   delete_limit: "limits",
   get_agent_token_usage: "limits",
   get_llm_proxy_token_usage: "limits",
-
-  get_autonomy_policy_operators: "policies",
-  get_tool_invocation_policies: "policies",
-  create_tool_invocation_policy: "policies",
-  get_tool_invocation_policy: "policies",
-  update_tool_invocation_policy: "policies",
-  delete_tool_invocation_policy: "policies",
-  get_trusted_data_policies: "policies",
-  create_trusted_data_policy: "policies",
-  get_trusted_data_policy: "policies",
-  update_trusted_data_policy: "policies",
-  delete_trusted_data_policy: "policies",
 
   bulk_assign_tools_to_agents: "tool_assignment",
   bulk_remove_tools_from_agents: "tool_assignment",
@@ -747,28 +703,6 @@ export const TOOL_GET_AGENT_TOKEN_USAGE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_AGENT_TOKEN_USAGE_SHORT_NAME}` as const;
 export const TOOL_GET_LLM_PROXY_TOKEN_USAGE_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_LLM_PROXY_TOKEN_USAGE_SHORT_NAME}` as const;
-export const TOOL_GET_AUTONOMY_POLICY_OPERATORS_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_AUTONOMY_POLICY_OPERATORS_SHORT_NAME}` as const;
-export const TOOL_GET_TOOL_INVOCATION_POLICIES_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TOOL_INVOCATION_POLICIES_SHORT_NAME}` as const;
-export const TOOL_CREATE_TOOL_INVOCATION_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_TOOL_INVOCATION_POLICY_SHORT_NAME}` as const;
-export const TOOL_GET_TOOL_INVOCATION_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TOOL_INVOCATION_POLICY_SHORT_NAME}` as const;
-export const TOOL_UPDATE_TOOL_INVOCATION_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPDATE_TOOL_INVOCATION_POLICY_SHORT_NAME}` as const;
-export const TOOL_DELETE_TOOL_INVOCATION_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_TOOL_INVOCATION_POLICY_SHORT_NAME}` as const;
-export const TOOL_GET_TRUSTED_DATA_POLICIES_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TRUSTED_DATA_POLICIES_SHORT_NAME}` as const;
-export const TOOL_CREATE_TRUSTED_DATA_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_CREATE_TRUSTED_DATA_POLICY_SHORT_NAME}` as const;
-export const TOOL_GET_TRUSTED_DATA_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_GET_TRUSTED_DATA_POLICY_SHORT_NAME}` as const;
-export const TOOL_UPDATE_TRUSTED_DATA_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_UPDATE_TRUSTED_DATA_POLICY_SHORT_NAME}` as const;
-export const TOOL_DELETE_TRUSTED_DATA_POLICY_FULL_NAME =
-  `${ARCHESTRA_TOOL_PREFIX}${TOOL_DELETE_TRUSTED_DATA_POLICY_SHORT_NAME}` as const;
 export const TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_FULL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_BULK_ASSIGN_TOOLS_TO_AGENTS_SHORT_NAME}` as const;
 export const TOOL_BULK_ASSIGN_TOOLS_TO_MCP_GATEWAYS_FULL_NAME =
@@ -928,16 +862,6 @@ export function isImplicitOpenAppaReadToolShortName(
 ): boolean {
   return IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET.has(shortName ?? "");
 }
-
-/**
- * Built-in tools that do NOT bypass policy evaluation. Most built-ins are
- * auto-trusted, but these ingest external content (e.g. knowledge-base
- * documents) that can carry prompt injection, so their invocations and
- * results are evaluated by tool invocation and trusted data policies just
- * like external tools.
- */
-export const POLICY_EVALUATED_ARCHESTRA_TOOL_SHORT_NAMES: ReadonlySet<ArchestraToolShortName> =
-  new Set([TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME]);
 
 /**
  * Agent Skill tools — only assigned to agents once an org admin opts in via

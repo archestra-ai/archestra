@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   DynamicInteraction,
   isEncryptedChatUnavailableContent,
+  isLogContentNotStored,
 } from "@archestra/shared";
 import { Database, Layers } from "lucide-react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -97,17 +98,13 @@ function LogDetail({
   const interaction = new DynamicInteraction(dynamicInteraction);
   const agent = agents?.find((a) => a.id === interaction.profileId);
   const toolsUsed = interaction.getToolNamesUsed();
-  const toolsBlocked = interaction.getToolNamesRefused();
-  const isDualLlmRelevant = interaction.isLastMessageToolCall();
-  const lastToolCallId = interaction.getLastToolCallId();
-  const allDualLlmAnalyses = dynamicInteraction.dualLlmAnalyses ?? [];
-  const dualLlmResult = allDualLlmAnalyses.find(
-    (r) => r.toolCallId === lastToolCallId,
-  );
+  // Metadata only keeps no response, so which tools it called is unknown.
+  const toolsNotStored = isLogContentNotStored(dynamicInteraction.response);
+  const failed = isFailedResponse(dynamicInteraction.response);
 
   const requestMessages = new DynamicInteraction(
     dynamicInteraction,
-  ).mapToUiMessages(allDualLlmAnalyses);
+  ).mapToUiMessages();
   const chatErrors = dynamicInteraction.chatErrors ?? [];
   const authMethod = dynamicInteraction.authMethod
     ? formatAuthMethod(dynamicInteraction.authMethod)
@@ -170,6 +167,14 @@ function LogDetail({
       ),
     },
     { label: "Provider", value: interaction.provider },
+    ...(failed
+      ? [
+          {
+            label: "Result",
+            value: <Badge variant="destructive">Error</Badge>,
+          },
+        ]
+      : []),
     ...(dynamicInteraction.connectorId
       ? [
           {
@@ -265,41 +270,11 @@ function LogDetail({
             ))}
           </div>
         ) : (
-          <span className="text-muted-foreground">None</span>
+          <span className="text-muted-foreground">
+            {toolsNotStored ? "Not stored" : "None"}
+          </span>
         ),
     },
-    ...(toolsBlocked.length > 0
-      ? [
-          {
-            label: "Tools blocked",
-            value: (
-              <div className="flex flex-wrap gap-1">
-                {toolsBlocked.map((toolName) => (
-                  <Badge
-                    key={toolName}
-                    variant="destructive"
-                    className="text-xs"
-                  >
-                    {toolName}
-                  </Badge>
-                ))}
-              </div>
-            ),
-          },
-        ]
-      : []),
-    ...(isDualLlmRelevant
-      ? [
-          {
-            label: "Dual LLM analysis",
-            value: dualLlmResult ? (
-              <Badge className="bg-green-600">Analyzed</Badge>
-            ) : (
-              <span className="text-muted-foreground">Not analyzed</span>
-            ),
-          },
-        ]
-      : []),
   ];
 
   return (
@@ -344,10 +319,8 @@ function LogDetail({
                 conversationId={dynamicInteraction.sessionId ?? undefined}
                 containerClassName="h-auto"
                 hideDivider={true}
-                profileId={agent?.id}
                 agentName={agent?.name ?? undefined}
                 selectedModel={interaction.modelName}
-                unsafeContextBoundary={dynamicInteraction.unsafeContextBoundary}
               />
             </div>
           </div>
@@ -398,8 +371,7 @@ function LogDetail({
                     />
                   )}
                   <p className="text-xs text-muted-foreground mt-2">
-                    This shows the request after trusted data filtering and
-                    other policy updates.
+                    This shows the request after policy updates.
                   </p>
                 </AccordionContent>
               </AccordionItem>
@@ -469,5 +441,19 @@ function InteractionShell({ children }: { children: React.ReactNode }) {
     >
       {children}
     </PageLayout>
+  );
+}
+
+/**
+ * Whether the provider call failed: the proxy stores a failure as
+ * `{ error: string }`, and Metadata only keeps just that outcome on the
+ * not-stored marker.
+ */
+function isFailedResponse(response: unknown): boolean {
+  if (isLogContentNotStored(response)) return response.isError === true;
+  return (
+    typeof response === "object" &&
+    response !== null &&
+    typeof (response as { error?: unknown }).error === "string"
   );
 }

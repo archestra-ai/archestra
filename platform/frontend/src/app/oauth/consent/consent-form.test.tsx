@@ -6,9 +6,11 @@ import {
   useOAuthClientInfo,
   useSubmitOAuthConsent,
 } from "@/lib/auth/oauth.query";
+import { postConnected } from "@/lib/connect-signal";
 import { ConsentForm } from "./consent-form";
 
 vi.mock("next/navigation");
+vi.mock("@/lib/connect-signal");
 
 vi.mock("@/lib/auth/oauth.query", () => ({
   useOAuthClientInfo: vi.fn(),
@@ -91,5 +93,27 @@ describe("ConsentForm", () => {
     expect(
       screen.queryByRole("button", { name: "Deny" }),
     ).not.toBeInTheDocument();
+    // The Connect page, open in another tab, hears it once.
+    expect(postConnected).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the Connect page nothing when consent is denied", async () => {
+    const replaceMock = vi.fn();
+    vi.stubGlobal("location", {
+      ...window.location,
+      assign: vi.fn(),
+      replace: replaceMock,
+    });
+    mockMutateAsync.mockResolvedValue({
+      redirectTo: "http://localhost:1234/callback?error=access_denied",
+    });
+
+    render(<ConsentForm />);
+    await userEvent.click(screen.getByRole("button", { name: "Deny" }));
+
+    expect(replaceMock).toHaveBeenCalledWith(
+      "http://localhost:1234/callback?error=access_denied",
+    );
+    expect(postConnected).not.toHaveBeenCalled();
   });
 });

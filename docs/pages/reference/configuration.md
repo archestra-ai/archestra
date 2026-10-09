@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -77,7 +77,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_BETA`** - Turns on beta features.
   - Default: `false`
   - Values: `true`, `false`
-  - Turns on [Guardrails](#guardrails) and plugins directly.
+  - Turns on plugins directly. Guardrails and Agent Runtime do not use this switch.
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
@@ -585,9 +585,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
 
 - **`ARCHESTRA_LLM_PROXY_PLUGINS`** - LLM proxy plugins loaded at startup.
-  - Default: unset (no plugins)
+  - Default: `appa` (always loaded)
   - Values: comma-separated; the only plugin is `appa`. An unknown name or a duplicate stops startup.
-  - [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) adds `appa` automatically. Listing `appa` without [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) has no effect.
+  - OpenAPPA is always loaded, independently of [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA).
 
 ## Chat
 
@@ -681,6 +681,11 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Default: `4096`
   - Values: `1` to `1000000`
   - On low Groq tiers, a larger request fails with HTTP 413 before generating anything. Raise it on higher tiers.
+
+- **`ARCHESTRA_CHAT_MODEL_STREAM_IDLE_TIMEOUT_MS`** - How long a chat model response may go without sending data before Archestra ends the turn, in milliseconds.
+  - Default: `300000` (5 minutes)
+  - Keep-alive messages from the provider or a proxy do not count as data. Time spent running tools does not count either.
+  - The user sees an error with a retry option. Raise it for models that think for a long time before they answer.
 
 - **`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`** - Largest file a user can attach to a chat message, in bytes.
   - Default: `52428800` (50 MiB)
@@ -927,12 +932,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 ## Agent Runtime
 
-Agent Runtime needs the orchestrator configured. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
-
-- **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime.
-  - Default: `false`
-  - Values: `true`, `false`
-  - Does not follow [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA).
+Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, and OpenClaw images are pulled from.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
@@ -1406,6 +1406,15 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
   - Default: `false`
   - Values: `true` or `false`
 
+## Log Content
+
+Keep prompts and tool data out of the logs while usage, cost, and the audit trail stay complete.
+
+- **`ARCHESTRA_LOGS_CONTENT_MODE`** - What LLM proxy logs, MCP gateway logs, and Guardrails consult records store.
+  - Default: `full`
+  - Values: `full` stores prompts, responses, tool arguments, and tool results. `metadata_only` stores who, when, the model or tool, tokens, cost, and whether the call failed. Any other value stores metadata only.
+  - Applies to records written after a restart. Stored records keep their content.
+
 ## Data Retention
 
 Retention is an Enterprise feature: the backend does not start when a window is set without an [Enterprise license](/docs/get-started/pricing-model). Each value is a whole number of days; any other value turns that window off.
@@ -1425,7 +1434,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 ## Guardrails
 
-[Guardrails](/docs/agents/guardrails) are a beta feature: set [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) to show them. Enforcement is a separate switch on the Guardrails page and starts off.
+[Guardrails](/docs/agents/guardrails) are available on every deployment. Enforcement is a separate switch on the Guardrails page and starts off.
 
 - **`ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`** - Key that signs delegation bindings, child-session recovery receipts, and peer proofs.
   - Default: generated and kept across upgrades by the Helm chart. Without Helm, derived from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SESSION_SECRET).

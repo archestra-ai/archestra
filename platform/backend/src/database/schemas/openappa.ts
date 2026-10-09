@@ -183,6 +183,11 @@ export const openappaOperationsTable = pgTable(
     index("openappa_operations_pending_idx")
       .on(table.root)
       .where(sql`${table.status} = 'pending'`),
+    // The overview's activity chart reads one organization's recent rows.
+    index("openappa_operations_org_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
     check(
       "openappa_operations_status",
       sql`(${table.status} = 'pending' AND ${table.decision} IS NULL) OR (${table.status} = 'complete' AND ${table.decision} IS NOT NULL)`,

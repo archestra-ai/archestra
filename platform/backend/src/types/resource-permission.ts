@@ -41,6 +41,12 @@ export const ResourcePermissionsResponseSchema = z.object({
     }),
   ),
   effectiveActions: z.array(ResourcePermissionActionSchema),
+  /**
+   * Every subject that reaches the caller (their user, teams, roles and the
+   * organization), so the editor can warn before a save removes the caller's
+   * own access or leaves nobody able to manage.
+   */
+  actorSubjects: z.array(PermissionSubjectSchema),
 });
 
 export const PermissionSubjectOptionSchema = z.object({

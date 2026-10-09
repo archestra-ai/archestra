@@ -4,6 +4,10 @@ import type { archestraApiTypes } from "@archestra/shared";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import {
+  isRoleAssignmentBlocked,
+  RoleAssignmentBlockedNotice,
+} from "@/components/role-assignment-blocked-notice";
+import {
   SettingsBlock,
   SettingsSaveBar,
   SettingsSectionStack,
@@ -25,6 +29,7 @@ import {
 import { clearPersistedQueryCache } from "@/lib/query-persistence";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; reset is a no-op when RUM never started
 import { rumClient } from "@/lib/rum.ee";
+import { formatRoleName } from "@/lib/utils/role";
 import {
   type AuthSettingsFormValues,
   buildAuthSettingsFormValues,
@@ -127,8 +132,10 @@ export default function AuthSettingsPage() {
       return;
     }
 
-    const updatedOrganization =
-      await updateAuthSettingsMutation.mutateAsync(data);
+    const updatedOrganization = await updateAuthSettingsMutation
+      .mutateAsync(data)
+      // A refused default role shows as a notice under its setting.
+      .catch(() => null);
     if (!updatedOrganization) {
       return;
     }
@@ -203,7 +210,10 @@ export default function AuthSettingsPage() {
                   <RoleSelect
                     id="defaultMemberRole"
                     value={field.value}
-                    onValueChange={field.onChange}
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      updateAuthSettingsMutation.reset();
+                    }}
                     // The block's title is a heading, not a label, so the
                     // combobox has no name of its own to announce.
                     ariaLabel="Default roles for new users"
@@ -214,7 +224,14 @@ export default function AuthSettingsPage() {
                 )}
               />
             }
-          />
+          >
+            {isRoleAssignmentBlocked(updateAuthSettingsMutation.error) && (
+              <RoleAssignmentBlockedNotice
+                error={updateAuthSettingsMutation.error}
+                name={formatRoleName(watchedValues.defaultMemberRole)}
+              />
+            )}
+          </SettingsBlock>
 
           <OrganizationTokenSection />
 

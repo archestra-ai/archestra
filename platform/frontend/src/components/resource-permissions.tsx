@@ -734,14 +734,42 @@ function PermissionsEditor({
             dirty &&
             safety &&
             (blocked ? (
-              <InlineNotice variant="error">
+              policy.scope === "*" ? (
+                <InlineNotice variant="error" className="w-full">
+                  <AlertTriangle />
+                  <span className="font-medium">
+                    At least one recipient needs Full access.
+                  </span>
+                  <InlineNoticeText>
+                    Without it, nobody can edit, delete, or share{" "}
+                    {resourcePluralNames[policy.resource]} that other people
+                    created.
+                  </InlineNoticeText>
+                </InlineNotice>
+              ) : (
+                <InlineNotice variant="error" className="w-full">
+                  <AlertTriangle />
+                  <span className="font-medium">
+                    Someone must be able to change permissions.
+                  </span>
+                  <InlineNoticeText>
+                    These changes would leave no one able to change permissions.
+                    Give another recipient full access before removing your own.
+                  </InlineNoticeText>
+                </InlineNotice>
+              )
+            ) : safety.losesManagement && policy.scope === "*" ? (
+              // Editing this list takes a role permission, not a grant here,
+              // so the caller can always change it back.
+              <InlineNotice className="w-full">
                 <AlertTriangle />
                 <span className="font-medium">
-                  Someone must be able to change permissions.
+                  {safety.losesAccess
+                    ? `You’ll lose access to ${resourcePluralNames[policy.resource]} that other people created.`
+                    : `You won’t be able to edit or delete ${resourcePluralNames[policy.resource]} that other people created.`}
                 </span>
                 <InlineNoticeText>
-                  These changes would leave no one able to change permissions.
-                  Give another recipient full access before removing your own.
+                  You can change this list again at any time.
                 </InlineNoticeText>
               </InlineNotice>
             ) : safety.losesManagement ? (
@@ -843,12 +871,18 @@ function PermissionsEditor({
         }
       >
         <p className="text-sm text-muted-foreground">
-          You won’t be able to undo this yourself.
-          <span>
-            {safety?.losesAccess
-              ? ` Ask ${safety?.recovery} to give you access again.`
-              : ` To change permissions again, ask ${safety?.recovery}.`}
-          </span>
+          {policy.scope === "*" ? (
+            <span>You can change this list again at any time.</span>
+          ) : (
+            <>
+              You won’t be able to undo this yourself.
+              <span>
+                {safety?.losesAccess
+                  ? ` Ask ${safety?.recovery} to give you access again.`
+                  : ` To change permissions again, ask ${safety?.recovery}.`}
+              </span>
+            </>
+          )}
         </p>
       </StandardDialog>
       {canManage && addOpen && (

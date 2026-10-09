@@ -117467,6 +117467,22 @@ export type GetResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        actorSubjects: Array<{
+            type: 'user';
+            id: string;
+        } | {
+            type: 'team';
+            id: string;
+        } | {
+            type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'role';
+            id: string;
+        } | {
+            type: 'organization';
+            id: '*';
+        }>;
     };
 };
 
@@ -117622,6 +117638,22 @@ export type UpdateResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        actorSubjects: Array<{
+            type: 'user';
+            id: string;
+        } | {
+            type: 'team';
+            id: string;
+        } | {
+            type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'role';
+            id: string;
+        } | {
+            type: 'organization';
+            id: '*';
+        }>;
     };
 };
 

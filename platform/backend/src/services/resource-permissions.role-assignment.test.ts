@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
-  ROLE_ASSIGNMENT_BLOCKED_CODE,
   type ResourcePermissionGrant,
+  ROLE_ASSIGNMENT_BLOCKED_CODE,
   type ScopedResource,
 } from "@archestra/shared";
 import { adminPermissions } from "@archestra/shared/access-control";
@@ -152,7 +152,7 @@ describe("assigning a role that objects are shared with", () => {
         userId: caller.id,
         subjects: [{ type: "role", id: role.id }],
       }),
-    ).rejects.toThrow("that you cannot share");
+    ).rejects.toThrow("You can only share an item if you can manage");
   });
 
   test("a custom role that can edit organization-wide policies can assign Member", async ({
@@ -213,7 +213,14 @@ describe("assigning a role that objects are shared with", () => {
     expect((error as ApiError).internalCode).toBe(ROLE_ASSIGNMENT_BLOCKED_CODE);
     expect((error as ApiError).details).toEqual({
       subjectType: "role",
-      items: [{ resource: "agent", scope: agent.id, name: agent.name }],
+      items: [
+        {
+          resource: "agent",
+          scope: agent.id,
+          name: agent.name,
+          missing: ["manage-permissions"],
+        },
+      ],
       total: 1,
     });
   });

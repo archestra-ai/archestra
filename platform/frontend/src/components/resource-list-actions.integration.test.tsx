@@ -56,6 +56,7 @@ beforeEach(() => {
     ],
     inheritedGrants: [],
     effectiveActions: ["read", "use", "update", "delete", "manage-permissions"],
+    actorSubjects: [],
   };
   server.use(
     http.get(

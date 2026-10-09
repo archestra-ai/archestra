@@ -26,6 +26,7 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { InviteByLinkCard } from "@/components/invite-by-link-card";
 import { LoadingWrapper } from "@/components/loading";
+import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
 import { SearchInput } from "@/components/search-input";
 import { SmallTeamTierBanner } from "@/components/small-team-tier-banner";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -67,6 +68,7 @@ import {
   useMemberSignupStatus,
   useOrganization,
 } from "@/lib/organization.query";
+import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
 import { useSetSettingsAction } from "../layout";
 
@@ -681,14 +683,24 @@ function MembersTab({
         <ChangeRoleDialog
           member={changingRole.member}
           open={!!changingRole}
-          onOpenChange={(open) => !open && setChangingRole(null)}
+          onOpenChange={(open) => {
+            if (open) return;
+            setChangingRole(null);
+            updateMemberRole.reset();
+          }}
           onConfirm={async (newRole) => {
-            await updateMemberRole.mutateAsync({
-              memberId: changingRole.member.id,
-              role: newRole,
-            });
+            const updated = await updateMemberRole
+              .mutateAsync({
+                memberId: changingRole.member.id,
+                role: newRole,
+              })
+              // The dialog shows a refused role; other errors were toasted.
+              .catch(() => null);
+            if (!updated) return;
             setChangingRole(null);
           }}
+          onRoleChange={() => updateMemberRole.reset()}
+          error={updateMemberRole.error}
           isPending={updateMemberRole.isPending}
         />
       )}
@@ -791,12 +803,16 @@ function ChangeRoleDialog({
   open,
   onOpenChange,
   onConfirm,
+  onRoleChange,
+  error,
   isPending,
 }: {
   member: Member;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (role: string) => void;
+  onRoleChange: () => void;
+  error: unknown;
   isPending: boolean;
 }) {
   const [selectedRole, setSelectedRole] = useState(member.role);
@@ -824,9 +840,16 @@ function ChangeRoleDialog({
         <RoleSelect
           multiple
           value={selectedRole}
-          onValueChange={setSelectedRole}
+          onValueChange={(role) => {
+            setSelectedRole(role);
+            onRoleChange();
+          }}
           ariaLabel="Roles"
           className="w-full"
+        />
+        <RoleAssignmentBlockedNotice
+          error={error}
+          name={formatRoleName(selectedRole)}
         />
       </DialogBody>
       <DialogStickyFooter>

@@ -26,7 +26,7 @@ const policy: ResourcePermissions = {
   ],
   inheritedGrants: [],
   effectiveActions: actions,
-  previewActorSubjects: [{ type: "role", id: "admin" }],
+  actorSubjects: [{ type: "role", id: "admin" }],
 };
 const title = "Permissions for all MCP registry entries";
 

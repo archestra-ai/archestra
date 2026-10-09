@@ -819,6 +819,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // still need an access-checked backing row.
       if (!isBuiltInCatalogId(id)) {
         const catalogItem = await InternalMcpCatalogModel.findById(id, {
+          expandSecrets: false,
           userId: request.user.id,
           isAdmin,
           organizationId: request.organizationId,

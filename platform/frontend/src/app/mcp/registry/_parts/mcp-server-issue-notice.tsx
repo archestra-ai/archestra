@@ -35,6 +35,7 @@ import {
   bucketOf,
   canFixInstall,
   describeMcpServerIssue,
+  describeOtherConnectionsReauth,
   facetIssues,
   type McpServerAttentionFacet,
   type McpServerIssue,
@@ -390,25 +391,31 @@ export function McpServerIssueNotice({
       <div className="space-y-3 bg-muted/20 px-4 py-3">
         {explained.map((issue) => {
           const guidance = describeMcpServerIssue(issue);
+          const kindIssues = relevant.filter(
+            (candidate) => candidate.kind === issue.kind,
+          );
           const actionOwner = describeMcpIssueActionOwners({
-            issues: relevant.filter(
-              (candidate) => candidate.kind === issue.kind,
-            ),
+            issues: kindIssues,
             servers,
           });
+          const othersReauth = describeOtherConnectionsReauth(kindIssues);
           const rawDetail = rawDetailFor(issue);
           return (
             <div key={issue.kind} className="space-y-2">
               <p className={cn(typeRole({ role: "body" }), "max-w-prose")}>
-                <span>{guidance.what}</span>{" "}
-                {issue.audience === "you" && !issue.muted ? (
-                  <span className="text-muted-foreground">{guidance.fix}</span>
+                {othersReauth ? (
+                  <span>{othersReauth}</span>
                 ) : (
-                  <span className="text-muted-foreground">
-                    {issue.muted
-                      ? dismissedSentence(issue.mutedReason)
-                      : actionOwner.sentence}
-                  </span>
+                  <>
+                    <span>{guidance.what}</span>{" "}
+                    <span className="text-muted-foreground">
+                      {issue.audience === "you" && !issue.muted
+                        ? guidance.fix
+                        : issue.muted
+                          ? dismissedSentence(issue.mutedReason)
+                          : actionOwner.sentence}
+                    </span>
+                  </>
                 )}
               </p>
               {rawDetail && (
@@ -479,12 +486,15 @@ export function McpServerIssueNotice({
   }
 
   // Failures are errors, a lapsed sign-in is a warning, and a row the viewer
-  // dismissed is only a note.
-  const noticeVariant = relevant.every((issue) => issue.muted)
-    ? "neutral"
-    : explained.some((issue) => issue.kind !== "needs-reauth")
-      ? "error"
-      : "warning";
+  // dismissed — or other people's lapsed sign-ins, which the viewer's own
+  // calls do not use — is only a note.
+  const noticeVariant =
+    relevant.every((issue) => issue.muted) ||
+    describeOtherConnectionsReauth(relevant)
+      ? "neutral"
+      : explained.some((issue) => issue.kind !== "needs-reauth")
+        ? "error"
+        : "warning";
   const compactButton = "h-6 px-2 text-xs";
 
   return (
@@ -506,15 +516,18 @@ export function McpServerIssueNotice({
           )}
           {explained.map((issue) => {
             const guidance = describeMcpServerIssue(issue);
+            const kindIssues = relevant.filter(
+              (candidate) => candidate.kind === issue.kind,
+            );
             const actionOwner = describeMcpIssueActionOwners({
-              issues: relevant.filter(
-                (candidate) => candidate.kind === issue.kind,
-              ),
+              issues: kindIssues,
               servers,
             });
             const since = issue.since
               ? formatRelativeTimeFromNow(issue.since, { neverLabel: "" })
               : "";
+            const othersReauth = describeOtherConnectionsReauth(kindIssues);
+            if (othersReauth) return <p key={issue.kind}>{othersReauth}</p>;
             return (
               <p key={issue.kind}>
                 {guidance.what}

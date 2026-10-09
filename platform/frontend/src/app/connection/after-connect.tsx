@@ -47,6 +47,9 @@ export function AfterConnect({
   onPhase: (phase: AfterConnectPhase) => void;
 }) {
   const name = nameOf(client);
+  // The installer ends with a command that starts every script agent but
+  // Cursor, which has no command to start.
+  const launches = script && client.id !== "cursor";
   const close = (
     <Button
       variant="outline"
@@ -124,8 +127,9 @@ export function AfterConnect({
                 {close}
               </div>
               <p className="px-1 text-xs text-muted-foreground">
-                Once {script ? "your terminal" : name} says setup is done, paste
-                this into a new {name} session.
+                {launches
+                  ? `Your terminal ends with a command that starts ${name} and asks it what it can do. You can also paste this into a new ${name} session.`
+                  : `Once ${script ? "your terminal" : name} says setup is done, paste this into a new ${name} session.`}
               </p>
               <WelcomePrompt text={welcome} />
             </section>
@@ -144,7 +148,7 @@ export function AfterConnect({
           </div>
           <p className="px-1 text-xs text-muted-foreground">
             Works once {name} is connected. If it isn't yet, it points you back
-            to the connect prompt.
+            to the Connect page.
           </p>
           <WelcomePrompt text={welcome} />
         </section>

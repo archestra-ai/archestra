@@ -2504,6 +2504,7 @@ class ToolModel {
    * Catalog entries, tools, and visible entities used by the OpenAPPA overview.
    * The built-in catalog is included because its tools can be assigned.
    * App catalogs are left out unless `includeAppCatalogs` is set.
+   * `catalogId` narrows catalogs, tools, and assignments to that one entry.
    */
   static async findCoverageInventory(
     organizationId: string,
@@ -2514,6 +2515,7 @@ class ToolModel {
         excludeOtherPersonalTypes?: Array<"agent" | "mcp_gateway">;
       };
       includeAppCatalogs?: boolean;
+      catalogId?: string;
     } = {},
   ): Promise<{
     catalogs: Array<Pick<InternalMcpCatalog, "id" | "name" | "scope" | "icon">>;
@@ -2539,7 +2541,7 @@ class ToolModel {
       accessAllTools: boolean;
     }>;
   }> {
-    const { visibility, includeAppCatalogs = false } = options;
+    const { visibility, includeAppCatalogs = false, catalogId } = options;
     const principals = visibility
       ? await ResourcePermissionSubjectModel.resolvePrincipals({
           userId: visibility.userId,
@@ -2621,6 +2623,9 @@ class ToolModel {
           includeAppCatalogs
             ? undefined
             : ne(schema.internalMcpCatalogTable.serverType, "app"),
+          catalogId
+            ? eq(schema.internalMcpCatalogTable.id, catalogId)
+            : undefined,
           isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
           notDeleted(schema.internalMcpCatalogTable),
         ),

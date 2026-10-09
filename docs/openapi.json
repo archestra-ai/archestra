@@ -140895,6 +140895,18 @@
                       ]
                     }
                   },
+                  "gateway": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                  },
+                  "plugins": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._-]{1,128}$"
+                    }
+                  },
                   "deviceName": {
                     "type": "string",
                     "minLength": 1,
@@ -141530,6 +141542,17 @@
                         ]
                       }
                     },
+                    "gateway": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "plugins": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "deviceName": {
                       "nullable": true,
                       "type": "string"
@@ -141545,6 +141568,8 @@
                     "clientId",
                     "platform",
                     "exclude",
+                    "gateway",
+                    "plugins",
                     "deviceName",
                     "userCode",
                     "expiresAt"
@@ -144891,300 +144916,6 @@
                   },
                   "required": [
                     "success"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
-        }
-      }
-    },
-    "/api/connection-setups/prompt-session": {
-      "post": {
-        "operationId": "beginConnectionPromptSession",
-        "tags": [
-          "Connection Setups"
-        ],
-        "description": "Begin a 10-minute connection setup window for the signed-in user without changing the prompt.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "clientId": {
-                    "type": "string",
-                    "enum": [
-                      "claude-code",
-                      "cursor",
-                      "codex",
-                      "claude-desktop",
-                      "copilot-cli",
-                      "opencode"
-                    ]
-                  },
-                  "origin": {
-                    "type": "string",
-                    "format": "uri"
-                  }
-                },
-                "required": [
-                  "clientId",
-                  "origin"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "expiresAt": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "expiresAt"
                   ],
                   "additionalProperties": false
                 }
@@ -334451,20 +334182,21 @@
                               "approvals"
                             ]
                           },
-                          "rules": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
+                          "level": {
+                            "nullable": true,
+                            "type": "string"
                           },
                           "approvers": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "cleaners": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           },
                           "unservedMarks": {
                             "type": "array",
@@ -334478,7 +334210,7 @@
                         },
                         "required": [
                           "kind",
-                          "rules",
+                          "level",
                           "approvers",
                           "cleaners",
                           "unservedMarks",
@@ -334741,7 +334473,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Tool calls the runtime denied on each of the last seven days, and how many of them a remedy then let through: an authority answered an offer with approve, or a sanitizer answered one. Days are calendar days in `timeZone`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage",
+        "description": "Tool calls the runtime denied on each of the last seven days, by how each ended: approved by an authority, cleaned by a sanitizer, or blocked when neither lifted it. Days are calendar days in `timeZone`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage",
         "parameters": [
           {
             "schema": {
@@ -334777,7 +334509,12 @@
                             "minimum": 0,
                             "maximum": 9007199254740991
                           },
-                          "remedied": {
+                          "approved": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "cleaned": {
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 9007199254740991
@@ -334786,7 +334523,8 @@
                         "required": [
                           "date",
                           "blocked",
-                          "remedied"
+                          "approved",
+                          "cleaned"
                         ],
                         "additionalProperties": false
                       }

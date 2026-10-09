@@ -2927,7 +2927,7 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `list_openappa_consults` | List the external consults OpenAPPA recorded for one session, newest first: every annotator, context provider, authority, sanitizer and audience source it asked, with the outcome, the HTTP status, ... | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
 | `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | `connect_guardrails_repository` | Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
-| `yell` | Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
+| `yell` | Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tools and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
@@ -2936,8 +2936,8 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `update_guardrails_policy` | Publish a change to organization.appa.toml. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `bind_guardrails_credential` | Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_openappa_policy_tests` | Read the authoritative .appa validation files, their version, configured directory and accepted Git commit. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `preview_openappa_validation_change` | Preview a patch of .appa specifications and optionally a complete proposed policy, then replay the full resulting suite offline. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `publish_openappa_validation_change` | Publish the exact policy and specification patch explained after preview_openappa_validation_change, within the user's authorized scope. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
+| `preview_openappa_validation_change` | Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
+| `publish_openappa_validation_change` | Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `get_remedy_plans` | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None (no additional RBAC permission required) |
 | `execute_remedy_plan` | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None (no additional RBAC permission required) |
@@ -3016,6 +3016,7 @@ Required RBAC permission: [`openappaDiagnostics:read`](/docs/reference/permissio
 | `outcome` | `"answered" \| "unregistered" \| "unreachable" \| "dismissed" \| "non_success" \| "timeout" \| "transport" \| "malformed" \| "oversized" \| "unsupported_version" \| "module_error" \| "module_panicked"` | No | Only consults with this outcome, such as non_success. |
 | `externalName` | `string` | No | Only consults of this external, such as github.repository-visibility. |
 | `role` | `"authority" \| "sanitizer" \| "annotator" \| "audience_source" \| "input" \| "context_provider"` | No | Only consults of externals in this role, such as annotator. |
+| `cursor` | `string` | No | The nextCursor of the previous call, with the same filters, for the next page. |
 
 
 #### create_guardrails_repository
@@ -3164,7 +3165,7 @@ Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#op
 | `changes.upsert[].path` | `string` | Yes |  |
 | `changes.upsert[].content` | `string` | Yes |  |
 | `changes.delete` | `string[]` | No |  |
-| `policyContent` | `string` | No |  |
+| `policyContent` | `string \| null` | No | Complete proposed root policy, only when the user explicitly requested a policy change. Omit or pass null for validation-only work. Never use an empty string, whitespace, or a copy of the current policy as a placeholder. |
 
 
 #### publish_openappa_validation_change
@@ -3182,7 +3183,7 @@ Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#
 | `changes.upsert[].path` | `string` | Yes |  |
 | `changes.upsert[].content` | `string` | Yes |  |
 | `changes.delete` | `string[]` | No |  |
-| `policyContent` | `string` | No |  |
+| `policyContent` | `string \| null` | No | Complete proposed root policy, only when the user explicitly requested a policy change. Omit or pass null for validation-only work. Never use an empty string, whitespace, or a copy of the current policy as a placeholder. |
 | `title` | `string` | No |  |
 | `summary` | `string` | No |  |
 

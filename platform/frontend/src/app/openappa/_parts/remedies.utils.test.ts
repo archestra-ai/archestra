@@ -2,6 +2,7 @@
 import { describe, expect, test } from "vitest";
 import type {
   Authority,
+  BlockCoverage,
   RemediesView,
   Sanitizer,
 } from "@/lib/openappa-remedies.query";
@@ -12,7 +13,6 @@ import {
   gapLines,
   groupBySource,
   runsAs,
-  runsAsBreakdown,
 } from "./remedies.utils";
 
 function authority(overrides: Partial<Authority> = {}): Authority {
@@ -58,33 +58,9 @@ function view(overrides: Partial<RemediesView> = {}): RemediesView {
     blocks: [
       {
         kind: "trust",
-        rules: 0,
-        approvers: 0,
-        cleaners: 0,
-        unservedMarks: [],
-        covered: true,
-      },
-      {
-        kind: "audience",
-        rules: 0,
-        approvers: 0,
-        cleaners: 0,
-        unservedMarks: [],
-        covered: true,
-      },
-      {
-        kind: "effects",
-        rules: 0,
-        approvers: 0,
-        cleaners: 0,
-        unservedMarks: [],
-        covered: true,
-      },
-      {
-        kind: "approvals",
-        rules: 0,
-        approvers: 0,
-        cleaners: 0,
+        level: "suspicious",
+        approvers: [],
+        cleaners: ["attest-schema"],
         unservedMarks: [],
         covered: true,
       },
@@ -95,35 +71,18 @@ function view(overrides: Partial<RemediesView> = {}): RemediesView {
 
 describe("runsAs", () => {
   test("groups implementations by who answers, and null when not wired", () => {
-    expect(runsAs(authority())?.phrase).toBe("a person reviews");
+    expect(runsAs(authority())).toBe("a person reviews");
     expect(
-      runsAs(authority({ implementation: { kind: "url", detail: "a.b" } }))
-        ?.phrase,
+      runsAs(authority({ implementation: { kind: "url", detail: "a.b" } })),
     ).toBe("an HTTP service");
     expect(
-      runsAs(sanitizer({ implementation: { kind: "llm", detail: "llm" } }))
-        ?.phrase,
+      runsAs(sanitizer({ implementation: { kind: "llm", detail: "llm" } })),
     ).toBe("a model decides");
     expect(
-      runsAs(sanitizer({ implementation: { kind: "command", detail: "py" } }))
-        ?.phrase,
+      runsAs(sanitizer({ implementation: { kind: "command", detail: "py" } })),
     ).toBe("a local program");
-    expect(runsAs(sanitizer())?.phrase).toBe("built in");
+    expect(runsAs(sanitizer())).toBe("built in");
     expect(runsAs(authority({ implementation: null }))).toBeNull();
-  });
-
-  test("the breakdown counts wired remedies only, in a fixed order", () => {
-    expect(
-      runsAsBreakdown([
-        sanitizer(),
-        authority({ implementation: null }),
-        authority(),
-        authority({ name: "other" }),
-      ]).map((group) => [group.label, group.count]),
-    ).toEqual([
-      ["people", 2],
-      ["built in", 1],
-    ]);
   });
 });
 
@@ -213,57 +172,61 @@ describe("groupBySource", () => {
 });
 
 describe("gapLines", () => {
-  test("a kind no rule uses is left out; an uncovered kind names what the rules need", () => {
+  const coverage = (
+    partial: Partial<BlockCoverage> & Pick<BlockCoverage, "kind" | "level">,
+  ): BlockCoverage => ({
+    approvers: [],
+    cleaners: [],
+    unservedMarks: [],
+    covered:
+      partial.approvers?.length || partial.cleaners?.length ? true : false,
+    ...partial,
+  });
+
+  test("names each level with what lifts it, gaps first", () => {
     const lines = gapLines(
       view({
         blocks: [
-          {
+          coverage({
             kind: "trust",
-            rules: 41,
-            approvers: 0,
-            cleaners: 0,
-            unservedMarks: [],
-            covered: false,
-          },
-          {
+            level: "suspicious",
+            cleaners: ["attest-schema"],
+          }),
+          coverage({
             kind: "audience",
-            rules: 88,
-            approvers: 3,
-            cleaners: 12,
-            unservedMarks: [],
-            covered: true,
-          },
-          {
+            level: "internal",
+            approvers: ["human"],
+            cleaners: ["strip-pii"],
+          }),
+          coverage({ kind: "audience", level: "self" }),
+          coverage({ kind: "audience", level: "@finance" }),
+          coverage({
             kind: "effects",
-            rules: 0,
-            approvers: 0,
-            cleaners: 0,
-            unservedMarks: [],
-            covered: true,
-          },
-          {
+            level: null,
+            approvers: ["finance-officer"],
+          }),
+          coverage({
             kind: "approvals",
-            rules: 9,
-            approvers: 1,
-            cleaners: 0,
+            level: null,
+            approvers: ["human"],
             unservedMarks: ["monday-review", "sentry-review"],
             covered: false,
-          },
+          }),
         ],
       }),
     );
     expect(lines).toEqual([
       {
-        key: "trust",
-        label: "Trust",
-        text: "41 rules need trusted data · no remedy",
+        key: "audience:self",
+        label: "self data",
+        text: "can't be shared wider",
         covered: false,
       },
       {
-        key: "audience",
-        label: "Audience",
-        text: "88 rules · 3 approve, 12 clean",
-        covered: true,
+        key: "audience:@finance",
+        label: "@finance data",
+        text: "can't be shared wider",
+        covered: false,
       },
       {
         key: "approvals",
@@ -271,54 +234,52 @@ describe("gapLines", () => {
         text: "2 marks nobody gives: monday-review, sentry-review",
         covered: false,
       },
+      {
+        key: "trust:suspicious",
+        label: "suspicious data",
+        text: "only subagent returns can be made trusted (attest-schema)",
+        covered: true,
+      },
+      {
+        key: "audience:internal",
+        label: "internal data",
+        text: "can be shared wider (human, strip-pii)",
+        covered: true,
+      },
+      {
+        key: "effects",
+        label: "Effects",
+        text: "can run after an excluded effect (finance-officer)",
+        covered: true,
+      },
     ]);
   });
 
-  test("a declared but unwired remedy adds a wiring line, and every uncovered line counts as a gap", () => {
+  test("a declared but unwired authority adds a wiring line, and every uncovered line counts as a gap", () => {
     const current = view({
       authorities: [
         authority(),
         authority({ name: "legal-reviewer", implementation: null }),
       ],
       blocks: [
-        {
-          kind: "trust",
-          rules: 2,
-          approvers: 0,
-          cleaners: 0,
-          unservedMarks: [],
-          covered: false,
-        },
-        {
-          kind: "audience",
-          rules: 0,
-          approvers: 0,
-          cleaners: 0,
-          unservedMarks: [],
-          covered: true,
-        },
-        {
-          kind: "effects",
-          rules: 0,
-          approvers: 0,
-          cleaners: 0,
-          unservedMarks: [],
-          covered: true,
-        },
-        {
+        coverage({ kind: "trust", level: "suspicious" }),
+        coverage({
           kind: "approvals",
-          rules: 1,
-          approvers: 1,
-          cleaners: 0,
-          unservedMarks: [],
+          level: null,
+          approvers: ["human"],
           covered: true,
-        },
+        }),
       ],
     });
-    expect(gapLines(current).at(-1)).toEqual({
+    expect(gapLines(current).map((line) => line.key)).toEqual([
+      "trust:suspicious",
+      "wiring",
+      "approvals",
+    ]);
+    expect(gapLines(current)[1]).toEqual({
       key: "wiring",
       label: "Wiring",
-      text: "1 remedy declared but not wired: legal-reviewer",
+      text: "1 declared but not wired: legal-reviewer",
       covered: false,
     });
     expect(gapCount(current)).toBe(2);

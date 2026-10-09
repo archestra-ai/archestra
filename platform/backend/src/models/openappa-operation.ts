@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type { BlockedCallsDay } from "@/types/openappa-remedies";
+import type { ActivityDay } from "@/types/openappa-remedies";
 
 const operations = schema.openappaOperationsTable;
 const consults = schema.openappaExternalConsultsTable;
@@ -12,20 +12,21 @@ const consults = schema.openappaExternalConsultsTable;
 class OpenAppaOperationModel {
   /**
    * Denied tool calls per calendar day over the last `days` days, ending
-   * today in `timeZone`, with how many of them a remedy then let through.
-   * A denial names its offers; a call got through when an authority answered
-   * one of them with `approve`, or a sanitizer answered one at all.
+   * today in `timeZone`, by how each ended: approved when an authority
+   * answered one of the denial's offers with `approve`, cleaned when a
+   * sanitizer answered one, blocked when neither did. A call counts once,
+   * as approved before cleaned.
    */
-  static async blockedCallsByDay(params: {
+  static async activityByDay(params: {
     organizationId: string;
     timeZone: string;
     days: number;
-  }): Promise<BlockedCallsDay[]> {
+  }): Promise<ActivityDay[]> {
     const days = Math.max(1, Math.trunc(params.days));
     // A remedy is consulted after its denial, so both reads can start at the
     // same instant, one day before the window to cover the zone offset.
     const since = sql`now() - make_interval(days => ${sql.raw(String(days + 1))})`;
-    const result = await db.execute<BlockedCallsDay>(sql`
+    const result = await db.execute<ActivityDay>(sql`
       WITH days AS (
         SELECT to_char(
           date_trunc('day', now() AT TIME ZONE ${params.timeZone}) - make_interval(days => n),
@@ -43,8 +44,10 @@ class OpenAppaOperationModel {
           AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'tool_call'
           AND o.decision->>'decision' = 'deny_call'
       ),
-      remedied AS (
-        SELECT DISTINCT b.session_id, b.operation_id
+      lifted AS (
+        SELECT b.session_id, b.operation_id,
+          BOOL_OR(c.role = 'authority' AND c.answer->>'ruling' = 'approve') AS approved,
+          BOOL_OR(c.role = 'sanitizer') AS cleaned
         FROM blocked AS b
         CROSS JOIN LATERAL jsonb_array_elements(COALESCE(b.decision->'offers', '[]'::jsonb)) AS offer
         JOIN ${consults} AS c
@@ -52,25 +55,24 @@ class OpenAppaOperationModel {
           AND c.created_at >= ${since}
           AND c.offer_id = offer->>'offer_id'
           AND c.outcome = 'answered'
-          AND (
-            (c.role = 'authority' AND c.answer->>'ruling' = 'approve')
-            OR c.role = 'sanitizer'
-          )
+        GROUP BY b.session_id, b.operation_id
       )
       SELECT d.date,
-        COUNT(b.operation_id)::int AS blocked,
-        COUNT(r.operation_id)::int AS remedied
+        COUNT(b.operation_id) FILTER (WHERE NOT COALESCE(l.approved, false) AND NOT COALESCE(l.cleaned, false))::int AS blocked,
+        COUNT(b.operation_id) FILTER (WHERE l.approved)::int AS approved,
+        COUNT(b.operation_id) FILTER (WHERE l.cleaned AND NOT l.approved)::int AS cleaned
       FROM days AS d
       LEFT JOIN blocked AS b ON b.date = d.date
-      LEFT JOIN remedied AS r
-        ON r.session_id = b.session_id AND r.operation_id = b.operation_id
+      LEFT JOIN lifted AS l
+        ON l.session_id = b.session_id AND l.operation_id = b.operation_id
       GROUP BY d.date
       ORDER BY d.date
     `);
     return result.rows.map((row) => ({
       date: row.date,
       blocked: Number(row.blocked),
-      remedied: Number(row.remedied),
+      approved: Number(row.approved),
+      cleaned: Number(row.cleaned),
     }));
   }
 }

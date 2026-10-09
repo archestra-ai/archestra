@@ -2,23 +2,48 @@
 
 import { ArrowRight, CircleCheck, TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { Bar, BarChart } from "recharts";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
+  type ActivityDay,
   type RemediesView,
   type Remedy,
   useRemedies,
+  useRemediesActivity,
 } from "@/lib/openappa-remedies.query";
 import { cn } from "@/lib/utils/tailwind";
-import { gapCount, gapLines, runsAsBreakdown } from "./remedies.utils";
+import { gapCount, gapLines } from "./remedies.utils";
+import {
+  activityBars,
+  activityHeadline,
+  activityTotals,
+} from "./remedies-activity.utils";
 import { RemediesDialog, type RemedyFilter } from "./remedies-dialog";
 
+/** The three ways a denied call ends, bottom of the stack first. */
+const OUTCOMES: ChartConfig = {
+  blocked: { label: "stayed blocked", color: "var(--muted-foreground)" },
+  approved: {
+    label: "approved by an authority",
+    color: "var(--color-blue-400)",
+  },
+  cleaned: { label: "cleaned by a sanitizer", color: "var(--color-pink-400)" },
+};
+
 /**
- * Three panels beside the security label: the authorities that can approve
- * a blocked call, the sanitizers that can clean data, and the kinds of block
- * the rules can cause that nothing lifts.
+ * Beside the security label: one card with the authorities that can approve
+ * a blocked call and the sanitizers that can clean data, and under them the
+ * week's denied calls by how each ended; then the kinds of block nothing
+ * lifts.
  */
 export function RemediesPanels() {
   const view = useRemedies();
@@ -29,7 +54,7 @@ export function RemediesPanels() {
       <Card className="py-5 xl:col-span-3">
         <CardContent className="px-5">
           <QueryLoadError
-            title="Could not load remedies"
+            title="Could not load authorities and sanitizers"
             onRetry={() => view.refetch()}
           />
         </CardContent>
@@ -38,28 +63,42 @@ export function RemediesPanels() {
   if (!view.data)
     return (
       <>
-        <Panel title="Authorities" loading />
-        <Panel title="Sanitizers" loading />
+        <Card className="py-4 xl:col-span-2">
+          <CardContent className="grid gap-6 px-4 sm:grid-cols-2">
+            <Column title="Authorities" loading />
+            <Column title="Sanitizers" loading />
+          </CardContent>
+          <CardContent className="mt-auto px-4">
+            <Skeleton className="h-24 w-full" />
+          </CardContent>
+        </Card>
         <Panel title="Gaps" loading />
       </>
     );
 
   return (
     <>
-      <CountPanel
-        title="Authorities"
-        remedies={view.data.authorities}
-        detail="can approve a blocked call"
-        empty="nobody can approve a blocked call"
-        onOpen={() => setOpen("authority")}
-      />
-      <CountPanel
-        title="Sanitizers"
-        remedies={view.data.sanitizers}
-        detail="can clean a tool result or arguments to approve a blocked call"
-        empty="nothing cleans data"
-        onOpen={() => setOpen("sanitizer")}
-      />
+      <Card className="py-4 xl:col-span-2">
+        <CardContent className="grid gap-6 px-4 sm:grid-cols-2">
+          <CountColumn
+            title="Authorities"
+            remedies={view.data.authorities}
+            detail="can approve a blocked call"
+            empty="nobody can approve a blocked call"
+            onOpen={() => setOpen("authority")}
+          />
+          <CountColumn
+            title="Sanitizers"
+            remedies={view.data.sanitizers}
+            detail="can clean a tool result or arguments to approve a blocked call"
+            empty="nothing cleans data"
+            onOpen={() => setOpen("sanitizer")}
+          />
+        </CardContent>
+        <CardContent className="mt-auto px-4">
+          <ActivityWeek />
+        </CardContent>
+      </Card>
       <GapsPanel view={view.data} />
       <RemediesDialog
         view={view.data}
@@ -74,7 +113,8 @@ export function RemediesPanels() {
 // Internal components
 // =============================================================================
 
-function Panel({
+/** A column of the shared card: the title row, then its body. */
+function Column({
   title,
   action,
   loading,
@@ -86,10 +126,36 @@ function Panel({
   children?: ReactNode;
 }) {
   return (
+    <section className="flex min-w-0 flex-col gap-2.5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-medium">{title}</h3>
+        {action}
+      </div>
+      {loading ? (
+        <>
+          <Skeleton className="h-9 w-16" />
+          <Skeleton className="h-4 w-40" />
+        </>
+      ) : (
+        children
+      )}
+    </section>
+  );
+}
+
+function Panel({
+  title,
+  loading,
+  children,
+}: {
+  title: string;
+  loading?: boolean;
+  children?: ReactNode;
+}) {
+  return (
     <Card className="gap-3 py-4">
       <CardHeader className="flex items-center justify-between px-4">
         <CardTitle className="text-xs font-medium">{title}</CardTitle>
-        {action}
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-2.5 px-4">
         {loading ? (
@@ -105,7 +171,7 @@ function Panel({
   );
 }
 
-function CountPanel({
+function CountColumn({
   title,
   remedies,
   detail,
@@ -118,10 +184,8 @@ function CountPanel({
   empty: string;
   onOpen: () => void;
 }) {
-  const breakdown = runsAsBreakdown(remedies);
-  const wired = breakdown.reduce((total, group) => total + group.count, 0);
   return (
-    <Panel
+    <Column
       title={title}
       action={
         remedies.length > 0 && (
@@ -139,41 +203,89 @@ function CountPanel({
       <p className="text-muted-foreground text-xs">
         {remedies.length === 0 ? empty : detail}
       </p>
-      {wired > 0 && (
-        <div className="mt-auto space-y-1.5 pt-2">
-          <div
-            role="img"
-            aria-label={breakdown
-              .map((group) => `${group.label}: ${group.count}`)
-              .join(", ")}
-            className="flex h-1.5 gap-0.5"
+    </Column>
+  );
+}
+
+/**
+ * The last seven days of denied calls, each by how it ended: approved by an
+ * authority, cleaned by a sanitizer, or blocked when neither lifted it.
+ */
+function ActivityWeek() {
+  const activity = useRemediesActivity();
+  const days: ActivityDay[] = activity.data?.days ?? [];
+  const headline = activityHeadline(activityTotals(days));
+
+  return (
+    <div className="space-y-2">
+      <div className="text-muted-foreground flex items-center justify-between gap-2 text-[11px]">
+        <span>Denied calls · last 7 days</span>
+        {activity.data ? (
+          <span className="tabular-nums">{headline}</span>
+        ) : activity.isLoadingError ? (
+          <UnstyledButton
+            onClick={() => activity.refetch()}
+            className="hover:text-foreground underline"
           >
-            {breakdown.map((group) => (
-              <span
-                key={group.key}
-                className="rounded-sm"
-                style={{
-                  flex: `${group.count} 1 0`,
-                  backgroundColor: group.color,
-                }}
+            Could not load · retry
+          </UnstyledButton>
+        ) : (
+          <Skeleton className="h-3 w-40" />
+        )}
+      </div>
+      {activity.data ? (
+        <ChartContainer config={OUTCOMES} className="aspect-auto h-16 w-full">
+          <BarChart
+            accessibilityLayer
+            data={activityBars(days)}
+            margin={{ top: 0, left: 0, right: 0, bottom: 0 }}
+            barCategoryGap={3}
+          >
+            <ChartTooltip
+              cursor={{ fill: "var(--muted)", fillOpacity: 0.6 }}
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(_, payload) => {
+                    const bar = payload[0]?.payload as
+                      | { date?: string }
+                      | undefined;
+                    return bar?.date ?? "";
+                  }}
+                />
+              }
+            />
+            {Object.entries(OUTCOMES).map(([key, series], index, all) => (
+              <Bar
+                key={key}
+                dataKey={key}
+                stackId="week"
+                fill={series.color}
+                fillOpacity={key === "blocked" ? 0.35 : 1}
+                isAnimationActive={false}
+                radius={index === all.length - 1 ? [2, 2, 0, 0] : 0}
               />
             ))}
-          </div>
-          <ul className="text-muted-foreground flex flex-wrap gap-x-2.5 gap-y-1 text-[11px]">
-            {breakdown.map((group) => (
-              <li key={group.key} className="flex items-center gap-1">
-                <span
-                  aria-hidden
-                  className="size-1.5 rounded-sm"
-                  style={{ backgroundColor: group.color }}
-                />
-                <span className="tabular-nums">{`${group.count} ${group.label}`}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+          </BarChart>
+        </ChartContainer>
+      ) : (
+        <Skeleton className="h-16 w-full" />
       )}
-    </Panel>
+      <ul className="text-muted-foreground flex flex-wrap gap-x-2.5 gap-y-1 text-[11px]">
+        {Object.entries(OUTCOMES).map(([key, series]) => (
+          <li key={key} className="flex items-center gap-1">
+            <span
+              aria-hidden
+              className="size-1.5 rounded-sm"
+              style={{
+                backgroundColor: series.color,
+                opacity: key === "blocked" ? 0.35 : 1,
+              }}
+            />
+            <span>{series.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -192,11 +304,13 @@ function GapsPanel({ view }: { view: RemediesView }) {
       />
       <p className="text-muted-foreground text-xs">
         {gaps === 0
-          ? "every block has a way out"
-          : "kinds of block with no way out"}
+          ? "no label keeps a blocked call blocked"
+          : gaps === 1
+            ? "label where blocked calls stay blocked"
+            : "labels where blocked calls stay blocked"}
       </p>
       {lines.length > 0 && (
-        <ul className="text-muted-foreground mt-auto space-y-1.5 pt-2 text-xs">
+        <ul className="text-muted-foreground space-y-1.5 pt-1 text-xs">
           {lines.map((line) => (
             <li key={line.key} className="flex gap-1.5">
               {line.covered ? (
@@ -210,8 +324,13 @@ function GapsPanel({ view }: { view: RemediesView }) {
                   className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400"
                 />
               )}
-              <span>
-                <span className="text-foreground font-medium">
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "font-medium",
+                    line.covered ? "text-muted-foreground" : "text-foreground",
+                  )}
+                >
                   {line.label}
                 </span>
                 <span>{` · ${line.text}`}</span>

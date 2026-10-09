@@ -1219,7 +1219,7 @@ test("a key the policy text sets is locked to the repository line", async () => 
   expect(written).toBe(false);
 });
 
-test("a key the policy text sets outside GitHub sync points at the Policy tab", async () => {
+test("a key the policy text sets outside GitHub sync points at the configuration agent", async () => {
   declarations = emptyDeclarations({
     batteries: [
       declaredGithub({
@@ -1242,13 +1242,9 @@ test("a key the policy text sets outside GitHub sync points at the Policy tab", 
   await waitFor(() => expect(select).toHaveTextContent("GitHub token"));
   expect(select).toBeDisabled();
   expect(row).toHaveTextContent(
-    "Set by a [credentials] line in the policy text. Remove it on the Policy tab to manage it here.",
+    "Set by a [credentials] line in the policy text. Ask the configuration agent to remove it to manage it here.",
   );
   expect(row).not.toHaveTextContent("policy repository");
-  expect(within(row).getByRole("link", { name: "Policy tab" })).toHaveAttribute(
-    "href",
-    "/openappa/policy",
-  );
 });
 
 test("without the permission to manage guardrails the controls are read-only", async () => {

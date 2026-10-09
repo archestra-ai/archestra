@@ -4,6 +4,7 @@ import {
   type CursorPaginatedResult,
   createCursorPaginatedResult,
   decodeCursor,
+  encodeCursor,
 } from "@/database/utils/pagination";
 import type {
   ExternalConsult,
@@ -32,8 +33,13 @@ class OpenappaExternalConsultModel {
     return createCursorPaginatedResult(
       rows,
       { limit: params.limit, cursor: params.cursor },
-      (row) => ({ value: row.createdAt.toISOString(), id: row.id }),
+      cursorPosition,
     );
+  }
+
+  /** The cursor that continues right after `row`, for a page cut short. */
+  static cursorAfter(row: ExternalConsult): string {
+    return encodeCursor(cursorPosition(row));
   }
 
   /** Up to `max` rows in the same order, read a page at a time. */
@@ -172,6 +178,10 @@ export interface ExternalConsultFilters {
   root?: string;
   sessionId?: string;
   callerId?: string;
+}
+
+function cursorPosition(row: ExternalConsult) {
+  return { value: row.createdAt.toISOString(), id: row.id };
 }
 
 const EXPORT_PAGE_SIZE = 500;

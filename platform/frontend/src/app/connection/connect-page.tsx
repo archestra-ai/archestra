@@ -10,14 +10,11 @@
 // chosen agent: light server and skill rows, then status chips (routing,
 // guardrails). A future capability (budgets, audit...) is one more entry in
 // `statusChips` in ProfileCard.
-// Under the hero, spanning the page: the copy prompt, or the manual steps
-// themselves when Manual is chosen.
+// Under the hero, spanning the page: the app's way in. The installer command
+// for apps with one, Claude Desktop's download, the copy prompt for other
+// agents, or the manual steps themselves.
 
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
-import {
-  hasNativeSetupSession,
-  type NativeSessionClientId,
-} from "@archestra/shared/connection-setup";
 import {
   ArrowDown,
   BookOpen,
@@ -27,18 +24,14 @@ import {
   ChevronRight,
   Copy,
   Cpu,
-  Download,
   Gauge,
   Info,
-  ListOrdered,
-  MessageSquareText,
   MoreHorizontal,
   Puzzle,
   Settings,
   ShieldCheck,
   ShieldOff,
   SlidersHorizontal,
-  SquareTerminal,
   TriangleAlert,
   Wrench,
 } from "lucide-react";
@@ -55,16 +48,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -73,7 +59,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConnectedSignal } from "@/lib/connect-signal";
-import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -86,7 +71,10 @@ import type { ConnectClient } from "./clients";
 import {
   ALL_INCLUDED,
   type ConnectChoices,
+  type ConnectPicks,
+  DEFAULT_PICKS,
   readConnectChoices,
+  readConnectPicks,
   saveConnectChoices,
 } from "./connect-choices";
 import {
@@ -116,7 +104,13 @@ import {
   LastConnectedMark,
   useConnectedAgents,
 } from "./connected-agents";
-import { type SetupMode, setupModeFor, useManualSteps } from "./manual-setup";
+import { type IncludeChange, IncludeDialog } from "./include-dialog";
+import {
+  readsPrompts,
+  type SetupMode,
+  setupModeFor,
+  useManualSteps,
+} from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
@@ -127,7 +121,7 @@ const ConnectCommandPanel = dynamic(
   { ssr: false },
 );
 
-type DialogKind = "servers" | "skills" | "plugins" | "cursor";
+type DialogKind = "servers" | "skills" | "plugins" | "cursor" | "include";
 
 const MOTION_CSS = `
 @keyframes connect-icon {
@@ -143,24 +137,25 @@ const MOTION_CSS = `
 
 export function ConnectPage() {
   usePageTitle("Connect");
-  const data = useConnectPageData();
+  // A gateway and plugins picked over the defaults, per agent, kept next to
+  // the switches below.
+  const [picks, setPicks] = useState<ConnectPicks>(DEFAULT_PICKS);
+  const data = useConnectPageData(picks.gatewayId);
   const connected = useConnectedAgents();
   // Same access as the Agent connections log it links to.
   const { data: canSeeStatistics } = useHasPermissions(
     requiredPagePermissionsMap["/connections/logs"] ?? {},
   );
-  // Links (connect.md, docs) can open the page on an app, and on its manual
-  // setup with ?mode=manual. Picks and the Manual toggle are written back.
+  // Links (connect.md, docs) can open the page on an app. Picks are written
+  // back.
   const searchParams = useSearchParams();
   const updateUrlParams = useUpdateUrlParams();
   const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
-  // null until the user toggles: then ?mode=manual decides, for the app the
-  // page actually lands on.
-  const [manualChosen, setManualChosen] = useState<boolean | null>(null);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
-  // What the user leaves out, per agent. The prompt carries it, and this
-  // browser keeps it for a while (connect-choices.ts).
+  // What the user leaves out, per agent. The copied command (or prompt, for
+  // generic agents) carries it, and this browser keeps it for a while
+  // (connect-choices.ts).
   const [choices, setChoices] = useState<ConnectChoices>(ALL_INCLUDED);
 
   const skillsSorted = useMemo(
@@ -179,6 +174,7 @@ export function ConnectPage() {
     // left out (Choose what to include).
     if (!clientId) return;
     setChoices({ ...readConnectChoices(clientId), tools: true });
+    setPicks(readConnectPicks(clientId));
   }, [clientId]);
 
   if (data.loading || !client) return <LoadingState />;
@@ -188,32 +184,23 @@ export function ConnectPage() {
   const servers = choices.tools ? data.servers : [];
   const tools = servers.reduce((n, s) => n + s.toolCount, 0);
   const skills = data.skillsEnabled ? skillsSorted : [];
-  const plugins = parts.plugins ? data.pluginsFor(client) : [];
+  const plugins = parts.plugins
+    ? data.keptPlugins(client, picks.pluginIds)
+    : [];
   const prompt = data.connectPrompt(client, choices);
-  const setChoice = (part: keyof ConnectChoices, value: boolean) => {
-    const next = { ...choices, [part]: value };
-    setChoices(next);
-    saveConnectChoices(client.id, next);
+  const update = (change: IncludeChange) => {
+    const nextChoices = { ...choices, ...change.choices };
+    const nextPicks = { ...picks, ...change.picks };
+    setChoices(nextChoices);
+    setPicks(nextPicks);
+    saveConnectChoices(client.id, nextChoices, nextPicks);
   };
 
   const setup = setupModeFor(client);
-  const manualOn =
-    manualChosen ??
-    (searchParams.get("mode") === "manual" && setup === "prompt-or-manual");
-  const manual =
-    setup === "manual" || (setup === "prompt-or-manual" && manualOn);
-  // Apps with an installer can also run it straight from a terminal. Claude
-  // Desktop keeps its own download flow.
-  const scriptable = setup === "prompt" && client.id !== "claude-desktop";
-  const script = scriptable && manualOn;
-  // Claude Desktop installs from a downloaded installer by default; its
-  // Prompt (for Cowork) is the alternative, so the toggle reads inverted.
-  const download = client.id === "claude-desktop" && !manualOn;
-  const step = currentStep(client, manual, script, download);
+  const step = currentStep(client, setup);
 
   const pick = (id: string) => {
     setPickedId(id);
-    setManualChosen(false);
     // Manual steps bookmark a provider; providers vary per app.
     updateUrlParams({ clientId: id, mode: null, providerId: null });
   };
@@ -295,10 +282,11 @@ export function ConnectPage() {
             skills={skills}
             skillsOff={parts.skills && !choices.skills}
             plugins={plugins}
-            pluginsOff={parts.plugins && !choices.plugins}
+            pluginsOff={
+              parts.plugins && (!choices.plugins || plugins.length === 0)
+            }
             routed={routed}
             choices={choices}
-            onChoice={setChoice}
             onOpen={(d, item) => {
               setFocus(item ?? null);
               setDialog(d);
@@ -311,18 +299,9 @@ export function ConnectPage() {
             client={client}
             setup={setup}
             step={step}
-            manual={manual}
-            scriptable={scriptable}
-            script={script}
-            download={download}
             choices={choices}
+            picks={picks}
             prompt={prompt}
-            onManual={(v) => {
-              setManualChosen(v);
-              // Only manual setup is bookmarkable; Script is a view of Prompt.
-              if (setup === "prompt-or-manual")
-                updateUrlParams({ mode: v ? "manual" : null });
-            }}
             onCursorNote={() => setDialog("cursor")}
           />
         </div>
@@ -340,6 +319,15 @@ export function ConnectPage() {
         client={client}
         skills={skillsSorted}
         choices={choices}
+      />
+      <IncludeDialog
+        open={dialog === "include"}
+        onOpenChange={(v) => !v && setDialog(null)}
+        data={data}
+        client={client}
+        choices={choices}
+        picks={picks}
+        onChange={update}
       />
       <InfoDialog
         open={dialog === "cursor"}
@@ -616,59 +604,52 @@ function StepPill({ children }: { children: ReactNode }) {
   );
 }
 
-// === Connect area: prompt, or the manual steps in its place ===
+// === Connect area: the command, download, prompt or manual steps ===
 
 function ConnectArea({
   data,
   client,
   setup,
   step,
-  manual,
-  scriptable,
-  script,
-  download,
   choices,
+  picks,
   prompt,
-  onManual,
   onCursorNote,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
   setup: SetupMode;
   step: string;
-  manual: boolean;
-  /** The app has an installer, so it offers Prompt / Script. */
-  scriptable: boolean;
-  /** Script is chosen: show the installer command instead of the prompt. */
-  script: boolean;
-  /** Claude Desktop's installer download replaces the prompt. */
-  download: boolean;
   choices: ConnectChoices;
-  /** null when every part is left out. */
+  picks: ConnectPicks;
+  /** The generic prompt; null when every part is left out. */
   prompt: string | null;
-  onManual: (v: boolean) => void;
   onCursorNote: () => void;
 }) {
   const { copied, copy: copyText } = useCopy();
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
-  // Claude Code, Codex and OpenCode: copying opens a short setup window for
-  // this user, so the agent's setup can start without another sign-in.
-  const sessionClientId: NativeSessionClientId | undefined =
-    hasNativeSetupSession(client.id) ? client.id : undefined;
-  const session = useConnectionPromptSession(sessionClientId, origin);
   const [windows, setWindows] = useState(false);
   useEffect(() => setWindows(detectPlatform() === "windows"), []);
-  const command = scriptable
-    ? data.installerCommand(client, choices, windows)
+  const manual = setup === "manual";
+  const script = setup === "script";
+  const download = setup === "download";
+  const command = script
+    ? data.installerCommand(client, choices, windows, picks)
     : null;
   // What the box shows and the button copies.
   const text = script ? command : prompt;
-  // Other agents read the generic prompt, with or without a manual option.
-  const generic = setup === "prompt-or-manual" || setup === "generic-prompt";
+  const keptPlugins = data.keptPlugins(client, picks.pluginIds);
+  // Keeping none of the plugins is leaving plugins out.
   const leftOutParts = (
     Object.keys(choices) as (keyof ConnectChoices)[]
-  ).filter((part) => !choices[part]);
+  ).filter(
+    (part) =>
+      !choices[part] ||
+      (part === "plugins" &&
+        data.partsFor(client).plugins &&
+        keptPlugins.length === 0),
+  );
 
   // After copying: the status card under the band. A changed pick or choice
   // sends it back to idle, except once connected.
@@ -678,6 +659,8 @@ function ConnectArea({
     manual,
     download,
     ...leftOutParts,
+    data.gateway?.id,
+    ...keptPlugins.map((p) => p.id),
   ].join();
   const [run, setRun] = useState<AfterConnectRun>({
     phase: "idle",
@@ -697,76 +680,40 @@ function ConnectArea({
   useConnectedSignal(phase === "waiting", () => setPhase("connected"));
 
   const copy = async () => {
-    if (!text) return;
-    // The terminal command asks for browser approval itself.
-    if (sessionClientId && !script) {
-      const refreshed = await session.refetch();
-      if (
-        refreshed.isError ||
-        !refreshed.data ||
-        Date.parse(refreshed.data.expiresAt) <= Date.now()
-      ) {
-        toast.error("Could not start connection setup. Try again.");
-        return;
-      }
-    }
-    if (await copyText(text)) startWaiting();
+    if (text && (await copyText(text))) startWaiting();
   };
 
   const band = (
     <Band busy={data.revalidating} dim={phase === "connected"}>
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         <StepHeading step={step} />
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {setup === "prompt-or-manual" && (
-            <ModeSwitch
-              alt={manual}
-              altIcon={<ListOrdered />}
-              altLabel="Manual setup"
-              onChange={onManual}
-            />
-          )}
-          {client.id === "claude-desktop" && (
-            <ModeSwitch
-              alt={download}
-              altIcon={<Download />}
-              altLabel="Download"
-              onChange={(v) => onManual(!v)}
-            />
-          )}
-          {scriptable && (
-            <ModeSwitch
-              alt={script}
-              altIcon={<SquareTerminal />}
-              altLabel="Script"
-              onChange={onManual}
-            />
-          )}
-        </div>
       </div>
 
       {download ? (
-        <>
-          <ConnectCommandPanel
-            // Remount on a changed selection; the panel reads it once.
-            key={leftOutParts.join(",")}
-            variant="download"
-            client={client}
-            exclude={leftOutParts}
-            mcpGateways={data.gateway ? [data.gateway] : null}
-            mcpGatewayId={data.gateway?.id ?? null}
-            onMcpGatewaySelect={() => {}}
-            llmProxyId={data.llmProxyId}
-            shownProviders={data.shownProviders}
-            urlProvider={null}
-            onProviderSelect={() => {}}
-            baseUrl={data.baseUrl}
-            skillsEnabled={data.skillsEnabled}
-            pluginsEnabled={data.pluginsEnabled}
-          />
-        </>
+        <ConnectCommandPanel
+          // Remount on a changed selection; the panel reads it once.
+          key={setupKey}
+          variant="download"
+          client={client}
+          exclude={leftOutParts}
+          pluginSlugs={
+            picks.pluginIds === null
+              ? undefined
+              : keptPlugins.map((p) => p.slug)
+          }
+          mcpGateways={data.gateway ? [data.gateway] : null}
+          mcpGatewayId={data.gateway?.id ?? null}
+          onMcpGatewaySelect={() => {}}
+          llmProxyId={data.llmProxyId}
+          shownProviders={data.shownProviders}
+          urlProvider={null}
+          onProviderSelect={() => {}}
+          baseUrl={data.baseUrl}
+          skillsEnabled={data.skillsEnabled}
+          pluginsEnabled={data.pluginsEnabled}
+        />
       ) : manual ? (
-        // The steps take the prompt's place, starting right here.
+        // The steps start right here, in the band.
         <div
           key={`manual-${client.id}`}
           className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300"
@@ -790,10 +737,8 @@ function ConnectArea({
                 </>
               ) : (
                 <>
-                  {sentenceNameOf(client)}{" "}
-                  {generic
-                    ? "checks what it supports and asks before changing anything."
-                    : "opens a browser page. Nothing changes until you approve."}
+                  {sentenceNameOf(client)} checks what it supports and asks
+                  before changing anything.
                 </>
               )}
             </p>
@@ -866,8 +811,11 @@ function ConnectArea({
         client={run.client}
         script={run.script}
         welcome={origin ? welcomePrompt(origin, data.appName) : null}
-        // n8n has no prompt to follow up on; neither does "everything left out".
-        showLink={setup !== "manual" && prompt !== null}
+        // n8n has no agent to follow up with; "everything left out" has
+        // nothing to follow up on.
+        showLink={
+          readsPrompts(client) && (setup !== "prompt" || prompt !== null)
+        }
         onPhase={setPhase}
       />
     </>
@@ -916,17 +864,17 @@ function ScriptBlock({
 }
 
 /**
- * The Script option's "When it finishes" list. Its meaning follows the setup
- * script's own Next steps (nextStepsFor in
- * backend/src/services/connection-setup-script.ts); the full list prints at
+ * The Script option's "When it finishes" list. It follows the installer's own
+ * ending (each agent's ending in
+ * backend/src/services/agent-connection-setup/agents/), which prints in full at
  * the end of the output.
  */
 function scriptNextSteps(client: ConnectClient): string[] {
   switch (client.id) {
     case "claude-code":
       return [
-        "Open a new terminal and start claude.",
-        "Run /mcp, pick the gateway and sign in through the browser. Skills load on their own.",
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Open a new terminal and run the claude command it prints. Skills load on their own.",
       ];
     case "cursor":
       return [
@@ -936,19 +884,19 @@ function scriptNextSteps(client: ConnectClient): string[] {
       ];
     case "codex":
       return [
-        "Open a new terminal and run codex.",
-        'If the output doesn\'t say "Successfully logged in.", run the codex mcp login command it prints.',
-        "For skills, run /plugins and install the plugin.",
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Open a new terminal and run the codex command it prints.",
+        "For skills, run /plugins in Codex and install the plugin.",
       ];
     case "copilot-cli":
       return [
-        "Restart Copilot. It opens the browser to sign in to the gateway.",
-        "If the output prints export lines, add them to your shell profile.",
+        "If the output prints COPILOT_* lines, add them to your shell profile.",
+        "Open a new terminal and run the copilot command it prints. It opens the browser to sign in to the gateway.",
       ];
     case "opencode":
       return [
-        "Close OpenCode and start it again in a new terminal.",
-        "If the gateway isn't connected, run the opencode mcp auth command it prints.",
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Close OpenCode if it's open, then run the opencode command it prints in a new terminal.",
       ];
     default:
       return [`Restart ${nameOf(client)}.`];
@@ -957,17 +905,18 @@ function scriptNextSteps(client: ConnectClient): string[] {
 
 // === Connect band heading: the one instruction ===
 
-function currentStep(
-  client: ConnectClient,
-  manual: boolean,
-  script: boolean,
-  download: boolean,
-): string {
+function currentStep(client: ConnectClient, setup: SetupMode): string {
   const name = nameOf(client);
-  if (manual) return `Follow the steps for ${name}`;
-  if (script) return "Run the command in your terminal";
-  if (download) return `Download the installer for ${name}`;
-  return `Paste the prompt into ${name}`;
+  switch (setup) {
+    case "manual":
+      return `Follow the steps for ${name}`;
+    case "script":
+      return "Run the command in your terminal";
+    case "download":
+      return `Download the installer for ${name}`;
+    case "prompt":
+      return `Paste the prompt into ${name}`;
+  }
 }
 
 function Band({
@@ -1055,42 +1004,6 @@ function ManualSteps({
   );
 }
 
-/** Prompt, or the app's other way in (Manual setup or Script). */
-function ModeSwitch({
-  alt,
-  altIcon,
-  altLabel,
-  onChange,
-}: {
-  alt: boolean;
-  altIcon: ReactNode;
-  altLabel: string;
-  onChange: (alt: boolean) => void;
-}) {
-  const option = (value: boolean, icon: ReactNode, label: string) => (
-    <UnstyledButton
-      type="button"
-      onClick={() => onChange(value)}
-      aria-pressed={alt === value}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-colors [&_svg]:size-3.5",
-        alt === value
-          ? "bg-background font-semibold text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {icon}
-      {label}
-    </UnstyledButton>
-  );
-  return (
-    <div className="inline-flex rounded-lg border bg-muted/60 p-0.5">
-      {option(false, <MessageSquareText />, "Prompt")}
-      {option(true, altIcon, altLabel)}
-    </div>
-  );
-}
-
 // === Guardrails status ===
 
 /**
@@ -1155,98 +1068,6 @@ function guardrailsStatus(
 
 // === Profile card ===
 
-/** The card's one place to leave parts out; the prompt carries the result. */
-function IncludeMenu({
-  skills,
-  plugins,
-  routing,
-  choices,
-  onChoice,
-}: {
-  skills: boolean;
-  plugins: boolean;
-  routing: boolean;
-  choices: ConnectChoices;
-  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
-}) {
-  const rows: {
-    id: string;
-    title: string;
-    sub: string;
-    part?: keyof ConnectChoices;
-  }[] = [
-    { id: "tools", title: "Tools", sub: "Always included" },
-    ...(skills
-      ? [
-          {
-            id: "skills",
-            title: "Skills",
-            sub: "Loaded when a task needs one",
-            part: "skills" as const,
-          },
-        ]
-      : []),
-    ...(plugins
-      ? [
-          {
-            id: "plugins",
-            title: "Plugins",
-            sub: "The plugins your org approved for this agent",
-            part: "plugins" as const,
-          },
-        ]
-      : []),
-    ...(routing
-      ? [
-          {
-            id: "proxy",
-            title: "LLM proxy",
-            sub: "Model requests go through the LLM proxy",
-            part: "proxy" as const,
-          },
-        ]
-      : []),
-  ];
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="-mr-1.5 shrink-0 text-muted-foreground"
-        >
-          <SlidersHorizontal />
-          Choose what to include
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-1.5">
-        {rows.map((r) => (
-          <div
-            key={r.id}
-            className="flex items-center gap-3 rounded-md px-2.5 py-2"
-          >
-            <label
-              htmlFor={`include-${r.id}`}
-              className={cn("min-w-0 flex-1", r.part && "cursor-pointer")}
-            >
-              <span className="block text-sm font-semibold">{r.title}</span>
-              <span className="block text-xs text-muted-foreground">
-                {r.sub}
-              </span>
-            </label>
-            <Switch
-              id={`include-${r.id}`}
-              checked={r.part ? choices[r.part] : true}
-              disabled={!r.part}
-              onCheckedChange={(v) => r.part && onChoice(r.part, v)}
-            />
-          </div>
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 /** "See all 5 skills", or "See the skill" when there's one. */
 function seeAllLabel(count: number, noun: string) {
   return count === 1
@@ -1292,7 +1113,6 @@ function ProfileCard({
   pluginsOff,
   routed,
   choices,
-  onChoice,
   onOpen,
 }: {
   data: ConnectPageData;
@@ -1308,7 +1128,6 @@ function ProfileCard({
   servers: ConnectServer[];
   tools: number;
   choices: ConnectChoices;
-  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
   /** Opens a dialog; for servers and skills, on one row's item. */
   onOpen: (d: DialogKind, item?: string) => void;
 }) {
@@ -1397,14 +1216,19 @@ function ProfileCard({
           <p className="text-sm leading-snug text-pretty text-foreground">
             {cardIntro(data, servers, included)}
           </p>
-          {(skillsOn || pluginsOn || proxyOn) && (
-            <IncludeMenu
-              skills={skillsOn && skills.length > 0}
-              plugins={pluginsOn}
-              routing={proxyOn}
-              choices={choices}
-              onChoice={onChoice}
-            />
+          {(data.gateways.length > 1 ||
+            data.partsFor(client).skills ||
+            pluginsOn ||
+            proxyOn) && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="-mr-1.5 shrink-0 text-muted-foreground"
+              onClick={() => onOpen("include")}
+            >
+              <SlidersHorizontal />
+              Choose what to include
+            </Button>
           )}
         </div>
 

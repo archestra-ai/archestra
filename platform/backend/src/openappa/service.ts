@@ -1511,16 +1511,11 @@ export async function loadChildReturns(params: {
             operationPrefix: params.operationPrefix,
           }
         : undefined;
-    const records = lookup
-      ? await module.loadChildReturns(
-          params.organizationId,
-          params.parentSessionId,
-          lookup,
-        )
-      : await module.loadChildReturns(
-          params.organizationId,
-          params.parentSessionId,
-        );
+    const records = await module.loadChildReturns(
+      params.organizationId,
+      params.parentSessionId,
+      lookup,
+    );
     return records.map((record) => ({
       childSessionId: record.childSessionId,
       ...(record.operationId ? { operationId: record.operationId } : {}),
@@ -1996,23 +1991,9 @@ async function peerResponse<T>(
   schema: z.ZodType<T>,
 ): Promise<T> {
   try {
-    return schema.parse(await peerJson(session, call));
-  } catch (error) {
-    throw openappaFailure(error);
-  }
-}
-
-async function peerJson(
-  session: OpenAppaSession,
-  call: (
-    module: Awaited<ReturnType<typeof binding>>,
-    policy: DispatchPolicy,
-  ) => Promise<string>,
-): Promise<unknown> {
-  try {
     const policy = await effectivePolicy(session.organization_id);
     const module = await binding();
-    return JSON.parse(await call(module, policy));
+    return schema.parse(JSON.parse(await call(module, policy)));
   } catch (error) {
     throw openappaFailure(error);
   }

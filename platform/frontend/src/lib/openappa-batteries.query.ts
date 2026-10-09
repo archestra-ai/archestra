@@ -27,8 +27,6 @@ export type BatterySummary =
 export type PolicyDeclarations =
   archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"];
 export type PolicyBattery = PolicyDeclarations["batteries"][number];
-export type EffectivePolicy =
-  archestraApiTypes.GetOpenappaEffectivePolicyResponses["200"];
 export type BatteryPolicySource =
   archestraApiTypes.GetOpenappaBatteryPolicySourceResponses["200"];
 /** What an attach names: the battery, and the catalog unless it governs the organization. */

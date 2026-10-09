@@ -366,6 +366,17 @@ delta = {}
 name = "*"
 annotator = "noop"
 
+# Review one exact call that explicitly requires human approval.
+[[policy.authority]]
+name = "hitl"
+hint = "Ask the person running this session to approve this exact call."
+
+[policy.authority.permits]
+attention = ["human-approval"]
+
+[externals.authorities.hitl]
+builtin = "hitl"
+
 [externals.annotators.noop]
 url = "${noopAnnotatorUrl()}"
 `;

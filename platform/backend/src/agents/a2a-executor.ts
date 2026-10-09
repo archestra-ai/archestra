@@ -306,19 +306,26 @@ export async function executeA2AMessage(
     await assertCallerMayStartTurn({ agentId, userId });
   }
 
-  const { selectedModel, selectedProvider: provider } =
-    await resolveConversationLlmSelectionForAgent({
-      agent: {
-        llmApiKeyId: agent.llmApiKeyId,
-        modelId: agent.modelId,
-      },
-      organizationId,
-      userId,
-      // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
-      // the user driving the /chat model selector, so they resolve from the
-      // agent's own configuration rather than the caller's personal chat default.
-      includeMemberChatDefault: false,
-    });
+  const {
+    selectedModel,
+    selectedProvider: provider,
+    chatApiKeyId: resolvedApiKeyId,
+  } = await resolveConversationLlmSelectionForAgent({
+    agent: {
+      llmApiKeyId: agent.llmApiKeyId,
+      modelId: agent.modelId,
+    },
+    organizationId,
+    userId,
+    // A2A runs (chatops, scheduled triggers, external A2A, delegation) are not
+    // the user driving the /chat model selector, so they resolve from the
+    // agent's own configuration rather than the caller's personal chat default.
+    includeMemberChatDefault: false,
+  });
+  // Run on the key that was selected with the model (the agent's own, or the
+  // organization default's). Without it, key lookup prefers the caller's
+  // personal key and the run sends a key the selection never chose.
+  const llmApiKeyId = resolvedApiKeyId ?? agent.llmApiKeyId;
 
   // Track subagent run so the browser preview can skip screenshots
   // while subagents are active (prevents flickering from tab switching).
@@ -380,7 +387,7 @@ export async function executeA2AMessage(
     // Create LLM model using shared service
     // Pass sessionId to group A2A requests with the calling session
     // Pass delegationChain as externalAgentId so agent names appear in logs
-    // Pass agent's llmApiKeyId so it can be used without user access check
+    // Pass the resolved key so it can be used without user access check
     const { model, anthropicNativeEndpoint, chatApiKeyId } =
       await createLLMModelForAgent({
         organizationId,
@@ -391,7 +398,7 @@ export async function executeA2AMessage(
         sessionId,
         source,
         externalAgentId: delegationChain,
-        agentLlmApiKeyId: agent.llmApiKeyId,
+        agentLlmApiKeyId: llmApiKeyId,
         appaSubagentToken: params.appaSubagent?.token,
       });
 
@@ -548,7 +555,7 @@ export async function executeA2AMessage(
               sessionId,
               source: "a2a:tool_call_repair",
               externalAgentId: delegationChain,
-              agentLlmApiKeyId: agent.llmApiKeyId,
+              agentLlmApiKeyId: llmApiKeyId,
               appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,

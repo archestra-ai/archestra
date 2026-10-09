@@ -151,7 +151,7 @@ export function useConnectSkills(enabled: boolean): {
 interface ConnectCommandPanelProps {
   client: ConnectClient;
   /** null when the user can't read MCP gateways. */
-  mcpGateways: AgentSelectorAgent[] | null;
+  mcpGateways: (AgentSelectorAgent & { slug?: string | null })[] | null;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
   /** The org's single LLM Proxy id; null when the user can't read it (or it hasn't loaded). */
@@ -168,6 +168,8 @@ interface ConnectCommandPanelProps {
   pluginsEnabled?: boolean;
   /** Parts the user left out on the Connect page; they stay off. */
   exclude?: readonly ConnectSetupPart[];
+  /** Plugins the user kept on the Connect page, by slug; omitted = all. */
+  pluginSlugs?: readonly string[];
   /**
    * "download": only the Claude Desktop installer download, for the Connect
    * page's band. The full review flow is what the approval page shows.
@@ -195,6 +197,7 @@ export function ConnectCommandPanel({
   skillsEnabled = true,
   pluginsEnabled = true,
   exclude,
+  pluginSlugs,
   variant = "full",
 }: ConnectCommandPanelProps) {
   const searchParams = useSearchParams();
@@ -300,6 +303,48 @@ export function ConnectCommandPanel({
     }
     if (excluded.size > 0) setCustomizing(true);
   }, [excluded, client.id]);
+  // A gateway and plugins picked on the Connect page start selected, once
+  // each list has loaded; after that the selection is the user's.
+  const presetGateway = connection?.gateway ?? null;
+  const presetPluginsKey = (connection?.plugins ?? pluginSlugs ?? null)?.join(
+    ",",
+  );
+  const appliedPresets = useRef({ gateway: false, plugins: false });
+  useEffect(() => {
+    // An empty list is one still loading on the approval page.
+    if (
+      !presetGateway ||
+      !mcpGateways?.length ||
+      appliedPresets.current.gateway
+    )
+      return;
+    appliedPresets.current.gateway = true;
+    const picked = mcpGateways.find(
+      (g) => g.slug === presetGateway || g.id === presetGateway,
+    );
+    if (picked && picked.id !== mcpGatewayId) onMcpGatewaySelect(picked.id);
+    setCustomizing(true);
+  }, [presetGateway, mcpGateways, mcpGatewayId, onMcpGatewaySelect]);
+  useEffect(() => {
+    if (
+      presetPluginsKey === undefined ||
+      pluginsLoading ||
+      excluded.has("plugins") ||
+      appliedPresets.current.plugins
+    )
+      return;
+    appliedPresets.current.plugins = true;
+    const slugs = new Set(presetPluginsKey.split(","));
+    setPluginSelections((current) =>
+      new Map(current).set(
+        client.id,
+        new Set(
+          plugins.filter((p) => slugs.has(p.pluginSlug)).map((p) => p.id),
+        ),
+      ),
+    );
+    setCustomizing(true);
+  }, [presetPluginsKey, pluginsLoading, excluded, plugins, client.id]);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
@@ -1238,7 +1283,7 @@ export function ConnectCommandPanel({
             <CollapsibleContent className="mt-3 grid max-w-lg gap-4">
               {excluded.size > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Your prompt left some parts out. They stay off for this
+                  Your setup left some parts out. They stay off for this
                   connection.
                 </p>
               )}

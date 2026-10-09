@@ -58,7 +58,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
             ? {
                 title: "Yells",
                 description:
-                  "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed.",
+                  "Yells are agent reports of blocks it could not make sense of or get past. Investigate them in chat and mark them resolved once fixed.",
               }
             : {
                 title: "Guardrails",

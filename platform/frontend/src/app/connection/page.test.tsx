@@ -392,7 +392,7 @@ describe("ConnectPage (no connect request)", () => {
     expect(connectionFlowMock).not.toHaveBeenCalled();
   });
 
-  it("carries what the user left out in the installer prompt", () => {
+  it("carries what the user left out in the installer command", () => {
     window.localStorage.clear();
     saveConnectChoices("cursor", {
       tools: false,
@@ -404,10 +404,11 @@ describe("ConnectPage (no connect request)", () => {
     render(<ConnectionPage />);
     // Tools are always included, whatever was saved.
     expect(
-      screen.getByText(
-        /connect\.md\?client=cursor&exclude=skills,plugins and connect Cursor\./,
-      ),
+      screen.getByText(/--client cursor --exclude skills,plugins$/),
     ).toBeVisible();
+    expect(screen.getByText("Run the command in your terminal")).toBeVisible();
+    // The installer is the only way in: no prompt to switch to.
+    expect(screen.queryByRole("button", { name: "Prompt" })).toBeNull();
   });
 
   it("shows the LLM proxy as on for supported agents, not active when the admin turned it off", () => {
@@ -473,10 +474,13 @@ describe("ConnectPage (no connect request)", () => {
       );
       await userEvent.click(screen.getByRole("switch", { name: /LLM proxy/ }));
       expect(screen.getByText("Off")).toBeVisible();
+      expect(
+        screen.getByText(/^Off\. .+ calls its model provider directly\.$/),
+      ).toBeVisible();
       // Other agents' prompt is covered by the generic prompt tests.
       if (id === "claude-code")
         expect(
-          screen.getByText(/connect\.md\?client=claude-code&exclude=proxy/),
+          screen.getByText(/--client claude-code --exclude proxy$/),
         ).toBeVisible();
       unmount();
     }
@@ -493,30 +497,29 @@ describe("ConnectPage (no connect request)", () => {
     } as unknown as ReturnType<typeof useProfile>);
     mockOrganization({
       data: {
-        connectionShownClientIds: ["generic"],
+        connectionShownClientIds: ["hermes-agent"],
         connectionDefaultMcpGatewayId: "gw-1",
       },
     });
     render(<ConnectionPage />);
     expect(
       screen.getByText(
-        /connect\.md\?client=generic&gateway=team&exclude=skills,proxy(&base=[^ ]+)? and connect /,
+        /connect\.md\?client=generic&gateway=team&exclude=skills,proxy(&base=[^ ]+)? and connect Hermes Agent\./,
       ),
     ).toBeVisible();
   });
 
-  it("opens a linked agent on its manual setup", () => {
+  it("sets the generic client up by hand", () => {
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("clientId=generic&mode=manual") as ReturnType<
+      new URLSearchParams("clientId=generic") as ReturnType<
         typeof useSearchParams
       >,
     );
     mockOrganization({});
     render(<ConnectionPage />);
-    expect(
-      screen.getByRole("button", { name: "Manual setup", pressed: true }),
-    ).toBeVisible();
     expect(screen.getByText("Follow the steps for your agent")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Prompt" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
   });
 
   it("gives other agents the prompt only, even when linked to manual setup", () => {
@@ -763,6 +766,54 @@ describe("ConnectPage guardrails for members", () => {
   });
 });
 
+describe("ConnectPage gateway pick", () => {
+  it("connects through the gateway picked over the default", async () => {
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    const gateway = (id: string, name: string) => ({
+      id,
+      name,
+      slug: id,
+      agentType: "mcp_gateway",
+      tools: [],
+      accessAllTools: false,
+    });
+    const gateways = [
+      gateway("default-gateway", "Default gateway"),
+      gateway("coding-gateway", "Coding gateway"),
+    ];
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: gateways[0],
+    } as unknown as ReturnType<typeof useDefaultMcpGateway>);
+    vi.mocked(useProfiles).mockReturnValue({
+      data: gateways,
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfiles>);
+    vi.mocked(useProfile).mockImplementation(
+      (id) =>
+        ({
+          data: gateways.find((g) => g.id === id),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useProfile>,
+    );
+    mockOrganization({ data: { connectionShownClientIds: ["claude-code"] } });
+    saveConnectChoices(
+      "claude-code",
+      { tools: true, skills: true, proxy: true, plugins: true },
+      { gatewayId: "coding-gateway", pluginIds: null },
+    );
+    render(<ConnectionPage />);
+    expect(
+      await screen.findByText(/--client claude-code --gateway coding-gateway$/),
+    ).toBeVisible();
+  });
+});
+
 describe("ConnectPage plugins", () => {
   const plugin = (
     id: string,
@@ -770,6 +821,7 @@ describe("ConnectPage plugins", () => {
     supportedPlatforms: string[],
   ) => ({
     id,
+    pluginSlug: `plugin-${id}`,
     displayName: `Plugin ${id}`,
     description: null,
     clientType,
@@ -779,7 +831,7 @@ describe("ConnectPage plugins", () => {
     approvedContentHash: "h",
   });
 
-  function setup(clientId: string) {
+  function setup(clientId: string, extra: ReturnType<typeof plugin>[] = []) {
     window.localStorage.clear();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -795,6 +847,7 @@ describe("ConnectPage plugins", () => {
         plugin("a", "claude-code", ["posix", "windows"]),
         plugin("b", "claude-code", ["windows"]),
         plugin("c", "codex", ["posix"]),
+        ...extra,
       ],
     } as unknown as ReturnType<typeof usePlugins>);
     mockOrganization({
@@ -813,7 +866,7 @@ describe("ConnectPage plugins", () => {
     expect(screen.queryByText("Plugin b")).toBeNull();
   });
 
-  it("leaves plugins out of the prompt when switched off", async () => {
+  it("leaves plugins out of the command when switched off", async () => {
     setup("claude-code");
     await userEvent.click(
       screen.getByRole("button", { name: "Choose what to include" }),
@@ -821,9 +874,42 @@ describe("ConnectPage plugins", () => {
     await userEvent.click(screen.getByRole("switch", { name: /Plugins/ }));
     expect(screen.getByText("Plugins off")).toBeVisible();
     expect(
-      screen.getByText(
-        /connect\.md\?client=claude-code&exclude=plugins and connect Claude Code\./,
-      ),
+      screen.getByText(/--client claude-code --exclude plugins$/),
+    ).toBeVisible();
+  });
+
+  it("keeps only the plugins picked in the dialog", async () => {
+    setup("claude-code", [plugin("d", "claude-code", ["posix", "windows"])]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Choose what to include" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(/All 2 plugins your org approved/),
+    ).toBeVisible();
+    // Only these starts from nothing picked, in the pane over the dialog.
+    await userEvent.click(
+      within(dialog).getByRole("radio", { name: /Only these/ }),
+    );
+    const pane = screen.getByRole("region", { name: "Pick plugins" });
+    await userEvent.click(
+      within(pane).getByRole("checkbox", { name: /Plugin a/ }),
+    );
+    await userEvent.click(within(pane).getByRole("button", { name: "Done" }));
+    expect(within(dialog).getByText(/1 of 2 plugins/)).toBeVisible();
+    expect(
+      screen.getByText(/--client claude-code --plugins plugin-a$/),
+    ).toBeVisible();
+    // Removing the last pick is leaving plugins out.
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Remove Plugin a" }),
+    );
+    expect(within(dialog).getByText("No plugins picked")).toBeVisible();
+    expect(
+      within(dialog).getByText(/^Off\. Claude Code gets none of the 2 plugins/),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/--client claude-code --exclude plugins$/),
     ).toBeVisible();
   });
 
@@ -889,7 +975,7 @@ describe("ConnectPage loading", () => {
   });
 });
 
-describe("ConnectPage after copying the prompt", () => {
+describe("ConnectPage after copying the command", () => {
   const welcome =
     "Read http://localhost:3000/welcome.md and show me what I can do with Example Platform.";
 
@@ -918,10 +1004,8 @@ describe("ConnectPage after copying the prompt", () => {
     render(<ConnectionPage />);
   }
 
-  const copyPrompt = () =>
-    userEvent.click(
-      screen.getByRole("button", { name: /^(Copy prompt|Copied)$/ }),
-    );
+  const copyCommand = () =>
+    userEvent.click(screen.getByRole("button", { name: /^(Copy|Copied)$/ }));
   const status = () =>
     screen.queryByRole("region", { name: "Connection status" });
   const approveElsewhere = async () => {
@@ -929,12 +1013,12 @@ describe("ConnectPage after copying the prompt", () => {
     await screen.findByText(/^Connected\./);
   };
 
-  it("waits for approval once the prompt is copied, then offers the welcome prompt", async () => {
+  it("waits for approval once the command is copied, then offers the welcome prompt", async () => {
     show(["cursor"]);
     expect(status()).toBeNull();
-    await copyPrompt();
+    await copyCommand();
     expect(status()).toHaveTextContent(
-      "Waiting for approvalCursor opens a browser page. Approve there and this card moves on by itself.",
+      "Waiting for approvalThe command opens a browser page. Approve there and this card moves on by itself.",
     );
 
     await approveElsewhere();
@@ -942,7 +1026,7 @@ describe("ConnectPage after copying the prompt", () => {
       "Connected. Next, ask Cursor what it can do now",
     );
     expect(status()).toHaveTextContent(
-      "Once Cursor says setup is done, paste this into a new Cursor session.",
+      "Once your terminal says setup is done, paste this into a new Cursor session.",
     );
     expect(screen.getByText(welcome)).toBeVisible();
     // The connect band steps back.
@@ -964,19 +1048,19 @@ describe("ConnectPage after copying the prompt", () => {
     ).toBeVisible();
   });
 
-  it("starts waiting when the prompt text is copied by hand", () => {
+  it("starts waiting when the command text is copied by hand", () => {
     show(["cursor"]);
-    fireEvent.copy(screen.getByText(/connect\.md\?client=cursor/));
+    fireEvent.copy(screen.getByText(/--client cursor$/));
     expect(status()).toHaveTextContent("Waiting for approval");
   });
 
   it("moves on with Done, and goes back to the link on Cancel", async () => {
     show(["cursor"]);
-    await copyPrompt();
+    await copyCommand();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(status()).toBeNull();
 
-    await copyPrompt();
+    await copyCommand();
     await userEvent.click(
       screen.getByRole("button", { name: "Done? Show the next step" }),
     );
@@ -985,12 +1069,12 @@ describe("ConnectPage after copying the prompt", () => {
 
   it("stops waiting when the agent changes, but keeps a connection it saw", async () => {
     show(["cursor", "codex"]);
-    await copyPrompt();
+    await copyCommand();
     await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
     expect(status()).toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: /Cursor/ }));
-    await copyPrompt();
+    await copyCommand();
     await approveElsewhere();
     await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
     expect(status()).toHaveTextContent(
@@ -1005,7 +1089,7 @@ describe("ConnectPage after copying the prompt", () => {
     );
     const card = screen.getByRole("region", { name: "Starter prompt" });
     expect(card).toHaveTextContent(
-      "Works once your agent is connected. If it isn't yet, it points you back to the connect prompt.",
+      "Works once your agent is connected. If it isn't yet, it points you back to the Connect page.",
     );
     expect(within(card).getByText(welcome)).toBeVisible();
     await userEvent.click(within(card).getByRole("button", { name: "Close" }));
@@ -1013,7 +1097,7 @@ describe("ConnectPage after copying the prompt", () => {
   });
 
   it("offers the starter prompt in manual setup, but not for n8n", () => {
-    show(["generic"], "clientId=generic&mode=manual");
+    show(["generic"]);
     expect(
       screen.getByRole("button", { name: "Show the starter prompt" }),
     ).toBeVisible();

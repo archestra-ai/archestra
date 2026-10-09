@@ -38831,6 +38831,8 @@ export type StartClientConnectionData = {
         clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
         exclude?: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
+        gateway?: string;
+        plugins?: Array<string>;
         deviceName?: string;
     };
     path?: never;
@@ -39086,6 +39088,8 @@ export type GetClientConnectionResponses = {
         clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
         exclude: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
+        gateway: string | null;
+        plugins: Array<string> | null;
         deviceName: string | null;
         userCode: string;
         expiresAt: string;
@@ -40050,92 +40054,6 @@ export type DisconnectConnectedClientResponses = {
 };
 
 export type DisconnectConnectedClientResponse = DisconnectConnectedClientResponses[keyof DisconnectConnectedClientResponses];
-
-export type BeginConnectionPromptSessionData = {
-    body: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
-        origin: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/connection-setups/prompt-session';
-};
-
-export type BeginConnectionPromptSessionErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type BeginConnectionPromptSessionError = BeginConnectionPromptSessionErrors[keyof BeginConnectionPromptSessionErrors];
-
-export type BeginConnectionPromptSessionResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        expiresAt: string;
-    };
-};
-
-export type BeginConnectionPromptSessionResponse = BeginConnectionPromptSessionResponses[keyof BeginConnectionPromptSessionResponses];
 
 export type GetConnectionHealthData = {
     body?: never;
@@ -87309,9 +87227,9 @@ export type GetOpenappaRemediesResponses = {
         }>;
         blocks: Array<{
             kind: 'trust' | 'audience' | 'effects' | 'approvals';
-            rules: number;
-            approvers: number;
-            cleaners: number;
+            level: string | null;
+            approvers: Array<string>;
+            cleaners: Array<string>;
             unservedMarks: Array<string>;
             covered: boolean;
         }>;
@@ -87403,7 +87321,8 @@ export type GetOpenappaRemediesActivityResponses = {
         days: Array<{
             date: string;
             blocked: number;
-            remedied: number;
+            approved: number;
+            cleaned: number;
         }>;
     };
 };

@@ -235,13 +235,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
         clientId: String(routeParams?.clientId),
       }),
   },
-  // Sole audited child of the denylisted /api/connection-setups prefix.
-  // Installer tickets stay unaudited; this window grant records no secrets.
-  "/api/connection-setups/prompt-session": {
-    resourceType: "connectionPromptSession",
-    action: "connectionPromptSession.created",
-    resourceIdSource: "organizationContext",
-  },
   "/api/hooks": {
     resourceType: "hook",
     fetchById: (id, organizationId) =>

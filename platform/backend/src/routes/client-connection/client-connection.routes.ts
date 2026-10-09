@@ -4,13 +4,14 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
 import { CacheKey } from "@/cache-manager";
+import { CLIENT_CONNECTION_INSTALLER } from "@/services/agent-connection-setup/bootstrap/client-connection-installer";
 import { clientConnectionService } from "@/services/client-connection";
-import { CLIENT_CONNECTION_INSTALLER } from "@/services/client-connection-installer";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   ConnectionSetupClientIdSchema,
   ConnectionSetupPlatformSchema,
 } from "@/types/connection-setup";
+import { PLUGIN_DELIVERY_MAX_COUNT } from "@/types/plugin";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -41,6 +42,13 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           platform: ConnectionSetupPlatformSchema,
           /** Parts the copied prompt left out; the approval cannot add them back. */
           exclude: z.array(z.enum(CONNECT_SETUP_PARTS)).max(4).optional(),
+          /** Gateway slug or id picked on the Connect page; preselected on approval. */
+          gateway: GatewayRefSchema.optional(),
+          /** Plugin slugs picked on the Connect page; preselected on approval. */
+          plugins: z
+            .array(PluginSlugSchema)
+            .max(PLUGIN_DELIVERY_MAX_COUNT)
+            .optional(),
           /** Hostname of the machine running the installer, shown on approval. */
           deviceName: z.string().trim().min(1).max(64).optional(),
         }),
@@ -96,6 +104,8 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             clientId: ConnectionSetupClientIdSchema,
             platform: ConnectionSetupPlatformSchema,
             exclude: z.array(z.enum(CONNECT_SETUP_PARTS)),
+            gateway: z.string().nullable(),
+            plugins: z.array(z.string()).nullable(),
             deviceName: z.string().nullable(),
             userCode: z.string(),
             expiresAt: z.string(),
@@ -154,6 +164,8 @@ export default routes;
 
 // === Internal helpers
 const IdSchema = z.object({ id: z.string().regex(/^[a-f0-9]{48}$/) });
+const GatewayRefSchema = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
+const PluginSlugSchema = z.string().regex(/^[A-Za-z0-9._-]{1,128}$/);
 async function rateLimit(params: {
   ip: string;
   action: string;

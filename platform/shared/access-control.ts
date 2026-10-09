@@ -575,7 +575,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DecideClientConnection]: {},
   [RouteId.CreateConnectionSetup]: {},
   // A signed-in member may start a short connection window for their own user.
-  [RouteId.BeginConnectionPromptSession]: {},
   // Reports whether a pre-built VAF Add On package exists for this
   // installation, so the connector form can offer a download link that is
   // never a known 404. Reads nothing protected — the answer is the same for

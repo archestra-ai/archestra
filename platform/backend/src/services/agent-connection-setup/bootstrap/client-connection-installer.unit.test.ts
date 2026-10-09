@@ -219,7 +219,7 @@ test("Copilot prints saved credentials once in the final instructions, after the
   const result = await run(origin, "copilot-cli");
   expect(result.code).toBe(0);
   const summary = result.output.indexOf("Copilot CLI is connected");
-  const optional = result.output.indexOf("Optional: add environment variables");
+  const optional = result.output.indexOf("Environment variables (optional)");
   const credentials = result.output.indexOf(
     "export COPILOT_PROVIDER_API_KEY='test-key'",
   );
@@ -231,7 +231,9 @@ test("Copilot prints saved credentials once in the final instructions, after the
   expect(
     result.output.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm),
   ).toHaveLength(1);
-  expect(result.output).toContain("No shell changes are required");
+  expect(result.output).toContain(
+    "copilot -i 'What can you do with my Test tools?'",
+  );
   expect(result.output).not.toContain("printed above");
 });
 

@@ -470,7 +470,7 @@ ${pluginInstalls}`);
 function copilotEnding(ctx: SetupScriptContext): AgentEnding {
   const notes: string[] = [];
   const proxyDetail = ctx.proxy
-    ? "Provider settings saved in providers.json; model selected in settings.json"
+    ? "Provider settings saved in providers.json"
     : undefined;
   if (ctx.proxy) {
     if (!ctx.proxy.virtualKey && ctx.proxy.provider !== "github-copilot") {
@@ -500,17 +500,7 @@ function copilotEnding(ctx: SetupScriptContext): AgentEnding {
             "Copilot opens your browser to sign in the first time it uses these tools.",
         }
       : null,
-    launch: [
-      "copilot",
-      ...(ctx.proxy
-        ? [
-            "--model",
-            `archestra/${ctx.proxy.model ?? DEFAULT_MODELS[ctx.proxy.provider]}`,
-          ]
-        : []),
-      "-i",
-      starterPrompt(ctx),
-    ],
+    launch: ["copilot", "-i", starterPrompt(ctx)],
     notes,
   };
 }

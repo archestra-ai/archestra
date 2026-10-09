@@ -123,7 +123,7 @@ test("setup saves credentials and model, preserves other settings, reruns safely
   );
   expect(stdout).toContain("Your API key is installed in providers.json");
   expect(stdout).not.toMatch(/<your-[a-z-]+>/);
-  expect(stdout.indexOf("Optional: add environment variables")).toBeGreaterThan(
+  expect(stdout.indexOf("Environment variables (optional)")).toBeGreaterThan(
     stdout.indexOf("Copilot CLI is connected"),
   );
   expect(stdout.indexOf("Next: open a new terminal")).toBeGreaterThan(

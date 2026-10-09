@@ -112,10 +112,9 @@ const paint = (code, text) => process.stdout.isTTY && !process.env.NO_COLOR
   ? "\x1b[" + code + "m" + text + "\x1b[0m" : text;
 const divider = "─".repeat(Math.min(56, process.stdout.columns || 56));
 console.log("\n" + paint("2", divider));
-console.log(paint("1;35", "Optional: add environment variables"));
+console.log(paint("1;35", "Environment variables (optional)"));
 console.log();
 if (existing.apiKey) {
-  console.log("  " + paint("1", "You can skip this step. No shell changes are required."));
   console.log("  Your provider settings and API key are already saved in:");
 } else {
   console.log("  Your provider settings are saved in:");
@@ -124,7 +123,7 @@ console.log("    " + paint("2", registryPath));
 if (!existing.apiKey) console.log("\n  " + paint("1;33", "Add your API key to that file before launching Copilot."));
 if (process.env.COPILOT_MODEL && process.env.COPILOT_MODEL !== state.installedModel && process.env.COPILOT_MODEL !== state.installedModel.slice("archestra/".length)) {
   console.log("\n  " + paint("1;33", "Your existing COPILOT_MODEL selects another model."));
-  console.log("  Use the launch command below, or unset it to use the saved model.");
+  console.log("  Unset COPILOT_MODEL to use the saved model.");
 }
 const values = {
   COPILOT_PROVIDER_TYPE: existing.type,
@@ -137,12 +136,11 @@ const fish = /(?:^|\/)fish$/.test(process.env.SHELL || "");
 const windows = process.platform === "win32" || process.env.ARCHESTRA_COPILOT_SHELL === "powershell";
 console.log();
 console.log(windows
-  ? "  To also use environment variables, paste these into PowerShell."
-  : "  To also use environment variables, add these to your shell profile:");
+  ? "  You may also set these environment variables in PowerShell:"
+  : "  You may also add these environment variables to your shell profile");
 if (!windows) {
-  console.log("    " + paint("1", fish ? "~/.config/fish/config.fish" : "~/.zshrc or ~/.bashrc") + ", then open a new terminal.");
+  console.log("  (" + paint("1", fish ? "~/.config/fish/config.fish" : "~/.zshrc or ~/.bashrc") + "):");
 }
-console.log("  " + paint("2", "Provider settings in providers.json take precedence."));
 console.log();
 for (const [name, value] of Object.entries(values)) {
   const quoted = windows ? "'" + value.replace(/'/g, "''") + "'" : fish

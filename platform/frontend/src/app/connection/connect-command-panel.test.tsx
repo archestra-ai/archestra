@@ -1756,18 +1756,42 @@ describe("ConnectCommandPanel", () => {
       }
     });
 
-    it("offers the org's synced models for the provider as a dropdown", async () => {
+    it("filters synced models and regenerates setup with the keyboard selection", async () => {
       modelsByProviderMock.mockReturnValue({
-        openai: [{ id: "gpt-5.5" }, { id: "o4-mini" }],
+        openai: [
+          ...Array.from({ length: 100 }, (_, index) => ({
+            id: `synced-model-${index}`,
+          })),
+          { id: "o4-mini" },
+        ],
       });
       const user = userEvent.setup();
       renderPanel({ client: findClient("copilot-cli") });
       await screen.findByText(COMMAND);
 
       await user.click(screen.getByTestId("connect-change-model"));
-      // a Select (not the free-text input) backs multi-option providers
-      expect(screen.queryByPlaceholderText("Model id")).not.toBeInTheDocument();
-      expect(screen.getByRole("combobox")).toBeInTheDocument();
+      const picker = screen.getByRole("combobox", { name: "Model" });
+      await user.click(picker);
+      // Keep the default reachable even when it isn't in the synced catalog.
+      expect(screen.getByRole("option", { name: "gpt-5.5" })).toBeVisible();
+      const search = screen.getByPlaceholderText("Search models...");
+      await user.type(search, "missing-model");
+      expect(screen.getByText("No models found.")).toBeVisible();
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+
+      await user.clear(search);
+      await user.type(search, "O4-MINI");
+      expect(screen.getAllByRole("option")).toHaveLength(1);
+      expect(screen.getByRole("option", { name: "o4-mini" })).toBeVisible();
+      await user.keyboard("{ArrowDown}{Enter}");
+
+      expect(picker).toHaveTextContent("o4-mini");
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "o4-mini" }),
+        ),
+      );
     });
 
     it("shows no model row for clients without provider env wiring", async () => {

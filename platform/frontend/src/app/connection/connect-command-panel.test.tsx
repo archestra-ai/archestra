@@ -1752,9 +1752,7 @@ describe("ConnectCommandPanel", () => {
         screen.getByRole("option", { name: "Microsoft 365 Copilot" }),
       ).toBeVisible();
       for (const name of ["GitHub Copilot", "OpenAI", "OpenAI-compatible"]) {
-        expect(
-          screen.queryByRole("option", { name, exact: true }),
-        ).not.toBeInTheDocument();
+        expect(screen.queryByRole("option", { name })).not.toBeInTheDocument();
       }
     });
 

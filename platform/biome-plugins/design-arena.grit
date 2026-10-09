@@ -1,0 +1,5 @@
+// Design-arena guard: prototype scaffolding (`__arena__`) must never be committed.
+`import $_ from $source` where {
+  $source <: r".*__arena__.*",
+  register_diagnostic(span=$source, message="design-arena: do not commit")
+}

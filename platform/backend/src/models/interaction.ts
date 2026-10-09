@@ -8,6 +8,7 @@ import {
   clientFilterToAgentIds,
   DynamicInteraction,
   isClaudeSessionSource,
+  isLogContentNotStored,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
   TimeInMs,
 } from "@archestra/shared";
@@ -1937,6 +1938,7 @@ class InteractionModel {
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         lastInteractionId: lastInteraction?.lastInteractionId ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
+        contentNotStored: lastInteraction?.contentNotStored ?? false,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
       };
@@ -2048,6 +2050,7 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
     >
@@ -2091,6 +2094,7 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
     >();
@@ -2175,7 +2179,14 @@ class InteractionModel {
           const hasGeminiContent =
             Array.isArray(request?.contents) && request.contents.length > 0;
 
-          if (hasOpenAiContent || hasResponsesContent || hasGeminiContent) {
+          // A Metadata only turn is a real turn whose content was never
+          // stored: it is the session's tip, with no preview to show.
+          if (
+            hasOpenAiContent ||
+            hasResponsesContent ||
+            hasGeminiContent ||
+            isLogContentNotStored(interaction.request)
+          ) {
             lastMainInteraction = interaction;
           }
         }
@@ -2249,6 +2260,9 @@ class InteractionModel {
           : null,
         lastInteractionId: lastMainInteraction?.id ?? null,
         lastInteractionType: lastMainInteraction?.type ?? null,
+        contentNotStored: lastMainInteraction
+          ? isLogContentNotStored(lastMainInteraction.request)
+          : false,
         claudeCodeTitle: claudeCodeTitle ?? null,
       });
     }

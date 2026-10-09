@@ -128,6 +128,49 @@ describe("LLM interactions", () => {
   });
 });
 
+describe("session listing", () => {
+  test("a Metadata only session is flagged as not stored, with no preview", async ({
+    makeAdmin,
+    makeAgent,
+  }) => {
+    const admin = await makeAdmin();
+    const agent = await makeAgent();
+    const turn = (sessionId: string) =>
+      InteractionModel.create({
+        profileId: agent.id,
+        sessionId,
+        type: "anthropic:messages",
+        request,
+        response,
+      });
+
+    const stored = await turn("stored-session");
+    config.logs.contentMode = "metadata_only";
+    const withheld = await turn("withheld-session");
+
+    const listed = async (sessionId: string) =>
+      (
+        await InteractionModel.getSessions(
+          { limit: 100, offset: 0 },
+          admin.id,
+          true,
+          { sessionId },
+        )
+      ).data[0];
+
+    expect(await listed("withheld-session")).toMatchObject({
+      contentNotStored: true,
+      lastUserMessagePreview: null,
+      lastInteractionId: withheld.id,
+    });
+    expect(await listed("stored-session")).toMatchObject({
+      contentNotStored: false,
+      lastUserMessagePreview: `summarize ${PRIVATE}`,
+      lastInteractionId: stored.id,
+    });
+  });
+});
+
 describe("MCP tool calls", () => {
   test("Metadata only keeps the tool, status and identity, never arguments or results", async ({
     makeAgent,

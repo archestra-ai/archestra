@@ -55558,6 +55558,10 @@ export type GetInteractionSessionsResponses = {
             lastUserMessagePreview: string | null;
             lastInteractionId: string | null;
             lastInteractionType: string | null;
+            /**
+             * True when the session's latest turn was logged under the Metadata only Log Content mode, so it has no message preview.
+             */
+            contentNotStored: boolean;
             conversationTitle: string | null;
             claudeCodeTitle: string | null;
         }>;

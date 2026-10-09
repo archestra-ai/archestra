@@ -909,6 +909,15 @@ export const SessionSummarySchema = z.object({
   /** Interaction backing the preview and latest-conversation detail view. */
   lastInteractionId: z.string().uuid().nullable(),
   lastInteractionType: z.string().nullable(),
+  /**
+   * The session's latest turn was logged under Metadata only, so it has no
+   * preview to show.
+   */
+  contentNotStored: z
+    .boolean()
+    .describe(
+      "True when the session's latest turn was logged under the Metadata only Log Content mode, so it has no message preview.",
+    ),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
 });

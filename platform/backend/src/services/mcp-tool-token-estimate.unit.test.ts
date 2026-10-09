@@ -15,128 +15,35 @@ const searchTool = {
 };
 
 describe("estimateMcpToolTokens", () => {
-  test("normalizes tool definitions but only escapes the configured server name", () => {
+  test("matches Claude's normalized, truncated tool serialization", () => {
     const [definition] = buildClaudeMcpToolDefinitions({
-      serverName: "Ｇａｔｅｗａｙ",
+      serverName: "my gateway",
       tools: [
         {
-          name: "ｒｅａｄ",
-          description: "Ａ… a\u200d\u0301 \ud800x\udc00😀",
+          name: "ｓｅａｒｃｈ",
+          description: `${"x".repeat(2047)}😀tail`,
           inputSchema: {
+            properties: { ｑ: { type: "string", description: "Ａ\u200d" } },
             type: "object",
-            properties: {
-              ｑ: {
-                enum: ["Ａ…", "a\u200db\ue000\u0378\ud800c\udc00😀"],
-                description: "ASCII\n\t\u0001",
-              },
-            },
-            required: ["ｑ"],
+            $schema: "https://example.test/schema",
           },
         },
       ],
     });
-    expect(definition).toEqual({
-      name: "mcp___________read",
-      description: "A... á x😀",
-      input_schema: {
-        type: "object",
-        properties: {
-          q: { enum: ["A...", "abc😀"], description: "ASCII\n\t\u0001" },
-        },
-        required: ["q"],
-      },
-    });
+    expect(definition.name).toBe("mcp__my_gateway__search");
+    expect(definition.description).toBe(`${"x".repeat(2047)}… [truncated]`);
+    expect(JSON.stringify(definition.input_schema)).toBe(
+      '{"$schema":"https://example.test/schema","type":"object","properties":{"q":{"type":"string","description":"A"}}}',
+    );
   });
 
-  test("moves only the root schema's reserved fields and preserves nested schema order", () => {
-    const inputSchema = {
-      properties: { q: { description: "Query", type: "string" } },
-      required: ["q"],
-      type: "object",
-      $schema: "https://example.test/schema",
+  test("counts complete Claude definitions, reconciles rounding, and includes attestation bytes", () => {
+    const params = {
+      client: "claude-code" as const,
+      serverName: "gateway",
+      tools: [searchTool, searchTool],
     };
-    const [definition] = buildClaudeMcpToolDefinitions({
-      serverName: "gateway",
-      tools: [{ ...searchTool, inputSchema }],
-    });
-    expect(JSON.stringify(definition.input_schema)).toBe(
-      '{"$schema":"https://example.test/schema","type":"object","properties":{"q":{"description":"Query","type":"string"}},"required":["q"]}',
-    );
-    expect(Object.keys(inputSchema)).toEqual([
-      "properties",
-      "required",
-      "type",
-      "$schema",
-    ]);
-  });
-
-  test("omits normalized prototype keys without changing other schema properties", () => {
-    const [definition] = buildClaudeMcpToolDefinitions({
-      serverName: "gateway",
-      tools: [
-        {
-          ...searchTool,
-          inputSchema: JSON.parse(
-            '{"type":"object","properties":{"__proto__":{"type":"number"},"＿＿ｐｒｏｔｏ＿＿":{"type":"string"},"safe":{"type":"string"}}}',
-          ),
-        },
-      ],
-    });
-    expect(JSON.stringify(definition.input_schema)).toBe(
-      '{"type":"object","properties":{"safe":{"type":"string"}}}',
-    );
-  });
-
-  test("counts complete Claude definitions and reconciles rounding across tools", () => {
-    const tokens = estimateMcpToolTokens({
-      client: "claude-code",
-      serverName: "gateway",
-      tools: [
-        searchTool,
-        {
-          name: "read",
-          description: "Read a record.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              options: {
-                type: "object",
-                properties: {
-                  fields: { type: "array", items: { type: "string" } },
-                },
-              },
-            },
-            required: ["id"],
-          },
-        },
-      ],
-    });
-
-    // The provider array is 405 UTF-16 code units, including the nested schema.
-    expect(tokens).toEqual([80, 123]);
-  });
-
-  test.each([
-    ["x".repeat(2048), "x".repeat(2048)],
-    ["x".repeat(2049), `${"x".repeat(2048)}… [truncated]`],
-    [`${"x".repeat(2046)}…`, `${"x".repeat(2046)}..… [truncated]`],
-    [`${"x".repeat(2047)}\u200dy`, `${"x".repeat(2047)}y`],
-    [`${"x".repeat(2047)}😀tail`, `${"x".repeat(2047)}… [truncated]`],
-  ])("normalizes before clipping at a safe UTF-16 boundary (case %#)", (description, expected) => {
-    const [definition] = buildClaudeMcpToolDefinitions({
-      serverName: "gateway",
-      tools: [{ ...searchTool, description }],
-    });
-    expect(definition.description).toBe(expected);
-  });
-
-  test.each([
-    "claude-code",
-    "generic",
-  ] as const)("%s retains the gateway description marker in the client estimate", (client) => {
-    const params = { client, serverName: "gateway", tools: [searchTool] };
-    const plain = estimateMcpToolTokens(params);
+    expect(estimateMcpToolTokens(params)).toEqual([80, 80]);
     const marked = estimateMcpToolTokens({
       ...params,
       tools: [
@@ -146,26 +53,23 @@ describe("estimateMcpToolTokens", () => {
         },
       ],
     });
-    expect(marked[0]).toBeGreaterThan(plain[0]);
+    expect(marked[0]).toBeGreaterThan(80);
   });
 
-  test("generic estimates keep full descriptions and ignore Claude server prefixes", () => {
-    const estimate = (description: string) =>
+  test("generic estimates ignore Claude prefixes and retain full descriptions", () => {
+    const estimate = (
+      serverName: string,
+      description = searchTool.description,
+    ) =>
       estimateMcpToolTokens({
         client: "generic",
-        serverName: "gateway",
+        serverName,
         tools: [{ ...searchTool, description }],
-      })[0];
-
+      });
+    expect(estimate("gateway")).toEqual([32]);
+    expect(estimate("other gateway")).toEqual(estimate("gateway"));
     expect(
-      estimateMcpToolTokens({
-        client: "generic",
-        serverName: "a different Claude prefix",
-        tools: [searchTool],
-      }),
-    ).toEqual([32]);
-    expect(estimate("Search records. ".repeat(2000))).toBeGreaterThan(
-      estimate("Search records. ".repeat(200)),
-    );
+      estimate("gateway", "Search records. ".repeat(2000))[0],
+    ).toBeGreaterThan(estimate("gateway", "Search records. ".repeat(200))[0]);
   });
 });

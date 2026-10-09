@@ -2,7 +2,7 @@
 title: Claude Code
 description: Connect Claude Code with subscription or API-key inference
 order: 1
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,11 +30,3 @@ Send `Reply with connection verified.` In Archestra, open **Logs → LLM Proxy**
 Run `/mcp` and confirm that the gateway is connected. Enable the gateway if it is disabled. Ask Claude Code to list the tools available from that gateway. The list reflects the tools assigned in Archestra and your permissions.
 
 If inference works but tools do not, authenticate the gateway separately. If no request appears in the proxy logs, check that you started a new session and that another Claude configuration does not override the generated settings.
-
-## Tool Counts and Context
-
-**Connect** counts the gateway tools available to your signed-in account at session start. With progressive tool loading enabled, it shows the smaller loaded set; more tools remain available on demand.
-
-With Claude Code configured through **Connect** and the LLM proxy enabled, Connect can show the provider's count for matching gateway tool definitions. The tooltip identifies the model and when the count was observed. Counts expire after an hour and only apply while the tool names, descriptions, and schemas still match.
-
-Without a matching count, Connect uses Claude Code's local fallback estimate, which can differ significantly from the provider's count. Other MCP connections, tool search settings, and tools loaded during the session also affect `/context`.

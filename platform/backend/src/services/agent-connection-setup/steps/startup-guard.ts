@@ -56,7 +56,7 @@ try {`,
           client,
         ),
         `} catch {
-  ${client.clientId === "codex" ? `Write-Warning ('Setup is incomplete. Before making further edits, restore this attempt with: node "' + (Join-Path $archCodexRecovery 'recover.cjs') + '". Then start a new installer run. OAuth grants and downloaded plugins may remain; review the connection in Archestra.')` : ""}
+  ${client.clientId === "codex" ? `Write-Warning ('Setup is incomplete. Before making further edits, restore this attempt with: node "' + (Join-Path $archCodexRecovery 'recover.cjs') + '". Then start a new installer run. OAuth grants and downloaded plugins may remain; review the connection on the Connect page.')` : ""}
   if ($null -ne $archPreviousStartupWrapper) {
     Set-Item Function:${client.binary} -Value $archPreviousStartupWrapper.ScriptBlock
   }
@@ -78,7 +78,7 @@ archestra_codex_setup_exit() {
   if [ "$archestra_codex_setup_complete" != 1 ]; then
     printf '%s\\n' 'Setup is incomplete. Before making further edits, restore this attempt with:' >&2
     printf '  node %q\\n' "$archestra_codex_recovery/recover.cjs" >&2
-    printf '%s\\n' 'Then start a new installer run. OAuth grants and downloaded plugins may remain; review the connection in Archestra.' >&2
+    printf '%s\\n' 'Then start a new installer run. OAuth grants and downloaded plugins may remain; review the connection on the Connect page.' >&2
   fi
   if [ -t 1 ]; then stty sane </dev/tty 2>/dev/null || true; fi
   return "$status"

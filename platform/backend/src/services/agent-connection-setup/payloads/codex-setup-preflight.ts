@@ -49,7 +49,7 @@ for (const { file, present, mode, index } of manifest) {
   } else fs.rmSync(file, { force: true });
 }
 console.log('Restored the client configuration and launch checks from before this setup attempt. Open a new terminal.');
-console.log('OAuth grants, credentials, downloaded plugins and server-side connection records were not rolled back. Review the connection in Archestra; sign in again if setup replaced your login.');
+console.log('OAuth grants, credentials, downloaded plugins and server-side connection records were not rolled back. Review the connection on the Connect page; sign in again if setup replaced your login.');
 `)}, { mode: 0o600 });
     process.stdout.write(backup);
   } catch (error) { rmSync(backup, { recursive: true, force: true }); throw error; }

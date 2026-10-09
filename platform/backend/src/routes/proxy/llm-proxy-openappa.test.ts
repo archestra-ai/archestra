@@ -133,14 +133,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     // The server flag alone no longer enforces: the deployment-wide switch has
     // to be on too, and every case here is about APPA actually enforcing.
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -11928,12 +11925,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -14404,12 +14398,9 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",

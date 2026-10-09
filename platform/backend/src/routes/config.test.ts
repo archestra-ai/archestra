@@ -5,6 +5,7 @@ import {
 } from "@/fastify-instance";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { OrganizationModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
 
@@ -183,7 +184,9 @@ describe("config routes", () => {
     ]);
   });
 
-  test("reports Agent Runtime availability from the Agent Sandbox controller", async () => {
+  test("reports Agent Runtime and OpenAPPA without enabling beta features", async () => {
+    const originalBeta = config.beta;
+    config.beta = false;
     const sandboxInstalled = vi
       .spyOn(agentSandboxApi, "isInstalled", "get")
       .mockReturnValue(false);
@@ -204,12 +207,16 @@ describe("config routes", () => {
       const installed = (
         await app.inject({ method: "GET", url: "/api/config" })
       ).json();
+      expect(installed.features.betaEnabled).toBe(false);
+      expect(installed.features.openappaEnabled).toBe(true);
+      expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
       expect(installed.features.agentRuntime).toBe(true);
       expect(installed.features.agentRuntimeBackend).toMatchObject({
         name: "kubernetes",
         available: true,
       });
     } finally {
+      config.beta = originalBeta;
       sandboxInstalled.mockRestore();
     }
   });

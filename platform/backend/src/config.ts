@@ -2011,12 +2011,11 @@ const LLM_PROXY_PLUGIN_NAMES = ["appa"] as const;
 type LlmProxyPluginName = (typeof LLM_PROXY_PLUGIN_NAMES)[number];
 
 /**
- * Parses the startup-only allowlist and registers APPA only through its feature flag.
+ * Parses the startup-only allowlist and always registers APPA.
  * @public — exported for testability
  */
 export function parseLlmProxyPlugins(
   value: string | undefined,
-  appaEnabled = false,
 ): LlmProxyPluginName[] {
   const plugins = parseCommaSeparatedList(value ?? "");
   const invalid = plugins.filter(
@@ -2030,11 +2029,6 @@ export function parseLlmProxyPlugins(
   if (new Set(plugins).size !== plugins.length) {
     throw new Error("ARCHESTRA_LLM_PROXY_PLUGINS must not contain duplicates");
   }
-  if (!appaEnabled) {
-    return plugins.filter(
-      (plugin) => plugin !== "appa",
-    ) as LlmProxyPluginName[];
-  }
   if (!plugins.includes("appa")) plugins.push("appa");
   return plugins as LlmProxyPluginName[];
 }
@@ -2043,17 +2037,21 @@ const MIN_OPENAPPA_OFFER_SIGNING_SECRET_LENGTH = 32;
 const OFFER_SIGNING_DOMAIN = "archestra.openappa.offer-signing.v1";
 
 /**
- * OpenAPPA follows the ARCHESTRA_BETA master switch; it has no flag of its own.
- * Validates APPA settings only when that switch is explicitly "true".
+ * OpenAPPA is available on every deployment, independently of beta features.
+ * Enforcement is controlled separately by the deployment's Guardrails setting.
  * @public — exported for testability
  */
-export function parseOpenAppaConfig(
-  betaEnabled: string | undefined,
-  yellEnabled?: string,
-  offerSigningSecret?: string,
-  postgresMaxConnections?: string,
-  authSecret?: string,
-) {
+export function parseOpenAppaConfig({
+  yellEnabled,
+  offerSigningSecret,
+  postgresMaxConnections,
+  authSecret,
+}: {
+  yellEnabled?: string;
+  offerSigningSecret?: string;
+  postgresMaxConnections?: string;
+  authSecret?: string;
+} = {}) {
   const dedicated = offerSigningSecret ?? "";
   if (
     dedicated.length > 0 &&
@@ -2066,15 +2064,14 @@ export function parseOpenAppaConfig(
   // Derives from the session authentication secret when no dedicated key is set.
   // Uses a domain-separated HMAC so the key never collides with session or MRTR keys.
   const secret = dedicated || deriveOfferSigningSecret(authSecret);
-  const isEnabled = betaEnabled === "true";
-  if (isEnabled && secret.length === 0) {
+  if (secret.length === 0) {
     logger.warn(
       "OpenAPPA is enabled without a signing key. Signed delegation, history-based trajectory recovery, and peer inbox calls are unavailable. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret to use those paths.",
     );
   }
   return {
-    enabled: isEnabled,
-    yellEnabled: isEnabled && (yellEnabled ?? "true") === "true",
+    enabled: true,
+    yellEnabled: (yellEnabled ?? "true") === "true",
     offerSigningSecret: secret,
     postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
       postgresMaxConnections,
@@ -2292,16 +2289,15 @@ const authSessionSecret =
   process.env.ARCHESTRA_AUTH_SESSION_SECRET?.trim() ||
   process.env.ARCHESTRA_AUTH_SECRET;
 
-const openappa = parseOpenAppaConfig(
-  process.env.ARCHESTRA_BETA,
-  process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
-  process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
-  process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
-  authSessionSecret,
-);
+const openappa = parseOpenAppaConfig({
+  yellEnabled: process.env.ARCHESTRA_OPENAPPA_YELL_ENABLED,
+  offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
+  postgresMaxConnections:
+    process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+  authSecret: authSessionSecret,
+});
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,
-  openappa.enabled,
 );
 
 const config = {

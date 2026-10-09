@@ -1017,7 +1017,7 @@ describe("GET /api/connection-setups/script/:token", () => {
 
     try {
       config.openappa = {
-        ...parseOpenAppaConfig("true"),
+        ...parseOpenAppaConfig(),
         offerSigningSecret: "test-offer-signing-secret-32chars",
       };
       await GuardrailsDeploymentModel.setEnabled(true);

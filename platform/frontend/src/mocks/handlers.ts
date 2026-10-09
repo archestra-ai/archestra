@@ -348,6 +348,16 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
   ...getJson("/api/k8s/capabilities", {
+    agentSandbox: {
+      installed: false,
+      missingResources: [
+        "sandboxes.agents.x-k8s.io",
+        "sandboxclaims.extensions.agents.x-k8s.io",
+        "sandboxtemplates.extensions.agents.x-k8s.io",
+        "sandboxwarmpools.extensions.agents.x-k8s.io",
+      ],
+      message: "The Agent Sandbox controller is not installed.",
+    },
     networkPolicy: {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,

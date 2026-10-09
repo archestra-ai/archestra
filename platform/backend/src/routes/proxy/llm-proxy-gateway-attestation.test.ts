@@ -113,12 +113,9 @@ describe("Gateway tool attestation on the LLM proxy", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeSecret, makeLlmProviderApiKey }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",

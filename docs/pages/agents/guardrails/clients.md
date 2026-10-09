@@ -3,8 +3,7 @@ title: Guardrail Clients
 sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
-alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

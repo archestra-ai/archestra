@@ -1,14 +1,15 @@
 ---
 title: Agent Runtime
-beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). See [Setup](/docs/agents/runtime/setup)."
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Agent Runtime gives an agent a dedicated runtime: its own container, running a coding agent such as Claude Code or Codex. You get a live terminal, and the files persist. Send follow-ups and continue later with the same files.
+
+Agent Runtime becomes available when your Kubernetes cluster serves the Agent Sandbox API. It needs persistent storage and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). See [Setup](/docs/agents/runtime/setup).
 
 A run uses the agent's instructions, tools, skills, and permissions. Its model calls go through the [LLM Proxy](/docs/llm-proxy) and its tools through the [MCP Gateway](/docs/mcp/gateway), so logs, guardrails, and cost limits apply.
 

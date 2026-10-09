@@ -65,7 +65,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
 
   beforeEach(async () => {
     openappa = config.openappa;
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",

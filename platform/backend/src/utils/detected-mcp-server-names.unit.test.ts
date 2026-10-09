@@ -44,9 +44,7 @@ describe("parseDetectedToolName", () => {
 });
 
 describe("detectedServerId", () => {
-  test("joins family and label with a dot, the family being dot-free", () => {
-    expect(detectedServerId("claude-code", "my.server")).toBe(
-      "claude-code.my.server",
-    );
+  test("prefixes the label with detected, whichever client declared it", () => {
+    expect(detectedServerId("my.server")).toBe("detected.my.server");
   });
 });

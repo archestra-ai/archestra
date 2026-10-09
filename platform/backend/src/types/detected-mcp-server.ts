@@ -3,14 +3,15 @@ import { DETECTED_CLIENT_FAMILIES } from "@/utils/detected-mcp-server-names";
 
 /**
  * An MCP server a client connected on its own, seen through the tools the LLM
- * proxy observed it declaring: one per (client family, label) in the
- * organization. Its id, `<family>.<label>`, is also the alias target a policy
- * names to govern it.
+ * proxy observed it declaring: one per label in the organization, whichever
+ * clients declared it. Its id, `detected.<label>`, is also the alias target a
+ * policy names to govern it.
  */
 export const DetectedMcpServerSchema = z.object({
   id: z.string(),
   label: z.string(),
-  clientFamily: z.enum(DETECTED_CLIENT_FAMILIES),
+  /** The clients it was seen in, in a fixed order. */
+  clientFamilies: z.array(z.enum(DETECTED_CLIENT_FAMILIES)),
   tools: z.array(
     z.object({
       id: z.string().uuid(),

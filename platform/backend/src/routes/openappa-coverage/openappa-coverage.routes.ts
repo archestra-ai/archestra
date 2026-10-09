@@ -131,7 +131,7 @@ function detectedEntities(
       id: server.id,
       name: server.label,
       label: server.label,
-      clientFamily: server.clientFamily,
+      clientFamilies: server.clientFamilies,
       toolCount: server.tools.length,
       firstObservedAt: server.firstObservedAt,
     }))

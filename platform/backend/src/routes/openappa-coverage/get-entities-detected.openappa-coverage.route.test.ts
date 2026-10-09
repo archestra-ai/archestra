@@ -28,7 +28,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
   });
 
-  test("groups observed proxy tools by client family and label, shared by every member who declared them", async ({
+  test("groups observed proxy tools by label, across clients and every member who declared them", async ({
     makeUser,
     makeMember,
   }) => {
@@ -68,22 +68,28 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.pagination.total).toBe(4);
+    // Claude Code and Codex both declared slack: one server, both clients.
+    expect(body.pagination.total).toBe(3);
     expect(
       body.data.map(
         (s: {
           id: string;
           type: string;
           name: string;
-          clientFamily: string;
+          clientFamilies: string[];
           toolCount: number;
-        }) => [s.type, s.id, s.name, s.clientFamily, s.toolCount],
+        }) => [s.type, s.id, s.name, s.clientFamilies, s.toolCount],
       ),
     ).toEqual([
-      ["detected_mcp_server", "opencode.github", "github", "opencode", 1],
-      ["detected_mcp_server", "codex.linear", "linear", "codex", 1],
-      ["detected_mcp_server", "claude-code.slack", "slack", "claude-code", 2],
-      ["detected_mcp_server", "codex.slack", "slack", "codex", 1],
+      ["detected_mcp_server", "detected.github", "github", ["opencode"], 1],
+      ["detected_mcp_server", "detected.linear", "linear", ["codex"], 1],
+      [
+        "detected_mcp_server",
+        "detected.slack",
+        "slack",
+        ["claude-code", "codex"],
+        2,
+      ],
     ]);
   });
 
@@ -119,14 +125,14 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
       first.data.map((row: { type: string; id: string }) => [row.type, row.id]),
     ).toEqual([
       ["mcp_server", catalog.id],
-      ["detected_mcp_server", "claude-code.linear"],
+      ["detected_mcp_server", "detected.linear"],
     ]);
     expect(
       second.data.map((row: { type: string; id: string }) => [
         row.type,
         row.id,
       ]),
-    ).toEqual([["detected_mcp_server", "claude-code.slack"]]);
+    ).toEqual([["detected_mcp_server", "detected.slack"]]);
 
     const registryOnly = (
       await ctx.app.inject({
@@ -146,7 +152,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
       })
     ).json();
     expect(searched.data.map((row: { id: string }) => row.id)).toEqual([
-      "claude-code.slack",
+      "detected.slack",
     ]);
   });
 
@@ -170,7 +176,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     });
 
     expect(response.json().data).toMatchObject([
-      { id: "claude-code.slack", toolCount: 1 },
+      { id: "detected.slack", toolCount: 1 },
     ]);
   });
 

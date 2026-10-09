@@ -87299,7 +87299,7 @@ export type GetOpenappaCoverageEntitiesResponses = {
         } | {
             id: string;
             label: string;
-            clientFamily: 'claude-code' | 'codex' | 'opencode';
+            clientFamilies: Array<'claude-code' | 'codex' | 'opencode'>;
             firstObservedAt: string;
             type: 'detected_mcp_server';
             name: string;

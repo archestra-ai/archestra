@@ -6,8 +6,7 @@ import {
 
 /**
  * The client families whose own MCP server spellings the proxy can read.
- * The value is the family's filter id, which is also the first segment of a
- * detected server's id (`<family>.<label>`).
+ * The value is the family's filter id.
  */
 export const DETECTED_CLIENT_FAMILIES = [
   "claude-code",
@@ -42,12 +41,15 @@ export function parseDetectedToolName(
   }
 }
 
-/** `<family>.<label>`: the detected server's id and its alias target. */
-export function detectedServerId(
-  family: DetectedClientFamily,
-  label: string,
-): string {
-  return `${family}.${label}`;
+/** The prefix of every detected server's id. */
+const DETECTED_SERVER_ID_PREFIX = "detected.";
+
+/**
+ * `detected.<label>`: the detected server's id and its alias target. The
+ * prefix keeps it apart from a gateway server of the same label.
+ */
+export function detectedServerId(label: string): string {
+  return `${DETECTED_SERVER_ID_PREFIX}${label}`;
 }
 
 export function isDetectedClientFamily(
@@ -57,7 +59,7 @@ export function isDetectedClientFamily(
 }
 
 /**
- * A label is valid when `<family>.<label>` is a segment OpenAPPA's alias
+ * A label is valid when `detected.<label>` is a segment OpenAPPA's alias
  * grammar accepts: ASCII letters, digits, `_`, `.`, `-`, and no `__`, which
  * the runtime reads as a server/tool separator. Invalid labels are never
  * normalised; the row is skipped.

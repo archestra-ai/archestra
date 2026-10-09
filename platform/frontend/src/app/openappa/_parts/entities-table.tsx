@@ -388,11 +388,18 @@ function isDetected(entity: CoverageEntity): entity is DetectedCoverageEntity {
   return entity.type === "detected_mcp_server";
 }
 
+/** One badge per client the server was seen in. */
 function DetectedClientBadge({ entity }: { entity: DetectedCoverageEntity }) {
-  const client = CLIENT_FILTER_OPTIONS.find(
-    (option) => option.value === entity.clientFamily,
+  const clients = entity.clientFamilies.flatMap((family) =>
+    CLIENT_FILTER_OPTIONS.filter((option) => option.value === family),
   );
-  return client ? <ClientSourceBadge client={client} /> : null;
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {clients.map((client) => (
+        <ClientSourceBadge key={client.value} client={client} />
+      ))}
+    </span>
+  );
 }
 
 function entityTypeLabel(type: RegistryCoverageEntity["type"]): string {

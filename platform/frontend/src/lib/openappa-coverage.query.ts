@@ -83,23 +83,38 @@ export function useCoverageSummary() {
 
 /**
  * The servers people connected directly to their coding clients, as the
- * Guardrails list shows them: the detected rows of the entities endpoint.
- * Bounded by the endpoint's page size, which is more than an organization's
- * client labels.
+ * Guardrails list shows them: every detected row of the entities endpoint,
+ * read a page at a time.
  */
 export function useDetectedMcpServers({ enabled = true } = {}) {
   return useQuery({
     queryKey: [coverageQueryPrefix, "entities", "detected"],
     enabled,
     queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getOpenappaCoverageEntities(
-        { query: { type: "detected_mcp_server", limit: 100, offset: 0 } },
-      );
-      throwOnApiError(error, { toastOnError: false });
-      return (data?.data ?? []).filter(
-        (entity): entity is DetectedCoverageEntity =>
-          entity.type === "detected_mcp_server",
-      );
+      const servers: DetectedCoverageEntity[] = [];
+      for (let page = 0; page < DETECTED_PAGES; page++) {
+        const { data, error } =
+          await archestraApiSdk.getOpenappaCoverageEntities({
+            query: {
+              type: "detected_mcp_server",
+              limit: DETECTED_PAGE_SIZE,
+              offset: page * DETECTED_PAGE_SIZE,
+            },
+          });
+        throwOnApiError(error, { toastOnError: false });
+        servers.push(
+          ...(data?.data ?? []).filter(
+            (entity): entity is DetectedCoverageEntity =>
+              entity.type === "detected_mcp_server",
+          ),
+        );
+        if (!data?.pagination.hasNext) break;
+      }
+      return servers;
     },
   });
 }
+
+/** The entities endpoint's page size, and how many pages the picker reads at most. */
+const DETECTED_PAGE_SIZE = 100;
+const DETECTED_PAGES = 50;

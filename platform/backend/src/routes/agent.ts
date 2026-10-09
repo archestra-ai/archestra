@@ -1,18 +1,21 @@
 import {
   type AgentType,
   createPaginatedResponseSchema,
+  DEFAULT_APP_NAME,
   getResourceForAgentType,
   isModelSelectionComplete,
   PaginationQuerySchema,
   parseLabelsParam,
   ResourceAccessQuerySchema,
   RouteId,
+  resolveMcpClientServerName,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
+import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
@@ -40,6 +43,7 @@ import {
   ProjectModel,
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
+import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
 import { listPolicyIndependentAvailableAgentSkills } from "@/services/agent-activation-skill-candidates";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import {
@@ -61,11 +65,13 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
+import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
 import { getDocsSuggestedPrompts } from "@/services/docs-mcp-servers";
 import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
@@ -95,6 +101,7 @@ import {
   RetiredSharingUpdateFieldSchema,
   SelectAgentSchema,
   SuggestedPromptInputSchema,
+  ToolExposureModeSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
@@ -1190,6 +1197,118 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(await serializeAgentForExport(agent));
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/mcp-tool-preview",
+    {
+      schema: {
+        operationId: RouteId.GetAgentMcpToolPreview,
+        description:
+          "Preview the gateway's initial tools/list for the current user, with estimated tool-definition context tokens",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          client: z.enum(["claude-code", "generic"]).default("generic"),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            toolExposureMode: ToolExposureModeSchema,
+            tokenCount: z.discriminatedUnion("source", [
+              z.object({
+                total: z.number().int().nonnegative(),
+                source: z.literal("claude-provider"),
+                model: z.string(),
+                observedAt: z.iso.datetime(),
+              }),
+              z.object({
+                total: z.number().int().nonnegative(),
+                source: z.literal("estimate"),
+                model: z.null(),
+                observedAt: z.null(),
+              }),
+            ]),
+            tools: z.array(
+              z.object({
+                name: z.string(),
+                description: z.string(),
+                catalogId: z.string().nullable(),
+                tokens: z.number().int().nonnegative(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (
+      { params: { id }, query: { client }, user, organizationId },
+      reply,
+    ) => {
+      const agent = await AgentModel.findGatewayAgentById(id);
+      if (!agent || agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        checker.require(agent.agentType, { action: "read", scope: agent.id });
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (
+        !checker.isAdmin(agent.agentType) &&
+        !(await AgentModel.findById(id, user.id, false))
+      ) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Preview the external user's tool surface, including the attestation
+      // bytes a harness receives, without issuing an access token or recording a call.
+      const { tools, catalogIdsByName } = await buildAgentMcpToolList({
+        agent,
+        tokenAuth: { userId: user.id, organizationId },
+      });
+      const organization = await OrganizationModel.getById(organizationId);
+      const serverName = resolveMcpClientServerName({
+        gatewayName: agent.name,
+        appName: organization?.appName ?? DEFAULT_APP_NAME,
+        isPersonalGateway: agent.isPersonalGateway,
+      });
+      const tokens = estimateMcpToolTokens({
+        tools,
+        client,
+        serverName,
+      });
+      const observed =
+        client === "claude-code"
+          ? await getObservedClaudeCodeToolTokenCount({
+              organizationId,
+              gatewayId: agent.id,
+              tools,
+              serverName,
+            })
+          : null;
+      return reply.send({
+        toolExposureMode: agent.toolExposureMode ?? "full",
+        tokenCount: observed
+          ? { ...observed, source: "claude-provider" as const }
+          : {
+              total: tokens.reduce((sum, count) => sum + count, 0),
+              source: "estimate" as const,
+              model: null,
+              observedAt: null,
+            },
+        tools: tools.map((tool, index) => ({
+          name: tool.name,
+          description: removeAttestationTokens(tool.description ?? ""),
+          catalogId: catalogIdsByName.get(tool.name) ?? null,
+          tokens: tokens[index],
+        })),
+      });
     },
   );
 

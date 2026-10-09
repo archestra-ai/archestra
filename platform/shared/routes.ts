@@ -50,6 +50,7 @@ export const RouteId = {
   ExportAgent: "exportAgent",
   ImportAgent: "importAgent",
   GetAgentToolExclusions: "getAgentToolExclusions",
+  GetAgentMcpToolPreview: "getAgentMcpToolPreview",
   UpdateAgentToolExclusions: "updateAgentToolExclusions",
   GetAgentSubagentExclusions: "getAgentSubagentExclusions",
   UpdateAgentSubagentExclusions: "updateAgentSubagentExclusions",

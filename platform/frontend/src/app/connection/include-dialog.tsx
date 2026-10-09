@@ -78,7 +78,7 @@ export function IncludeDialog({
             <Section
               icon={<Wrench />}
               title="MCP gateway"
-              sub={`${fmt(servers)} MCP ${plural(servers, "server")}, ${fmt(tools)} ${plural(tools, "tool")}. Tools are always included.`}
+              sub={`${fmt(servers)} MCP ${plural(servers, "server")}. ${tools === null ? (data.toolPreviewError ? "Tool count unavailable." : "Loading tool count…") : `${fmt(tools)} ${plural(tools, "tool")}.`} Tools are always included.`}
             >
               {data.gateways.length > 1 ? (
                 <AgentSelector

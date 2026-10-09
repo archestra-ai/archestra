@@ -17931,6 +17931,110 @@ export type ExportAgentResponses = {
 
 export type ExportAgentResponse = ExportAgentResponses[keyof ExportAgentResponses];
 
+export type GetAgentMcpToolPreviewData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        client?: 'claude-code' | 'generic';
+    };
+    url: '/api/agents/{id}/mcp-tool-preview';
+};
+
+export type GetAgentMcpToolPreviewErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentMcpToolPreviewError = GetAgentMcpToolPreviewErrors[keyof GetAgentMcpToolPreviewErrors];
+
+export type GetAgentMcpToolPreviewResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        toolExposureMode: 'full' | 'search_and_run_only';
+        tokenCount: {
+            total: number;
+            source: 'claude-provider';
+            model: string;
+            observedAt: string;
+        } | {
+            total: number;
+            source: 'estimate';
+            model: null;
+            observedAt: null;
+        };
+        tools: Array<{
+            name: string;
+            description: string;
+            catalogId: string | null;
+            tokens: number;
+        }>;
+    };
+};
+
+export type GetAgentMcpToolPreviewResponse = GetAgentMcpToolPreviewResponses[keyof GetAgentMcpToolPreviewResponses];
+
 export type GetAgentToolExclusionsData = {
     body?: never;
     path: {

@@ -32,7 +32,7 @@ export function OpenAppaLicenceRequired() {
               OpenAPPA
             </a>{" "}
             blocked every attack across 1,320 evaluations while agents still
-            finished 89% of their tasks. It comes with the AI Security plan.
+            finished 89% of their tasks. Backed by NeurIPS-accepted research.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>

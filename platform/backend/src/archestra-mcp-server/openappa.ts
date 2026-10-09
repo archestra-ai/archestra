@@ -864,10 +864,10 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "preview_openappa_validation_change",
-    title: "Preview OpenAPPA policy and validations",
+    title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Preview a patch of .appa specifications and optionally a complete proposed policy, then replay the full resulting suite offline. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent for validation-only work. This saves nothing and does not affect global run history, execute business tools, or contact model/helper providers. Explain the intended assertions, policy warnings, failed or cannot-run scenarios and offline limits before publishing; never change existing expectations merely to force green. Keep specifications small and focused on the user's intended behavior.",
+      "Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect global run history, execute business tools, or contact model/helper providers. Show the draft validation files and explain their assertions, warnings, failed or cannot-run scenarios and offline limits before publishing. A failed check does not authorize a policy fix or changing expectations merely to force green. Keep specifications small and focused on the user's intended behavior.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(
@@ -885,9 +885,9 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "publish_openappa_validation_change",
-    title: "Publish OpenAPPA policy and validations",
+    title: "Publish OpenAPPA validations",
     description:
-      "Publish the exact policy and specification patch explained after preview_openappa_validation_change, within the user's authorized scope. Replays the full suite again before saving. With Git sync, opens one repository PR using the configured GitHub App or PAT, containing the policy and .appa changes; nothing becomes active until merge and sync. Otherwise saves policy and specifications together locally. Test failures are informational and do not block an authorized valid policy. Preserve existing expectations and unrelated rules. On a conflict, re-read and reconcile before retrying. Tests-only writes do not enable enforcement. A first local policy change turns enforcement on for an administrator; report enforcement and inactive batteries. Policy-only setup can continue to use update_guardrails_policy without creating tests.",
+      "Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. Replays the full suite again before saving. Omit policyContent or pass null for validation-only work. Saving validations does not authorize a policy change; include a complete proposed policy only for an explicitly requested policy change. With Git sync, opens one repository PR using the configured GitHub App or PAT, containing only the changed files; nothing becomes active until merge and sync. Otherwise saves locally, atomically when policy and validations both change. Test failures are informational and do not authorize policy fixes or block an authorized valid policy. Preserve existing expectations and unrelated rules. On a conflict, re-read and reconcile before retrying. Tests-only writes do not enable enforcement. A first local policy change turns enforcement on for an administrator; report enforcement and inactive batteries. Policy-only setup can continue to use update_guardrails_policy without creating tests.",
     schema: PublishOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);

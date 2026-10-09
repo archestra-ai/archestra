@@ -88,6 +88,7 @@ If the request is unclear, ask with one \`archestra__ask_user\` question what th
 
 These rules replace the shared rules on ending a turn with the proposal: in Archestra the \`archestra__ask_user\` card ends the turn, and its answer is the later message that approves.
 
+- For validation-only requests, follow \`references/validation.md\`: preview and review the validation files, then ask about saving those files. The policy approval and publication steps below apply only to an explicitly requested policy change. Never call \`archestra__update_guardrails_policy\` or include \`policyContent\` to repair a failing validation unless the operator requests a policy fix.
 - Preview before you propose, with the revision you read: \`edits\` for a saved policy, naming only the text you replace (to insert rules, replace a nearby line with the new rules plus that same line); \`content\` only for a first policy or a full rewrite. Fix errors and preview again, and explain warnings. Check that \`diff\` shows only the lines you meant to change. A valid preview does not prove that a battery governs tools or a helper works.
 - If a saved policy would not change, say that no update is needed, without approval language. An unsaved local revision-0 starter is the exception: even with an empty diff it still needs approval and publication. Do not manufacture an edit.
 - Preview only a change the operator asked for or picked. Explain and review requests preview nothing. Previewing saves nothing: "show me first" or "don't save yet" still means preview, explain, and ask.
@@ -135,7 +136,17 @@ ${APPA_GUIDE_CORE}`,
       kind: "reference",
       content: `# Lightweight OpenAPPA validation specifications
 
-A specification is a UTF-8 .appa file with an ordered scenario. Every file starts a fresh session. Calls use canonical tool names and JSON arguments, followed by the expected policy decision. A short # comment records intent:
+A specification is a UTF-8 .appa file with an ordered scenario. Every file starts a fresh session. Calls use canonical tool names and a brace-delimited argument block, followed by the expected policy decision. Use \`{}\` for no arguments. Otherwise put each unquoted argument name on its own line, followed by a colon and a JSON value. The argument block is not a JSON object: do not quote argument names or separate lines with commas:
+
+\`\`\`appa
+mcp/mail/send {
+  recipient: "reviewer@example.com"
+  body: "Status update"
+}
+expect allow
+\`\`\`
+
+A short # comment records intent:
 
 \`\`\`appa
 # External data must not lead to a trusted-context email write.
@@ -159,7 +170,7 @@ Put that companion in a separate file because calls in one file share their orde
 
 Offline replay uses the same native policy engine as enforcement, against the composed candidate policy. It executes no tools, models or remote helpers. The host's catch-all annotator (\`noop\`) answers offline; a step that needs any other annotator, such as \`archestra.run-command\`, or an audience lookup such as team membership reports cannot_run. Steps before a missing annotator still pass or fail; after an unanswered audience lookup, replay stops at the first call in the file that was not allowed, which can be an earlier denial. A policy with a model annotator other than \`archestra\`, a model profile, or an external authority or sanitizer cannot run at all. A passing replay demonstrates only the decisions represented by the scenario; it does not prove live client integration or provider behavior.
 
-Use get_openappa_policy_tests to obtain the authoritative version and configured directory. Upsert only the named files you intend to edit and use explicit deletions. For Git sources, files must stay under that directory and Git remains authoritative. Preview the full patched suite against policyContent before publishing; omitting policyContent leaves the policy unchanged.
+Use get_openappa_policy_tests to obtain the authoritative version and configured directory. Upsert only the named files you intend to edit and use explicit deletions. For Git sources, files must stay under that directory and Git remains authoritative. Preview the full patched suite against the current policy; omit policyContent or pass null for validation-only work. Include policyContent only when the operator explicitly requested a policy change. A replay failure does not authorize a policy fix.
 `,
     },
     {

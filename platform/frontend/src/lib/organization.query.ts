@@ -389,9 +389,6 @@ export function useUpdateAppearanceSettings(
         await archestraApiSdk.updateAppearanceSettings({ body: data });
 
       if (error) {
-        // A refused default role is explained on the page, not a toast.
-        const blocked = parseRoleAssignmentBlocked(error);
-        if (blocked) throw blocked;
         toast.error(onErrorMessage);
         return null;
       }
@@ -686,6 +683,9 @@ export function useUpdateAuthSettings(
         await archestraApiSdk.updateAuthSettings({ body: data });
 
       if (error) {
+        // A refused default role is explained on the page, not a toast.
+        const blocked = parseRoleAssignmentBlocked(error);
+        if (blocked) throw blocked;
         toast.error(onErrorMessage);
         return null;
       }

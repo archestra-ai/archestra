@@ -1,9 +1,15 @@
-import { ADMIN_ROLE_NAME, ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  ARCHESTRA_TOKEN_PREFIX,
+  ROLE_ASSIGNMENT_BLOCKED_CODE,
+} from "@archestra/shared";
+import { adminPermissions } from "@archestra/shared/access-control";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
+import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
@@ -94,6 +100,71 @@ describe("service account routes", () => {
       },
     });
     expect(invalid.statusCode).toBe(400);
+  });
+
+  test("a custom access-policy editor can create an account with a role sharing items they cannot manage", async ({
+    makeCustomRole,
+    makeAgent,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: adminPermissions,
+    });
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      access: "org",
+    });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "Role delegation regression", role: "member" },
+    });
+
+    expect(created.statusCode, created.body).toBe(200);
+    expect(
+      await ServiceAccountModel.findById(created.json().id, organizationId),
+    ).toMatchObject({ role: "member", createdBy: { id: user.id } });
+    const audit = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceId: created.json().id,
+      limit: 10,
+      offset: 0,
+    });
+    expect(audit.data).toContainEqual(
+      expect.objectContaining({
+        action: "serviceAccount.created",
+        after: expect.objectContaining({ role: "member" }),
+      }),
+    );
+
+    // Removing only policy administration must restore scoped delegation checks.
+    const restricted = await makeCustomRole(organizationId, {
+      permission: { ...adminPermissions, accessPolicies: [] },
+    });
+    await MemberModel.updateRole(user.id, organizationId, restricted.role);
+    const refused = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "Refused role delegation", role: "member" },
+    });
+    expect(refused.statusCode, refused.body).toBe(403);
+    expect(refused.json().error).toMatchObject({
+      internal_code: ROLE_ASSIGNMENT_BLOCKED_CODE,
+      details: {
+        subjectType: "role",
+        total: 1,
+        items: [
+          {
+            resource: "agent",
+            scope: agent.id,
+            name: agent.name,
+            missing: ["manage-permissions"],
+          },
+        ],
+      },
+    });
   });
 
   test("stamps the acting user as creator and returns them resolved", async () => {

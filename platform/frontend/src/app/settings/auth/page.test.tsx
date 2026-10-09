@@ -118,6 +118,7 @@ describe("AuthSettingsPage", () => {
     );
     vi.mocked(useUpdateAuthSettings).mockReturnValue({
       mutateAsync,
+      reset: vi.fn(),
       isPending: false,
     } as unknown as ReturnType<typeof useUpdateAuthSettings>);
     vi.mocked(useEnterpriseFeature).mockReturnValue(true);

@@ -74,11 +74,14 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
     [...filesByPath.values()].sort((a, b) => a.path.localeCompare(b.path)),
   );
   const policyContent = request.policyContent ?? root.content;
-  if (request.policyContent !== undefined)
+  const policyChanged =
+    request.policyContent != null &&
+    (root.revision === 0 || policyContent !== root.content);
+  if (policyChanged)
     await refuseCredentialLines({
       organizationId,
       before: root.content,
-      after: request.policyContent,
+      after: policyContent,
     });
   const [replayed, inspection] = await Promise.all([
     replayOpenAppaValidationProposal(
@@ -88,7 +91,7 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
         files,
         sourceVersion: collection.version,
         directory: collection.directory,
-        ...(request.policyContent !== undefined
+        ...(policyChanged
           ? {
               proposedPolicy: {
                 content: policyContent,
@@ -145,9 +148,7 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
     tests,
     counts,
     policyContent,
-    policyChanged:
-      request.policyContent !== undefined &&
-      (root.revision === 0 || policyContent !== root.content),
+    policyChanged,
   };
 }
 
@@ -162,10 +163,14 @@ export async function previewOpenAppaValidationChange(
         ? ("pull_request" as const)
         : ("revision" as const),
     policy: {
-      before: proposal.root.content,
-      after: proposal.policyContent,
       revision: proposal.root.revision,
       changed: proposal.policyChanged,
+      ...(proposal.policyChanged
+        ? {
+            before: proposal.root.content,
+            after: proposal.policyContent,
+          }
+        : {}),
     },
     changes: proposal.request.changes,
     tests: proposal.tests,

@@ -64,6 +64,7 @@ import {
   detectChanges,
   resolveInitialState,
 } from "./agent-settings-utils";
+import { SubagentModelTiersSection } from "./subagent-model-tiers-section";
 
 type FileUploadsEnabled = "enabled" | "disabled";
 
@@ -453,6 +454,7 @@ export default function AgentSettingsPage() {
         onSave={handleSave}
         onCancel={handleCancel}
       />
+      <SubagentModelTiersSection />
       <IntegrationAvailabilitySection
         id="available-messaging-channels"
         catalogKey="messagingChannelOverrides"

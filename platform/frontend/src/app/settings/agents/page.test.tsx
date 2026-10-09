@@ -149,6 +149,7 @@ vi.mock("@/lib/llm-models.query", () => ({
     ],
     isPending: false,
   }),
+  useLlmModelsByProvider: () => ({ modelsByProvider: {} }),
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({

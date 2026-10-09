@@ -2,7 +2,7 @@
 title: Subagents
 description: Let an agent delegate work to its own copy, your agents, built-in subagents, or external A2A agents
 order: 5
-lastUpdated: 2026-10-07
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,9 +32,18 @@ What to know:
 
 Keep long searches and noisy tool output out of the conversation. Every agent can hand a task to a fresh copy of itself, and only the copy's answer comes back. You don't need to set this up.
 
+The agent picks the model the copy runs on for each task:
+
+- **Normal**: the agent's own model. This is the default.
+- **Smart**: a stronger model, for hard reasoning or checking a conclusion.
+- **Fast**: a cheaper, quicker model, for bulk reading, searching, or extraction.
+
+To choose the Smart and Fast models, go to **Settings → Agents → Subagent Model Tiers**. Each provider has its own pair. Unset tiers use the provider's best model for Smart and its small model for Fast.
+
 What to know:
 
 - The copy has the same tools and instructions, but none of the conversation. The agent writes everything the copy needs into the task.
+- Smart and Fast stay on the agent's provider key. If that key has no matching model, the copy runs on the agent's own model.
 - A copy cannot fork again.
 
 ## Get Trusted Answers From Untrusted Data

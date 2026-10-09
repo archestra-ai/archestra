@@ -78,6 +78,7 @@ export function makeOrganization(
     connectionShownProviders: null,
     connectionBaseUrls: null,
     connectionDefaultProviderKeys: null,
+    subagentModelTiers: null,
     connectionSkillsEnabled: true,
     connectionLlmProxyEnabled: true,
     connectionPluginsEnabled: true,

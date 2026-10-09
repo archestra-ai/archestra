@@ -649,10 +649,10 @@ function BatteryDialog({
     }),
   );
   // The picker alone reads these; a dialog that cannot show it asks for nothing.
-  const detectedServers =
-    useDetectedMcpServers({
-      enabled: writable && !organizationWide && summary !== null,
-    }).data ?? [];
+  const detectedQuery = useDetectedMcpServers({
+    enabled: writable && !organizationWide && summary !== null,
+  });
+  const detectedServers = detectedQuery.data ?? [];
   // An entry not in the policy yet reads the organization's credential table
   // like any other: a variable another battery binds already has its key.
   const credentials: BatteryCredential[] =
@@ -791,6 +791,8 @@ function BatteryDialog({
               catalog={catalog}
               installedCatalogIds={installedCatalogIds}
               detected={detectedServers}
+              detectedFailed={detectedQuery.isError}
+              onRetryDetected={() => detectedQuery.refetch()}
               taken={governedTargets}
               pending={pending}
               onAttach={(attachment, onSuccess) =>
@@ -910,6 +912,8 @@ function AttachServerPicker({
   catalog,
   installedCatalogIds,
   detected,
+  detectedFailed,
+  onRetryDetected,
   taken,
   pending,
   onAttach,
@@ -918,6 +922,9 @@ function AttachServerPicker({
   catalog: CatalogEntry[];
   installedCatalogIds: Set<string> | null;
   detected: DetectedCoverageEntity[];
+  /** The detected servers could not be read: their absence says nothing. */
+  detectedFailed: boolean;
+  onRetryDetected: () => void;
   taken: Set<string>;
   pending: boolean;
   onAttach: (
@@ -952,7 +959,26 @@ function AttachServerPicker({
       selectedContent: <DetectedServerOption server={server} />,
     })),
   ];
-  if (installedCatalogIds?.size === 0 && detectedOptions.length === 0)
+  const detectedNotice = detectedFailed ? (
+    <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <span>Servers connected to a client could not be loaded.</span>
+      <Button
+        type="button"
+        variant="link"
+        size="sm"
+        className="h-auto p-0"
+        aria-label="Retry loading servers connected to a client"
+        onClick={onRetryDetected}
+      >
+        Retry
+      </Button>
+    </p>
+  ) : null;
+  if (
+    !detectedFailed &&
+    installedCatalogIds?.size === 0 &&
+    detectedOptions.length === 0
+  )
     return (
       <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         <span>No MCP server is installed yet.</span>
@@ -963,13 +989,16 @@ function AttachServerPicker({
     );
   if (options.length === 0)
     return (
-      <p className="text-sm text-muted-foreground">
-        Every server already has this battery.
-      </p>
+      detectedNotice ?? (
+        <p className="text-sm text-muted-foreground">
+          Every server already has this battery.
+        </p>
+      )
     );
   const id = `battery-server-${batteryName}`;
   return (
     <div className="space-y-2">
+      {detectedNotice}
       <div className="space-y-0.5">
         <Label htmlFor={id}>Attach to a server</Label>
         <p className="text-xs text-muted-foreground">

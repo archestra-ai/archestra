@@ -334,17 +334,35 @@ export type UploadedBatteryPackage = z.infer<
   typeof UploadedBatteryPackageSchema
 >;
 
-export const CreateBatteryInstallSchema = z.strictObject({
-  batteryName: z.string().min(1).max(100),
-  /** The server to govern; absent for a battery made of annotators alone. */
-  attachment: BatteryServerAttachmentSchema.optional(),
-  /** The stored package to include; absent spells the bundled battery. */
-  packageHash: z
-    .string()
-    .regex(/^[0-9a-f]{64}$/)
-    .nullable()
-    .default(null),
-});
+export const CreateBatteryInstallSchema = z
+  .strictObject({
+    batteryName: z.string().min(1).max(100),
+    /** The server to govern; absent for a battery made of annotators alone. */
+    attachment: BatteryServerAttachmentSchema.optional(),
+    /**
+     * Deprecated: the catalog entry to govern, as clients from before
+     * `attachment` send it. Read as `{ kind: "catalog", catalogId }`.
+     */
+    catalogId: z.uuid().optional(),
+    /** The stored package to include; absent spells the bundled battery. */
+    packageHash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .nullable()
+      .default(null),
+  })
+  .refine(
+    (body) => body.attachment === undefined || body.catalogId === undefined,
+    "Name the server once: attachment or the former catalogId, not both",
+  )
+  .transform(({ catalogId, ...body }) => ({
+    ...body,
+    attachment:
+      body.attachment ??
+      (catalogId === undefined
+        ? undefined
+        : { kind: "catalog" as const, catalogId }),
+  }));
 export type CreateBatteryInstall = z.infer<typeof CreateBatteryInstallSchema>;
 
 export const UpdateBatteryInstallSchema = z.strictObject({

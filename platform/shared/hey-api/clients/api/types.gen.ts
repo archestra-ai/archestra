@@ -86654,6 +86654,7 @@ export type CreateOpenappaBatteryInstallData = {
             kind: 'detected';
             detectedId: string;
         };
+        catalogId?: string;
         packageHash?: string | null;
     };
     path?: never;

@@ -1782,6 +1782,7 @@ describe("list_detected_mcp_servers", () => {
         client: "claude-code",
         toolCount: 1,
         toolNames: [named],
+        matchCount: 1,
         batteryMatches: [
           {
             battery: "github",
@@ -1798,6 +1799,7 @@ describe("list_detected_mcp_servers", () => {
         client: "claude-code",
         toolCount: 1,
         toolNames: ["forecast"],
+        matchCount: 0,
         batteryMatches: [],
       },
     ]);

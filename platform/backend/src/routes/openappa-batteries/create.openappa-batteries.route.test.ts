@@ -131,6 +131,48 @@ describe("guardrails batteries", () => {
       .filter((battery) => battery.name !== ARCHESTRA_BATTERY)
       .flatMap((battery) => battery.installs);
 
+  test("a client from before attachment names the catalog by catalogId, and naming the server twice is refused", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_prod__get_me",
+      rawName: "get_me",
+    });
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: { batteryName: "github", catalogId: catalog.id },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    expect(created.json()).toMatchObject({
+      name: "github",
+      servers: [
+        {
+          target: "github_prod",
+          attachment: { kind: "catalog", catalogId: catalog.id },
+        },
+      ],
+    });
+
+    const both = await app.inject({
+      method: "POST",
+      url: "/api/openappa/battery-installs",
+      payload: {
+        batteryName: "github",
+        catalogId: catalog.id,
+        attachment: { kind: "catalog", catalogId: catalog.id },
+      },
+    });
+    expect(both.statusCode).toBe(400);
+  });
+
   test("an install declares the battery and joins the composed policy once its credential is bound", async ({
     makeInternalMcpCatalog,
     makeTool,

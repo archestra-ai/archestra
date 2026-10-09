@@ -582,7 +582,7 @@ const registry = defineArchestraTools([
     title: "List detected MCP servers",
     annotations: { readOnlyHint: true },
     description:
-      "List the MCP servers people connected directly to their coding clients (Claude Code, Codex, OpenCode), as the LLM proxy saw them declare tools: one per client and server label (the first 100 by id, and `serverCount`), with its tool names (the first 200, and `toolCount`); or only the one whose `serverId` is given. Each server's `id`, `<client>.<label>` such as `claude-code.slack`, is the `[server_aliases]` target a policy names to govern it, the way a catalog server's tool prefix is. `batteryMatches` lists the batteries whose rules name its tools, by name overlap only, each with the `include` entry that declares it, the `namespaces` to point at the server's id in `[server_aliases]`, and the credential variables `[credentials]` must bind; propose them, never attach without the operator. A battery already attached to the server is marked `declared`. This changes nothing.",
+      "List the MCP servers people connected directly to their coding clients (Claude Code, Codex, OpenCode), as the LLM proxy saw them declare tools: one per client and server label (the first 100 by id, and `serverCount`), with its tool names (the first 200, and `toolCount`); or only the one whose `serverId` is given. Each server's `id`, `<client>.<label>` such as `claude-code.slack`, is the `[server_aliases]` target a policy names to govern it, the way a catalog server's tool prefix is. `batteryMatches` lists the batteries whose rules name its tools (the 10 naming the most, and `matchCount`), by name overlap only, each with the `include` entry that declares it, the `namespaces` to point at the server's id in `[server_aliases]`, and the credential variables `[credentials]` must bind; propose them, never attach without the operator. A battery already attached to the server is marked `declared`. This changes nothing.",
     schema: z.strictObject({
       serverId: DetectedServerIdSchema.nullish().describe(
         "A detected server's id, `<client>.<label>`, to list only it; omit or null for every server",
@@ -615,15 +615,16 @@ const registry = defineArchestraTools([
           toolNames: server.tools
             .slice(0, LISTED_TOOL_NAMES)
             .map((tool) => tool.toolName),
-          batteryMatches: (byServer.get(server.id)?.matches ?? []).map(
-            (match) => ({
+          matchCount: byServer.get(server.id)?.matches.length ?? 0,
+          batteryMatches: (byServer.get(server.id)?.matches ?? [])
+            .slice(0, LISTED_MATCHES)
+            .map((match) => ({
               battery: match.battery,
               declared: match.install !== null,
               include: batteries.get(match.battery)?.include ?? null,
               namespaces: batteries.get(match.battery)?.namespaces ?? [],
               credentials: batteries.get(match.battery)?.credentials ?? [],
-            }),
-          ),
+            })),
         })),
       });
     },
@@ -1305,6 +1306,7 @@ async function inspectableToolIds(
 /** Tool names listed per detected server, and servers listed per call; the counts say how many there are. */
 const LISTED_TOOL_NAMES = 200;
 const LISTED_SERVERS = 100;
+const LISTED_MATCHES = 10;
 
 export function isOpenappaTool(shortName: string | null | undefined): boolean {
   return (

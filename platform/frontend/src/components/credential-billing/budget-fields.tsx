@@ -2,7 +2,7 @@
 
 import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { Info } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   CLEANUP_INTERVAL_LABELS,
   type LimitCleanupInterval,
@@ -79,6 +79,7 @@ export function BudgetFields({
   capLocked = false,
   currentUsage = null,
   idPrefix,
+  layout = "card",
 }: {
   /** What is being billed, for the copy: "key" or "client". */
   subject: "key" | "client";
@@ -93,55 +94,177 @@ export function BudgetFields({
   /** Spend counted against the saved cap so far in its window. */
   currentUsage?: number | null;
   idPrefix: string;
+  /**
+   * "inline" is the create dialog's: a "Budget" heading over the payer and
+   * two labelled cap fields, with no card around the cap.
+   */
+  layout?: "card" | "inline";
 }) {
   const teams = useBillableTeams(billingTeamId);
   const team = teams.find((option) => option.id === billingTeamId) ?? null;
-  const interval = spendCap?.cleanupInterval ?? "calendar_month";
+  // The period can be picked before an amount is typed, so it is kept here
+  // until the cap exists to carry it.
+  const [chosenInterval, setChosenInterval] =
+    useState<LimitCleanupInterval>("calendar_month");
+  const interval = spendCap?.cleanupInterval ?? chosenInterval;
+
+  const payerLabel =
+    layout === "inline" ? "Who pays" : `Who pays for this ${subject}?`;
+  const payer = showBillingTeam && (
+    <div className={layout === "inline" ? "space-y-1.5" : "space-y-2"}>
+      <Label
+        htmlFor={`${idPrefix}-billing-team`}
+        className={cn(
+          layout === "inline" && "font-normal text-muted-foreground text-xs",
+        )}
+      >
+        {payerLabel}
+      </Label>
+      <TeamSelect
+        id={`${idPrefix}-billing-team`}
+        ariaLabel={`Who pays for this ${subject}?`}
+        className="w-full"
+        value={billingTeamId}
+        onValueChange={onBillingTeamIdChange}
+        teams={teams}
+        noneOption={{
+          label: "No team",
+          description:
+            "Usage counts toward the LLM proxy's teams and the owner's limits.",
+        }}
+      />
+      <p className="text-xs text-muted-foreground">
+        {team ? (
+          <span>
+            Costs and limits count this {subject}'s usage for {team.name}. The
+            owner's personal limit does not apply.
+          </span>
+        ) : (
+          <span>
+            Pick a team to charge its budget for everything this {subject}{" "}
+            spends.{" "}
+            <a
+              className="underline underline-offset-2"
+              href={getDocsUrl(DocsPage.PlatformCostsAndLimits)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Costs and limits
+            </a>
+          </span>
+        )}
+      </p>
+    </div>
+  );
+  const capInput = (
+    <InputGroup className="w-full">
+      <InputGroupAddon>
+        <InputGroupText>$</InputGroupText>
+      </InputGroupAddon>
+      <InputGroupInput
+        id={`${idPrefix}-spend-cap`}
+        aria-label="Spend cap in dollars"
+        inputMode="numeric"
+        placeholder="No cap"
+        disabled={capLocked}
+        value={spendCap ? String(spendCap.limitValue) : ""}
+        onChange={(event) => {
+          const digits = event.target.value.replace(/[^0-9]/g, "");
+          const amount = Number.parseInt(digits, 10);
+          onSpendCapChange(
+            digits && amount > 0
+              ? { limitValue: amount, cleanupInterval: interval }
+              : null,
+          );
+        }}
+      />
+    </InputGroup>
+  );
+  const periodSelect = (
+    <Select
+      value={interval}
+      disabled={capLocked}
+      onValueChange={(value) => {
+        const next = value as LimitCleanupInterval;
+        setChosenInterval(next);
+        if (spendCap) onSpendCapChange({ ...spendCap, cleanupInterval: next });
+      }}
+    >
+      <SelectTrigger
+        id={`${idPrefix}-cap-resets`}
+        aria-label="Cap resets"
+        className="w-full"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {CAP_PERIODS.map((period) => (
+          <SelectItem key={period} value={period}>
+            {PERIOD_LABELS[period]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+  const capNotes = (
+    <>
+      {currentUsage !== null && spendCap && (
+        <p className="text-xs text-muted-foreground">
+          <span>
+            {formatWholeDollars(currentUsage)} spent{" "}
+            {describeWindow(spendCap.cleanupInterval)}.
+          </span>
+        </p>
+      )}
+      {capLocked && (
+        <p className="text-xs text-muted-foreground">
+          <span>
+            Ask someone who manages limits to change or remove this cap.
+          </span>
+        </p>
+      )}
+      {team && (
+        <TeamUsageBar team={team} spendCap={spendCap} subject={subject} />
+      )}
+    </>
+  );
+
+  if (layout === "inline") {
+    return (
+      <section aria-label="Budget" className="space-y-3">
+        <div className="font-medium text-sm">
+          Budget{" "}
+          <span className="font-normal text-muted-foreground">· optional</span>
+        </div>
+        {payer}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label
+              htmlFor={`${idPrefix}-spend-cap`}
+              className="font-normal text-muted-foreground text-xs"
+            >
+              Spend cap for this {subject}
+            </Label>
+            {capInput}
+          </div>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor={`${idPrefix}-cap-resets`}
+              className="font-normal text-muted-foreground text-xs"
+            >
+              Cap resets
+            </Label>
+            {periodSelect}
+          </div>
+        </div>
+        {capNotes}
+      </section>
+    );
+  }
 
   return (
     <div className="space-y-5">
-      {showBillingTeam && (
-        <div className="space-y-2">
-          <Label htmlFor={`${idPrefix}-billing-team`}>
-            Who pays for this {subject}?
-          </Label>
-          <TeamSelect
-            id={`${idPrefix}-billing-team`}
-            ariaLabel={`Who pays for this ${subject}?`}
-            className="w-full"
-            value={billingTeamId}
-            onValueChange={onBillingTeamIdChange}
-            teams={teams}
-            noneOption={{
-              label: "No team",
-              description:
-                "Usage counts toward the LLM proxy's teams and the owner's limits.",
-            }}
-          />
-          <p className="text-xs text-muted-foreground">
-            {team ? (
-              <span>
-                Costs and limits count this {subject}'s usage for {team.name}.
-                The owner's personal limit does not apply.
-              </span>
-            ) : (
-              <span>
-                Pick a team to charge its budget for everything this {subject}{" "}
-                spends.{" "}
-                <a
-                  className="underline underline-offset-2"
-                  href={getDocsUrl(DocsPage.PlatformCostsAndLimits)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Costs and limits
-                </a>
-              </span>
-            )}
-          </p>
-        </div>
-      )}
-
+      {payer}
       <fieldset className="space-y-3 rounded-lg border p-4">
         <legend className="sr-only">Spend cap for this {subject}</legend>
         <div className="flex items-center justify-between gap-2">
@@ -156,69 +279,10 @@ export function BudgetFields({
           </Badge>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <InputGroup className="w-full">
-            <InputGroupAddon>
-              <InputGroupText>$</InputGroupText>
-            </InputGroupAddon>
-            <InputGroupInput
-              id={`${idPrefix}-spend-cap`}
-              aria-label="Spend cap in dollars"
-              inputMode="numeric"
-              placeholder="No cap"
-              disabled={capLocked}
-              value={spendCap ? String(spendCap.limitValue) : ""}
-              onChange={(event) => {
-                const digits = event.target.value.replace(/[^0-9]/g, "");
-                const amount = Number.parseInt(digits, 10);
-                onSpendCapChange(
-                  digits && amount > 0
-                    ? { limitValue: amount, cleanupInterval: interval }
-                    : null,
-                );
-              }}
-            />
-          </InputGroup>
-          <Select
-            value={interval}
-            disabled={capLocked || !spendCap}
-            onValueChange={(value) =>
-              spendCap &&
-              onSpendCapChange({
-                ...spendCap,
-                cleanupInterval: value as LimitCleanupInterval,
-              })
-            }
-          >
-            <SelectTrigger aria-label="Cap resets" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CAP_PERIODS.map((period) => (
-                <SelectItem key={period} value={period}>
-                  {PERIOD_LABELS[period]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {capInput}
+          {periodSelect}
         </div>
-        {currentUsage !== null && spendCap && (
-          <p className="text-xs text-muted-foreground">
-            <span>
-              {formatWholeDollars(currentUsage)} spent{" "}
-              {describeWindow(spendCap.cleanupInterval)}.
-            </span>
-          </p>
-        )}
-        {capLocked && (
-          <p className="text-xs text-muted-foreground">
-            <span>
-              Ask someone who manages limits to change or remove this cap.
-            </span>
-          </p>
-        )}
-        {team && (
-          <TeamUsageBar team={team} spendCap={spendCap} subject={subject} />
-        )}
+        {capNotes}
       </fieldset>
     </div>
   );

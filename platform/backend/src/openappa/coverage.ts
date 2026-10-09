@@ -52,12 +52,16 @@ class OpenAppaCoverageService {
     params: { organizationId: string; catalogId: string } & CoverageVisibility,
   ): Promise<CoverageTool[]> {
     if (!params.visibleCatalogIds?.includes(params.catalogId)) return [];
-    const { tools } = await buildReport(params.organizationId, {
-      ...params,
-      visibleCatalogIds: [params.catalogId],
-      includeAutoModeTools: false,
-      includeAppCatalogs: true,
-    });
+    const { tools } = await buildReport(
+      params.organizationId,
+      {
+        ...params,
+        visibleCatalogIds: [params.catalogId],
+        includeAutoModeTools: false,
+        includeAppCatalogs: true,
+      },
+      params.catalogId,
+    );
     return tools
       .map((row) => row.tool)
       .filter((tool) => tool.catalogId === params.catalogId);
@@ -448,9 +452,15 @@ type Candidate = {
   kind: Exclude<CoverageKind, "unlisted">;
 };
 
+/**
+ * `catalogId` reads only that catalog's tools and assignments. Each tool's row
+ * depends on its own catalog, assignments and the policy alone, so the rows
+ * for that catalog are the same as an organization-wide report's.
+ */
 async function buildReport(
   organizationId: string,
   visibility?: CoverageVisibility,
+  catalogId?: string,
 ): Promise<Report> {
   const [snapshot, inventory] = await Promise.all([
     openappaBatteriesService.coverageSnapshot(organizationId),
@@ -464,6 +474,7 @@ async function buildReport(
           }
         : undefined,
       includeAppCatalogs: visibility?.includeAppCatalogs,
+      catalogId,
     }),
   ]);
   const { resolution, rootContent } = snapshot;

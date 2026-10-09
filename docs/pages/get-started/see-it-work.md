@@ -34,7 +34,7 @@ What to know:
 
 Use the client you connected in [Connect Your Agents](/docs/get-started/connect):
 
-- **Tools:** ask your client to list the Archestra gateway's tools. If they are missing, complete the gateway authentication shown in **Connect**, then reload the client.
+- **Tools:** ask your client to list the Archestra gateway's tools. If they are missing, finish the gateway sign-in described in [Connect Your Agents](/docs/get-started/connect#finish-setup-in-your-client), then reload the client.
 - **Models:** send any prompt.
 - **Skills:** ask for one of the shared skills you selected during setup.
 

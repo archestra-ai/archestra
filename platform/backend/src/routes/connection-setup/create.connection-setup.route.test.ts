@@ -604,8 +604,32 @@ describe("POST /api/connection-setups", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain(
-      "not supported by OpenCode local-credential passthrough",
+      "azure is not supported for opencode setups",
     );
+  });
+
+  test.for([
+    "zhipuai",
+    "gemini",
+    "minimax",
+    "kimi",
+  ] as const)("accepts OpenCode passthrough provider %s", async (provider, {
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        llmProxyId: proxy.id,
+        provider,
+        proxyAuth: "provider-key",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
   });
 
   test("codex openai virtual-key provisions only a personal standard key (no passthrough key)", async ({

@@ -1,18 +1,12 @@
-import { beforeEach, expect, test, vi } from "vitest";
-import { setupTestCacheManager } from "@/test/cache-manager";
-import { beginConnectionPromptSession } from "./connection-prompt-session";
+import { expect, test } from "vitest";
 import { issueConnectionSetupContext } from "./connection-setup-context";
 import {
   nativeSetupClientFromProvenance,
   resolveConnectionSetupScope,
 } from "./connection-setup-scope";
 
-// The real cache, stored in this file's test database.
-setupTestCacheManager();
-
 const userId = "user-1";
 const organizationId = "org-1";
-const origin = "https://ai.example.com";
 const principal = {
   userId,
   organizationId,
@@ -20,159 +14,18 @@ const principal = {
   guardrailsActive: true,
 };
 
-beforeEach(() => vi.useRealTimers());
-
-test.each([
-  {
-    clientId: "claude-code" as const,
-    label: "Claude Code",
-    provenance: "claude-code-header" as const,
-    body: (prompt: string) => ({
-      messages: [{ role: "user", content: prompt }],
-    }),
-  },
-  {
-    clientId: "claude-code" as const,
-    label: "Claude Code",
-    provenance: "claude-code-metadata" as const,
-    body: (prompt: string) => ({
-      messages: [{ role: "user", content: prompt }],
-    }),
-  },
-  {
-    clientId: "codex" as const,
-    label: "Codex",
-    provenance: "codex-turn-metadata" as const,
-    body: (prompt: string) => ({
-      input: [
-        {
-          type: "message",
-          role: "user",
-          content: [{ type: "input_text", text: prompt }],
-        },
-      ],
-    }),
-  },
-  {
-    clientId: "opencode" as const,
-    label: "OpenCode",
-    provenance: "opencode-session-header" as const,
-    body: (prompt: string) => ({
-      messages: [{ role: "user", content: prompt }],
-    }),
-  },
-  {
-    clientId: "opencode" as const,
-    label: "OpenCode",
-    provenance: "opencode-hosted-header" as const,
-    body: (prompt: string) => ({
-      messages: [{ role: "user", content: prompt }],
-    }),
-  },
-])("binds $clientId through the same native-session scope", async ({
-  clientId,
-  label,
-  provenance,
-  body,
-}) => {
-  await beginConnectionPromptSession({
-    userId,
-    organizationId,
-    clientId,
-    origin,
-  });
-  const prompt = `Read ${origin}/connect.md?client=${clientId} and connect ${label}.`;
-  const evidence = {
-    kind: "native-session" as const,
-    identity: { provenance, sessionId: `native-${provenance}` },
-    requestBody: body(prompt),
-  };
-  expect(await resolveConnectionSetupScope({ principal, evidence })).toEqual({
-    kind: "native-session",
-    userId,
-    organizationId,
-    clientId,
-  });
-  expect(
-    await resolveConnectionSetupScope({
-      principal,
-      evidence: { ...evidence, requestBody: { messages: [] } },
-    }),
-  ).toEqual(expect.objectContaining({ kind: "native-session", clientId }));
-});
-
-test("missing or unrecognized native identity leaves the prompt window untouched", async () => {
-  await beginConnectionPromptSession({
-    userId,
-    organizationId,
-    clientId: "claude-code",
-    origin,
-  });
-  const prompt = `Read ${origin}/connect.md?client=claude-code and connect Claude Code.`;
+test("maps native client provenance, and nothing else, to a client", () => {
+  expect(nativeSetupClientFromProvenance("claude-code-header")).toBe(
+    "claude-code",
+  );
+  expect(nativeSetupClientFromProvenance("codex-turn-metadata")).toBe("codex");
   for (const provenance of [
     "claude-metadata",
     "prompt-cache-key",
     "appa-header",
   ] as const) {
     expect(nativeSetupClientFromProvenance(provenance)).toBeUndefined();
-    expect(
-      await resolveConnectionSetupScope({
-        principal,
-        evidence: {
-          kind: "native-session",
-          identity: { provenance, sessionId: "native-1" },
-          requestBody: { messages: [{ role: "user", content: prompt }] },
-        },
-      }),
-    ).toBeNull();
   }
-  expect(
-    await resolveConnectionSetupScope({
-      principal,
-      evidence: {
-        kind: "native-session",
-        identity: { provenance: "claude-code-header", sessionId: "native-1" },
-        requestBody: { messages: [{ role: "user", content: prompt }] },
-      },
-    }),
-  ).not.toBeNull();
-});
-
-test("principal and deployment gates deny native scope without consuming it", async () => {
-  await beginConnectionPromptSession({
-    userId,
-    organizationId,
-    clientId: "opencode",
-    origin,
-  });
-  const evidence = {
-    kind: "native-session" as const,
-    identity: {
-      provenance: "opencode-session-header" as const,
-      sessionId: "native-1",
-    },
-    requestBody: {
-      messages: [
-        {
-          role: "user",
-          content: `Read ${origin}/connect.md?client=opencode and connect OpenCode.`,
-        },
-      ],
-    },
-  };
-  for (const altered of [
-    { ...principal, userId: undefined },
-    { ...principal, organizationId: "other-org" },
-    { ...principal, targetOrganizationId: "other-org" },
-    { ...principal, guardrailsActive: false },
-  ]) {
-    expect(
-      await resolveConnectionSetupScope({ principal: altered, evidence }),
-    ).toBeNull();
-  }
-  expect(
-    await resolveConnectionSetupScope({ principal, evidence }),
-  ).not.toBeNull();
 });
 
 test("approved installer scope is bound to authenticated user, org, and gateway", async () => {

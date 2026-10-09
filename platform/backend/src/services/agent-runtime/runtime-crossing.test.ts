@@ -257,6 +257,7 @@ describe("runtime crossing", () => {
 
 describe("model-facing runtime tools", () => {
   beforeEach(async () => {
+    vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
     config.openappa.enabled = true;
     await GuardrailsDeploymentModel.setEnabled(true);
   });

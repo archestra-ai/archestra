@@ -133,6 +133,8 @@ describe("MCP Gateway (stateless mode)", () => {
   let app: FastifyInstance;
 
   beforeEach(async () => {
+    // These tool-list contracts exclude implicit OpenAPPA tools.
+    config.openappa.enabled = false;
     // Create a test Fastify app
     app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);

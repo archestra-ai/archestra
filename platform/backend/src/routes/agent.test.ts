@@ -2,6 +2,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
@@ -1650,6 +1651,7 @@ describe("agent routes", () => {
     test("hides the default knowledge query tool when an agent has no knowledge sources", async ({
       makeAgent,
     }) => {
+      config.openappa.enabled = true;
       const suffix = crypto.randomUUID().slice(0, 8);
       const agent = await makeAgent({
         name: `No Knowledge ${suffix}`,
@@ -1676,7 +1678,9 @@ describe("agent routes", () => {
       });
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME);
       expect(toolNames).toHaveLength(
-        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length - 1,
+        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length +
+          REQUIRED_OPENAPPA_TOOL_SHORT_NAMES.length -
+          1,
       );
     });
   });
@@ -2249,6 +2253,7 @@ describe("agent routes", () => {
     test("does not export the default knowledge query tool without knowledge sources", async ({
       makeAgent,
     }) => {
+      config.openappa.enabled = true;
       const created = await makeAgent({
         name: `Export No Knowledge ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
@@ -2273,7 +2278,9 @@ describe("agent routes", () => {
         });
       expect(toolNames).not.toContain(TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME);
       expect(toolNames).toHaveLength(
-        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length - 1,
+        DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES.length +
+          REQUIRED_OPENAPPA_TOOL_SHORT_NAMES.length -
+          1,
       );
     });
 

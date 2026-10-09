@@ -578,6 +578,11 @@ export const handlers: HttpHandler[] = [
   ),
 
   // LLM proxy logs (/llm/logs list, session detail, interaction detail).
+  ...getJson("/api/interactions/sessions/:sessionId/lineage", {
+    forkedFrom: null,
+    forks: [],
+    forksTruncated: false,
+  }),
   // The sessions handler is query-aware: it filters the seed by the params the
   // frontend actually sends (sessionId / client / source), so the Client/Source
   // filter specs genuinely exercise the request wiring rather than asserting

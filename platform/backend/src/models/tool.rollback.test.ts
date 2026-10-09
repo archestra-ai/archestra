@@ -4,6 +4,7 @@ import {
   getArchestraMcpCatalogName,
   getArchestraToolFullName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
@@ -2090,6 +2091,7 @@ describe("ToolModel", () => {
       makeOrganization,
       makeAgent,
     }) => {
+      config.openappa.enabled = true;
       const org = await makeOrganization();
       await OrganizationModel.patch(org.id, { appName: "Acme Copilot" });
 
@@ -2109,6 +2111,7 @@ describe("ToolModel", () => {
           [
             TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
             TOOL_TODO_WRITE_SHORT_NAME,
+            ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
           ] as const
         )
           .map((shortName) =>

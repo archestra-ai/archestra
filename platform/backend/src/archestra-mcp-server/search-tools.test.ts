@@ -14,7 +14,7 @@ import {
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
-import { vi } from "vitest";
+import { beforeEach, vi } from "vitest";
 import config from "@/config";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
@@ -68,6 +68,10 @@ type SearchToolsStructuredContent = {
 };
 
 describe("search_tools", () => {
+  beforeEach(() => {
+    // Search ranking tests control their candidate set; OpenAPPA tests opt in.
+    config.openappa.enabled = false;
+  });
   test("returns ranked matching tools with compact parameter summaries", async ({
     makeAgent,
     makeInternalMcpCatalog,

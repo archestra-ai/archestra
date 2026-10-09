@@ -40843,6 +40843,9 @@ export type GetConnectionInstructionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**

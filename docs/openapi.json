@@ -146597,6 +146597,10 @@
                         },
                         "internal_code": {
                           "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       },
                       "required": [

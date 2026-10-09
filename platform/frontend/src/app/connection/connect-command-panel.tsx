@@ -53,6 +53,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
+  SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";

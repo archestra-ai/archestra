@@ -65,12 +65,12 @@ import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclus
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
+import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
 import { getDocsSuggestedPrompts } from "@/services/docs-mcp-servers";
 import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
-import { getObservedMcpToolTokenCount } from "@/services/mcp-tool-token-count";
 import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -1285,7 +1285,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       const observed =
         client === "claude-code"
-          ? await getObservedMcpToolTokenCount({
+          ? await getObservedClaudeCodeToolTokenCount({
               organizationId,
               gatewayId: agent.id,
               tools,

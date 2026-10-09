@@ -1,4 +1,4 @@
-import { RouteId } from "@archestra/shared";
+import { CLAUDE_CODE_CLIENT_ID, RouteId } from "@archestra/shared";
 import fastifyHttpProxy from "@fastify/http-proxy";
 import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -7,11 +7,12 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import config from "@/config";
 import logger from "@/logging";
 import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
-import { mcpToolTokenCountObserver } from "@/services/mcp-tool-token-count";
+import { claudeCodeToolTokenCountObserver } from "@/services/claude-code-tool-token-count";
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
 import { anthropicAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
 import { handleLLMProxy } from "../llm-proxy-handler";
+import { getExternalAgentId } from "../utils/headers/external-agent-id";
 import {
   AnthropicModelsHeadersSchema,
   AnthropicModelsListResponseSchema,
@@ -52,10 +53,15 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       beforeCleanBody: async (request, body) => {
         if (
           request.method === "POST" &&
+          getExternalAgentId(request.headers) === CLAUDE_CODE_CLIENT_ID &&
           request.url.split("?")[0] ===
             `${ANTHROPIC_PREFIX}/v1/messages/count_tokens`
         ) {
-          await mcpToolTokenCountObserver.prepare(request, body, upstream);
+          await claudeCodeToolTokenCountObserver.prepare(
+            request,
+            body,
+            upstream,
+          );
         }
       },
       skipErrorResponse: {
@@ -67,7 +73,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
       },
     }),
-    replyOptions: { onResponse: mcpToolTokenCountObserver.onResponse },
+    replyOptions: { onResponse: claudeCodeToolTokenCountObserver.onResponse },
   });
 
   /**

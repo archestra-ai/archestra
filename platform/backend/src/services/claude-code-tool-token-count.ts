@@ -15,7 +15,7 @@ import AgentModel from "@/models/agent";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { buildClaudeMcpToolDefinitions } from "./mcp-tool-token-estimate";
 
-class McpToolTokenCountObserver {
+class ClaudeCodeToolTokenCountObserver {
   // Request-local handoff, never a cache of request bodies or credentials.
   private readonly pending = new WeakMap<object, PendingCount>();
 
@@ -129,10 +129,11 @@ class McpToolTokenCountObserver {
   };
 }
 
-export const mcpToolTokenCountObserver = new McpToolTokenCountObserver();
+export const claudeCodeToolTokenCountObserver =
+  new ClaudeCodeToolTokenCountObserver();
 
 /** Returns a provider count only for the entire current, ordered tool surface. */
-export async function getObservedMcpToolTokenCount(
+export async function getObservedClaudeCodeToolTokenCount(
   params: {
     organizationId: string;
     gatewayId: string;

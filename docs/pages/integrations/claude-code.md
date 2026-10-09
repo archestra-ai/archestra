@@ -35,4 +35,6 @@ If inference works but tools do not, authenticate the gateway separately. If no 
 
 **Connect** counts the gateway tools available to your signed-in account at session start. With progressive tool loading enabled, it shows the smaller loaded set; more tools remain available on demand.
 
-When Claude Code's token-count request passes through the LLM proxy, Connect can show the provider's count for the same gateway tool definitions. The tooltip identifies the model and when the count was observed. Counts expire after an hour and only apply while the tool names, descriptions, and schemas still match. Without a matching count, Connect uses Claude Code's local fallback estimate, which can differ significantly from the provider's count. Other MCP connections, tool search settings, and tools loaded during the session also affect `/context`.
+With Claude Code configured through **Connect** and the LLM proxy enabled, Connect can show the provider's count for matching gateway tool definitions. The tooltip identifies the model and when the count was observed. Counts expire after an hour and only apply while the tool names, descriptions, and schemas still match.
+
+Without a matching count, Connect uses Claude Code's local fallback estimate, which can differ significantly from the provider's count. Other MCP connections, tool search settings, and tools loaded during the session also affect `/context`.

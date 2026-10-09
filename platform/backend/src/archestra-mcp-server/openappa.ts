@@ -746,7 +746,10 @@ const registry = defineArchestraTools([
     schema: ProposedGuardrailsPolicySchema,
     handler: ({ args, context }) =>
       refusalAsResult(async () => {
-        const organizationId = organization(context);
+        const { organizationId, userId } = organizationUser(
+          context,
+          AUTHENTICATED_CONTEXT_REQUIRED,
+        );
         const before = await guardrailsPolicyService.get(organizationId);
         if (before.revision !== args.expectedRevision)
           throw new ApiError(
@@ -759,6 +762,7 @@ const registry = defineArchestraTools([
         });
         await refuseCredentialLines({
           organizationId,
+          userId,
           before: before.content,
           after,
         });
@@ -777,7 +781,7 @@ const registry = defineArchestraTools([
             delivery === "revision" &&
             !(await firstPolicyRefusal(
               organizationId,
-              context.userId,
+              userId,
               before.revision + 1,
             )),
           path: sync.source?.path ?? "organization.appa.toml",
@@ -823,7 +827,7 @@ const registry = defineArchestraTools([
     shortName: "bind_guardrails_credential",
     title: "Bind OpenAPPA battery credential",
     description:
-      "Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. The binding is stored beside the policy, not in its text, so it needs no policy change and works while GitHub sync owns the policy. One variable has one key for the whole organization: every battery whose `credentials` list it is in reads that key. Use the variable names list_guardrails_battery_fits returns and keys from list_runtime_credentials that have an organization value. A variable bound by a `[credentials]` line in the policy text is refused; that line wins and is removed on the Policy tab. Returns every declared battery with its credentials and their source.",
+      "Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. The binding is stored beside the policy, not in its text, so it needs no policy change and works while GitHub sync owns the policy. One variable has one key for the whole organization: every battery whose `credentials` list it is in reads that key. Use the variable names list_guardrails_battery_fits returns and keys from list_runtime_credentials that have an organization value. A variable bound by a `[credentials]` line in the policy text is refused; that line wins until a policy change removes it (update_guardrails_policy; with GitHub sync, through the repository). Returns every declared battery with its credentials and their source.",
     schema: z.strictObject({
       variable: z
         .string()

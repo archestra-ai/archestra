@@ -307,8 +307,13 @@ export const handlers: HttpHandler[] = [
   }),
   ...getJson("/api/organization/mcp-preset-entries", []),
   ...getJson("/api/connected-clients", []),
-  // The Connect page reads the gateway's tool list for its token estimate.
   ...getJson("/api/chat/agents/:agentId/mcp-tools", []),
+  // Connect reads the gateway's served tool list and initial context cost.
+  ...getJson("/api/agents/:id/mcp-tool-preview", {
+    toolExposureMode: "full",
+    tools: [],
+    tokenCount: { total: 0, source: "estimate", model: null, observedAt: null },
+  }),
   ...getJson("/api/projects", []),
   ...getJson("/api/apps", {
     data: [],

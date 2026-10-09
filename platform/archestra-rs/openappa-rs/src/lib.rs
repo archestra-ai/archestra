@@ -656,6 +656,14 @@ pub struct CredentialDeclaration {
     pub line: u32,
 }
 
+/// A root external or profile naming a `token_env`; `reader` is its `externals`
+/// path.
+#[napi(object)]
+pub struct TokenEnvReader {
+    pub variable: String,
+    pub reader: String,
+}
+
 #[napi(object)]
 pub struct PolicyDeclarations {
     pub include: Vec<IncludeDeclaration>,
@@ -667,6 +675,8 @@ pub struct PolicyDeclarations {
     /// or profile of the document names them as its `token_env`. A dispatch carries
     /// their values in `DispatchPolicy.credentials`.
     pub runtime_credentials: Vec<String>,
+    /// Every root external or profile naming a `token_env`, bound or not.
+    pub token_env_readers: Vec<TokenEnvReader>,
     /// A shape the reader could not make sense of, naming the key and its line. An
     /// unparsable document is one error and no declarations.
     pub errors: Vec<String>,
@@ -708,6 +718,14 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                     .collect(),
                 routed_annotators: parsed.routed_annotators,
                 runtime_credentials: parsed.runtime_credentials,
+                token_env_readers: parsed
+                    .token_env_readers
+                    .into_iter()
+                    .map(|reader| TokenEnvReader {
+                        variable: reader.variable,
+                        reader: reader.reader,
+                    })
+                    .collect(),
                 errors: parsed.errors,
             })
             .map_err(|_| error("OpenAPPA declaration parsing failed"))

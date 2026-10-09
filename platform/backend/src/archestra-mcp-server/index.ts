@@ -384,7 +384,9 @@ export async function executeArchestraTool(
     archestraMcpBranding.getToolShortName(toolName) === "yell" &&
     (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
   ) {
-    throw { code: -32601, message: "OpenAPPA reporting is disabled" };
+    // An unavailable feedback tool is a recoverable tool refusal, not a
+    // failed agent run. Keep the result with the agent so it can continue.
+    return errorResult("OpenAPPA reporting is disabled");
   }
   // A child runs outside APPA and must not execute remedies on the parent's
   // shared logging session. Direct calls also respect the feature flag.

@@ -67,8 +67,13 @@ import {
 } from "./utils";
 
 let mockValidateJwt: MockInstance<typeof jwksValidator.validateJwt>;
+let previousOpenappaEnabled: boolean;
 
 beforeEach(() => {
+  previousOpenappaEnabled = config.openappa.enabled;
+  // OpenAPPA cases enable it explicitly; keep unrelated tool-list assertions
+  // independent of the deployment default.
+  config.openappa.enabled = false;
   config.enterpriseFeatures.core = true;
   mockValidateJwt = vi
     .spyOn(jwksValidator, "validateJwt")
@@ -76,6 +81,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  config.openappa.enabled = previousOpenappaEnabled;
   mockValidateJwt.mockRestore();
 });
 

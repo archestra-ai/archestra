@@ -22,6 +22,8 @@ export const CacheKey = {
   ModelsDevSync: "models-dev-sync",
   /** MCP tools for chat feature */
   ChatMcpTools: "chat-mcp-tools",
+  /** Last verified provider tool-token count, bounded to one slot per gateway. */
+  McpToolTokenCount: "mcp-tool-token-count",
   /** Deduplication for processed emails */
   ProcessedEmail: "processed-email",
   /** Rate limiting for webhooks */

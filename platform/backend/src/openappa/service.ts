@@ -279,8 +279,12 @@ export async function executeYell(params: {
   toolCallId: string;
   args: { message: string; with_trajectory: boolean };
 }): Promise<CallToolResult> {
-  if (!openappaYellEnabled())
-    throw new ApiError(404, "OpenAPPA reporting is disabled");
+  if (!openappaYellEnabled()) {
+    return {
+      isError: true,
+      content: [{ type: "text", text: "OpenAPPA reporting is disabled" }],
+    };
+  }
   const record = await OpenAppaYellModel.record({
     organizationId: params.session.organization_id,
     callerId: params.session.caller_id ?? "unknown",

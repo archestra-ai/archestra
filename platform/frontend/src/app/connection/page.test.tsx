@@ -1,3 +1,4 @@
+import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -8,9 +9,20 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
 import type { ReactElement, ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import {
   useDefaultMcpGateway,
   useProfile,
@@ -50,7 +62,13 @@ vi.mock("@/lib/plugins/plugin.query", async (importOriginal) => ({
 }));
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/llm-proxy.query");
-vi.mock("@/lib/mcp/internal-mcp-catalog.query");
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/mcp/internal-mcp-catalog.query")
+  >()),
+  useAllCatalogTools: vi.fn(),
+  useInternalMcpCatalog: vi.fn(),
+}));
 vi.mock("@/lib/organization.query");
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -158,6 +176,182 @@ beforeEach(() => {
   vi.mocked(useGuardrailsDeployment).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useGuardrailsDeployment>);
+});
+
+describe("ConnectPage gateway footprint", () => {
+  const api = setupServer();
+  const previewUrl = "http://localhost:9000/api/agents/gw-1/mcp-tool-preview";
+
+  beforeAll(() => api.listen({ onUnhandledRequest: "bypass" }));
+  afterEach(() => api.resetHandlers());
+  afterAll(() => api.close());
+
+  function show(progressive = false) {
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=claude-code") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    vi.mocked(useProfile).mockReturnValue({
+      data: {
+        id: "gw-1",
+        name: "Team gateway",
+        slug: "team",
+        accessAllTools: progressive,
+        toolExposureMode: progressive ? "search_and_run_only" : "full",
+        tools: ["read", "write", "hidden"].map((name) => ({
+          name: `example__${name}`,
+          catalogId: "catalog-1",
+          description: name,
+        })),
+      },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    vi.mocked(useInternalMcpCatalog).mockReturnValue({
+      data: [
+        {
+          id: "catalog-1",
+          name: "Example server",
+          serverType: "remote",
+          toolCount: 3,
+        },
+      ],
+    } as unknown as ReturnType<typeof useInternalMcpCatalog>);
+    mockOrganization({
+      data: {
+        connectionDefaultMcpGatewayId: "gw-1",
+        connectionShownClientIds: ["claude-code", "codex"],
+      },
+    });
+    return render(<ConnectionPage />);
+  }
+
+  const listed = (tokens: number) => ({
+    toolExposureMode: "full",
+    tools: [
+      {
+        name: "example__read",
+        catalogId: "catalog-1",
+        description: "Read items",
+        tokens,
+      },
+      {
+        name: "example__write",
+        catalogId: "catalog-1",
+        description: "Write items",
+        tokens,
+      },
+    ],
+  });
+
+  it("counts served tools instead of catalog rows and changes the estimate with the client", async () => {
+    api.use(
+      http.get(previewUrl, ({ request }) =>
+        HttpResponse.json(
+          listed(
+            new URL(request.url).searchParams.get("client") === "claude-code"
+              ? 1200
+              : 550,
+          ),
+        ),
+      ),
+    );
+    show();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(await within(summary).findByText("2 tools")).toBeVisible();
+    expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
+    expect(within(summary).queryByText("3 tools")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Codex$/ }));
+    expect(await screen.findByText("~1.1K tokens")).toBeVisible();
+  });
+
+  it("uses the preview's loading mode even when the cached profile has the old mode", async () => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({
+          ...listed(1200),
+          toolExposureMode: "search_and_run_only",
+        }),
+      ),
+    );
+    show();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(
+      await within(summary).findByText("2 tools loaded, more on demand"),
+    ).toBeVisible();
+    expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
+  });
+
+  it.each([
+    [11732, "~11.7K tokens"],
+    [0, "~0 tokens"],
+  ])("shows provider total %i instead of summing fallback estimates", async (total, label) => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({
+          ...listed(8443),
+          tokenCount: {
+            total,
+            source: "claude-provider",
+            model: "claude-sonnet-5-5",
+            observedAt: "2026-10-09T12:00:00.000Z",
+          },
+        }),
+      ),
+    );
+    show();
+    const summary = screen.getByRole("complementary", {
+      name: "What Claude Code gets",
+    });
+    expect(await within(summary).findByText(label)).toBeVisible();
+    await userEvent.hover(
+      within(summary).getByRole("button", { name: "How tools load" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Last matching provider count for claude-sonnet-5-5",
+    );
+    await userEvent.click(
+      within(summary).getByRole("button", { name: "1 MCP server" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Example server")).toBeVisible();
+    expect(within(dialog).queryByText(/16\.9K tokens/)).toBeNull();
+  });
+
+  it("shows an empty gateway instead of retaining catalog counts", async () => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json({ toolExposureMode: "full", tools: [] }),
+      ),
+    );
+    show();
+    expect(await screen.findByText("0 tools")).toBeVisible();
+    expect(screen.queryByText("3 tools")).toBeNull();
+    expect(screen.queryByText("Example server")).toBeNull();
+  });
+
+  it("does not substitute catalog totals when the preview fails", async () => {
+    api.use(
+      http.get(previewUrl, () =>
+        HttpResponse.json(
+          { error: { message: "Unavailable" } },
+          { status: 503 },
+        ),
+      ),
+    );
+    show();
+    expect(await screen.findByText("Tool counts unavailable")).toBeVisible();
+    expect(screen.queryByText("3 tools")).toBeNull();
+  });
 });
 
 describe("ConnectPage saved agent order", () => {
@@ -767,7 +961,33 @@ describe("ConnectPage guardrails for members", () => {
 });
 
 describe("ConnectPage gateway pick", () => {
-  it("connects through the gateway picked over the default", async () => {
+  const api = setupServer();
+  beforeAll(() => api.listen({ onUnhandledRequest: "bypass" }));
+  afterEach(() => api.resetHandlers());
+  afterAll(() => api.close());
+
+  it("connects through and counts the gateway picked over the default", async () => {
+    api.use(
+      http.get(
+        "http://localhost:9000/api/agents/:id/mcp-tool-preview",
+        ({ params, request }) => {
+          expect(new URL(request.url).searchParams.get("client")).toBe(
+            "claude-code",
+          );
+          return HttpResponse.json({
+            toolExposureMode: "full",
+            tools: [
+              {
+                name: "example__read",
+                catalogId: null,
+                description: "Read",
+                tokens: params.id === "coding-gateway" ? 2300 : 100,
+              },
+            ],
+          });
+        },
+      ),
+    );
     window.localStorage.clear();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -811,6 +1031,7 @@ describe("ConnectPage gateway pick", () => {
     expect(
       await screen.findByText(/--client claude-code --gateway coding-gateway$/),
     ).toBeVisible();
+    expect(await screen.findByText("~2.3K tokens")).toBeVisible();
   });
 });
 

@@ -183,7 +183,42 @@ export async function resolveSubagentTierSelection(params: {
 }): Promise<ConversationLlmSelection> {
   const { tier, parent } = params;
   if (tier === "normal" || !parent.modelId) return parent;
+  const tierModel = (await findTierModels(params))[tier];
+  return tierModel
+    ? {
+        modelId: tierModel.id,
+        chatApiKeyId: parent.chatApiKeyId,
+        selectedModel: tierModel.modelId,
+        selectedProvider: tierModel.provider,
+      }
+    : parent;
+}
 
+/**
+ * The tiers a fork of `parent` can actually move to: those resolving to a model
+ * other than the parent's own. A tier that would just rerun the parent's model
+ * is not offered.
+ */
+export async function availableSubagentTiers(params: {
+  parent: ConversationLlmSelection;
+  agentTrio: ModelTrioTiers;
+  organizationId: string;
+}): Promise<Exclude<SubagentModelTier, "normal">[]> {
+  const { parent } = params;
+  if (!parent.modelId) return [];
+  const tierModels = await findTierModels(params);
+  return (["fast", "smart"] as const).filter((tier) => {
+    const model = tierModels[tier];
+    return model !== undefined && model.id !== parent.modelId;
+  });
+}
+
+async function findTierModels(params: {
+  parent: ConversationLlmSelection;
+  agentTrio: ModelTrioTiers;
+  organizationId: string;
+}): Promise<Record<Exclude<SubagentModelTier, "normal">, Model | undefined>> {
+  const { parent } = params;
   const [organization, keyModels] = await Promise.all([
     OrganizationModel.getById(params.organizationId),
     parent.chatApiKeyId
@@ -193,24 +228,17 @@ export async function resolveSubagentTierSelection(params: {
         : Promise.resolve([]),
   ]);
   const candidates = keyModels.filter(isSubagentTierCandidate);
-  const field = TRIO_TIER_FIELD[tier];
-  const explicitIds = [
-    params.agentTrio[field],
-    organization ? toTrioTiers(organization)[field] : null,
-  ];
-  const tierModel =
-    explicitIds
-      .map((id) => candidates.find((model) => model.id === id))
-      .find(Boolean) ??
-    findTierDefault(candidates, parent.selectedProvider, tier);
-  return tierModel
-    ? {
-        modelId: tierModel.id,
-        chatApiKeyId: parent.chatApiKeyId,
-        selectedModel: tierModel.modelId,
-        selectedProvider: tierModel.provider,
-      }
-    : parent;
+  const orgTrio = organization ? toTrioTiers(organization) : null;
+  const pick = (tier: Exclude<SubagentModelTier, "normal">) => {
+    const field = TRIO_TIER_FIELD[tier];
+    return (
+      [params.agentTrio[field], orgTrio?.[field]]
+        .map((id) => candidates.find((model) => model.id === id))
+        .find(Boolean) ??
+      findTierDefault(candidates, parent.selectedProvider, tier)
+    );
+  };
+  return { fast: pick("fast"), smart: pick("smart") };
 }
 
 function toTrioTiers(organization: {

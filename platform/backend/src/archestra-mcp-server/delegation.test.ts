@@ -917,6 +917,11 @@ describe("self-fork and attested returns", () => {
         _meta: expect.objectContaining({ targetAgentId: parent.id }),
       }),
     );
+    // No model resolves for the agent, so no tier can move the fork anywhere.
+    expect(
+      tools.find((tool) => tool.name === SELF_FORK_TOOL_NAME)?.inputSchema
+        .properties,
+    ).not.toHaveProperty("tier");
   });
 
   for (const active of [true, false]) {

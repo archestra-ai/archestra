@@ -251,6 +251,7 @@ function getToolCacheKey(
   userId: string,
   isolationKey?: string,
   delegationChain?: string,
+  parentLlm?: ModelSelection,
 ): `${typeof CacheKey.ChatMcpTools}-${string}` {
   const baseKey = getCacheKey(agentId, userId);
   const parts = [baseKey];
@@ -259,6 +260,8 @@ function getToolCacheKey(
   // under one isolation key. Each depth needs its own entry: the tools close
   // over the chain, which the executor reads to detect delegation cycles.
   if (delegationChain) parts.push(delegationChain);
+  // The fork's advertised tiers depend on the model and key the run is on.
+  if (parentLlm) parts.push(`${parentLlm.modelId}/${parentLlm.apiKeyId ?? ""}`);
   return `${CacheKey.ChatMcpTools}-${parts.join(":")}`;
 }
 
@@ -952,6 +955,7 @@ export async function getChatMcpTools({
     userId,
     scopeKey,
     delegationChain,
+    parentLlm,
   );
   const shouldUseToolCache = !abortSignal && !appaSubagent;
 
@@ -1143,6 +1147,7 @@ export async function getChatMcpTools({
             organizationId,
             userId,
             skipAccessCheck: userId === "system",
+            parentLlm,
           }),
           getSkillDelegationTools({ agentId, organizationId, userId }),
         ]);

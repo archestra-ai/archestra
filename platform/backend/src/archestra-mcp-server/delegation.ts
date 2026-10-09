@@ -1,6 +1,8 @@
 import {
   AGENT_TOOL_PREFIX,
+  type ModelSelection,
   SELF_FORK_TOOL_NAME,
+  type SubagentModelTier,
   SubagentModelTierSchema,
   slugify,
 } from "@archestra/shared";
@@ -40,6 +42,11 @@ import {
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
+import {
+  availableSubagentTiers,
+  type ModelTrioTiers,
+  resolveConversationLlmSelectionForAgent,
+} from "@/utils/llm-resolution";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
 
@@ -58,14 +65,38 @@ const DELEGATION_INPUT_JSON_SCHEMA = z.toJSONSchema(delegationToolArgsSchema, {
 }) as Tool["inputSchema"];
 
 export const selfForkToolArgsSchema = delegationToolArgsSchema.extend({
-  tier: SubagentModelTierSchema.optional().describe(
-    "Model the copy runs on. `smart`: a stronger model, for hard reasoning or checking a conclusion. `fast`: a cheaper, quicker model, for bulk reading, searching, or extraction. `normal` (default): your own model.",
-  ),
+  tier: SubagentModelTierSchema.optional(),
 });
 
-const SELF_FORK_INPUT_JSON_SCHEMA = z.toJSONSchema(selfForkToolArgsSchema, {
-  io: "input",
-}) as Tool["inputSchema"];
+/**
+ * The fork's input schema. `tier` is advertised only with the tiers that would
+ * move the copy to another model; with none it is left out entirely.
+ */
+function selfForkInputSchema(
+  tiers: Exclude<SubagentModelTier, "normal">[],
+): Tool["inputSchema"] {
+  if (tiers.length === 0) return DELEGATION_INPUT_JSON_SCHEMA;
+  const descriptions = {
+    smart:
+      "`smart`: a stronger model, for hard reasoning or checking a conclusion.",
+    fast: "`fast`: a cheaper, quicker model, for bulk reading, searching, or extraction.",
+  };
+  return {
+    ...DELEGATION_INPUT_JSON_SCHEMA,
+    properties: {
+      ...DELEGATION_INPUT_JSON_SCHEMA.properties,
+      tier: {
+        type: "string",
+        enum: ["normal", ...tiers],
+        description: [
+          "Model the copy runs on.",
+          ...tiers.map((tier) => descriptions[tier]),
+          "`normal` (default): your own model.",
+        ].join(" "),
+      },
+    },
+  };
+}
 
 // === Exports ===
 
@@ -90,6 +121,8 @@ export async function getAgentTools(context: {
   /** Skip user access check (for A2A/ChatOps flows where caller has elevated permissions) */
   skipAccessCheck?: boolean;
   lookups?: RequestLookups;
+  /** The model and key the caller runs on, which its fork starts from. */
+  parentLlm?: ModelSelection;
 }): Promise<Tool[]> {
   const { agentId, organizationId, userId, skipAccessCheck, lookups } = context;
 
@@ -143,7 +176,7 @@ export async function getAgentTools(context: {
       attestable,
     });
     return finishDelegationTools(
-      agentId,
+      context,
       [...outboundTools, ...localTools],
       attestable,
     );
@@ -204,7 +237,7 @@ export async function getAgentTools(context: {
     }),
   );
   return finishDelegationTools(
-    agentId,
+    context,
     [...outboundTools, ...localTools],
     attestable,
   );
@@ -804,11 +837,16 @@ function advertiseReturnSchema(
 
 /** The calling agent's own fork, offered first so a same-named agent never shadows it. */
 async function finishDelegationTools(
-  agentId: string,
+  context: {
+    agentId: string;
+    organizationId: string;
+    userId?: string;
+    parentLlm?: ModelSelection;
+  },
   tools: Tool[],
   attestable: boolean,
 ): Promise<Tool[]> {
-  const caller = await AgentModel.findDelegationTarget(agentId);
+  const caller = await AgentModel.findDelegationTarget(context.agentId);
   const fork =
     caller?.agentType === "agent"
       ? [
@@ -816,7 +854,9 @@ async function finishDelegationTools(
             ...buildDelegationToolDescriptor({
               name: SELF_FORK_TOOL_NAME,
               targetAgent: { id: caller.id, name: caller.name },
-              inputSchema: SELF_FORK_INPUT_JSON_SCHEMA,
+              inputSchema: selfForkInputSchema(
+                await forkTiers({ ...context, caller }),
+              ),
               attestable,
             }),
             title: "Fork yourself",
@@ -825,6 +865,33 @@ async function finishDelegationTools(
         ]
       : [];
   return dedupeDelegationTools([...fork, ...tools]);
+}
+
+/**
+ * The tiers the caller's fork can move to, from the same parent selection the
+ * fork run resolves: the caller's own model and key, else the agent's config.
+ */
+async function forkTiers(params: {
+  caller: {
+    llmApiKeyId: string | null;
+    modelId: string | null;
+  } & ModelTrioTiers;
+  organizationId: string;
+  userId?: string;
+  parentLlm?: ModelSelection;
+}): Promise<Exclude<SubagentModelTier, "normal">[]> {
+  const { caller, organizationId, userId, parentLlm } = params;
+  if (!userId) return [];
+  const parent = await resolveConversationLlmSelectionForAgent({
+    agent: { llmApiKeyId: caller.llmApiKeyId, modelId: caller.modelId },
+    organizationId,
+    userId,
+    ...(parentLlm && {
+      explicitModelId: parentLlm.modelId,
+      explicitApiKeyId: parentLlm.apiKeyId,
+    }),
+  });
+  return availableSubagentTiers({ parent, agentTrio: caller, organizationId });
 }
 
 const SELF_FORK_DESCRIPTION =

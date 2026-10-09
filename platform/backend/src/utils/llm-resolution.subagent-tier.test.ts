@@ -6,6 +6,7 @@ import {
 } from "@/models";
 import { describe, expect, test } from "@/test";
 import {
+  availableSubagentTiers,
   type ConversationLlmSelection,
   resolveSubagentTierSelection,
 } from "./llm-resolution";
@@ -196,6 +197,43 @@ describe("resolveSubagentTierSelection", () => {
       selectedModel: "gpt-6-luna",
       selectedProvider: "github-copilot",
     });
+  });
+
+  test("only tiers that move off the parent's model are available", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const { org, selection } = await setup(
+      { makeOrganization, makeLlmProviderApiKey },
+      ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"],
+    );
+    const tiers = (modelId: string) =>
+      availableSubagentTiers({
+        parent: selection(modelId),
+        agentTrio: NO_TRIO,
+        organizationId: org.id,
+      });
+
+    expect(await tiers("claude-sonnet-5-5")).toEqual(["fast", "smart"]);
+    expect(await tiers("claude-opus-5-5")).toEqual(["fast"]);
+  });
+
+  test("no tier is available when the parent's key serves no tier model", async ({
+    makeOrganization,
+    makeLlmProviderApiKey,
+  }) => {
+    const { org, selection } = await setup(
+      { makeOrganization, makeLlmProviderApiKey },
+      ["claude-sonnet-5-5"],
+    );
+
+    expect(
+      await availableSubagentTiers({
+        parent: selection("claude-sonnet-5-5"),
+        agentTrio: NO_TRIO,
+        organizationId: org.id,
+      }),
+    ).toEqual([]);
   });
 });
 

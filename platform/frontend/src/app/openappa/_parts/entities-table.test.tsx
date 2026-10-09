@@ -217,8 +217,8 @@ test("lists MCP servers including Archestra, each with a chat and scoped details
   expect(targets.getByText("2 MCP servers")).toBeVisible();
   expect(entityRequests[0]?.get("sortBy")).toBe("name");
   expect(entityRequests[0]?.get("type")).toBe("mcp_server");
-  // The default lists the registry's servers and the detected ones together.
-  expect(entityRequests[0]?.get("includeDetected")).toBe("true");
+  // The default lists the registry's servers and the observed ones together.
+  expect(entityRequests[0]?.get("includeObserved")).toBe("true");
   expect(screen.getByRole("combobox", { name: "Type" })).toHaveTextContent(
     "All types",
   );

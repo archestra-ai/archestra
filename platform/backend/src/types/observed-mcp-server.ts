@@ -6,7 +6,7 @@ import { z } from "zod";
  * clients declared it. Its id, `observed.<label>`, is also the alias target a
  * policy names to govern it.
  */
-export const DetectedMcpServerSchema = z.object({
+export const ObservedMcpServerSchema = z.object({
   id: z.string(),
   label: z.string(),
   tools: z.array(
@@ -21,4 +21,4 @@ export const DetectedMcpServerSchema = z.object({
   firstObservedAt: z.date(),
 });
 
-export type DetectedMcpServer = z.infer<typeof DetectedMcpServerSchema>;
+export type ObservedMcpServer = z.infer<typeof ObservedMcpServerSchema>;

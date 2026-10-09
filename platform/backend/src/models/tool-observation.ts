@@ -86,7 +86,7 @@ class ToolObservationModel {
   /**
    * Every observation of a proxy-discovered tool by a member of the
    * organization: the tool's name and the client that declared it. The
-   * detected-server view is derived from these rows; observations carry no
+   * observed-server view is derived from these rows; observations carry no
    * organization of their own, so membership of the observer scopes them.
    */
   static async listProxyToolObservations(

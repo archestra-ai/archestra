@@ -11,16 +11,16 @@ import { useRouteTestApp } from "@/test/route-test-app";
 import routes from "./openappa-coverage.routes";
 
 /**
- * Detected servers are derived from what the proxy observed clients declare
+ * Observed servers are derived from what the proxy observed clients declare
  * and listed beside the registry's servers. The rules under test: a server is
  * one (client family, label) per organization, shared by every member who
  * connected it and never attributed to anyone; only tools the proxy
  * discovered count, read in the client's own spelling; nothing from another
  * organization, another kind of tool row or an unreadable name leaks in; and
- * one paged list carries registry rows first and detected rows after, with
+ * one paged list carries registry rows first and observed rows after, with
  * the totals of both.
  */
-describe("GET /api/openappa/coverage/entities with detected servers", () => {
+describe("GET /api/openappa/coverage/entities with observed servers", () => {
   const ctx = useRouteTestApp(routes);
 
   beforeEach(async ({ makeMember }) => {
@@ -63,7 +63,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
 
     const response = await ctx.app.inject({
       method: "GET",
-      url: "/api/openappa/coverage/entities?type=detected_mcp_server",
+      url: "/api/openappa/coverage/entities?type=observed_mcp_server",
     });
 
     expect(response.statusCode).toBe(200);
@@ -80,13 +80,13 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
         ],
       ),
     ).toEqual([
-      ["detected_mcp_server", "observed.github", "github", 1],
-      ["detected_mcp_server", "observed.linear", "linear", 1],
-      ["detected_mcp_server", "observed.slack", "slack", 2],
+      ["observed_mcp_server", "observed.github", "github", 1],
+      ["observed_mcp_server", "observed.linear", "linear", 1],
+      ["observed_mcp_server", "observed.slack", "slack", 2],
     ]);
   });
 
-  test("one paged list: registry servers first, detected after, totals of both", async ({
+  test("one paged list: registry servers first, observed after, totals of both", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -108,7 +108,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     const page = (offset: number) =>
       ctx.app.inject({
         method: "GET",
-        url: `/api/openappa/coverage/entities?type=mcp_server&includeDetected=true&limit=2&offset=${offset}`,
+        url: `/api/openappa/coverage/entities?type=mcp_server&includeObserved=true&limit=2&offset=${offset}`,
       });
     const first = (await page(0)).json();
     const second = (await page(2)).json();
@@ -118,14 +118,14 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
       first.data.map((row: { type: string; id: string }) => [row.type, row.id]),
     ).toEqual([
       ["mcp_server", catalog.id],
-      ["detected_mcp_server", "observed.linear"],
+      ["observed_mcp_server", "observed.linear"],
     ]);
     expect(
       second.data.map((row: { type: string; id: string }) => [
         row.type,
         row.id,
       ]),
-    ).toEqual([["detected_mcp_server", "observed.slack"]]);
+    ).toEqual([["observed_mcp_server", "observed.slack"]]);
 
     const registryOnly = (
       await ctx.app.inject({
@@ -141,7 +141,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     const searched = (
       await ctx.app.inject({
         method: "GET",
-        url: "/api/openappa/coverage/entities?type=mcp_server&includeDetected=true&search=SLA",
+        url: "/api/openappa/coverage/entities?type=mcp_server&includeObserved=true&search=SLA",
       })
     ).json();
     expect(searched.data.map((row: { id: string }) => row.id)).toEqual([
@@ -165,7 +165,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
 
     const response = await ctx.app.inject({
       method: "GET",
-      url: "/api/openappa/coverage/entities?type=detected_mcp_server",
+      url: "/api/openappa/coverage/entities?type=observed_mcp_server",
     });
 
     expect(response.json().data).toMatchObject([
@@ -173,7 +173,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     ]);
   });
 
-  test("a target filter names a registry server, so a detected-only list under one is empty", async () => {
+  test("a target filter names a registry server, so a observed-only list under one is empty", async () => {
     await ToolModel.bulkCreateProxyToolsIfNotExists(
       [proxyTool("mcp__slack__send")],
       "",
@@ -182,7 +182,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
 
     const response = await ctx.app.inject({
       method: "GET",
-      url: `/api/openappa/coverage/entities?type=detected_mcp_server&toolId=${crypto.randomUUID()}`,
+      url: `/api/openappa/coverage/entities?type=observed_mcp_server&toolId=${crypto.randomUUID()}`,
     });
 
     expect(response.statusCode).toBe(200);
@@ -230,7 +230,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
 
     const response = await ctx.app.inject({
       method: "GET",
-      url: "/api/openappa/coverage/entities?type=detected_mcp_server",
+      url: "/api/openappa/coverage/entities?type=observed_mcp_server",
     });
 
     expect(response.statusCode).toBe(200);
@@ -247,7 +247,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
 
     const response = await ctx.app.inject({
       method: "GET",
-      url: "/api/openappa/coverage/entities?type=detected_mcp_server",
+      url: "/api/openappa/coverage/entities?type=observed_mcp_server",
     });
 
     expect(response.json().data).toMatchObject([

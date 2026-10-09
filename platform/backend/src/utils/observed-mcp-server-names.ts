@@ -5,7 +5,7 @@ import {
 } from "@archestra/shared/interactions/client";
 
 /** A tool name read as `<label>` + `<tool>`. */
-type DetectedToolName = { label: string; toolName: string };
+type ObservedToolName = { label: string; toolName: string };
 
 /**
  * Reads a client's own MCP tool spelling, whichever client sent it, or
@@ -17,23 +17,23 @@ type DetectedToolName = { label: string; toolName: string };
  * - `mcp:<label>:<tool>`: OpenCode. Its other spelling, `<label>_<tool>`,
  *   cannot be split without knowing the label, so it is not read here.
  */
-export function parseDetectedToolName(
+export function parseObservedToolName(
   name: string,
-): DetectedToolName | undefined {
+): ObservedToolName | undefined {
   return (
     parseDoubleUnderscoreSpelling(name) ?? parseOpenCodeColonSpelling(name)
   );
 }
 
-/** The prefix of every detected server's id. */
-const DETECTED_SERVER_ID_PREFIX = "observed.";
+/** The prefix of every observed server's id. */
+const OBSERVED_SERVER_ID_PREFIX = "observed.";
 
 /**
  * `observed.<label>`: the observed server's id and its alias target. The
  * prefix keeps it apart from a gateway server of the same label.
  */
-export function detectedServerId(label: string): string {
-  return `${DETECTED_SERVER_ID_PREFIX}${label}`;
+export function observedServerId(label: string): string {
+  return `${OBSERVED_SERVER_ID_PREFIX}${label}`;
 }
 
 /**
@@ -42,7 +42,7 @@ export function detectedServerId(label: string): string {
  * the runtime reads as a server/tool separator. Invalid labels are never
  * normalised; the row is skipped.
  */
-function isValidDetectedLabel(label: string): boolean {
+function isValidObservedLabel(label: string): boolean {
   return (
     label.length > 0 &&
     SEGMENT_PATTERN.test(label) &&
@@ -56,7 +56,7 @@ const SEGMENT_PATTERN = /^[A-Za-z0-9_.-]+$/;
 
 function parseDoubleUnderscoreSpelling(
   name: string,
-): DetectedToolName | undefined {
+): ObservedToolName | undefined {
   if (!name.startsWith(CLIENT_MCP_TOOL_NAME_PREFIX)) return undefined;
   const rest = name.slice(CLIENT_MCP_TOOL_NAME_PREFIX.length);
   const separator = rest.indexOf(MCP_SERVER_TOOL_NAME_SEPARATOR);
@@ -70,7 +70,7 @@ function parseDoubleUnderscoreSpelling(
   if (
     toolName === "" ||
     toolName.includes(MCP_SERVER_TOOL_NAME_SEPARATOR) ||
-    !isValidDetectedLabel(label)
+    !isValidObservedLabel(label)
   ) {
     return undefined;
   }
@@ -79,13 +79,13 @@ function parseDoubleUnderscoreSpelling(
 
 function parseOpenCodeColonSpelling(
   name: string,
-): DetectedToolName | undefined {
+): ObservedToolName | undefined {
   if (!name.startsWith(OPENCODE_MCP_TOOL_NAME_PREFIX)) return undefined;
   const rest = name.slice(OPENCODE_MCP_TOOL_NAME_PREFIX.length);
   const separator = rest.indexOf(":");
   if (separator <= 0) return undefined;
   const label = rest.slice(0, separator);
   const toolName = rest.slice(separator + 1);
-  if (toolName === "" || !isValidDetectedLabel(label)) return undefined;
+  if (toolName === "" || !isValidObservedLabel(label)) return undefined;
   return { label, toolName };
 }

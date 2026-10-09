@@ -1,17 +1,17 @@
 import { describe, expect, test } from "vitest";
 import {
-  detectedServerId,
-  parseDetectedToolName,
-} from "./detected-mcp-server-names";
+  observedServerId,
+  parseObservedToolName,
+} from "./observed-mcp-server-names";
 
-describe("parseDetectedToolName", () => {
+describe("parseObservedToolName", () => {
   test.each([
     ["mcp__slack__slack_send_message", "slack", "slack_send_message"],
     ["mcp__linear__create_issue", "linear", "create_issue"],
     ["mcp__my.server-1__tool", "my.server-1", "tool"],
     ["mcp:slack:send_message", "slack", "send_message"],
   ] as const)("reads %s as label %s and tool %s, whichever client sent it", (name, label, toolName) => {
-    expect(parseDetectedToolName(name)).toEqual({ label, toolName });
+    expect(parseObservedToolName(name)).toEqual({ label, toolName });
   });
 
   test.each([
@@ -25,19 +25,19 @@ describe("parseDetectedToolName", () => {
     "slack_send_message",
     "mcp:slack",
     "mcp::send",
-  ])("does not read %s as a detected tool", (name) => {
-    expect(parseDetectedToolName(name)).toBeUndefined();
+  ])("does not read %s as a observed tool", (name) => {
+    expect(parseObservedToolName(name)).toBeUndefined();
   });
 
   // A second `__` makes the split ambiguous, and the runtime reads a
   // canonical name at its last `__`; the name is skipped rather than rewritten.
   test("rejects a name with more than one separator without normalising it", () => {
-    expect(parseDetectedToolName("mcp__a__b__send")).toBeUndefined();
+    expect(parseObservedToolName("mcp__a__b__send")).toBeUndefined();
   });
 });
 
-describe("detectedServerId", () => {
+describe("observedServerId", () => {
   test("prefixes the label with observed, whichever client declared it", () => {
-    expect(detectedServerId("my.server")).toBe("observed.my.server");
+    expect(observedServerId("my.server")).toBe("observed.my.server");
   });
 });

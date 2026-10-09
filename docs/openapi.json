@@ -336446,7 +336446,7 @@
                 "agent",
                 "mcp_gateway",
                 "mcp_server",
-                "detected_mcp_server"
+                "observed_mcp_server"
               ]
             },
             "in": "query",
@@ -336514,7 +336514,7 @@
               ]
             },
             "in": "query",
-            "name": "includeDetected",
+            "name": "includeObserved",
             "required": false
           }
         ],
@@ -336654,7 +336654,7 @@
                               "type": {
                                 "type": "string",
                                 "enum": [
-                                  "detected_mcp_server"
+                                  "observed_mcp_server"
                                 ]
                               },
                               "name": {

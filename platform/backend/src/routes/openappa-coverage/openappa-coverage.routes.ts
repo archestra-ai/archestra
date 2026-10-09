@@ -5,9 +5,9 @@ import {
   openappaCoverageService,
 } from "@/openappa/coverage";
 import { openappaEnabled } from "@/openappa/service";
-import { listDetectedMcpServers } from "@/services/detected-mcp-servers";
+import { listObservedMcpServers } from "@/services/observed-mcp-servers";
 import { ApiError, constructResponseSchema } from "@/types";
-import type { DetectedMcpServer } from "@/types/detected-mcp-server";
+import type { ObservedMcpServer } from "@/types/observed-mcp-server";
 import {
   type CoverageEntitiesPage,
   CoverageEntitiesRoutePageSchema,
@@ -16,7 +16,7 @@ import {
   CoverageSummarySchema,
   CoverageToolsPageSchema,
   CoverageToolsQuerySchema,
-  type DetectedCoverageEntity,
+  type ObservedCoverageEntity,
 } from "@/types/openappa-coverage";
 
 /**
@@ -39,20 +39,20 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const { type, includeDetected, ...query } = request.query;
-      // `entityId` and `toolId` name registry targets; no detected server is one.
-      const detectedWanted =
-        (type === "detected_mcp_server" ||
-          (type === "mcp_server" && includeDetected === true)) &&
+      const { type, includeObserved, ...query } = request.query;
+      // `entityId` and `toolId` name registry targets; no observed server is one.
+      const observedWanted =
+        (type === "observed_mcp_server" ||
+          (type === "mcp_server" && includeObserved === true)) &&
         !query.entityId &&
         !query.toolId;
-      const detectedRows = detectedWanted
-        ? listDetectedMcpServers(request.organizationId).then((servers) =>
-            detectedEntities(servers, query),
+      const observedRows = observedWanted
+        ? listObservedMcpServers(request.organizationId).then((servers) =>
+            observedEntities(servers, query),
           )
         : Promise.resolve([]);
-      if (type === "detected_mcp_server") {
-        return pageOf(await detectedRows, query);
+      if (type === "observed_mcp_server") {
+        return pageOf(await observedRows, query);
       }
       const registryRows = coverageVisibility(
         request.user.id,
@@ -65,11 +65,11 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           type,
         }),
       );
-      const [registry, detected] = await Promise.all([
+      const [registry, observed] = await Promise.all([
         registryRows,
-        detectedRows,
+        observedRows,
       ]);
-      return appendDetected(registry, detected, query);
+      return appendObserved(registry, observed, query);
     },
   );
   app.get(
@@ -115,19 +115,19 @@ type EntitiesPaging = Pick<
   "search" | "sortBy" | "sortDirection" | "limit" | "offset"
 >;
 
-/** Detected servers as list rows: the search and sort the registry rows get. */
-function detectedEntities(
-  servers: DetectedMcpServer[],
+/** Observed servers as list rows: the search and sort the registry rows get. */
+function observedEntities(
+  servers: ObservedMcpServer[],
   query: EntitiesPaging,
-): DetectedCoverageEntity[] {
+): ObservedCoverageEntity[] {
   const search = query.search?.toLowerCase();
   const direction = query.sortDirection === "desc" ? -1 : 1;
-  const key = (entity: DetectedCoverageEntity) =>
+  const key = (entity: ObservedCoverageEntity) =>
     query.sortBy === "tools" ? entity.toolCount : entity.name;
   return servers
     .filter((server) => !search || server.label.toLowerCase().includes(search))
     .map((server) => ({
-      type: "detected_mcp_server" as const,
+      type: "observed_mcp_server" as const,
       id: server.id,
       name: server.label,
       label: server.label,
@@ -152,7 +152,7 @@ function detectedEntities(
 }
 
 function pageOf(
-  rows: DetectedCoverageEntity[],
+  rows: ObservedCoverageEntity[],
   paging: Pick<EntitiesPaging, "limit" | "offset">,
 ) {
   return {
@@ -162,25 +162,25 @@ function pageOf(
 }
 
 /**
- * One paged list over registry rows then detected rows: the registry page is
- * what coverage returned for this offset, and detected rows fill the rest of
+ * One paged list over registry rows then observed rows: the registry page is
+ * what coverage returned for this offset, and observed rows fill the rest of
  * the page from where the registry's total left off.
  */
-function appendDetected(
+function appendObserved(
   registry: CoverageEntitiesPage,
-  detected: DetectedCoverageEntity[],
+  observed: ObservedCoverageEntity[],
   paging: Pick<EntitiesPaging, "limit" | "offset">,
 ) {
-  if (detected.length === 0) return registry;
+  if (observed.length === 0) return registry;
   const room = paging.limit - registry.data.length;
   const start = Math.max(0, paging.offset - registry.pagination.total);
   return {
     data: [
       ...registry.data,
-      ...(room > 0 ? detected.slice(start, start + room) : []),
+      ...(room > 0 ? observed.slice(start, start + room) : []),
     ],
     pagination: calculatePaginationMeta(
-      registry.pagination.total + detected.length,
+      registry.pagination.total + observed.length,
       paging,
     ),
   };

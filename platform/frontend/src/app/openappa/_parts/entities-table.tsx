@@ -28,7 +28,7 @@ import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import {
   type CoverageEntity,
-  type DetectedCoverageEntity,
+  type ObservedCoverageEntity,
   type RegistryCoverageEntity,
   useCoverageEntities,
 } from "@/lib/openappa-coverage.query";
@@ -94,9 +94,9 @@ export function EntitiesTable() {
   );
   const entities = useCoverageEntities({
     search,
-    ...(typeFilter === "detected"
-      ? { type: "detected_mcp_server" }
-      : { type: "mcp_server", includeDetected: typeFilter === "all" }),
+    ...(typeFilter === "observed"
+      ? { type: "observed_mcp_server" }
+      : { type: "mcp_server", includeObserved: typeFilter === "all" }),
     sortBy: sort.id,
     sortDirection: sort.desc ? "desc" : "asc",
     limit,
@@ -117,7 +117,7 @@ export function EntitiesTable() {
         size: 260,
         cell: ({ row }) => {
           const entity = row.original;
-          return isDetected(entity) ? (
+          return isObserved(entity) ? (
             // Laid out like the registry rows' button: icon, then name.
             <span className="flex min-w-0 items-center gap-2">
               <Network className="size-4 shrink-0 text-muted-foreground" />
@@ -151,7 +151,7 @@ export function EntitiesTable() {
         header: ({ column }) => <SortHeader column={column} label="Type" />,
         size: 210,
         cell: ({ row }) =>
-          isDetected(row.original) ? (
+          isObserved(row.original) ? (
             <span>Observed</span>
           ) : (
             <span className="flex items-center gap-2">
@@ -171,7 +171,7 @@ export function EntitiesTable() {
           <SortHeader column={column} label="Tool coverage" />
         ),
         cell: ({ row }) =>
-          isDetected(row.original) ? (
+          isObserved(row.original) ? (
             <span className="text-muted-foreground text-xs tabular-nums">
               {`${row.original.toolCount.toLocaleString()} ${row.original.toolCount === 1 ? "tool" : "tools"}`}
             </span>
@@ -194,7 +194,7 @@ export function EntitiesTable() {
         header: "Actions",
         size: 100,
         cell: ({ row }) =>
-          isDetected(row.original) ? null : (
+          isObserved(row.original) ? null : (
             <OpenAppaChatButton
               permissions={
                 row.original.type === "mcp_server"
@@ -258,7 +258,7 @@ export function EntitiesTable() {
             items={[
               { value: DEFAULT_FILTER_ALL, label: "All types" },
               { value: "mcp_server", label: "MCP server" },
-              { value: "detected", label: "Observed" },
+              { value: "observed", label: "Observed" },
             ]}
           />
         </FilterBar>
@@ -275,7 +275,7 @@ export function EntitiesTable() {
           data={entities.data?.data ?? []}
           getRowId={(row) => `${row.type}:${row.id}`}
           onRowClick={(row) => {
-            if (!isDetected(row)) setSelected(row);
+            if (!isObserved(row)) setSelected(row);
           }}
           manualPagination
           pagination={{
@@ -372,15 +372,15 @@ function PolicyTargetDialog({
   );
 }
 
-const TYPE_FILTERS = ["all", "mcp_server", "detected"] as const;
+const TYPE_FILTERS = ["all", "mcp_server", "observed"] as const;
 type TypeFilter = (typeof TYPE_FILTERS)[number];
 
 function isTypeFilter(value: string | null): value is TypeFilter {
   return TYPE_FILTERS.some((filter) => filter === value);
 }
 
-function isDetected(entity: CoverageEntity): entity is DetectedCoverageEntity {
-  return entity.type === "detected_mcp_server";
+function isObserved(entity: CoverageEntity): entity is ObservedCoverageEntity {
+  return entity.type === "observed_mcp_server";
 }
 
 function entityTypeLabel(type: RegistryCoverageEntity["type"]): string {

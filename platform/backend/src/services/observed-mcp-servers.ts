@@ -1,39 +1,39 @@
 import { ToolObservationModel } from "@/models";
 import type { ProxyToolObservation } from "@/models/tool-observation";
-import type { DetectedMcpServer } from "@/types";
+import type { ObservedMcpServer } from "@/types";
 import {
-  detectedServerId,
-  parseDetectedToolName,
-} from "@/utils/detected-mcp-server-names";
+  observedServerId,
+  parseObservedToolName,
+} from "@/utils/observed-mcp-server-names";
 
 /**
- * The organization's detected MCP servers, derived from the proxy's tool
+ * The organization's observed MCP servers, derived from the proxy's tool
  * observations: an observation ties a proxy-discovered tool to the member
  * who declared it. Every local server under one label, for any member and
- * whichever client sent it, is one detected server: an attachment made to it
+ * whichever client sent it, is one observed server: an attachment made to it
  * governs that label for everyone.
  */
-export async function listDetectedMcpServers(
+export async function listObservedMcpServers(
   organizationId: string,
-): Promise<DetectedMcpServer[]> {
+): Promise<ObservedMcpServer[]> {
   const observations =
     await ToolObservationModel.listProxyToolObservations(organizationId);
-  return groupDetectedServers(observations);
+  return groupObservedServers(observations);
 }
 
 // === Internal helpers ===
 
-function groupDetectedServers(
+function groupObservedServers(
   observations: ProxyToolObservation[],
-): DetectedMcpServer[] {
+): ObservedMcpServer[] {
   const servers = new Map<
     string,
-    DetectedMcpServer & { toolNames: Set<string> }
+    ObservedMcpServer & { toolNames: Set<string> }
   >();
   for (const observation of observations) {
-    const parsed = parseDetectedToolName(observation.toolName);
+    const parsed = parseObservedToolName(observation.toolName);
     if (!parsed) continue;
-    const id = detectedServerId(parsed.label);
+    const id = observedServerId(parsed.label);
     let server = servers.get(id);
     if (!server) {
       server = {

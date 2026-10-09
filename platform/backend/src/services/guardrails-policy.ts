@@ -6,6 +6,7 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -298,7 +299,7 @@ export const guardrailsPolicyService = {
 };
 
 function requireEnabled() {
-  if (!config.openappa.enabled)
+  if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
 function noopAnnotatorUrl() {

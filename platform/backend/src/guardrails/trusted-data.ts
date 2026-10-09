@@ -19,7 +19,7 @@ import {
   resolveRunToolTarget,
 } from "@/archestra-mcp-server/run-tool-target";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import { TrustedDataPolicyModel } from "@/models";
 import type { PolicyEvaluationContext } from "@/models/tool-invocation-policy";
@@ -525,14 +525,15 @@ export async function evaluateIfContextIsTrusted(params: {
  * result, and the pages that configure this one are hidden while OpenAPPA is
  * on, so its verdicts would be unexplainable and unchangeable from the UI.
  *
- * Keyed on the server flag alone, never on the deployment enforcement switch
- * or on anything stored. Turning the flag off restores this guardrail exactly
- * as it was, with every policy row untouched.
+ * Keyed on the server flag and the enterprise licence, never on the
+ * deployment enforcement switch or on anything stored. Turning the flag off,
+ * or losing the licence, restores this guardrail exactly as it was, with every
+ * policy row untouched.
  *
  * @public — exported for testability
  */
 export function legacyTrustedDataActive(): boolean {
-  return !config.openappa.enabled;
+  return !enterpriseTier.isOpenappaActive();
 }
 
 /**

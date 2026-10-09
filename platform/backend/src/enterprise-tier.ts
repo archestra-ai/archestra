@@ -58,6 +58,11 @@ class EnterpriseTierService {
     return config.enterpriseFeatures.core || this.isSmallTeam();
   }
 
+  /** OpenAPPA needs both the beta flag and an effective enterprise licence. */
+  isOpenappaActive(): boolean {
+    return config.openappa.enabled && this.isCoreActive();
+  }
+
   isKnowledgeBaseActive(): boolean {
     return config.enterpriseFeatures.knowledgeBase || this.isSmallTeam();
   }

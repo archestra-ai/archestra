@@ -11,6 +11,7 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import { AgentToolModel, ToolModel, TrustedDataPolicyModel } from "@/models";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -1705,6 +1706,52 @@ describe("trusted-data evaluation (provider-agnostic)", () => {
       expect(result.unsafeContextBoundary).toBeUndefined();
       expect(result.toolResultUpdates).toEqual({});
       expect(result.dualLlmAnalyses).toEqual([]);
+    });
+
+    test("keeps judging when OpenAPPA is enabled but unlicensed", async () => {
+      const commonMessages: CommonMessage[] = [
+        { role: "assistant" },
+        {
+          role: "tool",
+          toolCalls: [
+            {
+              id: "call_untrusted",
+              name: "get_emails",
+              content: { from: "user@example.com" },
+              isError: false,
+            },
+          ],
+        },
+      ];
+      const original = config.openappa.enabled;
+      const originalCore = config.enterpriseFeatures.core;
+      config.openappa.enabled = true;
+      Object.defineProperty(config.enterpriseFeatures, "core", {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      enterpriseTier.setUserCountForTesting(30);
+      onTestFinished(() => {
+        config.openappa.enabled = original;
+        Object.defineProperty(config.enterpriseFeatures, "core", {
+          value: originalCore,
+          writable: true,
+          configurable: true,
+        });
+        enterpriseTier.setUserCountForTesting(0);
+      });
+
+      const result = await evaluateIfContextIsTrusted({
+        messages: commonMessages,
+        agentId: agentId,
+        organizationId: organizationId,
+        considerContextUntrusted: false,
+        policyContext: { teamIds: [] },
+      });
+
+      expect(legacyTrustedDataActive()).toBe(true);
+      expect(result.contextIsTrusted).toBe(false);
     });
 
     test("KB tool error result still makes context untrusted", async () => {

@@ -486,8 +486,7 @@ describe("buildWindowsStartupGuardInstallSection (Claude Code)", () => {
     // irm|iex runs in the caller's scope, so evaluating the block here defines
     // `function claude` in the live session — not only in profile.ps1.
     expect(section).toContain("Invoke-Expression $archGuardBlock");
-    // and the final message reflects that it is active immediately
-    expect(section).toContain("active in this PowerShell session now");
+    expect(section).toContain("Launch check added.");
   });
 });
 

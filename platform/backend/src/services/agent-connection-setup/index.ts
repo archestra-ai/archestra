@@ -5,6 +5,7 @@ import { codexSetup } from "./agents/codex";
 import { copilotCliSetup } from "./agents/copilot-cli";
 import { cursorSetup } from "./agents/cursor";
 import { opencodeSetup } from "./agents/opencode";
+import { buildEnding } from "./steps/ending";
 import {
   bashFooter,
   bashHeader,
@@ -71,6 +72,7 @@ export function renderSetupScript(rawCtx: SetupScriptContext): string {
     appName: sanitizeAppName(rawCtx.appName),
   };
   const agent = SHELL_AGENTS[rawCtx.clientId];
+  const ending = buildEnding(ctx, agent.label, agent.ending(ctx));
 
   // Windows targets PowerShell; macOS/Linux share bash.
   const sections =
@@ -78,12 +80,12 @@ export function renderSetupScript(rawCtx: SetupScriptContext): string {
       ? [
           powerShellHeader(ctx, agent),
           ...agent.powerShell.sections(ctx),
-          powerShellFooter(ctx, agent.powerShell.nextSteps(ctx)),
+          powerShellFooter(ending),
         ]
       : [
           bashHeader(ctx, agent),
           ...agent.bash.sections(ctx),
-          bashFooter(ctx, agent.bash.nextSteps(ctx)),
+          bashFooter(ending),
         ];
   return `${sections.join("\n\n")}\n`;
 }

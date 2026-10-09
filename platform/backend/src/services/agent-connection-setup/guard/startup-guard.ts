@@ -1257,7 +1257,7 @@ export function buildStartupGuardInstallSection(
   fi`
     : "";
 
-  return `say ${sh(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
+  return `say ${sh(`Adding the ${ctx.appName} launch check to ${client.label}`)}
 mkdir -p "$(dirname "${guardPath}")"
 ${promptInstall}
 ${extraInstall}
@@ -1356,13 +1356,8 @@ ${GUARD_PROFILE_EOF}
 }
 
 # Install both interactive-shell rc files plus the Bash login profile that the
-# user already chose (or .bash_profile when none exists). This script runs in a
-# child \`curl | bash\`, so it cannot define the wrapper in its parent shell; the
-# activation hint remains necessary for the current terminal.
-case "\${SHELL:-}" in
-  *zsh*) archestra_guard_profile="$HOME/.zshrc" ;;
-  *)     archestra_guard_profile="$HOME/.bashrc" ;;
-esac
+# user already chose (or .bash_profile when none exists). New terminals pick the
+# wrapper up; this script runs in a child shell and cannot arm its parent.
 archestra_install_guard_block "$HOME/.bashrc"
 archestra_install_guard_block "$HOME/.zshrc"
 if [ -f "$HOME/.bash_profile" ]; then
@@ -1375,9 +1370,7 @@ else
   archestra_bash_login_profile="$HOME/.bash_profile"
 fi
 archestra_install_guard_block "$archestra_bash_login_profile"
-ok "Startup guard installed for ${client.binary}."
-printf '   It runs automatically in new terminals. To arm it in THIS terminal now,\n'
-printf '   reload your shell:  %ssource %s%s   (or just open a new terminal).\n' "$ARCH_C_OK" "$archestra_guard_profile" "$ARCH_C_RESET"`;
+ok "Launch check added. It runs each time you start ${client.binary} in a new terminal."`;
 }
 
 function renderMarketplaceRefreshProfileBlock(params: {

@@ -281,6 +281,15 @@ test("Desktop downloads and executes its approved setup through the same protoco
   expect(result.output).not.toContain("A".repeat(43));
 });
 
+/** node:fs for the installer's terminal questions: no terminal here. */
+const noTerminal = {
+  openSync() {
+    throw new Error("no terminal");
+  },
+  readSync: () => 0,
+  closeSync() {},
+};
+
 test("writes the approved Windows setup with a UTF-8 BOM so powershell.exe -File decodes its glyphs", async () => {
   // Windows PowerShell 5.1 reads a BOM-less .ps1 in the system ANSI codepage,
   // garbling the banner's Unicode mark and the startup-guard body the script
@@ -316,6 +325,7 @@ test("writes the approved Windows setup with a UTF-8 BOM so powershell.exe -File
       },
       require: (name: string) => {
         if (name === "node:crypto") return { createHash };
+        if (name === "node:fs") return noTerminal;
         if (name === "node:fs/promises") return fileSystem;
         if (name === "node:path") return { join };
         if (name === "node:os")
@@ -389,6 +399,7 @@ test.each([
       },
       require: (name: string) => {
         if (name === "node:crypto") return { createHash };
+        if (name === "node:fs") return noTerminal;
         if (name === "node:fs/promises") return fileSystem;
         if (name === "node:path") return { join };
         if (name === "node:os")

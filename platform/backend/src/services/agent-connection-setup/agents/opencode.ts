@@ -11,6 +11,7 @@ import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
 } from "../payloads/opencode-routing-plugin";
+import { starterPrompt } from "../steps/ending";
 import { legacyServerNames } from "../steps/mcp";
 import { psq, sh } from "../steps/quoting";
 import {
@@ -18,6 +19,7 @@ import {
   withStartupGuardPowerShell,
 } from "../steps/startup-guard";
 import type {
+  AgentEnding,
   SetupScriptContext,
   SetupScriptProxySection,
   ShellAgentSetup,
@@ -26,20 +28,6 @@ import type {
 // OpenCode setup. Shared helpers and the config-merge payloads first, then the
 // bash and PowerShell steps side by side, then the agent module the dispatcher
 // in ../index.ts uses.
-
-/**
- * OpenCode's post-install OAuth step, shared by the bash and PowerShell
- * renderers. Unlike Claude Code's in-session `/mcp`, `opencode mcp auth` is its
- * own process that reads the updated config, so the connection agent can run it
- * before asking the user to restart. The running OpenCode session still never
- * reloads its config, so the renderers close with a user-controlled handoff.
- */
-function opencodeOAuthNextStep(serverName: string): string {
-  return `Run \`opencode mcp list\` first. If "${serverName}" is connected (OAuth), skip sign-in. Otherwise check \`opencode mcp auth list\`: if "${serverName}" is authenticated but not connected, report the connection error rather than forcing re-authentication. If authentication is missing or expired, run \`opencode mcp auth ${serverName}\` with CI=true set for the process so its browser URL stays visible in captured output. Keep it running while the user completes sign-in — this browser approval is the gateway's native OAuth flow, not a repeat of connection setup. If no browser opens, relay the URL printed by the command. OpenCode does not start this sign-in on its own.`;
-}
-
-const opencodeRestartNextStep =
-  "Do not stop or restart OpenCode from inside this running conversation. Finish your reply, then tell the user to save work, close all OpenCode windows normally, and launch `opencode` in a new terminal. The startup guard checks these remotes on that launch.";
 
 interface OpencodeProviderTarget {
   id: string;
@@ -440,7 +428,7 @@ ARCHESTRA_OPENCODE_MAJOR="$( { opencode --version 2>/dev/null || true; } </dev/n
   ];
 
   if (ctx.mcp) {
-    sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+    sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 ${opencodeOwnedMergeBash(
   {
     ARCHESTRA_OC_MCP_NAME: ctx.mcp.serverName,
@@ -616,7 +604,7 @@ function Enable-ArchOcProviders($cfg, [string[]]$providerIds) {
   ];
 
   if (ctx.mcp) {
-    sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+    sections.push(`Say ${psq(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 $archCfg = Read-ArchOcOwned
 if (-not $archCfg.PSObject.Properties['mcp']) { Set-ArchProp $archCfg 'mcp' ([pscustomobject]@{}) }
 foreach ($archLegacy in @(${legacyServerNames(ctx.mcp).map(psq).join(", ") || "''"})) {
@@ -749,58 +737,47 @@ try { & opencode mcp list 2>$null | Out-Host } catch { }`);
   return withStartupGuardPowerShell(ctx, OPENCODE_GUARD_CLIENT, sections);
 }
 
-function opencodeBashNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  if (ctx.mcp) {
-    steps.push(opencodeOAuthNextStep(ctx.mcp.serverName));
+function opencodeEnding(ctx: SetupScriptContext): AgentEnding {
+  let proxyDetail: string | undefined;
+  if (ctx.proxy?.authMode === "provider-key") {
+    proxyDetail = `Providers you have signed in to in OpenCode now go through the ${ctx.appName} LLM proxy`;
+  } else if (ctx.proxy) {
+    const target = opencodeProviderTarget(ctx);
+    proxyDetail = `Pick ${target.id}/${target.model} in OpenCode's model picker to use it`;
   }
-  if (ctx.proxy) {
-    if (ctx.proxy.authMode === "provider-key") {
-      steps.push(
-        "Keep using OpenCode's existing provider and model picker. Providers with compatible local credentials now route through the LLM proxy without moving credentials out of OpenCode.",
-      );
-    } else {
-      const target = opencodeProviderTarget(ctx);
-      steps.push(
-        `Select ${target.id}/${target.model} in OpenCode to use the virtual key-backed proxy provider.`,
-      );
-    }
-  }
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    steps.push(opencodeRestartNextStep);
-  }
-  return steps;
-}
-
-function opencodePowerShellNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  if (ctx.mcp) {
-    steps.push(opencodeOAuthNextStep(ctx.mcp.serverName));
-  }
-  if (ctx.proxy) {
-    if (ctx.proxy.authMode === "provider-key") {
-      steps.push(
-        "Keep using OpenCode's existing provider and model picker. Providers with compatible local credentials now route through the LLM proxy without moving credentials out of OpenCode.",
-      );
-    } else {
-      const target = opencodeProviderTarget(ctx);
-      steps.push(
-        `Select ${target.id}/${target.model} in OpenCode to use the virtual key-backed proxy provider.`,
-      );
-    }
-  }
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    steps.push(opencodeRestartNextStep);
-  }
-  return steps;
+  return {
+    proxyDetail,
+    parts:
+      ctx.mcp || ctx.proxy || ctx.skills
+        ? [
+            {
+              name: "Launch check",
+              detail: "Runs each time you start opencode",
+            },
+          ]
+        : [],
+    signIn: ctx.mcp
+      ? {
+          command: ["opencode", "mcp", "auth", ctx.mcp.serverName],
+          howTo: `Run opencode mcp auth ${ctx.mcp.serverName} and finish the sign-in in your browser.`,
+        }
+      : null,
+    launch: ["opencode", "--prompt", starterPrompt(ctx)],
+    notes:
+      ctx.mcp || ctx.proxy || ctx.skills
+        ? [
+            "If OpenCode is already open, close it first so it picks up the new settings.",
+          ]
+        : [],
+  };
 }
 
 export const opencodeSetup: ShellAgentSetup = {
   label: "OpenCode",
   binary: "opencode",
-  bash: { sections: opencodeBashSections, nextSteps: opencodeBashNextSteps },
+  bash: { sections: opencodeBashSections },
   powerShell: {
     sections: opencodePowerShellSections,
-    nextSteps: opencodePowerShellNextSteps,
   },
+  ending: opencodeEnding,
 };

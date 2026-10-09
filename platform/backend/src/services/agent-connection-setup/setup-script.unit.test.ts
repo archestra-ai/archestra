@@ -429,7 +429,7 @@ describe("Claude Code APPA permission installation", () => {
     expect(script).toContain("claude mcp add");
     expect(script).toContain("team_(eu)");
     expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
-    expect(script).not.toContain("APPA helper calls are pre-approved");
+    expect(script).not.toContain("call the guardrail helpers");
     expect(script).not.toContain("python3 is required");
     expect(script).not.toContain("mcp__team_(eu)__");
     expect(() =>
@@ -444,7 +444,7 @@ describe("Claude Code APPA permission installation", () => {
     });
     expect(script).toContain("claude mcp add");
     expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
-    expect(script).not.toContain("APPA helper calls are pre-approved");
+    expect(script).not.toContain("call the guardrail helpers");
     expect(script).not.toContain("mcp__prod_gateway__");
     expect(script).not.toContain("*get_remedy_plans");
     expect(() =>
@@ -938,7 +938,10 @@ ${binary} "$@"
       // and positions text with absolute cursor moves that assume it owns the
       // screen, cascading every line to the right under `curl | bash`. Every
       // invocation must go through `cli`, which detaches stdout from the tty.
+      // The ending's text shows commands for the person to type; it is
+      // printed, never run.
       const bareInvocations = script
+        .replace(/<<'ARCHESTRA_NEXT'\n[\s\S]*?\nARCHESTRA_NEXT/, "")
         .split("\n")
         .map((line) => line.trim())
         .filter((line) =>
@@ -987,7 +990,7 @@ ${binary} "$@"
     expect(claude).not.toContain(
       "cli claude plugin install 'acme-skills@acme-skills'",
     );
-    expect(claude).toContain("Configures: Plugins marketplace");
+    expect(claude).toContain("Sets up:    Plugins");
     expect(claude).toContain("1 plugin is installed");
     expect(claude).toContain("Plugins marketplace (acme-skills)");
     expect(claude).not.toContain("The shared skills are installed");
@@ -995,7 +998,7 @@ ${binary} "$@"
     const codex = renderSetupScript(context("codex"));
     await expectValidBash(codex);
     expect(codex).toContain(`cli codex plugin add '${pluginRef}'`);
-    expect(codex).toContain("approve each delivered hook");
+    expect(codex).toContain("approve each new hook");
 
     const copilot = renderSetupScript(context("copilot-cli"));
     await expectValidBash(copilot);
@@ -1032,7 +1035,7 @@ ${binary} "$@"
     );
     expect(claude).toContain("plugin update -y");
     expect(claude).toContain("'Application', 'ExternalScript'");
-    expect(claude).toContain("Configures: Plugins marketplace");
+    expect(claude).toContain("Sets up:    Plugins");
     expect(claude).toContain("1 plugin is installed");
     expect(claude).toContain("Plugins marketplace (acme-skills)");
     expect(claude).not.toContain("The shared skills are installed");
@@ -1205,10 +1208,8 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     expect(script).not.toContain("marketplace browse");
     // python3 fallback prints a manual snippet rather than failing.
     expect(script).toContain("python3 not found");
-    // Next steps name the exact command and server for the OAuth handshake,
-    // in a NEW session — the current one never sees the gateway.
-    expect(script).toContain("Start a new `claude` session, run `/mcp` there");
-    expect(script).toContain(`select "${MCP.serverName}"`);
+    // The ending names the exact sign-in command and server.
+    expect(script).toContain(`claude mcp login ${MCP.serverName}`);
   });
 
   test("claude-code: skips re-registration on matching normalized marketplace sources", async () => {
@@ -1446,38 +1447,24 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     }
   });
 
-  test("claude-code (windows): next steps carry the same OAuth guidance", () => {
+  test("claude-code (windows): the ending carries the same sign-in command", () => {
     const script = renderSetupScript(fullContext("claude-code", "windows"));
-    expect(script).toContain("Start a new `claude` session, run `/mcp` there");
-    expect(script).toContain(`select "${MCP.serverName}"`);
+    expect(script).toContain(`claude mcp login ${MCP.serverName}`);
   });
 
   test.each([
     "macos",
     "windows",
-  ] as const)("opencode (%s): next steps leave restart to the user", (platform) => {
+  ] as const)("opencode (%s): the ending offers sign-in and a launch command", (platform) => {
     const script = renderSetupScript(fullContext("opencode", platform));
-    expect(script).toContain("Run `opencode mcp list` first");
-    expect(script).toContain("connected (OAuth), skip sign-in");
+    expect(script).toContain(`opencode mcp auth ${MCP.serverName}`);
     expect(script).toContain(
-      "report the connection error rather than forcing re-authentication",
+      "opencode --prompt 'What can you do with my Archestra tools?'",
     );
-    expect(script).toContain("run `opencode mcp auth");
-    expect(script).toContain("CI=true set for the process");
-    expect(script).toContain(
-      "this browser approval is the gateway's native OAuth flow",
-    );
-    expect(script).toContain("If no browser opens, relay the URL");
-    const signInAt = script.indexOf(`opencode mcp auth ${MCP.serverName}`);
-    const restartAt = script.indexOf(
-      "Do not stop or restart OpenCode from inside this running conversation",
-    );
-    expect(signInAt).toBeGreaterThan(-1);
-    expect(restartAt).toBeGreaterThan(signInAt);
-    expect(script).toContain(
-      "tell the user to save work, close all OpenCode windows normally",
-    );
-    expect(script).not.toContain("Close every running OpenCode process");
+    expect(script).toContain("If OpenCode is already open, close it first");
+    // No instructions addressed to an agent.
+    expect(script).not.toContain("relay the URL");
+    expect(script).not.toContain("tell the user");
   });
 
   test("opencode: rerunning setup preserves a connected gateway and LLM proxy without requiring OAuth again", async () => {
@@ -1546,9 +1533,7 @@ esac
         env,
       });
       expect(second.stdout).toContain("prod_gateway connected (OAuth)");
-      expect(second.stdout).toContain(
-        'If "prod_gateway" is connected (OAuth), skip sign-in',
-      );
+      expect(second.stdout).toContain("OpenCode is connected to Archestra.");
       expect(second.stdout).not.toContain(
         "Run `opencode mcp auth prod_gateway` now",
       );
@@ -2417,7 +2402,7 @@ if (process.argv[2] === 'debug') {
     );
     expect(script).not.toContain("Authorization");
     expect(script).toContain("Override OpenAI Base URL");
-    expect(script).toContain("Cursor Customize → MCPs");
+    expect(script).toContain("open Customize > MCPs");
     expect(script).toContain('turn on "Use OpenAI API Key"');
     expect(script).not.toContain("click Verify");
     expect(script).toContain(".cursor/skills/");
@@ -2917,9 +2902,8 @@ describe("banner", () => {
     expect(branded).toContain("Secure access to your AI tools");
     // the Archestra braille mark is printed under the default brand
     expect(branded).toContain("⣾⣿⣿⣿⣿⣷");
-    expect(branded).toContain("Client:     Claude Code");
-    expect(branded).toContain("Configures:");
-    expect(branded).toContain("one-time setup");
+    expect(branded).toContain("Connecting: Claude Code");
+    expect(branded).toContain("Sets up:");
 
     // an org named "Archestra Staging" is still Archestra's own brand — the
     // mark must not disappear just because the name isn't an exact match
@@ -2966,7 +2950,7 @@ describe("color output", () => {
     expect(script).toContain("say()");
     expect(script).toContain("err()");
     expect(script).toContain("warn()");
-    expect(script).toContain('ok "Done."');
+    expect(script).toContain("is connected to Archestra.");
     // Errors are routed through err() (stderr), not bare `echo ... >&2`.
     expect(script).not.toContain('echo "error:');
   });
@@ -3191,5 +3175,32 @@ describe("migrating a gateway registered under an older name", () => {
     const script = renderSetupScript(fullContext("claude-code"));
 
     expect(script).not.toContain("my_gateway");
+  });
+});
+
+describe("ending", () => {
+  test("links to the disconnect steps and hands the installer the commands", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      connectPageUrl: "https://archestra.example.com/connection",
+    });
+    expect(script).toContain(
+      "Disconnect anytime: https://archestra.example.com/connection?clientId=claude-code&disconnect=1",
+    );
+    // Run on its own, the script prints the ending; the installer reads it
+    // from the marker instead.
+    expect(script).toContain('if [ -z "${ARCHESTRA_CONNECT_INSTALLER:-}" ]');
+    const marker = script.match(/^# archestra-ending: (\S+)$/m)?.[1];
+    const ending = JSON.parse(Buffer.from(marker ?? "", "base64").toString());
+    expect(ending.signIn.command).toEqual([
+      "claude",
+      "mcp",
+      "login",
+      MCP.serverName,
+    ]);
+    expect(ending.launch).toEqual({
+      command: ["claude", "What can you do with my Archestra tools?"],
+      text: "claude 'What can you do with my Archestra tools?'",
+    });
   });
 });

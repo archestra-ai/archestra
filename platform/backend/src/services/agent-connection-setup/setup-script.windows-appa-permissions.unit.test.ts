@@ -31,7 +31,7 @@ const BEGIN = "# >>> archestra:claude-appa-permissions >>>";
 const END = "# <<< archestra:claude-appa-permissions <<<";
 const SECRET = "arch_secret_token_value";
 const NOTICE =
-  "APPA helper calls are pre-approved for Claude Code, including auto mode. Claude skips its approval prompt and classifier for these helpers. Gateway authorization and required human review still apply.";
+  "Claude Code can call the guardrail helpers without asking each time. Gateway sign-in and required human reviews still apply.";
 
 const MCP: SetupScriptMcpSection = {
   serverName: "prod_gateway",

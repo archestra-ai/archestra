@@ -4,16 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
-  ARCHESTRA_TOOL_PREFIX,
-  getArchestraToolPrefix,
-} from "@archestra/shared/archestra-mcp-server";
-import {
   ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
   isCodexOriginator,
 } from "@archestra/shared/interactions/client";
 import { expect, test } from "vitest";
-import { CODEX_GUARD_CLIENT } from "../guard/clients";
-import { renderSetupScript } from "../index";
 import { CODEX_CONNECTION_VERIFICATION_WINDOWS } from "./codex-connection-verification.windows";
 import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
 
@@ -54,22 +48,16 @@ const scenarios = [
   "branded-canonical-only",
   "invalid-tool-prefix",
 ] as const;
-test.for([
-  ...scenarios.flatMap((scenario) =>
+test.for(
+  scenarios.flatMap((scenario) =>
     ["node", "powershell"].map((runtime) => ({
-      scenario,
+      scenario: scenario as string,
       runtime,
-      printed: false,
     })),
   ),
-  { scenario: "success", runtime: "node", printed: true },
-  { scenario: "success", runtime: "powershell", printed: true },
-  { scenario: "branded-list-skills", runtime: "node", printed: true },
-  { scenario: "branded-list-skills", runtime: "powershell", printed: true },
-])("native connection verification: $runtime / $scenario / printed=$printed", async ({
+)("native connection verification: $runtime / $scenario", async ({
   scenario,
   runtime,
-  printed,
 }, { skip }) => {
   if (runtime === "powershell" && spawnSync("pwsh", ["--version"]).status !== 0)
     skip("PowerShell is not installed");
@@ -201,8 +189,8 @@ createInterface({ input: process.stdin }).on('line', line => {
         ...(toolPrefix ? { toolPrefix } : {}),
       }),
     ).toString("base64");
-    let command = runtime === "powershell" ? "pwsh" : process.execPath;
-    let args =
+    const command = runtime === "powershell" ? "pwsh" : process.execPath;
+    const args =
       runtime === "powershell"
         ? [
             "-NoProfile",
@@ -215,44 +203,6 @@ createInterface({ input: process.stdin }).on('line', line => {
             options,
           ]
         : [helper, "--verify", binary, options];
-    if (printed) {
-      const windows = runtime === "powershell";
-      const script = renderSetupScript({
-        appName: "Archestra",
-        clientId: "codex",
-        platform: windows ? "windows" : "linux",
-        mcp: {
-          serverName: "selected-gateway",
-          toolPrefix: "archestra__",
-          url: "https://example.test/v1/mcp/gateway",
-        },
-        toolPrefix:
-          scenario === "branded-list-skills"
-            ? "archestra_staging__"
-            : undefined,
-        proxy: null,
-        skills: null,
-      });
-      const verify = script.match(/Verification command: ([^\n]+)/)?.[1];
-      if (!verify) throw new Error("missing printed verification command");
-      const installed = path.join(
-        directory,
-        `${
-          windows
-            ? CODEX_GUARD_CLIENT.psScriptRelpath
-            : CODEX_GUARD_CLIENT.scriptRelpath
-        }${windows ? ".verify.ps1" : ".handoff.cjs"}`,
-      );
-      await mkdir(path.dirname(installed), { recursive: true });
-      await writeFile(
-        installed,
-        windows ? CODEX_CONNECTION_VERIFICATION_WINDOWS : CODEX_HANDOFF_HELPER,
-      );
-      command = windows ? "pwsh" : "bash";
-      args = windows
-        ? ["-NoProfile", "-NonInteractive", "-Command", verify]
-        : ["-c", verify];
-    }
     const result = await exec(command, args, {
       env: {
         ...process.env,
@@ -352,7 +302,7 @@ createInterface({ input: process.stdin }).on('line', line => {
       expect(result.code, result.stderr).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
         gateway: "verified",
-        proxy: printed ? "not-selected" : "verified",
+        proxy: "verified",
       });
       expect(
         requests.find((request) => request.method === "mcpServer/tool/call")
@@ -374,9 +324,7 @@ createInterface({ input: process.stdin }).on('line', line => {
         requests.filter((request) => request.method === "mcpServer/tool/call"),
       ).toHaveLength(1);
       const turn = requests.find((request) => request.method === "turn/start");
-      if (printed) expect(turn).toBeUndefined();
-      else
-        expect(Object.keys(turn.params).sort()).toEqual(["input", "threadId"]);
+      expect(Object.keys(turn.params).sort()).toEqual(["input", "threadId"]);
     } else {
       expect(result.code).toBe(1);
       expect(result.stdout).not.toContain('"verified"');
@@ -441,59 +389,4 @@ createInterface({ input: process.stdin }).on('line', line => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
-
-test("printed verification options use the branding prefix, not the client server name", () => {
-  const toolPrefix = getArchestraToolPrefix({
-    appName: "Archestra Staging",
-    fullWhiteLabeling: true,
-  });
-  expect(toolPrefix).toBe("archestra_staging__");
-  expect(
-    getArchestraToolPrefix({
-      appName: "Archestra Staging",
-      fullWhiteLabeling: false,
-    }),
-  ).toBe(ARCHESTRA_TOOL_PREFIX);
-  const context = {
-    appName: "Archestra Staging",
-    clientId: "codex" as const,
-    mcp: {
-      serverName: "renamed_gateway",
-      toolPrefix,
-      url: "https://example.test/v1/mcp/gateway",
-    },
-    proxy: null,
-    skills: null,
-    toolPrefix,
-  };
-  const linux = renderSetupScript({ ...context, platform: "linux" });
-  const linuxEncoded = linux.match(
-    /--verify "\$\(command -v codex\)" '([^']+)'/,
-  )?.[1];
-  expect(
-    JSON.parse(Buffer.from(linuxEncoded ?? "", "base64").toString()),
-  ).toEqual({
-    server: "renamed_gateway",
-    toolPrefix: "archestra_staging__",
-  });
-  const windows = renderSetupScript({ ...context, platform: "windows" });
-  const windowsEncoded = windows.match(/-OptionsBase64 '([^']+)'/)?.[1];
-  expect(
-    JSON.parse(Buffer.from(windowsEncoded ?? "", "base64").toString()),
-  ).toEqual({
-    server: "renamed_gateway",
-    toolPrefix: "archestra_staging__",
-  });
-  const canonical = renderSetupScript({
-    ...context,
-    platform: "linux",
-    toolPrefix: ARCHESTRA_TOOL_PREFIX,
-  });
-  const canonicalEncoded = canonical.match(
-    /--verify "\$\(command -v codex\)" '([^']+)'/,
-  )?.[1];
-  expect(
-    JSON.parse(Buffer.from(canonicalEncoded ?? "", "base64").toString()),
-  ).toEqual({ server: "renamed_gateway" });
 });

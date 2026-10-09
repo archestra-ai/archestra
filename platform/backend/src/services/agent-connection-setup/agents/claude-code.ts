@@ -11,11 +11,11 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
 } from "@archestra/shared/archestra-mcp-server";
 import { CLAUDE_CODE_GUARD_CLIENT } from "../guard/clients";
+import { starterPrompt } from "../steps/ending";
 import {
   mergeJsonFileBash,
   mergeJsonFilePowerShell,
 } from "../steps/json-merge";
-import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { legacyServerNames } from "../steps/mcp";
 import { renderPowerShellJsonWriter } from "../steps/powershell-json";
 import { psq, sh } from "../steps/quoting";
@@ -24,6 +24,7 @@ import {
   withStartupGuardPowerShell,
 } from "../steps/startup-guard";
 import type {
+  AgentEnding,
   SetupScriptContext,
   SetupScriptMcpSection,
   SetupScriptProxySection,
@@ -56,10 +57,6 @@ const [
  * updated config — so the step must send the user to a NEW session; naming
  * `/mcp` alone strands them in a session where the gateway does not exist.
  */
-function claudeCodeOAuthNextStep(serverName: string): string {
-  return `Start a new \`claude\` session, run \`/mcp\` there, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
-}
-
 /** @public — asserted by the setup script unit tests, which knip --production ignores. */
 export const CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING =
   "Skipped Claude Code helper allow rules. The gateway name or tool prefix cannot be used in an exact permission rule. MCP setup continues without pre-approving those calls.";
@@ -107,14 +104,14 @@ function claudeAppaPermissionsBash(mcp: SetupScriptMcpSection): string {
   if (!claudeCodeAppaPermissionsAreLiteral(mcp)) {
     return `warn ${sh(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING)}`;
   }
-  return `say 'Configuring exact APPA helper permissions for Claude Code'
+  return `say 'Allowing the guardrail (APPA) helpers in Claude Code'
 ARCHESTRA_MCP_NAME=${sh(mcp.serverName)} \\
 ARCHESTRA_MCP_LEGACY_NAMES=${sh(JSON.stringify(legacyServerNames(mcp)))} \\
 ARCHESTRA_APPA_PERMISSION_RULES=${sh(JSON.stringify(claudeCodeAppaPermissionRules(mcp)))} \\
 python3 - <<'ARCHESTRA_APPA_PERMISSIONS_PY'
 ${CLAUDE_APPA_PERMISSIONS_MERGE_PY}
 ARCHESTRA_APPA_PERMISSIONS_PY
-ok 'APPA helper calls are pre-approved for Claude Code, including auto mode. Gateway authorization and required human review still apply.'`;
+ok 'Claude Code can call the guardrail helpers without asking each time. Gateway sign-in and required human reviews still apply.'`;
 }
 
 const CLAUDE_APPA_PERMISSIONS_MERGE_PY = `import json, os, pathlib, shutil
@@ -176,10 +173,10 @@ Warn ${psq(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING)}
   const rulesJson = JSON.stringify(claudeCodeAppaPermissionRules(mcp));
   const legacyJson = JSON.stringify(legacyServerNames(mcp));
   return `# >>> archestra:claude-appa-permissions >>>
-Say 'Configuring exact APPA helper permissions for Claude Code'
+Say 'Allowing the guardrail (APPA) helpers in Claude Code'
 ${claudeAppaPermissionsSnippet({ serverName: mcp.serverName, rulesJson, legacyJson })}
 Write-Host ('Updated ' + $archAppaSettingsPath)
-Ok 'APPA helper calls are pre-approved for Claude Code, including auto mode. Claude skips its approval prompt and classifier for these helpers. Gateway authorization and required human review still apply.'
+Ok 'Claude Code can call the guardrail helpers without asking each time. Gateway sign-in and required human reviews still apply.'
 # <<< archestra:claude-appa-permissions <<<`;
 }
 
@@ -943,7 +940,7 @@ function claudeCodeBashSections(ctx: SetupScriptContext): string[] {
       .join("\n");
     const preflight = claudeAppaPermissionsPreflightBash(ctx.mcp);
     if (preflight) sections.push(preflight);
-    sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+    sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 cli claude mcp remove --scope local ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
 cli claude mcp remove --scope user ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli claude mcp add --scope user --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
@@ -999,7 +996,7 @@ function claudeCodePowerShellSections(ctx: SetupScriptContext): string[] {
         `try { claude mcp remove --scope user ${psq(name)} 2>$null | Out-Null } catch { }`,
       ])
       .join("\n");
-    sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+    sections.push(`Say ${psq(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 try { claude mcp remove --scope local ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
 try { claude mcp remove --scope user ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
 claude mcp add --scope user --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}
@@ -1042,50 +1039,27 @@ ${pluginInstalls}`);
   return withStartupGuardPowerShell(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 }
 
-function claudeCodeBashNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  if (ctx.mcp) {
-    steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
-  }
-  if (ctx.skills?.hasSkills ?? !!ctx.skills) {
-    steps.push(
-      "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
-    );
-  }
-  if (ctx.skills?.pluginNames?.length) {
-    steps.push(
-      `${ctx.skills.pluginNames.length} plugin${ctx.skills.pluginNames.length === 1 ? " is" : "s are"} installed and will load automatically.`,
-    );
-  }
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    steps.push(
-      "Open a new terminal (or `source` your shell profile) so the startup guard wrapper takes effect — it checks these remotes before every `claude` launch.",
-    );
-  }
-  return steps;
-}
-
-function claudeCodePowerShellNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  if (ctx.mcp) {
-    steps.push(claudeCodeOAuthNextStep(ctx.mcp.serverName));
-  }
-  if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {
-    steps.push(
-      "The shared skills are installed for Claude Code — start `claude` and they load automatically.",
-    );
-  }
-  if (ctx.skills?.pluginNames?.length) {
-    steps.push(
-      `${ctx.skills.pluginNames.length} plugin${ctx.skills.pluginNames.length === 1 ? " is" : "s are"} installed and will load automatically.`,
-    );
-  }
-  if (ctx.mcp || ctx.proxy || ctx.skills) {
-    steps.push(
-      "Open a new PowerShell session so the startup guard wrapper takes effect — it checks these remotes before every `claude` launch.",
-    );
-  }
-  return steps;
+function claudeCodeEnding(ctx: SetupScriptContext): AgentEnding {
+  const plugins = ctx.skills?.pluginNames?.length ?? 0;
+  return {
+    parts:
+      ctx.mcp || ctx.proxy || ctx.skills
+        ? [{ name: "Launch check", detail: "Runs each time you start claude" }]
+        : [],
+    signIn: ctx.mcp
+      ? {
+          command: ["claude", "mcp", "login", ctx.mcp.serverName],
+          howTo: `Start claude, run /mcp, pick "${ctx.mcp.serverName}" and sign in.`,
+        }
+      : null,
+    launch: ["claude", starterPrompt(ctx)],
+    notes:
+      plugins > 0
+        ? [
+            `${plugins} plugin${plugins === 1 ? " is" : "s are"} installed and load on their own.`,
+          ]
+        : [],
+  };
 }
 
 export const claudeCodeSetup: ShellAgentSetup = {
@@ -1093,10 +1067,9 @@ export const claudeCodeSetup: ShellAgentSetup = {
   binary: "claude",
   bash: {
     sections: claudeCodeBashSections,
-    nextSteps: claudeCodeBashNextSteps,
   },
   powerShell: {
     sections: claudeCodePowerShellSections,
-    nextSteps: claudeCodePowerShellNextSteps,
   },
+  ending: claudeCodeEnding,
 };

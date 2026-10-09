@@ -6,6 +6,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { COPILOT_GUARD_CLIENT } from "../guard/clients";
+import { starterPrompt } from "../steps/ending";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { legacyServerNames } from "../steps/mcp";
 import { psq, sh } from "../steps/quoting";
@@ -14,6 +15,7 @@ import {
   withStartupGuardPowerShell,
 } from "../steps/startup-guard";
 import type {
+  AgentEnding,
   SetupScriptContext,
   SetupScriptProxySection,
   ShellAgentSetup,
@@ -399,7 +401,7 @@ function copilotBashSections(ctx: SetupScriptContext): string[] {
         (name) => `cli copilot mcp remove ${sh(name)} >/dev/null 2>&1 || true`,
       )
       .join("\n");
-    sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+    sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 cli copilot mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli copilot mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}
 cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
@@ -454,7 +456,7 @@ function copilotPowerShellSections(ctx: SetupScriptContext): string[] {
           `try { copilot mcp remove ${psq(name)} 2>$null | Out-Null } catch { }`,
       )
       .join("\n");
-    sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+    sections.push(`Say ${psq(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 try { copilot mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
 copilot mcp add --transport http ${psq(ctx.mcp.serverName)} ${psq(ctx.mcp.url)}
 if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }
@@ -512,64 +514,55 @@ ${pluginInstalls}`);
   return withStartupGuardPowerShell(ctx, COPILOT_GUARD_CLIENT, sections);
 }
 
-function copilotBashNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  if (ctx.mcp) {
-    steps.push(
-      "Copilot opens your browser to complete OAuth when the gateway asks for it.",
+function copilotEnding(ctx: SetupScriptContext): AgentEnding {
+  const notes: string[] = [];
+  let proxyDetail: string | undefined;
+  if (ctx.proxy && ctx.platform !== "windows") {
+    proxyDetail =
+      "Ready once the COPILOT_* lines printed above are in your shell profile";
+    notes.push(
+      "Add the COPILOT_* lines printed above to your shell profile (for example ~/.zshrc), then open a new terminal.",
     );
-  }
-  if (ctx.proxy) {
-    steps.push(
-      'Paste the export lines printed above into your shell profile, set COPILOT_MODEL, then verify with: copilot -p "Reply with exactly: archestra-copilot-cli-ok"',
-    );
-  }
-  if (ctx.skills?.hasSkills ?? !!ctx.skills) {
-    steps.push(
-      `Browse and install the shared skills: copilot plugin marketplace browse ${ctx.skills.marketplaceName}`,
-    );
-  }
-  if (ctx.skills?.pluginNames?.length) {
-    steps.push("The plugins are installed and enabled.");
-  }
-  return steps;
-}
-
-function copilotPowerShellNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  if (ctx.mcp) {
-    steps.push(
-      "Copilot opens your browser to complete OAuth when the gateway asks for it.",
-    );
-  }
-  if (ctx.proxy) {
+  } else if (ctx.proxy) {
     // The key is applied automatically when the script knows it: a minted
     // virtual key, or the GitHub token the Copilot link section obtains.
     const keyApplied =
       Boolean(ctx.proxy.virtualKey) || ctx.proxy.provider === "github-copilot";
-    steps.push(
-      keyApplied
-        ? 'The COPILOT_* provider variables (including a default COPILOT_MODEL) were applied for you — verify with: copilot -p "Reply with exactly: archestra-copilot-cli-ok"'
-        : `Set ${COPILOT_PROVIDER_ENV_KEYS.apiKey} to your own key (the other COPILOT_* variables were applied for you), then verify with: copilot -p "Reply with exactly: archestra-copilot-cli-ok"`,
-    );
+    if (!keyApplied) {
+      notes.push(
+        `Set ${COPILOT_PROVIDER_ENV_KEYS.apiKey} to your own key. The other COPILOT_* settings are in place.`,
+      );
+    }
   }
   if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {
-    steps.push(
-      `Browse and install the shared skills: copilot plugin marketplace browse ${ctx.skills.marketplaceName}`,
+    notes.push(
+      `To add the shared skills, run: copilot plugin marketplace browse ${ctx.skills.marketplaceName}`,
     );
   }
-  if (ctx.skills?.pluginNames?.length) {
-    steps.push("The plugins are installed and enabled.");
-  }
-  return steps;
+  return {
+    proxyDetail,
+    parts:
+      ctx.mcp || ctx.proxy || ctx.skills
+        ? [{ name: "Launch check", detail: "Runs each time you start copilot" }]
+        : [],
+    signIn: ctx.mcp
+      ? {
+          command: null,
+          howTo:
+            "Copilot opens your browser to sign in the first time it uses these tools.",
+        }
+      : null,
+    launch: ["copilot", "-i", starterPrompt(ctx)],
+    notes,
+  };
 }
 
 export const copilotCliSetup: ShellAgentSetup = {
   label: "Copilot CLI",
   binary: "copilot",
-  bash: { sections: copilotBashSections, nextSteps: copilotBashNextSteps },
+  bash: { sections: copilotBashSections },
   powerShell: {
     sections: copilotPowerShellSections,
-    nextSteps: copilotPowerShellNextSteps,
   },
+  ending: copilotEnding,
 };

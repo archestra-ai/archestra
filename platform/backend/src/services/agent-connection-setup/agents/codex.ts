@@ -3,8 +3,8 @@ import {
   EXTERNAL_AGENT_ID_HEADER,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
-import { ARCHESTRA_TOOL_PREFIX } from "@archestra/shared/archestra-mcp-server";
 import { CODEX_GUARD_CLIENT } from "../guard/clients";
+import { starterPrompt } from "../steps/ending";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { legacyServerNames } from "../steps/mcp";
 import { psq, sh } from "../steps/quoting";
@@ -13,29 +13,15 @@ import {
   withStartupGuardPowerShell,
 } from "../steps/startup-guard";
 import type {
+  AgentEnding,
   SetupScriptContext,
   SetupScriptProxySection,
   ShellAgentSetup,
 } from "../types";
 
 // Codex setup. Shared helpers first, then the bash and PowerShell section lists
-// and next steps side by side, then the agent module the dispatcher in
+// side by side, then the ending and the agent module the dispatcher in
 // ../index.ts uses.
-
-function codexConnectionVerificationOptions(params: {
-  server?: string;
-  provider?: string;
-  toolPrefix?: string;
-}): { server?: string; provider?: string; toolPrefix?: string } {
-  const options: { server?: string; provider?: string; toolPrefix?: string } =
-    {};
-  if (params.server) options.server = params.server;
-  if (params.provider) options.provider = params.provider;
-  if (params.toolPrefix && params.toolPrefix !== ARCHESTRA_TOOL_PREFIX) {
-    options.toolPrefix = params.toolPrefix;
-  }
-  return options;
-}
 
 /**
  * TOML basic-string quoting for a header name/value in ~/.codex/config.toml.
@@ -87,7 +73,7 @@ fi`);
     const stale = legacyServerNames(ctx.mcp)
       .map((name) => `cli codex mcp remove ${sh(name)} >/dev/null 2>&1 || true`)
       .join("\n");
-    sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+    sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
   }
@@ -182,7 +168,7 @@ if ((Test-Path $arch_config) -and -not (Test-Path ($arch_config + '.archestra-ba
           `try { codex mcp remove ${psq(name)} 2>$null | Out-Null } catch { }`,
       )
       .join("\n");
-    sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
+    sections.push(`Say ${psq(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
 codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}
 if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }`);
@@ -256,82 +242,40 @@ ${pluginInstalls}`);
   return withStartupGuardPowerShell(ctx, CODEX_GUARD_CLIENT, sections);
 }
 
-function codexBashNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  if (ctx.mcp) {
-    steps.push(
-      `If registration printed "Successfully logged in.", OAuth for "${ctx.mcp.serverName}" is already cached; do not repeat login. Otherwise check \`codex mcp list\` and run \`codex mcp login ${ctx.mcp.serverName}\` only when Auth is "Not logged in". Keep any pending login running until its browser callback finishes.`,
-    );
-  }
-  if (ctx.mcp || ctx.proxy) {
-    steps.push(
-      `Verification command: node "$HOME/${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs" --verify "$(command -v codex)" ${sh(Buffer.from(JSON.stringify(codexConnectionVerificationOptions({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName, toolPrefix: ctx.toolPrefix }))).toString("base64"))}`,
-    );
-  }
-  if (ctx.proxy) {
-    if (!ctx.proxy.virtualKey) {
-      steps.push(
-        "Use your existing Codex ChatGPT login, or sign in with your own OpenAI API key (codex login --with-api-key).",
-      );
-    }
-    steps.push(
-      `Open a new terminal and run \`codex\`. The \`${ctx.proxy.proxyName}\` provider is now the default.`,
-    );
-  }
-  if (ctx.skills?.hasSkills ?? !!ctx.skills) {
-    steps.push(
-      'Run /plugins inside Codex and pick "Install Plugin" to install the included skills.',
-    );
-  }
-  if (ctx.skills?.pluginNames?.length) {
-    steps.push(
-      "Run `/hooks` inside Codex and approve each delivered hook before it can execute.",
-    );
-  }
-  return steps;
-}
-
-function codexPowerShellNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  if (ctx.mcp) {
-    steps.push(
-      `If registration printed "Successfully logged in.", OAuth for "${ctx.mcp.serverName}" is already cached; do not repeat login. Otherwise check \`codex mcp list\` and run \`codex mcp login ${ctx.mcp.serverName}\` only when Auth is "Not logged in". Keep any pending login running until its browser callback finishes.`,
-    );
-  }
-  if (ctx.mcp || ctx.proxy) {
-    steps.push(
-      `Verification command: & (Join-Path $env:USERPROFILE ${psq(`${CODEX_GUARD_CLIENT.psScriptRelpath}.verify.ps1`)}) -CodexPath (Get-Command codex -CommandType Application | Select-Object -First 1).Source -OptionsBase64 ${psq(Buffer.from(JSON.stringify(codexConnectionVerificationOptions({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName, toolPrefix: ctx.toolPrefix }))).toString("base64"))}`,
-    );
-  }
-  if (ctx.proxy) {
-    if (!ctx.proxy.virtualKey) {
-      steps.push(
-        "Use your existing Codex ChatGPT login, or sign in with your own OpenAI API key (codex login --with-api-key).",
-      );
-    }
-    steps.push(
-      `Open a new PowerShell session and run \`codex\`. The \`${ctx.proxy.proxyName}\` provider is now the default.`,
-    );
-  }
+function codexEnding(ctx: SetupScriptContext): AgentEnding {
+  const notes: string[] = [];
   if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {
-    steps.push(
-      'Run /plugins inside Codex and pick "Install Plugin" to install the included skills.',
+    notes.push(
+      'In Codex, run /plugins and choose "Install Plugin" to add the shared skills.',
     );
   }
   if (ctx.skills?.pluginNames?.length) {
-    steps.push(
-      "Run `/hooks` inside Codex and approve each delivered hook before it can execute.",
+    notes.push(
+      "In Codex, run /hooks and approve each new hook before it runs.",
     );
   }
-  return steps;
+  return {
+    parts:
+      ctx.mcp || ctx.proxy || ctx.skills
+        ? [{ name: "Launch check", detail: "Runs each time you start codex" }]
+        : [],
+    signIn: ctx.mcp
+      ? {
+          command: ["codex", "mcp", "login", ctx.mcp.serverName],
+          howTo: `Run codex mcp login ${ctx.mcp.serverName} and finish the sign-in in your browser.`,
+        }
+      : null,
+    launch: ["codex", starterPrompt(ctx)],
+    notes,
+  };
 }
 
 export const codexSetup: ShellAgentSetup = {
   label: "Codex",
   binary: "codex",
-  bash: { sections: codexBashSections, nextSteps: codexBashNextSteps },
+  bash: { sections: codexBashSections },
   powerShell: {
     sections: codexPowerShellSections,
-    nextSteps: codexPowerShellNextSteps,
   },
+  ending: codexEnding,
 };

@@ -1041,7 +1041,7 @@ export function buildWindowsStartupGuardInstallSection(
       ${launchArgs}
     }`
     : "";
-  return `Say ${psq(`Installing the ${ctx.appName} startup guard for ${client.label}`)}
+  return `Say ${psq(`Adding the ${ctx.appName} launch check to ${client.label}`)}
 $archGuardPath = Join-Path $env:USERPROFILE ${psq(client.psScriptRelpath)}
 $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archGuardPath)
 ${promptInstall}
@@ -1199,7 +1199,7 @@ foreach ($archProfilePath in $archProfiles) {
 # removed any previously-loaded wrapper so the connect steps reached the real
 # ${client.binary}; this re-arms it now that connect is done.)
 Invoke-Expression $archGuardBlock
-Ok ${psq(`Startup guard installed — active in this PowerShell session now, and in every new session.`)}`;
+Ok ${psq(`Launch check added. It runs each time you start ${client.binary}.`)}`;
 }
 
 function renderWindowsMarketplaceRefreshProfileBlock(

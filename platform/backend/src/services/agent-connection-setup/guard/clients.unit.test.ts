@@ -113,10 +113,8 @@ describe.each([
     expect(script).not.toContain("Claude may fail to reach");
   });
 
-  test("install hooks interactive and Bash login profiles and prints the current-shell activation", () => {
+  test("install hooks interactive and Bash login profiles", () => {
     const install = buildStartupGuardInstallSection(CTX, client);
-    expect(install).toContain('archestra_guard_profile="$HOME/.zshrc"');
-    expect(install).toContain('archestra_guard_profile="$HOME/.bashrc"');
     expect(install).toContain('archestra_install_guard_block "$HOME/.zshrc"');
     expect(install).toContain('archestra_install_guard_block "$HOME/.bashrc"');
     expect(install).toContain(
@@ -125,9 +123,9 @@ describe.each([
     expect(install).toContain(
       'archestra_install_guard_block "$archestra_bash_login_profile"',
     );
-    expect(install).toContain("source %s");
-    expect(install).toContain('"$archestra_guard_profile"');
-    expect(install).toContain("or just open a new terminal");
+    expect(install).toContain(
+      `Launch check added. It runs each time you start ${client.binary} in a new terminal.`,
+    );
   });
 
   test("unshadow step drops the wrapper but is non-destructive, silent, and valid bash", async () => {

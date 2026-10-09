@@ -2,7 +2,11 @@ import { mergeJsonFileBash } from "../steps/json-merge";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { legacyServerNames } from "../steps/mcp";
 import { psq, sh } from "../steps/quoting";
-import type { SetupScriptContext, ShellAgentSetup } from "../types";
+import type {
+  AgentEnding,
+  SetupScriptContext,
+  ShellAgentSetup,
+} from "../types";
 
 // Cursor setup. Cursor has no CLI to drive: the script merges ~/.cursor/mcp.json,
 // clones the skills, and prints the model settings to paste. Bash and
@@ -36,7 +40,7 @@ printf '%s\\n' ${sh(ctx.runtimeHandoffInstructions)}`);
   }
 
   if (ctx.mcp) {
-    sections.push(`say ${sh(`Adding MCP gateway "${ctx.mcp.serverName}" to ~/.cursor/mcp.json (OAuth)`)}
+    sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 ${mergeJsonFileBash({
   file: "$HOME/.cursor/mcp.json",
   env: {
@@ -119,7 +123,7 @@ Write-Host ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffe
   }
 
   if (ctx.mcp) {
-    sections.push(`Say ${psq(`Adding MCP gateway "${ctx.mcp.serverName}" to ~/.cursor/mcp.json (OAuth)`)}
+    sections.push(`Say ${psq(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 $arch_path = Join-Path $env:USERPROFILE '.cursor\\mcp.json'
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $arch_path) | Out-Null
 if ((Test-Path $arch_path) -and -not (Test-Path ($arch_path + '.archestra-backup'))) {
@@ -205,66 +209,40 @@ Then install these plugins from Customize -> Plugins:
   return sections;
 }
 
-function cursorBashNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  steps.push(
-    ctx.mcp && ctx.runtimeHandoffInstructions
-      ? "Runtime handoff needs a manual step: paste the printed handoff instructions into Cursor Customize > Rules > User Rules. Keep your existing rules."
-      : "If you previously added runtime handoff instructions to Cursor User Rules, remove that text to disable them.",
-  );
-  if (ctx.mcp) {
-    steps.push(
-      `Open Cursor Customize → MCPs and authenticate "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
-    );
-  }
-  if (ctx.proxy) {
-    steps.push(
-      "Apply the Cursor model settings printed above (Settings → Models → OpenAI API Key).",
-    );
-  }
+function cursorEnding(ctx: SetupScriptContext): AgentEnding {
+  const notes: string[] = [];
   if (ctx.skills) {
-    steps.push(
-      "Reload Cursor, then open Customize → Skills to confirm the shared skills are available.",
-    );
+    notes.push("Reload Cursor to load the shared skills (Customize > Skills).");
     if (ctx.skills.pluginNames?.length) {
-      steps.push(
-        `Then install these plugins from Customize → Plugins: ${ctx.skills.pluginNames.join(", ")}.`,
+      notes.push(
+        `Install these plugins from Customize > Plugins: ${ctx.skills.pluginNames.join(", ")}.`,
       );
     }
   }
-  return steps;
-}
-
-function cursorPowerShellNextSteps(ctx: SetupScriptContext): string[] {
-  const steps: string[] = [];
-  steps.push(
+  notes.push(
     ctx.mcp && ctx.runtimeHandoffInstructions
-      ? "Runtime handoff needs a manual step: paste the printed handoff instructions into Cursor Customize > Rules > User Rules. Keep your existing rules."
-      : "If you previously added runtime handoff instructions to Cursor User Rules, remove that text to disable them.",
+      ? "Paste the handoff instructions printed above into Cursor Customize > Rules > User Rules, next to your own rules."
+      : `If you pasted ${ctx.appName} handoff instructions into Cursor User Rules before, you can remove them.`,
   );
-  if (ctx.mcp) {
-    steps.push(
-      `Open Cursor Customize → MCPs and authenticate "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
-    );
-  }
-  if (ctx.proxy) {
-    steps.push(
-      "Apply the Cursor model settings printed above (Settings → Models → OpenAI API Key).",
-    );
-  }
-  if (ctx.skills) {
-    steps.push(
-      "Reload Cursor, then open Customize → Skills to confirm the shared skills are available.",
-    );
-  }
-  return steps;
+  return {
+    proxyDetail:
+      "Paste the model settings printed above into Cursor Settings > Models",
+    signIn: ctx.mcp
+      ? {
+          command: null,
+          howTo: `In Cursor, open Customize > MCPs and sign in to "${ctx.mcp.serverName}".`,
+        }
+      : null,
+    launch: null,
+    notes,
+  };
 }
 
 export const cursorSetup: ShellAgentSetup = {
   label: "Cursor",
-  bash: { sections: cursorBashSections, nextSteps: cursorBashNextSteps },
+  bash: { sections: cursorBashSections },
   powerShell: {
     sections: cursorPowerShellSections,
-    nextSteps: cursorPowerShellNextSteps,
   },
+  ending: cursorEnding,
 };

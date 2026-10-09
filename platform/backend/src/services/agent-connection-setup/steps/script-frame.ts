@@ -1,8 +1,12 @@
 import { DEFAULT_APP_NAME, isDefaultBrandedAppName } from "@archestra/shared";
 import { archestraMarkWithText } from "@/services/archestra-mark";
-import type { SetupScriptContext, ShellAgentSetup } from "../types";
+import type {
+  SetupEnding,
+  SetupScriptContext,
+  ShellAgentSetup,
+} from "../types";
+import { endingMarker, INSTALLER_ENV, renderEndingText } from "./ending";
 import { describeMarketplaceContents } from "./marketplace-copy";
-import { psq, sh } from "./quoting";
 
 /** Collapse control characters so appName is safe in comments and bare echoes. */
 export function sanitizeAppName(appName: string): string {
@@ -59,6 +63,19 @@ err()  { printf '%serror:%s %s\\n' "$ARCH_C_ERR" "$ARCH_C_RESET" "$1" >&2; }
 # script's own stdin (the download pipe). pipefail preserves their exit status.
 cli() { "$@" </dev/null 2>&1 | cat; }`;
 
+/** What the banner says the setup covers, in the ending's words. */
+function setupParts(ctx: SetupScriptContext): string[] {
+  const parts: string[] = [];
+  if (ctx.mcp) parts.push("Tools");
+  if (ctx.proxy) parts.push(`LLM proxy (${ctx.proxy.providerLabel})`);
+  if (ctx.skills) {
+    const { hasSkills, hasPlugins } = describeMarketplaceContents(ctx.skills);
+    if (hasSkills) parts.push("Skills");
+    if (hasPlugins) parts.push("Plugins");
+  }
+  return parts;
+}
+
 export function bashHeader(
   ctx: SetupScriptContext,
   agent: ShellAgentSetup,
@@ -80,9 +97,7 @@ set -euo pipefail
 
 ${BASH_SCRIPT_HELPERS}
 
-${bashBanner(ctx, label)}
-
-say ${sh(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
+${bashBanner(ctx, label)}${requireBinary}`;
 }
 
 /**
@@ -92,18 +107,7 @@ say ${sh(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
  * through a quoted heredoc so nothing in it is ever expanded by bash.
  */
 function bashBanner(ctx: SetupScriptContext, label: string): string {
-  const configures: string[] = [];
-  if (ctx.mcp) configures.push("MCP gateway (OAuth)");
-  if (ctx.proxy) {
-    configures.push(
-      `${ctx.proxy.providerLabel} via the LLM proxy${
-        ctx.proxy.virtualKey ? " (virtual key)" : ""
-      }`,
-    );
-  }
-  if (ctx.skills) {
-    configures.push(describeMarketplaceContents(ctx.skills).label);
-  }
+  const configures = setupParts(ctx);
 
   // The one canonical Archestra mark (shared with the startup guards), block/
   // quadrant glyphs that render as solid shapes in any UTF-8 terminal.
@@ -113,9 +117,8 @@ function bashBanner(ctx: SetupScriptContext, label: string): string {
    Secure access to your AI tools`;
 
   const details = [
-    `   Client:     ${label}`,
-    configures.length > 0 ? `   Configures: ${configures.join(", ")}` : null,
-    `   Note:       one-time setup — this link expires after first use.`,
+    `   Connecting: ${label}`,
+    configures.length > 0 ? `   Sets up:    ${configures.join(", ")}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -128,39 +131,18 @@ ${details}
 ARCHESTRA_BANNER`;
 }
 
-export function bashFooter(
-  ctx: SetupScriptContext,
-  nextSteps: string[],
-): string {
-  const lines = [`ok "Done."`];
-
-  if (nextSteps.length > 0) {
-    lines.push(`cat <<'ARCHESTRA_NEXT'
-
-Next steps:
-${nextSteps.map((step, i) => `  ${i + 1}. ${step}`).join("\n")}
-ARCHESTRA_NEXT`);
-  }
-
-  const revocation: string[] = [];
-  if (ctx.proxy?.virtualKeyName) {
-    revocation.push(
-      `delete the "${ctx.proxy.virtualKeyName}" key on the Virtual API Keys page`,
-    );
-  }
-  if (ctx.skills) {
-    revocation.push(
-      `revoke the "${ctx.skills.marketplaceName}" marketplace share link`,
-    );
-  }
-  if (revocation.length > 0) {
-    lines.push(`cat <<'ARCHESTRA_REVOKE'
-
-To revoke this machine's access later in ${ctx.appName}: ${revocation.join("; ")}.
-ARCHESTRA_REVOKE`);
-  }
-
-  return lines.join("\n");
+/**
+ * The ending, printed only when the script runs on its own: under the Node
+ * installer (INSTALLER_ENV set) the installer prints it from the marker line.
+ */
+export function bashFooter(ending: SetupEnding): string {
+  return `${endingMarker(ending)}
+if [ -z "\${${INSTALLER_ENV}:-}" ]; then
+  echo
+  cat <<'ARCHESTRA_NEXT'
+${renderEndingText(ending)}
+ARCHESTRA_NEXT
+fi`;
 }
 
 /**
@@ -211,9 +193,7 @@ if (-not (Get-Command ${binary} -ErrorAction SilentlyContinue)) {
 # credentials — do not share or commit it.
 ${POWERSHELL_SCRIPT_HELPERS}
 
-${powerShellBanner(ctx, label)}
-
-Say ${psq(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
+${powerShellBanner(ctx, label)}${requireBinary}`;
 }
 
 /**
@@ -226,23 +206,11 @@ Say ${psq(`${ctx.appName} setup: ${label}`)}${requireBinary}`;
  * `irm | iex` console never mojibakes.
  */
 function powerShellBanner(ctx: SetupScriptContext, label: string): string {
-  const configures: string[] = [];
-  if (ctx.mcp) configures.push("MCP gateway (OAuth)");
-  if (ctx.proxy) {
-    configures.push(
-      `${ctx.proxy.providerLabel} via the LLM proxy${
-        ctx.proxy.virtualKey ? " (virtual key)" : ""
-      }`,
-    );
-  }
-  if (ctx.skills) {
-    configures.push(describeMarketplaceContents(ctx.skills).label);
-  }
+  const configures = setupParts(ctx);
 
   const details = [
-    `   Client:     ${label}`,
-    configures.length > 0 ? `   Configures: ${configures.join(", ")}` : null,
-    `   Note:       one-time setup — this link expires after first use.`,
+    `   Connecting: ${label}`,
+    configures.length > 0 ? `   Sets up:    ${configures.join(", ")}` : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -272,37 +240,13 @@ ${details}
 '@`;
 }
 
-export function powerShellFooter(
-  ctx: SetupScriptContext,
-  nextSteps: string[],
-): string {
-  const lines = [`Ok "Done."`];
+/** The PowerShell twin of bashFooter. */
+export function powerShellFooter(ending: SetupEnding): string {
+  return `${endingMarker(ending)}
+if (-not $env:${INSTALLER_ENV}) {
+Write-Host @'
 
-  if (nextSteps.length > 0) {
-    lines.push(`Write-Host @'
-
-Next steps:
-${nextSteps.map((step, i) => `  ${i + 1}. ${step}`).join("\n")}
-'@`);
-  }
-
-  const revocation: string[] = [];
-  if (ctx.proxy?.virtualKeyName) {
-    revocation.push(
-      `delete the "${ctx.proxy.virtualKeyName}" key on the Virtual API Keys page`,
-    );
-  }
-  if (ctx.skills) {
-    revocation.push(
-      `revoke the "${ctx.skills.marketplaceName}" marketplace share link`,
-    );
-  }
-  if (revocation.length > 0) {
-    lines.push(`Write-Host @'
-
-To revoke this machine's access later in ${ctx.appName}: ${revocation.join("; ")}.
-'@`);
-  }
-
-  return lines.join("\n");
+${renderEndingText(ending)}
+'@
+}`;
 }

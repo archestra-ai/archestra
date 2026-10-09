@@ -7,6 +7,7 @@ import {
 export const CLIENT_CONNECTION_INSTALLER = String.raw`#!/usr/bin/env node
 const { spawn, spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
+const { closeSync, openSync, readSync } = require('node:fs');
 const { mkdtemp, open, writeFile, readFile, rm, access } = require('node:fs/promises');
 const { hostname, tmpdir } = require('node:os');
 const { join } = require('node:path');
@@ -40,15 +41,18 @@ async function main() {
     return;
   }
   if (setupToken) {
-    await applySetup({ scriptPath: '/api/connection-setups/script/' + setupToken, origin: networkOrigin, platform });
+    finishSetup(await applySetup({ scriptPath: '/api/connection-setups/script/' + setupToken, origin: networkOrigin, platform }), platform);
     return;
   }
   const releaseLock = await acquireConnectionLock({ origin: origin.origin, clientId, platform });
+  let ending;
   try {
-    await runConnection({ args, clientId, exclude, networkOrigin, origin, platform });
+    ending = await runConnection({ args, clientId, exclude, networkOrigin, origin, platform });
   } finally {
     await releaseLock();
   }
+  // After the lock: the sign-in and the agent it starts can run for a long time.
+  finishSetup(ending, platform);
 }
 async function runConnection({ args, clientId, exclude, networkOrigin, origin, platform }) {
   const request = async (path, body) => {
@@ -84,8 +88,7 @@ async function runConnection({ args, clientId, exclude, networkOrigin, origin, p
     if (state.status !== 'approved') throw new Error('Connection ' + state.status + '. Start the installer again when ready.');
     console.log('Browser approval confirmed.');
     const scriptPath = '/api/connection-setups/script/archestra_con_' + started.deviceCode;
-    await applySetup({ scriptPath, origin: networkOrigin, platform });
-    return;
+    return applySetup({ scriptPath, origin: networkOrigin, platform });
   }
   throw new Error('Connection expired. Start the installer again.');
 }
@@ -207,13 +210,71 @@ async function applySetup({ scriptPath, origin, platform }) {
     // installs. A UTF-8 BOM makes powershell.exe -File decode it correctly.
     await writeFile(filename, platform === 'windows' ? '\uFEFF' + script : script, { mode: 0o600 });
     const lineCount = script.trimEnd().split(/\r?\n/).length;
+    const marker = /^# archestra-ending: (\S+)$/m.exec(script);
     console.log('Downloaded approved setup (' + lineCount + ' lines). Applying now.');
     const child = platform === 'windows'
-      ? spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', filename], { stdio: 'inherit' })
-      : spawnSync('bash', [filename], { stdio: 'inherit' });
+      ? spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', filename], { stdio: 'inherit', env: installerEnv })
+      : spawnSync('bash', [filename], { stdio: 'inherit', env: installerEnv });
     if (child.error || child.status !== 0) throw new Error('Setup failed. Review the output above and start the installer again after fixing the problem.');
+    if (marker) return JSON.parse(Buffer.from(marker[1], 'base64').toString('utf8'));
     console.log('Setup applied. Restart or reload your client if needed. Complete its MCP sign-in if prompted.');
+    return null;
   } finally { await rm(directory, { recursive: true, force: true }); }
+}
+// Tells the script to leave its ending to finishSetup.
+const installerEnv = { ...process.env, ARCHESTRA_CONNECT_INSTALLER: '1' };
+// The end of a run: what was set up, then what is left. With a terminal it
+// offers to run the sign-in and start the agent; without one (an agent or CI
+// ran the installer) it prints the commands instead.
+function finishSetup(ending, platform) {
+  if (!ending) return;
+  const paint = (code, text) => process.stdout.isTTY && !process.env.NO_COLOR ? '\x1b[' + code + 'm' + text + '\x1b[0m' : text;
+  console.log('\n' + paint('1;32', ending.label + ' is connected to ' + ending.appName + '.'));
+  if (ending.parts.length) {
+    const width = Math.max(...ending.parts.map(part => part.name.length));
+    console.log('\n' + ending.parts.map(part => '  ' + paint('1', part.name.padEnd(width)) + '   ' + part.detail).join('\n'));
+  }
+  if (ending.notes.length) console.log('\nGood to know:\n' + ending.notes.map(note => '  - ' + note).join('\n'));
+  if (ending.disconnect) console.log('\n' + ending.disconnect);
+  const terminal = openTerminal();
+  try {
+    if (ending.signIn) {
+      console.log('\n' + paint('1', 'Sign in to ' + ending.appName + ' tools'));
+      if (ending.signIn.command && terminal !== null && ask(terminal, '  Sign in now? This opens your browser. [Y/n] ')) {
+        const child = spawnSync(ending.signIn.command[0], ending.signIn.command.slice(1), { stdio: [terminal, 'inherit', 'inherit'], shell: platform === 'windows' });
+        console.log(!child.error && child.status === 0 ? paint('1;32', '  Signed in.') : '  Sign-in did not finish. ' + ending.signIn.howTo);
+      } else console.log('  ' + ending.signIn.text);
+    }
+    if (ending.launch) {
+      console.log('\n' + paint('1', 'Start ' + ending.label));
+      if (terminal !== null && ask(terminal, '  Start ' + ending.label + ' now with a first prompt? [Y/n] ')) {
+        // Through the user's own shell, so its profile loads the launch check
+        // the script just installed, exactly as in a new terminal.
+        const child = platform === 'windows'
+          ? spawnSync('powershell.exe', ['-NoLogo', '-Command', ending.launch.text], { stdio: [terminal, 'inherit', 'inherit'] })
+          : spawnSync(process.env.SHELL || 'bash', ['-i', '-c', ending.launch.text], { stdio: [terminal, 'inherit', 'inherit'] });
+        if (child.error) console.log('  Could not start it. In a new terminal, run: ' + ending.launch.text);
+      } else console.log('  In a new terminal, run: ' + ending.launch.text);
+    }
+  } finally { if (terminal !== null) closeSync(terminal); }
+}
+// stdin is the download pipe, so questions go to the terminal itself.
+function openTerminal() {
+  if (!process.stdout.isTTY) return null;
+  try { return openSync(process.platform === 'win32' ? '\\\\.\\CONIN$' : '/dev/tty', 'r+'); } catch { return null; }
+}
+// Enter or anything but "n" means yes.
+function ask(terminal, question) {
+  process.stdout.write(question);
+  const byte = Buffer.alloc(1);
+  let answer = '';
+  for (;;) {
+    let read;
+    try { read = readSync(terminal, byte, 0, 1, null); } catch { return false; }
+    if (read === 0 || byte[0] === 10) break;
+    answer += byte.toString('utf8');
+  }
+  return !/^\s*n/i.test(answer);
 }
 async function openDesktopTerminal({ origin, platform, noOpen, setupToken }) {
   // Desktop owns the agent process. A separate OS terminal survives its restart.

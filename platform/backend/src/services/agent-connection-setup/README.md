@@ -24,11 +24,15 @@ routes render inside their claim transaction, and tests assert exact output.
    with `curl | bash` or `irm | iex`.
 4. **Render.** `renderSetupScript` (`index.ts`) picks the agent module for
    `ctx.clientId`. It renders bash for macOS and Linux and PowerShell for
-   Windows: the shared header, the agent's sections, then the shared footer
-   with the agent's next steps.
+   Windows: the shared header, the agent's sections, then the shared ending
+   (`steps/ending.ts`): what was set up, the sign-in, a launch command with a
+   first prompt, and a link to the disconnect steps.
 5. **Run.** The installer saves the script to a private temporary directory,
    runs it with bash or PowerShell, and deletes it. The script registers the
    gateway, routes the proxy, installs skills, and installs the startup guard.
+   The installer then prints the ending itself and, in a terminal, offers to
+   run the sign-in and start the agent. A script run on its own prints the
+   ending as text.
 
 Claude Desktop takes its own path. `agents/claude-desktop.ts` renders a Python
 installer wrapped in bash or PowerShell, and `desktop/` builds the Desktop
@@ -41,7 +45,7 @@ index.ts            renderSetupScript and the agent dispatch map
 types.ts            SetupScriptContext and the agent module interface
 setup-command.ts    the one-line Connect command and URL helpers
 agents/             one module per agent
-  claude-code.ts    bash and PowerShell steps side by side, plus next steps
+  claude-code.ts    bash and PowerShell steps side by side, plus its ending
   codex.ts
   copilot-cli.ts
   cursor.ts
@@ -49,6 +53,7 @@ agents/             one module per agent
   claude-desktop.ts Python installer for Claude Desktop (separate path)
 steps/              building blocks shared by agents
   script-frame.ts   header, banner, footer and logging helpers (bash + PowerShell)
+  ending.ts         the end-of-setup summary every agent fills in
   quoting.ts        shell quoting (sh, psq) and small text helpers
   json-merge.ts     key-scoped JSON config merge with a one-time backup
   startup-guard.ts  wraps an agent's sections with the guard unshadow/install
@@ -65,7 +70,8 @@ desktop/            Claude Desktop extension bundle and its installer
 
 An agent module (`ShellAgentSetup` in `types.ts`) provides a label, the CLI
 binary the script requires, and a `bash` and a `powerShell` renderer. Each
-renderer returns the agent's sections and its next steps. Agent modules call
+renderer returns the agent's sections, and `ending` says what the shared ending
+adds for the agent. Agent modules call
 shared steps but never render the script frame themselves.
 
 ## Adding an agent

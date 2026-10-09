@@ -94,14 +94,63 @@ export interface SetupScriptContext {
   skills: SetupScriptSkillsSection | null;
   /** Copied locally by setup, never fetched from the platform at launch. */
   runtimeHandoffInstructions?: string | null;
+  /**
+   * The Connect page, e.g. https://host/connection. The ending links to its
+   * disconnect steps; without it the ending says what to revoke instead.
+   */
+  connectPageUrl?: string | null;
 }
 
 /** One script language's renderer for an agent. */
 export interface AgentScriptRenderer {
   /** Setup steps, in order, between the shared header and footer. */
   sections(ctx: SetupScriptContext): string[];
-  /** Numbered next steps printed by the shared footer. */
-  nextSteps(ctx: SetupScriptContext): string[];
+}
+
+/**
+ * What an agent adds to the shared ending (steps/ending.ts). The ending says
+ * what was set up, then what is left for the person running setup.
+ */
+export interface AgentEnding {
+  /** Replaces the shared "LLM proxy" line when the agent says it better. */
+  proxyDetail?: string;
+  /** Extra "what was set up" lines, e.g. the launch check. */
+  parts?: SetupEndingPart[];
+  /**
+   * The gateway sign-in. `command` is offered to run when the agent has one;
+   * `howTo` is printed otherwise, or when the command fails.
+   */
+  signIn?: { command: string[] | null; howTo: string } | null;
+  /** Starts the agent with a first prompt. Null when it has no CLI to start. */
+  launch?: string[] | null;
+  /** Anything else the person still has to do or should know. */
+  notes?: string[];
+}
+
+export interface SetupEndingPart {
+  name: string;
+  detail: string;
+}
+
+/**
+ * The end-of-setup summary. The Node installer prints it and offers to run the
+ * sign-in and the launch command; a script run on its own prints it as text.
+ */
+export interface SetupEnding {
+  label: string;
+  appName: string;
+  parts: SetupEndingPart[];
+  /**
+   * `text` is what the person types (the quoted command) or, when `command`
+   * is null, how to sign in by hand. `howTo` is the fallback when the command
+   * fails.
+   */
+  signIn: { command: string[] | null; text: string; howTo: string } | null;
+  /** `text` is `command` quoted for the person's shell. */
+  launch: { command: string[]; text: string } | null;
+  notes: string[];
+  /** Where to disconnect, or what to revoke; null when nothing to undo. */
+  disconnect: string | null;
 }
 
 /**
@@ -115,4 +164,5 @@ export interface ShellAgentSetup {
   binary?: string;
   bash: AgentScriptRenderer;
   powerShell: AgentScriptRenderer;
+  ending(ctx: SetupScriptContext): AgentEnding;
 }

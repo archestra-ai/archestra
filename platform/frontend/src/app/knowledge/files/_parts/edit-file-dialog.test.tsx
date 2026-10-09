@@ -58,6 +58,7 @@ beforeEach(() => {
           },
         ],
         inheritedGrants: [],
+        actorSubjects: [],
         effectiveActions: ["read", "update", "manage-permissions"],
       }),
     ),

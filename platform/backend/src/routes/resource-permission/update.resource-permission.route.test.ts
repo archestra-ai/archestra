@@ -481,6 +481,11 @@ describe("resource permission routes", () => {
       payload: {
         revision: 1,
         grants: [
+          // Somebody must keep Full access on every agent.
+          {
+            subject: { type: "role", id: "admin" },
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
+          },
           { subject: { type: "user", id: recipient.id }, actions: ["read"] },
         ],
       },
@@ -495,13 +500,13 @@ describe("resource permission routes", () => {
     expect(cleared.statusCode).toBe(200);
     expect(cleared.json()).toMatchObject({
       grants: [],
-      inheritedGrants: [
-        {
+      inheritedGrants: expect.arrayContaining([
+        expect.objectContaining({
           name: "Resource reader",
           subject: { type: "user", id: recipient.id },
           actions: ["read"],
-        },
-      ],
+        }),
+      ]),
     });
   });
 

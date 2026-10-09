@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import type {
-  ResourcePermissionGrant,
-  ScopedResource,
+import {
+  type ResourcePermissionGrant,
+  ROLE_ASSIGNMENT_BLOCKED_CODE,
+  type ScopedResource,
 } from "@archestra/shared";
+import { adminPermissions } from "@archestra/shared/access-control";
 import A2AContextModel from "@/models/a2a/context";
 import A2ATaskModel from "@/models/a2a/task";
 import AgentModel from "@/models/agent";
@@ -10,6 +12,7 @@ import AgentRunModel from "@/models/agent-run";
 import ConversationModel from "@/models/conversation";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { describe, expect, test } from "@/test";
+import { ApiError } from "@/types";
 import { ResourcePermissions } from "./resource-permissions";
 
 /**
@@ -149,7 +152,77 @@ describe("assigning a role that objects are shared with", () => {
         userId: caller.id,
         subjects: [{ type: "role", id: role.id }],
       }),
-    ).rejects.toThrow("whose scoped permissions you cannot grant");
+    ).rejects.toThrow("You can only share an item if you can manage");
+  });
+
+  test("a custom role that can edit organization-wide policies can assign Member", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      access: "org",
+    });
+    // Holds every admin permission but none of the `*` grants an
+    // organization seeds for the built-in admin roles.
+    const role = await makeCustomRole(org.id, { permission: adminPermissions });
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: role.role });
+
+    await expect(
+      ResourcePermissions.validateSubjectAssignment({
+        organizationId: org.id,
+        userId: caller.id,
+        subjects: [{ type: "role", id: "member" }],
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  test("a refusal names each object the caller cannot share", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeCustomRole,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      access: "org",
+    });
+    const role = await makeCustomRole(org.id, {
+      permission: { serviceAccount: ["read", "create"] },
+    });
+    const caller = await makeUser();
+    await makeMember(caller.id, org.id, { role: role.role });
+
+    const error = await ResourcePermissions.validateSubjectAssignment({
+      organizationId: org.id,
+      userId: caller.id,
+      subjects: [{ type: "role", id: "member" }],
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).statusCode).toBe(403);
+    expect((error as ApiError).internalCode).toBe(ROLE_ASSIGNMENT_BLOCKED_CODE);
+    expect((error as ApiError).details).toEqual({
+      subjectType: "role",
+      items: [
+        {
+          resource: "agent",
+          scope: agent.id,
+          name: agent.name,
+          missing: ["manage-permissions"],
+        },
+      ],
+      total: 1,
+    });
   });
 });
 

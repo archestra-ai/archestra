@@ -47,6 +47,8 @@ To share a resource, add recipients in its permissions, next to its other settin
 
 For grants covering every object of a kind, open the resource list's **More actions** menu beside **Create** or **Add**, then choose **Permissions**. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
 
+At least one recipient must keep **Full access** in the permissions for every object of a kind. Without it, nobody can edit, delete, or share objects that other people created, so **Save** stays off until one recipient has it.
+
 ### Actions And Scopes
 
 **Can view** permits reading. **Can use** permits execution. **Can edit** permits configuration changes. **Full access** also includes deletion and permission management. Editing does not imply execution or sharing.
@@ -90,7 +92,9 @@ The Permissions editor displays inherited grants separately. A read grant on all
 
 You can share only actions you hold. Team administration can change membership, but does not authorize editing the resources or grants shared with the team.
 
-Assigning a role, or adding someone to a team, shares every grant the role or team carries, so you must hold those grants too. Grants that members put on their own chats, agent runs, and personal provider keys do not count: only their owner holds those.
+Assigning a role, or adding someone to a team, shares every grant the role or team carries, so you must hold those grants and `manage-permissions` on each object. Grants that members put on their own chats, agent runs, and personal provider keys do not count: only their owner holds those. [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) skips this check, so it can assign any role or team.
+
+When the check refuses an assignment, the form lists each object you cannot share. Hover over an object to see the actions you lack on it.
 
 If another administrator saves first, the editor preserves your draft and asks you to reload. Review the latest permissions before saving again. Permission changes appear in the audit log.
 

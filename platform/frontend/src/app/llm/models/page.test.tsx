@@ -206,6 +206,7 @@ describe("ModelsPage", () => {
             grants: [],
             inheritedGrants: [],
             effectiveActions: ["read", "update", "manage-permissions"],
+            actorSubjects: [],
           } satisfies archestraApiTypes.GetResourcePermissionsResponses["200"]),
       ),
     );

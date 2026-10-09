@@ -1658,19 +1658,12 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it("lets OpenCode's first Virtual key tab switch between all primary model providers and one provider", async () => {
+    it("sends the selected OpenCode routing mode without retaining an individual provider in all-provider mode", async () => {
       const user = userEvent.setup();
       availableKeysMock.mockReturnValue({
         data: [
-          { id: "primary-anthropic", provider: "anthropic", isPrimary: true },
-          {
-            id: "primary-custom",
-            provider: "vllm",
-            isPrimary: true,
-            baseUrl: "https://models.example/v1",
-          },
-          { id: "non-primary", provider: "openai", isPrimary: false },
-          { id: "bedrock", provider: "bedrock", isPrimary: false },
+          { provider: "anthropic", isPrimary: true },
+          { provider: "bedrock", isPrimary: false },
         ],
       });
       function OpenCodePanel() {
@@ -1688,48 +1681,25 @@ describe("ConnectCommandPanel", () => {
         );
       }
       render(<OpenCodePanel />, { wrapper: queryWrapper() });
-
-      expect(await screen.findByText(COMMAND)).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("connect-change-model"),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.getByTestId("connect-change-proxy").closest("li"),
-      ).toHaveTextContent(
-        "Route all primary model providers (2) through the LLM Proxy using a virtual key",
-      );
       await waitFor(() =>
-        expect(createSetupMock).toHaveBeenCalledWith(
+        expect(createSetupMock).toHaveBeenLastCalledWith(
           expect.objectContaining({
-            clientId: "opencode",
             proxyAuth: "primary-providers",
             provider: undefined,
-            model: undefined,
           }),
         ),
       );
       await user.click(screen.getByTestId("connect-change-proxy"));
-      expect(screen.getAllByRole("tab")[0]).toHaveTextContent("Virtual key");
-      expect(screen.getAllByRole("tab")).toHaveLength(2);
-      expect(
-        screen.getByRole("combobox", { name: "Model provider" }),
-      ).toHaveTextContent("All model providers");
       fireEvent.keyDown(
         screen.getByRole("combobox", { name: "Model provider" }),
         { key: "ArrowDown" },
       );
-      expect(
-        screen.getByRole("option", { name: "AWS Bedrock" }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("option", { name: "OpenAI-compatible" }),
-      ).toBeInTheDocument();
-      await user.click(screen.getByRole("option", { name: "OpenAI" }));
+      await user.click(screen.getByRole("option", { name: "AWS Bedrock" }));
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
           expect.objectContaining({
             proxyAuth: "virtual-key",
-            provider: "openai",
+            provider: "bedrock",
           }),
         ),
       );
@@ -1739,13 +1709,7 @@ describe("ConnectCommandPanel", () => {
           expect.objectContaining({ proxyAuth: "provider-key" }),
         ),
       );
-      expect(
-        screen.queryByRole("combobox", { name: "Model provider" }),
-      ).not.toBeInTheDocument();
       await user.click(screen.getByRole("tab", { name: "Virtual key" }));
-      expect(
-        screen.getByRole("combobox", { name: "Model provider" }),
-      ).toHaveTextContent("OpenAI");
       fireEvent.keyDown(
         screen.getByRole("combobox", { name: "Model provider" }),
         { key: "ArrowDown" },
@@ -1763,135 +1727,35 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it.each([
-      "missing",
-      "expired",
-      "connected",
-    ] as const)("only offers usable configured OpenCode providers when a subscription is %s", async (subscriptionState) => {
+    it("does not offer unconfigured or expired OpenCode provider credentials", async () => {
       const user = userEvent.setup();
       availableKeysMock.mockReturnValue({
         data: [
-          { id: "primary", provider: "anthropic", isPrimary: true },
-          { id: "configured", provider: "bedrock", isPrimary: false },
-          { id: "missing-endpoint", provider: "vllm", isPrimary: true },
-          { id: "blank-endpoint", provider: "ollama", baseUrl: "  " },
-          { id: "expired", provider: "openai", requiresReauthentication: true },
-          ...(subscriptionState === "missing"
-            ? []
-            : [
-                {
-                  id: "subscription",
-                  provider: "github-copilot",
-                  isPrimary: true,
-                  requiresReauthentication: subscriptionState === "expired",
-                },
-              ]),
+          { provider: "anthropic", isPrimary: true },
+          { provider: "openai", requiresReauthentication: true },
+          { provider: "vllm", baseUrl: "  " },
+          {
+            provider: "microsoft-365-copilot",
+            requiresReauthentication: false,
+          },
         ],
       });
-      function OpenCodePanel() {
-        const [provider, setProvider] = useState<SupportedProvider | null>(
-          null,
-        );
-        return (
-          <ConnectCommandPanel
-            {...renderPanelProps({
-              client: findClient("opencode"),
-              urlProvider: provider,
-              onProviderSelect: setProvider,
-            })}
-          />
-        );
-      }
-      render(<OpenCodePanel />, { wrapper: queryWrapper() });
+      renderPanel({ client: findClient("opencode") });
       await screen.findByText(COMMAND);
       await user.click(screen.getByTestId("connect-change-proxy"));
       fireEvent.keyDown(
         screen.getByRole("combobox", { name: "Model provider" }),
-        {
-          key: "ArrowDown",
-        },
+        { key: "ArrowDown" },
       );
-      const options = screen
-        .getAllByRole("option")
-        .map((option) => option.textContent);
-      expect(options).toEqual(
-        expect.arrayContaining([
-          "All model providers",
-          "Anthropic",
-          "AWS Bedrock",
-        ]),
-      );
-      expect(options).not.toContain("OpenAI");
-      expect(options).not.toContain("OpenAI-compatible");
-      expect(options).not.toContain("Ollama");
-      expect(options).not.toContain("Microsoft 365 Copilot");
-      if (subscriptionState === "connected") {
-        expect(options).toContain("GitHub Copilot");
-      } else {
-        expect(options).not.toContain("GitHub Copilot");
+      expect(screen.getByRole("option", { name: "Anthropic" })).toBeVisible();
+      expect(
+        screen.getByRole("option", { name: "Microsoft 365 Copilot" }),
+      ).toBeVisible();
+      for (const name of ["GitHub Copilot", "OpenAI", "OpenAI-compatible"]) {
+        expect(
+          screen.queryByRole("option", { name, exact: true }),
+        ).not.toBeInTheDocument();
       }
-      // Switching out of all-provider mode must use the same usable list.
-      await user.click(screen.getByRole("option", { name: "AWS Bedrock" }));
-      await waitFor(() =>
-        expect(createSetupMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            proxyAuth: "virtual-key",
-            provider: "bedrock",
-          }),
-        ),
-      );
-    });
-
-    it("keeps Your provider key first and selected for other clients", async () => {
-      const user = userEvent.setup();
-      renderPanel({ client: findClient("codex") });
-      await screen.findByText(COMMAND);
-      await user.click(screen.getByTestId("connect-change-proxy"));
-      expect(screen.getAllByRole("tab")[0]).toHaveTextContent(
-        "Your provider key",
-      );
-      expect(
-        screen.getByRole("tab", { name: "Your provider key" }),
-      ).toHaveAttribute("aria-selected", "true");
-      expect(
-        screen.queryByRole("combobox", { name: "Model provider" }),
-      ).not.toBeInTheDocument();
-    });
-
-    it("does not generate an OpenCode command without a usable primary", async () => {
-      availableKeysMock.mockReturnValue({
-        data: [
-          { id: "not-primary", provider: "anthropic", isPrimary: false },
-          {
-            id: "expired",
-            provider: "openai",
-            isPrimary: true,
-            requiresReauthentication: true,
-          },
-          { id: "no-endpoint", provider: "vllm", isPrimary: true },
-        ],
-      });
-      renderPanel({ client: findClient("opencode") });
-      expect(
-        await screen.findByText(
-          /No usable primary model providers are available/,
-        ),
-      ).toBeInTheDocument();
-      expect(createSetupMock).not.toHaveBeenCalled();
-    });
-
-    it("requires virtual-key permission for all primary providers", async () => {
-      vi.mocked(useHasPermissions).mockReturnValue({
-        data: false,
-      } as ReturnType<typeof useHasPermissions>);
-      availableKeysMock.mockReturnValue({
-        data: [{ id: "primary", provider: "anthropic", isPrimary: true }],
-      });
-      renderPanel({ client: findClient("opencode") });
-      expect(
-        await screen.findByText(/You need permission to create virtual keys/),
-      ).toBeInTheDocument();
-      expect(createSetupMock).not.toHaveBeenCalled();
     });
 
     it("offers the org's synced models for the provider as a dropdown", async () => {

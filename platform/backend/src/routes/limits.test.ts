@@ -1,6 +1,9 @@
+import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { EnvironmentModel, LimitModel } from "@/models";
 import AgentModel from "@/models/agent";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -27,6 +30,7 @@ describe("limits routes", () => {
       (request as typeof request & { user: User }).user = user;
     });
 
+    registerAuditLogHook(app);
     const { default: limitsRoutes } = await import("./limits");
     await app.register(limitsRoutes);
   });
@@ -337,6 +341,72 @@ describe("limits routes", () => {
   });
 
   describe("POST /api/limits", () => {
+    test("rejects proxy cost limits while allowing ordinary agent budgets", async ({
+      makeAgent,
+    }) => {
+      const proxy = await makeAgent({
+        organizationId,
+        agentType: "llm_proxy",
+      });
+      const agent = await makeAgent({ organizationId });
+      const payload = {
+        entityType: "agent",
+        entityId: proxy.id,
+        limitType: "token_cost",
+        limitValue: 1000,
+      };
+
+      const rejected = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload,
+      });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json().error.message).toContain(
+        "Use an organization limit instead",
+      );
+      expect(await LimitModel.findAll("agent", proxy.id)).toEqual([]);
+
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/limits",
+        payload: { ...payload, entityId: agent.id },
+      });
+      expect(created.statusCode).toBe(200);
+      expect(created.json()).toMatchObject({ entityId: agent.id });
+      const records = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.organizationId, organizationId),
+            eq(schema.auditLogsTable.httpRoute, "/api/limits"),
+          ),
+        );
+      expect(records).toHaveLength(2);
+      expect(records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "limit.created",
+            outcome: "success",
+            resourceType: "limit",
+            resourceId: created.json().id,
+            before: null,
+            after: expect.objectContaining({
+              entityId: agent.id,
+              limitValue: 1000,
+            }),
+          }),
+          expect.objectContaining({
+            action: "limit.created",
+            outcome: "failure",
+            httpStatus: 400,
+            after: null,
+          }),
+        ]),
+      );
+    });
+
     test("defaults new limits to calendar-month cleanup", async () => {
       const response = await app.inject({
         method: "POST",

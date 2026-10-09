@@ -3,6 +3,7 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
 } from "@archestra/shared";
+import LimitModel from "@/models/limit";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -70,6 +71,32 @@ describe("limit tool execution", () => {
       "Successfully created limit",
     );
     expect((result.content[0] as any).text).toContain("Model: All models");
+  });
+
+  test("create_limit rejects an LLM Proxy cost budget", async ({
+    makeAgent,
+  }) => {
+    const proxy = await makeAgent({
+      organizationId: mockContext.organizationId,
+      agentType: "llm_proxy",
+    });
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}create_limit`,
+      {
+        entity_type: "agent",
+        entity_id: proxy.id,
+        limit_type: "token_cost",
+        limit_value: 1000,
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining("Use an organization limit instead"),
+      }),
+    ]);
+    expect(await LimitModel.findAll("agent", proxy.id)).toEqual([]);
   });
 
   test("create_limit succeeds with null model (all models)", async () => {

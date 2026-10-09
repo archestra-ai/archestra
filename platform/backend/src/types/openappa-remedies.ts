@@ -86,17 +86,23 @@ export const BlockKindSchema = z.enum([
 export type BlockKind = z.infer<typeof BlockKindSchema>;
 
 /**
- * One way a rule can block a call, with how many rules can cause it and
- * which wired remedies can lift it. `unservedMarks` is for `approvals`: the
- * marks rules require that no wired authority may give.
+ * One way a call can be blocked, and what wired authorities and sanitizers
+ * can lift it. A `trust` entry is one rank data can carry below the most
+ * trusted; an `audience` entry one audience narrower than `public`. An
+ * `effects` entry is present when some rule excludes an earlier effect, an
+ * `approvals` entry when some rule requires an attention mark;
+ * `unservedMarks` then lists the marks no wired authority may give.
  */
 export const BlockCoverageSchema = z.object({
   kind: BlockKindSchema,
-  rules: z.number().int().nonnegative(),
-  approvers: z.number().int().nonnegative(),
-  cleaners: z.number().int().nonnegative(),
+  /** The trust rank or audience; null for `effects` and `approvals`. */
+  level: z.string().nullable(),
+  /** Wired authorities that may approve a call blocked this way. */
+  approvers: z.array(z.string()),
+  /** Wired sanitizers that may clean data labelled this way. */
+  cleaners: z.array(z.string()),
   unservedMarks: z.array(z.string()),
-  /** False when some rule can cause it and nothing wired can lift it. */
+  /** False when nothing wired can lift it. */
   covered: z.boolean(),
 });
 export type BlockCoverage = z.infer<typeof BlockCoverageSchema>;

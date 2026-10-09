@@ -304,8 +304,10 @@ function GapsPanel({ view }: { view: RemediesView }) {
       />
       <p className="text-muted-foreground text-xs">
         {gaps === 0
-          ? "every block has a way out"
-          : "kinds of block with no way out"}
+          ? "no label keeps a blocked call blocked"
+          : gaps === 1
+            ? "label where blocked calls stay blocked"
+            : "labels where blocked calls stay blocked"}
       </p>
       {lines.length > 0 && (
         <ul className="text-muted-foreground space-y-1.5 pt-1 text-xs">

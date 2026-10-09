@@ -95,6 +95,42 @@ class OpenAppaTrustAudienceService {
 
 export const openappaTrustAudienceService = new OpenAppaTrustAudienceService();
 
+/**
+ * The levels a policy can label data with: trust ranks least trusted first,
+ * and audiences widest first, `public` then `internal`, `self` and each
+ * group. A group is narrower than the level it is declared `within`.
+ */
+export function policyLevels(
+  files: Array<{ entry: string | null; text: string }>,
+): {
+  trust: string[];
+  audiences: Array<{ name: string; width: number }>;
+} {
+  const root = files.find((file) => file.entry === null)?.text ?? "";
+  const policy = asRecord(parsePolicyToml(root)?.policy);
+  const mappings = audienceMappings(root, policy);
+  const width = (name: string): number => {
+    const chain = CHAIN_AUDIENCES.indexOf(name);
+    if (chain >= 0) return chain;
+    const within = mappings.get(name)?.within ?? "internal";
+    return (
+      (CHAIN_AUDIENCES.indexOf(within) >= 0
+        ? CHAIN_AUDIENCES.indexOf(within)
+        : 1) + 0.5
+    );
+  };
+  // Mapped groups only: a rule may also name templated selectors such as
+  // `@archestra:team/$team_ids`, which select readers rather than name a level.
+  const names = [
+    ...CHAIN_AUDIENCES,
+    ...[...mappings.keys()].filter((name) => name.startsWith("@")),
+  ];
+  return {
+    trust: strings(policy?.trust_chain) ?? DEFAULT_TRUST_CHAIN,
+    audiences: names.map((name) => ({ name, width: width(name) })),
+  };
+}
+
 // =============================================================================
 // Internal helpers
 // =============================================================================

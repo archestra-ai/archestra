@@ -89520,9 +89520,9 @@ export type GetOpenappaRemediesResponses = {
         }>;
         blocks: Array<{
             kind: 'trust' | 'audience' | 'effects' | 'approvals';
-            rules: number;
-            approvers: number;
-            cleaners: number;
+            level: string | null;
+            approvers: Array<string>;
+            cleaners: Array<string>;
             unservedMarks: Array<string>;
             covered: boolean;
         }>;

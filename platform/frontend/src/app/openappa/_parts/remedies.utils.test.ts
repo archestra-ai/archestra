@@ -2,6 +2,7 @@
 import { describe, expect, test } from "vitest";
 import type {
   Authority,
+  BlockCoverage,
   RemediesView,
   Sanitizer,
 } from "@/lib/openappa-remedies.query";
@@ -57,33 +58,9 @@ function view(overrides: Partial<RemediesView> = {}): RemediesView {
     blocks: [
       {
         kind: "trust",
-        rules: 0,
-        approvers: 0,
-        cleaners: 0,
-        unservedMarks: [],
-        covered: true,
-      },
-      {
-        kind: "audience",
-        rules: 0,
-        approvers: 0,
-        cleaners: 0,
-        unservedMarks: [],
-        covered: true,
-      },
-      {
-        kind: "effects",
-        rules: 0,
-        approvers: 0,
-        cleaners: 0,
-        unservedMarks: [],
-        covered: true,
-      },
-      {
-        kind: "approvals",
-        rules: 0,
-        approvers: 0,
-        cleaners: 0,
+        level: "suspicious",
+        approvers: [],
+        cleaners: ["attest-schema"],
         unservedMarks: [],
         covered: true,
       },
@@ -198,50 +175,60 @@ describe("groupBySource", () => {
 });
 
 describe("gapLines", () => {
-  test("a kind no rule uses is left out; an uncovered kind names what the rules need", () => {
+  const coverage = (
+    partial: Partial<BlockCoverage> & Pick<BlockCoverage, "kind" | "level">,
+  ): BlockCoverage => ({
+    approvers: [],
+    cleaners: [],
+    unservedMarks: [],
+    covered:
+      partial.approvers?.length || partial.cleaners?.length ? true : false,
+    ...partial,
+  });
+
+  test("names each level with what lifts it, gaps first", () => {
     const lines = gapLines(
       view({
         blocks: [
-          {
+          coverage({
             kind: "trust",
-            rules: 41,
-            approvers: 0,
-            cleaners: 0,
-            unservedMarks: [],
-            covered: false,
-          },
-          {
+            level: "suspicious",
+            cleaners: ["attest-schema"],
+          }),
+          coverage({
             kind: "audience",
-            rules: 88,
-            approvers: 3,
-            cleaners: 12,
-            unservedMarks: [],
-            covered: true,
-          },
-          {
+            level: "internal",
+            approvers: ["human"],
+            cleaners: ["strip-pii"],
+          }),
+          coverage({ kind: "audience", level: "self" }),
+          coverage({ kind: "audience", level: "@finance" }),
+          coverage({
             kind: "effects",
-            rules: 0,
-            approvers: 0,
-            cleaners: 0,
-            unservedMarks: [],
-            covered: true,
-          },
-          {
+            level: null,
+            approvers: ["finance-officer"],
+          }),
+          coverage({
             kind: "approvals",
-            rules: 9,
-            approvers: 1,
-            cleaners: 0,
+            level: null,
+            approvers: ["human"],
             unservedMarks: ["monday-review", "sentry-review"],
             covered: false,
-          },
+          }),
         ],
       }),
     );
     expect(lines).toEqual([
       {
-        key: "trust",
-        label: "Trust",
-        text: "41 rules need trusted data · no authority approves, no sanitizer cleans",
+        key: "audience:self",
+        label: "self data",
+        text: "can't be shared wider",
+        covered: false,
+      },
+      {
+        key: "audience:@finance",
+        label: "@finance data",
+        text: "can't be shared wider",
         covered: false,
       },
       {
@@ -251,9 +238,21 @@ describe("gapLines", () => {
         covered: false,
       },
       {
-        key: "audience",
-        label: "Audience",
-        text: "88 rules · 3 authorities approve, 12 sanitizers clean",
+        key: "trust:suspicious",
+        label: "suspicious data",
+        text: "only subagent returns can be made trusted (attest-schema)",
+        covered: true,
+      },
+      {
+        key: "audience:internal",
+        label: "internal data",
+        text: "can be shared wider (human, strip-pii)",
+        covered: true,
+      },
+      {
+        key: "effects",
+        label: "Effects",
+        text: "can run after an excluded effect (finance-officer)",
         covered: true,
       },
     ]);
@@ -266,42 +265,17 @@ describe("gapLines", () => {
         authority({ name: "legal-reviewer", implementation: null }),
       ],
       blocks: [
-        {
-          kind: "trust",
-          rules: 2,
-          approvers: 0,
-          cleaners: 0,
-          unservedMarks: [],
-          covered: false,
-        },
-        {
-          kind: "audience",
-          rules: 0,
-          approvers: 0,
-          cleaners: 0,
-          unservedMarks: [],
-          covered: true,
-        },
-        {
-          kind: "effects",
-          rules: 0,
-          approvers: 0,
-          cleaners: 0,
-          unservedMarks: [],
-          covered: true,
-        },
-        {
+        coverage({ kind: "trust", level: "suspicious" }),
+        coverage({
           kind: "approvals",
-          rules: 1,
-          approvers: 1,
-          cleaners: 0,
-          unservedMarks: [],
+          level: null,
+          approvers: ["human"],
           covered: true,
-        },
+        }),
       ],
     });
     expect(gapLines(current).map((line) => line.key)).toEqual([
-      "trust",
+      "trust:suspicious",
       "wiring",
       "approvals",
     ]);

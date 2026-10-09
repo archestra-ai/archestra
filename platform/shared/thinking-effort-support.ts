@@ -33,10 +33,6 @@ export function supportsThinkingEffort(
       return supportsGeminiThinkingEffort(modelId);
     case "openai":
       return supportsOpenAiThinkingEffort(modelId);
-    case "zhipuai":
-      // GLM-5.3's three effort levels are low/high/max. Older GLM models
-      // have a different thinking switch; do not send them this dialect.
-      return /^glm-5\.3(?:-flashx?)?$/i.test(modelId);
     case "anthropic":
       return anthropicSupportsThinkingEffort(modelId);
     default:

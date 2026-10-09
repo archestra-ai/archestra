@@ -15283,14 +15283,6 @@
               "type"
             ]
           },
-          "reasoning_effort": {
-            "type": "string",
-            "enum": [
-              "low",
-              "high",
-              "max"
-            ]
-          },
           "temperature": {
             "nullable": true,
             "type": "number"
@@ -36901,14 +36893,6 @@
               "type"
             ],
             "additionalProperties": false
-          },
-          "reasoning_effort": {
-            "type": "string",
-            "enum": [
-              "low",
-              "high",
-              "max"
-            ]
           },
           "temperature": {
             "nullable": true,

@@ -63,7 +63,6 @@ export const ChatCompletionRequestSchema = z
         clear_thinking: z.boolean().optional(),
       })
       .optional(),
-    reasoning_effort: z.enum(["low", "high", "max"]).optional(),
     temperature: z.number().nullable().optional(),
     top_p: z.number().nullable().optional(),
     max_tokens: z.number().nullable().optional(),

@@ -4719,7 +4719,6 @@ export type ZhipuaiChatCompletionRequestInput = {
         type: 'enabled' | 'disabled';
         clear_thinking?: boolean;
     };
-    reasoning_effort?: 'low' | 'high' | 'max';
     temperature?: number | null;
     top_p?: number | null;
     max_tokens?: number | null;
@@ -11162,7 +11161,6 @@ export type ZhipuaiChatCompletionRequest = {
         type: 'enabled' | 'disabled';
         clear_thinking?: boolean;
     };
-    reasoning_effort?: 'low' | 'high' | 'max';
     temperature?: number | null;
     top_p?: number | null;
     max_tokens?: number | null;

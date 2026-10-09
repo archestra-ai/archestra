@@ -269,6 +269,10 @@ const POPULAR_GENERIC_CLIENTS: (Pick<
     svg: KIRO_PATH,
     iconColor: "#9046ff",
     tileBg: "#f4eeff",
+    proxy: {
+      kind: "unsupported",
+      reason: "Kiro sends its model requests to its own service.",
+    },
   },
   {
     id: "openclaw",

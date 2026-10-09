@@ -18,7 +18,13 @@ import {
 const SALES_EMAIL = "sales@archestra.ai";
 const OPENAPPA_URL = "https://www.openappa.com/";
 
-export function OpenAppaLicenceRequired() {
+// The tier comes from the same server fetch that chose this page: the
+// client's config cache can lag behind and contradict that choice.
+export function OpenAppaLicenceRequired({
+  tier,
+}: {
+  tier: { threshold: number; userCount: number };
+}) {
   return (
     <PageLayout title="Guardrails">
       <Empty className="py-16">
@@ -36,6 +42,10 @@ export function OpenAppaLicenceRequired() {
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
+          <p className="text-sm text-muted-foreground">
+            Free for teams under {tier.threshold} users. This instance has{" "}
+            {tier.userCount}.
+          </p>
           <Button asChild>
             <a href={`mailto:${SALES_EMAIL}`}>
               <Mail aria-hidden="true" />

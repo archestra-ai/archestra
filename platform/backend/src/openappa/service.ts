@@ -397,7 +397,24 @@ async function dispatch(
   /** A policy the caller already read, shared across a batch of dispatches. */
   policy?: DispatchPolicy,
 ) {
-  const principal = await sessionPrincipal(session);
+  return dispatchWithPrincipal({
+    session,
+    event,
+    policy,
+    principal: await sessionPrincipal(session),
+  });
+}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function dispatchWithPrincipal(params: {
+  session: OpenAppaSession;
+  event: Record<string, unknown>;
+  policy?: DispatchPolicy;
+  principal: { principal?: string };
+}) {
+  const { session, event, policy, principal } = params;
   return withRuntime(
     session.organization_id,
     (module, policy) =>
@@ -414,6 +431,29 @@ async function dispatch(
     policy,
   );
 }
+
+/**
+ * Resolve membership once for a tool-call batch, including its cancellation
+ * events. The promise belongs only to this batch: the next batch must observe
+ * membership revocation and principal changes.
+ */
+function sessionDispatch(session: OpenAppaSession, policy: SharedPolicy) {
+  let principal: ReturnType<typeof sessionPrincipal> | undefined;
+  return async (event: Record<string, unknown>) => {
+    principal ??= sessionPrincipal(session);
+    const [batchPolicy, batchPrincipal] = await Promise.all([
+      policy(),
+      principal,
+    ]);
+    return dispatchWithPrincipal({
+      session,
+      event,
+      policy: batchPolicy,
+      principal: batchPrincipal,
+    });
+  };
+}
+// SPDX-SnippetEnd
 
 /**
  * Whether the deployment's Log Content mode keeps content out of the consult
@@ -865,6 +905,9 @@ type AppaCallDecision =
       review?: Array<{ offer_id: string; text: string }>;
     };
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function evaluateToolCalls(
   session: OpenAppaSession,
   calls: Array<{
@@ -925,6 +968,7 @@ export async function evaluateToolCalls(
     looseRunToolDispatch: options.looseRunToolDispatch === true,
   });
   const admitted: string[] = [];
+  const dispatchCall = sessionDispatch(session, policy);
   const results = await Promise.allSettled(
     calls.map(async (call, index) => {
       const target = normalized[index];
@@ -1002,18 +1046,14 @@ export async function evaluateToolCalls(
         });
         if (refusal) return refusal;
       }
-      const decision = await dispatch(session, event, await policy());
+      const decision = await dispatchCall(event);
       if (
         spawn &&
         (decision.decision === "pass_control" ||
           (decision.decision === "allow_call" && !decision.spawn_binding))
       ) {
         if (decision.decision === "allow_call")
-          await dispatch(
-            session,
-            { event: "cancel_call", tool_call_id: call.id },
-            await policy(),
-          );
+          await dispatchCall({ event: "cancel_call", tool_call_id: call.id });
         return {
           kind: "deny" as const,
           feedback:
@@ -1054,12 +1094,8 @@ export async function evaluateToolCalls(
     if (admitted.length > 0) {
       // Cancel admitted calls from this batch if evaluation failed mid-batch.
       const cancelResults = await Promise.allSettled(
-        admitted.map(async (id) =>
-          dispatch(
-            session,
-            { event: "cancel_call", tool_call_id: id },
-            await policy(),
-          ),
+        admitted.map((id) =>
+          dispatchCall({ event: "cancel_call", tool_call_id: id }),
         ),
       );
       for (const [index, cancelResult] of cancelResults.entries()) {
@@ -1084,6 +1120,8 @@ export async function evaluateToolCalls(
 }
 
 /** Verdict on a call the provider already ran. */
+// SPDX-SnippetEnd
+
 type AppaHostedCallDecision =
   | { kind: "release" }
   | { kind: "hold"; feedback: string };
@@ -1147,19 +1185,17 @@ export async function evaluateHostedToolCalls(
 }
 
 /** Cancels admitted tool calls when the carrier response is withheld. */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function cancelCalls(
   session: OpenAppaSession,
   ids: readonly string[],
   policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<void> {
+  const dispatchCall = sessionDispatch(session, policy);
   const results = await Promise.allSettled(
-    ids.map(async (id) =>
-      dispatch(
-        session,
-        { event: "cancel_call", tool_call_id: id },
-        await policy(),
-      ),
-    ),
+    ids.map((id) => dispatchCall({ event: "cancel_call", tool_call_id: id })),
   );
   for (const [index, result] of results.entries()) {
     if (result.status === "rejected") {
@@ -1174,6 +1210,8 @@ export async function cancelCalls(
     }
   }
 }
+
+// SPDX-SnippetEnd
 
 /** Reports the start of a user turn, before the model is called. */
 export async function notePrompt(

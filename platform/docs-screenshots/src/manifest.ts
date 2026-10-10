@@ -223,8 +223,6 @@ export const SHOTS: Shot[] = [
       await page.locator(".monaco-editor").first().waitFor();
       await page.waitForLoadState("networkidle");
       await page.locator("input").first().blur();
-      // Runtime icons load after the picker renders.
-      await page.waitForTimeout(1_000);
       await page
         .getByRole("heading", { name: "Runtime", exact: true })
         .scrollIntoViewIfNeeded();

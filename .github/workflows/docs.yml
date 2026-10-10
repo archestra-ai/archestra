@@ -120,7 +120,7 @@ jobs:
           persist-credentials: true # zizmor: ignore[artipacked] the job pushes updated screenshots.
           ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ steps.generate-token.outputs.token }}
-          fetch-depth: 1
+          fetch-depth: 2
 
       - name: Setup environment
         uses: ./.github/actions/setup-env
@@ -168,6 +168,12 @@ jobs:
           BASE_BRANCH: ${{ github.ref_name }}
           RUN_ID: ${{ github.run_id }}
         run: |
+          # Validate image-only capture commits without publishing another batch
+          # of volatile values (keys, approval codes, relative timestamps).
+          if [ "$(python3 .github/scripts/should-commit-docs-screenshots.py "$EVENT_NAME")" = "false" ]; then
+            echo "Screenshot commit validated; retaining its captured images."
+            exit 0
+          fi
           if [ -z "$(git status --porcelain -- docs/assets)" ]; then
             echo "Screenshots are up to date."
             exit 0

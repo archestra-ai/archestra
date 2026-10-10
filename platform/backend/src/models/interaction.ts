@@ -1699,7 +1699,10 @@ class InteractionModel {
       })
       .from(t)
       .where(and(...conditions))
-      .orderBy(desc(t.createdAt), desc(t.id))
+      // Drizzle's descending timestamp indexes use NULLS LAST. PostgreSQL
+      // otherwise defaults DESC to NULLS FIRST and sorts the entire history,
+      // even though createdAt is non-nullable.
+      .orderBy(sql`${t.createdAt} DESC NULLS LAST`, desc(t.id))
       .limit(cursorQuery.limit + 1);
 
     return rows.map((row) => ({
@@ -1965,7 +1968,13 @@ class InteractionModel {
     const seen = new Set<string>();
     let scanned = 0;
 
-    while (keys.length < needed && scanned < maxScanRows) {
+    // Each scanned interaction can yield at most one session. A page beyond
+    // the scan budget cannot be filled by this walk, so go straight to grouping.
+    while (
+      needed <= maxScanRows &&
+      keys.length < needed &&
+      scanned < maxScanRows
+    ) {
       const batch = await db
         .select({
           id: schema.interactionsTable.id,
@@ -1983,7 +1992,7 @@ class InteractionModel {
         // which works from the oldest end — far below anything this walk
         // reads.
         .orderBy(
-          desc(schema.interactionsTable.createdAt),
+          sql`${schema.interactionsTable.createdAt} DESC NULLS LAST`,
           desc(schema.interactionsTable.id),
         )
         .limit(SESSION_SCAN_BATCH_ROWS)

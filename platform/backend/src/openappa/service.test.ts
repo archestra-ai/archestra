@@ -9,9 +9,11 @@ import * as database from "@/database";
 import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import MemberModel from "@/models/member";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
 import {
   addressRuntimeChild,
@@ -691,6 +693,45 @@ describe("APPA feature boundary", () => {
       ),
     ).toEqual(["call:first", "call:second"]);
   });
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test("a tool batch reads its principal once and the next batch sees revoked membership", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const user = await makeUser({ email: "batch-member@example.com" });
+    await makeMember(user.id, organizationId);
+    const userSession = { ...session, caller_id: `user:${user.id}` };
+    const calls = Array.from({ length: 4 }, (_, index) => ({
+      id: `batch-${index}`,
+      name: "read_file",
+      arguments: {},
+    }));
+    const options = { canonicalize: (name: string) => name };
+    const { result, statements } = await recordQueries(() =>
+      evaluateToolCalls(userSession, calls, options),
+    );
+    expect(result).toEqual(calls.map(() => ({ kind: "allow" })));
+    expect(
+      statements.filter((statement) => statement.includes('from "member"')),
+    ).toHaveLength(1);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(calls.map(() => user.email));
+
+    await MemberModel.deleteAllByUserId(user.id);
+    native.dispatchHook.mockClear();
+    await evaluateToolCalls(userSession, calls, options);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(calls.map(() => undefined));
+  });
+  // SPDX-SnippetEnd
 
   test("names a member's email as the session principal, and nobody else's", async ({
     makeUser,

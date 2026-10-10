@@ -6,10 +6,12 @@ import {
   isIntegrationHidden,
   KnowledgeConnectorIdSchema,
   MessagingChannelIdSchema,
+  orderedPopularAgentIds,
   PopularAgentIdSchema,
   PopularAgentOverridesSchema,
   pruneIntegrationOverrides,
   withAllowedIntegrationIds,
+  withOrderedPopularAgentIds,
 } from "./integration-overrides";
 import { CONNECTOR_TYPE_LABELS } from "./knowledge-base";
 
@@ -169,5 +171,33 @@ describe("popular agent request contract", () => {
       PopularAgentIdSchema.options,
     );
     expect(schema.required ?? []).toEqual([]);
+  });
+});
+
+describe("coding agent ordering", () => {
+  const catalog = PopularAgentIdSchema.options;
+  it("keeps default order, appends unpositioned entries, and excludes hidden entries", () => {
+    expect(orderedPopularAgentIds(null, catalog)).toEqual(catalog);
+    expect(
+      orderedPopularAgentIds(
+        {
+          codex: { position: 0 },
+          hermes: { hidden: true, position: 1 },
+          opencode: { position: 0 },
+        },
+        catalog,
+      ),
+    ).toEqual(["codex", "opencode", "claude-code", "openclaw"]);
+  });
+  it("round-trips reordering and restores a hidden entry at its new position", () => {
+    const order = ["hermes", "codex", "claude-code"] as const;
+    const overrides = withOrderedPopularAgentIds(
+      { hermes: { hidden: true } },
+      catalog,
+      order,
+    );
+    expect(orderedPopularAgentIds(overrides, catalog)).toEqual(order);
+    expect(overrides.hermes).toEqual({ position: 0 });
+    expect(overrides.opencode).toEqual({ hidden: true });
   });
 });

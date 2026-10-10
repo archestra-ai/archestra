@@ -158,10 +158,19 @@ function RuntimeFlow({ initialId }: { initialId: AgentRuntimeSelection }) {
 }
 
 async function remove(name: string) {
-  const chip = within(screen.getByRole("combobox")).getByText(name);
-  if (!chip) throw new Error("Missing selected chip");
-  await userEvent.click(
-    within(chip).getByRole("button", { name: "Remove selected option" }),
+  await userEvent.click(screen.getByRole("button", { name: `Remove ${name}` }));
+}
+
+function picker() {
+  return within(screen.getByRole("list", { name: "Coding agents" }));
+}
+
+function savedOverrides(ids: string[]) {
+  return Object.fromEntries(
+    PopularAgentIdSchema.options.map((id) => [
+      id,
+      ids.includes(id) ? { position: ids.indexOf(id) } : { hidden: true },
+    ]),
   );
 }
 
@@ -197,7 +206,7 @@ describe("popular agent configuration", () => {
       responseReady.resolve();
     }
     await waitFor(() =>
-      expect(screen.getAllByText("Could not load popular agents")).toHaveLength(
+      expect(screen.getAllByText("Could not load coding agents")).toHaveLength(
         2,
       ),
     );
@@ -227,7 +236,7 @@ describe("popular agent configuration", () => {
     renderFlow();
     try {
       for (const button of screen.getAllByRole("button", {
-        name: "Remove selected option",
+        name: /^Remove /,
       })) {
         expect(button).toBeDisabled();
       }
@@ -244,19 +253,18 @@ describe("popular agent configuration", () => {
     }
     await ready();
     await waitFor(() =>
-      expect(
-        within(screen.getByRole("combobox")).queryByText("Codex"),
-      ).not.toBeInTheDocument(),
+      expect(picker().queryByText("Codex")).not.toBeInTheDocument(),
     );
     await remove("Claude Code");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(writes).toEqual([
         {
-          popularAgentOverrides: {
-            "claude-code": { hidden: true },
-            codex: { hidden: true },
-          },
+          popularAgentOverrides: savedOverrides([
+            "opencode",
+            "hermes",
+            "openclaw",
+          ]),
         },
       ]),
     );
@@ -277,7 +285,7 @@ describe("popular agent configuration", () => {
     );
     renderFlow();
     await waitFor(() =>
-      expect(screen.getAllByText("Could not load popular agents")).toHaveLength(
+      expect(screen.getAllByText("Could not load coding agents")).toHaveLength(
         2,
       ),
     );
@@ -289,7 +297,7 @@ describe("popular agent configuration", () => {
     ).not.toBeInTheDocument();
     await userEvent.click(screen.getAllByRole("button", { name: "Retry" })[0]);
     await screen.findByRole("button", { name: /Claude Code / });
-    expect(screen.queryAllByText("Could not load popular agents")).toHaveLength(
+    expect(screen.queryAllByText("Could not load coding agents")).toHaveLength(
       0,
     );
     expect(
@@ -306,12 +314,16 @@ describe("popular agent configuration", () => {
       ).toBeInTheDocument();
       expect(screen.getByRole("radio", { name })).toBeInTheDocument();
     }
+    expect(
+      screen.getByRole("button", { name: "Add coding agent" }),
+    ).toBeDisabled();
     await remove("Codex");
+    expect(
+      screen.getByRole("button", { name: "Add coding agent" }),
+    ).toBeEnabled();
     expect(screen.getByRole("button", { name: /Codex / })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      within(screen.getByRole("combobox")).getByText("Codex"),
-    ).toBeInTheDocument();
+    expect(picker().getByText("Codex")).toBeInTheDocument();
     expect(writes).toEqual([]);
     await remove("Codex");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -321,7 +333,14 @@ describe("popular agent configuration", () => {
       ).not.toBeInTheDocument(),
     );
     expect(writes).toEqual([
-      { popularAgentOverrides: { codex: { hidden: true } } },
+      {
+        popularAgentOverrides: savedOverrides([
+          "claude-code",
+          "opencode",
+          "hermes",
+          "openclaw",
+        ]),
+      },
     ]);
     expect(
       screen.getByRole("button", { name: /Claude Code / }),
@@ -339,7 +358,9 @@ describe("popular agent configuration", () => {
       PopularAgentIdSchema.options.map((id) => [id, { hidden: true }]),
     );
     renderFlow();
-    const input = await screen.findByPlaceholderText("Select popular agents…");
+    await screen.findByRole("button", {
+      name: "Add coding agent",
+    });
     await waitFor(() => expect(screen.getAllByRole("radio")).toHaveLength(2));
     expect(
       screen.getByRole("radio", { name: "Test Platform" }),
@@ -356,15 +377,22 @@ describe("popular agent configuration", () => {
     expect(
       screen.getByRole("button", { name: /Connect via A2A/ }),
     ).toBeInTheDocument();
-    await userEvent.click(input);
-    await userEvent.click(screen.getByRole("option", { name: "Codex" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Add coding agent" }),
+      ).toBeEnabled(),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add coding agent" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Codex" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await ready();
     expect(screen.getByRole("button", { name: /Codex / })).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Hermes / }),
     ).not.toBeInTheDocument();
-    expect(organization.popularAgentOverrides?.codex).toBeUndefined();
+    expect(organization.popularAgentOverrides?.codex).toEqual({ position: 0 });
     expect(screen.getByRole("radio", { name: "Codex" })).toBeInTheDocument();
   });
 
@@ -402,28 +430,96 @@ describe("popular agent configuration", () => {
         queryKey: organizationKeys.details(),
       });
     });
-    const picker = within(screen.getByRole("combobox"));
-    expect(picker.queryByText("Codex")).not.toBeInTheDocument();
-    expect(picker.getByText("Hermes")).toBeInTheDocument();
+    const selected = picker();
+    expect(selected.queryByText("Codex")).not.toBeInTheDocument();
+    expect(selected.getByText("Hermes")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(picker.getByText("Codex")).toBeInTheDocument();
-    expect(picker.queryByText("Hermes")).not.toBeInTheDocument();
+    expect(selected.getByText("Codex")).toBeInTheDocument();
+    expect(selected.queryByText("Hermes")).not.toBeInTheDocument();
     expect(writes).toEqual([]);
   });
 
-  it("restores a removed choice without treating selection order as an unsaved change", async () => {
+  it("appends a restored choice and saves the resulting order", async () => {
     renderFlow();
     await ready();
     await remove("Codex");
     await userEvent.click(
-      screen.getByRole("textbox", { name: "Search options" }),
+      screen.getByRole("button", { name: "Add coding agent" }),
     );
-    await userEvent.click(screen.getByRole("option", { name: "Codex" }));
-    expect(
-      screen.queryByRole("button", { name: "Save" }),
-    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Codex" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(writes).toEqual([
+        {
+          popularAgentOverrides: savedOverrides([
+            "claude-code",
+            "opencode",
+            "hermes",
+            "openclaw",
+            "codex",
+          ]),
+        },
+      ]),
+    );
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole("radio")
+          .map((radio) => radio.closest("label")?.textContent),
+      ).toEqual([
+        "Test Platform",
+        "Claude Code",
+        "OpenCode",
+        "Hermes",
+        "OpenClaw",
+        "Codex",
+        "Custom image",
+      ]),
+    );
+  });
+
+  it("cancels a reorder, then saves and reloads it in the catalog and runtime picker", async () => {
+    const view = renderFlow();
+    await ready();
+    const reorder = async () => {
+      screen.getByRole("button", { name: "Reorder Codex" }).focus();
+      await userEvent.keyboard("{ArrowLeft}");
+    };
+    await reorder();
+    expect(picker().getAllByRole("listitem")[0]).toHaveTextContent("Codex");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(picker().getAllByRole("listitem")[0]).toHaveTextContent(
+      "Claude Code",
+    );
     expect(writes).toEqual([]);
+    await reorder();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(writes).toEqual([
+        {
+          popularAgentOverrides: savedOverrides([
+            "codex",
+            "claude-code",
+            "opencode",
+            "hermes",
+            "openclaw",
+          ]),
+        },
+      ]),
+    );
+    view.unmount();
+    renderFlow();
+    await ready();
+    expect(picker().getAllByRole("listitem")[0]).toHaveTextContent("Codex");
+    const section = screen
+      .getByRole("heading", { name: "Coding agents" })
+      .closest("section");
+    if (!section) throw new Error("Missing catalog section");
+    expect(within(section).getAllByRole("button")[0]).toHaveTextContent(
+      "Codex",
+    );
+    expect(screen.getAllByRole("radio")[1]).toHaveAccessibleName("Codex");
   });
 
   it("keeps the saved catalog and draft when a save fails", async () => {
@@ -443,9 +539,7 @@ describe("popular agent configuration", () => {
       expect(screen.getByRole("button", { name: "Save" })).toBeEnabled(),
     );
     expect(screen.getByRole("button", { name: /Codex / })).toBeInTheDocument();
-    expect(
-      within(screen.getByRole("combobox")).queryByText("Codex"),
-    ).not.toBeInTheDocument();
+    expect(picker().queryByText("Codex")).not.toBeInTheDocument();
   });
 
   it("prevents users without settings permission from removing chips", async () => {
@@ -456,11 +550,11 @@ describe("popular agent configuration", () => {
     renderFlow();
     await ready();
     for (const button of screen.getAllByRole("button", {
-      name: "Remove selected option",
+      name: /^Remove /,
     }))
       expect(button).toBeDisabled();
     expect(
-      screen.getByRole("textbox", { name: "Search options" }),
+      screen.getByRole("button", { name: "Add coding agent" }),
     ).toBeDisabled();
     expect(writes).toEqual([]);
   });

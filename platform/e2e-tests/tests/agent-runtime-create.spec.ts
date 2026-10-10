@@ -142,7 +142,10 @@ test("configures popular agent templates and preserves the creation wizard", asy
   expect(organizationResponse.ok()).toBe(true);
   const original = await organizationResponse.json();
   const settingsUrl = `${UI_BASE_URL}/api/organization/integration-settings`;
-  const settings = page.locator("#popular-agents");
+  const settings = page.getByRole("list", {
+    name: "Coding agents",
+    exact: true,
+  });
   const names = ["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"];
   const save = async () => {
     const response = page.waitForResponse(
@@ -167,18 +170,17 @@ test("configures popular agent templates and preserves the creation wizard", asy
     ).toBe(true);
     await goToPage(page, "/settings/agents");
     await expect(
-      settings.getByRole("button", { name: "Remove selected option" }),
+      settings.getByRole("button", { name: /^Remove / }),
     ).toHaveCount(5);
     for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
       await settings
-        .getByText(name, { exact: true })
-        .getByRole("button", { name: "Remove selected option" })
+        .getByRole("button", { name: `Remove ${name}`, exact: true })
         .click();
     }
     await save();
     await page.reload();
     await expect(
-      settings.getByRole("button", { name: "Remove selected option" }),
+      settings.getByRole("button", { name: /^Remove / }),
     ).toHaveCount(2);
 
     await goToPage(page, "/agents/new");
@@ -215,15 +217,13 @@ test("configures popular agent templates and preserves the creation wizard", asy
 
     await goToPage(page, "/settings/agents");
     await expect(
-      settings.getByRole("button", { name: "Remove selected option" }),
+      settings.getByRole("button", { name: /^Remove / }),
     ).toHaveCount(2);
     await settings
-      .getByRole("button", { name: "Remove selected option" })
+      .getByRole("button", { name: /^Remove / })
       .first()
       .click();
-    await settings
-      .getByRole("button", { name: "Remove selected option" })
-      .click();
+    await settings.getByRole("button", { name: /^Remove / }).click();
     await save();
     await goToPage(page, "/agents/new");
     await expect(
@@ -242,11 +242,10 @@ test("configures popular agent templates and preserves the creation wizard", asy
     ).toBeVisible();
 
     await goToPage(page, "/settings/agents");
-    await settings.getByRole("textbox", { name: "Search options" }).click();
     for (const name of names) {
-      await page.getByRole("option", { name: new RegExp(name) }).click();
+      await settings.getByRole("button", { name: "Add coding agent" }).click();
+      await page.getByRole("button", { name, exact: true }).click();
     }
-    await page.keyboard.press("Escape");
     await save();
     await goToPage(page, "/agents/new");
     for (const name of names)

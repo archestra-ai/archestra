@@ -484,16 +484,16 @@ export default function AgentSettingsPage() {
             id="popular-agents"
             catalogKey="popularAgentOverrides"
             catalog={PopularAgentIdSchema.options}
-            title="Popular agents"
-            description="Choose which templates appear on Create Agent and in the Runtime image choices. Removing a template preserves existing agents and custom runtime configuration."
+            title="Coding agents"
+            description="Add agents and drag to reorder them on Create Agent and in the Runtime image choices. Removing an agent preserves existing agents and custom runtime configuration."
             options={PopularAgentIdSchema.options.map((id) => ({
               value: id,
               label: AGENT_CATALOG_TEMPLATE_NAMES[id],
               icon: <CatalogAgentIcon id={id} size={18} />,
             }))}
-            placeholder="Select popular agents…"
+            placeholder="Select coding agents…"
             emptyMessage="No agents found."
-            savedMessage="Popular agents updated"
+            savedMessage="Coding agents updated"
           />
           {runtimeBackend && <RuntimeBackendSection />}
         </div>

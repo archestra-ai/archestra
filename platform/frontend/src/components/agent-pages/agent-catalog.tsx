@@ -5,7 +5,7 @@ import {
   buildAgentCatalogRuntime,
   buildAgentCatalogSystemPrompt,
   getAgentCatalogImages,
-  isIntegrationHidden,
+  orderedPopularAgentIds,
 } from "@archestra/shared";
 import {
   Bot,
@@ -116,15 +116,13 @@ export function useAvailableAgentCatalogTemplates() {
     isFetching,
     refetch,
   } = useOrganization(true, { fresh: true });
+  const catalog = getAgentCatalogTemplates(images, appName);
   const templates =
     organization && !isError && !isFetching
-      ? getAgentCatalogTemplates(images, appName).filter(
-          (item) =>
-            !isIntegrationHidden(
-              organization.popularAgentOverrides ?? null,
-              item.id,
-            ),
-        )
+      ? orderedPopularAgentIds(
+          organization.popularAgentOverrides ?? null,
+          catalog.map((item) => item.id),
+        ).flatMap((id) => catalog.filter((item) => item.id === id))
       : [];
   return { templates, isError, isFetching, refetch };
 }
@@ -142,7 +140,7 @@ export function AgentCatalog({
   onStartFromScratch: () => void;
   onAddExternalAgent: () => void;
   onSelect: (template: AgentCatalogTemplate) => void;
-  /** Popular agents run in a dedicated runtime; undefined while loading. */
+  /** Coding agents run in a dedicated runtime; undefined while loading. */
   runtimeAvailable: boolean | undefined;
 }) {
   const { templates, isError, isFetching, refetch } =
@@ -178,7 +176,7 @@ export function AgentCatalog({
           <GiveItWorkFrom />
           {isError ? (
             <QueryLoadError
-              title="Could not load popular agents"
+              title="Could not load coding agents"
               onRetry={() => refetch()}
             />
           ) : (

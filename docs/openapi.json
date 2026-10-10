@@ -345247,6 +345247,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -346342,6 +346347,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -347678,6 +347688,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -348625,6 +348640,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -349572,6 +349592,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -350531,6 +350556,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -351561,6 +351591,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -351983,7 +352018,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or popular agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or coding agent templates, order coding agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -352000,6 +352035,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -352009,6 +352049,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -352018,6 +352063,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -352027,6 +352077,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -352036,6 +352091,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -352598,6 +352658,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -353615,6 +353680,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -354576,6 +354646,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -355568,6 +355643,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -356497,6 +356577,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false
@@ -358630,6 +358715,11 @@
                         "properties": {
                           "hidden": {
                             "type": "boolean"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "additionalProperties": false

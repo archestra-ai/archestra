@@ -226,7 +226,7 @@ export const SHOTS: Shot[] = [
       // Runtime icons load after the picker renders.
       await page.waitForTimeout(1_000);
       await page
-        .getByText("Choose what runs your agent", { exact: false })
+        .getByRole("heading", { name: "Runtime", exact: true })
         .scrollIntoViewIfNeeded();
     },
   },

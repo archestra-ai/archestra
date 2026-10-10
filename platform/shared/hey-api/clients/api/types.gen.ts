@@ -91350,6 +91350,7 @@ export type GetOrganizationResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -91680,6 +91681,7 @@ export type UpdateAppearanceSettingsResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -91888,6 +91890,7 @@ export type UpdateSecuritySettingsResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -92093,6 +92096,7 @@ export type UpdateMcpSettingsResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -92298,6 +92302,7 @@ export type UpdateSkillsSettingsResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -92504,6 +92509,7 @@ export type UpdateAgentSettingsResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -92726,6 +92732,7 @@ export type UpdateConnectionSettingsResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -92754,18 +92761,23 @@ export type UpdateIntegrationSettingsData = {
         popularAgentOverrides?: {
             'claude-code'?: {
                 hidden?: boolean;
+                position?: number;
             };
             codex?: {
                 hidden?: boolean;
+                position?: number;
             };
             opencode?: {
                 hidden?: boolean;
+                position?: number;
             };
             hermes?: {
                 hidden?: boolean;
+                position?: number;
             };
             openclaw?: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         modelProviderOverrides?: {
@@ -92962,6 +92974,7 @@ export type UpdateIntegrationSettingsResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -93177,6 +93190,7 @@ export type UpdateDefaultEnvironmentResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -93387,6 +93401,7 @@ export type UpdateAuthSettingsResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -93599,6 +93614,7 @@ export type UpdateKnowledgeSettingsResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -93801,6 +93817,7 @@ export type DropEmbeddingConfigResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;
@@ -94365,6 +94382,7 @@ export type CompleteOnboardingResponses = {
         popularAgentOverrides: {
             [key: string]: {
                 hidden?: boolean;
+                position?: number;
             };
         } | null;
         defaultEnvironmentName: string | null;

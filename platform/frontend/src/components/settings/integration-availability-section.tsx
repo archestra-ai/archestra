@@ -2,7 +2,10 @@
 
 import {
   allowedIntegrationIds,
+  orderedPopularAgentIds,
+  PopularAgentIdSchema,
   withAllowedIntegrationIds,
+  withOrderedPopularAgentIds,
 } from "@archestra/shared";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -12,6 +15,7 @@ import {
   SettingsBlock,
   SettingsSaveBar,
 } from "@/components/settings/settings-block";
+import { SortableAgentList } from "@/components/settings/sortable-agent-list";
 import {
   MultiSelectCombobox,
   type MultiSelectOption,
@@ -66,29 +70,42 @@ export function IntegrationAvailabilitySection({
   );
 
   const overrides = organization?.[catalogKey] ?? null;
-  const savedAllowed = allowedIntegrationIds(overrides, catalog);
+  const sortable = catalogKey === "popularAgentOverrides";
+  const savedAllowed = sortable
+    ? orderedPopularAgentIds(
+        organization?.popularAgentOverrides ?? null,
+        PopularAgentIdSchema.options,
+      )
+    : allowedIntegrationIds(overrides, catalog);
+  const keyFor = sortable ? orderedSelectionKey : selectionKey;
 
   const [allowed, setAllowed] = useState<string[]>(savedAllowed);
   // The organization arrives after first paint, and a save replaces it. Both
   // are the same event as far as this section is concerned: adopt what the
   // server now holds, unless the admin has unsaved edits in front of them.
-  const savedKey = selectionKey(savedAllowed);
+  const savedKey = keyFor(savedAllowed);
   const lastSavedKey = useRef(savedKey);
   useEffect(() => {
     if (lastSavedKey.current === savedKey) return;
     const previousSavedKey = lastSavedKey.current;
     lastSavedKey.current = savedKey;
     setAllowed((current) =>
-      selectionKey(current) === previousSavedKey ? savedAllowed : current,
+      keyFor(current) === previousSavedKey ? savedAllowed : current,
     );
-  }, [savedKey, savedAllowed]);
+  }, [savedKey, savedAllowed, keyFor]);
 
-  const hasChanges = selectionKey(allowed) !== savedKey;
+  const hasChanges = keyFor(allowed) !== savedKey;
 
   const handleSave = async () => {
     if (!organization || disabled) return;
     await updateMutation.mutateAsync({
-      [catalogKey]: withAllowedIntegrationIds(overrides, catalog, allowed),
+      [catalogKey]: sortable
+        ? withOrderedPopularAgentIds(
+            organization.popularAgentOverrides,
+            PopularAgentIdSchema.options,
+            allowed,
+          )
+        : withAllowedIntegrationIds(overrides, catalog, allowed),
     });
   };
 
@@ -110,21 +127,38 @@ export function IntegrationAvailabilitySection({
             permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
-            {({ hasPermission }) => (
-              <MultiSelectCombobox
-                options={options}
-                value={allowed}
-                onChange={setAllowed}
-                placeholder={placeholder}
-                emptyMessage={emptyMessage}
-                disabled={
-                  disabled ||
-                  !organization ||
-                  updateMutation.isPending ||
-                  !hasPermission
-                }
-              />
-            )}
+            {({ hasPermission }) =>
+              sortable ? (
+                <SortableAgentList
+                  items={orderedOptions(options, allowed)}
+                  shownItemIds={allowed}
+                  onShownItemIdsChange={setAllowed}
+                  onOrderChange={setAllowed}
+                  label="Coding agents"
+                  emptyMessage="No coding agents added."
+                  disabled={
+                    disabled ||
+                    !organization ||
+                    updateMutation.isPending ||
+                    !hasPermission
+                  }
+                />
+              ) : (
+                <MultiSelectCombobox
+                  options={options}
+                  value={allowed}
+                  onChange={setAllowed}
+                  placeholder={placeholder}
+                  emptyMessage={emptyMessage}
+                  disabled={
+                    disabled ||
+                    !organization ||
+                    updateMutation.isPending ||
+                    !hasPermission
+                  }
+                />
+              )
+            }
           </WithPermissions>
         )}
       </SettingsBlock>
@@ -142,4 +176,25 @@ export function IntegrationAvailabilitySection({
 
 function selectionKey(ids: readonly string[]): string {
   return [...ids].sort().join(",");
+}
+
+function orderedOptions(options: MultiSelectOption[], allowed: string[]) {
+  return [...options]
+    .sort((a, b) => {
+      const aIndex = allowed.indexOf(a.value);
+      const bIndex = allowed.indexOf(b.value);
+      return (
+        (aIndex < 0 ? options.length : aIndex) -
+        (bIndex < 0 ? options.length : bIndex)
+      );
+    })
+    .map((option) => ({
+      id: option.value,
+      label: option.label,
+      icon: option.icon,
+    }));
+}
+
+function orderedSelectionKey(ids: readonly string[]): string {
+  return ids.join(",");
 }

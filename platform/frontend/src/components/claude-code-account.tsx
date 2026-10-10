@@ -28,7 +28,8 @@ export function ClaudeCodeAccount({
 }: {
   agentId: string;
   showDisconnectedNotice?: boolean;
-  variant?: "card" | "row" | "compact";
+  /** `button` renders only the sign-in button, for a setup checklist row. */
+  variant?: "card" | "row" | "compact" | "button";
   model?: string;
   onModelChange?: (model: string) => void;
 }) {
@@ -102,8 +103,18 @@ export function ClaudeCodeAccount({
     );
 
   return (
-    <div className="space-y-4">
-      {variant === "compact" ? (
+    <div className={variant === "button" ? "contents" : "space-y-4"}>
+      {variant === "button" ? (
+        <Button
+          type="button"
+          size="sm"
+          variant={connected ? "outline" : "default"}
+          onClick={() => setOpen(true)}
+          disabled={account.isPending}
+        >
+          <span>{connected ? "Manage" : "Sign in with Claude"}</span>
+        </Button>
+      ) : variant === "compact" ? (
         <InlineNotice>
           <RuntimeCredentialIcon icon="logo:anthropic" className="size-3.5" />
           <span className="font-medium">Claude Code</span>

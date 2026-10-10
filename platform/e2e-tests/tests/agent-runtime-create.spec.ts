@@ -37,20 +37,19 @@ test("creates Claude Code from the catalog and explains the account connection a
       await nameField.fill(name);
       await expect(nextButton).toBeEnabled({ timeout: 2_000 });
     }).toPass({ timeout: 20_000 });
+    // Picked in the catalog, so the runtime is a summary, not a second picker.
     await expect(
-      page.getByRole("radio", { name: /Claude Code/ }),
-    ).toBeChecked();
+      page.getByText("Claude Code in its own container", { exact: true }),
+    ).toBeVisible();
     await expect(
-      page.getByRole("radio", { name: "Archestra Agent", exact: true }),
+      page.getByRole("radiogroup", { name: "Runtime", exact: true }),
     ).toHaveCount(0);
     const authenticationRow = page.getByRole("button", {
-      name: /^Authentication/,
+      name: /^Whose Claude account runs it/,
     });
     await expect(authenticationRow).toHaveAttribute("aria-expanded", "true");
     await expect(authenticationRow.getByRole("img")).toHaveCount(0);
-    await page
-      .getByRole("radio", { name: /API key or cloud provider/ })
-      .click();
+    await page.getByRole("radio", { name: /A company API key/ }).click();
     const attention = authenticationRow.getByRole("img", {
       name: "Select a provider and Claude model",
     });
@@ -85,7 +84,7 @@ test("creates Claude Code from the catalog and explains the account connection a
       }),
     ).toBeVisible();
     await page
-      .getByRole("radio", { name: /Personal Claude subscription/ })
+      .getByRole("radio", { name: /Each person's Claude subscription/ })
       .click();
     await expect(authenticationRow.getByRole("img")).toHaveCount(0);
 
@@ -111,14 +110,14 @@ test("creates Claude Code from the catalog and explains the account connection a
       claudeCode: { authentication: "subscription" },
       inferenceProtocol: "anthropic",
     });
-    // Creating opens chat with the agent selected, which asks for the
-    // missing Claude account before the agent can run.
-    await expect(page).toHaveURL(new RegExp(`/chat\\?agentId=${agentId}$`));
+    // Creating opens the agent's own page, which lists the missing Claude
+    // account before the agent can run.
+    await expect(page).toHaveURL(new RegExp(`/agents/${agentId}$`));
     await expect(
-      page.getByText("Sign in to use this agent.", { exact: true }),
+      page.getByText("Connect your Claude subscription", { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "Sign in", exact: true }),
+      page.getByRole("button", { name: "Sign in with Claude", exact: true }),
     ).toBeVisible();
   } finally {
     if (agentId) await deleteAgent(request, agentId);
@@ -193,9 +192,10 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await expect(page.getByRole("textbox", { name: /^Name\b/ })).toHaveValue(
       "Claude Code",
     );
-    await expect(
-      page.getByRole("radio", { name: /Claude Code/ }),
-    ).toBeChecked();
+    // The catalog's pick shows as a summary; the full runtime picker is on
+    // the built-in agent's path.
+    await goToPage(page, "/agents/new");
+    await page.getByRole("button", { name: /^New .* agent/ }).click();
     const runtimeChoices = page.getByRole("radiogroup", {
       name: "Runtime",
       exact: true,
@@ -227,15 +227,15 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await save();
     await goToPage(page, "/agents/new");
     await expect(
-      page.getByRole("heading", { name: "Popular agents", exact: true }),
+      page.getByRole("heading", { name: "Coding agents", exact: true }),
     ).toHaveCount(0);
     await expect(
-      page.getByRole("button", { name: /Start from scratch/ }),
+      page.getByRole("button", { name: /^New .* agent/ }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /Connect via A2A/ }),
     ).toBeVisible();
-    await page.getByRole("button", { name: /Start from scratch/ }).click();
+    await page.getByRole("button", { name: /^New .* agent/ }).click();
     await expect(runtimeChoices.getByRole("radio")).toHaveCount(2);
     await expect(
       runtimeChoices.getByRole("radio", { name: "Custom image", exact: true }),
@@ -253,7 +253,7 @@ test("configures popular agent templates and preserves the creation wizard", asy
       await expect(
         page.getByRole("button", { name: new RegExp(name) }),
       ).toBeVisible();
-    await page.getByRole("button", { name: /Start from scratch/ }).click();
+    await page.getByRole("button", { name: /^New .* agent/ }).click();
     await expect(runtimeChoices.getByRole("radio")).toHaveCount(7);
     for (const name of names)
       await expect(

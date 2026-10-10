@@ -671,6 +671,39 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
   ),
 }));
 
+// Claude Code lists its connections instead of the dropdown; the same stub
+// buttons keep the form-level tests about key selection working for both.
+vi.mock("@/components/claude-provider-connections", () => ({
+  ClaudeProviderConnections: ({
+    onAddApiKey,
+    onSelect,
+    canRunClaude,
+  }: {
+    onAddApiKey?: () => void;
+    onSelect: (keyId: string) => void;
+    canRunClaude: (provider: SupportedProvider) => boolean;
+  }) => (
+    <>
+      <button type="button" onClick={() => onSelect("key-1")}>
+        Pick API key
+      </button>
+      {onAddApiKey && (
+        <button type="button" onClick={onAddApiKey}>
+          Add provider key
+        </button>
+      )}
+      <output data-testid="runtime-provider-filter">
+        {JSON.stringify({
+          gemini: canRunClaude("gemini"),
+          openai: canRunClaude("openai"),
+          anthropic: canRunClaude("anthropic"),
+          bedrock: canRunClaude("bedrock"),
+        })}
+      </output>
+    </>
+  ),
+}));
+
 vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
   CreateLlmProviderApiKeyDialog: ({
     allowedProviders,
@@ -841,6 +874,9 @@ vi.mock("@/components/ui/dialog", () => ({
     <div>{children}</div>
   ),
   DialogContent: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogBody: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
   DialogDescription: ({ children }: { children?: React.ReactNode }) => (
@@ -4090,7 +4126,10 @@ describe("AgentForm save payload and failure handling", () => {
     const name = screen.getByPlaceholderText("Enter agent name");
     await user.clear(name);
     await user.type(name, "Incident helper");
-    const description = screen.getByLabelText("Description");
+    // The variable editor beside it has a Description field of its own.
+    const description = document.getElementById(
+      "agentDescription",
+    ) as HTMLTextAreaElement;
     await user.clear(description);
     await user.type(description, "Investigate build failures");
     const instructions = screen.getByRole("textbox", { name: "Instructions" });
@@ -4251,9 +4290,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(
       screen.queryByRole("img", { name: /Connect your Claude account/ }),
     ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("radio", { name: /API key or cloud provider/ }),
-    );
+    await user.click(screen.getByRole("radio", { name: /A company API key/ }));
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     expect(screen.queryByText(/GPT-5.6 Luna/)).not.toBeInTheDocument();
     expect(
@@ -4261,11 +4298,15 @@ describe("AgentForm save payload and failure handling", () => {
         name: "Select a provider and Claude model",
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Authentication/ }));
+    await user.click(
+      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
+    );
     expect(
       screen.queryByRole("button", { name: "Pick API key" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Authentication/ }));
+    await user.click(
+      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
+    );
     await user.click(screen.getByRole("button", { name: "Pick API key" }));
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
     expect(
@@ -4307,9 +4348,7 @@ describe("AgentForm save payload and failure handling", () => {
         initialValues={claude?.initialValues}
       />,
     );
-    await user.click(
-      screen.getByRole("radio", { name: /API key or cloud provider/ }),
-    );
+    await user.click(screen.getByRole("radio", { name: /A company API key/ }));
     await user.click(screen.getByRole("button", { name: "Pick API key" }));
     expect(
       screen.getByRole("img", {
@@ -4318,7 +4357,7 @@ describe("AgentForm save payload and failure handling", () => {
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     await user.click(
-      screen.getByRole("radio", { name: /Personal Claude subscription/ }),
+      screen.getByRole("radio", { name: /Each person's Claude subscription/ }),
     );
     expect(
       screen.queryByRole("img", { name: /Select a model/ }),
@@ -4563,6 +4602,7 @@ describe("AgentForm save payload and failure handling", () => {
       expect(onCreated).toHaveBeenCalledWith({
         id: "created-agent",
         name: "New Agent",
+        hasRuntime: false,
       }),
     );
     expect(createAgent.mock.calls[0][0]).toMatchObject({

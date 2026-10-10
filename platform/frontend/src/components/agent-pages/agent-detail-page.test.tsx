@@ -69,6 +69,11 @@ vi.mock("@/lib/agent-runtime.query", () => ({
 vi.mock("./agent-runs", () => ({
   AgentRuns: () => <div>run history</div>,
 }));
+vi.mock("./agent-work-sources", () => ({
+  AgentWorkSources: ({ hasRuntime }: { hasRuntime: boolean }) => (
+    <div>{hasRuntime ? "give it work" : "where people use it"}</div>
+  ),
+}));
 vi.mock("@/components/agent-saved-setup-banner", () => ({
   AgentSavedSetupBanner: () => null,
 }));
@@ -265,7 +270,7 @@ describe("AgentDetailPage", () => {
       [
         "General",
         "Tools, Skills & Knowledge",
-        "Messaging Channels",
+        "Triggers & Channels",
         "Advanced",
         "A2A",
       ].map(

@@ -15,7 +15,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { useSession } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { makeOrganization } from "@/mocks/data/organization";
@@ -58,6 +58,10 @@ const catalogImages = getAgentCatalogImages({
 });
 
 beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+    isPending: false,
+  } as ReturnType<typeof useHasPermissions>);
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "test-user" } },
   } as ReturnType<typeof useSession>);
@@ -100,14 +104,38 @@ describe("AgentRuntimePicker", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows a runtime picked in the catalog as a summary, and sends Change back to the catalog", async () => {
+    const user = userEvent.setup();
+    const onChangeTemplate = vi.fn();
+    render(
+      <AgentRuntimePicker
+        selectedId="claude-code"
+        value={runtimeFor("claude-code")}
+        onSelect={vi.fn()}
+        onChange={vi.fn()}
+        modelBlock={<div>Model settings content</div>}
+        modelSummary="summary"
+        onChangeTemplate={onChangeTemplate}
+      />,
+      { wrapper: QueryWrapper },
+    );
+    expect(
+      await screen.findByText("Claude Code in its own container"),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("radiogroup", { name: "Runtime" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    expect(onChangeTemplate).toHaveBeenCalledOnce();
+  });
+
   it("locks Claude Code to Anthropic and limits Codex to the two OpenAI protocols", async () => {
     const user = userEvent.setup();
     await renderPicker("claude-code");
-    await user.click(screen.getByRole("button", { name: /^Inference API/ }));
-    expect(screen.getByLabelText("Inference API")).toBeDisabled();
-    expect(screen.getByLabelText("Inference API")).toHaveTextContent(
-      "Anthropic Messages",
-    );
+    // One protocol leaves nothing to choose, so the row is not offered.
+    expect(
+      screen.queryByRole("button", { name: /^Inference API/ }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "Codex" }));
     await user.click(screen.getByRole("button", { name: /^Inference API/ }));
     await user.click(screen.getByLabelText("Inference API"));
@@ -127,16 +155,12 @@ describe("AgentRuntimePicker", () => {
       target: { value: "archestra-claude-code" },
     });
     expect(savedRuntime().inferenceProtocol).toBe("anthropic");
-    expect(screen.getByLabelText("Inference API")).toBeDisabled();
-    expect(screen.getByLabelText("Inference API")).toHaveTextContent(
-      "Anthropic Messages",
-    );
     expect(
-      screen.getByRole("button", { name: /^Authentication/ }),
+      screen.queryByRole("button", { name: /^Inference API/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: /^Inference API/ }),
-    ).toHaveTextContent("Fixed for Claude Code");
 
     fireEvent.change(screen.getByLabelText("Command"), {
       target: { value: "archestra-codex" },
@@ -144,9 +168,6 @@ describe("AgentRuntimePicker", () => {
     expect(savedRuntime().inferenceProtocol).toBe("openai_responses");
     expect(screen.getByLabelText("Inference API")).toBeEnabled();
     expect(screen.getByRole("button", { name: /^Model/ })).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: /^Inference API/ }),
-    ).not.toHaveTextContent("Fixed for Claude Code");
     await user.click(screen.getByLabelText("Inference API"));
     await user.click(
       screen.getByRole("option", { name: "OpenAI Chat Completions" }),
@@ -186,7 +207,7 @@ describe("AgentRuntimePicker", () => {
     await user.click(
       screen.getByRole("option", { name: "Anthropic Messages" }),
     );
-    await user.click(screen.getByRole("button", { name: /^Run controls/ }));
+    await user.click(screen.getByRole("button", { name: /^Limits/ }));
     await user.click(
       screen.getByRole("button", { name: /Resources and access/ }),
     );
@@ -194,9 +215,9 @@ describe("AgentRuntimePicker", () => {
     fireEvent.change(screen.getByLabelText("Metered LLM budget"), {
       target: { value: "25" },
     });
-    expect(
-      screen.getByRole("button", { name: /^Run controls/ }),
-    ).toHaveTextContent("$25 LLM budget");
+    expect(screen.getByRole("button", { name: /^Limits/ })).toHaveTextContent(
+      "$25 LLM budget",
+    );
     await user.click(screen.getByRole("radio", { name: "OpenCode" }));
     expect(savedRuntime()).toEqual(runtimeFor("opencode"));
     expect(screen.queryByLabelText("Container image")).not.toBeInTheDocument();
@@ -225,13 +246,15 @@ describe("AgentRuntimePicker", () => {
     await user.tab();
     await user.tab();
     expect(
-      screen.getByRole("button", { name: /^Authentication/ }),
+      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
     ).toHaveFocus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       props.modelAttention,
     );
     expect(screen.getByText("Model settings content")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /^Authentication/ }));
+    await user.click(
+      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
+    );
     expect(
       screen.queryByText("Model settings content"),
     ).not.toBeInTheDocument();

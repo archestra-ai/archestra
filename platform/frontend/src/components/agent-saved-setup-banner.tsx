@@ -74,7 +74,8 @@ export function AgentSavedSetupBanner({
     .filter(({ key }) => key !== "CLAUDE_CODE_ACCOUNT")
     .map(({ key, label }) => ({
       id: key,
-      label: `Provide a value for ${label}, or connect ${label}`,
+      label: `Provide ${label}`,
+      description: `This agent needs ${label} in its container. Set a value, or connect it.`,
       status: "now",
       action: (
         <Button
@@ -87,6 +88,16 @@ export function AgentSavedSetupBanner({
         </Button>
       ),
     }));
+  if (needsClaudeAccount) {
+    items.unshift({
+      id: "CLAUDE_CODE_ACCOUNT",
+      label: "Connect your Claude subscription",
+      description:
+        "Runs use your own Pro or Max plan. Each person who uses this agent connects their own; nobody shares yours.",
+      status: "now",
+      action: <ClaudeCodeAccount agentId={agentId} variant="button" />,
+    });
+  }
   if (preflight.data.incompatible) {
     items.push({
       id: "model-incompatible",
@@ -135,7 +146,9 @@ export function AgentSavedSetupBanner({
     } else if (!hasPersonalSubscription) {
       items.push({
         id: "chatgpt-subscription",
-        label: "Connect your own ChatGPT subscription",
+        label: "Connect your ChatGPT subscription",
+        description:
+          "Runs use your own ChatGPT plan. Each person who uses this agent connects their own.",
         status: "now",
         action: (
           <Button asChild size="sm" variant="outline">
@@ -164,10 +177,7 @@ export function AgentSavedSetupBanner({
   }
   return (
     <>
-      {needsClaudeAccount && (
-        <ClaudeCodeAccount agentId={agentId} variant="compact" />
-      )}
-      {(items.length > 0 || (showReady && !needsClaudeAccount)) && (
+      {(items.length > 0 || showReady) && (
         <AgentSetupBanner
           key={agentId}
           items={items}

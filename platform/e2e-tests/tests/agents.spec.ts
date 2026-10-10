@@ -55,12 +55,12 @@ async function createViaWizard(
   const nameField = page.getByRole("textbox", { name: /^Name\b/ });
   const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
   const startFromScratchButton = page.getByRole("button", {
-    name: /Start from scratch/,
+    name: /^New .* agent/,
   });
 
   // 1. Open the wizard — retry the trigger until the name field mounts. The
   //    Agents page first opens its creation catalog, where this flow chooses
-  //    "Start from scratch"; gateways continue straight to their form.
+  //    its built-in agent; gateways continue straight to their form.
   await expect(async () => {
     if (!page.url().includes(`${listPath}/new`)) {
       await createButton.click();

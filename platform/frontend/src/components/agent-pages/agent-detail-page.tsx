@@ -96,6 +96,7 @@ import {
   resolveAgentDetailSection,
 } from "./agent-page-config";
 import { AgentRuns } from "./agent-runs";
+import { AgentWorkSources } from "./agent-work-sources";
 import { useAgentAccess } from "./use-agent-access";
 
 /**
@@ -649,6 +650,19 @@ function AgentDetails({
           <AgentSavedSetupBanner agentId={agent.id} canEditAgent={canEdit} />
         </div>
       )}
+      {section === "general" && kind === "agent" && !isBuiltIn && !isGone && (
+        <div className="mb-6">
+          <AgentWorkSources
+            agentId={agent.id}
+            hasRuntime={hasAgentRuntime}
+            runtimeAvailable={runtimeEnabled && canEdit}
+            chatHref={
+              chatAction.visible && chatAction.href ? chatAction.href : null
+            }
+            showsA2a={showConnect}
+          />
+        </div>
+      )}
       <div className="min-w-0">
         {section === "runs" ? (
           <AgentRuns agentId={agent.id} />
@@ -861,7 +875,7 @@ const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
   settings: "Settings",
   general: "General",
   tools: "Tools, Skills & Knowledge",
-  messaging: "Messaging Channels",
+  messaging: "Triggers & Channels",
   runtime: "Agent Runtime",
   advanced: "Advanced",
   connect: "Connect",

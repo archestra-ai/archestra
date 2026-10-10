@@ -26,6 +26,7 @@ import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavai
 import { ConfigurationRow } from "@/components/configuration-row";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Accordion } from "@/components/ui/accordion";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   RadioGroup,
@@ -47,6 +48,7 @@ export function AgentRuntimePicker({
   modelBlock,
   modelSummary,
   modelAttention,
+  onChangeTemplate,
 }: {
   selectedId: AgentRuntimeSelection;
   value: AgentRuntimeConfig | null;
@@ -58,10 +60,15 @@ export function AgentRuntimePicker({
   modelBlock: ReactNode;
   modelSummary: string;
   modelAttention?: string;
+  /**
+   * Set when the runtime was picked from the catalog. The picker then shows
+   * that choice as a summary rather than asking a second time, and this
+   * returns the reader to the catalog to choose another.
+   */
+  onChangeTemplate?: () => void;
 }) {
   const id = useId();
   const appName = useAppName();
-  const appIconLogo = useAppIconLogo();
   const runtimeEnabled = useFeature("agentRuntime");
   const { templates, isError, isFetching, refetch } =
     useAvailableAgentCatalogTemplates();
@@ -93,11 +100,23 @@ export function AgentRuntimePicker({
     () => setExpandedRows(defaultExpandedRows(selectedId)),
     [selectedId],
   );
+  const selectedOption = options.find(
+    (option) => option.id === visibleSelectedId,
+  );
+  const showsTemplateSummary =
+    !!onChangeTemplate &&
+    visibleSelectedId !== "chat" &&
+    visibleSelectedId !== "custom";
   const protocol = value
     ? AGENT_RUNTIME_PROTOCOL_LABELS[value.inferenceProtocol]
     : "";
+  // A harness that speaks one protocol has nothing to choose here.
+  const protocolIsFixed =
+    !!value && getAgentRuntimeAllowedProtocols(value.command).length === 1;
   const steering =
-    value?.steerMode === "tmux_keys" ? "Terminal input" : "Turn boundary";
+    value?.steerMode === "tmux_keys"
+      ? "Typed into its terminal"
+      : "Delivered between turns";
   return (
     <section
       className="space-y-4"
@@ -106,55 +125,79 @@ export function AgentRuntimePicker({
     >
       <div className="space-y-1">
         <h3 className="text-sm font-medium">Runtime</h3>
-        <p className="text-sm text-muted-foreground">
-          Choose what runs your agent. {appName} uses its built-in harness;
-          other options run their harness in a container.
-        </p>
+        {!showsTemplateSummary && (
+          <p className="text-sm text-muted-foreground">
+            Choose what runs your agent. {appName} uses its built-in harness;
+            other options run their harness in a container.
+          </p>
+        )}
       </div>
-      <RadioGroup
-        aria-label="Runtime"
-        value={visibleSelectedId}
-        className="flex flex-wrap gap-2"
-        onValueChange={(nextId) => {
-          const option = options.find((item) => item.id === nextId);
-          if (option) onSelect(option.id, option.runtime);
-        }}
-      >
-        {options.map((option) => (
-          <Label
-            key={option.id}
-            htmlFor={`${id}-option-${option.id}`}
-            className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 font-normal",
-              radioCardClass({ checked: visibleSelectedId === option.id }),
-            )}
+      {showsTemplateSummary && selectedOption ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border px-4 py-3">
+          <span
+            aria-hidden="true"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted"
           >
-            <RadioGroupItem
-              className="sr-only"
-              id={`${id}-option-${option.id}`}
-              value={option.id}
-              disabled={
-                runtimeEnabled !== true &&
-                option.id !== "chat" &&
-                option.id !== selectedId
-              }
-            />
-            <span
-              aria-hidden="true"
-              className="flex size-6 items-center justify-center rounded bg-muted"
-            >
-              {option.id === "chat" ? (
-                <PlatformAgentIcon appIconLogo={appIconLogo} size={16} />
-              ) : option.id === "custom" ? (
-                <Code className="size-4" />
-              ) : (
-                <CatalogAgentIcon id={option.id} size={16} />
+            <RuntimeOptionIcon id={selectedOption.id} />
+          </span>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="text-sm font-medium">
+              {selectedOption.name} in its own container
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Each task starts a run. Idle runs pause and keep their files.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto px-0"
+            onClick={onChangeTemplate}
+          >
+            Change
+          </Button>
+        </div>
+      ) : (
+        <RadioGroup
+          aria-label="Runtime"
+          value={visibleSelectedId}
+          className="flex flex-wrap gap-2"
+          onValueChange={(nextId) => {
+            const option = options.find((item) => item.id === nextId);
+            if (option) onSelect(option.id, option.runtime);
+          }}
+        >
+          {options.map((option) => (
+            <Label
+              key={option.id}
+              htmlFor={`${id}-option-${option.id}`}
+              className={cn(
+                "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 font-normal",
+                radioCardClass({ checked: visibleSelectedId === option.id }),
               )}
-            </span>
-            <span>{option.name}</span>
-          </Label>
-        ))}
-      </RadioGroup>
+            >
+              <RadioGroupItem
+                className="sr-only"
+                id={`${id}-option-${option.id}`}
+                value={option.id}
+                disabled={
+                  runtimeEnabled !== true &&
+                  option.id !== "chat" &&
+                  option.id !== selectedId
+                }
+              />
+              <span
+                aria-hidden="true"
+                className="flex size-6 items-center justify-center rounded bg-muted"
+              >
+                <RuntimeOptionIcon id={option.id} size={16} />
+              </span>
+              <span>{option.name}</span>
+            </Label>
+          ))}
+        </RadioGroup>
+      )}
       {isError && !isFetching && (
         <QueryLoadError
           title="Could not load popular agents"
@@ -173,7 +216,7 @@ export function AgentRuntimePicker({
           value="model"
           title={
             value?.command?.[0] === "archestra-claude-code"
-              ? "Authentication"
+              ? "Whose Claude account runs it"
               : "Model"
           }
           summary={modelSummary}
@@ -187,6 +230,7 @@ export function AgentRuntimePicker({
               id={`${id}-image`}
               value="image"
               title="Image"
+              description="The container image each run starts from."
               attention={
                 !value.image.trim()
                   ? "Set a container image before creating the agent"
@@ -194,7 +238,11 @@ export function AgentRuntimePicker({
                     ? "Set a command before creating the agent"
                     : undefined
               }
-              summary={`${value.image.split("/").slice(-2).join("/") || "No image set"}. ${value.command?.join(" ") || "No command set"}`}
+              summary={
+                showsTemplateSummary
+                  ? value.image.split("/").at(-1) || "No image set"
+                  : `${value.image.split("/").slice(-2).join("/") || "No image set"}. ${value.command?.join(" ") || "No command set"}`
+              }
             >
               <AgentRuntimeImageFields
                 value={value}
@@ -213,23 +261,27 @@ export function AgentRuntimePicker({
                 }}
               />
             </ConfigurationRow>
-            <ConfigurationRow
-              id={`${id}-inference`}
-              value="inference"
-              title="Inference API"
-              summary={`${protocol}${value.command?.[0] === "archestra-claude-code" ? ". Fixed for Claude Code" : ""}`}
-            >
-              <AgentRuntimeProtocolField
-                value={value}
-                onChange={onChange}
-                hideLabel
-                constrainToHarness
-              />
-            </ConfigurationRow>
+            {!protocolIsFixed && (
+              <ConfigurationRow
+                id={`${id}-inference`}
+                value="inference"
+                title="Inference API"
+                description="The API the harness uses to call models."
+                summary={protocol}
+              >
+                <AgentRuntimeProtocolField
+                  value={value}
+                  onChange={onChange}
+                  hideLabel
+                  constrainToHarness
+                />
+              </ConfigurationRow>
+            )}
             <ConfigurationRow
               id={`${id}-steering`}
               value="steering"
-              title="Steering"
+              title="Follow-up messages"
+              description="What happens to a message you send while it works."
               summary={steering}
             >
               <AgentRuntimeSteeringField
@@ -241,39 +293,45 @@ export function AgentRuntimePicker({
             <ConfigurationRow
               id={`${id}-controls`}
               value="controls"
-              title="Run controls"
+              title="Limits"
+              description="Idle timeout, maximum duration, spend cap, CPU and memory."
               summary={runControlsSummary(value)}
             >
               <AgentRuntimeRunControls value={value} onChange={onChange} />
             </ConfigurationRow>
-            <ConfigurationRow
-              id={`${id}-environment`}
-              value="environment"
-              title="Environment variables"
-              summary={environmentSummary(value)}
-            >
-              <AgentRuntimeEnvironmentFields
-                hideLabel
-                value={value}
-                onChange={onChange}
-              />
-            </ConfigurationRow>
           </>
         )}
       </Accordion>
+      {value && (
+        // Its own block, always open: this is where a run gets the tokens
+        // it needs, and a collapsed row with "None" was never opened.
+        <section
+          aria-label="Credentials and environment"
+          className="rounded-xl border bg-card p-5"
+        >
+          <AgentRuntimeEnvironmentFields value={value} onChange={onChange} />
+        </section>
+      )}
     </section>
   );
 }
 
-function defaultExpandedRows(id: AgentRuntimeSelection): string[] {
-  return id === "custom" ? ["model", "image", "inference"] : ["model"];
+function RuntimeOptionIcon({
+  id,
+  size = 20,
+}: {
+  id: AgentRuntimeSelection;
+  size?: number;
+}) {
+  const appIconLogo = useAppIconLogo();
+  if (id === "chat")
+    return <PlatformAgentIcon appIconLogo={appIconLogo} size={size} />;
+  if (id === "custom") return <Code className="size-4" />;
+  return <CatalogAgentIcon id={id} size={size} />;
 }
 
-function environmentSummary(value: AgentRuntimeConfig): string {
-  const variables = value.environment?.length ?? 0;
-  const secrets = value.credentials?.length ?? 0;
-  if (!variables && !secrets) return "None";
-  return `${variables} ${variables === 1 ? "variable" : "variables"}, ${secrets} ${secrets === 1 ? "secret" : "secrets"}`;
+function defaultExpandedRows(id: AgentRuntimeSelection): string[] {
+  return id === "custom" ? ["model", "image", "inference"] : ["model"];
 }
 
 function runControlsSummary(value: AgentRuntimeConfig): string {

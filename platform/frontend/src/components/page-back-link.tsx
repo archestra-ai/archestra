@@ -11,9 +11,12 @@ export function PageBackLink({
   href,
   onNavigate,
   onClick,
+  iconOnly = false,
   children,
 }: {
   href: string;
+  /** Just the arrow; `children` becomes its accessible name. */
+  iconOnly?: boolean;
   onNavigate?: () => void;
   onClick?: MouseEventHandler<HTMLAnchorElement>;
   children: ReactNode;
@@ -22,8 +25,8 @@ export function PageBackLink({
   return (
     <Button
       variant="ghost"
-      size="sm"
-      className="-ml-2 text-muted-foreground"
+      size={iconOnly ? "icon-sm" : "sm"}
+      className="-ml-2 shrink-0 text-muted-foreground"
       asChild
     >
       <Link
@@ -45,7 +48,7 @@ export function PageBackLink({
         }}
       >
         <ArrowLeft className="h-4 w-4" />
-        {children}
+        {iconOnly ? <span className="sr-only">{children}</span> : children}
       </Link>
     </Button>
   );

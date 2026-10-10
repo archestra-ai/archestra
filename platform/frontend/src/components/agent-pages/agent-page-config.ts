@@ -20,8 +20,6 @@ export interface AgentPageConfig {
   /** Permission resource the routes are gated on. */
   resource: "agent" | "llmProxy" | "mcpGateway";
   defaultIconType: AgentIconVariant;
-  /** Sub-headline under "Create <singular>". */
-  createDescription: string;
   /** Body of the permanent-delete confirmation; names what history survives. */
   permanentDeleteDescription: (name: string) => string;
 }
@@ -35,7 +33,6 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     plural: "Agents",
     resource: "agent",
     defaultIconType: "agent",
-    createDescription: "Give the agent a name and instructions.",
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its chats and LLM interaction history are kept, no longer pointing at the agent. Nothing recovers the agent itself.`,
   },
@@ -47,8 +44,6 @@ export const AGENT_PAGE_CONFIGS: Record<AgentPageKind, AgentPageConfig> = {
     plural: "MCP Gateways",
     resource: "mcpGateway",
     defaultIconType: "mcp_gateway",
-    createDescription:
-      "Name the gateway and choose who can use it, then pick the tools it exposes and connect a client.",
     permanentDeleteDescription: (name) =>
       `This destroys "${name}" and everything it owns. Its MCP tool-call history is kept, no longer pointing at the gateway. Nothing recovers the gateway itself.`,
   },
@@ -224,7 +219,7 @@ const TOOLS_SKILLS_STEP: AgentSetupStep = {
 };
 const MESSAGING_STEP: AgentSetupStep = {
   id: "messaging",
-  title: "Messaging Channels",
+  title: "Triggers & Channels",
 };
 const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
 
@@ -232,7 +227,7 @@ const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
  * The setup wizard's steps for one agent — the same on create and on edit.
  * Configuration is what the record is and who can use it; the Tools step holds
  * everything the record reaches (and names Skills for internal agents);
- * Messaging Channels where it answers;
+ * Triggers & Channels where it answers and what starts it;
  * Advanced the settings a record rarely needs. Only an `agent` has channels —
  * a gateway or proxy is not something a person messages — so the step is
  * offered for that type alone. A built-in agent is a single-step edit, so its host renders no

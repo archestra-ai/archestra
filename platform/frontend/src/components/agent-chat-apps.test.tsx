@@ -42,6 +42,16 @@ vi.mock("@/lib/chatops/chatops.query", () => ({
   }),
 }));
 
+// The agent's Slack bot section has its own data; these tests are about
+// channel assignment, so it renders nothing here.
+vi.mock("@/lib/chatops/chatops-config.query", () => ({
+  useSlackAgentBots: () => ({
+    data: undefined,
+    isError: false,
+    isLoading: true,
+  }),
+}));
+
 vi.mock("@/lib/chatops/incoming-email.query", () => ({
   useAgentEmailAddress: () => ({
     data: { emailAddress: "operations@example.com" },

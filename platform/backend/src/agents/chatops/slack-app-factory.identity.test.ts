@@ -1,5 +1,6 @@
 import { slackHandleFor } from "@archestra/shared";
-import { vi } from "vitest";
+import sharp from "sharp";
+import { beforeAll, vi } from "vitest";
 import { AgentModel, ChatOpsConfigModel, OrganizationModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import { slackAppFactory } from "./slack-app-factory";
@@ -21,7 +22,16 @@ vi.mock("@slack/web-api", () => ({
   },
 }));
 
-const PNG_ICON = `data:image/png;base64,${Buffer.from("png-bytes").toString("base64")}`;
+// A small, wide icon: Slack wants a 512–2000 px square.
+let PNG_ICON = "";
+beforeAll(async () => {
+  const png = await sharp({
+    create: { width: 100, height: 40, channels: 4, background: "#d97757" },
+  })
+    .png()
+    .toBuffer();
+  PNG_ICON = `data:image/png;base64,${png.toString("base64")}`;
+});
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -131,7 +141,8 @@ describe("SlackAppFactory.syncAgentIdentity", () => {
     const [method, args] = slack.apiCall.mock.calls[0];
     expect(method).toBe("apps.icon.set");
     expect(args.app_id).toBe("A_BOT");
-    expect(Buffer.from(args.file).toString()).toBe("png-bytes");
+    const uploaded = await sharp(args.file).metadata();
+    expect(uploaded).toMatchObject({ format: "png", width: 512, height: 512 });
   });
 
   test("an emoji icon is left alone: Slack app icons are images", async ({

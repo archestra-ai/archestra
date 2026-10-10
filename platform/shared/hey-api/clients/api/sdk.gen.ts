@@ -3393,7 +3393,7 @@ export const updateSlackAgentBot = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * Save a Slack app configuration token so Archestra can create Slack apps
+ * Save a Slack app configuration token used to create Slack apps automatically
  *
  * Authentication:
  *
@@ -3413,7 +3413,7 @@ export const updateSlackAppConfigToken = <ThrowOnError extends boolean = false>(
 });
 
 /**
- * Update every connected Slack app's settings to what Archestra needs
+ * Update every connected Slack app to the current settings (agent experience, events, scopes)
  *
  * Authentication:
  *

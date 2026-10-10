@@ -459,9 +459,10 @@ describe("ChatOpsManager security validation", () => {
     });
 
     expect(result.success).toBe(false);
+    // Names the agent and where to get it shared.
     expect(sendReplySpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        text: expect.stringContaining("Access Denied"),
+        text: expect.stringMatching(/can't use \*.+\* yet[\s\S]*\/agents\//),
       }),
     );
   });
@@ -2570,17 +2571,22 @@ describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
   test.for([
     "app_mention",
     "message",
-  ])("replies once for empty %s and skips processMessage on retries", async (eventType, {
+  ])("sends an empty %s to the agent once, even when Slack retries", async (eventType, {
     makeUser,
     makeOrganization,
+    makeTeam,
+    makeTeamMember,
     makeInternalAgent,
   }) => {
     const user = await makeUser({ email: "slackuser@example.com" });
     const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({
       organizationId: org.id,
       name: "Slack Agent",
     });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
 
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
@@ -2618,9 +2624,18 @@ describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
     };
 
     const manager = new ChatOpsManager();
-    const processMessageSpy = vi
-      .spyOn(manager, "processMessage")
-      .mockResolvedValue({ success: true });
+    const executeSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Hi! What can I do for you?",
+        messageId: "agent-greeting",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "agent-greeting",
+          role: "assistant",
+          parts: [{ type: "text", text: "Hi! What can I do for you?" }],
+        },
+      });
 
     const message: IncomingChatMessage = {
       messageId: "slack-empty-mention-1",
@@ -2644,8 +2659,15 @@ describe("ChatOpsManager.handleIncomingMessage empty Slack mention", () => {
     await manager.handleIncomingMessage(provider, message);
     await manager.handleIncomingMessage(provider, message);
 
+    // The agent answers in its own voice, told it was mentioned without text.
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(executeSpy.mock.calls[0][0].message).toContain(
+      "mentioned you without a message",
+    );
     expect(sendReplySpy).toHaveBeenCalledTimes(1);
-    expect(processMessageSpy).not.toHaveBeenCalled();
+    expect(sendReplySpy).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "Hi! What can I do for you?" }),
+    );
   });
 });
 

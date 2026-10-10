@@ -333,7 +333,7 @@ export function useSaveSlackAppConfigToken() {
     },
     onSuccess: (data) => {
       if (!data?.success) return;
-      toast.success("Archestra can now create Slack apps");
+      toast.success("Slack apps can now be created automatically");
       reportSlackAppMigration(data.migrated);
       queryClient.invalidateQueries({
         queryKey: ["chatops", "slack-agent-bots"],

@@ -734,25 +734,18 @@ export class ChatOpsManager {
       binding = { ...binding, agentId };
     }
 
-    // A bare mention can arrive as either app_mention or message; ingress
-    // dedup keeps the first, so both forms must produce the same reply.
-    const isEmptySlackMention =
-      provider.providerId === "slack" &&
+    // A bare mention (no text, no file) still goes to the agent, so it answers
+    // in its own voice — a greeting, or a reply to what the thread is about —
+    // instead of a canned line. It can arrive as either app_mention or
+    // message; processMessage's dedup keeps the first.
+    const isBareMention =
       (message.metadata?.eventType === "app_mention" ||
         message.metadata?.botMentioned === true) &&
-      !message.text.trim();
-    if (isEmptySlackMention) {
-      // Deduplicate this early-return path so Slack retries don't produce duplicate replies.
-      const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
-        processedMessageKey(provider, message),
-      );
-      if (isNew) {
-        await provider.sendReply({
-          originalMessage: message,
-          text: "How can I help you?",
-        });
-      }
-      return;
+      !message.text.trim() &&
+      !message.attachments?.length &&
+      !message.skippedAttachments?.length;
+    if (isBareMention) {
+      message.text = BARE_MENTION_TEXT;
     }
 
     // Process message through assigned agent
@@ -1706,10 +1699,17 @@ export class ChatOpsManager {
         "[ChatOps] User does not have access to agent",
       );
       if (!denyQuietly) {
+        const appName = await OrganizationModel.getAppName();
         await this.sendSecurityErrorReply(
           provider,
           message,
-          `You don't have access to the agent "${agentName}". Contact your administrator for access.`,
+          [
+            `You can't use *${agentName}* yet — it hasn't been shared with you in ${appName}.`,
+            `Ask whoever manages ${agentName} to share it with you (${userEmail}): ${config.frontendBaseUrl}/agents/${agentId}`,
+            ...(provisioned.invitationId !== null
+              ? [`You'll also get a DM from me with a link to sign in.`]
+              : []),
+          ].join("\n"),
         );
       }
       return {
@@ -1732,7 +1732,9 @@ export class ChatOpsManager {
   }
 
   /**
-   * Send a security error reply back to the user via the chat provider.
+   * Tell the sender why they were refused — only them, where the platform
+   * allows it (a Slack channel: an ephemeral message), so the thread is not
+   * interrupted for everyone else.
    */
   private async sendSecurityErrorReply(
     provider: ChatOpsProvider,
@@ -1747,9 +1749,19 @@ export class ChatOpsManager {
       "[ChatOps] Sending security error reply",
     );
     try {
+      const isChannel = message.metadata?.conversationType !== "personal";
+      if (isChannel && provider.sendEphemeralMessage) {
+        await provider.sendEphemeralMessage({
+          channelId: message.channelId,
+          userId: message.senderId,
+          text: `:lock: ${errorText}`,
+          threadId: message.threadId,
+        });
+        return;
+      }
       await provider.sendReply({
         originalMessage: message,
-        text: `⚠️ **Access Denied**\n\n${errorText}`,
+        text: `🔒 ${errorText}`,
       });
       logger.debug("[ChatOps] Security error reply sent successfully");
     } catch (error) {
@@ -3329,6 +3341,10 @@ export function matchesAgentName(input: string, agentName: string): boolean {
   const normalizedName = agentName.toLowerCase().replace(/\s+/g, "");
   return normalizedInput === normalizedName;
 }
+
+/** What the agent sees for an @mention with no message. */
+const BARE_MENTION_TEXT =
+  "(The sender @mentioned you without a message. Reply briefly: greet them, or pick up what the thread is about.)";
 
 /**
  * The key a message is claimed under for deduplication. Slack bots pinned to

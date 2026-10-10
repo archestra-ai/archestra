@@ -2117,7 +2117,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (connectionMode === "webhook" && !canUpdateSlack) {
         throw new ApiError(
           400,
-          "Add a Slack app configuration token first, so Archestra can point this webhook app at the agent.",
+          `Add a Slack app configuration token first, so ${archestraMcpBranding.appName} can point this webhook app at the agent.`,
         );
       }
 
@@ -2252,7 +2252,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSlackAppConfigToken,
         description:
-          "Save a Slack app configuration token so Archestra can create Slack apps",
+          "Save a Slack app configuration token used to create Slack apps automatically",
         tags: ["ChatOps"],
         body: z.object({
           accessToken: z.string().min(1).max(512),
@@ -2296,7 +2296,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.MigrateSlackApps,
         description:
-          "Update every connected Slack app's settings to what Archestra needs",
+          "Update every connected Slack app to the current settings (agent experience, events, scopes)",
         tags: ["ChatOps"],
         response: constructResponseSchema(
           z.object({ migrated: z.array(SlackAppMigrationResultSchema) }),

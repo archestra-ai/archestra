@@ -84,6 +84,19 @@ export function SlackAgentBotsSection({
 
   useInstallResultToast();
 
+  // Arriving from an agent's page (?addBot=<agentId>): add that agent's bot.
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const addBotFor = searchParams.get("addBot");
+  const [presetAgentId, setPresetAgentId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!addBotFor || isLoading) return;
+    setPresetAgentId(addBotFor);
+    if (canCreateApps) setAddOpen(true);
+    else setConnectOpen(true);
+    router.replace("/settings/messaging-channels/slack");
+  }, [addBotFor, isLoading, canCreateApps, router]);
+
   const agentsWithoutBot = agents.filter(
     (agent) => !bots.some((bot) => bot.agentId === agent.id),
   );
@@ -311,6 +324,7 @@ export function SlackAgentBotsSection({
       {addOpen && (
         <AddBotDialog
           agents={agentsWithoutBot}
+          initialAgentId={presetAgentId ?? ""}
           connectionMode={connectionMode}
           onClose={() => setAddOpen(false)}
           onManual={(agent) => {
@@ -821,16 +835,19 @@ function AddBotDialog({
   onClose,
   onManual,
   onNeedsTokens,
+  initialAgentId,
 }: {
   agents: AgentRef[];
   connectionMode: ConnectionMode;
   onClose: () => void;
   onManual: (agent: AgentRef) => void;
   onNeedsTokens: (target: FinishTarget) => void;
+  /** Preselect this agent (opened from the agent's own page). */
+  initialAgentId: string;
 }) {
   const appName = useAppName();
   const mutation = useCreateSlackAgentBotApp();
-  const [agentId, setAgentId] = useState("");
+  const [agentId, setAgentId] = useState(initialAgentId);
   // Null until edited: the handle then follows the picked agent's name.
   const [customHandle, setCustomHandle] = useState<string | null>(null);
   const picked = agents.find((agent) => agent.id === agentId);
@@ -992,6 +1009,7 @@ function FinishSetupDialog({
   target: FinishTarget;
   onClose: () => void;
 }) {
+  const appName = useAppName();
   const mutation = useUpdateSlackAgentBot(target.id);
   const [botToken, setBotToken] = useState("");
   const [appLevelToken, setAppLevelToken] = useState("");
@@ -1006,7 +1024,7 @@ function FinishSetupDialog({
         if (!open) onClose();
       }}
       title={`Finish ${target.name}'s Slack bot`}
-      description="Slack does not hand these tokens to Archestra on its own."
+      description={`Slack does not hand these tokens to ${appName} on its own.`}
       size="small"
     >
       <DialogForm

@@ -1,6 +1,8 @@
 import { SLACK_REQUIRED_BOT_SCOPES } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
-import { ChatOpsChannelBindingModel } from "@/models";
+import { vi } from "vitest";
+import * as a2aExecutor from "@/agents/a2a-executor";
+import { AgentTeamModel, ChatOpsChannelBindingModel } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import { describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -22,11 +24,27 @@ describe("mention reply delivery", () => {
   ])("replies once after a Stop when %s arrives first", async (firstType, {
     makeUser,
     makeOrganization,
+    makeTeam,
+    makeTeamMember,
     makeInternalAgent,
   }) => {
     const user = await makeUser({ email: "mention-user@example.com" });
     const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
     const agent = await makeInternalAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    // The model is the boundary: the agent greets a bare mention.
+    vi.spyOn(a2aExecutor, "executeA2AMessage").mockResolvedValue({
+      text: "Hi! What can I do for you?",
+      messageId: "agent-greeting",
+      finishReason: "stop",
+      responseUiMessage: {
+        id: "agent-greeting",
+        role: "assistant",
+        parts: [{ type: "text", text: "Hi! What can I do for you?" }],
+      },
+    });
     await ChatOpsChannelBindingModel.create({
       organizationId: org.id,
       provider: "slack",
@@ -63,6 +81,12 @@ describe("mention reply delivery", () => {
       ),
       http.post("https://slack.com/api/conversations.list", () =>
         HttpResponse.json({ ok: true, channels: [] }),
+      ),
+      http.post("https://slack.com/api/conversations.replies", () =>
+        HttpResponse.json({ ok: true, messages: [] }),
+      ),
+      http.post("https://slack.com/api/chat.getPermalink", () =>
+        HttpResponse.json({ ok: true, permalink: "https://slack.test/p1" }),
       ),
       http.post(
         "https://slack.com/api/chat.postMessage",
@@ -140,7 +164,7 @@ describe("mention reply delivery", () => {
         }
       }
       expect(posts).toHaveLength(2);
-      expect(posts[1].get("text")).toBe("How can I help you?");
+      expect(posts[1].get("text")).toContain("Hi! What can I do for you?");
       expect(posts[1].get("channel")).toBe("C_TEST");
       expect(posts[1].get("thread_ts")).toBe("100.000001");
 

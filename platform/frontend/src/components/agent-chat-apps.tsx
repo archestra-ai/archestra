@@ -22,6 +22,7 @@ import {
 } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentSlackBotSection } from "@/components/agent-slack-bot-section";
 import { ChannelIcon } from "@/components/channel-icon";
 import { CopyButton } from "@/components/copy-button";
 import { FormDialog } from "@/components/form-dialog";
@@ -594,6 +595,15 @@ export function AgentChatAppsEditor({
 
   return (
     <>
+      {/* The agent's own Slack bot: an existing agent only, and only where
+          Slack is offered at all. */}
+      {subjectId && visibleProviders.includes("slack") && (
+        <AgentSlackBotSection
+          agentId={subjectId}
+          agentName={subject.name}
+          agentIcon={subject.icon}
+        />
+      )}
       {/* Every chat provider hidden but email still on: there is no pool to
           pick from, so the section would only ever show an empty state. */}
       {visibleProviders.length > 0 && (

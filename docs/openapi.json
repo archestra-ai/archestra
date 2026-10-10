@@ -142304,7 +142304,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Save a Slack app configuration token so Archestra can create Slack apps\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Save a Slack app configuration token used to create Slack apps automatically\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -142627,7 +142627,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Update every connected Slack app's settings to what Archestra needs\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Update every connected Slack app to the current settings (agent experience, events, scopes)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "responses": {
           "200": {
             "description": "Default Response",

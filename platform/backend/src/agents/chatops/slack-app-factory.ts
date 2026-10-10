@@ -6,6 +6,8 @@ import {
   TimeInMs,
 } from "@archestra/shared";
 import { WebClient } from "@slack/web-api";
+import sharp from "sharp";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -156,7 +158,9 @@ class SlackAppFactory {
     const key = installStateKey(params.state);
     const pending = await cacheManager.get<{ agentId: string }>(key);
     if (!pending) {
-      throw new Error("This install link expired. Start again from Archestra.");
+      throw new Error(
+        `This install link expired. Start again from ${archestraMcpBranding.appName}.`,
+      );
     }
     await cacheManager.delete(key);
 
@@ -412,7 +416,7 @@ class SlackAppFactory {
     const saved = await ChatOpsConfigModel.getSlackAppConfigToken();
     if (!saved) {
       throw new Error(
-        "Add a Slack app configuration token so Archestra can create Slack apps.",
+        `Add a Slack app configuration token so ${archestraMcpBranding.appName} can create Slack apps.`,
       );
     }
     if (saved.expiresAt - Date.now() > ROTATE_BEFORE_EXPIRY_MS) {
@@ -456,17 +460,27 @@ class SlackAppFactory {
     });
   }
 
-  /** Upload an image as the app's icon (Slack's apps.icon.set). */
+  /**
+   * Upload an image as the app's icon (Slack's apps.icon.set). Slack takes
+   * only squares between 512 and 2000 px, so the agent's icon is fitted into a
+   * 512 px square first: scaled up or down, padded with transparency.
+   */
   private async setAppIcon(params: {
     token: string;
     appId: string;
     icon: { contentType: string; data: Buffer };
   }): Promise<void> {
-    const extension = params.icon.contentType.split("/")[1] ?? "png";
+    const png = await sharp(params.icon.data, {
+      limitInputPixels: MAX_ICON_INPUT_PIXELS,
+    })
+      .resize(SLACK_ICON_SIZE, SLACK_ICON_SIZE, {
+        fit: "contain",
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
+      .png()
+      .toBuffer();
     // A `name` on the buffer gives the multipart upload its filename.
-    const file = Object.assign(params.icon.data, {
-      name: `icon.${extension.replace(/\+.*$/, "")}`,
-    });
+    const file = Object.assign(png, { name: "icon.png" });
     const result = await new WebClient().apiCall("apps.icon.set", {
       token: params.token,
       app_id: params.appId,
@@ -516,6 +530,12 @@ export const slackAppFactory = new SlackAppFactory();
 const ROTATE_BEFORE_EXPIRY_MS = 10 * TimeInMs.Minute;
 
 const CONFIG_TOKEN_LIFETIME_MS = 12 * TimeInMs.Hour;
+
+/** Slack app icons are squares of 512–2000 px; the smallest keeps uploads light. */
+const SLACK_ICON_SIZE = 512;
+
+/** Refuse to decode an icon bigger than 4096×4096 (a decompression bomb). */
+const MAX_ICON_INPUT_PIXELS = 4096 * 4096;
 
 /** Slack's authorization code lives 10 minutes; the link a little longer. */
 const INSTALL_STATE_TTL_MS = 30 * TimeInMs.Minute;

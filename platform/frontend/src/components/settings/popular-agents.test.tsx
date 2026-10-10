@@ -166,7 +166,7 @@ async function remove(name: string) {
 }
 
 async function ready() {
-  await screen.findByRole("heading", { name: "Popular agents" });
+  await screen.findByRole("heading", { name: "Coding agents" });
 }
 
 describe("popular agent configuration", () => {
@@ -191,7 +191,7 @@ describe("popular agent configuration", () => {
         screen.queryByRole("button", { name: /Codex / }),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /Start from scratch/ }),
+        screen.getByRole("button", { name: /New Test Platform agent/ }),
       ).toBeInTheDocument();
     } finally {
       responseReady.resolve();
@@ -236,7 +236,7 @@ describe("popular agent configuration", () => {
         screen.queryByRole("button", { name: "Save" }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("heading", { name: "Popular agents" }),
+        screen.queryByRole("heading", { name: "Coding agents" }),
       ).not.toBeInTheDocument();
       expect(writes).toEqual([]);
     } finally {
@@ -348,10 +348,10 @@ describe("popular agent configuration", () => {
       screen.getByRole("radio", { name: "Custom image" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Popular agents" }),
+      screen.queryByRole("heading", { name: "Coding agents" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Start from scratch/ }),
+      screen.getByRole("button", { name: /New Test Platform agent/ }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Connect via A2A/ }),

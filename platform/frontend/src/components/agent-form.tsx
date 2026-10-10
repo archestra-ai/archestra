@@ -65,10 +65,16 @@ import {
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
 import {
+  AgentChannelHowItWorks,
+  AgentOtherTaskSources,
+} from "@/components/agent-other-task-sources";
+import {
   type AgentRuntimeConfig,
   AgentRuntimeFields,
 } from "@/components/agent-runtime-fields";
+import { AgentRuntimeHowItWorks } from "@/components/agent-runtime-how-it-works";
 import { AgentRuntimePicker } from "@/components/agent-runtime-picker";
+import { AgentRuntimeToolSources } from "@/components/agent-runtime-tool-sources";
 import { AgentSelector } from "@/components/agent-selector";
 import {
   AgentSkillsEditor,
@@ -88,6 +94,7 @@ import {
 import { AvailableSkillsDialog } from "@/components/available-skills-dialog";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { ClaudeCodeInferenceSettings } from "@/components/claude-code-inference-settings";
+import { ClaudeProviderConnections } from "@/components/claude-provider-connections";
 import { EnvironmentSelector } from "@/components/environment-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { IdentityFields } from "@/components/identity-fields";
@@ -912,7 +919,12 @@ export interface AgentFormProps {
   initialValues?: AgentFormInitialValues;
   initialRuntimeId?: AgentCatalogId;
   /** Callback when a new agent/profile is created (not called for updates) */
-  onCreated?: (created: { id: string; name: string }) => void;
+  onCreated?: (created: {
+    id: string;
+    name: string;
+    /** Whether it runs in a dedicated container runtime. */
+    hasRuntime: boolean;
+  }) => void;
   /** Callback after an existing agent was saved (not called for creates). */
   onSaved?: (saved: { id: string; name: string }) => void;
   /**
@@ -949,6 +961,11 @@ export interface AgentFormProps {
   readOnly?: boolean;
   /** When true, the tools "Add MCP server" combobox starts open. */
   openToolsCombobox?: boolean;
+  /**
+   * Returns to the catalog to pick another agent. Set when the runtime came
+   * from the catalog, so the form shows that choice instead of asking again.
+   */
+  onChangeRuntimeTemplate?: () => void;
 }
 
 /**
@@ -974,6 +991,7 @@ export function AgentForm({
   footer,
   readOnly = false,
   openToolsCombobox = false,
+  onChangeRuntimeTemplate,
 }: AgentFormProps) {
   const appName = useAppName();
   // Given to the footer so a submit button portaled out of this form (into a
@@ -2373,7 +2391,11 @@ export function AgentForm({
         toast.success(getSuccessMessage(agentType, false));
         // Notify parent about creation (for opening connection dialog, etc.)
         if (onCreated && created) {
-          onCreated({ id: created.id, name: created.name });
+          onCreated({
+            id: created.id,
+            name: created.name,
+            hasRuntime: created.runtime != null,
+          });
         }
       }
 
@@ -2787,6 +2809,45 @@ export function AgentForm({
       {createApiKeyDialog}
     </>
   );
+  const setClaudeAuthentication = (
+    authentication: "provider" | "subscription",
+  ) => {
+    if (!runtime) return;
+    setAgentRuntime({
+      ...runtime,
+      claudeCode: {
+        ...runtime.claudeCode,
+        authentication,
+      },
+      credentials:
+        runtime.credentials?.filter(
+          ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
+        ) ?? null,
+    });
+    if (authentication === "subscription") {
+      handleLlmApiKeyChange(null);
+      setLlmModel(null);
+    }
+  };
+  // Claude Code chooses among the few connections that can run Claude, so
+  // they are listed outright instead of behind a dropdown of every key.
+  const claudeConnectionControl = (
+    <>
+      <ClaudeProviderConnections
+        keys={availableApiKeys}
+        selectedKeyId={llmApiKeyId}
+        canRunClaude={runtimeProviderFilter}
+        onSelect={(keyId) => {
+          cancelPendingCreatedKeySelection();
+          handleLlmApiKeyChange(keyId);
+        }}
+        onAddApiKey={onAddApiKey}
+        onUseSubscription={() => setClaudeAuthentication("subscription")}
+        disabled={readOnly}
+      />
+      {createApiKeyDialog}
+    </>
+  );
   const modelControl = (
     <>
       {!llmApiKeyId ? (
@@ -2853,7 +2914,7 @@ export function AgentForm({
             : "Select a provider for the selected model"
           : runtimeModelIncompatibility || undefined;
   const modelSummary = usesClaudeSubscription
-    ? "Personal Claude subscription. Connect after saving."
+    ? "Each person's Claude subscription"
     : requiredSubscription
       ? `${requiredSubscription.label}. ${requiredSubscriptionSatisfied ? "Connected" : "Not connected yet"}`
       : needsClaudeProviderKey
@@ -2862,7 +2923,9 @@ export function AgentForm({
   const modelBlock = (
     <div className="space-y-2">
       {(agent || !isInternalAgent || !agentRuntimeEnabled) && (
-        <Label>{isClaudeCodeRuntime ? "Authentication" : "Model"}</Label>
+        <Label>
+          {isClaudeCodeRuntime ? "Whose Claude account runs it" : "Model"}
+        </Label>
       )}
       {cannotReadLlmConfiguration && !isClaudeCodeRuntime ? (
         <Alert>
@@ -2920,24 +2983,7 @@ export function AgentForm({
               authentication={
                 usesClaudeSubscription ? "subscription" : "provider"
               }
-              onAuthenticationChange={(authentication) => {
-                if (!runtime) return;
-                setAgentRuntime({
-                  ...runtime,
-                  claudeCode: {
-                    ...runtime.claudeCode,
-                    authentication,
-                  },
-                  credentials:
-                    runtime.credentials?.filter(
-                      ({ key }) => key !== "CLAUDE_CODE_OAUTH_TOKEN",
-                    ) ?? null,
-                });
-                if (authentication === "subscription") {
-                  handleLlmApiKeyChange(null);
-                  setLlmModel(null);
-                }
-              }}
+              onAuthenticationChange={setClaudeAuthentication}
               model={runtime?.claudeCode?.model}
               onModelChange={(model) => {
                 if (!runtime) return;
@@ -2959,8 +3005,16 @@ export function AgentForm({
                 null
               }
               vertexEnabled={anthropicVertexAiEnabled}
-              apiKeySelector={providerKeyControl}
+              apiKeySelector={claudeConnectionControl}
               modelSelector={modelControl}
+              showModelSelector={
+                !!llmApiKeyId ||
+                availableApiKeys.some(
+                  (key) =>
+                    !isPersonalSubscription(key) &&
+                    runtimeProviderFilter(key.provider),
+                )
+              }
             />
           ) : (
             <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -3037,6 +3091,9 @@ export function AgentForm({
                   section, and saying it twice reads as a mistake. */}
               {showPrimarySettingsCard && (
                 <SettingsSection>
+                  {!agent && runtime && agentRuntimeEnabled && (
+                    <AgentRuntimeHowItWorks />
+                  )}
                   {/* Name + Icon (hidden for built-in agents, shown in dialog title) */}
                   {!isBuiltIn && (
                     <IdentityFields
@@ -3061,7 +3118,7 @@ export function AgentForm({
                     <div className="space-y-2">
                       <Label htmlFor="agentDescription">Description</Label>
                       <FieldDescription id="agent-description-hint">
-                        An internal description of what this agent does.
+                        Helps people and other agents pick it.
                       </FieldDescription>
                       <Textarea
                         aria-describedby="agent-description-hint"
@@ -3084,7 +3141,11 @@ export function AgentForm({
                     <div className="space-y-2">
                       <SystemPromptEditor
                         title="Instructions"
-                        description="Define what this agent should do, how it should respond, and any rules it should follow."
+                        description={
+                          runtime
+                            ? "Added to every task, on top of what the person asks."
+                            : "Define what this agent should do, how it should respond, and any rules it should follow."
+                        }
                         value={systemPrompt}
                         onChange={setSystemPrompt}
                         readOnly={readOnly}
@@ -3139,6 +3200,7 @@ export function AgentForm({
                           }
                         }}
                         onChange={setAgentRuntime}
+                        onChangeTemplate={onChangeRuntimeTemplate}
                         modelBlock={showsModelControl ? modelBlock : null}
                         modelSummary={modelSummary}
                         modelAttention={modelAttention}
@@ -3196,6 +3258,11 @@ export function AgentForm({
               <SettingsSectionGroup
                 className={cn(!isActiveSection("messaging") && "hidden")}
               >
+                <SettingsSection>
+                  <AgentChannelHowItWorks
+                    hasRuntime={!!runtime && agentRuntimeEnabled}
+                  />
+                </SettingsSection>
                 {/* The editor renders its own Channels and Email sections:
                     the two are different kinds of thing, and neither belongs
                     inside the other's list. */}
@@ -3223,6 +3290,14 @@ export function AgentForm({
                   standaloneSave={false}
                   onSaveHandlerChange={registerChannelAssignmentsSave}
                 />
+                <SettingsSection
+                  title="Other ways to start tasks"
+                  description="Nothing to set up here. These work as soon as the agent exists."
+                >
+                  <AgentOtherTaskSources
+                    hasRuntime={!!runtime && agentRuntimeEnabled}
+                  />
+                </SettingsSection>
               </SettingsSectionGroup>
             )}
 
@@ -3230,6 +3305,11 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("tools") && "hidden")}
             >
+              {runtime && agentRuntimeEnabled && (
+                <SettingsSection>
+                  <AgentRuntimeToolSources />
+                </SettingsSection>
+              )}
               {/* Section 3: Tools & Knowledge Sources */}
               {showTools && (
                 <SettingsSection
@@ -3604,6 +3684,13 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("advanced") && "hidden")}
             >
+              {!agent && (
+                <SettingsSection>
+                  <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+                    Optional. The defaults work in most cases.
+                  </p>
+                </SettingsSection>
+              )}
               {/* Skills served over MCP (SEP-2640). Gateways only, behind the
                   draft-extension feature flag. It sits in Advanced rather than
                   beside Tools & Knowledge: these are resources the gateway

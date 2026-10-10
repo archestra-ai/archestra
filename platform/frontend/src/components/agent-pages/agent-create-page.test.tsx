@@ -1,5 +1,5 @@
 import { E2eTestId, getAgentCatalogImages } from "@archestra/shared";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,7 +34,13 @@ vi.mock("@/components/agent-form", () => ({
         </button>
         <button
           type="button"
-          onClick={() => props.onCreated?.({ id: "new-1", name: "Fresh" })}
+          onClick={() =>
+            props.onCreated?.({
+              id: "new-1",
+              name: "Fresh",
+              hasRuntime: formState.hasRuntime,
+            })
+          }
         >
           fire created
         </button>
@@ -119,7 +125,7 @@ describe("AgentCreatePage", () => {
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Create your own", "Popular agents", "External agents"]);
+    ).toEqual(["Archestra agent", "Coding agents", "External agents"]);
     expect(screen.getByText("Agent Runtime unavailable.")).toBeVisible();
     expect(
       screen.queryByText(/sandboxes\.agents\.x-k8s\.io/),
@@ -144,7 +150,7 @@ describe("AgentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: /claude code/i }));
     expect(formProps).not.toHaveBeenCalled();
     expect(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     ).toBeEnabled();
   });
 
@@ -156,7 +162,7 @@ describe("AgentCreatePage", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     ).toHaveAccessibleDescription("Requires permission to create agents.");
 
     await user.click(screen.getByRole("button", { name: /connect via a2a/i }));
@@ -187,7 +193,7 @@ describe("AgentCreatePage", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     ).toBeEnabled();
     const externalAgentChoice = screen.getByRole("button", {
       name: /connect via a2a/i,
@@ -211,13 +217,13 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     expect(
-      screen.getByRole("heading", { level: 2, name: "Popular agents" }),
+      screen.getByRole("heading", { level: 2, name: "Coding agents" }),
     ).toBeInTheDocument();
     expect(
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Create your own", "Popular agents", "External agents"]);
+    ).toEqual(["Archestra agent", "Coding agents", "External agents"]);
     for (const name of [
       "Claude Code",
       "Codex",
@@ -229,16 +235,22 @@ describe("AgentCreatePage", () => {
         screen.getByRole("button", { name: new RegExp(name, "i") }),
       ).toBeInTheDocument();
     }
+    // The platform's own harness is offered on its own, not as a coding agent.
+    const codingAgents = screen
+      .getByRole("heading", { level: 2, name: "Coding agents" })
+      .closest("section") as HTMLElement;
     expect(
-      screen.queryByRole("button", { name: /archestra agent/i }),
-    ).toBeNull();
+      within(codingAgents)
+        .getAllByRole("button")
+        .map((button) => button.querySelector(".font-medium")?.textContent),
+    ).toEqual(["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"]);
     expect(formProps).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: /codex/i }));
 
-    expect(screen.getByText(/codex is prefilled below/i)).toBeInTheDocument();
     expect(formProps).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        onChangeRuntimeTemplate: expect.any(Function),
         initialValues: expect.objectContaining({
           name: "Codex",
           icon: "/model-logos/openai.svg",
@@ -346,11 +358,6 @@ describe("AgentCreatePage", () => {
       screen.getByRole("heading", { level: 1, name: "Create MCP Gateway" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Name the gateway and choose who can use it, then pick the tools it exposes and connect a client.",
-      ),
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole("link", { name: "MCP Gateways" }),
     ).toBeInTheDocument();
     // The last step alone offers to create; earlier steps only move on.
@@ -385,7 +392,7 @@ describe("AgentCreatePage", () => {
     const user = userEvent.setup();
     const { rerender } = renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
     expect(
       screen.getByTestId(E2eTestId.AgentSetupSubmitButton),
@@ -395,9 +402,10 @@ describe("AgentCreatePage", () => {
     rerender(
       <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
     );
+    // It opens on its own page rather than in chat, so it promises no run.
     expect(
       screen.getByTestId(E2eTestId.AgentSetupSubmitButton),
-    ).toHaveTextContent("Create and run");
+    ).toHaveTextContent("Create Agent");
     formState.hasRuntime = false;
   });
 
@@ -405,7 +413,7 @@ describe("AgentCreatePage", () => {
     const user = userEvent.setup();
     renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
     expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
@@ -421,7 +429,7 @@ describe("AgentCreatePage", () => {
     );
     renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
     expect(screen.getByRole("button", { name: "Create Agent" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "fire created" }));
@@ -435,7 +443,7 @@ describe("AgentCreatePage", () => {
     expect(push).toHaveBeenCalledWith("/mcp/gateways/new-1");
   });
 
-  it("opens chat with a newly created Claude Code agent", async () => {
+  it("opens a newly created Claude Code agent on its own page, where its setup is listed", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
       feature === "agentRuntime" ? true : undefined,
@@ -443,9 +451,14 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     await user.click(screen.getByRole("button", { name: /claude code/i }));
-    await user.click(screen.getByRole("button", { name: "fire created" }));
+    formState.hasRuntime = true;
+    try {
+      await user.click(screen.getByRole("button", { name: "fire created" }));
+    } finally {
+      formState.hasRuntime = false;
+    }
 
-    expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
+    expect(push).toHaveBeenCalledWith("/agents/new-1");
   });
 
   it("stays put with a success state when the creator may not read what it made", async () => {
@@ -453,7 +466,7 @@ describe("AgentCreatePage", () => {
     mockPermissions({ canRead: false });
     renderAgentCreatePage({ canAddExternalAgent: false });
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
 
     await user.click(screen.getByRole("button", { name: "fire created" }));
@@ -477,7 +490,7 @@ describe("AgentCreatePage", () => {
     mockPermissions({ canRead: undefined, isPending: true });
     const { rerender } = renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
@@ -499,7 +512,7 @@ describe("AgentCreatePage", () => {
     mockPermissions({ canRead: undefined, isPending: true });
     const { rerender } = renderAgentCreatePage();
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
@@ -518,7 +531,7 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
     await user.click(screen.getByRole("button", { name: "Catalog" }));
     expect(
@@ -532,7 +545,7 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
     await user.click(screen.getByRole("link", { name: "Agents" }));
 
@@ -547,7 +560,7 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
     await user.click(screen.getByRole("button", { name: "make dirty" }));
     await user.click(screen.getByRole("button", { name: "Catalog" }));
@@ -570,7 +583,7 @@ describe("AgentCreatePage", () => {
     renderAgentCreatePage();
 
     await user.click(
-      screen.getByRole("button", { name: /start from scratch/i }),
+      screen.getByRole("button", { name: /new archestra agent/i }),
     );
     await user.click(screen.getByRole("button", { name: "make dirty" }));
     await user.click(screen.getByRole("link", { name: "Agents" }));

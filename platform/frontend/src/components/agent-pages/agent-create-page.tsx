@@ -64,8 +64,12 @@ export function AgentCreatePage({
   const nextStep = steps[stepIndex + 1];
   const goToStep = (target: AgentSetupStepId) => {
     setStep(target);
-    // A new step starts at its top, as a routed step would.
+    // A new step starts at its top, as a routed step would. The app shell
+    // scrolls an inner container, not the window, so bring the header back.
     window.scrollTo({ top: 0 });
+    document
+      .querySelector("[data-page-header]")
+      ?.scrollIntoView?.({ block: "start" });
   };
 
   // A create-only role has nowhere to go afterwards: the detail page needs
@@ -75,9 +79,11 @@ export function AgentCreatePage({
     useHasPermissions({ [config.resource]: ["read"] });
   const { data: canChat, isPending: isChatPermissionPending } =
     useHasPermissions({ chat: ["read", "create"] });
-  const [created, setCreated] = useState<{ id: string; name: string } | null>(
-    null,
-  );
+  const [created, setCreated] = useState<{
+    id: string;
+    name: string;
+    hasRuntime: boolean;
+  } | null>(null);
 
   // Where a create goes is not decided until the read permission is known, and
   // the answer can still be in flight when the record lands. The created id
@@ -95,9 +101,12 @@ export function AgentCreatePage({
       (kind === "agent" && isChatPermissionPending)
     )
       return;
+    // A container-runtime agent usually needs a sign-in or a credential
+    // before its first run, so it opens on its own page, where that setup
+    // and the ways to give it work are listed.
     router.push(
       kind === "agent"
-        ? canChat
+        ? canChat && !created.hasRuntime
           ? `/chat?agentId=${encodeURIComponent(created.id)}`
           : agentDetailHref(kind, created.id)
         : agentDetailHref(kind, created.id, "connect"),
@@ -139,34 +148,33 @@ export function AgentCreatePage({
   const isChoosingSource = sourceChooserEnabled && !sourceSelected;
   const header = {
     title: `Create ${config.singular}`,
+    // The wizard's progress says where the reader is; a sentence above it
+    // would only cost the height the form needs.
     description: isChoosingSource
       ? "Choose how you want to add an Agent."
-      : selectedTemplate
-        ? `${selectedTemplate.name} is prefilled below. Review or change any setting before creating it.`
-        : config.createDescription,
+      : undefined,
     action:
       !isChoosingSource && steps.length > 1 ? (
-        <div className="hidden sm:block">
-          <WizardStepper
-            compact
-            steps={steps}
-            activeStep={step}
-            // Earlier steps can be revisited; a later one is reached through
-            // its predecessor's Next, which is what checks the step is
-            // complete.
-            onStepClick={(target) => {
-              const targetIndex = steps.findIndex((s) => s.id === target);
-              if (targetIndex < stepIndex) goToStep(target);
-            }}
-            stepTestIdPrefix={E2eTestId.AgentSetupStep}
-          />
-        </div>
+        <WizardStepper
+          variant="progress"
+          steps={steps}
+          activeStep={step}
+          // Earlier steps can be revisited; a later one is reached through
+          // its predecessor's Next, which is what checks the step is
+          // complete.
+          onStepClick={(target) => {
+            const targetIndex = steps.findIndex((s) => s.id === target);
+            if (targetIndex < stepIndex) goToStep(target);
+          }}
+          stepTestIdPrefix={E2eTestId.AgentSetupStep}
+        />
       ) : undefined,
   };
 
   return (
     <AgentPageShell
       stickyFooter
+      compactBack={!!header.action}
       // The list needs the same read permission this role is missing, so on
       // the success state there is nowhere to go back to.
       backHref={showsUnreadableSuccess ? undefined : agentListHref(kind)}
@@ -231,13 +239,19 @@ export function AgentCreatePage({
           defaultIconType={config.defaultIconType}
           initialValues={selectedTemplate?.initialValues}
           initialRuntimeId={selectedTemplate?.id}
+          onChangeRuntimeTemplate={
+            selectedTemplate
+              ? () => {
+                  closeTargetRef.current = "catalog";
+                  guard.requestClose();
+                }
+              : undefined
+          }
           // One mount for the whole wizard: the steps show one group at a
           // time, and what was picked on a step stays on the form until the
           // create at the end.
           activeSection={step}
-          submitEnabled={
-            !nextStep || (kind === "agent" && step === "configuration")
-          }
+          submitEnabled={!nextStep || kind === "agent"}
           onDirtyChange={setIsDirty}
           onCreated={(record) => {
             // The record is saved: nothing is unsaved any more, whichever
@@ -286,25 +300,6 @@ export function AgentCreatePage({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {kind === "agent" && step === "configuration" && (
-                  <Button
-                    size="sm"
-                    type="submit"
-                    disabled={!canSubmit}
-                    data-testid={E2eTestId.AgentSetupSubmitButton}
-                  >
-                    {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                    <span>
-                      {isSaving
-                        ? "Creating..."
-                        : !canChat
-                          ? "Create Agent"
-                          : hasRuntime
-                            ? "Create and run"
-                            : "Create and chat"}
-                    </span>
-                  </Button>
-                )}
                 {nextStep ? (
                   // Moving on needs what a create would need of this step (a
                   // name, a complete visibility choice), so the last step is
@@ -317,11 +312,7 @@ export function AgentCreatePage({
                   <Button
                     size="sm"
                     key="next"
-                    variant={
-                      kind === "agent" && step === "configuration"
-                        ? "outline"
-                        : "default"
-                    }
+                    variant={kind === "agent" ? "outline" : "default"}
                     type="button"
                     disabled={!canSubmit}
                     onClick={(event) => {
@@ -337,7 +328,10 @@ export function AgentCreatePage({
                     </span>
                     <ArrowRight className="h-4 w-4" />
                   </Button>
-                ) : (
+                ) : null}
+                {/* An agent can be created from any step: every later one
+                    has working defaults. A gateway creates at the end. */}
+                {(kind === "agent" || !nextStep) && (
                   <Button
                     size="sm"
                     key="create"
@@ -347,7 +341,11 @@ export function AgentCreatePage({
                   >
                     {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
                     <span>
-                      {isSaving ? "Creating..." : `Create ${config.singular}`}
+                      {isSaving
+                        ? "Creating..."
+                        : kind === "agent" && canChat && !hasRuntime
+                          ? "Create and chat"
+                          : `Create ${config.singular}`}
                     </span>
                   </Button>
                 )}

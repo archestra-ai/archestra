@@ -1,5 +1,7 @@
+import { SecretsManagerType } from "@archestra/shared/types";
 import { secretManager } from "@/secrets-manager";
 import type { LocalConfig } from "@/types";
+import { SecretDecryptionError } from "@/utils/secret-decryption-error";
 
 interface LocalConfigSecretExtraction {
   /** Config with secret values removed; persist this, not the input. */
@@ -11,6 +13,58 @@ interface LocalConfigSecretExtraction {
    * gate; callers that restart installs use this to force the restart.
    */
   rotated: boolean;
+}
+
+/** Reject incomplete recovery before a writer renames the catalog or rotates another credential. */
+export async function assertCatalogCredentialRecovery(params: {
+  localSecretId: string | null | undefined;
+  existingLocalConfig: LocalConfig | null | undefined;
+  localConfig: LocalConfig | null | undefined;
+  clientSecretId: string | null | undefined;
+  clientRecovery?: { requiredKeys: string[]; values: Record<string, string> };
+}): Promise<void> {
+  const localSurfaceTouched =
+    params.localConfig?.environment !== undefined ||
+    params.localConfig?.imagePullSecrets !== undefined;
+  const candidates = [
+    ...(localSurfaceTouched
+      ? [
+          {
+            id: params.localSecretId,
+            complete:
+              params.existingLocalConfig !== undefined &&
+              hasCompleteLocalSecretReplacement(
+                params.localConfig,
+                params.existingLocalConfig,
+              ),
+          },
+        ]
+      : []),
+    ...(params.clientRecovery &&
+    Object.keys(params.clientRecovery.values).length > 0
+      ? [
+          {
+            id: params.clientSecretId,
+            complete: params.clientRecovery.requiredKeys.every((key) =>
+              Boolean(params.clientRecovery?.values[key]),
+            ),
+          },
+        ]
+      : []),
+  ];
+  for (const candidate of candidates) {
+    try {
+      await readSecretBag(candidate.id);
+    } catch (error) {
+      if (
+        !(error instanceof SecretDecryptionError) ||
+        secretManager().type !== SecretsManagerType.DB ||
+        !candidate.complete
+      ) {
+        throw error;
+      }
+    }
+  }
 }
 
 /**
@@ -26,15 +80,41 @@ export async function extractLocalConfigSecrets(params: {
   localConfig: LocalConfig | null | undefined;
   existingSecretId: string | null | undefined;
   catalogName: string;
+  existingLocalConfig?: LocalConfig | null;
 }): Promise<LocalConfigSecretExtraction> {
   const { existingSecretId, catalogName } = params;
   const localConfig = params.localConfig
     ? structuredClone(params.localConfig)
     : params.localConfig;
 
-  const existingSecretValues = await readSecretBag(existingSecretId);
+  // Metadata-only edits must not require credentials.
+  if (
+    localConfig?.environment === undefined &&
+    localConfig?.imagePullSecrets === undefined
+  ) {
+    return { localConfig, secretId: existingSecretId ?? null, rotated: false };
+  }
+  let existingSecretValues: Record<string, string>;
+  let recovering = false;
+  try {
+    existingSecretValues = await readSecretBag(existingSecretId);
+  } catch (error) {
+    if (
+      !(error instanceof SecretDecryptionError) ||
+      secretManager().type !== SecretsManagerType.DB ||
+      params.existingLocalConfig === undefined ||
+      !hasCompleteLocalSecretReplacement(
+        localConfig,
+        params.existingLocalConfig,
+      )
+    ) {
+      throw error;
+    }
+    existingSecretValues = {};
+    recovering = true;
+  }
   const secretEnvVars: Record<string, string> = {};
-  let rotated = false;
+  let rotated = recovering;
 
   for (const envVar of localConfig?.environment ?? []) {
     if (envVar.credentialId) {
@@ -82,9 +162,12 @@ export async function extractLocalConfigSecrets(params: {
     }
   }
 
-  let secretId = existingSecretId ?? null;
+  // A new bag makes recovery visible to the catalog audit and reinstall gates.
+  // Keep the unreadable bag intact in case the previous key is restored later.
+  let secretId = recovering ? null : (existingSecretId ?? null);
   if (
     Object.keys(secretEnvVars).length > 0 ||
+    recovering ||
     (secretId && localBagSurfaceTouched)
   ) {
     if (secretId) {
@@ -106,10 +189,31 @@ export async function upsertCatalogClientSecretValue(params: {
   catalogName: string;
   key: string;
   value: string;
+  /** All configured keys must be explicitly supplied when replacing an unreadable bag. */
+  recovery?: { requiredKeys: string[]; values: Record<string, string> };
 }): Promise<{ id: string; rotated: boolean }> {
-  const existingSecretValues = await getCatalogClientSecretValues(
-    params.clientSecretId,
-  );
+  let existingSecretValues: Record<string, string>;
+  try {
+    existingSecretValues = await getCatalogClientSecretValues(
+      params.clientSecretId,
+    );
+  } catch (error) {
+    if (
+      !(error instanceof SecretDecryptionError) ||
+      secretManager().type !== SecretsManagerType.DB ||
+      !params.recovery ||
+      !params.recovery.requiredKeys.every((key) =>
+        Boolean(params.recovery?.values[key]),
+      )
+    ) {
+      throw error;
+    }
+    const secret = await secretManager().createSecret(
+      { ...params.recovery.values, [params.key]: params.value },
+      `${params.catalogName}-client-secrets`,
+    );
+    return { id: secret.id, rotated: true };
+  }
   // For a new bag the caller's row diff already covers the cascade via the new
   // `clientSecretId`, so `rotated` only matters on an existing one.
   const rotated = existingSecretValues[params.key] !== params.value;
@@ -137,6 +241,34 @@ export async function getCatalogClientSecretValues(
 }
 
 // === Internal ===
+
+function hasCompleteLocalSecretReplacement(
+  replacement: LocalConfig | null | undefined,
+  existing: LocalConfig | null,
+): boolean {
+  // Require both configured surfaces, including explicitly empty arrays when
+  // removing credentials. Omitted surfaces must never silently drop passwords.
+  if (
+    (existing?.environment !== undefined &&
+      replacement?.environment === undefined) ||
+    (existing?.imagePullSecrets !== undefined &&
+      replacement?.imagePullSecrets === undefined)
+  )
+    return false;
+  return (
+    Boolean(replacement) &&
+    (replacement?.environment ?? []).every(
+      (entry) =>
+        entry.type !== "secret" ||
+        entry.promptOnInstallation ||
+        entry.credentialId ||
+        Boolean(entry.value),
+    ) &&
+    (replacement?.imagePullSecrets ?? []).every(
+      (entry) => entry.source !== "credentials" || Boolean(entry.password),
+    )
+  );
+}
 
 /** Bag key for a registry password, stable across reorder and unique per account. */
 function regcredPasswordKey(server: string, username: string): string {

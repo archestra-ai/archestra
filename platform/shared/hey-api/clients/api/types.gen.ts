@@ -37822,6 +37822,60 @@ export type PostApiWebhooksChatopsSlackResponses = {
 
 export type PostApiWebhooksChatopsSlackResponse = PostApiWebhooksChatopsSlackResponses[keyof PostApiWebhooksChatopsSlackResponses];
 
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdData = {
+    body: unknown;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/webhooks/chatops/slack/agents/{agentId}';
+};
+
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdError = PostApiWebhooksChatopsSlackAgentsByAgentIdErrors[keyof PostApiWebhooksChatopsSlackAgentsByAgentIdErrors];
+
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        challenge: string;
+    } | {
+        ok: boolean;
+    };
+};
+
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdResponse = PostApiWebhooksChatopsSlackAgentsByAgentIdResponses[keyof PostApiWebhooksChatopsSlackAgentsByAgentIdResponses];
+
 export type PostApiWebhooksChatopsSlackInteractiveData = {
     body: unknown;
     path?: never;
@@ -37862,6 +37916,67 @@ export type PostApiWebhooksChatopsSlackInteractiveResponses = {
 };
 
 export type PostApiWebhooksChatopsSlackInteractiveResponse = PostApiWebhooksChatopsSlackInteractiveResponses[keyof PostApiWebhooksChatopsSlackInteractiveResponses];
+
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdInteractiveData = {
+    body: unknown;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/webhooks/chatops/slack/agents/{agentId}/interactive';
+};
+
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdInteractiveErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    429: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+};
+
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdInteractiveError = PostApiWebhooksChatopsSlackAgentsByAgentIdInteractiveErrors[keyof PostApiWebhooksChatopsSlackAgentsByAgentIdInteractiveErrors];
+
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdInteractiveResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        ok: boolean;
+    };
+};
+
+export type PostApiWebhooksChatopsSlackAgentsByAgentIdInteractiveResponse = PostApiWebhooksChatopsSlackAgentsByAgentIdInteractiveResponses[keyof PostApiWebhooksChatopsSlackAgentsByAgentIdInteractiveResponses];
+
+export type GetApiWebhooksChatopsSlackOauthCallbackData = {
+    body?: never;
+    path?: never;
+    query?: {
+        code?: string;
+        state?: string;
+        error?: string;
+    };
+    url: '/api/webhooks/chatops/slack/oauth/callback';
+};
+
+export type GetApiWebhooksChatopsSlackOauthCallbackResponses = {
+    /**
+     * Default Response
+     */
+    200: unknown;
+};
 
 export type PostApiWebhooksChatopsSlackSlashCommandData = {
     body: unknown;
@@ -39092,6 +39207,673 @@ export type UpdateSlackChatOpsConfigResponses = {
 };
 
 export type UpdateSlackChatOpsConfigResponse = UpdateSlackChatOpsConfigResponses[keyof UpdateSlackChatOpsConfigResponses];
+
+export type ListSlackAgentBotsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack/agents';
+};
+
+export type ListSlackAgentBotsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListSlackAgentBotsError = ListSlackAgentBotsErrors[keyof ListSlackAgentBotsErrors];
+
+export type ListSlackAgentBotsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        bots: Array<{
+            identitySyncError: string | null;
+            handle: string | null;
+            missingScopes: Array<string>;
+            reinstallUrl: string | null;
+            installed: boolean;
+            needsAppLevelToken: boolean;
+            createdByArchestra: boolean;
+            agentId: string;
+            agentName: string;
+            enabled: boolean;
+            connectionMode: 'webhook' | 'socket';
+            appId: string;
+            connected: boolean;
+            botUserId: string | null;
+            teamId: string | null;
+        }>;
+        canCreateApps: boolean;
+        oneClickInstall: boolean;
+        workspaceName: string | null;
+        unassignedApp: {
+            appId: string;
+            connectionMode: 'webhook' | 'socket';
+            agentUsage: Array<{
+                agentId: string;
+                agentName: string;
+                bindings: number;
+            }>;
+        } | null;
+    };
+};
+
+export type ListSlackAgentBotsResponse = ListSlackAgentBotsResponses[keyof ListSlackAgentBotsResponses];
+
+export type ConvertSlackAppToAgentBotData = {
+    body: {
+        agentId: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack/convert-app';
+};
+
+export type ConvertSlackAppToAgentBotErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ConvertSlackAppToAgentBotError = ConvertSlackAppToAgentBotErrors[keyof ConvertSlackAppToAgentBotErrors];
+
+export type ConvertSlackAppToAgentBotResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        reinstallUrl?: string;
+    };
+};
+
+export type ConvertSlackAppToAgentBotResponse = ConvertSlackAppToAgentBotResponses[keyof ConvertSlackAppToAgentBotResponses];
+
+export type DeleteSlackAgentBotData = {
+    body?: never;
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/chatops/config/slack/agents/{agentId}';
+};
+
+export type DeleteSlackAgentBotErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DeleteSlackAgentBotError = DeleteSlackAgentBotErrors[keyof DeleteSlackAgentBotErrors];
+
+export type DeleteSlackAgentBotResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DeleteSlackAgentBotResponse = DeleteSlackAgentBotResponses[keyof DeleteSlackAgentBotResponses];
+
+export type UpdateSlackAgentBotData = {
+    body: {
+        enabled?: boolean;
+        botToken?: string;
+        signingSecret?: string;
+        appId?: string;
+        connectionMode?: 'webhook' | 'socket';
+        appLevelToken?: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/chatops/config/slack/agents/{agentId}';
+};
+
+export type UpdateSlackAgentBotErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSlackAgentBotError = UpdateSlackAgentBotErrors[keyof UpdateSlackAgentBotErrors];
+
+export type UpdateSlackAgentBotResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UpdateSlackAgentBotResponse = UpdateSlackAgentBotResponses[keyof UpdateSlackAgentBotResponses];
+
+export type UpdateSlackAppConfigTokenData = {
+    body: {
+        accessToken: string;
+        refreshToken: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack/app-config-token';
+};
+
+export type UpdateSlackAppConfigTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateSlackAppConfigTokenError = UpdateSlackAppConfigTokenErrors[keyof UpdateSlackAppConfigTokenErrors];
+
+export type UpdateSlackAppConfigTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+        migrated: Array<{
+            appId: string;
+            agentId?: string;
+            ok: boolean;
+            error?: string;
+            reinstallUrl?: string;
+        }>;
+    };
+};
+
+export type UpdateSlackAppConfigTokenResponse = UpdateSlackAppConfigTokenResponses[keyof UpdateSlackAppConfigTokenResponses];
+
+export type MigrateSlackAppsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack/apps/migrate';
+};
+
+export type MigrateSlackAppsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type MigrateSlackAppsError = MigrateSlackAppsErrors[keyof MigrateSlackAppsErrors];
+
+export type MigrateSlackAppsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        migrated: Array<{
+            appId: string;
+            agentId?: string;
+            ok: boolean;
+            error?: string;
+            reinstallUrl?: string;
+        }>;
+    };
+};
+
+export type MigrateSlackAppsResponse = MigrateSlackAppsResponses[keyof MigrateSlackAppsResponses];
+
+export type CreateSlackAgentBotAppData = {
+    body: {
+        appName: string;
+        connectionMode: 'webhook' | 'socket';
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/api/chatops/config/slack/agents/{agentId}/app';
+};
+
+export type CreateSlackAgentBotAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateSlackAgentBotAppError = CreateSlackAgentBotAppErrors[keyof CreateSlackAgentBotAppErrors];
+
+export type CreateSlackAgentBotAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        appId: string;
+        installUrl: string;
+        installMode: 'oauth' | 'manual';
+    };
+};
+
+export type CreateSlackAgentBotAppResponse = CreateSlackAgentBotAppResponses[keyof CreateSlackAgentBotAppResponses];
 
 export type UpdateTelegramChatOpsConfigData = {
     body: {

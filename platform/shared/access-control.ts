@@ -1482,6 +1482,27 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     organizationSettings: ["update"],
   },
+  [RouteId.ListSlackAgentBots]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.UpdateSlackAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.DeleteSlackAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.UpdateSlackAppConfigToken]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.CreateSlackAgentBotApp]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.MigrateSlackApps]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ConvertSlackAppToAgentBot]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.UpdateTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
   },

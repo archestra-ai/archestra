@@ -15,6 +15,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
 import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
@@ -2142,6 +2143,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!agent) {
         throw new ApiError(404, "Agent not found");
       }
+
+      // A Slack bot of this agent follows its name and icon (best effort).
+      void slackAppFactory.syncAgentIdentity(id);
 
       // Only re-init metrics when labels were part of the update payload,
       // since that's the only field that can introduce new label keys.

@@ -6,6 +6,7 @@ import {
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
+import type { UIMessageChunk } from "ai";
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -40,6 +41,9 @@ import type {
   ChatOpsProcessingResult,
   ChatOpsProvider,
   ChatOpsProviderType,
+  ChatOpsReplyStream,
+  ChatReplyOptions,
+  DiscoveredChannel,
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
@@ -67,7 +71,7 @@ import {
 } from "./auto-provision";
 import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
 import { compactChatOpsResponse } from "./chatops-response";
-import { chatOpsRunRegistry } from "./chatops-run-registry";
+import { chatOpsRunRegistry, wasRunSuperseded } from "./chatops-run-registry";
 import { watchChatOpsTask } from "./chatops-task-watcher";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
@@ -103,6 +107,8 @@ import {
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
+  /** Additional Slack apps, each pinned to one agent, keyed by agent id. */
+  private slackAgentBots = new Map<string, SlackProvider>();
   private telegramProvider: TelegramProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
@@ -126,7 +132,12 @@ export class ChatOpsManager {
     return this.msTeamsProvider;
   }
 
-  getSlackProvider(): SlackProvider | null {
+  /**
+   * The main Slack connection, or with `agentId` the Slack bot pinned to that
+   * agent.
+   */
+  getSlackProvider(agentId?: string): SlackProvider | null {
+    if (agentId) return this.slackAgentBots.get(agentId) ?? null;
     return this.slackProvider;
   }
 
@@ -181,6 +192,7 @@ export class ChatOpsManager {
     return (
       (this.msTeamsProvider?.isConfigured() ?? false) ||
       (this.slackProvider?.isConfigured() ?? false) ||
+      [...this.slackAgentBots.values()].some((bot) => bot.isConfigured()) ||
       (this.telegramProvider?.isConfigured() ?? false)
     );
   }
@@ -209,19 +221,17 @@ export class ChatOpsManager {
     filename: string;
     data: Buffer;
     comment?: string;
+    /** Set when the conversation is with a Slack bot pinned to this agent. */
+    pinnedAgentId?: string;
   }): Promise<void> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
       throw new Error("The task's messaging-channel binding no longer exists");
     }
-    const provider: ChatOpsProvider | null =
-      binding.provider === "slack"
-        ? this.slackProvider
-        : binding.provider === "ms-teams"
-          ? this.msTeamsProvider
-          : binding.provider === "telegram"
-            ? this.telegramProvider
-            : null;
+    const provider = this.providerForBinding(
+      binding.provider,
+      params.pinnedAgentId,
+    );
     if (!provider?.isConfigured()) {
       throw new Error(`The ${binding.provider} provider is not configured`);
     }
@@ -244,6 +254,8 @@ export class ChatOpsManager {
     threadId: string;
     text: string;
     agentName?: string;
+    /** Set when the conversation is with a Slack bot pinned to this agent. */
+    pinnedAgentId?: string;
   }): Promise<void> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
@@ -253,14 +265,10 @@ export class ChatOpsManager {
       );
       return;
     }
-    const provider =
-      binding.provider === "slack"
-        ? this.slackProvider
-        : binding.provider === "ms-teams"
-          ? this.msTeamsProvider
-          : binding.provider === "telegram"
-            ? this.telegramProvider
-            : null;
+    const provider = this.providerForBinding(
+      binding.provider,
+      params.pinnedAgentId,
+    );
     if (!provider?.isConfigured()) {
       logger.warn(
         { bindingId: params.bindingId, provider: binding.provider },
@@ -305,7 +313,13 @@ export class ChatOpsManager {
     if (await cacheManager.get(cacheKey)) return;
 
     try {
-      const channels = await provider.discoverChannels(context);
+      // Every Slack connection shares the channel table, so a channel only one
+      // pinned bot belongs to must count as active, or the stale sweep below
+      // deletes its binding.
+      const channels =
+        provider.providerId === "slack"
+          ? await this.discoverAllSlackChannels(context)
+          : await provider.discoverChannels(context);
       if (!channels?.length) {
         logger.debug(
           { workspaceId },
@@ -367,29 +381,37 @@ export class ChatOpsManager {
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
-    const [msTeamsConfig, slackConfig, telegramConfig] = await Promise.all([
-      ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
-        logger.error(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[ChatOps] Failed to load MS Teams config, skipping",
-        );
-        return null;
-      }),
-      ChatOpsConfigModel.getSlackConfig().catch((error) => {
-        logger.error(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[ChatOps] Failed to load Slack config, skipping",
-        );
-        return null;
-      }),
-      ChatOpsConfigModel.getTelegramConfig().catch((error) => {
-        logger.error(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[ChatOps] Failed to load Telegram config, skipping",
-        );
-        return null;
-      }),
-    ]);
+    const [msTeamsConfig, slackConfig, telegramConfig, slackAgentBotConfigs] =
+      await Promise.all([
+        ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
+          logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            "[ChatOps] Failed to load MS Teams config, skipping",
+          );
+          return null;
+        }),
+        ChatOpsConfigModel.getSlackConfig().catch((error) => {
+          logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            "[ChatOps] Failed to load Slack config, skipping",
+          );
+          return null;
+        }),
+        ChatOpsConfigModel.getTelegramConfig().catch((error) => {
+          logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            "[ChatOps] Failed to load Telegram config, skipping",
+          );
+          return null;
+        }),
+        ChatOpsConfigModel.getSlackAgentBots().catch((error) => {
+          logger.error(
+            { error: errorMessage(error) },
+            "[ChatOps] Failed to load Slack agent bots, skipping",
+          );
+          return [];
+        }),
+      ]);
 
     // A channel an admin switched off must actually stop listening — a bot
     // left running would keep answering messages the organization no longer
@@ -420,6 +442,15 @@ export class ChatOpsManager {
       // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
       this.slackProvider.setEventHandler(this);
     }
+    if (!hiddenChannels.has("slack")) {
+      for (const botConfig of slackAgentBotConfigs) {
+        const bot = new SlackProvider(botConfig, {
+          pinnedAgentId: botConfig.agentId,
+        });
+        bot.setEventHandler(this);
+        this.slackAgentBots.set(botConfig.agentId, bot);
+      }
+    }
     // The Telegram integration is feature-flagged: without the master switch
     // the provider never starts, even if the DB already holds a config.
     if (
@@ -440,6 +471,10 @@ export class ChatOpsManager {
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.msTeamsProvider },
       { name: "Slack", provider: this.slackProvider },
+      ...[...this.slackAgentBots].map(([agentId, provider]) => ({
+        name: `Slack bot for agent ${agentId}`,
+        provider,
+      })),
       { name: "Telegram", provider: this.telegramProvider },
     ];
 
@@ -455,6 +490,14 @@ export class ChatOpsManager {
           );
         }
       }
+    }
+
+    // Each Slack bot ignores messages that @mention one of the others.
+    const slackBotUserIds = this.getSlackProviders().flatMap(
+      (slack) => slack.getBotUserId() ?? [],
+    );
+    for (const slack of this.getSlackProviders()) {
+      slack.setSiblingBotUserIds(slackBotUserIds);
     }
 
     // Eager channel discovery for providers that support it (fire-and-forget).
@@ -493,6 +536,10 @@ export class ChatOpsManager {
       await this.slackProvider.cleanup();
       this.slackProvider = null;
     }
+    for (const bot of this.slackAgentBots.values()) {
+      await bot.cleanup();
+    }
+    this.slackAgentBots.clear();
     if (this.telegramProvider) {
       await this.telegramProvider.cleanup();
       this.telegramProvider = null;
@@ -591,9 +638,11 @@ export class ChatOpsManager {
     });
 
     // If no binding found and this is a DM, check for a pending DM binding
-    // (pre-assigned from the UI before the first real DM interaction)
+    // (pre-assigned from the UI before the first real DM interaction). A
+    // pinned bot's DM is its own channel and never takes over another's.
     const isDm = message.metadata?.channelType === "im";
-    if (!binding && isDm && message.senderEmail) {
+    const pinnedAgentId = provider.pinnedAgentId;
+    if (!binding && isDm && message.senderEmail && !pinnedAgentId) {
       const pending = await ChatOpsChannelBindingModel.findPendingDmBinding({
         organizationId,
         provider: provider.providerId,
@@ -616,7 +665,7 @@ export class ChatOpsManager {
     // Fallback: if the DM channel ID changed (e.g., after bot reinstallation),
     // the pending lookup above misses. Try to find an existing DM binding by
     // email and update its channelId to the new one, preserving the agentId.
-    if (!binding && isDm && message.senderEmail) {
+    if (!binding && isDm && message.senderEmail && !pinnedAgentId) {
       const existingDm =
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId,
@@ -637,7 +686,24 @@ export class ChatOpsManager {
       }
     }
 
-    if (!binding || !binding.agentId) {
+    if (pinnedAgentId) {
+      // A pinned bot always answers as its agent: the binding only carries the
+      // channel (instructions, task follow-ups). Its DM is labelled with the
+      // agent so the conversation shows up under it.
+      binding ??= await ChatOpsChannelBindingModel.upsertByChannel({
+        organizationId,
+        provider: provider.providerId,
+        channelId: message.channelId,
+        workspaceId: message.workspaceId,
+        workspaceName: provider.getWorkspaceName() ?? undefined,
+        channelName: isDm
+          ? `Direct Message - ${message.senderEmail}`
+          : ((await provider.getChannelName(message.channelId)) ?? undefined),
+        isDm,
+        dmOwnerEmail: isDm ? message.senderEmail : undefined,
+        ...(isDm && { agentId: pinnedAgentId }),
+      });
+    } else if (!binding || !binding.agentId) {
       // Create binding early (without agent) so the DM/channel appears in the UI
       if (!binding) {
         const channelName = isDm
@@ -668,25 +734,18 @@ export class ChatOpsManager {
       binding = { ...binding, agentId };
     }
 
-    // A bare mention can arrive as either app_mention or message; ingress
-    // dedup keeps the first, so both forms must produce the same reply.
-    const isEmptySlackMention =
-      provider.providerId === "slack" &&
+    // A bare mention (no text, no file) still goes to the agent, so it answers
+    // in its own voice — a greeting, or a reply to what the thread is about —
+    // instead of a canned line. It can arrive as either app_mention or
+    // message; processMessage's dedup keeps the first.
+    const isBareMention =
       (message.metadata?.eventType === "app_mention" ||
         message.metadata?.botMentioned === true) &&
-      !message.text.trim();
-    if (isEmptySlackMention) {
-      // Deduplicate this early-return path so Slack retries don't produce duplicate replies.
-      const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
-        message.messageId,
-      );
-      if (isNew) {
-        await provider.sendReply({
-          originalMessage: message,
-          text: "How can I help you?",
-        });
-      }
-      return;
+      !message.text.trim() &&
+      !message.attachments?.length &&
+      !message.skippedAttachments?.length;
+    if (isBareMention) {
+      message.text = BARE_MENTION_TEXT;
     }
 
     // Process message through assigned agent
@@ -799,9 +858,10 @@ export class ChatOpsManager {
       announceAccessErrors = true,
     } = params;
 
-    // Deduplication check
+    // Deduplication check. Two bots in one channel both receive a message and
+    // each decides on its own, so the claim is per bot.
     const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
-      message.messageId,
+      processedMessageKey(provider, message),
     );
     if (!isNew) {
       return { success: true };
@@ -816,6 +876,11 @@ export class ChatOpsManager {
 
     if (!binding) {
       return { success: true, error: "NO_BINDING" };
+    }
+
+    // A pinned bot answers as its own agent, whatever the channel is bound to.
+    if (provider.pinnedAgentId) {
+      binding.agentId = provider.pinnedAgentId;
     }
 
     // Channel binding with no agent yet (e.g. Teams, which calls processMessage
@@ -849,12 +914,14 @@ export class ChatOpsManager {
       };
     }
 
-    // Resolve inline agent mention
-    const { agentToUse, cleanedMessageText } =
-      await this.resolveInlineAgentMention({
-        messageText: message.text,
-        defaultAgent: agent,
-      });
+    // Resolve inline agent mention. A pinned bot is already one agent's name;
+    // "Sales >" in its thread is just text.
+    const { agentToUse, cleanedMessageText } = provider.pinnedAgentId
+      ? { agentToUse: agent, cleanedMessageText: message.text }
+      : await this.resolveInlineAgentMention({
+          messageText: message.text,
+          defaultAgent: agent,
+        });
 
     // Security: Validate user has access to the agent
     logger.debug(
@@ -1632,10 +1699,17 @@ export class ChatOpsManager {
         "[ChatOps] User does not have access to agent",
       );
       if (!denyQuietly) {
+        const appName = await OrganizationModel.getAppName();
         await this.sendSecurityErrorReply(
           provider,
           message,
-          `You don't have access to the agent "${agentName}". Contact your administrator for access.`,
+          [
+            `You can't use *${agentName}* yet — it hasn't been shared with you in ${appName}.`,
+            `Ask whoever manages ${agentName} to share it with you (${userEmail}): ${config.frontendBaseUrl}/agents/${agentId}`,
+            ...(provisioned.invitationId !== null
+              ? [`You'll also get a DM from me with a link to sign in.`]
+              : []),
+          ].join("\n"),
         );
       }
       return {
@@ -1658,7 +1732,9 @@ export class ChatOpsManager {
   }
 
   /**
-   * Send a security error reply back to the user via the chat provider.
+   * Tell the sender why they were refused — only them, where the platform
+   * allows it (a Slack channel: an ephemeral message), so the thread is not
+   * interrupted for everyone else.
    */
   private async sendSecurityErrorReply(
     provider: ChatOpsProvider,
@@ -1673,9 +1749,19 @@ export class ChatOpsManager {
       "[ChatOps] Sending security error reply",
     );
     try {
+      const isChannel = message.metadata?.conversationType !== "personal";
+      if (isChannel && provider.sendEphemeralMessage) {
+        await provider.sendEphemeralMessage({
+          channelId: message.channelId,
+          userId: message.senderId,
+          text: `:lock: ${errorText}`,
+          threadId: message.threadId,
+        });
+        return;
+      }
       await provider.sendReply({
         originalMessage: message,
-        text: `⚠️ **Access Denied**\n\n${errorText}`,
+        text: `🔒 ${errorText}`,
       });
       logger.debug("[ChatOps] Security error reply sent successfully");
     } catch (error) {
@@ -1865,6 +1951,7 @@ export class ChatOpsManager {
       provider: provider.providerId,
       channelId: message.channelId,
       threadId: message.threadId ?? message.channelId,
+      scope: provider.stateScope,
     };
     // A sender's follow-up message supersedes their still-running turn: the
     // stale reply is dropped and only the follow-up gets answered — with the
@@ -1886,6 +1973,11 @@ export class ChatOpsManager {
     );
     const muteMarkerAtStart = await getThreadMuteMarker(threadKey);
 
+    // Held in a ref: the transient-error retry below swaps in a fresh stream.
+    const replyStream = {
+      current: this.openReplyStream({ provider, message, sendReply }),
+    };
+
     try {
       const executeParams = {
         agent,
@@ -1897,6 +1989,9 @@ export class ChatOpsManager {
         userId,
         abortSignal,
         notifyContextCompaction: sendReply,
+        onUiMessageChunk: replyStream.current
+          ? async (chunk: UIMessageChunk) => replyStream.current?.push(chunk)
+          : undefined,
       };
       let execution: Awaited<ReturnType<ChatOpsManager["executeMessage"]>>;
       try {
@@ -1910,6 +2005,8 @@ export class ChatOpsManager {
             provider,
             message,
             threadKey,
+            replyStream: replyStream.current,
+            abortSignal,
           });
         }
         // Web chat surfaces transient provider failures as a retry button;
@@ -1927,6 +2024,14 @@ export class ChatOpsManager {
           },
           "[ChatOps] Retrying execution once after a transient provider error",
         );
+        // The failed attempt's partial stream would read as the start of the
+        // retried answer — drop it and stream the retry fresh.
+        await replyStream.current?.abandon({ keepContent: false });
+        replyStream.current = this.openReplyStream({
+          provider,
+          message,
+          sendReply,
+        });
         execution = await this.executeMessage(executeParams);
       }
       const { result, responseAgent, session } = execution;
@@ -1939,7 +2044,13 @@ export class ChatOpsManager {
         abortSignal.aborted ||
         (await this.threadMutedSinceStart(threadKey, muteMarkerAtStart))
       ) {
-        return await this.suppressMutedReply({ provider, message, threadKey });
+        return await this.suppressMutedReply({
+          provider,
+          message,
+          threadKey,
+          replyStream: replyStream.current,
+          abortSignal,
+        });
       }
 
       return await this.replyByMessageExecutionResult({
@@ -1949,19 +2060,29 @@ export class ChatOpsManager {
         sendReply,
         result,
         session,
+        replyStream: replyStream.current,
       });
     } catch (error) {
       // A mute that aborted the run mid-flight (e.g. during the retry leg above)
       // surfaces here as a throw — stay silent rather than posting it as an
       // error, since the user just asked the bot to be quiet.
       if (abortSignal.aborted) {
-        return await this.suppressMutedReply({ provider, message, threadKey });
+        return await this.suppressMutedReply({
+          provider,
+          message,
+          threadKey,
+          replyStream: replyStream.current,
+          abortSignal,
+        });
       }
 
       logger.error(
         { messageId: message.messageId, error: errorMessage(error) },
         "[ChatOps] Failed to execute A2A message",
       );
+
+      // A half-streamed answer followed by an error reads as two replies.
+      await replyStream.current?.abandon({ keepContent: false });
 
       if (sendReply) {
         await this.sendExecutionErrorReply({
@@ -1981,7 +2102,91 @@ export class ChatOpsManager {
     } finally {
       if (typingHeartbeat) clearInterval(typingHeartbeat);
       unregister();
+      // Close a stream an unexpected throw left open (a no-op once finished),
+      // then clear the working indicator: Slack agent sessions stay
+      // "processing" until told otherwise, even after the reply is posted.
+      await replyStream.current?.abandon({ keepContent: true });
+      if (sendReply) {
+        await provider
+          .clearTypingStatus?.(message.channelId, message.threadId ?? "")
+          ?.catch(() => {});
+      }
     }
+  }
+
+  /** Every Slack connection: the main app, then the pinned agent bots. */
+  private getSlackProviders(): SlackProvider[] {
+    return [
+      ...(this.slackProvider ? [this.slackProvider] : []),
+      ...this.slackAgentBots.values(),
+    ];
+  }
+
+  /**
+   * The channels every Slack connection is a member of, merged. A connection
+   * whose listing fails contributes nothing (SlackProvider logs it).
+   */
+  private async discoverAllSlackChannels(
+    context: unknown,
+  ): Promise<DiscoveredChannel[]> {
+    const listings = await Promise.all(
+      this.getSlackProviders().map((slack) => slack.discoverChannels(context)),
+    );
+    const byId = new Map<string, DiscoveredChannel>();
+    for (const channel of listings.flat()) {
+      if (!byId.has(channel.channelId)) byId.set(channel.channelId, channel);
+    }
+    return [...byId.values()];
+  }
+
+  /**
+   * The connection that posts into a binding's conversation: the Slack bot
+   * pinned to the run's agent when the conversation was with that bot.
+   */
+  private providerForBinding(
+    providerType: ChatOpsProviderType,
+    pinnedAgentId: string | undefined,
+  ): ChatOpsProvider | null {
+    if (providerType === "slack" && pinnedAgentId) {
+      return this.slackAgentBots.get(pinnedAgentId) ?? null;
+    }
+    return this.getChatOpsProvider(providerType);
+  }
+
+  /**
+   * Open a reply stream when the provider supports one and the sender is
+   * plainly waiting for an answer: a DM, or a message that @mentions the bot.
+   * Elsewhere in a channel the agent often decides to stay quiet, and text it
+   * streamed before deciding would flash up and vanish.
+   */
+  private openReplyStream(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    sendReply: boolean;
+  }): ChatOpsReplyStream | null {
+    const { provider, message, sendReply } = params;
+    if (!sendReply || !provider.startReplyStream) return null;
+    const addressed =
+      message.metadata?.conversationType === "personal" ||
+      message.metadata?.botMentioned === true;
+    return addressed ? provider.startReplyStream(message) : null;
+  }
+
+  /**
+   * Post a reply, finishing the live streamed message instead when there is
+   * one, so the answer is not posted twice.
+   */
+  private async deliverReply(params: {
+    provider: ChatOpsProvider;
+    replyStream?: ChatOpsReplyStream | null;
+    options: ChatReplyOptions;
+  }): Promise<void> {
+    const { provider, replyStream, options } = params;
+    if (replyStream?.isLive) {
+      await replyStream.finish(options);
+      return;
+    }
+    await provider.sendReply(options);
   }
 
   /**
@@ -2077,6 +2282,9 @@ export class ChatOpsManager {
             type: "chatops",
             bindingId: binding.id,
             threadId,
+            ...(provider.pinnedAgentId && {
+              pinnedAgentId: provider.pinnedAgentId,
+            }),
           },
           ephemeralExecutionPrefix,
         },
@@ -2086,6 +2294,7 @@ export class ChatOpsManager {
         bindingId: binding.id,
         threadId,
         agentName: agent.name,
+        pinnedAgentId: provider.pinnedAgentId,
       }).catch((error) => {
         logger.warn(
           { error: errorMessage(error), taskId: task.id },
@@ -2137,10 +2346,12 @@ export class ChatOpsManager {
 
   /**
    * Silently drop the reply for a run aborted mid-flight — the thread was
-   * muted, or the run was superseded by the sender's follow-up message: clear
-   * the lingering "typing…" indicator and report success with no response
-   * (same shape as the agent deliberately staying quiet), so nothing is
-   * posted.
+   * stopped or muted, or the run was superseded by the sender's follow-up
+   * message: clear the lingering "typing…" indicator and report success with
+   * no response (same shape as the agent deliberately staying quiet), so
+   * nothing is posted. A streamed partial answer stays when the user stopped
+   * it (they saw it and chose to stop there) and goes when a follow-up
+   * superseded it.
    */
   private async suppressMutedReply(params: {
     provider: ChatOpsProvider;
@@ -2150,8 +2361,13 @@ export class ChatOpsManager {
       channelId: string;
       threadId: string;
     };
+    replyStream: ChatOpsReplyStream | null;
+    abortSignal: AbortSignal;
   }): Promise<ChatOpsProcessingResult> {
-    const { provider, message, threadKey } = params;
+    const { provider, message, threadKey, replyStream, abortSignal } = params;
+    await replyStream?.abandon({
+      keepContent: !wasRunSuperseded(abortSignal),
+    });
     logger.info(
       {
         messageId: message.messageId,
@@ -2159,7 +2375,7 @@ export class ChatOpsManager {
         channelId: threadKey.channelId,
         threadId: threadKey.threadId,
       },
-      "[ChatOps] Run aborted (thread muted or superseded by a follow-up) — dropping reply",
+      "[ChatOps] Run aborted (thread stopped, muted, or superseded by a follow-up) — dropping reply",
     );
     await provider
       .clearTypingStatus?.(message.channelId, message.threadId ?? "")
@@ -2328,6 +2544,8 @@ export class ChatOpsManager {
     currentApprovalId?: string; // if replying from an approval flow
     result: A2AProtocolSendMessageResponse;
     session?: ChatSessionReplyInfo;
+    /** The run's streamed reply, finished here instead of posting anew. */
+    replyStream?: ChatOpsReplyStream | null;
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
@@ -2337,6 +2555,7 @@ export class ChatOpsManager {
       currentApprovalId,
       result,
       session,
+      replyStream,
     } = params;
 
     const approvalRequests =
@@ -2350,6 +2569,7 @@ export class ChatOpsManager {
         approvalRequests,
         currentApprovalId,
         result,
+        replyStream,
       });
     }
 
@@ -2373,27 +2593,35 @@ export class ChatOpsManager {
       agentChoseSilence = true;
       agentResponse = "";
     }
+    // Whatever streamed before the agent settled on silence must not stay.
+    if (!agentResponse) {
+      await replyStream?.abandon({ keepContent: false });
+    }
 
     if (sendReply && agentResponse) {
-      await provider.sendReply({
-        originalMessage: message,
-        text: agentResponse,
-        footer: buildAgentFooter(
-          agent.name,
-          session?.ownerName
-            ? `conversation started by ${session.ownerName}`
-            : undefined,
-        ),
-        // The first reply of a rolled-over chat session says so: otherwise
-        // the agent forgetting the earlier topic reads as a bug. Otherwise,
-        // teach the off switch once per channel thread: sticky auto-reply
-        // only applies in channels, so the hint rides the bot's first reply.
-        ...(session?.rolledOver
-          ? { hint: CHATOPS_SESSION_ROLLOVER_HINT }
-          : (await this.shouldHintThreadMute(provider, message)) && {
-              hint: THREAD_MUTE_HINT,
-            }),
-        conversationReference: message.metadata?.conversationReference,
+      await this.deliverReply({
+        provider,
+        replyStream,
+        options: {
+          originalMessage: message,
+          text: agentResponse,
+          footer: buildAgentFooter(
+            agent.name,
+            session?.ownerName
+              ? `conversation started by ${session.ownerName}`
+              : undefined,
+          ),
+          // The first reply of a rolled-over chat session says so: otherwise
+          // the agent forgetting the earlier topic reads as a bug. Otherwise,
+          // teach the off switch once per channel thread: sticky auto-reply
+          // only applies in channels, so the hint rides the bot's first reply.
+          ...(session?.rolledOver
+            ? { hint: CHATOPS_SESSION_ROLLOVER_HINT }
+            : (await this.shouldHintThreadMute(provider, message)) && {
+                hint: THREAD_MUTE_HINT,
+              }),
+          conversationReference: message.metadata?.conversationReference,
+        },
       });
     } else if (
       sendReply &&
@@ -2419,8 +2647,7 @@ export class ChatOpsManager {
       });
     } else if (sendReply && !agentResponse) {
       // Nothing was (or will be) posted to the thread — clear the transient
-      // "thinking" indicator so it doesn't spin forever (Slack only
-      // auto-clears it when a message is posted).
+      // "thinking" indicator so it doesn't spin forever.
       await provider
         .clearTypingStatus?.(message.channelId, message.threadId ?? "")
         ?.catch(() => {});
@@ -2438,13 +2665,18 @@ export class ChatOpsManager {
    *
    * True only on the bot's FIRST reply in a channel thread — sticky auto-reply
    * (and thus muting) exists only in channels, and claimThreadMuteHint ensures
-   * the hint rides a single reply per thread rather than every one.
+   * the hint rides a single reply per thread rather than every one. Never for
+   * providers whose own Stop control is the off switch.
    */
   private async shouldHintThreadMute(
     provider: ChatOpsProvider,
     message: IncomingChatMessage,
   ): Promise<boolean> {
-    if (message.metadata?.conversationType !== "channel" || !message.threadId) {
+    if (
+      provider.hasNativeStopControl ||
+      message.metadata?.conversationType !== "channel" ||
+      !message.threadId
+    ) {
       return false;
     }
     return await claimThreadMuteHint({
@@ -2462,6 +2694,7 @@ export class ChatOpsManager {
     approvalRequests: A2AArchestraApprovalRequest[];
     currentApprovalId?: string; // if replying from an approval flow
     result: A2AProtocolSendMessageResponse;
+    replyStream?: ChatOpsReplyStream | null;
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
@@ -2471,6 +2704,7 @@ export class ChatOpsManager {
       approvalRequests,
       currentApprovalId,
       result,
+      replyStream,
     } = params;
     const { task } = result;
     if (!task) {
@@ -2507,13 +2741,17 @@ export class ChatOpsManager {
     );
 
     if (sendReply) {
-      await provider.sendReply({
-        originalMessage: message,
-        text:
-          agentResponse ||
-          "Approval required before I can continue with this action.",
-        footer: buildAgentFooter(agent.name),
-        conversationReference: message.metadata?.conversationReference,
+      await this.deliverReply({
+        provider,
+        replyStream,
+        options: {
+          originalMessage: message,
+          text:
+            agentResponse ||
+            "Approval required before I can continue with this action.",
+          footer: buildAgentFooter(agent.name),
+          conversationReference: message.metadata?.conversationReference,
+        },
       });
 
       for (const approvalRequest of approvalRequests) {
@@ -2555,6 +2793,8 @@ export class ChatOpsManager {
     abortSignal?: AbortSignal;
     /** Post a chat notice when loading history triggers a compaction. */
     notifyContextCompaction?: boolean;
+    /** Sees every chunk of the run as it is produced (reply streaming). */
+    onUiMessageChunk?: (chunk: UIMessageChunk) => Promise<void>;
   }): Promise<{
     result: A2AProtocolSendMessageResponse;
     responseAgent: { id: string; name: string };
@@ -2571,6 +2811,7 @@ export class ChatOpsManager {
       userId,
       abortSignal,
       notifyContextCompaction,
+      onUiMessageChunk,
     } = params;
 
     // Use thread ID (or channel ID for non-threaded messages) as session ID
@@ -2622,6 +2863,9 @@ export class ChatOpsManager {
         type: "chatops",
         bindingId: binding.id,
         threadId: effectiveThreadId,
+        ...(provider.pinnedAgentId && {
+          pinnedAgentId: provider.pinnedAgentId,
+        }),
       },
       ephemeralExecutionPrefix,
     };
@@ -2633,6 +2877,7 @@ export class ChatOpsManager {
       request,
       systemParams,
       abortSignal,
+      onUiMessageChunk,
       // Tell the user their conversation was summarized — otherwise the model
       // suddenly "forgetting" details reads as a bug.
       onContextCompacted: notifyContextCompaction
@@ -2834,7 +3079,8 @@ export class ChatOpsManager {
         );
         return;
       }
-      if (!binding.agentId) {
+      const agentId = provider.pinnedAgentId ?? binding.agentId;
+      if (!agentId) {
         logger.error(
           {
             bindingId: binding.id,
@@ -2846,10 +3092,10 @@ export class ChatOpsManager {
         return;
       }
 
-      const agent = await AgentModel.findById(binding.agentId);
+      const agent = await AgentModel.findById(agentId);
       if (!agent) {
         logger.error(
-          { bindingId: binding.id, agentId: binding.agentId },
+          { bindingId: binding.id, agentId },
           "[ChatOps] Could not find agent for approval decision",
         );
         return;
@@ -2894,7 +3140,7 @@ export class ChatOpsManager {
           id: user.id,
           organizationId: binding.organizationId,
         },
-        agentId: binding.agentId,
+        agentId,
         request: buildApprovalDecisionSendMessageRequest({
           taskId: decision.taskId,
           approvalDecisions: [
@@ -2925,6 +3171,12 @@ export class ChatOpsManager {
         currentApprovalId: decision.approvalId,
         result,
       });
+      await provider
+        .clearTypingStatus?.(
+          originalMessage.channelId,
+          originalMessage.threadId ?? "",
+        )
+        ?.catch(() => {});
     } catch (error) {
       logger.error(
         {
@@ -3088,4 +3340,22 @@ export function matchesAgentName(input: string, agentName: string): boolean {
   const normalizedInput = input.toLowerCase().replace(/\s+/g, "");
   const normalizedName = agentName.toLowerCase().replace(/\s+/g, "");
   return normalizedInput === normalizedName;
+}
+
+/** What the agent sees for an @mention with no message. */
+const BARE_MENTION_TEXT =
+  "(The sender @mentioned you without a message. Reply briefly: greet them, or pick up what the thread is about.)";
+
+/**
+ * The key a message is claimed under for deduplication. Slack bots pinned to
+ * an agent share channels with each other and with the main app, and each one
+ * receives — and answers on its own — the same message id.
+ */
+function processedMessageKey(
+  provider: ChatOpsProvider,
+  message: IncomingChatMessage,
+): string {
+  return provider.stateScope
+    ? `${provider.stateScope}:${message.messageId}`
+    : message.messageId;
 }

@@ -365,6 +365,7 @@ export async function handleDelegation(
       isolationKey: context.isolationKey,
       chatOpsBindingId: context.chatOpsBindingId,
       chatOpsThreadId: context.chatOpsThreadId,
+      chatOpsPinnedAgentId: context.chatOpsPinnedAgentId,
       scheduleTriggerRunId: context.scheduleTriggerRunId,
       abortSignal: context.abortSignal,
       // Surface the child's tool calls on the caller's conversation, attributed

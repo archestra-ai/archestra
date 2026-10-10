@@ -39,7 +39,7 @@ for (const viewport of [
       await page.setViewportSize(viewport);
       await goToPage(page, `${family.path}/new`);
       const fromScratch = page.getByRole("button", {
-        name: /start from scratch/i,
+        name: /^New .* agent/,
       });
       const nameField = page.getByRole("textbox", { name: /^Name\b/ });
       await expect(nameField.or(fromScratch)).toBeVisible();

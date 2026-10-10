@@ -308,7 +308,9 @@ export function TeamManagementExternalSyncSection({
             {readOnly
               ? `SSO group identifiers mapped to "${team.name}". Matching users are added to this team when they sign in. Team admins manage the mappings.`
               : `Map extracted SSO group identifiers to "${team.name}". Matching users are added to this team when they sign in.`}{" "}
-            <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoTeamSync)}>
+            <ExternalDocsLink
+              href={getDocsUrl(DocsPage.PlatformSsoTeamSync, "team-sync")}
+            >
               Learn More
             </ExternalDocsLink>
           </p>

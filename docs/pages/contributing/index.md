@@ -1,31 +1,50 @@
 ---
 title: How to Contribute
 sidebarTitle: Contributing
-description: Propose a change or report a bug through a GitHub issue.
+description: Propose changes, report bugs, responsibly disclose vulnerabilities, and develop platform extensions
 order: 9
-sidebarChildren: false
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra takes contributions as human-written text, not code. You describe a bug or a change in a GitHub issue. Maintainers implement accepted changes with coding agents. CI closes pull requests from forks automatically. The guides in this section show how maintainers make common changes.
+Archestra accepts feature proposals and bug reports through GitHub issues. Maintainers implement accepted changes with autonomous coding agents.
+
+- [Developer Quickstart](/docs/contributing/developer-quickstart): Run Archestra from source using Tilt and a local Kubernetes cluster.
+- [Extending Archestra](/docs/contributing/extending-archestra): Add LLM providers, knowledge connectors, or vector search backends.
 
 ## Opening an Issue
 
-Go to [New issue](https://github.com/archestra-ai/archestra/issues/new/choose) and pick a template:
+Open an issue on [GitHub](https://github.com/archestra-ai/archestra/issues/new/choose) using the matching template:
 
-- **Create an issue:** a bug or a change to existing behavior.
-- **Add an LLM provider:** a model provider that Archestra does not support yet.
-- **Add a knowledge connector:** a data source to sync into knowledge bases.
-- **Add an MCP server to the catalog:** a new entry in the MCP Catalog.
-
-For a bug, give the steps you took, what you expected, and what happened instead. Include the Archestra version and whether you run it with Docker or Helm. For a change, describe the problem before the solution you have in mind.
+- **Create an issue:** Report a bug or propose changes to existing behavior. Include reproduction steps, your Archestra version, and whether you run Docker or Helm.
+- **Add an LLM provider:** Request or plan support for a new model provider.
+- **Add a knowledge connector:** Propose a new data source connector for knowledge bases.
+- **Add an MCP server to the catalog:** Submit a new server to the public MCP catalog.
 
 ## Talking to the Team
 
-Before you write a large proposal, post in **#general** in the [Slack community](https://archestra.ai/join-slack). The team may already have plans for the same area.
+Before drafting a large architectural change, discuss your proposal in the **#general** channel of our [Slack community](https://archestra.ai/join-slack).
 
 ## Reporting a Vulnerability
 
-Never report a vulnerability in a public issue. Follow [Security & Bug Bounty](/docs/contributing/security) instead.
+<span id="security"></span>
+
+Report security vulnerabilities privately. Never report security issues in public GitHub issues, pull requests, or Slack channels.
+
+Submit reports through either channel:
+
+- Email **security@archestra.ai**.
+- Open a private security advisory through GitHub's [Security Advisories](https://github.com/archestra-ai/archestra/security/advisories/new). Only repository maintainers can view the advisory.
+
+Please include:
+
+- Affected Archestra version and deployment method (Docker or Helm).
+- Detailed reproduction steps or a minimal proof of concept.
+- Attack impact assessment (unauthorized data access, privilege escalation, or code execution).
+
+## Bug Bounty
+
+<span id="bug-bounty"></span>
+
+Archestra does not operate a formal bug bounty program. The security team may award discretionary bounties for critical, responsibly disclosed vulnerabilities based on severity.

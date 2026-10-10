@@ -27,7 +27,7 @@ Organization roles assigned to teams are separate from [team membership roles](#
 
 You can grant only permissions you already hold. This applies when changing roles, inviting members, assigning roles to teams or service accounts, and changing team membership or hierarchy. Role pickers disable roles beyond your authority.
 
-[SSO role mapping](/docs/admin/identity/sso-role-mapping) is configured by the identity provider and can assign roles independently of the signing-in user's permissions.
+[SSO role mapping](/docs/admin/identity/sso#role-mapping) is configured by the identity provider and can assign roles independently of the signing-in user's permissions.
 
 ### Service Account Creators
 
@@ -140,7 +140,7 @@ A team **member** receives shared access. A team **admin** can manage its member
 
 Members inherit resource grants and organization roles from ancestor teams. Access does not flow from a child to its parent or to siblings. Team administrator roles are not inherited. Deleting a parent moves its direct children to the root.
 
-[SSO Team Sync](/docs/admin/identity/sso-team-sync) creates direct membership in mapped teams. Normal inheritance then applies.
+[SSO Team Sync](/docs/admin/identity/sso#team-sync) creates direct membership in mapped teams. Normal inheritance then applies.
 
 ### Environments
 

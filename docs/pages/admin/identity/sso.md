@@ -1,161 +1,114 @@
 ---
-title: "SSO"
-description: "Sign users in with their existing identity provider via OIDC or SAML"
+title: "Single Sign-On"
+description: "Sign users in with OIDC or SAML, map IdP claims to roles, and sync directory groups to teams"
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
+Sign users in to Archestra with their workplace identity provider (IdP) and manage access permissions directly from your directory.
 
-Single Sign-On (SSO) lets users sign in to Archestra with the identity they already have at work — Microsoft, Okta, Google, GitHub, GitLab, or any OIDC/SAML provider — instead of managing yet another username and password.
+Single Sign-On (SSO) automates onboarding: users authenticate through your IdP, and Archestra provisions accounts and assigns roles and team memberships from directory claims.
 
-> **Enterprise feature** — see [Pricing Model](/docs/get-started/pricing-model).
-
-## How sign-in works
-
-1. Admin configures an Identity Provider in **Settings > Identity Providers**
-2. SSO buttons appear on the Archestra sign-in page for every enabled provider
-3. The user clicks the button and authenticates with their identity provider
-4. Archestra applies role mapping and team sync rules
-5. The user is provisioned (if new) and logged in
+Identity providers are an enterprise feature. See [Pricing Model](/docs/get-started/pricing-model).
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant A as Archestra
-    participant I as Identity Provider
+    participant User
+    participant Archestra
+    participant IdP as Identity Provider
 
-    U->>A: Click "Sign in with {provider}"
-    A->>I: Authorization request (OIDC code flow / SAML AuthnRequest)
-    I->>U: Sign-in prompt
-    U->>I: Credentials + MFA
-    I-->>A: ID token (OIDC) or SAML assertion
-    A->>A: Apply role mapping + team sync
-    A-->>U: Logged in
+    User->>Archestra: Click "Sign in with {provider}"
+    Archestra->>IdP: Auth request (OIDC code flow / SAML AuthnRequest)
+    IdP->>User: Prompt credentials and MFA
+    User->>IdP: Authenticate
+    IdP-->>Archestra: ID token or SAML assertion
+    Archestra->>Archestra: Evaluate role mapping and team sync
+    Archestra-->>User: Issue session
 ```
 
-## Supported protocols
+## Supported Protocols
 
-Archestra speaks two SSO protocols:
+Archestra supports two SSO protocols:
 
-| Protocol | Use it for |
-| --- | --- |
-| **OIDC** (OpenID Connect) | Microsoft Entra ID, Okta, Google, GitHub, GitLab, Auth0, Keycloak, any modern OAuth 2.0 + OIDC provider |
-| **SAML 2.0** | Older enterprise IdPs that don't speak OIDC, or organizations standardized on SAML |
-
-OIDC is the default choice for new setups. SAML is supported for compliance-driven environments.
+- **OIDC (OpenID Connect):** Modern OAuth 2.0 + OIDC for Microsoft Entra ID, Okta, Google, GitHub, GitLab, Auth0, and Keycloak.
+- **SAML 2.0:** Legacy enterprise identity providers that require SAML assertions.
 
 ## Callback URLs
 
-Each protocol uses a different callback URL format. Both contain a `{ProviderId}` segment that is **case-sensitive** and must match the provider ID configured in Archestra exactly (for example `Okta`, `EntraID`, `Google`).
+<span id="saml-assertion-consumer-service-url"></span>
+<span id="oidc"></span>
 
-### OIDC
+Configure the callback URL in your identity provider before enabling SSO in Archestra. The `{ProviderId}` path segment is case-sensitive and must match the Archestra provider ID (`Okta`, `EntraID`, `Google`, `GitHub`, `GitLab`, or your custom ID).
 
-```
-https://your-archestra-domain.com/api/auth/sso/callback/{ProviderId}
-```
+| Protocol | Production Callback URL | Local Development URL |
+| --- | --- | --- |
+| **OIDC** | `https://<domain>/api/auth/sso/callback/{ProviderId}` | `http://localhost:3000/api/auth/sso/callback/{ProviderId}` |
+| **SAML (ACS URL)** | `https://<domain>/api/auth/sso/saml2/sp/acs/{ProviderId}` | `http://localhost:3000/api/auth/sso/saml2/sp/acs/{ProviderId}` |
 
-For local development:
+## Sign-In Boundaries
 
-```
-http://localhost:3000/api/auth/sso/callback/{ProviderId}
-```
+<span id="linked-downstream-idps"></span>
 
-### SAML (Assertion Consumer Service URL)
+Limit which accounts can sign in through an identity provider:
 
-```
-https://your-archestra-domain.com/api/auth/sso/saml2/sp/acs/{ProviderId}
-```
+- **Allowed Email Domains:** Enter comma-separated domains (such as `company.com, subsidiary.com`). Subdomains match automatically (`eng.company.com` matches `company.com`).
+- **Downstream-only providers:** Uncheck **Use for Single Sign-On** to use a provider solely for MCP tool token exchange. The provider remains hidden from the sign-in screen, and its role mapping rules never apply.
 
-For local development:
+## Role Mapping
 
-```
-http://localhost:3000/api/auth/sso/saml2/sp/acs/{ProviderId}
-```
+<span id="role-mapping"></span>
 
-## Allowed Email Domains
+Map directory attributes and groups to Archestra roles at each sign-in using [Handlebars](https://handlebarsjs.com/) templates.
 
-The **Allowed Email Domains** field is an optional Archestra-side sign-in boundary. When configured, users can sign in with that provider only when the email returned by the IdP matches one of the configured domains.
+When a user signs in, Archestra tests the token claims against your mapping rules in order. The first rule whose template returns a non-empty string assigns its roles.
 
-Use comma-separated domains for multi-domain SSO:
+1. In **Settings → Identity Providers**, edit your provider and select **Role Mapping**.
+2. Add one or more **Mapping Rules** with a template and target roles.
+3. Set **Default Roles** for new users who match no rule.
+4. Optional: Turn on **Strict Mode** to block sign-in for users who match no rule.
+5. Optional: Turn on **Skip Role Sync** to evaluate roles only on first sign-in, leaving subsequent role changes to manual administration.
 
-```
-company.com, subsidiary.com
-```
+### Template Helpers
 
-Subdomains are included automatically — `engineering.company.com` matches `company.com`.
+| Helper | Purpose | Example |
+| --- | --- | --- |
+| `includes` | Check if an array contains a value (case-insensitive) | `{{#includes groups "admins"}}true{{/includes}}` |
+| `equals` | String equality check | `{{#equals role "admin"}}true{{/equals}}` |
+| `and` / `or` | Boolean logic | `{{#and dept title}}{{#equals dept "IT"}}true{{/equals}}{{/and}}` |
+| `json` | Parse JSON string or serialize value | `{{#with (json roles)}}{{#each this}}{{#equals this.name "admin"}}true{{/equals}}{{/each}}{{/with}}` |
 
-## User provisioning
+For OIDC providers, ensure the ID token includes the groups claim. Many providers omit groups unless the `groups` scope is requested during authorization.
 
-When a user authenticates via SSO for the first time:
+## Team Sync
 
-1. A new user account is created with the email and name from the identity provider
-2. New users receive the first matching rule's roles, otherwise the provider's default roles or organization defaults
-3. The user is added to the organization
-4. A session is created and the user is logged in
+<span id="team-sync"></span>
 
-Subsequent logins link to the existing account by email. Role mapping rules are evaluated on each login, so role changes in the IdP take effect on next sign-in.
+Automatically add and remove users from Archestra teams based on directory group memberships.
 
-## Downstream providers
+Sync creates direct membership in the mapped team, while preserving members added manually in Archestra.
 
-An identity provider can be configured without being used for login. Disable **Use for Single Sign-On** when the provider is only used to link delegated tokens for downstream MCP tool calls. With this disabled, the provider is hidden from the sign-in page and its role mapping and team sync never run — connecting the provider to fetch a downstream token cannot change a user's Archestra role or team memberships.
+1. In the provider's **Team Sync** tab, verify **Enable Team Sync** is on.
+2. If your IdP uses custom group claim paths, set **Groups Handlebars Template** (e.g. `{{#each groups}}{{this}},{{/each}}`). Otherwise, Archestra checks `groups`, `group`, `memberOf`, `roles`, and `teams` in order.
+3. Go to **Settings → Teams**, click **Edit** on target team, and open **External Group Sync**.
+4. Enter the external group identifier (such as an Entra group object ID or Okta group name) and click **Add**.
 
-This is useful when one provider is the primary Archestra login provider, but a specific MCP tool needs a token from another provider. See [Enterprise-Managed Auth — Linked downstream IdPs](/docs/admin/identity/enterprise-managed-auth#linked-downstream-idps).
+## Enforcing SSO
 
-## Disabling Basic Authentication
+Lock down authentication to your identity provider once SSO sign-in is tested and verified:
 
-Once SSO is working, you can disable the username/password login form to enforce SSO-only authentication. Set [`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=true`](/docs/reference/configuration#ARCHESTRA_AUTH_DISABLE_BASIC_AUTH) and restart the backend. See [Deployment — Environment Variables](/docs/reference/configuration).
+1. **Disable password sign-in:** Set [`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=true`](/docs/reference/configuration#ARCHESTRA_AUTH_DISABLE_BASIC_AUTH) in the backend environment and restart. This hides the email/password form and requires SSO.
+2. **Disable invitations:** Set [`ARCHESTRA_AUTH_DISABLE_INVITATIONS=true`](/docs/reference/configuration#ARCHESTRA_AUTH_DISABLE_INVITATIONS) to disable manual user invite workflows.
 
-> **Important:** verify at least one SSO provider is working before disabling basic auth, or you (and your admins) will be locked out.
-
-Because there is no email provider, password recovery is a shell operation. If you disable basic auth and SSO later breaks, recover a locked-out admin by resetting their password from the backend container, then re-enable basic auth. See [Password Reset](/docs/admin/identity/reset-user-password).
-
-## Disabling User Invitations
-
-For organizations using SSO with auto-provisioning, you can disable the manual invitation system entirely. This hides the invitation UI and blocks invitation API endpoints. Set [`ARCHESTRA_AUTH_DISABLE_INVITATIONS=true`](/docs/reference/configuration#ARCHESTRA_AUTH_DISABLE_INVITATIONS). See [Deployment — Environment Variables](/docs/reference/configuration).
-
-## Per-provider walkthroughs
-
-Each provider has its own end-to-end setup page:
-
-- [Microsoft Entra ID SSO + OBO](/docs/admin/identity/entra-obo)
-- [Okta SSO + Token Exchange](/docs/admin/identity/okta)
-
-For Google, GitHub, GitLab, Generic OIDC, and Generic SAML, see the per-provider sections on the [Identity Providers index](/docs/admin/identity#supported-providers).
+If SSO fails while password authentication is disabled, recover via the command line with [Account Security](/docs/admin/identity/account-security#reset-a-password-from-the-cli).
 
 ## Troubleshooting
 
-### `state_mismatch` error
-
-Cookies are being blocked, or the callback URL doesn't match.
-
-- Third-party cookies must be enabled in the browser
-- The callback URL configured at the IdP must exactly match the Archestra callback URL, including the case-sensitive `{ProviderId}` segment
-
-### `missing_user_info` error
-
-The IdP did not return the required user attributes. For GitHub accounts without a public email, verify an email address and grant `user:email` access.
-
-### `account not linked` error
-
-The IdP returned an email that doesn't match the existing account, or reported the email as unverified. Verify the user signs in with the same email as their existing Archestra account and that the IdP marks the email verified.
-
-### `invalid_dpop_proof` error (Okta)
-
-DPoP is enabled on the Okta application. Disable **Require Demonstrating Proof of Possession (DPoP) header in token requests** in the Okta app's security settings.
-
-### `account_not_found` error (SAML)
-
-The SAML assertion didn't contain the required user attributes. Configure your IdP to send:
-
-- `NameID` in `emailAddress` format
-- `email` attribute
-- `firstName` and `lastName` attributes (recommended)
-
-### `signature_validation_failed` error (SAML)
-
-The SAML response signature couldn't be verified.
-
-- The IdP certificate in Archestra must match the current signing certificate from your IdP
-- If using IdP metadata, re-download it (certificates rotate)
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `state_mismatch` | Cookies blocked or mismatched callback URL | Enable browser third-party cookies and verify the IdP redirect URI matches the case-sensitive `{ProviderId}`. |
+| `account not linked` | Mismatched or unverified email | Confirm the user signs in with the email address registered on Archestra, and verify the email in the IdP. |
+| `account_not_found` (SAML) | Missing user attributes | Configure your SAML IdP to include `NameID` in `emailAddress` format, plus `email`, `firstName`, and `lastName`. |
+| `signature_validation_failed` | Expired or rotated SAML certificate | Re-download your IdP SAML metadata and update the certificate in Archestra. |
+| User missing team membership | Group claim omitted or identifier typo | Confirm the IdP sends the group claim in the ID token and that the group name in **Settings → Teams** matches verbatim. |

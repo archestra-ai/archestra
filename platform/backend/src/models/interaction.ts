@@ -2135,7 +2135,6 @@ class InteractionModel {
       let claudeCodeTitle: string | null | undefined;
 
       for (const interaction of windowRows) {
-        const requestStr = JSON.stringify(interaction.request);
         const isOpenCodeSideTurn =
           interaction.sessionSource === "opencode_session" &&
           computeRequestType(
@@ -2145,10 +2144,7 @@ class InteractionModel {
           ) === "subagent";
 
         // Check for title generation request (Claude Code)
-        if (
-          requestStr.includes("Please write a 5-10 word title") &&
-          claudeCodeTitle === undefined
-        ) {
+        if (interaction.isTitleGeneration && claudeCodeTitle === undefined) {
           // Extract title from response
           const response = interaction.response as {
             content?: Array<{ text?: string }>;
@@ -2161,8 +2157,8 @@ class InteractionModel {
         if (
           !lastMainInteraction &&
           !isOpenCodeSideTurn &&
-          !requestStr.includes("prompt suggestion generator") &&
-          !requestStr.includes("Please write a 5-10 word title")
+          !interaction.isPromptSuggestion &&
+          !interaction.isTitleGeneration
         ) {
           // Check if request has valid content - support both OpenAI/Anthropic and Gemini formats
           // We accept any interaction that has a valid request structure, not just text content.
@@ -2322,7 +2318,7 @@ class InteractionModel {
       oldest > 0
         ? sql`
         UNION ALL
-        (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
                 encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
@@ -2333,7 +2329,7 @@ class InteractionModel {
       uuidKeys.length > 0
         ? sql`
       UNION ALL
-      SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
+      SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
              encrypted_chat_conversation_id
       FROM interactions
       WHERE id IN (${sql.join(
@@ -2351,7 +2347,6 @@ class InteractionModel {
       source: InteractionSource | null;
       thread_id: string | null;
       request: unknown;
-      response: unknown;
       type: string;
       // Raw SQL bypasses Drizzle's column mapping, so timestamps arrive as
       // whatever the driver hands back — a Date on one, a string on another.
@@ -2368,11 +2363,11 @@ class InteractionModel {
       -- insertion order (the same tiebreak the write path already uses to
       -- resolve a delta parent). Final ordering is applied in JS, since the
       -- per-key UNION below has no single ordering to inherit.
-      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.response, t.type,
+      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.type,
              t.created_at, t.encrypted_chat_conversation_id
       FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
       CROSS JOIN LATERAL (
-        (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
                 encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
@@ -2397,6 +2392,7 @@ class InteractionModel {
     // overlap, and the caller's scan must not see the same row twice.
     const byId = new Map<string, SessionWindowRow>();
     for (const row of interactionsResult.rows) {
+      const requestText = JSON.stringify(row.request);
       byId.set(row.id, {
         id: row.id,
         sessionId: row.session_id,
@@ -2404,10 +2400,41 @@ class InteractionModel {
         source: row.source,
         threadId: row.thread_id,
         request: row.request,
-        response: row.response,
+        response: undefined,
+        isTitleGeneration: requestText.includes(
+          "Please write a 5-10 word title",
+        ),
+        isPromptSuggestion: requestText.includes("prompt suggestion generator"),
         type: row.type,
         createdAt: new Date(row.created_at).getTime(),
       });
+    }
+
+    // Ordinary previews only use the request. Load response bodies in one
+    // batch for the sampled title-generation turns that actually need them;
+    // full assistant responses can otherwise dwarf the session-list reads.
+    const titleIds = [...byId.values()]
+      .filter((row) => row.isTitleGeneration)
+      .map((row) => row.id);
+    if (titleIds.length > 0) {
+      const titles = await db
+        .select({
+          id: schema.interactionsTable.id,
+          response: schema.interactionsTable.response,
+          encryptedChatConversationId:
+            schema.interactionsTable.encryptedChatConversationId,
+        })
+        .from(schema.interactionsTable)
+        .where(inArray(schema.interactionsTable.id, titleIds));
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      for (const title of titles) {
+        readInteractionRow(title);
+        const row = byId.get(title.id);
+        if (row) row.response = title.response;
+      }
+      // SPDX-SnippetEnd
     }
 
     return [...byId.values()].sort(
@@ -2490,6 +2517,8 @@ type SessionWindowRow = {
   threadId: string | null;
   request: unknown;
   response: unknown;
+  isTitleGeneration: boolean;
+  isPromptSuggestion: boolean;
   type: string;
   /** Epoch milliseconds — see the driver note in fetchSessionWindowRows. */
   createdAt: number;

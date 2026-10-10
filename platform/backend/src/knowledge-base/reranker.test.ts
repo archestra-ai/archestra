@@ -71,7 +71,7 @@ function serveScores(content: string | { fail: true }) {
   );
 }
 
-/** Reranker interactions are recorded fire-and-forget, so poll for them. */
+/** Wait for the background write before the next test resets the database. */
 async function waitForRerankerInteractions() {
   const read = () =>
     db
@@ -79,7 +79,10 @@ async function waitForRerankerInteractions() {
       .from(schema.interactionsTable)
       .where(eq(schema.interactionsTable.source, "knowledge:reranker"));
 
-  await vi.waitFor(async () => expect(await read()).toHaveLength(1));
+  // Allow the real database write to finish when CI workers are busy.
+  await vi.waitFor(async () => expect(await read()).toHaveLength(1), {
+    timeout: 5_000,
+  });
   return read();
 }
 
@@ -140,6 +143,7 @@ describe("rerank", () => {
     });
 
     expect(result.map((r) => r.id)).toEqual(["b", "c", "a"]);
+    await waitForRerankerInteractions();
   });
 
   it("reads scores out of a reply wrapped in reasoning tokens and a markdown fence", async () => {
@@ -168,6 +172,7 @@ describe("rerank", () => {
     });
 
     expect(result.map((r) => r.id)).toEqual(["b", "a"]);
+    await waitForRerankerInteractions();
   });
 
   it("filters out chunks below minimum relevance score", async () => {
@@ -195,6 +200,7 @@ describe("rerank", () => {
     });
 
     expect(result.map((r) => r.id)).toEqual(["b"]);
+    await waitForRerankerInteractions();
   });
 
   it("returns original order on LLM error (graceful degradation)", async () => {

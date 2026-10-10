@@ -684,16 +684,23 @@ describe("Agent Runtime routes", () => {
 
   test("does not start a run inside a project the caller cannot read", async ({
     makeUser,
+    makeMember,
   }) => {
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId);
     await ResourcePermissions.updatePolicy({
       organizationId,
       userId: user.id,
       resource: "project",
       scope: "*",
       revision: 1,
-      grants: [],
+      grants: [
+        {
+          subject: { type: "user", id: otherUser.id },
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
+      ],
     });
-    const otherUser = await makeUser();
     const project = await projectService.create({
       organizationId,
       userId: otherUser.id,

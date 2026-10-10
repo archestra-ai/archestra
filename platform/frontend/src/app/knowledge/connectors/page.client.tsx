@@ -32,8 +32,15 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { ResourceDeletedStatusFilter } from "@/components/resource-scope-filter";
+import {
+  ResourceDeletedStatusFilter,
+  useScopeFilterParams,
+} from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -125,6 +132,11 @@ function ConnectorsList() {
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
 
+  // The trash lists by deletion, not by access, so the filters stay off it.
+  const { hasActiveScopeFilters, access, sharedWith, owner } =
+    useScopeFilterParams();
+  const accessFilters = isDeletedView ? {} : { access, sharedWith, owner };
+
   const pageIndex = Number(pageFromUrl || "1") - 1;
   const pageSize = Number(pageSizeFromUrl || DEFAULT_TABLE_LIMIT);
   const offset = pageIndex * pageSize;
@@ -147,6 +159,7 @@ function ConnectorsList() {
             archestraApiTypes.GetConnectorsData["query"]
           >["connectorType"]),
     status: isDeletedView ? "deleted" : undefined,
+    ...accessFilters,
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const editIdFromUrl = searchParams.get("edit");
@@ -185,7 +198,7 @@ function ConnectorsList() {
 
   // Changing a filter invalidates an escalation rather than silently
   // re-pointing "all N" at a different N.
-  const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}|${labelsFilter ?? ""}`;
+  const filterSignature = `${search}|${connectorTypeFilter}|${isDeletedView}|${labelsFilter ?? ""}|${JSON.stringify(accessFilters)}`;
   const allMatchingActive = selectAllMatchingFor === filterSignature;
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
@@ -215,6 +228,7 @@ function ConnectorsList() {
               >["connectorType"]),
         status: isDeletedView ? "deleted" : undefined,
         labels: labelsFilter,
+        ...accessFilters,
       },
       { enabled: allMatchingActive },
     );
@@ -235,7 +249,8 @@ function ConnectorsList() {
     !!search ||
     connectorTypeFilter !== "all" ||
     isDeletedView ||
-    Boolean(labelsFilter);
+    Boolean(labelsFilter) ||
+    hasActiveScopeFilters;
 
   const handlePaginationChange = useCallback(
     (newPagination: { pageIndex: number; pageSize: number }) => {
@@ -263,7 +278,13 @@ function ConnectorsList() {
 
   const clearFilters = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
-    for (const key of ["search", "connectorType", "status", "labels"]) {
+    for (const key of [
+      "search",
+      "connectorType",
+      "status",
+      "labels",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
+    ]) {
       params.delete(key);
     }
     params.set("page", "1");
@@ -436,6 +457,12 @@ function ConnectorsList() {
                 />
               }
             >
+              {!isDeletedView && (
+                <ResourceAccessFilter
+                  resource="knowledgeConnector"
+                  noun="connectors"
+                />
+              )}
               <Select
                 value={connectorTypeFilter}
                 onValueChange={handleConnectorTypeChange}

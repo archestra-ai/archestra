@@ -37,7 +37,9 @@ import CreatedByModel from "./created-by";
 import { VirtualApiKeyLabelModel } from "./entity-labels";
 import LimitModel from "./limit";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessFilter,
+} from "./resource-permission-subject";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -833,6 +835,8 @@ class VirtualApiKeyModel {
     keyType?: VirtualApiKeyType;
     scope?: ResourceVisibilityScope;
     labels?: Record<string, string[]>;
+    /** The list's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter;
   }): Promise<PaginatedResult<VirtualApiKeyWithParentInfo>> {
     const {
       organizationId,
@@ -843,6 +847,7 @@ class VirtualApiKeyModel {
       keyType,
       scope,
       labels,
+      access,
     } = params;
 
     // Resolved before the page query so a filter that matches nothing short
@@ -892,6 +897,21 @@ class VirtualApiKeyModel {
         inArray(schema.virtualApiKeysTable.id, labelFilteredIds),
       );
     }
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const accessCondition =
+      access &&
+      ResourcePermissionPolicyModel.accessRelationCondition({
+        ...access,
+        organizationId,
+        resource: "llmVirtualKey",
+        scopeColumn: schema.virtualApiKeysTable.id,
+        ownerColumn: schema.virtualApiKeysTable.authorId,
+      });
+    if (accessCondition) whereConditions.push(accessCondition);
+    // SPDX-SnippetEnd
 
     const whereClause = and(...whereConditions);
 

@@ -4,6 +4,7 @@ import {
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   legacyMcpClientServerNames,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  OPENCODE_PRIMARY_PROVIDERS,
   providerDisplayNames,
   RouteId,
   resolveMcpClientServerName,
@@ -40,7 +41,13 @@ import {
   renderSetupScript,
   type SetupScriptContext,
 } from "@/services/agent-connection-setup";
+import {
+  ensurePrimaryProviderKey,
+  getVirtualKeyProviderCatalog,
+} from "@/services/agent-connection-setup/credentials/primary-providers";
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
+import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
+import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
 import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
 import {
   type ConnectionCreditWarning,
@@ -70,6 +77,7 @@ import {
 } from "@/types";
 import {
   CONNECTION_HEALTH_PATH,
+  CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   SKILL_MARKETPLACE_PREFIX,
   SKILL_MARKETPLACE_STATIC_PATH,
@@ -240,6 +248,40 @@ const ConnectionHealthResponseSchema = z.object({
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
+    CONNECTION_INSTRUCTIONS_PATH,
+    {
+      schema: {
+        operationId: RouteId.GetConnectionInstructions,
+        description:
+          "Read current managed instructions with an installation-scoped read-only credential. Live membership and gateway access are rechecked.",
+        tags: ["Connection Setups"],
+        response: constructResponseSchema(
+          z.object({
+            instructions: z.string().max(20000).nullable(),
+            version: z.string(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (
+        await isRateLimited(
+          `${CacheKey.ConnectionHealthRateLimit}-instructions-${connectionHealthRequesterKey(request)}`,
+          { windowMs: 60_000, maxRequests: 60 },
+        )
+      )
+        throw new ApiError(429, "Too many requests");
+      const authorization = request.headers.authorization;
+      if (!authorization?.startsWith("Bearer "))
+        throw new ApiError(401, "Instruction credential required");
+      const result = await getConnectionManagedInstructions(
+        authorization.slice(7),
+      );
+      return reply.header("Cache-Control", "no-store").send(result);
+    },
+  );
+
+  fastify.get(
     CONNECTION_HEALTH_PATH,
     {
       schema: {
@@ -320,18 +362,31 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         clientId,
         platform,
         mcpGatewayId,
-        provider,
+        provider: requestedProvider,
         proxyAuth,
         attributePassthrough,
         model,
         skills,
         pluginIds: requestedPluginIds,
       } = body;
+      let provider = requestedProvider;
+      const allPrimary = proxyAuth === "primary-providers";
+      if (allPrimary && clientId !== "opencode") {
+        throw new ApiError(
+          400,
+          "All primary providers is only supported for OpenCode setups",
+        );
+      }
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
 
       if (
+        !allPrimary &&
         provider &&
-        !CLIENT_SUPPORTED_PROVIDERS[clientId].includes(provider)
+        !(
+          clientId === "opencode" && proxyAuth === "virtual-key"
+            ? OPENCODE_PRIMARY_PROVIDERS
+            : CLIENT_SUPPORTED_PROVIDERS[clientId]
+        ).includes(provider)
       ) {
         throw new ApiError(
           400,
@@ -390,12 +445,12 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // The caller no longer picks a proxy: `provider` alone opts the LLM
       // Proxy in, and the org's single proxy is resolved server-side.
       let llmProxyId: string | null = null;
-      if (provider) {
+      if (provider || allPrimary) {
         assertConnectLlmProxyEnabled(organization);
         llmProxyId = (
           await requireLlmProxyAccess({ organizationId, userId: user.id })
         ).id;
-        if (proxyAuth === "virtual-key") {
+        if (proxyAuth === "virtual-key" || allPrimary) {
           // Minting a virtual key requires the same permission as the
           // dedicated create endpoint (RouteId.CreateVirtualApiKey).
           const canCreateVirtualKey = await userHasPermission(
@@ -413,16 +468,27 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // The standard key is personal-scoped (authorId = the acting user), so
           // it carries the user's identity on its own — the proxy attributes the
           // request to that owner. No passthrough key is needed in this mode.
-          ({ virtualApiKeyId, creditWarning } =
-            await ensureConnectionVirtualKey({
+          if (allPrimary) {
+            ({ virtualApiKeyId, provider } = await ensurePrimaryProviderKey({
+              keyName: "OpenCode primary providers",
+              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
               organizationId,
               userId: user.id,
-              userEmail: user.email,
               userTeamIds: await TeamModel.getUserTeamIds(user.id),
-              provider,
-              preferredProviderKeyId:
-                organization.connectionDefaultProviderKeys?.[provider] ?? null,
             }));
+          } else if (provider) {
+            ({ virtualApiKeyId, creditWarning } =
+              await ensureConnectionVirtualKey({
+                organizationId,
+                userId: user.id,
+                userEmail: user.email,
+                userTeamIds: await TeamModel.getUserTeamIds(user.id),
+                provider,
+                preferredProviderKeyId:
+                  organization.connectionDefaultProviderKeys?.[provider] ??
+                  null,
+              }));
+          }
         } else if (
           // provider-key mode is passthrough: the script only rewires the base
           // URL and the user keeps their own provider credentials. We also
@@ -1011,7 +1077,10 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     let virtualKeyValue: string | null = null;
     let virtualKeyName: string | null = null;
     let passthroughVirtualKey: string | null = null;
-    if (setup.proxyAuth === "virtual-key") {
+    if (
+      setup.proxyAuth === "virtual-key" ||
+      setup.proxyAuth === "primary-providers"
+    ) {
       if (!setup.virtualApiKeyId) throw GONE();
       const virtualKey = await VirtualApiKeyModel.findById(
         setup.virtualApiKeyId,
@@ -1053,6 +1122,20 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       ? `${proxyApiPrefix}/connection-setup/${setupProxyContext}`
       : proxyApiPrefix;
     proxy = {
+      primaryProviders:
+        setup.clientId === "opencode" &&
+        setup.proxyAuth !== "provider-key" &&
+        setup.virtualApiKeyId
+          ? await getVirtualKeyProviderCatalog({
+              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              provider:
+                setup.proxyAuth === "virtual-key" ? setup.provider : undefined,
+              organizationId: setup.organizationId,
+              userId: setup.userId,
+              userTeamIds: await TeamModel.getUserTeamIds(setup.userId),
+              virtualApiKeyId: setup.virtualApiKeyId,
+            })
+          : undefined,
       authMode: setup.proxyAuth,
       provider: setup.provider,
       providerLabel: providerDisplayNames[setup.provider] ?? setup.provider,
@@ -1174,6 +1257,19 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       toolPrefix: archestraMcpBranding.toolPrefix,
       mcp,
       proxy,
+      managedInstructionsSource:
+        mcp &&
+        ["claude-code", "codex", "copilot-cli", "opencode"].includes(
+          setup.clientId,
+        )
+          ? {
+              url: `${proxyBaseUrlToOrigin(setup.baseUrl)}${CONNECTION_INSTRUCTIONS_PATH}`,
+              token: issueConnectionInstructionsToken({
+                setupId: setup.id,
+                secret: config.auth.secret ?? "",
+              }),
+            }
+          : null,
       runtimeHandoffInstructions:
         mcp && organization.connectionRuntimeHandoffEnabled
           ? (organization.connectionRuntimeHandoffInstructions ??

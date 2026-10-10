@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, type SupportedProvider } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 vi.mock("next/navigation");
 
@@ -1657,41 +1658,140 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it("leaves OpenCode provider and model selection unchanged", async () => {
-      renderPanel({ client: findClient("opencode") });
-
-      expect(await screen.findByText(COMMAND)).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("connect-change-model"),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.getByTestId("connect-change-proxy").closest("li"),
-      ).toHaveTextContent(
-        "Route supported OpenCode providers through the LLM Proxy using their existing local credentials",
+    it("sends the selected OpenCode routing mode without retaining an individual provider in all-provider mode", async () => {
+      const user = userEvent.setup();
+      availableKeysMock.mockReturnValue({
+        data: [
+          { provider: "anthropic", isPrimary: true },
+          { provider: "bedrock", isPrimary: false },
+        ],
+      });
+      function OpenCodePanel() {
+        const [provider, setProvider] = useState<SupportedProvider | null>(
+          null,
+        );
+        return (
+          <ConnectCommandPanel
+            {...renderPanelProps({
+              client: findClient("opencode"),
+              urlProvider: provider,
+              onProviderSelect: setProvider,
+            })}
+          />
+        );
+      }
+      render(<OpenCodePanel />, { wrapper: queryWrapper() });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            proxyAuth: "primary-providers",
+            provider: undefined,
+          }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Model provider" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(screen.getByRole("option", { name: "AWS Bedrock" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            proxyAuth: "virtual-key",
+            provider: "bedrock",
+          }),
+        ),
+      );
+      await user.click(screen.getByRole("tab", { name: "Your provider key" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ proxyAuth: "provider-key" }),
+        ),
+      );
+      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Model provider" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: "All model providers" }),
       );
       await waitFor(() =>
-        expect(createSetupMock).toHaveBeenCalledWith(
+        expect(createSetupMock).toHaveBeenLastCalledWith(
           expect.objectContaining({
-            clientId: "opencode",
-            proxyAuth: "provider-key",
-            model: undefined,
+            proxyAuth: "primary-providers",
+            provider: undefined,
           }),
         ),
       );
     });
 
-    it("offers the org's synced models for the provider as a dropdown", async () => {
+    it("does not offer unconfigured or expired OpenCode provider credentials", async () => {
+      const user = userEvent.setup();
+      availableKeysMock.mockReturnValue({
+        data: [
+          { provider: "anthropic", isPrimary: true },
+          { provider: "openai", requiresReauthentication: true },
+          { provider: "vllm", baseUrl: "  " },
+          {
+            provider: "microsoft-365-copilot",
+            requiresReauthentication: false,
+          },
+        ],
+      });
+      renderPanel({ client: findClient("opencode") });
+      await screen.findByText(COMMAND);
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Model provider" }),
+        { key: "ArrowDown" },
+      );
+      expect(screen.getByRole("option", { name: "Anthropic" })).toBeVisible();
+      expect(
+        screen.getByRole("option", { name: "Microsoft 365 Copilot" }),
+      ).toBeVisible();
+      for (const name of ["GitHub Copilot", "OpenAI", "OpenAI-compatible"]) {
+        expect(screen.queryByRole("option", { name })).not.toBeInTheDocument();
+      }
+    });
+
+    it("filters synced models and regenerates setup with the keyboard selection", async () => {
       modelsByProviderMock.mockReturnValue({
-        openai: [{ id: "gpt-5.5" }, { id: "o4-mini" }],
+        openai: [
+          ...Array.from({ length: 100 }, (_, index) => ({
+            id: `synced-model-${index}`,
+          })),
+          { id: "o4-mini" },
+        ],
       });
       const user = userEvent.setup();
       renderPanel({ client: findClient("copilot-cli") });
       await screen.findByText(COMMAND);
 
       await user.click(screen.getByTestId("connect-change-model"));
-      // a Select (not the free-text input) backs multi-option providers
-      expect(screen.queryByPlaceholderText("Model id")).not.toBeInTheDocument();
-      expect(screen.getByRole("combobox")).toBeInTheDocument();
+      const picker = screen.getByRole("combobox", { name: "Model" });
+      await user.click(picker);
+      // Keep the default reachable even when it isn't in the synced catalog.
+      expect(screen.getByRole("option", { name: "gpt-5.5" })).toBeVisible();
+      const search = screen.getByPlaceholderText("Search models...");
+      await user.type(search, "missing-model");
+      expect(screen.getByText("No models found.")).toBeVisible();
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+
+      await user.clear(search);
+      await user.type(search, "O4-MINI");
+      expect(screen.getAllByRole("option")).toHaveLength(1);
+      expect(screen.getByRole("option", { name: "o4-mini" })).toBeVisible();
+      await user.keyboard("{ArrowDown}{Enter}");
+
+      expect(picker).toHaveTextContent("o4-mini");
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "o4-mini" }),
+        ),
+      );
     });
 
     it("shows no model row for clients without provider env wiring", async () => {

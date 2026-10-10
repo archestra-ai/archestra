@@ -2,6 +2,8 @@ import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { CONNECTION_SETUP_MAX_SKILLS, type User } from "@/types";
 
@@ -56,6 +58,89 @@ describe("POST /api/connection-setups", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json().error.message).toContain("at least one");
+  });
+
+  test("OpenCode primary routing provisions all accessible primaries without a selected provider", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret();
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      isPrimary: true,
+    });
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "vllm",
+      isPrimary: true,
+      baseUrl: "https://models.example/v1",
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "primary-providers",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup?.proxyAuth).toBe("primary-providers");
+    expect(setup?.virtualApiKeyId).toBeTruthy();
+    const mappings = await VirtualApiKeyModel.getProviderApiKeys(
+      setup?.virtualApiKeyId as string,
+    );
+    expect(mappings.map((key) => key.provider).sort()).toEqual([
+      "anthropic",
+      "vllm",
+    ]);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${rawToken}`,
+    });
+    expect(script.statusCode).toBe(200);
+    expect(script.body).toContain("archestra-anthropic");
+    expect(script.body).toContain("archestra-vllm");
+    expect(script.body).toContain("opencode-primary.key");
+  });
+
+  test("primary routing is OpenCode-only and requires virtual-key creation permission", async () => {
+    const request = {
+      baseUrl: "http://localhost:9000/v1",
+      proxyAuth: "primary-providers",
+    };
+    for (const clientId of [
+      "claude-code",
+      "claude-desktop",
+      "codex",
+      "copilot-cli",
+      "cursor",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: { ...request, clientId },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "only supported for OpenCode",
+      );
+    }
+    mockUserHasPermission.mockImplementation(
+      async (_user, _org, resource) => resource !== "llmVirtualKey",
+    );
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/connection-setups",
+          payload: { ...request, clientId: "opencode" },
+        })
+      ).statusCode,
+    ).toBe(403);
   });
 
   test("provider alone opts the LLM Proxy in; llmProxyId alone selects nothing", async () => {
@@ -584,6 +669,83 @@ describe("POST /api/connection-setups", () => {
     });
     expect(wrongClient.statusCode).toBe(400);
     expect(wrongClient.json().error.message).toContain("copilot-cli");
+  });
+
+  test.for([
+    "bedrock",
+    "vllm",
+    "azure",
+  ] as const)("OpenCode virtual key installs %s models without leaking other mappings", async (provider, {
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const secret = await makeSecret();
+    await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    // Reuse a personal connection key that already has another provider.
+    const previous = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "codex",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "openai",
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(previous.statusCode).toBe(200);
+    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider,
+      isPrimary: false,
+      baseUrl: "https://models.example/v1",
+    });
+    const model = await ModelModel.create({
+      provider,
+      modelId: "example/coder",
+      externalId: `${provider}-coder`,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        provider,
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(
+      await VirtualApiKeyModel.findById(setup?.virtualApiKeyId as string),
+    ).toMatchObject({
+      authorId: user.id,
+      scope: "personal",
+      keyType: "standard",
+    });
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(
+        setup?.virtualApiKeyId as string,
+      ),
+    ).toHaveLength(2);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${rawToken}`,
+    });
+    expect(script.statusCode).toBe(200);
+    expect(script.body).toContain(`"archestra-${provider}"`);
+    expect(script.body).toContain(`"wireId":"${provider}:example/coder"`);
+    expect(script.body).not.toContain('"archestra-openai"');
+    expect(script.body).toContain("opencode-primary-state.json");
   });
 
   test("rejects OpenCode providers without a verified passthrough wire", async ({

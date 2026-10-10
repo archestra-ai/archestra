@@ -237,6 +237,7 @@ describe("OauthClientsPage", () => {
             revision: 1,
             grants: [],
             inheritedGrants: [],
+            actorSubjects: [],
             effectiveActions: ["read", "manage-permissions"],
           });
         },

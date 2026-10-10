@@ -21,10 +21,21 @@ export interface SetupScriptMcpSection {
 }
 
 export interface SetupScriptProxySection {
+  /** Resolved, authorized catalog for OpenCode's virtual-key setup (all primary or one provider). */
+  primaryProviders?: Array<{
+    provider: SupportedProvider;
+    name: string;
+    models: Array<{
+      id: string;
+      name: string;
+      context: number | null;
+      output: number | null;
+    }>;
+  }>;
   /**
    * "provider-key" (passthrough): only the base URL is rewired and the user
    * keeps their own provider credentials — virtualKey/virtualKeyName are
-   * null. "virtual-key": the auto-provisioned key below is injected.
+   * null. "virtual-key" and "primary-providers": the auto-provisioned key is injected.
    */
   authMode: ConnectionSetupProxyAuth;
   provider: SupportedProvider;
@@ -35,7 +46,7 @@ export interface SetupScriptProxySection {
   url: string;
   /** Slug of the LLM proxy name — provider id in client configs. */
   proxyName: string;
-  /** Raw virtual key value injected at render time (virtual-key mode only). */
+  /** Raw virtual key value injected at render time (virtual-key and primary-providers modes). */
   virtualKey: string | null;
   /** Display name of the virtual key, for revocation guidance. */
   virtualKeyName: string | null;
@@ -92,8 +103,9 @@ export interface SetupScriptContext {
   mcp: SetupScriptMcpSection | null;
   proxy: SetupScriptProxySection | null;
   skills: SetupScriptSkillsSection | null;
-  /** Copied locally by setup, never fetched from the platform at launch. */
+  /** Initial local copy; wrappers refresh it before launching an agent. */
   runtimeHandoffInstructions?: string | null;
+  managedInstructionsSource?: { url: string; token: string } | null;
 }
 
 /** One script language's renderer for an agent. */
@@ -120,6 +132,8 @@ export interface AgentEnding {
   launch?: string[] | null;
   /** Anything else the person still has to do or should know. */
   notes?: string[];
+  /** Read-only Node script that prints local optional settings before next steps. */
+  optionalInstructions?: string;
 }
 
 export interface SetupEndingPart {
@@ -144,6 +158,8 @@ export interface SetupEnding {
   /** `text` is `command` quoted for the person's shell. */
   launch: { command: string[]; text: string } | null;
   notes: string[];
+  /** Read-only Node script; credentials are read locally, never embedded here. */
+  optionalInstructions?: string;
 }
 
 /**

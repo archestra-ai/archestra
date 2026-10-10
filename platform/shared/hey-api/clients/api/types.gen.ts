@@ -12928,6 +12928,9 @@ export type TransferRemoteAgentOwnershipErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -13013,6 +13016,9 @@ export type GetAgentA2aDelegationsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -13105,6 +13111,9 @@ export type SyncAgentA2aDelegationsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -13213,6 +13222,9 @@ export type InspectA2aRemoteAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -13315,6 +13327,9 @@ export type ListA2aRemoteAgentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -13488,6 +13503,9 @@ export type CreateA2aRemoteAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -13619,6 +13637,9 @@ export type DeleteA2aRemoteAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -13704,6 +13725,9 @@ export type GetA2aRemoteAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -13861,6 +13885,9 @@ export type UpdateA2aRemoteAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -13994,6 +14021,9 @@ export type ListA2aRemoteAgentRunsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -14375,6 +14405,9 @@ export type GetAgentCatalogErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -14721,6 +14754,9 @@ export type GetAgentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -15122,6 +15158,9 @@ export type CreateAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -15332,6 +15371,9 @@ export type UnpinAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -15417,6 +15459,9 @@ export type PinAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -15533,6 +15578,9 @@ export type GetAllAgentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -15741,6 +15789,9 @@ export type GetAgentCredentialReadinessErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -15829,6 +15880,9 @@ export type GetDefaultMcpGatewayErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -16115,6 +16169,9 @@ export type ImportAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -16332,6 +16389,9 @@ export type DeleteAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -16417,6 +16477,9 @@ export type GetAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -16709,6 +16772,9 @@ export type UpdateAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -16919,6 +16985,9 @@ export type GetAgentDefaultSuggestedPromptsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -17008,6 +17077,9 @@ export type GetAgentVersionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -17108,6 +17180,9 @@ export type GetAgentVersionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -17270,6 +17345,9 @@ export type RestoreAgentVersionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -17503,6 +17581,9 @@ export type CloneAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -17713,6 +17794,9 @@ export type ExportAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -17876,6 +17960,9 @@ export type GetAgentMcpToolPreviewErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -17978,6 +18065,9 @@ export type GetAgentToolExclusionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -18071,6 +18161,9 @@ export type UpdateAgentToolExclusionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -18159,6 +18252,9 @@ export type GetAgentSubagentExclusionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -18252,6 +18348,9 @@ export type UpdateAgentSubagentExclusionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -18340,6 +18439,9 @@ export type GetAgentKnowledgeSourceExclusionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -18433,6 +18535,9 @@ export type UpdateAgentKnowledgeSourceExclusionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -18538,6 +18643,9 @@ export type GetAgentActivationSkillsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -18695,6 +18803,9 @@ export type GetAgentActivationSkillPolicyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -19030,6 +19141,9 @@ export type PatchAgentActivationSkillPolicyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -19318,6 +19432,9 @@ export type GetAgentSkillsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -19431,6 +19548,9 @@ export type UpdateAgentSkillsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -19535,6 +19655,9 @@ export type GetAgentSkillExclusionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -19640,6 +19763,9 @@ export type UpdateAgentSkillExclusionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -19742,6 +19868,9 @@ export type TransferAgentOwnershipErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -19830,6 +19959,9 @@ export type BulkDeleteAgentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -19924,6 +20056,9 @@ export type RestoreAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20134,6 +20269,9 @@ export type PermanentlyDeleteAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20217,6 +20355,9 @@ export type GetLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20303,6 +20444,9 @@ export type GetLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20384,6 +20528,9 @@ export type GetMemberDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20469,6 +20616,9 @@ export type UpdateMemberDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20552,6 +20702,9 @@ export type GetMemberDefaultModelErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20639,6 +20792,9 @@ export type UpdateMemberDefaultModelErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20727,6 +20883,9 @@ export type ReadAgentWorkspaceFileErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20819,6 +20978,9 @@ export type WriteAgentWorkspaceFileErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20907,6 +21069,9 @@ export type DeleteAgentWorkspaceErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -20992,6 +21157,9 @@ export type GetAgentRuntimePreflightErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21091,6 +21259,9 @@ export type DisconnectClaudeCodeAccountErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21180,6 +21351,9 @@ export type GetClaudeCodeAccountErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21271,6 +21445,9 @@ export type StartClaudeCodeSignInErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21363,6 +21540,9 @@ export type CompleteClaudeCodeSignInErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21452,6 +21632,9 @@ export type GetClaudeCodeModelsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21542,6 +21725,9 @@ export type DeleteAgentRuntimeCredentialErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21630,6 +21816,9 @@ export type SetAgentRuntimeCredentialErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21715,6 +21904,9 @@ export type GetAgentRunsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21839,6 +22031,9 @@ export type StartAgentRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -21932,6 +22127,9 @@ export type GetMyAgentRunsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22058,6 +22256,9 @@ export type DeleteAgentRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22143,6 +22344,9 @@ export type GetMyAgentRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22280,6 +22484,9 @@ export type UpdateAgentRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22395,6 +22602,9 @@ export type GetAgentRunOpenappaReviewErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22488,6 +22698,9 @@ export type DecideAgentRunOpenappaReviewErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22582,6 +22795,9 @@ export type ContinueAgentRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22674,6 +22890,9 @@ export type CancelAgentRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22769,6 +22988,9 @@ export type StartAgentWorkspaceTransferErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22876,6 +23098,9 @@ export type UploadAgentWorkspaceTransferErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -22981,6 +23206,9 @@ export type GetAllAgentToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23108,6 +23336,9 @@ export type UnassignToolFromAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23198,6 +23429,9 @@ export type AssignToolToAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23289,6 +23523,9 @@ export type BulkAssignToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23396,6 +23633,9 @@ export type BulkUpdateAgentToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23501,6 +23741,9 @@ export type GetAgentToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23620,6 +23863,9 @@ export type UpdateAgentToolErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23711,6 +23957,9 @@ export type GetAgentDelegationsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23801,6 +24050,9 @@ export type SyncAgentDelegationsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23888,6 +24140,9 @@ export type DeleteAgentDelegationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -23971,6 +24226,9 @@ export type GetAllDelegationConnectionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24081,6 +24339,9 @@ export type AnthropicMessagesWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24180,6 +24441,9 @@ export type AnthropicMessagesWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24266,6 +24530,9 @@ export type AnthropicListModelsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24362,6 +24629,9 @@ export type AnthropicListModelsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24451,6 +24721,9 @@ export type GetApiKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24552,6 +24825,9 @@ export type CreateApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24653,6 +24929,9 @@ export type DeleteApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24738,6 +25017,9 @@ export type GetApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24841,6 +25123,9 @@ export type BulkDeleteApiKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -24933,6 +25218,9 @@ export type AppGalleryDeviceAuthStartErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -25022,6 +25310,9 @@ export type AppGalleryDeviceAuthPollErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -25113,6 +25404,9 @@ export type EnhanceAppRecordingErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -25203,6 +25497,9 @@ export type RenderAppRecordingVideoErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -25288,6 +25585,9 @@ export type CancelAppRecordingRenderErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -25373,6 +25673,9 @@ export type GetAppRecordingRenderStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -25478,6 +25781,9 @@ export type ReviewAppRecordingErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -25561,6 +25867,9 @@ export type TransferAppOwnershipErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -25667,6 +25976,9 @@ export type GetAppsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -25868,6 +26180,9 @@ export type CreateAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26007,6 +26322,9 @@ export type GetExternalAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26108,6 +26426,9 @@ export type GetAppLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26194,6 +26515,9 @@ export type GetAppLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26275,6 +26599,9 @@ export type GetAppTemplatesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26363,6 +26690,9 @@ export type OpenAppInChatErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26450,6 +26780,9 @@ export type OpenExternalAppInChatErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26537,6 +26870,9 @@ export type UnpinAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26622,6 +26958,9 @@ export type PinAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26710,6 +27049,9 @@ export type UnpinExternalAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26798,6 +27140,9 @@ export type PinExternalAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26883,6 +27228,9 @@ export type DeleteAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -26968,6 +27316,9 @@ export type GetAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -27144,6 +27495,9 @@ export type UpdateAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -27285,6 +27639,9 @@ export type BulkDeleteAppsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -27379,6 +27736,9 @@ export type EnableAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -27527,6 +27887,9 @@ export type DisableAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -27675,6 +28038,9 @@ export type LockAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -27823,6 +28189,9 @@ export type UnlockAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -27971,6 +28340,9 @@ export type GetAppVersionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -28097,6 +28469,9 @@ export type GetAppVersionSummariesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -28186,6 +28561,9 @@ export type GetAppVersionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -28315,6 +28693,9 @@ export type RestoreAppVersionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -28453,6 +28834,9 @@ export type GetAppToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -28573,6 +28957,9 @@ export type PostAppRenderDiagnosticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -28661,6 +29048,9 @@ export type PostAppRenderScreenshotErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -28747,6 +29137,9 @@ export type UnassignToolFromAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -28836,6 +29229,9 @@ export type AssignToolToAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -28929,6 +29325,9 @@ export type ArchestraChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -29022,6 +29421,9 @@ export type ArchestraChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -29138,6 +29540,9 @@ export type GetAuditLogsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -29258,6 +29663,9 @@ export type GetAuditLogErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -29496,6 +29904,9 @@ export type SubmitOAuthConsentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -29656,6 +30067,9 @@ export type AzureEmbeddingsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -29766,6 +30180,9 @@ export type AzureEmbeddingsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -29869,6 +30286,9 @@ export type AzureChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -30063,6 +30483,9 @@ export type AzureResponsesWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -30234,6 +30657,9 @@ export type AzureResponsesWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -30370,6 +30796,9 @@ export type AzureChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -30575,6 +31004,9 @@ export type BedrockOpenaiListModelsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -30672,6 +31104,9 @@ export type BedrockOpenaiListModelsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -30957,6 +31392,9 @@ export type BedrockConverseWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -31311,6 +31749,9 @@ export type BedrockConverseWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -32088,6 +32529,9 @@ export type BedrockConverseWithAgentAndModelErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -32739,6 +33183,9 @@ export type BedrockInvokeWithDefaultAgentAndModelErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -33103,6 +33550,9 @@ export type BedrockInvokeWithAgentAndModelErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -33787,6 +34237,9 @@ export type CerebrasChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -33880,6 +34333,9 @@ export type CerebrasChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -33975,6 +34431,9 @@ export type StreamChatErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -34055,6 +34514,9 @@ export type ResolveChatMcpElicitationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -34140,6 +34602,9 @@ export type CancelChatMcpTaskErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -34225,6 +34690,9 @@ export type StopChatStreamErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -34310,6 +34778,9 @@ export type GetActiveChatRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -34397,6 +34868,9 @@ export type GetChatConversationsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -34573,6 +35047,9 @@ export type CreateChatConversationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -34734,6 +35211,9 @@ export type GetDeletedChatConversationsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -34897,6 +35377,9 @@ export type DeleteChatConversationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -34982,6 +35465,9 @@ export type GetChatConversationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -35154,6 +35640,9 @@ export type UpdateChatConversationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -35317,6 +35806,9 @@ export type GetChatOpenappaStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -35405,6 +35897,9 @@ export type SetConversationHooksDebugErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -35490,6 +35985,9 @@ export type MarkChatConversationReadErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -35575,6 +36073,9 @@ export type GetChatConversationFilesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -35682,6 +36183,9 @@ export type GetChatAttachmentContentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -35756,6 +36260,9 @@ export type DeleteChatAttachmentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -35843,6 +36350,9 @@ export type ForkChatConversationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -36006,6 +36516,9 @@ export type GetChatAgentMcpToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -36096,6 +36609,9 @@ export type RestoreChatConversationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -36259,6 +36775,9 @@ export type ClearChatConversationErrorsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -36344,6 +36863,9 @@ export type CompactChatConversationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -36528,6 +37050,9 @@ export type GenerateChatConversationTitleErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -36696,6 +37221,9 @@ export type UpdateChatMessageErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -36862,6 +37390,9 @@ export type SetChatMessageFeedbackErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -36948,6 +37479,9 @@ export type DeleteConversationEnabledToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -37033,6 +37567,9 @@ export type GetConversationEnabledToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -37121,6 +37658,9 @@ export type UpdateConversationEnabledToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -37396,6 +37936,9 @@ export type GetChatOpsStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -37507,6 +38050,9 @@ export type ListChatOpsBindingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -37630,6 +38176,9 @@ export type BulkUpdateChatOpsBindingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -37728,6 +38277,9 @@ export type DeleteChatOpsBindingErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -37817,6 +38369,9 @@ export type UpdateChatOpsBindingErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -37917,6 +38472,9 @@ export type CreateChatOpsDmBindingErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38025,6 +38583,9 @@ export type ApplyChatOpsBindingPlanErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38126,6 +38687,9 @@ export type UpdateChatOpsConfigInQuickstartErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38209,6 +38773,9 @@ export type DisconnectNgrokErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38292,6 +38859,9 @@ export type GetNgrokConfigErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38379,6 +38949,9 @@ export type ConnectNgrokErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38470,6 +39043,9 @@ export type UpdateSlackChatOpsConfigErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38556,6 +39132,9 @@ export type UpdateTelegramChatOpsConfigErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38639,6 +39218,9 @@ export type GenerateTelegramLinkCodeErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38723,6 +39305,9 @@ export type UnlinkTelegramChatOpsAccountErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38808,6 +39393,9 @@ export type LinkTelegramChatOpsAccountErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38893,6 +39481,9 @@ export type RefreshChatOpsChannelDiscoveryErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -38997,6 +39588,9 @@ export type StartClientConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39087,6 +39681,9 @@ export type PollClientConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39172,6 +39769,9 @@ export type GetClientConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39269,6 +39869,9 @@ export type DecideClientConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39364,6 +39967,9 @@ export type CohereChatWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39457,6 +40063,9 @@ export type CohereChatWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39677,6 +40286,9 @@ export type GetConnectedClientsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39783,6 +40395,9 @@ export type GetConnectedClientLogErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -39906,6 +40521,9 @@ export type GetAgentAdoptionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40045,6 +40663,9 @@ export type GetAgentAdoptionUsageErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40136,6 +40757,9 @@ export type DisconnectConnectedClientErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40183,6 +40807,93 @@ export type DisconnectConnectedClientResponses = {
 
 export type DisconnectConnectedClientResponse = DisconnectConnectedClientResponses[keyof DisconnectConnectedClientResponses];
 
+export type GetConnectionInstructionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/connection-instructions';
+};
+
+export type GetConnectionInstructionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectionInstructionsError = GetConnectionInstructionsErrors[keyof GetConnectionInstructionsErrors];
+
+export type GetConnectionInstructionsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        instructions: string | null;
+        version: string;
+    };
+};
+
+export type GetConnectionInstructionsResponse = GetConnectionInstructionsResponses[keyof GetConnectionInstructionsResponses];
+
 export type GetConnectionHealthData = {
     body?: never;
     path?: never;
@@ -40222,6 +40933,9 @@ export type GetConnectionHealthErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40279,7 +40993,7 @@ export type CreateConnectionSetupData = {
         mcpGatewayId?: string;
         llmProxyId?: string;
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-        proxyAuth?: 'provider-key' | 'virtual-key';
+        proxyAuth?: 'provider-key' | 'virtual-key' | 'primary-providers';
         attributePassthrough?: boolean;
         model?: string;
         skills?: {
@@ -40322,6 +41036,9 @@ export type CreateConnectionSetupErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40421,6 +41138,9 @@ export type CreateConnectionVirtualKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40511,6 +41231,9 @@ export type CreateConnectionPassthroughKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40623,6 +41346,9 @@ export type DeepseekChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40716,6 +41442,9 @@ export type DeepseekChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40797,6 +41526,9 @@ export type ListDefaultUserLimitsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40892,6 +41624,9 @@ export type CreateDefaultUserLimitErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -40984,6 +41719,9 @@ export type DeleteDefaultUserLimitErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41073,6 +41811,9 @@ export type UpdateDefaultUserLimitErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41163,6 +41904,9 @@ export type EnvironmentLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41249,6 +41993,9 @@ export type EnvironmentLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41335,6 +42082,9 @@ export type ListEnvironmentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41470,6 +42220,9 @@ export type CreateEnvironmentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41574,6 +42327,9 @@ export type UpdateEnvironmentResourceDefaultsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41663,6 +42419,9 @@ export type DeleteEnvironmentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41767,6 +42526,9 @@ export type UpdateEnvironmentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41870,6 +42632,9 @@ export type BulkDeleteEnvironmentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -41964,6 +42729,9 @@ export type GetExternalMcpSkillsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -42066,6 +42834,9 @@ export type GetExternalMcpSkillUsageStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -42164,6 +42935,9 @@ export type GetExternalMcpSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -42285,6 +43059,9 @@ export type GeminiEmbeddingsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -42395,6 +43172,9 @@ export type GeminiEmbeddingsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -42515,6 +43295,9 @@ export type PostV1GeminiV1BetaModelsByModelGenerateContentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -42623,6 +43406,9 @@ export type PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -42723,6 +43509,9 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -42832,6 +43621,9 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -42904,6 +43696,9 @@ export type ListGithubAppConfigsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -43003,6 +43798,9 @@ export type CreateGithubAppConfigErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -43095,6 +43893,9 @@ export type DeleteGithubAppConfigErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -43180,6 +43981,9 @@ export type GetGithubAppConfigErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -43281,6 +44085,9 @@ export type UpdateGithubAppConfigErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -43371,6 +44178,9 @@ export type GithubCopilotDeviceAuthStartErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -43460,6 +44270,9 @@ export type GithubCopilotDeviceAuthPollErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -43881,6 +44694,9 @@ export type GithubCopilotChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -44365,6 +45181,9 @@ export type GithubCopilotChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -44556,6 +45375,9 @@ export type GithubCopilotResponsesWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -44724,6 +45546,9 @@ export type GithubCopilotResponsesWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -44851,6 +45676,9 @@ export type GithubCopilotListModelsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -44945,6 +45773,9 @@ export type GithubCopilotListModelsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45034,6 +45865,9 @@ export type ListGithubPatsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45127,6 +45961,9 @@ export type CreateGithubPatErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45216,6 +46053,9 @@ export type DeleteGithubPatErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45307,6 +46147,9 @@ export type UpdateGithubPatErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45404,6 +46247,9 @@ export type GroqChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45497,6 +46343,9 @@ export type GroqChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45578,6 +46427,9 @@ export type GetGuardrailsDeploymentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45667,6 +46519,9 @@ export type UpdateGuardrailsDeploymentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45757,6 +46612,9 @@ export type AnnotateGuardrailsToolErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45850,6 +46708,9 @@ export type GetGuardrailsPolicyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -45941,6 +46802,9 @@ export type UpdateGuardrailsPolicyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46031,6 +46895,9 @@ export type ValidateGuardrailsPolicyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46175,6 +47042,9 @@ export type GetHooksErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46274,6 +47144,9 @@ export type CreateHookErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46368,6 +47241,9 @@ export type DeleteHookErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46459,6 +47335,9 @@ export type UpdateHookErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46602,6 +47481,9 @@ export type GetAgentEmailAddressErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46689,6 +47571,9 @@ export type GetIncomingEmailStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46781,6 +47666,9 @@ export type SetupIncomingEmailWebhookErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46867,6 +47755,9 @@ export type RenewIncomingEmailSubscriptionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -46953,6 +47844,9 @@ export type DeleteIncomingEmailSubscriptionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -47065,6 +47959,9 @@ export type GetInteractionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -53421,6 +54318,9 @@ export type GetInteractionSummariesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -53562,6 +54462,9 @@ export type GetInteractionSessionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -53693,6 +54596,9 @@ export type GetInteractionSessionLineageErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -53781,6 +54687,9 @@ export type GetUniqueExternalAgentIdsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -53865,6 +54774,9 @@ export type GetUniqueUserIdsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -53951,6 +54863,9 @@ export type GetInteractionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -60290,6 +61205,9 @@ export type TransferMcpCatalogOwnershipErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -60391,6 +61309,9 @@ export type GetInternalMcpCatalogErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -60775,6 +61696,9 @@ export type CreateInternalMcpCatalogItemErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -61004,6 +61928,9 @@ export type UnmuteMcpCatalogAlertErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -61093,6 +62020,9 @@ export type MuteMcpCatalogAlertErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -61183,6 +62113,9 @@ export type DeleteInternalMcpCatalogItemErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -61268,6 +62201,9 @@ export type GetInternalMcpCatalogItemErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -61617,6 +62553,9 @@ export type UpdateInternalMcpCatalogItemErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -61841,6 +62780,9 @@ export type GetInternalMcpCatalogToolsBatchErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -61928,6 +62870,9 @@ export type GetInternalMcpCatalogToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -62025,6 +62970,9 @@ export type ReinstallInternalMcpCatalogItemErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -62110,6 +63058,9 @@ export type RefreshInternalMcpCatalogImageErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -62193,6 +63144,9 @@ export type ListPendingImageApprovalCatalogItemsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -62419,6 +63373,9 @@ export type ApproveCatalogItemImageErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -62645,6 +63602,9 @@ export type DeleteInternalMcpCatalogItemByNameErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -62730,6 +63690,9 @@ export type RestoreInternalMcpCatalogItemErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -62815,6 +63778,9 @@ export type GetDeploymentYamlPreviewErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -62901,6 +63867,9 @@ export type ValidateDeploymentYamlErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -62988,6 +63957,9 @@ export type ResetDeploymentYamlErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -63071,6 +64043,9 @@ export type GetK8sImagePullSecretsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -63155,6 +64130,9 @@ export type GetInternalMcpCatalogLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -63241,6 +64219,9 @@ export type GetInternalMcpCatalogLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -63324,6 +64305,9 @@ export type CheckInvitationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -63424,6 +64408,9 @@ export type JevDecisionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -63517,6 +64504,9 @@ export type JevDecisionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -63598,6 +64588,9 @@ export type GetK8sCapabilitiesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -64032,6 +65025,9 @@ export type KimiChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -64516,6 +65512,9 @@ export type KimiChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -64665,6 +65664,9 @@ export type KnowledgeBaseLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -64751,6 +65753,9 @@ export type KnowledgeBaseLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -64832,6 +65837,9 @@ export type ConnectorLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -64918,6 +65926,9 @@ export type ConnectorLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65028,6 +66039,9 @@ export type GetKnowledgeBasesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65182,6 +66196,9 @@ export type CreateKnowledgeBaseErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65283,6 +66300,9 @@ export type DeleteKnowledgeBaseErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65368,6 +66388,9 @@ export type GetKnowledgeBaseErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65480,6 +66503,9 @@ export type UpdateKnowledgeBaseErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65584,6 +66610,9 @@ export type BulkDeleteKnowledgeBasesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65678,6 +66707,9 @@ export type RestoreKnowledgeBaseErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65763,6 +66795,9 @@ export type PermanentlyDeleteKnowledgeBaseErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65848,6 +66883,9 @@ export type GetKnowledgeBaseHealthErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -65909,6 +66947,18 @@ export type GetConnectorsData = {
          * Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`.
          */
         status?: 'active' | 'deleted';
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/connectors';
 };
@@ -65942,6 +66992,9 @@ export type GetConnectorsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -66479,6 +67532,9 @@ export type CreateConnectorErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -66773,6 +67829,9 @@ export type DeleteConnectorErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -66858,6 +67917,9 @@ export type GetConnectorErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -67360,6 +68422,9 @@ export type UpdateConnectorErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -67662,6 +68727,9 @@ export type GetConnectorDocumentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -67773,6 +68841,9 @@ export type DeleteConnectorDocumentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -67859,6 +68930,9 @@ export type GetConnectorDocumentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -67978,6 +69052,9 @@ export type BulkDeleteConnectorDocumentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68075,6 +69152,9 @@ export type BulkDeleteConnectorsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68180,6 +69260,9 @@ export type BulkUpdateConnectorsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68274,6 +69357,9 @@ export type RestoreConnectorErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68359,6 +69445,9 @@ export type PermanentlyDeleteConnectorErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68444,6 +69533,9 @@ export type SyncConnectorErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68530,6 +69622,9 @@ export type TriggerPermissionSyncErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68616,6 +69711,9 @@ export type GetPermissionSyncCoverageErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68704,6 +69802,9 @@ export type GetConnectorUserGroupsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68812,6 +69913,9 @@ export type UpsertConnectorMemberOverrideErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68898,6 +70002,9 @@ export type DeleteConnectorMemberOverrideErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -68983,6 +70090,9 @@ export type ForceResyncConnectorErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69069,6 +70179,9 @@ export type TestConnectorConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69157,6 +70270,9 @@ export type StartGoogleDriveConnectorOAuthErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69260,6 +70376,9 @@ export type GetConnectorKnowledgeBasesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69360,6 +70479,9 @@ export type AssignConnectorToKnowledgeBasesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69446,6 +70568,9 @@ export type UnassignConnectorFromKnowledgeBaseErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69540,6 +70665,9 @@ export type GetConnectorRunsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69676,6 +70804,9 @@ export type GetConnectorRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69799,6 +70930,9 @@ export type CancelConnectorRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69882,6 +71016,9 @@ export type KnowledgeFileLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -69968,6 +71105,9 @@ export type KnowledgeFileLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -70025,6 +71165,18 @@ export type GetKnowledgeFilesData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/knowledge-files';
 };
@@ -70058,6 +71210,9 @@ export type GetKnowledgeFilesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -70207,6 +71362,9 @@ export type UploadKnowledgeFileErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -70342,6 +71500,9 @@ export type UpsertKnowledgeFileErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -70457,6 +71618,9 @@ export type PromoteAttachmentToKnowledgeFileErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -70568,6 +71732,9 @@ export type DeleteKnowledgeFileErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -70665,6 +71832,9 @@ export type UpdateKnowledgeFileErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -70779,6 +71949,9 @@ export type BulkDeleteKnowledgeFilesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -70876,6 +72049,9 @@ export type IndexKnowledgeFilesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -70964,6 +72140,9 @@ export type GetKnowledgeDirectoriesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71063,6 +72242,9 @@ export type CreateKnowledgeDirectoryErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71162,6 +72344,9 @@ export type DeleteKnowledgeDirectoryErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71249,6 +72434,9 @@ export type UpdateKnowledgeDirectoryErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71351,6 +72539,9 @@ export type BulkDeleteKnowledgeDirectoriesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71443,6 +72634,9 @@ export type LimitLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71529,6 +72723,9 @@ export type LimitLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71618,6 +72815,9 @@ export type GetLimitsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71740,6 +72940,9 @@ export type CreateLimitErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71836,6 +73039,9 @@ export type DeleteLimitErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -71921,6 +73127,9 @@ export type GetLimitErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -72043,6 +73252,9 @@ export type UpdateLimitErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -72142,6 +73354,9 @@ export type BulkDeleteLimitsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -72234,6 +73449,9 @@ export type LlmProviderModelLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -72320,6 +73538,9 @@ export type LlmProviderModelLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -72405,6 +73626,9 @@ export type GetLlmModelsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -72513,6 +73737,9 @@ export type SyncLlmModelsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -72569,7 +73796,16 @@ export type SyncLlmModelsResponse = SyncLlmModelsResponses[keyof SyncLlmModelsRe
 export type GetModelsWithApiKeysData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+    };
     url: '/api/llm-models';
 };
 
@@ -72602,6 +73838,9 @@ export type GetModelsWithApiKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -72770,6 +74009,9 @@ export type BulkUpdateModelsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -72893,6 +74135,9 @@ export type UpdateModelErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -73019,6 +74264,9 @@ export type LlmOauthClientLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -73105,6 +74353,9 @@ export type LlmOauthClientLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -73163,6 +74414,18 @@ export type GetLlmOauthClientsData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/llm-oauth-clients';
 };
@@ -73196,6 +74459,9 @@ export type GetLlmOauthClientsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -73376,6 +74642,9 @@ export type CreateLlmOauthClientErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -73499,6 +74768,9 @@ export type DeleteLlmOauthClientErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -73612,6 +74884,9 @@ export type UpdateLlmOauthClientErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -73734,6 +75009,9 @@ export type RotateLlmOauthClientSecretErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -73860,6 +75138,9 @@ export type BulkDeleteLlmOauthClientsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -73952,6 +75233,9 @@ export type LlmProviderApiKeyLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -74038,6 +75322,9 @@ export type LlmProviderApiKeyLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -74093,6 +75380,18 @@ export type GetLlmProviderApiKeysData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/llm-provider-api-keys';
 };
@@ -74126,6 +75425,9 @@ export type GetLlmProviderApiKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -74294,6 +75596,9 @@ export type CreateLlmProviderApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -74418,6 +75723,9 @@ export type GetAvailableLlmProviderApiKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -74541,6 +75849,9 @@ export type DeleteLlmProviderApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -74626,6 +75937,9 @@ export type GetLlmProviderApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -74772,6 +76086,9 @@ export type UpdateLlmProviderApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -74897,6 +76214,9 @@ export type ReconnectLlmProviderApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -75020,6 +76340,9 @@ export type BulkDeleteLlmProviderApiKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -75112,6 +76435,9 @@ export type GetLlmProxyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -75198,6 +76524,9 @@ export type UpdateLlmProxyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -75398,6 +76727,9 @@ export type ReportAgentRuntimeStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -75481,6 +76813,9 @@ export type McpOauthClientLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -75567,6 +76902,9 @@ export type McpOauthClientLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -75621,6 +76959,18 @@ export type GetMcpOauthClientsData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/mcp-oauth-clients';
 };
@@ -75654,6 +77004,9 @@ export type GetMcpOauthClientsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -75796,6 +77149,9 @@ export type CreateMcpOauthClientErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -75905,6 +77261,9 @@ export type DeleteMcpOauthClientErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -76004,6 +77363,9 @@ export type UpdateMcpOauthClientErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -76112,6 +77474,9 @@ export type RotateMcpOauthClientSecretErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -76255,6 +77620,9 @@ export type GetMcpServerAutoModeAgentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -76351,6 +77719,9 @@ export type GetMcpServersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -76514,6 +77885,9 @@ export type InstallMcpServerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -76646,6 +78020,9 @@ export type DeleteMcpServerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -76731,6 +78108,9 @@ export type GetMcpServerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -76873,6 +78253,9 @@ export type ReauthenticateMcpServerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77008,6 +78391,9 @@ export type BulkDeleteMcpServersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77102,6 +78488,9 @@ export type RestoreMcpServerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77237,6 +78626,9 @@ export type UnmuteMcpServerAlertErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77326,6 +78718,9 @@ export type MuteMcpServerAlertErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77416,6 +78811,9 @@ export type GetMcpServerInstallationStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77502,6 +78900,9 @@ export type GetMcpServerToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77605,6 +79006,9 @@ export type InspectMcpServerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77699,6 +79103,9 @@ export type ReinstallMcpServerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77831,6 +79238,9 @@ export type HardResetMcpServerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -77955,6 +79365,9 @@ export type ReloadMcpServerToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -78060,6 +79473,9 @@ export type GetMcpToolCallsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -78179,6 +79595,9 @@ export type GetMcpToolCallErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -78300,6 +79719,9 @@ export type GetMembersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -78411,6 +79833,9 @@ export type BulkDeleteMembersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -78523,6 +79948,9 @@ export type GetMfilesVafAddOnDistributionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -78620,6 +80048,9 @@ export type Microsoft365CopilotDeviceAuthStartErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -78709,6 +80140,9 @@ export type Microsoft365CopilotDeviceAuthPollErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -79130,6 +80564,9 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -79614,6 +81051,9 @@ export type Microsoft365CopilotChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -79766,6 +81206,9 @@ export type Microsoft365CopilotListModelsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -79860,6 +81303,9 @@ export type Microsoft365CopilotListModelsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -79952,6 +81398,9 @@ export type MinimaxChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -80038,6 +81487,9 @@ export type MinimaxChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -80134,6 +81586,9 @@ export type MistralEmbeddingsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -80244,6 +81699,9 @@ export type MistralEmbeddingsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -80347,6 +81805,9 @@ export type MistralChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -80440,6 +81901,9 @@ export type MistralChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -80521,6 +81985,9 @@ export type ModelRouterListModelsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -80612,6 +82079,9 @@ export type ModelRouterListModelsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -80746,6 +82216,9 @@ export type ModelRouterResponsesWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -80917,6 +82390,9 @@ export type ModelRouterResponsesWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -81056,6 +82532,9 @@ export type ModelRouterEmbeddingsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -81166,6 +82645,9 @@ export type ModelRouterEmbeddingsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -81269,6 +82751,9 @@ export type ModelRouterChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -81430,6 +82915,9 @@ export type ModelRouterChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -81582,6 +83070,9 @@ export type InitiateOAuthErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -81670,6 +83161,9 @@ export type HandleOAuthCallbackErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -81820,6 +83314,9 @@ export type OllamaNativeChatWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -81913,6 +83410,9 @@ export type OllamaNativeChatWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82009,6 +83509,9 @@ export type OllamaEmbeddingsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82119,6 +83622,9 @@ export type OllamaEmbeddingsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82222,6 +83728,9 @@ export type OllamaChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82315,6 +83824,9 @@ export type OllamaChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82396,6 +83908,9 @@ export type GetOnboardingSeenNavItemsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82481,6 +83996,9 @@ export type MarkOnboardingNavItemsSeenErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82564,6 +84082,9 @@ export type GetOnboardingSurveyEligibilityErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82652,6 +84173,9 @@ export type SubmitOnboardingSurveyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82735,6 +84259,9 @@ export type GetFeedbackPopupActivationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82833,6 +84360,9 @@ export type OpenAiEmbeddingsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -82943,6 +84473,9 @@ export type OpenAiEmbeddingsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -83081,6 +84614,9 @@ export type OpenAiResponsesWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -83252,6 +84788,9 @@ export type OpenAiResponsesWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -83395,6 +84934,9 @@ export type OpenAiResponsesCompactWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -83538,6 +85080,9 @@ export type OpenAiResponsesCompactWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -83670,6 +85215,9 @@ export type OpenAiChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -83763,6 +85311,9 @@ export type OpenAiChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -83847,6 +85398,9 @@ export type OpenAiListModelsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -83946,6 +85500,9 @@ export type OpenAiListModelsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84040,6 +85597,9 @@ export type OpenaiCodexDeviceAuthStartErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84130,6 +85690,9 @@ export type OpenaiCodexDeviceAuthPollErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84224,6 +85787,9 @@ export type AnnotateOpenappaToolWithArchestraErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84307,6 +85873,9 @@ export type GetOpenappaBatteriesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84414,6 +85983,9 @@ export type GetOpenappaPolicyDeclarationsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84536,6 +86108,9 @@ export type GetOpenappaBatteryPolicySourceErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84621,6 +86196,9 @@ export type GetOpenappaEffectivePolicyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84713,6 +86291,9 @@ export type GetOpenappaBatteryMatchesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84819,6 +86400,9 @@ export type CreateOpenappaBatteryInstallErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -84922,6 +86506,9 @@ export type DeleteOpenappaBatteryInstallErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -85009,6 +86596,9 @@ export type UpdateOpenappaBatteryInstallErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -85112,6 +86702,9 @@ export type DeleteOpenappaBatteryIncludeErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -85199,6 +86792,9 @@ export type SetOpenappaCredentialBindingErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -85326,6 +86922,9 @@ export type UploadOpenappaBatteryPackageErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -85419,6 +87018,9 @@ export type DeleteOpenappaBatteryPackageErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -85511,6 +87113,9 @@ export type GetOpenappaCoverageEntitiesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -85629,6 +87234,9 @@ export type GetOpenappaCoverageToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -85764,6 +87372,9 @@ export type GetOpenappaCoverageSummaryErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -85890,6 +87501,9 @@ export type GetOpenappaExternalConsultsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86001,6 +87615,9 @@ export type GetAppaGithubSyncErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86111,6 +87728,9 @@ export type UpdateAppaGithubSyncErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86222,6 +87842,9 @@ export type ConfigureAppaGithubSyncErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86330,6 +87953,9 @@ export type CreateAppaGithubRepositoryErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86433,6 +88059,9 @@ export type AcceptHeldAppaGithubPullErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86548,6 +88177,9 @@ export type ConsultOpenappaBatteryHelperErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86636,6 +88268,9 @@ export type InspectOpenAppaPolicyTestsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86724,6 +88359,9 @@ export type GetOpenAppaPolicyTestsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86822,6 +88460,9 @@ export type UpdateOpenAppaPolicyTestsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -86921,6 +88562,9 @@ export type RunOpenAppaPolicyTestsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -87038,6 +88682,9 @@ export type GetOpenAppaPolicyTestRunsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -87162,6 +88809,9 @@ export type PreviewOpenAppaPolicyTestErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -87276,6 +88926,9 @@ export type GetOpenappaRemediesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -87420,6 +89073,9 @@ export type GetOpenappaRemediesActivityErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -87509,6 +89165,9 @@ export type GetOpenappaTrustAudienceErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -87623,6 +89282,9 @@ export type GetOpenAppaYellsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -87736,6 +89398,9 @@ export type GetOpenAppaYellsSummaryErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -87821,6 +89486,9 @@ export type GetOpenAppaYellErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -87931,6 +89599,9 @@ export type UpdateOpenAppaYellErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -88063,6 +89734,9 @@ export type OpenrouterChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -88156,6 +89830,9 @@ export type OpenrouterChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -88241,6 +89918,9 @@ export type GetRolesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -88350,6 +90030,9 @@ export type CreateRoleErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -88448,6 +90131,9 @@ export type DeleteRoleErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -88536,6 +90222,9 @@ export type GetRoleErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -88640,6 +90329,9 @@ export type UpdateRoleErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -88733,6 +90425,9 @@ export type GetOrganizationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -88932,6 +90627,9 @@ export type GetAppearanceSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -89057,6 +90755,9 @@ export type UpdateAppearanceSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -89262,6 +90963,9 @@ export type UpdateSecuritySettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -89464,6 +91168,9 @@ export type UpdateMcpSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -89666,6 +91373,9 @@ export type UpdateSkillsSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -89869,6 +91579,9 @@ export type UpdateAgentSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -90088,6 +91801,9 @@ export type UpdateConnectionSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -90321,6 +92037,9 @@ export type UpdateIntegrationSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -90533,6 +92252,9 @@ export type UpdateDefaultEnvironmentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -90740,6 +92462,9 @@ export type UpdateAuthSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -90949,6 +92674,9 @@ export type UpdateKnowledgeSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -91148,6 +92876,9 @@ export type DropEmbeddingConfigErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -91350,6 +93081,9 @@ export type TestEmbeddingConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -91437,6 +93171,9 @@ export type TestRerankerConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -91521,6 +93258,9 @@ export type GetKeywordRankingStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -91611,6 +93351,9 @@ export type TestOcrConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -91697,6 +93440,9 @@ export type CompleteOnboardingErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -91896,6 +93642,9 @@ export type GetOnboardingStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -91980,6 +93729,9 @@ export type GetMemberSignupStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -92073,6 +93825,9 @@ export type DeletePendingSignupMemberErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -92156,6 +93911,9 @@ export type GetOrganizationMembersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -92246,6 +94004,9 @@ export type GetOrganizationMemberErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -92342,6 +94103,9 @@ export type PerplexityChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -92435,6 +94199,9 @@ export type PerplexityChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -92561,6 +94328,9 @@ export type PerplexityResponsesWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -92732,6 +94502,9 @@ export type PerplexityResponsesWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -92860,6 +94633,9 @@ export type TransferPluginOwnershipErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -92943,6 +94719,9 @@ export type PluginLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -93029,6 +94808,9 @@ export type PluginLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -93127,6 +94909,9 @@ export type GetPluginsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -93301,6 +95086,9 @@ export type CreatePluginErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -93457,6 +95245,9 @@ export type DiscoverGithubPluginMarketplaceErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -93601,6 +95392,9 @@ export type ImportGithubPluginMarketplaceErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -93764,6 +95558,9 @@ export type PreviewGithubPluginErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -93891,6 +95688,9 @@ export type ImportGithubPluginErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -94046,6 +95846,9 @@ export type PreviewGithubPluginUpdateErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -94147,6 +95950,9 @@ export type ApplyGithubPluginUpdateErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -94300,6 +96106,9 @@ export type UpdatePluginGithubSyncErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -94451,6 +96260,9 @@ export type TriggerPluginGithubSyncErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -94536,6 +96348,9 @@ export type DeletePluginErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -94621,6 +96436,9 @@ export type GetPluginErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -94798,6 +96616,9 @@ export type UpdatePluginErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -94947,6 +96768,9 @@ export type GetPluginSkillsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95051,6 +96875,9 @@ export type GetPluginSkillUsageStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95152,6 +96979,9 @@ export type GetPluginSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95265,6 +97095,9 @@ export type TransferProjectOwnershipErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95348,6 +97181,9 @@ export type ProjectLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95434,6 +97270,9 @@ export type ProjectLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95550,6 +97389,9 @@ export type GetProjectsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95687,6 +97529,9 @@ export type CreateProjectErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95805,6 +97650,9 @@ export type CreateProjectFromConversationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95914,6 +97762,9 @@ export type DeleteProjectErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -95999,6 +97850,9 @@ export type GetProjectErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96128,6 +97982,9 @@ export type UpdateProjectErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96216,6 +98073,9 @@ export type BulkDeleteProjectsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96315,6 +98175,9 @@ export type RestoreProjectErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96430,6 +98293,9 @@ export type PermanentlyDeleteProjectErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96515,6 +98381,9 @@ export type GetProjectFilesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96612,6 +98481,9 @@ export type UploadProjectFilesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96699,6 +98571,9 @@ export type GetProjectInstructionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96786,6 +98661,9 @@ export type SetProjectInstructionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96871,6 +98749,9 @@ export type GetProjectConversationsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -96966,6 +98847,9 @@ export type GetProjectRunsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97099,6 +98983,9 @@ export type UnpinProjectErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97184,6 +99071,9 @@ export type PinProjectErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97269,6 +99159,9 @@ export type GetProjectAppsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97359,6 +99252,9 @@ export type UnlinkProjectAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97445,6 +99341,9 @@ export type LinkProjectAppErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97530,6 +99429,9 @@ export type StartGitHubUserConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97616,6 +99518,9 @@ export type CompleteGitHubUserConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97701,6 +99606,9 @@ export type ListRuntimeCredentialsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97812,6 +99720,9 @@ export type CreateRuntimeCredentialErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -97914,6 +99825,9 @@ export type GetRuntimeCredentialUsageErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98007,6 +99921,9 @@ export type DeleteRuntimeCredentialErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98101,6 +100018,9 @@ export type UpdateRuntimeCredentialErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98203,6 +100123,9 @@ export type DeletePersonalRuntimeCredentialConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98290,6 +100213,9 @@ export type SetPersonalRuntimeCredentialConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98375,6 +100301,9 @@ export type DeleteOrganizationRuntimeCredentialConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98462,6 +100391,9 @@ export type SetOrganizationRuntimeCredentialConnectionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98554,6 +100486,9 @@ export type GetScheduleTriggersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98676,6 +100611,9 @@ export type CreateScheduleTriggerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98782,6 +100720,9 @@ export type DeleteScheduleTriggerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98867,6 +100808,9 @@ export type GetScheduleTriggerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -98981,6 +100925,9 @@ export type UpdateScheduleTriggerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -99087,6 +101034,9 @@ export type EnableScheduleTriggerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -99193,6 +101143,9 @@ export type DisableScheduleTriggerErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -99299,6 +101252,9 @@ export type RunScheduleTriggerNowErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -99400,6 +101356,9 @@ export type GetScheduleTriggerRunsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -99508,6 +101467,9 @@ export type GetScheduleTriggerRunErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -99606,6 +101568,9 @@ export type CreateScheduleTriggerRunConversationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -99767,6 +101732,9 @@ export type GetSecretsTypeErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -99855,6 +101823,9 @@ export type GetSecretErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -99946,6 +101917,9 @@ export type CheckSecretsConnectivityErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100029,6 +102003,9 @@ export type ServiceAccountLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100115,6 +102092,9 @@ export type ServiceAccountLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100201,6 +102181,9 @@ export type GetServiceAccountsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100334,6 +102317,9 @@ export type CreateServiceAccountErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100450,6 +102436,9 @@ export type DeleteServiceAccountErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100535,6 +102524,9 @@ export type GetServiceAccountErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100661,6 +102653,9 @@ export type UpdateServiceAccountErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100780,6 +102775,9 @@ export type BulkDeleteServiceAccountsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100878,6 +102876,9 @@ export type BulkSetServiceAccountsDisabledErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -100975,6 +102976,9 @@ export type CreateServiceAccountTokenErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101068,6 +103072,9 @@ export type DeleteServiceAccountTokenErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101158,6 +103165,9 @@ export type UpdateServiceAccountTokenErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101252,6 +103262,9 @@ export type BulkRevokeSessionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101344,6 +103357,9 @@ export type GetSiteNotificationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101434,6 +103450,9 @@ export type CreateSiteNotificationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101521,6 +103540,9 @@ export type GetSiteNotificationSettingsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101610,6 +103632,9 @@ export type DeleteSiteNotificationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101699,6 +103724,9 @@ export type UpdateSiteNotificationErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101786,6 +103814,9 @@ export type GetSkillMarketplaceErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101875,6 +103906,9 @@ export type TransferSkillOwnershipErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -101958,6 +103992,9 @@ export type SkillLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -102044,6 +104081,9 @@ export type SkillLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -102184,6 +104224,9 @@ export type GetSkillsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -102390,6 +104433,9 @@ export type CreateSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -102542,6 +104588,9 @@ export type DeleteSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -102627,6 +104676,9 @@ export type GetSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -102816,6 +104868,9 @@ export type UpdateSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -102968,6 +105023,9 @@ export type GetSkillUsageStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -103067,6 +105125,9 @@ export type GetSkillVersionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -103168,6 +105229,9 @@ export type GetSkillVersionErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -103266,6 +105330,9 @@ export type GetSkillSourceReposErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -103354,6 +105421,9 @@ export type BulkDeleteSkillsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -103447,6 +105517,9 @@ export type RestoreSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -103599,6 +105672,9 @@ export type PermanentlyDeleteSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -103684,6 +105760,9 @@ export type ResetSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -103849,6 +105928,9 @@ export type UpdateSkillGithubSyncErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -103999,6 +106081,9 @@ export type EnableSkillToolDefaultsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -104086,6 +106171,9 @@ export type SearchSkillCatalogErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -104183,6 +106271,9 @@ export type DiscoverGithubSkillsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -104284,6 +106375,9 @@ export type PreviewGithubSkillErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -104421,6 +106515,9 @@ export type ImportGithubSkillsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -104548,6 +106645,9 @@ export type DeleteSkillSandboxArtifactErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -104651,6 +106751,9 @@ export type UpdateSkillSandboxArtifactContentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -104740,6 +106843,9 @@ export type GetSkillSandboxConversationArtifactsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -104833,6 +106939,9 @@ export type GetSkillShareLinksErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -104950,6 +107059,9 @@ export type CreateSkillShareLinkErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -105072,6 +107184,9 @@ export type RotateSkillShareLinkErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -105188,6 +107303,9 @@ export type RevokeSkillShareLinkErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -105277,6 +107395,9 @@ export type GetProxyCostStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -105403,6 +107524,9 @@ export type GetTeamStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -105505,6 +107629,9 @@ export type GetAgentStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -105608,6 +107735,9 @@ export type GetModelStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -105725,6 +107855,9 @@ export type GetUserStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -105862,6 +107995,9 @@ export type GetMyStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -105986,6 +108122,9 @@ export type GetMyUsageBreakdownErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -106113,6 +108252,9 @@ export type GetAppStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -106231,6 +108373,9 @@ export type GetSkillStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -106337,6 +108482,9 @@ export type GetOverviewStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -106427,6 +108575,9 @@ export type GetCostSavingsStatisticsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -106527,6 +108678,9 @@ export type GetTeamsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -106659,6 +108813,9 @@ export type CreateTeamErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -106772,6 +108929,9 @@ export type DeleteTeamErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -106857,6 +109017,9 @@ export type GetTeamErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -106981,6 +109144,9 @@ export type UpdateTeamErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107097,6 +109263,9 @@ export type BulkDeleteTeamsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107191,6 +109360,9 @@ export type GetTeamMembersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107287,6 +109459,9 @@ export type AddTeamMemberErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107378,6 +109553,9 @@ export type RemoveTeamMemberErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107466,6 +109644,9 @@ export type UpdateTeamMemberErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107554,6 +109735,9 @@ export type GetTeamLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107640,6 +109824,9 @@ export type GetTeamLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107723,6 +109910,9 @@ export type GetTeamExternalGroupsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107813,6 +110003,9 @@ export type AddTeamExternalGroupErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107902,6 +110095,9 @@ export type RemoveTeamExternalGroupErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -107990,6 +110186,9 @@ export type GetTokensErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108094,6 +110293,9 @@ export type GetTokenValueErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108179,6 +110381,9 @@ export type RotateTokenErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108279,6 +110484,9 @@ export type GetToolsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108434,6 +110642,9 @@ export type GetToolsWithAssignmentsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108568,6 +110779,9 @@ export type GetUserPermissionSourcesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108658,6 +110872,9 @@ export type GetUserPermissionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108741,6 +110958,9 @@ export type GetImpersonableUsersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108827,6 +111047,9 @@ export type GetUserTokenErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108914,6 +111137,9 @@ export type GetUserTokenValueErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -108997,6 +111223,9 @@ export type RotateUserTokenErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -109085,6 +111314,9 @@ export type VirtualApiKeyLabelKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -109171,6 +111403,9 @@ export type VirtualApiKeyLabelValuesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -109230,6 +111465,18 @@ export type GetAllVirtualApiKeysData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
     };
     url: '/api/llm-virtual-keys';
 };
@@ -109263,6 +111510,9 @@ export type GetAllVirtualApiKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -109439,6 +111689,9 @@ export type CreateVirtualApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -109569,6 +111822,9 @@ export type DeleteVirtualApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -109654,6 +111910,9 @@ export type GetVirtualApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -109802,6 +112061,9 @@ export type UpdateVirtualApiKeyErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -109931,6 +112193,9 @@ export type GetVirtualApiKeyValueErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110019,6 +112284,9 @@ export type BulkDeleteVirtualApiKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110126,6 +112394,9 @@ export type VllmEmbeddingsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110236,6 +112507,9 @@ export type VllmEmbeddingsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110339,6 +112613,9 @@ export type VllmChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110432,6 +112709,9 @@ export type VllmChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110523,6 +112803,9 @@ export type XaiChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110616,6 +112899,9 @@ export type XaiChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110697,6 +112983,9 @@ export type XaiSubscriptionDeviceAuthStartErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110786,6 +113075,9 @@ export type XaiSubscriptionDeviceAuthPollErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110889,6 +113181,9 @@ export type ZhipuaiEmbeddingsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -110999,6 +113294,9 @@ export type ZhipuaiEmbeddingsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -111103,6 +113401,9 @@ export type ZhipuaiChatCompletionsWithDefaultAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -111197,6 +113498,9 @@ export type ZhipuaiChatCompletionsWithAgentErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -111283,6 +113587,9 @@ export type BulkDeleteRolesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -111375,6 +113682,9 @@ export type GetPublicIdentityProvidersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -111459,6 +113769,9 @@ export type GetIdentityProvidersErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -111801,6 +114114,9 @@ export type CreateIdentityProviderErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -112014,6 +114330,9 @@ export type GetIdentityProviderTeamSyncOptionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -112099,6 +114418,9 @@ export type GetIdentityProviderIdpLogoutUrlErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -112184,6 +114506,9 @@ export type GetIdentityProviderLinkStatusErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -112270,6 +114595,9 @@ export type GetIdentityProviderLatestIdTokenClaimsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -112363,6 +114691,9 @@ export type DeleteIdentityProviderErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -112448,6 +114779,9 @@ export type GetIdentityProviderErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -112791,6 +115125,9 @@ export type UpdateIdentityProviderErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113008,6 +115345,9 @@ export type SearchInitialPermissionSubjectsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113108,6 +115448,9 @@ export type GetScopedCapabilitiesErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113199,6 +115542,9 @@ export type SearchResourcePermissionSubjectsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113302,6 +115648,9 @@ export type GetResourcePermissionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113390,6 +115739,22 @@ export type GetResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        actorSubjects: Array<{
+            type: 'user';
+            id: string;
+        } | {
+            type: 'team';
+            id: string;
+        } | {
+            type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'role';
+            id: string;
+        } | {
+            type: 'organization';
+            id: '*';
+        }>;
     };
 };
 
@@ -113455,6 +115820,9 @@ export type UpdateResourcePermissionsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113543,6 +115911,22 @@ export type UpdateResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        actorSubjects: Array<{
+            type: 'user';
+            id: string;
+        } | {
+            type: 'team';
+            id: string;
+        } | {
+            type: 'serviceAccount';
+            id: string;
+        } | {
+            type: 'role';
+            id: string;
+        } | {
+            type: 'organization';
+            id: '*';
+        }>;
     };
 };
 
@@ -113594,6 +115978,9 @@ export type IngestRumEventsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113679,6 +116066,9 @@ export type DeleteTeamVaultFolderErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113764,6 +116154,9 @@ export type GetTeamVaultFolderErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113855,6 +116248,9 @@ export type SetTeamVaultFolderErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -113946,6 +116342,9 @@ export type CheckTeamVaultFolderConnectivityErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -114033,6 +116432,9 @@ export type ListTeamVaultFolderSecretsErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**
@@ -114121,6 +116523,9 @@ export type GetTeamVaultSecretKeysErrors = {
             message: string;
             type: 'api_authorization_error';
             internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
         };
     };
     /**

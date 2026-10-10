@@ -25,8 +25,8 @@ First, add your provider keys on [Model Providers](/docs/llm-proxy/providers). T
 Give each app its own key. To cut off one app, delete its key. Other apps keep working.
 
 1. Go to **LLM Proxy** and click **Create standard virtual key**.
-2. Name it, and pick a provider key for each provider it may use.
-3. On **Budget**, pick who pays for it, and set **Expires** if the app is temporary. Click **Continue**, then **Create key**.
+2. Name it. Every provider starts with its primary key. Change a key or remove a provider if the app needs less.
+3. Optionally pick who pays for it, who can access it, and when it expires. Then create it.
 4. Copy the key. It shows only once. The dialog then shows a request with your key filled in.
 5. Use the key wherever the app expects a provider API key:
 
@@ -43,8 +43,9 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 
 - The key needs a mapping for the route's provider. An OpenAI route needs an OpenAI key. On the [Model Router](/docs/llm-proxy/model-router), the model's prefix picks the mapping.
 - Self-hosted providers can map several endpoints. Archestra sends each request to the endpoint that serves the model.
-- **To share a key** with a team, edit the key and add the team under its permissions.
-- To bill a team, pick it under **Who pays for this key?**. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget), not its creator's. A spend cap there limits the key itself.
+- **To share a key** with a team, add the team under its permissions, when you create the key or later.
+- Admins can create a key on behalf of another member by picking its owner. The owner can reveal the key.
+- To bill a team, pick it as the payer. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget), not its creator's. A spend cap there limits the key itself.
 
 <span id="creating-passthrough-virtual-keys"></span><span id="configuring-claude-code-and-claude-desktop"></span>
 

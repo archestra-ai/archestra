@@ -40,6 +40,7 @@ it.each([
     revision: 1,
     grants: [ownerGrant],
     inheritedGrants: [],
+    actorSubjects: [{ type: "user", id: "owner" }],
     effectiveActions: ["read", "manage-permissions"],
   };
   let saved: unknown;
@@ -153,6 +154,7 @@ it.each([
         revision: 1,
         grants: [],
         inheritedGrants: [],
+        actorSubjects: [{ type: "user", id: "owner" }],
         effectiveActions: ["read", "manage-permissions"],
       }),
     ),

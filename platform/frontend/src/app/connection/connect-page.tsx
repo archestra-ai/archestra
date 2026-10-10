@@ -890,7 +890,7 @@ function scriptNextSteps(client: ConnectClient): string[] {
       ];
     case "copilot-cli":
       return [
-        "If the output prints COPILOT_* lines, add them to your shell profile.",
+        "If you connected an LLM provider, its settings are saved in providers.json. The printed environment variables are optional.",
         "Open a new terminal and run the copilot command it prints. It opens the browser to sign in to the gateway.",
       ];
     case "opencode":

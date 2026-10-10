@@ -537,7 +537,7 @@ describe.each([
     disableEnvVar: "ARCHESTRA_COPILOT_GUARD",
     nonInteractive: "$a -eq '-p' -or $a -eq '--prompt'",
     proxyConfig: "COPILOT_PROVIDER_TYPE",
-    proxyNote: "Removed the COPILOT_PROVIDER_* environment variables",
+    proxyNote: "Removed the managed provider and model from providers.json",
   },
 ])("renderStartupGuardPowerShell ($name)", ({
   client,

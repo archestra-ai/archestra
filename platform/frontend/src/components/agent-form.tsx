@@ -14,6 +14,7 @@ import {
   getAgentRuntimeProviderCompatibility,
   getDocsUrl,
   getResourceForAgentType,
+  grantsAudience,
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
   MAX_PASSTHROUGH_HEADERS,
@@ -3274,7 +3275,9 @@ export function AgentForm({
                       id: null,
                       name: name.trim() || "This agent",
                       icon: icon || null,
-                      scope,
+                      // The draft's reach comes from the grants picked on
+                      // General, as it will once the record exists.
+                      scope: grantsAudience(initialGrants),
                       authorId: currentUserId,
                     }
                   }

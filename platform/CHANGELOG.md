@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0-rc.37](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.36...platform-v1.4.0-rc.37) (2026-10-10)
+
+
+### Features
+
+* configure coding agent availability and order ([#8670](https://github.com/archestra-ai/archestra/issues/8670)) ([df802e7](https://github.com/archestra-ai/archestra/commit/df802e7147fd2f83004510e2cab88bbb361767ad))
+
+
+### Performance Improvements
+
+* avoid full-history session sorts and repeated batch membership reads ([#8669](https://github.com/archestra-ai/archestra/issues/8669)) ([59274df](https://github.com/archestra-ai/archestra/commit/59274df7024476601758431f2af9070f9b923ca5))
+
 ## [1.4.0-rc.36](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.35...platform-v1.4.0-rc.36) (2026-10-10)
 
 

@@ -33,7 +33,7 @@ From a connected client, ask your agent to create one. [`create_agent`](/docs/re
 
 With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), go to **Settings → Agents → Coding agents** to choose the agents offered during creation.
 
-1. Click **Add an agent** to add a choice, or remove one with its **Remove** button.
+1. Click **+** to add a choice, or remove one with its **Remove** button.
 2. Drag the agent chips into your preferred order. You can also focus an agent's reorder handle and use the arrow keys.
 3. Click **Save**. The Create Agent cards and Configuration runtime choices follow the saved order.
 

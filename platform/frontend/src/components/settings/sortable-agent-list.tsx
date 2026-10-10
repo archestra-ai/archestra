@@ -17,8 +17,15 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, X } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { GripVertical, Plus, X } from "lucide-react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { ButtonWithTooltip } from "@/components/button-with-tooltip";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
@@ -32,6 +39,7 @@ export function SortableAgentList({
   label,
   emptyMessage,
   removeLabelSuffix = "",
+  inlineAdd = false,
 }: {
   items: { id: string; label: string; icon: ReactNode }[];
   shownItemIds: string[];
@@ -41,8 +49,10 @@ export function SortableAgentList({
   label: string;
   emptyMessage: string;
   removeLabelSuffix?: string;
+  inlineAdd?: boolean;
 }) {
   const addAgentId = useId();
+  const [addOpen, setAddOpen] = useState(false);
   const removeButtons = useRef(new Map<string, HTMLButtonElement>());
   const focusAfterChange = useRef<string | null>(null);
   useEffect(() => {
@@ -79,35 +89,37 @@ export function SortableAgentList({
 
   return (
     <div className="space-y-3">
-      <SearchableSelect
-        id={addAgentId}
-        value=""
-        ariaLabel={addLabel}
-        placeholder={addLabel}
-        searchPlaceholder="Search agents…"
-        emptyMessage="No agents match."
-        className="w-64 max-w-full"
-        disabled={disabled || !canAdd}
-        items={[...remainingItems]
-          .sort((a, b) => a.label.localeCompare(b.label))
-          .map((item) => ({
-            value: item.id,
-            label: item.label,
-            content: (
-              <span className="flex items-center gap-2">
-                {item.icon}
-                <span>{item.label}</span>
-              </span>
-            ),
-          }))}
-        onValueChange={(id) => {
-          if (disabled || !remainingIds.includes(id)) return;
-          if (remainingIds.length === 1) focusAfterChange.current = id;
-          onShownItemIdsChange([...shownItemIds, id]);
-          onOrderChange([...ids, id]);
-        }}
-      />
-      {selectedItems.length === 0 ? (
+      {!inlineAdd && (
+        <SearchableSelect
+          id={addAgentId}
+          value=""
+          ariaLabel={addLabel}
+          placeholder={addLabel}
+          searchPlaceholder="Search agents…"
+          emptyMessage="No agents match."
+          className="w-64 max-w-full"
+          disabled={disabled || !canAdd}
+          items={[...remainingItems]
+            .sort((a, b) => a.label.localeCompare(b.label))
+            .map((item) => ({
+              value: item.id,
+              label: item.label,
+              content: (
+                <span className="flex items-center gap-2">
+                  {item.icon}
+                  <span>{item.label}</span>
+                </span>
+              ),
+            }))}
+          onValueChange={(id) => {
+            if (disabled || !remainingIds.includes(id)) return;
+            if (remainingIds.length === 1) focusAfterChange.current = id;
+            onShownItemIdsChange([...shownItemIds, id]);
+            onOrderChange([...ids, id]);
+          }}
+        />
+      )}
+      {!inlineAdd && selectedItems.length === 0 ? (
         <p className="text-sm text-muted-foreground">{emptyMessage}</p>
       ) : (
         <DndContext
@@ -118,13 +130,17 @@ export function SortableAgentList({
           <SortableContext items={ids} strategy={rectSortingStrategy}>
             <ul
               aria-label={label}
-              className="flex flex-wrap gap-1.5 rounded-md border border-input bg-background p-2"
+              className={cn(
+                "flex flex-wrap gap-1.5 rounded-md border border-input bg-background p-2",
+                inlineAdd && "min-h-9 items-center px-3 py-1",
+              )}
             >
               {selectedItems.map((item, index) => (
                 <AvailableAgentPill
                   key={item.id}
                   item={item}
                   disabled={disabled}
+                  compact={inlineAdd}
                   removeLabelSuffix={removeLabelSuffix}
                   removeButtonRef={(node) => {
                     if (node) removeButtons.current.set(item.id, node);
@@ -140,6 +156,53 @@ export function SortableAgentList({
                   onMove={(direction) => move(index, index + direction)}
                 />
               ))}
+              {inlineAdd && (
+                <li className="flex items-center">
+                  <Popover
+                    open={addOpen && !disabled && canAdd}
+                    onOpenChange={setAddOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <ButtonWithTooltip
+                        id={addAgentId}
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label="Add coding agent"
+                        disabled={disabled || !canAdd}
+                        disabledText={
+                          canAdd
+                            ? "Editing unavailable"
+                            : "All coding agents are already added"
+                        }
+                        className="rounded-md border border-dashed border-input text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                      >
+                        <Plus className="size-3" />
+                      </ButtonWithTooltip>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-1" align="start">
+                      {remainingItems.map((item) => (
+                        <Button
+                          key={item.id}
+                          size="sm"
+                          variant="ghost"
+                          className="w-full justify-start"
+                          onClick={() => {
+                            if (disabled) return;
+                            if (remainingIds.length === 1)
+                              focusAfterChange.current = item.id;
+                            onShownItemIdsChange([...shownItemIds, item.id]);
+                            onOrderChange([...ids, item.id]);
+                            setAddOpen(false);
+                          }}
+                        >
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </Button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                </li>
+              )}
             </ul>
           </SortableContext>
         </DndContext>
@@ -155,10 +218,12 @@ function AvailableAgentPill({
   onMove,
   removeButtonRef,
   removeLabelSuffix,
+  compact,
 }: {
   item: { id: string; label: string; icon: ReactNode };
   disabled: boolean;
   removeLabelSuffix: string;
+  compact: boolean;
   onRemove: () => void;
   onMove: (direction: number) => void;
   removeButtonRef: (node: HTMLButtonElement | null) => void;
@@ -179,6 +244,7 @@ function AvailableAgentPill({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "inline-flex max-w-full items-center gap-1.5 rounded-md border bg-muted px-2 py-0.5 text-sm",
+        compact && "h-7",
         disabled && "opacity-50",
         isDragging && "relative z-10 shadow-md",
       )}
@@ -190,7 +256,10 @@ function AvailableAgentPill({
         {...listeners}
         aria-label={`Reorder ${item.label}`}
         disabled={disabled}
-        className="flex min-w-0 items-center gap-1.5 rounded-sm py-1 touch-none cursor-grab focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing disabled:cursor-not-allowed"
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 rounded-sm touch-none cursor-grab focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing disabled:cursor-not-allowed",
+          !compact && "py-1",
+        )}
         onKeyDown={(event) => {
           if (
             !isDragging &&
@@ -217,7 +286,10 @@ function AvailableAgentPill({
         onClick={onRemove}
         disabled={disabled}
         aria-label={`Remove ${item.label}${removeLabelSuffix}`}
-        className="shrink-0 rounded-sm p-1.5 text-muted-foreground hover:bg-muted-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+        className={cn(
+          "shrink-0 rounded-sm text-muted-foreground hover:bg-muted-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed",
+          !compact && "p-1.5",
+        )}
       >
         <X className="size-3" />
       </UnstyledButton>

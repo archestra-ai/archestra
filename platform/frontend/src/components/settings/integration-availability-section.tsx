@@ -136,6 +136,7 @@ export function IntegrationAvailabilitySection({
                   onOrderChange={setAllowed}
                   label="Coding agents"
                   emptyMessage="No coding agents added."
+                  inlineAdd
                   disabled={
                     disabled ||
                     !organization ||

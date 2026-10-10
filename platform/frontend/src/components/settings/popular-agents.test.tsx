@@ -314,7 +314,13 @@ describe("popular agent configuration", () => {
       ).toBeInTheDocument();
       expect(screen.getByRole("radio", { name })).toBeInTheDocument();
     }
+    expect(
+      screen.getByRole("button", { name: "Add coding agent" }),
+    ).toBeDisabled();
     await remove("Codex");
+    expect(
+      screen.getByRole("button", { name: "Add coding agent" }),
+    ).toBeEnabled();
     expect(screen.getByRole("button", { name: /Codex / })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(picker().getByText("Codex")).toBeInTheDocument();
@@ -352,7 +358,9 @@ describe("popular agent configuration", () => {
       PopularAgentIdSchema.options.map((id) => [id, { hidden: true }]),
     );
     renderFlow();
-    const input = await screen.findByRole("combobox", { name: "Add an agent" });
+    await screen.findByRole("button", {
+      name: "Add coding agent",
+    });
     await waitFor(() => expect(screen.getAllByRole("radio")).toHaveLength(2));
     expect(
       screen.getByRole("radio", { name: "Test Platform" }),
@@ -369,8 +377,15 @@ describe("popular agent configuration", () => {
     expect(
       screen.getByRole("button", { name: /Connect via A2A/ }),
     ).toBeInTheDocument();
-    await userEvent.click(input);
-    await userEvent.click(screen.getByRole("option", { name: "Codex" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Add coding agent" }),
+      ).toBeEnabled(),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add coding agent" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Codex" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await ready();
     expect(screen.getByRole("button", { name: /Codex / })).toBeInTheDocument();
@@ -430,9 +445,9 @@ describe("popular agent configuration", () => {
     await ready();
     await remove("Codex");
     await userEvent.click(
-      screen.getByRole("combobox", { name: "Add an agent" }),
+      screen.getByRole("button", { name: "Add coding agent" }),
     );
-    await userEvent.click(screen.getByRole("option", { name: "Codex" }));
+    await userEvent.click(screen.getByRole("button", { name: "Codex" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(writes).toEqual([
@@ -539,7 +554,7 @@ describe("popular agent configuration", () => {
     }))
       expect(button).toBeDisabled();
     expect(
-      screen.getByRole("combobox", { name: "All agents added" }),
+      screen.getByRole("button", { name: "Add coding agent" }),
     ).toBeDisabled();
     expect(writes).toEqual([]);
   });

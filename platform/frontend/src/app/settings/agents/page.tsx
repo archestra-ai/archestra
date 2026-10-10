@@ -485,11 +485,15 @@ export default function AgentSettingsPage() {
             catalogKey="popularAgentOverrides"
             catalog={PopularAgentIdSchema.options}
             title="Coding agents"
-            description="Add agents and drag to reorder them on Create Agent and in the Runtime image choices. Removing an agent preserves existing agents and custom runtime configuration."
+            description="Choose which coding agents are available when creating a new agent, and in what order."
             options={PopularAgentIdSchema.options.map((id) => ({
               value: id,
               label: AGENT_CATALOG_TEMPLATE_NAMES[id],
-              icon: <CatalogAgentIcon id={id} size={18} />,
+              icon: (
+                <span className="flex size-3.5 shrink-0 items-center justify-center">
+                  <CatalogAgentIcon id={id} size={14} />
+                </span>
+              ),
             }))}
             placeholder="Select coding agents…"
             emptyMessage="No agents found."

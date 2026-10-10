@@ -16,12 +16,13 @@ export function AvailableAgentsList(props: {
       items={props.clients.map((client) => ({
         id: client.id,
         label: client.label,
-        icon: <ClientIcon client={client} size={18} />,
+        icon: <ClientIcon client={client} size={16} />,
       }))}
       shownItemIds={props.shownClientIds}
       onShownItemIdsChange={props.onShownClientIdsChange}
       onOrderChange={props.onOrderChange}
       disabled={props.disabled}
+      inlineAdd
       label="Available agents"
       removeLabelSuffix=" from Connect"
       emptyMessage="No agents added. Generic client is still available."

@@ -151,26 +151,20 @@ describe("ConnectionSettingsForm", () => {
   it("disables Add when all agents are chosen and re-enables it after removal", async () => {
     const user = userEvent.setup();
     render(<ConnectionSettingsForm />);
-    expect(
-      screen.getByRole("combobox", { name: "All agents added" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add agent" })).toBeDisabled();
     await user.click(
       screen.getByRole("button", { name: "Remove Codex from Connect" }),
     );
-    expect(
-      screen.getByRole("combobox", { name: "Add an agent" }),
-    ).toBeEnabled();
-    await user.click(screen.getByRole("combobox", { name: "Add an agent" }));
-    await user.click(screen.getByRole("option", { name: /Codex/ }));
-    expect(
-      screen.getByRole("combobox", { name: "All agents added" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add agent" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Add agent" }));
+    await user.click(screen.getByRole("button", { name: "Codex" }));
+    expect(screen.getByRole("button", { name: "Add agent" })).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Remove Codex from Connect" }),
     ).toHaveFocus();
   });
 
-  it("adds an agent through search at the end, removes it, and discards back to the saved list", async () => {
+  it("adds an agent through the inline menu at the end, removes it, and discards back to the saved list", async () => {
     const user = userEvent.setup();
     const organization = vi.mocked(useOrganization)();
     vi.mocked(useOrganization).mockReturnValue({
@@ -182,9 +176,8 @@ describe("ConnectionSettingsForm", () => {
       },
     } as ReturnType<typeof useOrganization>);
     render(<ConnectionSettingsForm />);
-    await user.click(screen.getByRole("combobox", { name: "Add an agent" }));
-    await user.type(screen.getByPlaceholderText("Search agents…"), "cursor");
-    await user.click(screen.getByRole("option", { name: /Cursor/ }));
+    await user.click(screen.getByRole("button", { name: "Add agent" }));
+    await user.click(screen.getByRole("button", { name: "Cursor" }));
     expect(
       within(screen.getByRole("list", { name: "Available agents" }))
         .getAllByRole("button", { name: /^Reorder / })
@@ -220,9 +213,7 @@ describe("ConnectionSettingsForm", () => {
     expect(
       screen.getByText("No agents added. Generic client is still available."),
     ).toBeVisible();
-    expect(
-      screen.getByRole("combobox", { name: "Add an agent" }),
-    ).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Add agent" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mutate).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -230,9 +221,8 @@ describe("ConnectionSettingsForm", () => {
         connectionClientOrder: [],
       }),
     );
-    await user.click(screen.getByRole("combobox", { name: "Add an agent" }));
-    await user.type(screen.getByPlaceholderText("Search agents…"), "codex");
-    await user.click(screen.getByRole("option", { name: /Codex/ }));
+    await user.click(screen.getByRole("button", { name: "Add agent" }));
+    await user.click(screen.getByRole("button", { name: "Codex" }));
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 

@@ -588,7 +588,7 @@ export function ConnectionSettingsForm() {
 
               <SettingSection
                 title="Available agents"
-                description="Add the agents you want to offer on Connect, then drag their pills or use left/right arrow keys to reorder. Generic client is always shown last."
+                description="Choose which agents are available on Connect, and in what order."
               >
                 <AvailableAgentsList
                   clients={clientsInOrder}

@@ -137,6 +137,7 @@ export function IntegrationAvailabilitySection({
                   label="Coding agents"
                   emptyMessage="No coding agents added."
                   inlineAdd
+                  inlineAddLabel="Add coding agent"
                   disabled={
                     disabled ||
                     !organization ||

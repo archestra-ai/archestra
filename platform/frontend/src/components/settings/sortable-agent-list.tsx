@@ -40,6 +40,7 @@ export function SortableAgentList({
   emptyMessage,
   removeLabelSuffix = "",
   inlineAdd = false,
+  inlineAddLabel = "Add agent",
 }: {
   items: { id: string; label: string; icon: ReactNode }[];
   shownItemIds: string[];
@@ -50,6 +51,7 @@ export function SortableAgentList({
   emptyMessage: string;
   removeLabelSuffix?: string;
   inlineAdd?: boolean;
+  inlineAddLabel?: string;
 }) {
   const addAgentId = useId();
   const [addOpen, setAddOpen] = useState(false);
@@ -135,6 +137,11 @@ export function SortableAgentList({
                 inlineAdd && "min-h-9 items-center px-3 py-1",
               )}
             >
+              {inlineAdd && selectedItems.length === 0 && (
+                <li className="flex items-center text-sm text-muted-foreground">
+                  {emptyMessage}
+                </li>
+              )}
               {selectedItems.map((item, index) => (
                 <AvailableAgentPill
                   key={item.id}
@@ -167,12 +174,12 @@ export function SortableAgentList({
                         id={addAgentId}
                         size="icon-xs"
                         variant="ghost"
-                        aria-label="Add coding agent"
+                        aria-label={inlineAddLabel}
                         disabled={disabled || !canAdd}
                         disabledText={
                           canAdd
                             ? "Editing unavailable"
-                            : "All coding agents are already added"
+                            : "All agents are already added"
                         }
                         className="rounded-md border border-dashed border-input text-muted-foreground hover:border-foreground/30 hover:text-foreground"
                       >
@@ -183,6 +190,7 @@ export function SortableAgentList({
                       {remainingItems.map((item) => (
                         <Button
                           key={item.id}
+                          aria-label={item.label}
                           size="sm"
                           variant="ghost"
                           className="w-full justify-start"

@@ -171,16 +171,7 @@ export const SHOTS: Shot[] = [
         .click();
       const dialog = page.getByRole("dialog");
       await dialog.getByLabel("Name").fill("Support bot");
-      // Map the first key of the first two providers: the seeded ones in CI,
-      // local keys elsewhere. Picking a provider shows its keys.
-      await dialog.getByRole("radio").first().click();
-      await dialog
-        .getByTestId("provider-key-picker-available-provider")
-        .first()
-        .click();
-      await dialog.getByRole("radio").first().click();
-      await dialog.getByRole("button", { name: "Continue" }).click();
-      await dialog.getByRole("button", { name: "Continue" }).click();
+      // The single-page form starts with each provider's primary key selected.
       await dialog.getByRole("button", { name: "Create key" }).click();
       await page.getByText("Copy your key").waitFor();
     },

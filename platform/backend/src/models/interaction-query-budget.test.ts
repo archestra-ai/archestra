@@ -10,6 +10,49 @@ describe("session query budgets", () => {
   beforeEach(async ({ makeAgent }) => {
     profileId = (await makeAgent()).id;
   });
+
+  test("derives a session preview without loading its response payload", async ({
+    makeAdmin,
+  }) => {
+    const admin = await makeAdmin();
+    await InteractionModel.create({
+      profileId,
+      sessionId: "preview-payload-budget",
+      request: {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "Explain this example" }],
+      },
+      response: {
+        id: "large-response",
+        object: "chat.completion",
+        created: 0,
+        model: "gpt-4",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "x".repeat(1_000_000) },
+            finish_reason: "stop",
+          },
+        ],
+      },
+      type: "openai:chatCompletions",
+    });
+    await drainBackgroundWork();
+
+    const { result, statements } = await recordQueries(() =>
+      InteractionModel.getSessions({ limit: 100, offset: 0 }, admin.id, true, {
+        sessionId: "preview-payload-budget",
+      }),
+    );
+
+    expect(result.data[0].lastUserMessagePreview).toBe("Explain this example");
+    // Response bodies can be megabytes. This is a physical read budget:
+    // observing the real queries catches accidental payload expansion even
+    // when the resulting preview text remains identical.
+    expect(statements.some((statement) => /\bresponse\b/.test(statement))).toBe(
+      false,
+    );
+  });
   test("deep pages skip the scan that cannot reach them", async () => {
     for (let index = 0; index < 501; index++) {
       await InteractionModel.create({

@@ -16,6 +16,7 @@ import {
 import OrganizationModel from "@/models/organization";
 import { rewriteConnectionProxySetupUrl } from "@/services/connection-proxy-setup-context";
 import type { ApiError } from "@/types";
+import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import { handleServerError } from "./server/error-handler";
 
 const BROWSER_API_FAVICON_HREF = Symbol("browserApiFaviconHref");
@@ -48,6 +49,10 @@ export const createFastifyInstance = () =>
     .withTypeProvider<ZodTypeProvider>()
     .setValidatorCompiler(validatorCompiler)
     .setSerializerCompiler(serializerCompiler)
+    .addHook("onRequest", (request, _reply, done) => {
+      incomingRequestAbortTracker.observe(request.raw);
+      done();
+    })
     // Resolve white-label branding before a top-level API navigation reaches
     // onSend. Keeping onSend synchronous is required for routes (Better Auth)
     // that write directly to the raw response.

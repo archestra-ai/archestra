@@ -1938,7 +1938,15 @@ export function mapProviderError(
 
   // Map to error code using provider-specific mapper
   let errorCode = mapError(statusCode, parsedError);
-  const isTerminatedStream = isStreamTerminatedError(error);
+  const errorMessage = extractErrorMessage(parsedError, responseBody, error);
+  // A proxy can serialize a native disconnect into an error frame, losing
+  // its Error prototype. Recognize that status-less fallback too, without
+  // overriding an explicit provider rejection or a more specific category.
+  const isTerminatedStream =
+    isStreamTerminatedError(error) ||
+    (statusCode === undefined &&
+      errorCode === ChatErrorCode.Unknown &&
+      errorMessage === "terminated");
 
   if (isTerminatedStream) {
     errorCode = ChatErrorCode.NetworkError;
@@ -2002,9 +2010,6 @@ export function mapProviderError(
   if (usageLimitError) {
     errorCode = ChatErrorCode.UsageLimitExceeded;
   }
-
-  // Extract the most meaningful error message
-  const errorMessage = extractErrorMessage(parsedError, responseBody, error);
 
   // OpenRouter ends a streaming turn with "Upstream idle timeout exceeded" when
   // the routed upstream stops emitting tokens mid-generation (e.g. a reasoning

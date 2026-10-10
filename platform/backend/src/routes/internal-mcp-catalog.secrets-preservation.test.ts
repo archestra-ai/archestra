@@ -2,10 +2,17 @@ import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { InternalMcpCatalogModel } from "@/models";
+import AuditLogModel from "@/models/audit-log";
+import SecretModel from "@/models/secret";
 import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { User } from "@/types";
+import { deriveKeyFromSecret, encryptSecretValueWithKey } from "@/utils/crypto";
+
+setupTestCacheManager();
 
 describe("Internal MCP Catalog - Local Config Secret Preservation on PUT", () => {
   let app: FastifyInstanceWithZod;
@@ -31,12 +38,181 @@ describe("Internal MCP Catalog - Local Config Secret Preservation on PUT", () =>
     });
 
     const { default: routes } = await import("./internal-mcp-catalog");
+    registerAuditLogHook(app);
     await app.register(routes);
+    await app.register((await import("./oauth")).default);
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("unreadable local credentials allow metadata edits, reject partial replacement, and recover on complete replacement", async () => {
+    const secret = await SecretModel.create({
+      name: "unreadable-local",
+      secret: {},
+    });
+    const encrypted = encryptSecretValueWithKey(
+      { TOKEN: "old-token", OTHER: "old-other" },
+      deriveKeyFromSecret("unavailable-test-key"),
+    );
+    await SecretModel.updateRawSecret(secret.id, encrypted);
+    const localConfig = {
+      command: "node",
+      environment: [
+        { key: "TOKEN", type: "secret" as const, promptOnInstallation: false },
+        { key: "OTHER", type: "secret" as const, promptOnInstallation: false },
+      ],
+    };
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "unreadable-local-catalog",
+        serverType: "local",
+        localConfigSecretId: secret.id,
+        localConfig,
+      },
+      { organizationId, authorId: user.id },
+    );
+    const url = `/api/internal_mcp_catalog/${catalog.id}`;
+    expect(
+      (
+        await app.inject({
+          method: "PUT",
+          url,
+          payload: { description: "Metadata edit" },
+        })
+      ).statusCode,
+    ).toBe(200);
+    const partial = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        name: "must-not-rename-on-incomplete-recovery",
+        localConfig: {
+          ...localConfig,
+          environment: [
+            { ...localConfig.environment[0], value: "replacement-token" },
+            localConfig.environment[1],
+          ],
+        },
+      },
+    });
+    expect(partial.statusCode).toBe(409);
+    expect(
+      (
+        await InternalMcpCatalogModel.findById(catalog.id, {
+          expandSecrets: false,
+        })
+      )?.name,
+    ).toBe(catalog.name);
+    expect(partial.json().error.message).toContain("re-enter");
+    expect(
+      (await SecretModel.findAllRaw()).find((row) => row.id === secret.id)
+        ?.secret,
+    ).toEqual(encrypted);
+    const response = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        localConfig: {
+          ...localConfig,
+          environment: [
+            { ...localConfig.environment[0], value: "replacement-token" },
+            { ...localConfig.environment[1], value: "replacement-other" },
+          ],
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    const recovered = await InternalMcpCatalogModel.findByIdWithResolvedSecrets(
+      catalog.id,
+    );
+    expect(recovered?.localConfigSecretId).not.toBe(secret.id);
+    expect(
+      recovered?.localConfig?.environment?.map((entry) => entry.value),
+    ).toEqual(["replacement-token", "replacement-other"]);
+    // onResponse audit writes finish asynchronously.
+    await vi.waitFor(async () => {
+      const records = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceId: catalog.id,
+        action: "internalMcpCatalog.updated",
+        limit: 10,
+        offset: 0,
+        sortDirection: "desc",
+      });
+      const record = records.data.find((entry) =>
+        JSON.stringify(entry.after).includes(
+          recovered?.localConfigSecretId ?? "missing",
+        ),
+      );
+      expect(record).toBeDefined();
+      expect(record?.after).not.toEqual(record?.before);
+      expect(JSON.stringify(record)).not.toContain("replacement-token");
+    });
+  });
+
+  test("complete OAuth credential re-entry restores runtime resolution", async () => {
+    const secret = await SecretModel.create({
+      name: "unreadable-oauth",
+      secret: {},
+    });
+    await SecretModel.updateRawSecret(
+      secret.id,
+      encryptSecretValueWithKey(
+        { client_secret: "old-secret" },
+        deriveKeyFromSecret("unavailable-test-key"),
+      ),
+    );
+    const oauthConfig = {
+      name: "Synthetic OAuth",
+      server_url: "https://example.invalid/mcp",
+      client_id: "synthetic-client",
+      redirect_uris: ["https://example.invalid/oauth-callback"],
+      scopes: ["read"],
+      default_scopes: [],
+      supports_resource_metadata: false,
+      requires_proxy: true,
+      authorization_endpoint: "https://example.invalid/authorize",
+      token_endpoint: "https://example.invalid/token",
+    };
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "unreadable-oauth-catalog",
+        serverType: "remote",
+        serverUrl: "https://example.invalid/mcp",
+        clientSecretId: secret.id,
+        oauthConfig,
+      },
+      { organizationId, authorId: user.id },
+    );
+    const initiate = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/oauth/initiate",
+        payload: { catalogId: catalog.id },
+      });
+    const unavailable = await initiate();
+    expect(unavailable.statusCode).toBe(409);
+    expect(unavailable.headers["x-should-retry"]).toBe("false");
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/internal_mcp_catalog/${catalog.id}`,
+      payload: {
+        oauthConfig: { ...oauthConfig, client_secret: "replacement-oauth" },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(
+      (await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalog.id))
+        ?.oauthConfig?.client_secret,
+    ).toBe("replacement-oauth");
+    const initiated = await initiate();
+    expect(initiated.statusCode).toBe(200);
+    expect(
+      new URL(initiated.json().authorizationUrl).searchParams.get("client_id"),
+    ).toBe("synthetic-client");
   });
 
   test("1. PUT with env var entry but no value preserves the stored secret value", async ({

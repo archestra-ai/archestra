@@ -43,6 +43,7 @@ import {
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { assertCanWriteMcpDeploymentYaml } from "@/services/mcp-advanced-settings";
 import {
+  assertCatalogCredentialRecovery,
   extractLocalConfigSecrets,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
@@ -61,6 +62,7 @@ import {
   ResourceVisibilityScopeSchema,
   UuidIdSchema,
 } from "@/types";
+import { ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY } from "@/types/enterprise-managed-credentials";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
@@ -1039,6 +1041,17 @@ async function handleEditMcpConfig(
       catalogName: existing.name,
       existingLocalConfigSecretId: existing.localConfigSecretId,
       existingClientSecretId: existing.clientSecretId,
+      existingLocalConfig: existing.localConfig,
+      existingClientSecretKeys: [
+        ...(existing.oauthConfig ? ["client_secret"] : []),
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        ...(existing.enterpriseManagedConfig
+          ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
+          : []),
+        // SPDX-SnippetEnd
+      ],
     });
     const updated = await InternalMcpCatalogModel.update(
       existing.id,
@@ -1933,6 +1946,8 @@ async function moveCatalogSecretsToBag(params: {
   catalogName: string;
   existingLocalConfigSecretId: string | null;
   existingClientSecretId: string | null;
+  existingLocalConfig?: LocalConfig | null;
+  existingClientSecretKeys?: string[];
 }): Promise<void> {
   const {
     updateData,
@@ -1941,11 +1956,33 @@ async function moveCatalogSecretsToBag(params: {
     existingClientSecretId,
   } = params;
 
+  const submittedClientSecret = (
+    updateData.oauthConfig as { client_secret?: unknown } | null | undefined
+  )?.client_secret;
+  const clientRecovery = params.existingClientSecretKeys
+    ? {
+        requiredKeys: params.existingClientSecretKeys,
+        values: {
+          ...(typeof submittedClientSecret === "string" && submittedClientSecret
+            ? { client_secret: submittedClientSecret }
+            : {}),
+        },
+      }
+    : undefined;
+  await assertCatalogCredentialRecovery({
+    localSecretId: existingLocalConfigSecretId,
+    existingLocalConfig: params.existingLocalConfig,
+    localConfig: updateData.localConfig as LocalConfig | undefined,
+    clientSecretId: existingClientSecretId,
+    clientRecovery,
+  });
+
   if (updateData.localConfig !== undefined) {
     const { localConfig, secretId } = await extractLocalConfigSecrets({
       localConfig: updateData.localConfig as LocalConfig,
       existingSecretId: existingLocalConfigSecretId,
       catalogName,
+      existingLocalConfig: params.existingLocalConfig,
     });
     updateData.localConfig = localConfig;
     if (secretId) updateData.localConfigSecretId = secretId;
@@ -1967,6 +2004,7 @@ async function moveCatalogSecretsToBag(params: {
         catalogName,
         key: "client_secret",
         value: clientSecret,
+        recovery: clientRecovery,
       });
       updateData.oauthConfig = rest;
       updateData.clientSecretId = id;

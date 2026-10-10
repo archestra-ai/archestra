@@ -19,9 +19,11 @@ import {
   OrganizationModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import SecretModel from "@/models/secret";
 import { beforeEach, describe, expect, test } from "@/test";
 import { createRestrictedEnvironment } from "@/test/environments";
 import type { Agent } from "@/types";
+import { deriveKeyFromSecret, encryptSecretValueWithKey } from "@/utils/crypto";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
 describe("mcp server tool execution", () => {
@@ -40,6 +42,53 @@ describe("mcp server tool execution", () => {
       userId: user.id,
       organizationId: org.id,
     };
+  });
+
+  test("edit_mcp_config recovers unreadable credentials without exposing the replacement in its result", async () => {
+    const secret = await SecretModel.create({
+      name: "mcp-recovery",
+      secret: {},
+    });
+    await SecretModel.updateRawSecret(
+      secret.id,
+      encryptSecretValueWithKey(
+        { TOKEN: "old-token" },
+        deriveKeyFromSecret("unavailable-test-key"),
+      ),
+    );
+    const environment = [
+      { key: "TOKEN", type: "secret" as const, promptOnInstallation: false },
+    ];
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "mcp-recovery-catalog",
+        serverType: "local",
+        localConfigSecretId: secret.id,
+        localConfig: { command: "node", environment },
+      },
+      { organizationId, authorId: mockContext.userId },
+    );
+    const tool = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`;
+    const incomplete = await executeArchestraTool(
+      tool,
+      { id: catalog.id, environment },
+      mockContext,
+    );
+    expect(incomplete.isError).toBe(true);
+    const recovered = await executeArchestraTool(
+      tool,
+      {
+        id: catalog.id,
+        environment: [{ ...environment[0], value: "replacement-mcp-token" }],
+      },
+      mockContext,
+    );
+    expect(recovered.isError).toBe(false);
+    expect(JSON.stringify(recovered)).not.toContain("replacement-mcp-token");
+    expect(
+      (await InternalMcpCatalogModel.findByIdWithResolvedSecrets(catalog.id))
+        ?.localConfig?.environment?.[0].value,
+    ).toBe("replacement-mcp-token");
   });
 
   test("get_mcp_server_tools returns error when mcpServerId is missing", async () => {

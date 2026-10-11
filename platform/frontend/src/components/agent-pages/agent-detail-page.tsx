@@ -503,13 +503,15 @@ function AgentDetails({
     : formatPermissionConstraint({ [resource]: ["read"] });
   // `canDelete` is the delete permission AND the scope check AND not built-in,
   // so which of the three refused decides which sentence is the true one.
-  const deleteReason = canDelete
-    ? undefined
-    : isBuiltIn
-      ? `A built-in ${config.singularInSentence} cannot be deleted`
-      : canModify
-        ? formatPermissionConstraint({ [resource]: ["delete"] })
-        : refusalReason;
+  const deleteReason = agent.isPersonalGateway
+    ? "A personal MCP gateway is removed with its owner's account"
+    : canDelete
+      ? undefined
+      : isBuiltIn
+        ? `A built-in ${config.singularInSentence} cannot be deleted`
+        : canModify
+          ? formatPermissionConstraint({ [resource]: ["delete"] })
+          : refusalReason;
 
   const handleExport = () => {
     exportAgent.mutate(agent.id, {
@@ -542,6 +544,11 @@ function AgentDetails({
       scope={agent.id}
       onDirtyChange={setPermissionsDirty}
       registerSave={registerPermissionsSave}
+      lockedReason={
+        agent.isPersonalGateway
+          ? "A personal MCP gateway is only for its owner."
+          : undefined
+      }
     />
   );
 

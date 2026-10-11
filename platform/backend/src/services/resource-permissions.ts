@@ -24,6 +24,7 @@ import { roleActionResourceFor } from "@archestra/shared/access-control";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import { enterpriseTier } from "@/enterprise-tier";
+import AgentModel from "@/models/agent";
 import KbFileModel from "@/models/kb-file";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -475,6 +476,23 @@ export class ResourcePermissions {
       });
       if (target?.enabled === false)
         throw new ApiError(400, "Encrypted chats cannot be shared");
+    }
+    if (params.resource === "mcpGateway" && params.scope !== "*") {
+      // A personal gateway serves its owner's own installs and credentials,
+      // and is cleaned up with them when the owner's account goes.
+      const personal = await AgentModel.findPersonalMcpGatewayAuthor({
+        id: params.scope,
+        organizationId: params.organizationId,
+      });
+      if (
+        personal &&
+        params.grants.some(
+          (grant) =>
+            grant.subject.type !== "user" ||
+            grant.subject.id !== personal.authorId,
+        )
+      )
+        throw new ApiError(400, "Personal MCP gateways cannot be shared");
     }
     const effective = await ResourcePermissions.getEffective(params);
     await ResourcePermissions.assertNoStaticPinsBroken({

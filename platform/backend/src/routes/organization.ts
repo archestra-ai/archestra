@@ -385,6 +385,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ) {
           throw new ApiError(400, "Agent is not an MCP gateway");
         }
+        // One member's personal gateway is no default for everyone. A value
+        // saved before this rule may be resubmitted unchanged.
+        if (agent.isPersonalGateway) {
+          const current = await OrganizationModel.getById(organizationId);
+          if (current?.connectionDefaultMcpGatewayId !== agent.id) {
+            throw new ApiError(
+              400,
+              "A personal MCP gateway cannot be the default",
+            );
+          }
+        }
       }
 
       if (body.connectionDefaultProviderKeys) {

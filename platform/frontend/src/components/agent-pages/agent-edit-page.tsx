@@ -356,6 +356,11 @@ function AgentEditor({ agent }: { agent: Agent }) {
               scope={agent.id}
               onDirtyChange={setPermissionsDirty}
               registerSave={registerPermissionsSave}
+              lockedReason={
+                agent.isPersonalGateway
+                  ? "A personal MCP gateway is only for its owner."
+                  : undefined
+              }
             />
           </div>
         )}

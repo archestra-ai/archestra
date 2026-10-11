@@ -1188,23 +1188,28 @@ class InteractionModel {
     // Put the most active users first so a large organization's filter surfaces
     // likely choices before its alphabetical tail. Names and ids close ties to
     // keep the order stable between requests.
-    const activityCount = count();
-    const result = await db
+    // Aggregate the log before joining names so user metadata is joined once
+    // per distinct user instead of once per interaction.
+    const activity = db
       .select({
         userId: schema.interactionsTable.userId,
-        userName: schema.usersTable.name,
+        activityCount: count().as("activity_count"),
       })
       .from(schema.interactionsTable)
-      .innerJoin(
-        schema.usersTable,
-        eq(schema.interactionsTable.userId, schema.usersTable.id),
-      )
       .where(and(...conditions))
-      .groupBy(schema.interactionsTable.userId, schema.usersTable.name)
+      .groupBy(schema.interactionsTable.userId)
+      .as("user_activity");
+    const result = await db
+      .select({
+        userId: activity.userId,
+        userName: schema.usersTable.name,
+      })
+      .from(activity)
+      .innerJoin(schema.usersTable, eq(activity.userId, schema.usersTable.id))
       .orderBy(
-        desc(activityCount),
+        desc(activity.activityCount),
         asc(schema.usersTable.name),
-        asc(schema.interactionsTable.userId),
+        asc(activity.userId),
       );
 
     return result

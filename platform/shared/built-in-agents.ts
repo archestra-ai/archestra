@@ -8,7 +8,7 @@ export { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
 
 /** Display names for built-in agents */
 export const BUILT_IN_AGENT_NAMES = {
-  OPENAPPA_CONFIG: "OpenAPPA Configuration Agent",
+  OPENAPPA_CONFIG: "APPAdvisor",
   CONTEXT_COMPACTION: "Context Compaction Subagent",
   CHAT_TITLE_GENERATION: "Chat Title Generation Subagent",
   APP_RUNTIME: "App Runtime LLM Agent",

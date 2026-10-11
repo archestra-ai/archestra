@@ -16,7 +16,7 @@ describe("preview agent catalog", () => {
     );
     expect(
       result.data.map((row: { value: { name: string } }) => row.value.name),
-    ).toContain("OpenAPPA Configuration Agent");
+    ).toContain("APPAdvisor");
     expect(result.data).toHaveLength(4);
   });
 

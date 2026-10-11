@@ -1349,7 +1349,11 @@ describe("OpenAI Responses proxy", () => {
     expect(JSON.stringify(interactions)).not.toContain(accessToken);
   });
 
-  test("routes a codex exec ChatGPT bearer to the subscription backend", async ({
+  test.for([
+    "codex_exec",
+    "Codex Desktop",
+    "codex_work_desktop",
+  ])("routes a %s ChatGPT bearer to the subscription backend", async (originator, {
     makeAgent,
     makeMember,
     makeUser,
@@ -1384,8 +1388,8 @@ describe("OpenAI Responses proxy", () => {
         authorization: `Bearer ${accessToken}`,
         "x-archestra-virtual-key": passthroughToken,
         "chatgpt-account-id": "account_123",
-        originator: "codex_exec",
-        "user-agent": "codex_exec/0.156.1",
+        originator,
+        "user-agent": `${originator}/0.162.0`,
       },
       payload: { model: "gpt-5.6-sol", input: "Hello!" },
     });
@@ -1394,8 +1398,16 @@ describe("OpenAI Responses proxy", () => {
     expect(capturedOptions?.openAiCodexPassthrough).toMatchObject({
       accessToken,
       accountId: "account_123",
-      originator: "codex_exec",
+      originator,
     });
+    const interactions = await InteractionModel.getAllInteractionsForProfile(
+      agent.id,
+    );
+    expect(interactions.at(-1)).toMatchObject({
+      authMethod: "passthrough_virtual_key",
+      billingMode: "subscription",
+    });
+    expect(JSON.stringify(interactions)).not.toContain(accessToken);
   });
 
   test("routes the native verifier ChatGPT bearer to the subscription client and keeps API keys metered", async ({
@@ -1700,7 +1712,10 @@ describe("OpenAI Responses proxy", () => {
     await app.close();
   });
 
-  test("does not forward a Codex ChatGPT bearer without proxy access", async ({
+  test.for([
+    "codex_cli_rs",
+    "codex_work_desktop",
+  ])("does not forward a %s ChatGPT bearer without proxy access", async (originator, {
     makeAgent,
   }) => {
     const app = createOpenAiRouteTestApp();
@@ -1714,7 +1729,7 @@ describe("OpenAI Responses proxy", () => {
         authorization:
           "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature",
         "chatgpt-account-id": "account_123",
-        originator: "codex_cli_rs",
+        originator,
       },
       payload: { model: "gpt-5.6-sol", input: "Hello!" },
     });
@@ -1724,7 +1739,10 @@ describe("OpenAI Responses proxy", () => {
     expect(openAiResponsesAdapterFactory.createClient).not.toHaveBeenCalled();
   });
 
-  test("lists Codex subscription models only for a caller with proxy access", async ({
+  test.for([
+    "codex_cli_rs",
+    "codex_work_desktop",
+  ])("lists %s subscription models only for a caller with proxy access", async (originator, {
     makeAgent,
     makeMember,
     makeUser,
@@ -1745,7 +1763,7 @@ describe("OpenAI Responses proxy", () => {
       authorization:
         "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature",
       "chatgpt-account-id": "account_123",
-      originator: "codex_cli_rs",
+      originator,
     };
     const denied = await app.inject({
       method: "GET",
@@ -1797,7 +1815,7 @@ describe("OpenAI Responses proxy", () => {
     const forwardedHeaders = new Headers(fetchStub.mock.calls[0]?.[1]?.headers);
     expect(forwardedHeaders.get("authorization")).toBe(headers.authorization);
     expect(forwardedHeaders.get("chatgpt-account-id")).toBe("account_123");
-    expect(forwardedHeaders.get("originator")).toBe("codex_cli_rs");
+    expect(forwardedHeaders.get("originator")).toBe(originator);
     expect(forwardedHeaders.has("x-archestra-virtual-key")).toBe(false);
   });
 

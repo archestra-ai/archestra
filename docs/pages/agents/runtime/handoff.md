@@ -31,8 +31,6 @@ The skill drives these tools on the [MCP Gateway](/docs/mcp/gateway). You can al
 
 Only the person who started a run can steer it or use its files.
 
-These tools are on by default in My Gateway, your personal gateway. On any other gateway, assign them or remove them from its exclusions.
-
 ## Pass a Credential
 
 Your agent can give the run a credential, such as a GitHub token, with [`transfer_credential`](/docs/reference/archestra-mcp-server#transfer_credential). It reaches the container on the next turn and serves only your runs.

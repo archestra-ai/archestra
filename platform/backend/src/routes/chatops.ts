@@ -2010,6 +2010,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // Live, so a reinstall shows up when the page is reloaded.
           await provider?.refreshGrantedScopes();
           const missingScopes = provider?.getMissingScopes() ?? [];
+          // The reinstall below only grants scopes the app's manifest asks for.
+          if (missingScopes.length > 0) {
+            await slackAppFactory.ensureManifestScopes(bot);
+          }
           return {
             missingScopes,
             handle: provider?.getBotHandle() ?? null,

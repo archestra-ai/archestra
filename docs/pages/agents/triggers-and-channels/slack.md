@@ -46,7 +46,7 @@ With an HTTPS address, installing a new bot is one click: Slack sends you back t
 - In a direct message, it answers every message.
 - Mentioning one bot does not wake another in the same thread.
 
-Each channel belongs to one agent: the first bot to join or answer there claims it. Turn on **Answer all messages** in the channel's settings, and that agent's bot answers every message without a mention. Other bots in the channel still wait for theirs. To hand a channel over, edit the other agent's bot and make the channel that agent's.
+One bot per channel can reply to all messages, with no mention needed. Turning it on for a bot takes it from the bot that had it. Other bots in the channel still wait for their mention.
 
 To quiet a thread, press **Stop** while the bot is working. It drops the answer in progress and stops answering that thread. Mention it again to wake it.
 
@@ -67,6 +67,8 @@ The answer appears as the agent writes it, so a long one never leaves the thread
 Tell the agents how to behave in one channel. Edit the agent's bot, open the channel's **Settings**, and write them as you would talk to the agent. Every bot in the channel follows them. For example: "Every message here is a task. Create it at once, and do not ask first."
 
 They come first, before the agent's own instructions. They add to what the agent does, and never remove an ability.
+
+Bots also read the channel's description from Slack, to know what the channel is about. Anyone in the channel can edit it, so it is context, not instructions.
 
 <span id="autoprovisioning-slack-users"></span><span id="attachments"></span><span id="commands"></span><span id="switching-agents-inline"></span>
 

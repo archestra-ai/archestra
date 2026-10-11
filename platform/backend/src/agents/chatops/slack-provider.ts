@@ -118,6 +118,19 @@ class SlackProvider implements ChatOpsProvider {
     defaultTtl: TimeInMs.Hour,
   });
   /**
+   * Each channel's purpose, "" for none. Short-lived, and dropped as soon as
+   * Slack reports a purpose change in a channel the bot is in.
+   */
+  private channelDescriptionCache = new LRUCacheManager<string>({
+    maxSize: 1000,
+    defaultTtl: 10 * TimeInMs.Minute,
+  });
+  /**
+   * Reads the channel description on the way to a reply, so it must fail fast:
+   * the default client retries for minutes, holding the reply back.
+   */
+  private descriptionClient: WebClient | null = null;
+  /**
    * Set once agents.sessions.setStatus is rejected (an app not yet on the
    * Agent messaging experience), so status updates go straight to the legacy
    * assistant.threads.setStatus instead of failing first every time.
@@ -191,6 +204,10 @@ class SlackProvider implements ChatOpsProvider {
 
     const { botToken } = this.config;
     this.client = new WebClient(botToken);
+    this.descriptionClient = new WebClient(botToken, {
+      retryConfig: { retries: 0 },
+      timeout: 3 * TimeInMs.Second,
+    });
 
     // Single raw fetch to auth.test — reads both the JSON body (user/team info)
     // and the x-oauth-scopes response header (scope validation) in one API call.
@@ -376,6 +393,10 @@ class SlackProvider implements ChatOpsProvider {
     // Only process message and app_mention events.
     if (event.type !== "message" && event.type !== "app_mention") {
       return null;
+    }
+
+    if (event.subtype === "channel_purpose" && event.channel) {
+      this.channelDescriptionCache.delete(event.channel);
     }
 
     // Skip bot messages to avoid loops
@@ -1099,6 +1120,32 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  async getChannelDescription(channelId: string): Promise<string | null> {
+    const client = this.descriptionClient ?? this.client;
+    if (!client) return null;
+    const cached = this.channelDescriptionCache.get(channelId);
+    if (cached !== undefined) return cached || null;
+    try {
+      const result = await client.conversations.info({
+        channel: channelId,
+      });
+      const purpose =
+        (result.channel as { purpose?: { value?: string } } | undefined)
+          ?.purpose?.value ?? "";
+      const description = purpose.trim();
+      this.channelDescriptionCache.set(channelId, description);
+      return description || null;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId },
+        "[SlackProvider] Failed to get channel description",
+      );
+      // Answer without it for a minute rather than wait on Slack every reply.
+      this.channelDescriptionCache.set(channelId, "", TimeInMs.Minute);
+      return null;
+    }
+  }
+
   async discoverChannels(_context: unknown): Promise<DiscoveredChannel[]> {
     if (!this.client) {
       return [];
@@ -1162,6 +1209,7 @@ class SlackProvider implements ChatOpsProvider {
         channels.push({
           channelId: channel.id,
           channelName: channel.name || null,
+          description: channel.purpose?.value?.trim() || null,
           isPrivate: channel.is_private === true,
           isMember: channel.is_member === true,
         });
@@ -2832,6 +2880,8 @@ function protectSlackUrlBoundaries(text: string): string {
 type SlackJoinableChannel = {
   channelId: string;
   channelName: string | null;
+  /** The channel's purpose, as set in Slack. */
+  description: string | null;
   isPrivate: boolean;
   isMember: boolean;
 };

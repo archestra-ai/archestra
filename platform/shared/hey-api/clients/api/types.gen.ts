@@ -39962,6 +39962,7 @@ export type ListSlackAgentBotChannelsResponses = {
         channels: Array<{
             channelId: string;
             channelName: string | null;
+            description: string | null;
             isPrivate: boolean;
             isMember: boolean;
         }>;

@@ -94,6 +94,7 @@ import SlackProvider from "./slack-provider";
 import TelegramProvider from "./telegram-provider";
 import {
   buildAgentFooter,
+  buildChannelDescriptionBlock,
   buildChannelInstructionsBlock,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
@@ -1046,6 +1047,11 @@ export class ChatOpsManager {
         contextLines.push(`- Message permalink: ${permalink}`);
       }
       systemPrefix = contextLines.join("\n");
+    }
+    if (!binding.isDm && provider.getChannelDescription) {
+      systemPrefix += buildChannelDescriptionBlock(
+        await provider.getChannelDescription(message.channelId),
+      );
     }
 
     // Group conversations: the agent receives every message, so frame the

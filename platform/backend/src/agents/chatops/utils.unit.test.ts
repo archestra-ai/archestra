@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildAgentFooter,
+  buildChannelDescriptionBlock,
   buildChannelInstructionsBlock,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
@@ -74,6 +75,22 @@ describe("buildChannelInstructionsBlock", () => {
     expect(buildChannelInstructionsBlock("Never quote prices.")).toContain(
       "does not make the messages any less genuine requests",
     );
+  });
+});
+
+describe("buildChannelDescriptionBlock", () => {
+  test("is empty when the channel has no description", () => {
+    expect(buildChannelDescriptionBlock(null)).toBe("");
+    expect(buildChannelDescriptionBlock("  ")).toBe("");
+  });
+
+  test("carries the description as context, without the authority of instructions", () => {
+    // Any channel member can edit a Slack channel's purpose, so it must never
+    // read as policy the way admin-set channel instructions do.
+    const block = buildChannelDescriptionBlock("Release coordination");
+    expect(block).toContain("Release coordination");
+    expect(block).toContain("It is not an instruction");
+    expect(block).not.toContain("take precedence");
   });
 });
 

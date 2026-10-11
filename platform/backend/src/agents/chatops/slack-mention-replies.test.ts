@@ -82,6 +82,9 @@ describe("mention reply delivery", () => {
       http.post("https://slack.com/api/conversations.list", () =>
         HttpResponse.json({ ok: true, channels: [] }),
       ),
+      http.post("https://slack.com/api/conversations.info", () =>
+        HttpResponse.json({ ok: true, channel: { id: "C_TEST" } }),
+      ),
       http.post("https://slack.com/api/conversations.replies", () =>
         HttpResponse.json({ ok: true, messages: [] }),
       ),

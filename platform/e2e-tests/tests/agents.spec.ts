@@ -225,9 +225,14 @@ test("can create and delete an agent", {
     .filter({
       has: page.getByRole("link", { name: AGENT_NAME, exact: true }),
     });
+  // An instance where this is the admin's first personal agent pins it for
+  // them as their personal agent, so it is a tile above the table instead of
+  // a row; the tile's whole surface is its link.
+  const isRow = (await rowNameCell.count()) > 0;
   await expect(async () => {
     if (!page.url().match(agentDetailUrl)) {
-      await rowNameCell.click({ position: { x: 4, y: 4 } });
+      if (isRow) await rowNameCell.click({ position: { x: 4, y: 4 } });
+      else await agentLocator.click();
     }
     await expect(page).toHaveURL(agentDetailUrl, { timeout: 3_000 });
   }).toPass({ timeout: 20_000 });
@@ -302,8 +307,13 @@ test("pins MCP gateways as tiles, reloads, and filters", async ({
     const listPath = `/mcp/gateways?name=${encodeURIComponent(prefix)}&pageSize=1&sortBy=name&sortDirection=asc`;
     await goToPage(page, listPath);
     await waitForAgentsTable(page);
-    await openAgentRowMenu(page, names[0]);
-    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+    // Pinning is the row's own button, beside Edit and the menu.
+    const pinRow = (name: string) =>
+      page
+        .getByTestId(E2eTestId.AgentsTable)
+        .getByRole("button", { name: `Pin ${name}`, exact: true })
+        .click();
+    await pinRow(names[0]);
     // The viewer's personal gateway is pinned for them as well, so the
     // section can be there whatever this test pins; only its own tiles count.
     const pinnedSection = page.locator("section").filter({
@@ -319,8 +329,7 @@ test("pins MCP gateways as tiles, reloads, and filters", async ({
     await expect(
       page.getByRole("link", { name: names[1], exact: true }),
     ).toBeVisible();
-    await openAgentRowMenu(page, names[1]);
-    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+    await pinRow(names[1]);
     await expect(ownTiles).toHaveText([names[1], names[0]]);
     await page.reload();
     await expect(pinnedTile(names[0])).toBeVisible();
@@ -358,8 +367,7 @@ test("pins MCP gateways as tiles, reloads, and filters", async ({
     await page.setViewportSize({ width: 1280, height: 800 });
     await goToPage(page, `${listPath}&page=3`);
     await waitForAgentsTable(page);
-    await openAgentRowMenu(page, names[2]);
-    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+    await pinRow(names[2]);
     await expect(pinnedTile(names[2])).toBeVisible();
     await expect(
       page.getByRole("link", { name: names[1], exact: true }),

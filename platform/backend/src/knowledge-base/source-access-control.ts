@@ -271,6 +271,18 @@ class KnowledgeSourceAccessControlService {
     });
   }
 
+  canUpdateConnector(
+    accessControl: KnowledgeSourceAccessControlContext,
+    connector: Pick<KnowledgeBaseConnector, "id" | "syncPermissionsFromSource">,
+  ) {
+    return this.hasScopedAccess({
+      accessControl,
+      resource: "knowledgeConnector",
+      id: connector.id,
+      action: "update",
+    });
+  }
+
   canQueryKnowledgeBase(
     accessControl: KnowledgeSourceAccessControlContext,
     knowledgeBase: KnowledgeBase,
@@ -406,7 +418,7 @@ class KnowledgeSourceAccessControlService {
     accessControl: KnowledgeSourceAccessControlContext;
     resource: "knowledgeBase" | "knowledgeConnector";
     id: string;
-    action: "read" | "use";
+    action: "read" | "use" | "update";
   }) {
     const { accessControl } = params;
     if (!accessControl.organizationId) return false;

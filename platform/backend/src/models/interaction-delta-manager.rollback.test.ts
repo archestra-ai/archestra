@@ -624,6 +624,65 @@ describe("InteractionDeltaManager", () => {
     expect(reconstructedMessages(map.get(bTip.id)?.request)).toEqual(bMsgs);
   });
 
+  test("cold reconstruction sizes only requested targets and reuses them on warm reads", async () => {
+    const sessionId = "sess-target-cache";
+    const messages = [userMsg("first")];
+    const tips = [];
+    const expectedRequests = [];
+    for (let turn = 0; turn < 8; turn++) {
+      if (turn > 0) {
+        messages.push(
+          assistantMsg(`answer-${turn}`),
+          userMsg(`question-${turn}`),
+        );
+      }
+      tips.push(
+        await createClaude([...messages], {
+          sessionId,
+          processedMessages: [...messages],
+          envelope: { tools: [{ name: "example_tool" }] },
+          processedEnvelope: { tools: [{ name: "example_tool" }] },
+        }),
+      );
+      expectedRequests.push(
+        anthropicRequest([...messages], {
+          tools: [{ name: "example_tool" }],
+        }),
+      );
+    }
+    const requested = [tips[3], tips[7]];
+    const rows = await Promise.all(requested.map((tip) => rawRow(tip.id)));
+    InteractionDeltaManager.reset();
+    const cache = (
+      InteractionDeltaManager as unknown as {
+        reconstructCache: { set: (key: string, value: unknown) => void };
+      }
+    ).reconstructCache;
+    // Every insertion invokes the real cache's payload-size calculation. Its
+    // work must scale with requested targets rather than their ancestor count.
+    const setSpy = vi.spyOn(cache, "set");
+    try {
+      const full = await InteractionDeltaManager.reconstructMany(rows);
+      for (const index of [3, 7]) {
+        expect(full.get(tips[index].id)?.request).toEqual(
+          expectedRequests[index],
+        );
+        expect(full.get(tips[index].id)?.processedRequest).toEqual(
+          expectedRequests[index],
+        );
+      }
+      expect(setSpy.mock.calls.map(([key]) => key)).toEqual(
+        requested.map((tip) => tip.id),
+      );
+
+      setSpy.mockClear();
+      expect(await InteractionDeltaManager.reconstructMany(rows)).toEqual(full);
+      expect(setSpy).not.toHaveBeenCalled();
+    } finally {
+      setSpy.mockRestore();
+    }
+  });
+
   test("reconstructs correctly when the cache retains nothing", async () => {
     const sessionId = "sess-evicting";
     const msgs1 = [userMsg("e0")];

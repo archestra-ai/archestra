@@ -1148,6 +1148,7 @@ export async function getChatMcpTools({
             userId,
             skipAccessCheck: userId === "system",
             parentLlm,
+            delegationChain,
           }),
           getSkillDelegationTools({ agentId, organizationId, userId }),
         ]);

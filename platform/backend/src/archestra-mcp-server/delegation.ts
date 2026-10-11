@@ -123,6 +123,8 @@ export async function getAgentTools(context: {
   lookups?: RequestLookups;
   /** The model and key the caller runs on, which its fork starts from. */
   parentLlm?: ModelSelection;
+  /** The caller's own delegation chain; a fork's ends in its agent twice. */
+  delegationChain?: string;
 }): Promise<Tool[]> {
   const { agentId, organizationId, userId, skipAccessCheck, lookups } = context;
 
@@ -843,11 +845,14 @@ async function finishDelegationTools(
     organizationId: string;
     userId?: string;
     parentLlm?: ModelSelection;
+    delegationChain?: string;
   },
   tools: Tool[],
   attestable: boolean,
 ): Promise<Tool[]> {
-  const caller = await AgentModel.findDelegationTarget(context.agentId);
+  const caller = isForkRun(context)
+    ? null
+    : await AgentModel.findDelegationTarget(context.agentId);
   const tiers =
     caller?.agentType === "agent"
       ? await forkTiers({ ...context, caller })
@@ -892,6 +897,15 @@ async function forkTiers(params: {
     parentLlm,
   });
   return availableSubagentTiers({ parent, agentTrio: caller, organizationId });
+}
+
+/** A fork may not fork again, so it is not offered the fork tool. */
+function isForkRun(context: {
+  agentId: string;
+  delegationChain?: string;
+}): boolean {
+  const chain = context.delegationChain?.split(":") ?? [];
+  return chain.at(-1) === context.agentId && chain.at(-2) === context.agentId;
 }
 
 const SELF_FORK_TIER_USES = {

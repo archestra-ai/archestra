@@ -464,6 +464,7 @@ async function getSearchableTools(params: {
           userId,
           skipAccessCheck: userId === "system",
           parentLlm: params.parentLlm,
+          delegationChain: params.delegationChain,
         })
       : [];
   // Agent-designated skills are searchable through their skill__<slug>

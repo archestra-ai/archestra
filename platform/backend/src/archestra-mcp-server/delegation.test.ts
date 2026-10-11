@@ -924,6 +924,34 @@ describe("self-fork and attested returns", () => {
     ).not.toHaveProperty("tier");
   });
 
+  test("a fork is not offered a fork of its own", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const forkNames = async (delegationChain: string) =>
+      (
+        await getAgentTools({
+          agentId: parent.id,
+          organizationId: organization.id,
+          userId: user.id,
+          delegationChain,
+        })
+      )
+        .map((tool) => tool.name)
+        .filter((name) => name === SELF_FORK_TOOL_NAME);
+
+    expect(await forkNames(parent.id)).toEqual([SELF_FORK_TOOL_NAME]);
+    expect(await forkNames(`${parent.id}:${parent.id}`)).toEqual([]);
+  });
+
   for (const active of [true, false]) {
     test(`offers return_schema to own agents only while Guardrails v2 is ${active ? "active" : "off"}`, async ({
       makeOrganization,

@@ -92,6 +92,46 @@ describe("session query budgets", () => {
     expect(statements).toHaveLength(1);
   });
 
+  test("session previews use the timestamp index at both ends", async () => {
+    const fetchWindow = (
+      InteractionModel as unknown as {
+        fetchSessionWindowRows: (options: {
+          sessionKeys: string[];
+          uuidKeys: string[];
+          newest: number;
+          oldest: number;
+        }) => Promise<unknown>;
+      }
+    ).fetchSessionWindowRows.bind(InteractionModel);
+    const { statements } = await recordQueries(() =>
+      fetchWindow({
+        sessionKeys: ["index-preview-session"],
+        uuidKeys: [],
+        newest: 3,
+        oldest: 3,
+      }),
+    );
+    const statement = statements[0]
+      .replaceAll("$1", "'index-preview-session'")
+      .replaceAll("$2", "3")
+      .replaceAll("$3", "3");
+    await db.execute(sql`SET enable_seqscan = off`);
+    await db.execute(sql`SET enable_bitmapscan = off`);
+    try {
+      const plan = await db.execute(
+        sql.raw(`EXPLAIN (FORMAT JSON) ${statement}`),
+      );
+      const serialized = JSON.stringify(plan.rows);
+      expect(serialized).toContain("interactions_session_created_at_idx");
+      // Incremental Sort is bounded to timestamp ties. A full Sort before
+      // either LIMIT scans all turns in the session and defeats the window.
+      expect(serialized).not.toContain('"Node Type":"Sort"');
+    } finally {
+      await db.execute(sql`RESET enable_seqscan`);
+      await db.execute(sql`RESET enable_bitmapscan`);
+    }
+  });
+
   test("cursor heads can use the timestamp index without sorting all history", async () => {
     const findHeads = (
       InteractionModel as unknown as {

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -45,6 +46,7 @@ describe("Slack agent bots", () => {
 
   beforeEach(async ({ makeOrganization, makeAdmin }) => {
     vi.clearAllMocks();
+    vi.mocked(chatOpsManager.getSlackProvider).mockReturnValue(null);
     organizationId = (await makeOrganization()).id;
     user = await makeAdmin();
 
@@ -341,6 +343,173 @@ describe("Slack agent bots", () => {
       expect(await ChatOpsConfigModel.getSlackConfig()).toMatchObject({
         enabled: true,
       });
+    });
+  });
+
+  describe("the channels of an agent's bot", () => {
+    // The bot's Slack connection is the boundary: a fake stands in for it.
+    function fakeBot(
+      options: { missingScopes?: string[]; joinError?: string } = {},
+    ) {
+      const joinChannel = vi.fn(async (channelId: string) => {
+        if (options.joinError) {
+          throw Object.assign(new Error(options.joinError), {
+            data: { error: options.joinError },
+          });
+        }
+        return { channelName: `name-${channelId}` };
+      });
+      const bot = {
+        getWorkspaceId: () => "T1",
+        getWorkspaceName: () => "Acme",
+        getMissingScopes: () => options.missingScopes ?? [],
+        listJoinableChannels: async () => [
+          {
+            channelId: "C2",
+            channelName: "support",
+            isPrivate: false,
+            isMember: false,
+          },
+          {
+            channelId: "C1",
+            channelName: "alerts",
+            isPrivate: false,
+            isMember: true,
+          },
+          {
+            channelId: "C3",
+            channelName: "secret",
+            isPrivate: true,
+            isMember: false,
+          },
+          {
+            channelId: "C4",
+            channelName: "leads",
+            isPrivate: true,
+            isMember: true,
+          },
+        ],
+        joinChannel,
+      };
+      vi.mocked(chatOpsManager.getSlackProvider).mockReturnValue(
+        bot as unknown as ReturnType<typeof chatOpsManager.getSlackProvider>,
+      );
+      return { joinChannel };
+    }
+
+    test("lists the channels the bot is in and the public ones it can join", async ({
+      makeInternalAgent,
+    }) => {
+      const agent = await makeInternalAgent({ organizationId });
+      fakeBot({ missingScopes: ["channels:join"] });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/chatops/config/slack/agents/${agent.id}/channels`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        workspaceId: "T1",
+        canJoin: false,
+        channels: [
+          {
+            channelId: "C1",
+            channelName: "alerts",
+            isPrivate: false,
+            isMember: true,
+          },
+          {
+            channelId: "C4",
+            channelName: "leads",
+            isPrivate: true,
+            isMember: true,
+          },
+          {
+            channelId: "C2",
+            channelName: "support",
+            isPrivate: false,
+            isMember: false,
+          },
+        ],
+      });
+    });
+
+    test("an agent without a bot has no channels to list", async ({
+      makeInternalAgent,
+    }) => {
+      const agent = await makeInternalAgent({ organizationId });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/chatops/config/slack/agents/${agent.id}/channels`,
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    test("joining claims a channel nobody owns, and leaves another agent's alone", async ({
+      makeInternalAgent,
+    }) => {
+      const marketing = await makeInternalAgent({ organizationId });
+      const coding = await makeInternalAgent({ organizationId });
+      await ChatOpsChannelBindingModel.create({
+        organizationId,
+        provider: "slack",
+        channelId: "C9",
+        workspaceId: "T1",
+        agentId: coding.id,
+      });
+      const { joinChannel } = fakeBot();
+
+      const join = (channelId: string) =>
+        app.inject({
+          method: "POST",
+          url: `/api/chatops/config/slack/agents/${marketing.id}/channels/${channelId}/join`,
+        });
+      expect((await join("C2")).statusCode).toBe(200);
+      expect((await join("C9")).statusCode).toBe(200);
+
+      expect(joinChannel.mock.calls.map(([id]) => id)).toEqual(["C2", "C9"]);
+      const owner = async (channelId: string) =>
+        await ChatOpsChannelBindingModel.findByChannel({
+          provider: "slack",
+          channelId,
+          workspaceId: "T1",
+        });
+      expect(await owner("C2")).toMatchObject({
+        agentId: marketing.id,
+        channelName: "name-C2",
+      });
+      expect((await owner("C9"))?.agentId).toBe(coding.id);
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceType, "chatOpsBinding"));
+      expect(rows.length).toBeGreaterThan(0);
+    });
+
+    test("says to reinstall when the bot may not join channels yet", async ({
+      makeInternalAgent,
+    }) => {
+      const agent = await makeInternalAgent({ organizationId });
+      fakeBot({ joinError: "missing_scope" });
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/chatops/config/slack/agents/${agent.id}/channels/C2/join`,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toMatch(/Reinstall/);
+      expect(
+        await ChatOpsChannelBindingModel.findByChannel({
+          provider: "slack",
+          channelId: "C2",
+          workspaceId: "T1",
+        }),
+      ).toBeNull();
     });
   });
 });

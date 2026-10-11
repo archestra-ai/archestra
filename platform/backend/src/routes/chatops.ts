@@ -1379,8 +1379,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Drop the cached "answer all messages" flag so the message gate picks up
-      // the change without waiting for the short cache TTL to lapse.
-      if (request.body.answerAllMessages !== undefined) {
+      // the change without waiting for the short cache TTL to lapse. The agent
+      // matters too: a Slack bot pinned to an agent answers every message only
+      // in channels assigned to that agent.
+      if (
+        request.body.answerAllMessages !== undefined ||
+        request.body.agentId !== undefined
+      ) {
         await invalidateChannelAnswerAll({
           provider: updated.provider,
           channelId: updated.channelId,
@@ -2412,6 +2417,126 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // An app Archestra created goes from Slack too, so it does not linger in
       // the workspace's channels.
       await slackAppFactory.deleteCreatedApp(bot);
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * The Slack channels an agent's bot is in, and the public ones it can join.
+   */
+  fastify.get(
+    "/api/chatops/config/slack/agents/:agentId/channels",
+    {
+      schema: {
+        operationId: RouteId.ListSlackAgentBotChannels,
+        description: "List the Slack channels an agent's bot is in or can join",
+        tags: ["ChatOps"],
+        params: z.object({ agentId: z.string().uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            workspaceId: z.string().nullable(),
+            canJoin: z.boolean(),
+            channels: z.array(
+              z.object({
+                channelId: z.string(),
+                channelName: z.string().nullable(),
+                isPrivate: z.boolean(),
+                isMember: z.boolean(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const provider = await requireAgentSlackBot({
+        agentId: request.params.agentId,
+        organizationId: request.organizationId,
+      });
+      let channels: Awaited<ReturnType<typeof provider.listJoinableChannels>>;
+      try {
+        channels = await provider.listJoinableChannels();
+      } catch (error) {
+        throw new ApiError(
+          502,
+          `Slack did not list the channels: ${errorMessage(error)}`,
+        );
+      }
+      return reply.send({
+        workspaceId: provider.getWorkspaceId(),
+        canJoin: !provider.getMissingScopes().includes("channels:join"),
+        channels: channels
+          // A private channel the bot was not invited to is not ours to show.
+          .filter((channel) => channel.isMember || !channel.isPrivate)
+          .sort((a, b) =>
+            (a.channelName ?? "").localeCompare(b.channelName ?? ""),
+          ),
+      });
+    },
+  );
+
+  /**
+   * Add an agent's bot to a public Slack channel. A channel no agent owns yet
+   * becomes this agent's, so its settings show on the agent's page.
+   */
+  fastify.post(
+    "/api/chatops/config/slack/agents/:agentId/channels/:channelId/join",
+    {
+      schema: {
+        operationId: RouteId.JoinSlackAgentBotChannel,
+        description: "Add an agent's Slack bot to a public channel",
+        tags: ["ChatOps"],
+        params: z.object({
+          agentId: z.string().uuid(),
+          channelId: z.string().regex(/^[A-Z0-9]+$/),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const { agentId, channelId } = request.params;
+      const provider = await requireAgentSlackBot({
+        agentId,
+        organizationId: request.organizationId,
+      });
+      let channelName: string | null;
+      try {
+        ({ channelName } = await provider.joinChannel(channelId));
+      } catch (error) {
+        const slackError = (error as { data?: { error?: string } }).data?.error;
+        throw new ApiError(
+          400,
+          slackError === "missing_scope"
+            ? "The bot needs Slack's permission to join channels. Reinstall it from the Slack settings, then try again."
+            : slackError === "method_not_supported_for_channel_type"
+              ? "A bot cannot join a private channel by itself. Invite it from the channel in Slack."
+              : `Slack did not add the bot to the channel: ${errorMessage(error)}`,
+        );
+      }
+      const workspaceId = provider.getWorkspaceId();
+      const binding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "slack",
+        channelId,
+        workspaceId,
+      });
+      if (!binding) {
+        await ChatOpsChannelBindingModel.upsertByChannel({
+          organizationId: request.organizationId,
+          provider: "slack",
+          channelId,
+          workspaceId,
+          workspaceName: provider.getWorkspaceName() ?? undefined,
+          channelName: channelName ?? undefined,
+          agentId,
+        });
+      } else if (!binding.agentId) {
+        await ChatOpsChannelBindingModel.update(binding.id, { agentId });
+        await invalidateChannelAnswerAll({
+          provider: "slack",
+          channelId,
+          workspaceId,
+        });
+      }
       return reply.send({ success: true });
     },
   );
@@ -3547,3 +3672,19 @@ const TEAMS_AAD_GROUP_ID_TTL_MS = TimeInMs.Day;
  * Bot Framework round trip and how long it keeps using the fallback id.
  */
 const TEAMS_AAD_GROUP_ID_RETRY_TTL_MS = 5 * TimeInMs.Minute;
+
+/** The connected Slack bot pinned to an agent of this organization. */
+async function requireAgentSlackBot(params: {
+  agentId: string;
+  organizationId: string;
+}) {
+  const agent = await AgentModel.findById(params.agentId);
+  if (!agent || agent.organizationId !== params.organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+  const provider = chatOpsManager.getSlackProvider(params.agentId);
+  if (!provider) {
+    throw new ApiError(404, "This agent has no connected Slack bot");
+  }
+  return provider;
+}

@@ -228,6 +228,20 @@ export function buildAgentFooter(agentName: string, extra?: string): string {
 }
 
 /**
+ * A footer without the agent's name, for a bot that already appears in chat as
+ * that agent: only its extra detail ("conversation started by ...") is left,
+ * or nothing at all.
+ */
+export function footerWithoutAgentName(
+  footer: string | undefined,
+): string | undefined {
+  if (!footer?.startsWith(`${AGENT_FOOTER_GLYPH} `)) return footer;
+  const separator = footer.indexOf(FOOTER_DETAIL_SEPARATOR);
+  if (separator === -1) return undefined;
+  return footer.slice(separator + FOOTER_DETAIL_SEPARATOR.length) || undefined;
+}
+
+/**
  * Drop a footer the model wrote itself at the end of a reply, so appending the
  * real one can never render the branding line twice.
  *

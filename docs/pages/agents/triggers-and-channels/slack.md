@@ -2,7 +2,7 @@
 title: Slack
 description: Give each Archestra agent its own Slack bot
 order: 3
-lastUpdated: 2026-10-10
+lastUpdated: 2026-10-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,7 +19,7 @@ You paste one token pair from Slack once, and Archestra creates a Slack app for 
 2. On [api.slack.com/apps](https://api.slack.com/apps), click **Generate Token** under **Your App Configuration Tokens**, and paste both tokens. Archestra renews them itself.
 3. Click **Add Slack bot**, pick the agent, and keep or change its Slack name.
 4. Approve the install in Slack. In Socket Mode, also paste the app-level token Slack shows; Slack has no API to create it.
-5. Invite the bot to the channels where people should reach it: `/invite @archestra_marketing`.
+5. Edit the bot to add it to channels. It joins public channels itself; for a private one, type `/invite @archestra_marketing` there.
 
 What to know:
 
@@ -46,14 +46,17 @@ With an HTTPS address, installing a new bot is one click: Slack sends you back t
 - In a direct message, it answers every message.
 - Mentioning one bot does not wake another in the same thread.
 
+Each channel belongs to one agent: the first bot to join or answer there claims it. Turn on **Answer all messages** in the channel's settings, and that agent's bot answers every message without a mention. Other bots in the channel still wait for theirs. To hand a channel over, edit the other agent's bot and make the channel that agent's.
+
 To quiet a thread, press **Stop** while the bot is working. It drops the answer in progress and stops answering that thread. Mention it again to wake it.
 
 <span id="streaming"></span>
 
 ## Watch the Answer Arrive
 
-The answer appears as the agent writes it, so a long one never leaves the thread silent. Each tool call shows as a step that turns done or failed.
+The answer appears as the agent writes it, so a long one never leaves the thread silent. Each tool call shows as a step that turns done or failed. The bot already carries the agent's name, so answers have no signature line.
 
+- **Steps:** the tool calls of one answer are grouped in a single list.
 - **Streaming:** in direct messages and threads where you mentioned the bot. Elsewhere the full answer posts at once, because the agent may decide to stay quiet.
 - **Suggested prompts:** the agent's first four suggested prompts wait at the top of the bot's direct messages.
 
@@ -61,7 +64,7 @@ The answer appears as the agent writes it, so a long one never leaves the thread
 
 ## Channel Instructions
 
-Tell the agent how to behave in one channel. Open the channel's **Settings** and write them as you would talk to the agent. For example: "Every message here is a task. Create it at once, and do not ask first."
+Tell the agents how to behave in one channel. Edit the agent's bot, open the channel's **Settings**, and write them as you would talk to the agent. Every bot in the channel follows them. For example: "Every message here is a task. Create it at once, and do not ask first."
 
 They come first, before the agent's own instructions. They add to what the agent does, and never remove an ability.
 

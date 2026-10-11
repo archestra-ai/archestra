@@ -108,6 +108,22 @@ describe("AgentCreatePage", () => {
     } as unknown as ReturnType<typeof useRouter>);
   });
 
+  it("lists only the messengers the admins left switched on as places to give a coding agent work", () => {
+    vi.mocked(useOrganization).mockReturnValue({
+      data: makeOrganization({
+        messagingChannelOverrides: { telegram: { hidden: true } },
+      }),
+    } as ReturnType<typeof useOrganization>);
+    vi.mocked(useK8sCapabilities).mockReturnValue({
+      data: undefined,
+    } as unknown as ReturnType<typeof useK8sCapabilities>);
+    renderAgentCreatePage();
+
+    expect(screen.getByText("Slack")).toBeInTheDocument();
+    expect(screen.getByText("MS Teams")).toBeInTheDocument();
+    expect(screen.queryByText("Telegram")).not.toBeInTheDocument();
+  });
+
   it("greys out Popular agents and explains how to enable them when the cluster lacks the Agent Sandbox controller", async () => {
     const user = userEvent.setup();
     vi.mocked(useK8sCapabilities).mockReturnValue({
@@ -125,7 +141,7 @@ describe("AgentCreatePage", () => {
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Archestra agent", "Coding agents", "External agents"]);
+    ).toEqual(["Coding agents", "External agents"]);
     expect(screen.getByText("Agent Runtime unavailable.")).toBeVisible();
     expect(
       screen.queryByText(/sandboxes\.agents\.x-k8s\.io/),
@@ -223,7 +239,7 @@ describe("AgentCreatePage", () => {
       screen
         .getAllByRole("heading", { level: 2 })
         .map((heading) => heading.textContent),
-    ).toEqual(["Archestra agent", "Coding agents", "External agents"]);
+    ).toEqual(["Coding agents", "External agents"]);
     for (const name of [
       "Claude Code",
       "Codex",
@@ -243,7 +259,14 @@ describe("AgentCreatePage", () => {
       within(codingAgents)
         .getAllByRole("button")
         .map((button) => button.querySelector(".font-medium")?.textContent),
-    ).toEqual(["Claude Code", "Codex", "OpenCode", "Hermes", "OpenClaw"]);
+    ).toEqual([
+      "Claude Code",
+      "Codex",
+      "OpenCode",
+      "Hermes",
+      "OpenClaw",
+      "Custom image",
+    ]);
     expect(formProps).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: /codex/i }));
@@ -263,6 +286,29 @@ describe("AgentCreatePage", () => {
       }),
     );
     expect(screen.getByRole("button", { name: "Catalog" })).toBeInTheDocument();
+  });
+
+  it("starts a custom image agent from the catalog with an empty image to fill in", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useFeature).mockImplementation((feature) =>
+      feature === "agentRuntime"
+        ? true
+        : feature === "agentRuntimeCatalogImages"
+          ? getAgentCatalogImages({ registry: "archestra.local", tag: "dev" })
+          : undefined,
+    );
+
+    renderAgentCreatePage();
+    await user.click(screen.getByRole("button", { name: /custom image/i }));
+
+    expect(formProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        onChangeRuntimeTemplate: expect.any(Function),
+        initialValues: {
+          runtime: expect.objectContaining({ image: "", command: null }),
+        },
+      }),
+    );
   });
 
   it("prefills OpenCode with its maintained Responses runtime", async () => {

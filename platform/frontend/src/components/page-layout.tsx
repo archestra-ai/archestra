@@ -46,7 +46,6 @@ export function PageLayout({
   documentTitle,
   icon,
   backLink,
-  backLinkInline = false,
   description,
   status,
   children,
@@ -99,16 +98,11 @@ export function PageLayout({
    */
   icon?: React.ReactNode;
   /**
-   * "Back to <parent>" control for a detail page, rendered above the title so
-   * it reads as part of the header rather than as the first item of content.
+   * "Back to <parent>" control for a detail or wizard page — a `PageBackLink`.
+   * It sits in the title row, before the title, so the way back reads as part
+   * of the header without spending a row of its own.
    */
   backLink?: React.ReactNode;
-  /**
-   * Draws the back link beside the title, in the title row, instead of on a
-   * row of its own above it. For a wizard, whose header carries progress and
-   * should not spend a row on the way back.
-   */
-  backLinkInline?: boolean;
   /** Omit on pages whose title needs no gloss — nothing is rendered. */
   description?: React.ReactNode;
   /**
@@ -144,7 +138,6 @@ export function PageLayout({
   fillContent?: boolean;
 }) {
   const pathname = usePathname();
-  const stackedBackLink = backLinkInline ? undefined : backLink;
   const searchParams = useSearchParams();
   const appName = useAppName();
 
@@ -242,35 +235,38 @@ export function PageLayout({
                 HEADER_SPACING.bottom,
               )}
             >
-              {stackedBackLink && (
-                <div className="col-span-full row-start-1 min-w-0">
-                  {stackedBackLink}
-                </div>
-              )}
               {icon && (
-                <div
-                  aria-hidden
-                  data-page-icon
-                  className={cn(
-                    "col-start-1 flex size-10 shrink-0 items-center justify-center self-center overflow-hidden rounded-lg border bg-muted/40",
-                    // The tile owns the glyph size so no page can drift. Line
-                    // icons keep a 2px inner margin, so a 20px raster logo
-                    // reads the same size as a 24px line icon.
-                    "*:size-6! [&>img]:size-5!",
-                    stackedBackLink ? "row-start-2" : "row-start-1",
-                    // From `sm` up the description stacks beside the icon, so
-                    // the tile grows to the height of the two lines it fronts.
-                    description && "sm:size-12",
-                  )}
-                >
-                  {icon}
+                // The back link leads the tile, so the arrow stays outside
+                // the record's own mark: "← [icon] Title".
+                <div className="col-start-1 row-start-1 flex items-center gap-1 self-center">
+                  {backLink}
+                  <div
+                    aria-hidden
+                    data-page-icon
+                    className={cn(
+                      "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/40",
+                      // The tile owns the glyph size so no page can drift.
+                      // Line icons keep a 2px inner margin, so a 20px raster
+                      // logo reads the same size as a 24px line icon.
+                      "*:size-6! [&>img]:size-5!",
+                      // From `sm` up the description stacks beside the icon,
+                      // so the tile grows to the height of the two lines it
+                      // fronts.
+                      description && "sm:size-12",
+                      // On a phone the arrow and the tile together would
+                      // squeeze the title to a few letters; the tile is only
+                      // decoration, so the title keeps that room instead.
+                      backLink && "hidden sm:flex",
+                    )}
+                  >
+                    {icon}
+                  </div>
                 </div>
               )}
               <div
                 className={cn(
-                  "contents sm:block sm:min-w-0",
+                  "contents row-start-1 sm:block sm:min-w-0",
                   icon ? "sm:col-start-2" : "sm:col-start-1",
-                  stackedBackLink ? "row-start-2" : "row-start-1",
                 )}
               >
                 {/* Sibling pages of a tabbed section render PageLayout at the
@@ -289,16 +285,17 @@ export function PageLayout({
                   probe does. */}
                 <div
                   className={cn(
-                    "flex min-w-0 items-center gap-2",
+                    "row-start-1 flex min-w-0 items-center gap-2",
                     HEADER_SPACING.titleRow,
                     icon ? "col-start-2" : "col-start-1",
-                    stackedBackLink ? "row-start-2" : "row-start-1",
                     maxWidthKey === "wizard"
                       ? "flex-nowrap overflow-hidden"
                       : "flex-wrap",
                   )}
                 >
-                  {backLinkInline && backLink}
+                  {/* Without an icon the back link leads the title itself;
+                    with one it leads the tile instead (above). */}
+                  {!icon && backLink}
                   <h1
                     className={cn(
                       "min-w-0 break-words text-2xl font-semibold tracking-tight",
@@ -313,9 +310,8 @@ export function PageLayout({
                   <div
                     data-page-description
                     className={cn(
-                      "col-span-full text-sm text-muted-foreground",
+                      "col-span-full row-start-2 text-sm text-muted-foreground",
                       HEADER_SPACING.description,
-                      stackedBackLink ? "row-start-3" : "row-start-2",
                       maxWidthKey === "wizard" && "hidden sm:line-clamp-1",
                     )}
                   >
@@ -329,10 +325,9 @@ export function PageLayout({
                   className={cn(
                     // Tablet and phone actions align with the title; desktop
                     // actions centre against the title and description together.
-                    "flex items-center justify-self-end self-start lg:self-center",
+                    "row-start-1 flex items-center justify-self-end self-start lg:self-center",
                     HEADER_SPACING.titleRow,
                     icon ? "col-start-3" : "col-start-2",
-                    stackedBackLink ? "row-start-2" : "row-start-1",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
                   )}
                 >

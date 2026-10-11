@@ -161,16 +161,26 @@ export function agentDetailHref(
 }
 
 /**
- * Where "edit this record" lands. Configuration is not a page of its own any
- * more: it is the detail page's own sections, so every edit deep link in the
- * app resolves to one of them. The wizard's step ids are what those links
- * carry, so they are translated here.
+ * An agent's edit page: the setup steps again, every one reachable at once,
+ * with one save. `configuration` is the page's default and carries no
+ * `?step=`.
+ */
+export function agentEditHref(id: string, step?: AgentSetupStepId): string {
+  const base = `${AGENT_PAGE_CONFIGS.agent.basePath}/${encodeURIComponent(id)}/edit`;
+  return step && step !== "configuration" ? `${base}?step=${step}` : base;
+}
+
+/**
+ * Where "edit this record" lands. An agent edits on its own page; a gateway
+ * still edits in its detail page's sections. The wizard's step ids are what
+ * those links carry, so they are translated here.
  */
 export function agentConfigureHref(
   kind: AgentPageKind,
   id: string,
   step?: AgentSetupStepId,
 ): string {
+  if (kind === "agent") return agentEditHref(id, step);
   // "Edit this record" means its configuration, never wherever the page
   // happens to open — a gateway opens on Connect, which configures nothing.
   //

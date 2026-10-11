@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, CircleCheck, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentForm } from "@/components/agent-form";
+import { defaultAgentRuntime } from "@/components/agent-runtime-fields";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -57,6 +58,7 @@ export function AgentCreatePage({
   const [sourceSelected, setSourceSelected] = useState(false);
   const [selectedTemplate, setSelectedTemplate] =
     useState<AgentCatalogTemplate | null>(null);
+  const [startsFromImage, setStartsFromImage] = useState(false);
   const steps = getAgentSetupSteps({ agentType: kind, builtIn: false });
   const [step, setStep] = useState<AgentSetupStepId>(steps[0].id);
   const stepIndex = steps.findIndex((s) => s.id === step);
@@ -130,6 +132,7 @@ export function AgentCreatePage({
       if (closeTargetRef.current === "catalog") {
         closeTargetRef.current = "list";
         setSelectedTemplate(null);
+        setStartsFromImage(false);
         setSourceSelected(false);
         setStep(steps[0].id);
         setIsDirty(false);
@@ -148,11 +151,6 @@ export function AgentCreatePage({
   const isChoosingSource = sourceChooserEnabled && !sourceSelected;
   const header = {
     title: `Create ${config.singular}`,
-    // The wizard's progress says where the reader is; a sentence above it
-    // would only cost the height the form needs.
-    description: isChoosingSource
-      ? "Choose how you want to add an Agent."
-      : undefined,
     action:
       !isChoosingSource && steps.length > 1 ? (
         <WizardStepper
@@ -174,7 +172,6 @@ export function AgentCreatePage({
   return (
     <AgentPageShell
       stickyFooter
-      compactBack={!!header.action}
       // The list needs the same read permission this role is missing, so on
       // the success state there is nowhere to go back to.
       backHref={showsUnreadableSuccess ? undefined : agentListHref(kind)}
@@ -224,11 +221,18 @@ export function AgentCreatePage({
           canCreateAgent={canCreateAgent}
           onStartFromScratch={() => {
             setSelectedTemplate(null);
+            setStartsFromImage(false);
+            setSourceSelected(true);
+          }}
+          onStartFromImage={() => {
+            setSelectedTemplate(null);
+            setStartsFromImage(true);
             setSourceSelected(true);
           }}
           onAddExternalAgent={() => router.push(a2aRemoteAgentNewHref())}
           onSelect={(template) => {
             setSelectedTemplate(template);
+            setStartsFromImage(false);
             setSourceSelected(true);
           }}
           runtimeAvailable={runtimeEnabled}
@@ -237,10 +241,15 @@ export function AgentCreatePage({
         <AgentForm
           agentType={kind}
           defaultIconType={config.defaultIconType}
-          initialValues={selectedTemplate?.initialValues}
+          initialValues={
+            selectedTemplate?.initialValues ??
+            (startsFromImage ? { runtime: defaultAgentRuntime() } : undefined)
+          }
           initialRuntimeId={selectedTemplate?.id}
+          // What runs the agent was picked in the catalog, so the form shows
+          // that choice instead of asking again; changing it goes back there.
           onChangeRuntimeTemplate={
-            selectedTemplate
+            sourceChooserEnabled
               ? () => {
                   closeTargetRef.current = "catalog";
                   guard.requestClose();

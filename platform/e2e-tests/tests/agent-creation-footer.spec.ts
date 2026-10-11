@@ -169,8 +169,9 @@ for (const viewport of [
           ).toBeVisible();
         }
 
+        // An agent edits on its own page; a gateway in its Settings tab.
         const editPath = `${family.path}/${createdId}${
-          family.title === "MCP Gateway" ? "?section=settings" : ""
+          family.title === "MCP Gateway" ? "?section=settings" : "/edit"
         }`;
         await goToPage(page, editPath);
         await expect(nameField).toHaveValue(name);

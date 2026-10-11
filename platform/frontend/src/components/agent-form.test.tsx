@@ -4612,6 +4612,22 @@ describe("AgentForm save payload and failure handling", () => {
     });
   });
 
+  it("does not ask for a runtime again once the catalog picked the built-in agent", () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    render(
+      <AgentForm
+        agentType="agent"
+        activeSection="configuration"
+        onChangeRuntimeTemplate={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId(E2eTestId.AgentRuntimePicker),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Claude Code" })).toBeNull();
+  });
+
   it("keeps every step's editors mounted while one step shows, and submits only when told to", async () => {
     // The create wizard walks one form across its steps: what a hidden step
     // holds (the tools picked on it) must survive the step change, and Enter

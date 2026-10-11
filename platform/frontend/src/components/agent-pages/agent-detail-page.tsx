@@ -15,6 +15,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   PackageX,
+  Pencil,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
@@ -32,7 +33,6 @@ import { AudienceChip } from "@/components/audience-chip";
 import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
-import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { KebabItem } from "@/components/kebab-item";
@@ -40,6 +40,7 @@ import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourcePermissions } from "@/components/resource-permissions";
+import { StandardDialog } from "@/components/standard-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -87,8 +88,10 @@ import {
   AGENT_SECTION_FORM_GROUPS,
   type AgentDetailSection,
   type AgentPageKind,
+  type AgentSetupStepId,
   agentConfigureHref,
   agentDetailHref,
+  agentEditHref,
   agentListHref,
   agentPageKindForType,
   getAgentSetupSteps,
@@ -322,26 +325,32 @@ function AgentDetails({
   // could change anything. An agent keeps them apart — its configuration is
   // long enough that one tab would be a wall.
   const oneSettingsTab = kind === "mcp_gateway";
-  const sections: AgentDetailSection[] = [
-    ...(connectFirst ? (["connect"] as const) : []),
-    ...(oneSettingsTab
-      ? (["settings"] as const)
-      : [
-          "general" as const,
-          ...(steps.some((step) => step.id === "tools")
-            ? (["tools"] as const)
-            : []),
-          ...(runtimeEnabled && kind === "agent" && !isBuiltIn
-            ? (["runtime"] as const)
-            : []),
-          ...(hasMessagingChannels ? (["messaging"] as const) : []),
-          ...(steps.some((step) => step.id === "advanced")
-            ? (["advanced"] as const)
-            : []),
-        ]),
-    ...(hasRuns ? (["runs"] as const) : []),
-    ...(showConnect && !connectFirst ? (["connect"] as const) : []),
-  ];
+  // An agent's page is an overview of it: what it needs, where it gets work,
+  // what it is told. Its configuration is edited on its own page, and its A2A
+  // details open from the overview rather than taking a tab.
+  const overviewOnly = kind === "agent";
+  const sections: AgentDetailSection[] = overviewOnly
+    ? ["general", ...(hasRuns ? (["runs"] as const) : [])]
+    : [
+        ...(connectFirst ? (["connect"] as const) : []),
+        ...(oneSettingsTab
+          ? (["settings"] as const)
+          : [
+              "general" as const,
+              ...(steps.some((step) => step.id === "tools")
+                ? (["tools"] as const)
+                : []),
+              ...(runtimeEnabled && kind === "agent" && !isBuiltIn
+                ? (["runtime"] as const)
+                : []),
+              ...(hasMessagingChannels ? (["messaging"] as const) : []),
+              ...(steps.some((step) => step.id === "advanced")
+                ? (["advanced"] as const)
+                : []),
+            ]),
+        ...(hasRuns ? (["runs"] as const) : []),
+        ...(showConnect && !connectFirst ? (["connect"] as const) : []),
+      ];
   // Permissions live at the foot of the configuration tab now. Old links
   // that ask for them land there.
   const configurationSection = oneSettingsTab ? "settings" : "general";
@@ -349,11 +358,13 @@ function AgentDetails({
   const sectionParam =
     rawSectionParam === "permissions" ? configurationSection : rawSectionParam;
   const section = resolveAgentDetailSection(sections, sectionParam);
-  const showPermissions = !isBuiltIn && section === configurationSection;
+  // An agent's overview edits nothing; who can use it is set on its edit page.
+  const showPermissions =
+    !overviewOnly && !isBuiltIn && section === configurationSection;
   // Which form group is on screen, if any. Connect and Runs are not the
   // form's, so they answer undefined and it is not mounted at all.
   const activeFormGroups: readonly AgentFormSection[] =
-    section in AGENT_SECTION_FORM_GROUPS
+    !overviewOnly && section in AGENT_SECTION_FORM_GROUPS
       ? AGENT_SECTION_FORM_GROUPS[
           section as keyof typeof AGENT_SECTION_FORM_GROUPS
         ]
@@ -363,8 +374,22 @@ function AgentDetails({
   // `?section=runs`, or a typo) silently resolves to the first one.
   // Correct the URL to match, so a reload, a copied link or the back button
   // does not keep asking for a section that is not on this page.
+  const [a2aOpen, setA2aOpen] = useState(false);
   useEffect(() => {
     if (!rawSectionParam || rawSectionParam === section) return;
+    // Links from before the overview: an agent's settings sections now live
+    // on its edit page, and its A2A details in a dialog here.
+    if (overviewOnly) {
+      const step = LEGACY_AGENT_SECTION_STEPS[rawSectionParam];
+      if (step !== undefined) {
+        router.replace(agentEditHref(agent.id, step ?? undefined));
+        return;
+      }
+      if (rawSectionParam === "connect") {
+        setA2aOpen(showConnect);
+        return;
+      }
+    }
     if (sectionParam === "runs" && hasAgentRuntime && runsQuery.isPending)
       return;
     router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
@@ -377,6 +402,8 @@ function AgentDetails({
     router,
     hasAgentRuntime,
     runsQuery.isPending,
+    overviewOnly,
+    showConnect,
   ]);
 
   // Unsaved edits guard every way off the current tab that is not a save:
@@ -524,7 +551,14 @@ function AgentDetails({
         <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate">{agent.name}</span>
           {isBuiltIn && <BuiltInAgentBadge className="font-normal" />}
-          {audience && <AudienceChip audience={audience} />}
+          {audience && (
+            // The owner rides in the chip: who it reaches and who to ask,
+            // read together. A built-in record belongs to nobody.
+            <AudienceChip
+              audience={audience}
+              owner={isBuiltIn ? null : agent.createdBy}
+            />
+          )}
           {/* Hidden below sm: the header is one clipped line, and the Start
               run button below already carries the glyph. */}
           {hasAgentRuntime && (
@@ -579,13 +613,13 @@ function AgentDetails({
         // what the page cannot: chatting with the record, and the actions
         // that act on it as a whole.
         <div className="flex shrink-0 items-center gap-2">
-          {!isBuiltIn && agent.createdBy && (
-            // Dropped on phones, where the header has no room to spare beside
-            // the title and the actions that act on the record.
-            <p className="mr-1 hidden items-center gap-1.5 text-xs text-muted-foreground md:flex">
-              <span className="shrink-0">Owner</span>
-              <CreatedByCell createdBy={agent.createdBy} />
-            </p>
+          {overviewOnly && !isGone && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={agentEditHref(agent.id)}>
+                <Pencil className="h-4 w-4" />
+                <span>{canEdit ? "Edit" : "View settings"}</span>
+              </Link>
+            </Button>
           )}
           {chatAction.visible && chatAction.href && (
             <Button variant="outline" size="sm" asChild>
@@ -651,7 +685,7 @@ function AgentDetails({
         </div>
       )}
       {section === "general" && kind === "agent" && !isBuiltIn && !isGone && (
-        <div className="mb-6">
+        <div className="mb-4">
           <AgentWorkSources
             agentId={agent.id}
             hasRuntime={hasAgentRuntime}
@@ -659,7 +693,7 @@ function AgentDetails({
             chatHref={
               chatAction.visible && chatAction.href ? chatAction.href : null
             }
-            showsA2a={showConnect}
+            onShowA2a={showConnect ? () => setA2aOpen(true) : undefined}
           />
         </div>
       )}
@@ -679,6 +713,7 @@ function AgentDetails({
                 </AlertDescription>
               </Alert>
             ) : (
+              !overviewOnly &&
               !canEdit &&
               !isAccessPending && (
                 <Alert>
@@ -691,6 +726,13 @@ function AgentDetails({
               )
             )}
 
+            {overviewOnly && section === "general" && (
+              <AgentInstructionsCard
+                agent={agent}
+                editHref={agentEditHref(agent.id)}
+                canEdit={canEdit}
+              />
+            )}
             {activeFormGroups.length > 0 && (
               <AgentForm
                 // A fresh mount per agent and per section: the form seeds
@@ -791,6 +833,24 @@ function AgentDetails({
           canEditAgent={canEdit}
         />
       )}
+      {overviewOnly && showConnect && (
+        <StandardDialog
+          open={a2aOpen}
+          onOpenChange={(open) => {
+            setA2aOpen(open);
+            if (!open && rawSectionParam === "connect") {
+              router.replace(agentDetailHref(kind, agent.id), {
+                scroll: false,
+              });
+            }
+          }}
+          title="Send it tasks over A2A"
+          description="Point an A2A client at this agent. Its calls are logged and guarded like any other task."
+          size="large"
+        >
+          <AgentConnectContent kind={kind} agent={agent} />
+        </StandardDialog>
+      )}
       <UnsavedChangesDialog
         open={guard.confirmOpen}
         onKeepEditing={() => {
@@ -867,6 +927,7 @@ function sectionLabel(
   kind: AgentPageKind,
 ): string {
   if (section === "connect" && kind === "agent") return "A2A";
+  if (section === "general" && kind === "agent") return "Overview";
   return AGENT_SECTION_LABELS[section];
 }
 
@@ -881,6 +942,56 @@ const AGENT_SECTION_LABELS: Record<AgentDetailSection, string> = {
   connect: "Connect",
   runs: "Runs",
 };
+
+/**
+ * Where a `?section=` from before the overview now lands for an agent: its
+ * edit page, on the step that holds that section (`null` is the first step).
+ */
+const LEGACY_AGENT_SECTION_STEPS: Partial<
+  Record<string, AgentSetupStepId | null>
+> = {
+  tools: "tools",
+  messaging: "messaging",
+  advanced: "advanced",
+  runtime: null,
+  permissions: null,
+};
+
+/** The agent's instructions, read-only, with the way to change them. */
+function AgentInstructionsCard({
+  agent,
+  editHref,
+  canEdit,
+}: {
+  agent: Agent;
+  editHref: string;
+  canEdit: boolean;
+}) {
+  return (
+    <section
+      aria-labelledby="agent-instructions"
+      className="overflow-hidden rounded-xl border bg-card"
+    >
+      <div className="flex items-center justify-between gap-3 border-b bg-muted/40 px-5 py-3">
+        <h2 id="agent-instructions" className="text-sm font-semibold">
+          Instructions
+        </h2>
+        <Button variant="ghost" size="sm" asChild>
+          <Link href={editHref}>{canEdit ? "Edit" : "View settings"}</Link>
+        </Button>
+      </div>
+      {agent.systemPrompt?.trim() ? (
+        <p className="max-h-80 overflow-y-auto whitespace-pre-wrap px-5 py-4 font-mono text-[13px] leading-relaxed text-muted-foreground">
+          {agent.systemPrompt}
+        </p>
+      ) : (
+        <p className="px-5 py-4 text-sm text-muted-foreground">
+          No instructions yet.
+        </p>
+      )}
+    </section>
+  );
+}
 
 function DetailPageSkeleton() {
   return (

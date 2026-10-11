@@ -22,6 +22,7 @@ export function WizardStepper<Id extends string>({
   stepTestIdPrefix,
   compact = false,
   variant = "numbered",
+  allReached = false,
 }: {
   steps: ReadonlyArray<WizardStepDefinition<Id>>;
   activeStep: Id;
@@ -35,6 +36,11 @@ export function WizardStepper<Id extends string>({
    * phone collapses to "Step n of m" over the bare segments.
    */
   variant?: "numbered" | "progress";
+  /**
+   * Every step already has its values, as on an edit page: none reads as
+   * still to come.
+   */
+  allReached?: boolean;
 }) {
   const activeIndex = steps.findIndex((s) => s.id === activeStep);
   if (variant === "progress") {
@@ -58,7 +64,7 @@ export function WizardStepper<Id extends string>({
         >
           {steps.map((step, index) => {
             const isActive = index === activeIndex;
-            const isComplete = index < activeIndex;
+            const isComplete = allReached || index < activeIndex;
             const state = isActive
               ? "current"
               : isComplete

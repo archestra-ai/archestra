@@ -940,11 +940,11 @@ export interface AgentFormProps {
    */
   sections?: readonly AgentFormSection[];
   /**
-   * The one mounted group on screen; the others stay mounted but hidden. The
-   * create wizard steps through every group on one mount, so each editor
-   * keeps what was picked on it until the create at the end.
+   * The mounted group (or groups) on screen; the others stay mounted but
+   * hidden. The create wizard and the edit page step through every group on
+   * one mount, so each editor keeps what was picked on it until the one save.
    */
-  activeSection?: AgentFormSection;
+  activeSection?: AgentFormSection | readonly AgentFormSection[];
   /**
    * Whether submitting the form saves. Off on the create wizard's earlier
    * steps: Enter in a field must not create the record before the last step
@@ -1012,7 +1012,10 @@ export function AgentForm({
     showAdvancedSections ||
     showRuntimeSection;
   const isActiveSection = (group: AgentFormSection) =>
-    activeSection === undefined || activeSection === group;
+    activeSection === undefined ||
+    (typeof activeSection === "string"
+      ? activeSection === group
+      : activeSection.includes(group));
   // Which records can delegate at all, mirroring the backend's
   // `DELEGATING_AGENT_TYPES` (services/agent-subagent-exclusions.ts): only an
   // `llm_proxy` is excluded, because it has no MCP surface to advertise a
@@ -1294,6 +1297,10 @@ export function AgentForm({
   const [selectedRuntimeId, setSelectedRuntimeId] = useState<
     AgentCatalogId | "chat" | "custom"
   >(originalRuntimeId);
+  // The catalog already decided this is a built-in agent; there is no
+  // runtime left to pick.
+  const runsOnBuiltInHarness =
+    !!onChangeRuntimeTemplate && selectedRuntimeId === "chat";
   const [channelAssignmentsDirty, setChannelAssignmentsDirty] = useState(false);
   const [activationSkillsDirty, setActivationSkillsDirty] = useState(false);
   const [activationSkillsReady, setActivationSkillsReady] = useState(false);
@@ -3132,7 +3139,10 @@ export function AgentForm({
                   )}
 
                   {showsModelControl &&
-                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
+                    (agent ||
+                      !isInternalAgent ||
+                      !agentRuntimeEnabled ||
+                      runsOnBuiltInHarness) &&
                     modelBlock}
 
                   {/* Instructions: what the agent is told to do. Saved with the
@@ -3171,42 +3181,45 @@ export function AgentForm({
                     </div>
                   )}
 
-                  {!agent && isInternalAgent && agentRuntimeEnabled && (
-                    <div className="space-y-4 border-t pt-6">
-                      <AgentRuntimePicker
-                        selectedId={selectedRuntimeId}
-                        value={runtime}
-                        onSelect={(id, nextRuntime) => {
-                          setSelectedRuntimeId(id);
-                          setAgentRuntime(nextRuntime);
-                          catalogSubscriptionAppliedRef.current = false;
-                          cancelPendingCreatedKeySelection();
-                          pendingModelAutoSelectionRef.current = null;
-                          lastAutoSelectedProviderRef.current = null;
-                          if (
-                            nextRuntime?.claudeCode?.authentication ===
-                              "subscription" ||
-                            (nextRuntime &&
-                              selectedApiKey &&
-                              !getAgentRuntimeProviderCompatibility({
-                                inferenceProtocol:
-                                  nextRuntime.inferenceProtocol,
-                                runtimeCommand: nextRuntime.command,
-                                provider: selectedApiKey.provider,
-                              }).compatible)
-                          ) {
-                            setLlmApiKeyId(null);
-                            setLlmModel(null);
-                          }
-                        }}
-                        onChange={setAgentRuntime}
-                        onChangeTemplate={onChangeRuntimeTemplate}
-                        modelBlock={showsModelControl ? modelBlock : null}
-                        modelSummary={modelSummary}
-                        modelAttention={modelAttention}
-                      />
-                    </div>
-                  )}
+                  {!agent &&
+                    isInternalAgent &&
+                    agentRuntimeEnabled &&
+                    !runsOnBuiltInHarness && (
+                      <div className="space-y-4 border-t pt-6">
+                        <AgentRuntimePicker
+                          selectedId={selectedRuntimeId}
+                          value={runtime}
+                          onSelect={(id, nextRuntime) => {
+                            setSelectedRuntimeId(id);
+                            setAgentRuntime(nextRuntime);
+                            catalogSubscriptionAppliedRef.current = false;
+                            cancelPendingCreatedKeySelection();
+                            pendingModelAutoSelectionRef.current = null;
+                            lastAutoSelectedProviderRef.current = null;
+                            if (
+                              nextRuntime?.claudeCode?.authentication ===
+                                "subscription" ||
+                              (nextRuntime &&
+                                selectedApiKey &&
+                                !getAgentRuntimeProviderCompatibility({
+                                  inferenceProtocol:
+                                    nextRuntime.inferenceProtocol,
+                                  runtimeCommand: nextRuntime.command,
+                                  provider: selectedApiKey.provider,
+                                }).compatible)
+                            ) {
+                              setLlmApiKeyId(null);
+                              setLlmModel(null);
+                            }
+                          }}
+                          onChange={setAgentRuntime}
+                          onChangeTemplate={onChangeRuntimeTemplate}
+                          modelBlock={showsModelControl ? modelBlock : null}
+                          modelSummary={modelSummary}
+                          modelAttention={modelAttention}
+                        />
+                      </div>
+                    )}
                 </SettingsSection>
               )}
 

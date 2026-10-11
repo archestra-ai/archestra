@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -110,7 +111,7 @@ describe("AgentWorkSources", () => {
         hasRuntime
         runtimeAvailable
         chatHref="/chat?agentId=a1"
-        showsA2a
+        onShowA2a={vi.fn()}
       />,
     );
 
@@ -132,21 +133,22 @@ describe("AgentWorkSources", () => {
     expect(within(channels).queryByText(/support/)).toBeNull();
     expect(
       within(channels).getByRole("link", { name: "Manage channels" }),
-    ).toHaveAttribute("href", "/agents/a1?section=messaging");
+    ).toHaveAttribute("href", "/agents/a1/edit?step=messaging");
     // A coding agent already has a runtime: nothing to offer there.
     expect(
       screen.queryByRole("link", { name: "Set up Agent Runtime" }),
     ).toBeNull();
   });
 
-  it("offers an agent on the built-in harness A2A and a dedicated runtime", () => {
+  it("offers an agent on the built-in harness A2A and a dedicated runtime", async () => {
+    const showA2a = vi.fn();
     render(
       <AgentWorkSources
         agentId="a1"
         hasRuntime={false}
         runtimeAvailable
         chatHref="/chat?agentId=a1"
-        showsA2a
+        onShowA2a={showA2a}
       />,
     );
 
@@ -156,14 +158,14 @@ describe("AgentWorkSources", () => {
     expect(
       screen.queryByRole("link", { name: "Connect your local agent" }),
     ).toBeNull();
-    expect(screen.getByRole("link", { name: "A2A details" })).toHaveAttribute(
-      "href",
-      "/agents/a1?section=connect",
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show A2A details" }),
     );
+    expect(showA2a).toHaveBeenCalledOnce();
     expect(screen.getByRole("link", { name: "Add a channel" })).toBeVisible();
     expect(
       screen.getByRole("link", { name: "Set up Agent Runtime" }),
-    ).toHaveAttribute("href", "/agents/a1?section=runtime");
+    ).toHaveAttribute("href", "/agents/a1/edit");
   });
 
   it("says a coding agent's routes wait on its setup until the setup is done", () => {
@@ -174,7 +176,7 @@ describe("AgentWorkSources", () => {
         hasRuntime
         runtimeAvailable
         chatHref="/chat?agentId=a1"
-        showsA2a
+        onShowA2a={vi.fn()}
       />,
     );
     expect(
@@ -188,7 +190,7 @@ describe("AgentWorkSources", () => {
         hasRuntime
         runtimeAvailable
         chatHref="/chat?agentId=a1"
-        showsA2a
+        onShowA2a={vi.fn()}
       />,
     );
     expect(
@@ -207,7 +209,7 @@ describe("AgentWorkSources", () => {
         hasRuntime
         runtimeAvailable={false}
         chatHref={null}
-        showsA2a
+        onShowA2a={vi.fn()}
       />,
     );
     expect(
@@ -223,7 +225,6 @@ describe("AgentWorkSources", () => {
         hasRuntime={false}
         runtimeAvailable={false}
         chatHref={null}
-        showsA2a={false}
       />,
     );
 

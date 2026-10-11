@@ -1129,10 +1129,10 @@ class SlackProvider implements ChatOpsProvider {
       const result = await client.conversations.info({
         channel: channelId,
       });
-      const purpose =
+      const description = plainSlackText(
         (result.channel as { purpose?: { value?: string } } | undefined)
-          ?.purpose?.value ?? "";
-      const description = purpose.trim();
+          ?.purpose?.value,
+      );
       this.channelDescriptionCache.set(channelId, description);
       return description || null;
     } catch (error) {
@@ -1209,7 +1209,7 @@ class SlackProvider implements ChatOpsProvider {
         channels.push({
           channelId: channel.id,
           channelName: channel.name || null,
-          description: channel.purpose?.value?.trim() || null,
+          description: plainSlackText(channel.purpose?.value) || null,
           isPrivate: channel.is_private === true,
           isMember: channel.is_member === true,
         });
@@ -2877,6 +2877,24 @@ function protectSlackUrlBoundaries(text: string): string {
 }
 
 /** A channel a bot pinned to an agent is in, or could join. */
+/**
+ * Slack's markup in a channel purpose as plain text: links (<url|label>,
+ * <url>) and channel or user references (<#C1|name>) lose their brackets, and
+ * escaped &, < and > are restored.
+ *
+ * @public — exported for slack-provider.test.ts
+ */
+export function plainSlackText(text: string | null | undefined): string {
+  return (text ?? "")
+    .replace(/<#[A-Z0-9]+\|([^<>]+)>/g, "#$1")
+    .replace(/<[^<>|]+\|([^<>]+)>/g, "$1")
+    .replace(/<([^<>]+)>/g, "$1")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .trim();
+}
+
 type SlackJoinableChannel = {
   channelId: string;
   channelName: string | null;

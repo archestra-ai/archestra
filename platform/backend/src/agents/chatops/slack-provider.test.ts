@@ -37,7 +37,7 @@ import { ChatOpsChannelBindingModel, UserModel } from "@/models";
 import { test as dbTest } from "@/test";
 import { chatOpsRunRegistry, wasRunSuperseded } from "./chatops-run-registry";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
-import SlackProvider from "./slack-provider";
+import SlackProvider, { plainSlackText } from "./slack-provider";
 
 // =============================================================================
 // Helpers
@@ -3853,6 +3853,17 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
     expect(await UserModel.findByEmail(email)).toBeTruthy();
     expect(conversationsOpen).not.toHaveBeenCalled();
     expect(postMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("plainSlackText", () => {
+  test("drops Slack's link and channel markup and unescapes text", () => {
+    expect(
+      plainSlackText(
+        "Alerts from <https://alerts.example.com/issues?project=4|the tracker>, see <#C123|ops> &amp; <https://example.com>",
+      ),
+    ).toBe("Alerts from the tracker, see #ops & https://example.com");
+    expect(plainSlackText(null)).toBe("");
   });
 });
 

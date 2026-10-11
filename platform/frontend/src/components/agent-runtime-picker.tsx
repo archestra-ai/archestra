@@ -104,9 +104,7 @@ export function AgentRuntimePicker({
     (option) => option.id === visibleSelectedId,
   );
   const showsTemplateSummary =
-    !!onChangeTemplate &&
-    visibleSelectedId !== "chat" &&
-    visibleSelectedId !== "custom";
+    !!onChangeTemplate && visibleSelectedId !== "chat";
   const protocol = value
     ? AGENT_RUNTIME_PROTOCOL_LABELS[value.inferenceProtocol]
     : "";

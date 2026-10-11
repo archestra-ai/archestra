@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { agentEditHref } from "@/components/agent-pages/agent-page-config";
 import { AgentRuntimeCredentialsDialog } from "@/components/agent-runtime-credentials-dialog";
 import {
   AgentSetupBanner,
@@ -105,7 +106,7 @@ export function AgentSavedSetupBanner({
       status: "now",
       action: (
         <Button asChild size="sm" variant="outline">
-          <Link href={`/agents/${agentId}?section=general`}>Review model</Link>
+          <Link href={agentEditHref(agentId)}>Review model</Link>
         </Button>
       ),
     });
@@ -169,7 +170,7 @@ export function AgentSavedSetupBanner({
         status: "now",
         action: (
           <Button asChild size="sm" variant="outline">
-            <Link href={`/agents/${agentId}?section=general`}>Set up</Link>
+            <Link href={agentEditHref(agentId)}>Set up</Link>
           </Button>
         ),
       });

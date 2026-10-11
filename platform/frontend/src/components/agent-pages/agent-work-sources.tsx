@@ -18,7 +18,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
-import { agentDetailHref } from "./agent-page-config";
+import { agentEditHref } from "./agent-page-config";
 
 /**
  * The top of an agent's General tab: the places people give it work, each
@@ -31,14 +31,15 @@ export function AgentWorkSources({
   hasRuntime,
   runtimeAvailable,
   chatHref,
-  showsA2a,
+  onShowA2a,
 }: {
   agentId: string;
   hasRuntime: boolean;
   /** Whether a dedicated runtime can be set up on this deployment. */
   runtimeAvailable: boolean;
   chatHref: string | null;
-  showsA2a: boolean;
+  /** Opens the A2A connection details; unset when the reader may not see them. */
+  onShowA2a?: () => void;
 }) {
   const appName = useAppName();
   const { data: canReadChannels } = useHasPermissions({
@@ -64,7 +65,10 @@ export function AgentWorkSources({
             </span>
           )}
         </div>
-        <div className="grid gap-4 md:grid-cols-3">
+        {/* The ways that are a click away are equal cards; handoff needs a
+            one-time setup and a sample to explain it, so it gets a strip of
+            its own rather than stretching one card beside half-empty ones. */}
+        <div className="grid gap-4 md:grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]">
           <WorkSourceCard
             icon={<MessageSquare className="size-4" />}
             title={`In ${appName} chat`}
@@ -77,55 +81,55 @@ export function AgentWorkSources({
             }
           >
             {hasRuntime
-              ? "Opens a chat with this agent. Watch the live terminal while it works."
+              ? "Chat with it and watch the live terminal while it works."
               : "Answers in seconds. Tool calls, approvals and files show right in the conversation."}
           </WorkSourceCard>
-          {hasRuntime ? (
-            <WorkSourceCard
-              icon={<Monitor className="size-4" />}
-              title="From your laptop"
-              action={
-                <Button size="sm" variant="outline" asChild>
-                  <Link href="/connection">Connect your local agent</Link>
-                </Button>
-              }
-            >
-              <span className="flex flex-col gap-2.5">
-                <span>{`Add the ${appName} MCP gateway to Claude Code or Codex once. Then say "hand this over to ${appName}": your changes, files and credentials move into a run here. "Bring it back" returns a patch.`}</span>
-                <span
-                  role="img"
-                  aria-label={`Example: hand this over to ${appName}`}
-                  className="flex flex-col rounded-[10px] bg-[#16130F] px-3.5 py-3 font-mono text-xs leading-[1.7] text-[#D9D4CE]"
-                >
-                  <span>&gt; hand this over to {appName}</span>
-                  <span className="text-[#9CC59F]">
-                    ✓ Run started on this agent
-                  </span>
-                </span>
-              </span>
-            </WorkSourceCard>
-          ) : (
-            showsA2a && (
-              <WorkSourceCard
-                icon={<Share2 className="size-4" />}
-                title="Other agents and apps"
-                action={
-                  <Button size="sm" variant="outline" asChild>
-                    <Link href={agentDetailHref("agent", agentId, "connect")}>
-                      A2A details
-                    </Link>
-                  </Button>
-                }
-              >
-                Your other agents can hand it work as a subagent. Outside apps
-                call it over A2A.
-              </WorkSourceCard>
-            )
-          )}
           {canReadChannels && (
             <AgentChannelsCard agentId={agentId} hasRuntime={hasRuntime} />
           )}
+          {onShowA2a && (
+            <WorkSourceCard
+              icon={<Share2 className="size-4" />}
+              title="From other agents"
+              action={
+                <Button size="sm" variant="outline" onClick={onShowA2a}>
+                  Show A2A details
+                </Button>
+              }
+            >
+              Subagents and outside apps send it tasks over A2A.
+            </WorkSourceCard>
+          )}
         </div>
+        {hasRuntime && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-4 rounded-xl border bg-card p-5">
+            <span
+              aria-hidden="true"
+              className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted"
+            >
+              <Monitor className="size-4" />
+            </span>
+            <div className="min-w-0 flex-[1_1_18rem] space-y-1">
+              <h3 className="text-sm font-semibold">From your laptop</h3>
+              <p className="text-sm text-muted-foreground">
+                {`Add the ${appName} MCP gateway to Claude Code or Codex once. Your changes, files and credentials move into a run here; "bring it back" returns a patch.`}
+              </p>
+            </div>
+            <span
+              role="img"
+              aria-label={`Example: hand this over to ${appName}`}
+              className="flex min-w-0 flex-[0_1_20rem] flex-col rounded-[10px] bg-[#16130F] px-3.5 py-3 font-mono text-xs leading-[1.7] text-[#D9D4CE]"
+            >
+              <span>&gt; hand this over to {appName}</span>
+              <span className="text-[#9CC59F]">
+                ✓ Run started on this agent
+              </span>
+            </span>
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/connection">Connect your local agent</Link>
+            </Button>
+          </div>
+        )}
       </section>
       {!hasRuntime && runtimeAvailable && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card px-4 py-3">
@@ -145,9 +149,7 @@ export function AgentWorkSources({
             </p>
           </div>
           <Button size="sm" variant="outline" asChild>
-            <Link href={agentDetailHref("agent", agentId, "runtime")}>
-              Set up Agent Runtime
-            </Link>
+            <Link href={agentEditHref(agentId)}>Set up Agent Runtime</Link>
           </Button>
         </div>
       )}
@@ -166,7 +168,7 @@ function AgentChannelsCard({
   const assigned = (bindings.data?.bindings ?? []).filter(
     (binding) => binding.agentId === agentId,
   );
-  const manageHref = agentDetailHref("agent", agentId, "messaging");
+  const manageHref = agentEditHref(agentId, "messaging");
   return (
     <WorkSourceCard
       icon={<Hash className="size-4" />}
@@ -182,29 +184,31 @@ function AgentChannelsCard({
       {bindings.isPending ? (
         <span>Loading channels…</span>
       ) : assigned.length ? (
-        <span className="flex flex-col gap-2">
-          <ul className="divide-y rounded-md border">
+        <span className="flex flex-col gap-1.5">
+          <span className="flex flex-wrap items-center gap-1.5">
             {assigned.slice(0, 3).map((binding) => (
-              <li
+              <span
                 key={binding.id}
-                className="flex min-w-0 items-center gap-2 px-3 py-2 text-foreground"
+                className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
               >
-                <ChannelIcon channel={binding.provider} className="size-4" />
+                <ChannelIcon channel={binding.provider} className="size-3.5" />
                 <span className="truncate">
                   {MESSAGING_CHANNEL_LABELS[binding.provider]} ·{" "}
                   {channelDisplayName(binding)}
                 </span>
-              </li>
+              </span>
             ))}
-          </ul>
-          {assigned.length > 3 && <span>+{assigned.length - 3} more</span>}
+            {assigned.length > 3 && (
+              <span className="text-xs">+{assigned.length - 3} more</span>
+            )}
+          </span>
           <span>People mention it there; it answers in the thread.</span>
         </span>
       ) : (
         <span>
           {hasRuntime
-            ? "Not in any channel yet. Add a Slack, Teams or Telegram channel and people can give it tasks there; it answers in the thread."
-            : "Not in any channel yet. Add a Slack, Teams or Telegram channel and people can ask it there."}
+            ? "Not in a channel yet. People mention it in Slack, Teams or Telegram; it answers in the thread."
+            : "Not in a channel yet. People mention it in Slack, Teams or Telegram."}
         </span>
       )}
     </WorkSourceCard>
@@ -223,7 +227,7 @@ function WorkSourceCard({
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border bg-card p-5">
+    <div className="flex min-w-0 flex-col gap-2 rounded-xl border bg-card p-5">
       <div className="flex items-center gap-2.5">
         <span
           aria-hidden="true"
@@ -234,7 +238,7 @@ function WorkSourceCard({
         <h3 className="text-sm font-semibold">{title}</h3>
       </div>
       <div className="text-sm text-muted-foreground">{children}</div>
-      {action && <div className="mt-auto pt-1">{action}</div>}
+      {action && <div className="mt-auto pt-2">{action}</div>}
     </div>
   );
 }

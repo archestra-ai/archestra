@@ -99,7 +99,7 @@ test("delegates from a parent agent to an external A2A agent", async ({
 
     // External assignments deliberately share the Agent form's Save lifecycle:
     // selecting the row only stages it; the POST must happen after Save changes.
-    await goToPage(page, `/agents/${parentId}?section=tools`);
+    await goToPage(page, `/agents/${parentId}/edit?step=tools`);
     await expect(
       page.locator("#main-content").getByText("External Agents", {
         exact: true,

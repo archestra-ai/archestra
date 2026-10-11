@@ -164,19 +164,27 @@ test("can create and delete an agent", {
     page.getByRole("combobox").filter({ hasText: AGENT_NAME }),
   ).toBeVisible();
 
+  // The old A2A tab link opens the A2A details over the overview.
   await goToPage(page, `/agents/${agentId}?section=connect`);
   await expect(
-    page.getByText(new RegExp(`/v2/a2a/${agentId}`)).first(),
+    page
+      .getByRole("dialog")
+      .getByText(new RegExp(`/v2/a2a/${agentId}`))
+      .first(),
   ).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press("Escape");
   await expect(
     page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
   ).toBeVisible({ timeout: 15_000 });
 
-  // Configuration is not a second route any more: the wizard's steps are the
-  // detail page's own sections, edited in place.
+  // The overview's Edit opens the edit page; every step is one click away.
+  await page.getByRole("link", { name: "Edit", exact: true }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/agents/${agentId}/edit$`), {
+    timeout: 15_000,
+  });
   await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
   await expect(page).toHaveURL(
-    new RegExp(`/agents/${agentId}\\?section=tools`),
+    new RegExp(`/agents/${agentId}/edit\\?step=tools`),
     {
       timeout: 15_000,
     },
@@ -188,11 +196,10 @@ test("can create and delete an agent", {
     page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
   ).toBeVisible();
 
-  // The old wizard route still resolves, so links already out there land on
-  // the section their `?step=` asked for.
-  await goToPage(page, `/agents/${agentId}/edit?step=advanced`);
+  // Links to the old settings tabs land on the matching step.
+  await goToPage(page, `/agents/${agentId}?section=advanced`);
   await expect(page).toHaveURL(
-    new RegExp(`/agents/${agentId}\\?section=advanced`),
+    new RegExp(`/agents/${agentId}/edit\\?step=advanced`),
     { timeout: 15_000 },
   );
 

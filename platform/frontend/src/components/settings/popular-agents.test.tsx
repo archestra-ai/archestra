@@ -118,6 +118,7 @@ function renderFlow({
         canCreateAgent
         runtimeAvailable
         onStartFromScratch={vi.fn()}
+        onStartFromImage={vi.fn()}
         onAddExternalAgent={vi.fn()}
         onSelect={vi.fn()}
       />
@@ -175,7 +176,11 @@ function savedOverrides(ids: string[]) {
 }
 
 async function ready() {
-  await screen.findByRole("heading", { name: "Coding agents" });
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("status", { name: "Loading coding agents" }),
+    ).not.toBeInTheDocument(),
+  );
 }
 
 describe("popular agent configuration", () => {
@@ -245,7 +250,7 @@ describe("popular agent configuration", () => {
         screen.queryByRole("button", { name: "Save" }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("heading", { name: "Coding agents" }),
+        screen.queryByRole("button", { name: /Claude Code / }),
       ).not.toBeInTheDocument();
       expect(writes).toEqual([]);
     } finally {
@@ -353,7 +358,7 @@ describe("popular agent configuration", () => {
     ).toBeInTheDocument();
   });
 
-  it("loads saved choices, hides an empty section, and can restore a template", async () => {
+  it("loads saved choices, leaves only Custom image when every template is hidden, and can restore a template", async () => {
     organization.popularAgentOverrides = Object.fromEntries(
       PopularAgentIdSchema.options.map((id) => [id, { hidden: true }]),
     );
@@ -368,9 +373,15 @@ describe("popular agent configuration", () => {
     expect(
       screen.getByRole("radio", { name: "Custom image" }),
     ).toBeInTheDocument();
+    await ready();
+    const codingAgents = screen
+      .getByRole("heading", { name: "Coding agents" })
+      .closest("section") as HTMLElement;
     expect(
-      screen.queryByRole("heading", { name: "Coding agents" }),
-    ).not.toBeInTheDocument();
+      within(codingAgents)
+        .getAllByRole("button")
+        .map((button) => button.querySelector(".font-medium")?.textContent),
+    ).toEqual(["Custom image"]);
     expect(
       screen.getByRole("button", { name: /New Test Platform agent/ }),
     ).toBeInTheDocument();

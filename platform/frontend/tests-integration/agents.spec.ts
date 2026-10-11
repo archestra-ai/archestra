@@ -535,13 +535,29 @@ test.describe("Agents", () => {
       url: "/api/agents/all",
       body: [original, clonedDraft],
     });
+    // Same for the skills count the edit page's Tools step reads on load.
+    await mswControl.use({
+      method: "get",
+      url: "/api/agents/activation-skills",
+      body: {
+        enabled: true,
+        data: [],
+        pagination: {
+          currentPage: 1,
+          limit: 1,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        },
+      },
+    });
     await dialog.getByRole("button", { name: "Clone" }).click();
     // The clone lands on its own page, open on Configuration, so it can be
     // renamed without a second navigation.
-    await page.waitForURL(/\/agents\/agent-cloned$/);
+    await page.waitForURL(/\/agents\/agent-cloned\/edit$/);
 
-    // The configuration is the page, so the clone's name is editable on the
-    // screen the clone landed on.
+    // A clone lands on its edit page, so it can be renamed straight away.
     const nameInput = page.getByRole("textbox", { name: "Name" });
     await expect(nameInput).toHaveValue(CLONE_DRAFT);
 
@@ -559,13 +575,12 @@ test.describe("Agents", () => {
     await save.click();
     const putBody = JSON.parse((await saved).request().postData() ?? "{}");
     expect(putBody.name).toBe(CLONE);
-    // Saving stays put: the record's page is where it was being edited.
-    await expect(page).toHaveURL(/\/agents\/agent-cloned$/);
+    // Saving stays on the edit page, on the step it was made from.
+    await expect(page).toHaveURL(/\/agents\/agent-cloned\/edit$/);
 
-    // The remaining configuration is a section of the same page, not a step
-    // of a separate wizard.
+    // Every other step is one click away on the same page.
     await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
-    await page.waitForURL(/\/agents\/agent-cloned\?section=tools$/);
+    await page.waitForURL(/\/agents\/agent-cloned\/edit\?step=tools$/);
     await expect(page.getByTestId(E2eTestId.AgentToolsSection)).toBeVisible();
   });
 });

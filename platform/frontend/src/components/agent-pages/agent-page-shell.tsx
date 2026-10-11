@@ -15,7 +15,6 @@ export function AgentPageShell({
   header,
   children,
   stickyFooter = false,
-  compactBack = false,
 }: {
   /** Left unset for a state with nowhere to go back to; no link is rendered. */
   backHref?: string;
@@ -35,11 +34,6 @@ export function AgentPageShell({
   children: ReactNode;
   /** Let the shared WizardFooter follow the page's vertical scroll. */
   stickyFooter?: boolean;
-  /**
-   * An arrow beside the title rather than a labelled link above it, so a
-   * wizard's header stays one row next to its progress.
-   */
-  compactBack?: boolean;
 }) {
   return (
     <PageLayout
@@ -50,14 +44,9 @@ export function AgentPageShell({
       documentTitle={header.documentTitle}
       description={header.description}
       actionButton={header.action}
-      backLinkInline={compactBack}
       backLink={
         backHref ? (
-          <PageBackLink
-            href={backHref}
-            onNavigate={onBackRequest}
-            iconOnly={compactBack}
-          >
+          <PageBackLink href={backHref} onNavigate={onBackRequest}>
             {backLabel}
           </PageBackLink>
         ) : undefined

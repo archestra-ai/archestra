@@ -60,15 +60,7 @@ export function CreatedByCell({
           className={cn("flex min-w-0 items-center gap-2", className)}
           title={detail}
         >
-          <Avatar className="h-5 w-5 shrink-0">
-            <AvatarFallback className="text-[10px]">
-              {isServiceAccount ? (
-                <Bot className="size-3.5" aria-hidden="true" />
-              ) : (
-                getInitials(label)
-              )}
-            </AvatarFallback>
-          </Avatar>
+          <CreatorAvatar createdBy={createdBy} />
           <span className="min-w-0 truncate">{label}</span>
           {isServiceAccount && showServiceAccountBadge && (
             <Badge
@@ -113,7 +105,33 @@ export function createdByFact(
   };
 }
 
-function creatorLabel(createdBy: CreatedBy): string {
+/**
+ * The creator's initials, or a bot glyph for a service account, in a small
+ * avatar, so every surface that names a creator draws them the same way.
+ */
+export function CreatorAvatar({
+  createdBy,
+  className,
+  fallbackClassName,
+}: {
+  createdBy: CreatedBy;
+  className?: string;
+  fallbackClassName?: string;
+}) {
+  return (
+    <Avatar className={cn("h-5 w-5 shrink-0", className)} aria-hidden="true">
+      <AvatarFallback className={cn("text-[10px]", fallbackClassName)}>
+        {createdBy.type === "service_account" ? (
+          <Bot className="size-3.5" aria-hidden="true" />
+        ) : (
+          getInitials(creatorLabel(createdBy))
+        )}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+export function creatorLabel(createdBy: CreatedBy): string {
   return createdBy.name || createdBy.email || "Unknown user";
 }
 

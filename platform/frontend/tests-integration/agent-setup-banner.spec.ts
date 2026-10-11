@@ -48,7 +48,7 @@ const READY: Preflight = {
   incompatible: null,
 };
 
-test("spaces the setup checklist like the rest of the agent page, and clears it once the account is connected", async ({
+test("spaces the setup checklist like the rest of the agent overview, and clears it once the account is connected", async ({
   page,
   mswControl,
   request,
@@ -60,19 +60,16 @@ test("spaces the setup checklist like the rest of the agent page, and clears it 
   const notice = page
     .getByRole("alert")
     .filter({ hasText: "Before this agent can run" });
-  const form = page.locator("form").first();
   await expect(notice).toBeVisible();
   await expect(notice).toContainText("Connect your Claude subscription");
-  await expect(form.getByLabel(/^Name/)).toBeVisible();
 
-  // Compare against a gap the form already keeps, not a number from the CSS.
-  const standardGap = await verticalGap(
-    form.getByLabel(/^Name/),
-    form.locator("label").filter({ hasText: /^Description$/ }),
-  );
-  expect(standardGap).toBeGreaterThan(0);
-  // The checklist is followed by where the agent gets its work, then the form.
+  // The checklist is followed by where the agent gets its work, then its
+  // instructions. Compare against a gap the page already keeps, not a number
+  // from the CSS.
   const workSources = page.getByRole("region", { name: "Give it work" });
+  const instructions = page.getByRole("region", { name: "Instructions" });
+  const standardGap = await verticalGap(workSources, instructions);
+  expect(standardGap).toBeGreaterThan(0);
   expect(await verticalGap(notice, workSources)).toBeCloseTo(standardGap, 0);
 
   await connectClaudeAccount(page, mswControl);

@@ -16,11 +16,15 @@ import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
 import { Button } from "@/components/ui/button";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
+import {
+  useAllChatOpsBindings,
+  useChatOpsStatus,
+} from "@/lib/chatops/chatops.query";
 import {
   useSlackAgentBotChannels,
   useSlackAgentBots,
 } from "@/lib/chatops/chatops-config.query";
+import { useConfig } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { cn } from "@/lib/utils/tailwind";
@@ -173,6 +177,21 @@ function AgentChannelsCard({
   const appName = useAppName();
   const bindings = useAllChatOpsBindings();
   const catalog = useMessagingChannelCatalog();
+  const providerStatus = useChatOpsStatus();
+  const { data: config } = useConfig();
+  // The chat apps this deployment offers, and of those the ones the
+  // organization has connected: the card offers only what can work.
+  const offeredApps = CHAT_APPS.filter(
+    (provider) =>
+      !catalog.isHidden(provider) &&
+      (provider !== "telegram" ||
+        config?.features.chatopsTelegramEnabled === true),
+  );
+  const connectedApps = offeredApps.filter((provider) =>
+    providerStatus.data?.some(
+      (status) => status.id === provider && status.configured,
+    ),
+  );
   // Quiet: without the Slack settings, the card keeps its provider-neutral copy.
   const slackBots = useSlackAgentBots({ quiet: true });
   const [editingBot, setEditingBot] = useState(false);
@@ -214,7 +233,14 @@ function AgentChannelsCard({
       title="In your channels"
       action={
         <span className="flex flex-wrap gap-2">
-          {slackBot ? (
+          {!reachable && !bindings.isPending ? (
+            <EmptyChannelActions
+              connectedApps={connectedApps}
+              slackPerAgent={slackPerAgent}
+              addBotHref={addBotHref}
+              manageHref={manageHref}
+            />
+          ) : slackBot ? (
             <Button
               size="sm"
               variant="outline"
@@ -229,7 +255,7 @@ function AgentChannelsCard({
               </Button>
             )
           )}
-          {(listed.length > 0 || !slackPerAgent) && (
+          {reachable && (listed.length > 0 || !slackPerAgent) && (
             <Button size="sm" variant="outline" asChild>
               <Link href={manageHref}>
                 {listed.length ? "Manage channels" : "Add a channel"}
@@ -293,13 +319,9 @@ function AgentChannelsCard({
       ) : (
         <span className="flex flex-col gap-2">
           <span>
-            {slackPerAgent
-              ? hasRuntime
-                ? "Not reachable from chat apps yet. Give it a Slack bot and people @mention it with tasks; it answers in the thread. Or add a Teams or Telegram channel."
-                : "Not reachable from chat apps yet. Give it a Slack bot and people @mention it. Or add a Teams or Telegram channel."
-              : hasRuntime
-                ? `Not in any channel yet. Add a ${slackOffered ? "Slack, Teams or Telegram" : "Teams or Telegram"} channel and people can give it tasks there; it answers in the thread.`
-                : `Not in any channel yet. Add a ${slackOffered ? "Slack, Teams or Telegram" : "Teams or Telegram"} channel and people can ask it there.`}
+            {connectedApps.length > 0
+              ? `Not reachable from chat apps yet. Add it to ${listAppNames(connectedApps, "or")} and people can @mention it ${hasRuntime ? "with tasks" : "there"}; it answers in the thread.`
+              : `Not reachable from chat apps yet. Once ${listAppNames(offeredApps, "or")} is connected, people can @mention it there.`}
           </span>
           {slackWithoutBot && <SlackWithoutBotNotice href={addBotHref} />}
         </span>
@@ -317,6 +339,62 @@ function AgentChannelsCard({
       )}
     </WorkSourceCard>
   );
+}
+
+const CHAT_APPS = [
+  "slack",
+  "ms-teams",
+  "telegram",
+] as const satisfies readonly (keyof typeof MESSAGING_CHANNEL_LABELS)[];
+type ChatApp = (typeof CHAT_APPS)[number];
+
+/**
+ * One way in per connected chat app. A per-agent Slack bot is set up on the
+ * Slack settings page; channels in the other apps are assigned on the agent's
+ * Messaging tab. With none connected, the way in is connecting one.
+ */
+function EmptyChannelActions({
+  connectedApps,
+  slackPerAgent,
+  addBotHref,
+  manageHref,
+}: {
+  connectedApps: ChatApp[];
+  slackPerAgent: boolean;
+  addBotHref: string;
+  manageHref: string;
+}) {
+  if (connectedApps.length === 0) {
+    return (
+      <Button size="sm" variant="outline" asChild>
+        <Link href="/settings/messaging-channels">Set up a chat app</Link>
+      </Button>
+    );
+  }
+  return (
+    <>
+      {connectedApps.map((provider) => (
+        <Button key={provider} size="sm" variant="outline" asChild>
+          <Link
+            href={
+              provider === "slack" && slackPerAgent ? addBotHref : manageHref
+            }
+          >
+            <ChannelIcon channel={provider} className="size-4" />
+            {provider === "slack" && slackPerAgent
+              ? "Add Slack bot"
+              : `Add ${MESSAGING_CHANNEL_LABELS[provider]} channel`}
+          </Link>
+        </Button>
+      ))}
+    </>
+  );
+}
+
+function listAppNames(apps: ChatApp[], conjunction: string): string {
+  const names = apps.map((provider) => MESSAGING_CHANNEL_LABELS[provider]);
+  if (names.length <= 1) return names[0] ?? "a chat app";
+  return `${names.slice(0, -1).join(", ")} ${conjunction} ${names.at(-1)}`;
 }
 
 function SlackWithoutBotNotice({ href }: { href: string }) {

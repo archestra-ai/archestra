@@ -848,6 +848,10 @@ async function finishDelegationTools(
   attestable: boolean,
 ): Promise<Tool[]> {
   const caller = await AgentModel.findDelegationTarget(context.agentId);
+  const tiers =
+    caller?.agentType === "agent"
+      ? await forkTiers({ ...context, caller })
+      : [];
   const fork =
     caller?.agentType === "agent"
       ? [
@@ -855,13 +859,11 @@ async function finishDelegationTools(
             ...buildDelegationToolDescriptor({
               name: SELF_FORK_TOOL_NAME,
               targetAgent: { id: caller.id, name: caller.name },
-              inputSchema: selfForkInputSchema(
-                await forkTiers({ ...context, caller }),
-              ),
+              inputSchema: selfForkInputSchema(tiers),
               attestable,
             }),
             title: "Fork yourself",
-            description: SELF_FORK_DESCRIPTION,
+            description: selfForkDescription(tiers),
           },
         ]
       : [];
@@ -892,8 +894,22 @@ async function forkTiers(params: {
   return availableSubagentTiers({ parent, agentTrio: caller, organizationId });
 }
 
-const SELF_FORK_DESCRIPTION =
-  "Run a self-contained task in a fresh copy of yourself: same tools and instructions, none of this conversation. Use it to keep long tool output, searches, or exploration out of your context when only the conclusion matters. Put everything the copy needs in `message`, and say what to return. The copy cannot fork again.";
+const SELF_FORK_TIER_USES = {
+  smart:
+    'With `tier: "smart"` the copy runs on a stronger model: hand it a hard reasoning step, or have it check your conclusion before you act on it.',
+  fast: 'With `tier: "fast"` it runs on a cheaper, quicker model, for bulk reading, searching, or extraction.',
+};
+
+/** The fork's description, naming what each advertised tier is for. */
+function selfForkDescription(
+  tiers: Exclude<SubagentModelTier, "normal">[],
+): string {
+  return [
+    "Run a self-contained task in a fresh copy of yourself: same tools and instructions, none of this conversation. Use it to keep long tool output, searches, or exploration out of your context when only the conclusion matters.",
+    ...tiers.map((tier) => SELF_FORK_TIER_USES[tier]),
+    "Put everything the copy needs in `message`, and say what to return. The copy cannot fork again.",
+  ].join(" ");
+}
 
 function dedupeDelegationTools(tools: Tool[]): Tool[] {
   const names = new Set<string>();

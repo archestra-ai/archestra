@@ -339,9 +339,15 @@ export const handlers: HttpHandler[] = [
   // editor still renders its provider setup links and an empty assignment
   // table.
   ...getJson("/api/chatops/status", { providers: [] }),
-  // The agent edit page mounts the channel editor on every step, so its
-  // per-agent Slack bots are read even when the page opens on another one.
-  ...getJson("/api/chatops/config/slack/agents", { bots: [] }),
+  // The record's Slack bot section: no bots, Slack not connected. The agent
+  // edit page mounts it on every step, so it is read whichever step opens.
+  ...getJson("/api/chatops/config/slack/agents", {
+    bots: [],
+    canCreateApps: false,
+    oneClickInstall: false,
+    unassignedApp: null,
+    workspaceName: null,
+  }),
   ...getJson("/api/chatops/bindings", {
     data: [],
     pagination: {

@@ -16,6 +16,7 @@ export const SLACK_REQUIRED_BOT_SCOPES = [
   "commands",
   "app_mentions:read",
   "channels:history",
+  "channels:join",
   "channels:read",
   "chat:write",
   "files:read",

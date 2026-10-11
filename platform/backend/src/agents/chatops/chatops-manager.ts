@@ -69,7 +69,11 @@ import {
   ensureProvisionedUser,
   resolveSignupWelcomeMode,
 } from "./auto-provision";
-import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
+import {
+  claimThreadMuteHint,
+  getThreadMuteMarker,
+  invalidateChannelAnswerAll,
+} from "./channel-activation";
 import { compactChatOpsResponse } from "./chatops-response";
 import { chatOpsRunRegistry, wasRunSuperseded } from "./chatops-run-registry";
 import { watchChatOpsTask } from "./chatops-task-watcher";
@@ -688,8 +692,21 @@ export class ChatOpsManager {
 
     if (pinnedAgentId) {
       // A pinned bot always answers as its agent: the binding only carries the
-      // channel (instructions, task follow-ups). Its DM is labelled with the
-      // agent so the conversation shows up under it.
+      // channel (instructions, answer-all, task follow-ups). A channel nobody
+      // has claimed yet goes to the first bot's agent, so it shows up on that
+      // agent's page with its settings; other bots in it answer when
+      // @mentioned. Its DM is labelled with the agent the same way.
+      if (binding && !binding.agentId) {
+        binding =
+          (await ChatOpsChannelBindingModel.update(binding.id, {
+            agentId: pinnedAgentId,
+          })) ?? binding;
+        await invalidateChannelAnswerAll({
+          provider: binding.provider,
+          channelId: binding.channelId,
+          workspaceId: binding.workspaceId,
+        });
+      }
       binding ??= await ChatOpsChannelBindingModel.upsertByChannel({
         organizationId,
         provider: provider.providerId,
@@ -701,7 +718,7 @@ export class ChatOpsManager {
           : ((await provider.getChannelName(message.channelId)) ?? undefined),
         isDm,
         dmOwnerEmail: isDm ? message.senderEmail : undefined,
-        ...(isDm && { agentId: pinnedAgentId }),
+        agentId: pinnedAgentId,
       });
     } else if (!binding || !binding.agentId) {
       // Create binding early (without agent) so the DM/channel appears in the UI

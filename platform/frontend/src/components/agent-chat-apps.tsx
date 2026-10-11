@@ -47,6 +47,7 @@ import {
   useApplyChatOpsBindingPlan,
   useChatOpsStatus,
 } from "@/lib/chatops/chatops.query";
+import { useSlackAgentBots } from "@/lib/chatops/chatops-config.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import { useConfig } from "@/lib/config/config.query";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
@@ -180,10 +181,18 @@ export function AgentChatAppsEditor({
   }, [fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError]);
 
   const providerAvailabilityPending = configPending;
+  const slackOffered = !messagingChannelCatalog.isHidden("slack");
+  // With one bot per agent, Slack channels belong to the Slack bot section:
+  // assigning one here would not make anyone answer in it. A Slack app still
+  // routed by channel (not yet converted) keeps Slack in this list.
+  const slackBots = useSlackAgentBots({ quiet: true });
+  const slackHasAgentBots =
+    !!slackBots.data && slackBots.data.unassignedApp === null;
   const visibleProviders = CHAT_PROVIDERS.filter(
     (provider) =>
       !messagingChannelCatalog.isHidden(provider) &&
-      (provider !== "telegram" || telegramEnabled),
+      (provider !== "telegram" || telegramEnabled) &&
+      (provider !== "slack" || !slackHasAgentBots),
   );
   const visibleProviderIds = new Set(visibleProviders);
   const bindings = (data?.bindings ?? []).filter((binding) =>
@@ -597,7 +606,7 @@ export function AgentChatAppsEditor({
     <>
       {/* The agent's own Slack bot: an existing agent only, and only where
           Slack is offered at all. */}
-      {subjectId && visibleProviders.includes("slack") && (
+      {subjectId && slackOffered && (
         <AgentSlackBotSection
           agentId={subjectId}
           agentName={subject.name}

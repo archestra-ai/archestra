@@ -34,6 +34,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ChatOpsChannelBindingModel, UserModel } from "@/models";
+import { test as dbTest } from "@/test";
 import { chatOpsRunRegistry, wasRunSuperseded } from "./chatops-run-registry";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import SlackProvider from "./slack-provider";
@@ -938,30 +939,59 @@ describe("SlackProvider — bots pinned to an agent sharing a channel", () => {
     expect(await main.parseWebhookNotification(next, {})).not.toBeNull();
   });
 
-  test("a pinned bot ignores the channel's answer-all setting", async () => {
-    const { main, marketing } = createBots();
-    const binding = await ChatOpsChannelBindingModel.create({
-      organizationId: "org-shared",
-      provider: "slack",
-      channelId: CHANNEL,
-      workspaceId: "T12345",
-    });
-    await ChatOpsChannelBindingModel.update(binding.id, {
-      answerAllMessages: true,
-    });
+  dbTest(
+    "only the bot of the channel's agent answers every message",
+    async ({ makeAgent }) => {
+      const [marketingAgent, codingAgent] = [
+        await makeAgent(),
+        await makeAgent(),
+      ];
+      const pinnedBot = (agentId: string, botUserId: string) => {
+        const bot = new SlackProvider(
+          {
+            enabled: true,
+            botToken: `xoxb-${botUserId}`,
+            signingSecret: SIGNING_SECRET,
+            appId: `A_${botUserId}`,
+          },
+          { pinnedAgentId: agentId },
+        );
+        // biome-ignore lint/suspicious/noExplicitAny: test-only — bypass private field
+        (bot as any).botUserId = botUserId;
+        // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
+        (bot as any).client = {
+          apiCall: vi.fn().mockResolvedValue({ ok: true }),
+        };
+        return bot;
+      };
+      const marketing = pinnedBot(marketingAgent.id, MARKETING_BOT);
+      const coding = pinnedBot(codingAgent.id, "UCODINGBOT");
+      const binding = await ChatOpsChannelBindingModel.create({
+        organizationId: marketingAgent.organizationId,
+        provider: "slack",
+        channelId: CHANNEL,
+        workspaceId: "T12345",
+        agentId: marketingAgent.id,
+      });
+      await ChatOpsChannelBindingModel.update(binding.id, {
+        answerAllMessages: true,
+      });
 
-    const chatter = makeEventPayload(
-      {},
-      {
-        type: "message",
-        channel: CHANNEL,
-        text: "just chatting",
-        ts: "5555555555.000030",
-      },
-    );
-    expect(await main.parseWebhookNotification(chatter, {})).not.toBeNull();
-    expect(await marketing.parseWebhookNotification(chatter, {})).toBeNull();
-  });
+      const chatter = makeEventPayload(
+        {},
+        {
+          type: "message",
+          channel: CHANNEL,
+          text: "just chatting",
+          ts: "5555555555.000030",
+        },
+      );
+      expect(
+        await marketing.parseWebhookNotification(chatter, {}),
+      ).not.toBeNull();
+      expect(await coding.parseWebhookNotification(chatter, {})).toBeNull();
+    },
+  );
 });
 
 describe("SlackProvider.parseWebhookNotification — Stop button", () => {
@@ -1252,6 +1282,58 @@ describe("SlackProvider.sendReply", () => {
       {
         type: "context",
         elements: [{ type: "plain_text", text: "🤖 Agent", emoji: true }],
+      },
+    ]);
+  });
+
+  test("a bot pinned to an agent leaves its name out of the footer", async () => {
+    const provider = new SlackProvider(
+      {
+        enabled: true,
+        botToken: "xoxb-pinned",
+        signingSecret: SIGNING_SECRET,
+        appId: "A_PINNED",
+      },
+      { pinnedAgentId: "11111111-1111-4111-8111-111111111111" },
+    );
+    const postMessage = vi.fn().mockResolvedValue({ ts: "2222222222.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+    const reply = (footer: string) =>
+      provider.sendReply({
+        originalMessage: {
+          messageId: "1234567890.123456",
+          channelId: "C12345",
+          workspaceId: "T12345",
+          threadId: "1111111111.000000",
+          senderId: "U_SENDER",
+          senderName: "Test User",
+          text: "hello",
+          rawText: "hello",
+          timestamp: new Date(),
+          isThreadReply: false,
+        },
+        text: "Filed it.\n\n🤖 Agent",
+        footer,
+      });
+
+    await reply("🤖 Agent");
+    await reply("🤖 Agent · conversation started by Ann");
+
+    expect(postMessage.mock.calls[0][0].blocks).toEqual([
+      { type: "markdown", text: "Filed it." },
+    ]);
+    expect(postMessage.mock.calls[1][0].blocks).toEqual([
+      { type: "markdown", text: "Filed it." },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "plain_text",
+            text: "conversation started by Ann",
+            emoji: true,
+          },
+        ],
       },
     ]);
   });

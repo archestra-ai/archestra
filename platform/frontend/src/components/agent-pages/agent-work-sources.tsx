@@ -1,6 +1,6 @@
 "use client";
 
-import { MESSAGING_CHANNEL_LABELS } from "@archestra/shared";
+import { MESSAGING_CHANNEL_LABELS, slackHandleFor } from "@archestra/shared";
 import {
   Hash,
   MessageSquare,
@@ -9,14 +9,20 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { channelDisplayName } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { ChannelIcon } from "@/components/channel-icon";
+import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
 import { Button } from "@/components/ui/button";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
+import {
+  useSlackAgentBotChannels,
+  useSlackAgentBots,
+} from "@/lib/chatops/chatops-config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
 import { cn } from "@/lib/utils/tailwind";
 import { agentEditHref } from "./agent-page-config";
 
@@ -164,29 +170,98 @@ function AgentChannelsCard({
   agentId: string;
   hasRuntime: boolean;
 }) {
+  const appName = useAppName();
   const bindings = useAllChatOpsBindings();
+  const catalog = useMessagingChannelCatalog();
+  // Quiet: without the Slack settings, the card keeps its provider-neutral copy.
+  const slackBots = useSlackAgentBots({ quiet: true });
+  const [editingBot, setEditingBot] = useState(false);
+  const slackOffered = !catalog.isHidden("slack");
+  // With one bot per agent, Slack is reached through the agent's own bot, not
+  // through channels assigned to it. A Slack app still routed by channel (not
+  // yet converted) keeps the old meaning.
+  const slackPerAgent =
+    slackOffered && !!slackBots.data && slackBots.data.unassignedApp === null;
+  const slackBot = slackBots.data?.bots.find((bot) => bot.agentId === agentId);
+  const slackHandle = slackBot
+    ? (slackBot.handle ?? slackHandleFor(appName, slackBot.agentName))
+    : null;
+  const botChannels = useSlackAgentBotChannels(
+    slackBot?.installed ? agentId : undefined,
+  );
+  const botChannelCount = botChannels.data?.channels.filter(
+    (channel) => channel.isMember,
+  ).length;
+
   const assigned = (bindings.data?.bindings ?? []).filter(
     (binding) => binding.agentId === agentId,
   );
+  const listed = slackPerAgent
+    ? assigned.filter((binding) => binding.provider !== "slack")
+    : assigned;
+  // Assignments from before per-agent bots, left without a bot to answer.
+  const slackWithoutBot =
+    slackPerAgent &&
+    !slackBot &&
+    assigned.some((binding) => binding.provider === "slack" && !binding.isDm);
   const manageHref = agentEditHref(agentId, "messaging");
+  const addBotHref = `/settings/messaging-channels/slack?addBot=${encodeURIComponent(agentId)}`;
+  const reachable = listed.length > 0 || !!slackBot;
+
   return (
     <WorkSourceCard
       icon={<Hash className="size-4" />}
       title="In your channels"
       action={
-        <Button size="sm" variant="outline" asChild>
-          <Link href={manageHref}>
-            {assigned.length ? "Manage channels" : "Add a channel"}
-          </Link>
-        </Button>
+        <span className="flex flex-wrap gap-2">
+          {slackBot ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setEditingBot(true)}
+            >
+              Edit Slack bot
+            </Button>
+          ) : (
+            slackPerAgent && (
+              <Button size="sm" variant="outline" asChild>
+                <Link href={addBotHref}>Add Slack bot</Link>
+              </Button>
+            )
+          )}
+          {(listed.length > 0 || !slackPerAgent) && (
+            <Button size="sm" variant="outline" asChild>
+              <Link href={manageHref}>
+                {listed.length ? "Manage channels" : "Add a channel"}
+              </Link>
+            </Button>
+          )}
+        </span>
       }
     >
       {bindings.isPending ? (
         <span>Loading channels…</span>
-      ) : assigned.length ? (
+      ) : reachable ? (
         <span className="flex flex-col gap-1.5">
           <span className="flex flex-wrap items-center gap-1.5">
-            {assigned.slice(0, 3).map((binding) => (
+            {slackBot && slackHandle && (
+              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
+                <ChannelIcon channel="slack" className="size-3.5" />
+                <span className="truncate">
+                  <span className="font-mono">@{slackHandle}</span>
+                  {botChannelCount !== undefined && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      ·{" "}
+                      {botChannelCount === 1
+                        ? "1 channel"
+                        : `${botChannelCount} channels`}
+                    </span>
+                  )}
+                </span>
+              </span>
+            )}
+            {listed.slice(0, slackBot ? 2 : 3).map((binding) => (
               <span
                 key={binding.id}
                 className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
@@ -198,20 +273,61 @@ function AgentChannelsCard({
                 </span>
               </span>
             ))}
-            {assigned.length > 3 && (
-              <span className="text-xs">+{assigned.length - 3} more</span>
+            {listed.length > (slackBot ? 2 : 3) && (
+              <span className="text-xs">
+                +{listed.length - (slackBot ? 2 : 3)} more
+              </span>
             )}
           </span>
-          <span>People mention it there; it answers in the thread.</span>
+          {slackBot && slackHandle ? (
+            <span>
+              People mention{" "}
+              <span className="font-mono text-foreground">@{slackHandle}</span>{" "}
+              in Slack; it answers in the thread.
+            </span>
+          ) : (
+            <span>People mention it there; it answers in the thread.</span>
+          )}
+          {slackWithoutBot && <SlackWithoutBotNotice href={addBotHref} />}
         </span>
       ) : (
-        <span>
-          {hasRuntime
-            ? "Not in a channel yet. People mention it in Slack, Teams or Telegram; it answers in the thread."
-            : "Not in a channel yet. People mention it in Slack, Teams or Telegram."}
+        <span className="flex flex-col gap-2">
+          <span>
+            {slackPerAgent
+              ? hasRuntime
+                ? "Not reachable from chat apps yet. Give it a Slack bot and people @mention it with tasks; it answers in the thread. Or add a Teams or Telegram channel."
+                : "Not reachable from chat apps yet. Give it a Slack bot and people @mention it. Or add a Teams or Telegram channel."
+              : hasRuntime
+                ? `Not in any channel yet. Add a ${slackOffered ? "Slack, Teams or Telegram" : "Teams or Telegram"} channel and people can give it tasks there; it answers in the thread.`
+                : `Not in any channel yet. Add a ${slackOffered ? "Slack, Teams or Telegram" : "Teams or Telegram"} channel and people can ask it there.`}
+          </span>
+          {slackWithoutBot && <SlackWithoutBotNotice href={addBotHref} />}
         </span>
       )}
+      {slackBot && slackHandle && (
+        <SlackBotEditDialog
+          open={editingBot}
+          onOpenChange={setEditingBot}
+          agentId={agentId}
+          handle={slackHandle}
+          appId={slackBot.appId}
+          installed={slackBot.installed}
+          reinstallUrl={slackBot.reinstallUrl}
+        />
+      )}
     </WorkSourceCard>
+  );
+}
+
+function SlackWithoutBotNotice({ href }: { href: string }) {
+  return (
+    <span className="text-amber-800 dark:text-amber-300">
+      Some Slack channels are assigned to this agent, but no bot answers as it
+      there.{" "}
+      <Link href={href} className="font-medium underline underline-offset-2">
+        Add its Slack bot
+      </Link>
+    </span>
   );
 }
 

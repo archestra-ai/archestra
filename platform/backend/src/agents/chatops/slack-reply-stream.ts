@@ -271,7 +271,9 @@ export class SlackReplyStream implements ChatOpsReplyStream {
           channel: channelId,
           thread_ts: threadTs,
           chunks: coalesceText(chunks),
-          task_display_mode: "timeline",
+          // One compact plan block for all tool calls: "timeline" gives every
+          // call its own card, with gaps between them.
+          task_display_mode: "plan",
           ...(recipient && {
             recipient_user_id: recipient.userId,
             recipient_team_id: recipient.teamId,

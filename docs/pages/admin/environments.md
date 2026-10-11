@@ -20,7 +20,7 @@ Viewing environments requires [`environment:read`](/docs/reference/permissions#e
 
 ## The Default Environment
 
-Every organization has an implicit **Default** environment. Any resource whose environment is unset belongs to Default. Default is a real peer environment, not a wildcard: a resource in Default is not visible to a resource assigned to a named environment, and vice versa. [MCP Apps](/docs/chat/apps) are the one exception — an app accepts Default-environment tools as a shared baseline. Because everything starts in Default, isolation only changes behavior once you explicitly assign a non-default environment. Default can define a Kubernetes namespace and network egress policy like any other environment.
+Every organization has an implicit **Default** environment. Any resource whose environment is unset belongs to Default. Default is a real peer environment, not a wildcard: a resource in Default is not visible to a resource assigned to a named environment, and vice versa. [MCP Apps](/docs/workspace/apps) are the one exception — an app accepts Default-environment tools as a shared baseline. Because everything starts in Default, isolation only changes behavior once you explicitly assign a non-default environment. Default can define a Kubernetes namespace and network egress policy like any other environment.
 
 ## Where New Resources Land
 
@@ -54,9 +54,9 @@ An agent or MCP gateway assigned to **Production** can only see and use:
 - [Agent Skills](/docs/agents/skills) restricted to Production, or restricted to no environment at all
 - [subagent delegation targets](/docs/agents#delegation) in Production
 
-Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. [MCP Apps](/docs/chat/apps) differ too: an app accepts Default-environment tools alongside its own environment's, so Default acts as a shared baseline for apps. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
+Matching is strict for tools, knowledge, and subagents: a Production resource matches only other Production resources, a Dev resource matches only Dev, and Default matches only Default. Skills differ — a skill can be restricted to any number of environments, and a skill with none is available everywhere. [MCP Apps](/docs/workspace/apps) differ too: an app accepts Default-environment tools alongside its own environment's, so Default acts as a shared baseline for apps. Built-in servers (the Archestra control-plane server and Playwright) and built-in skills are exempt and always available.
 
-An agent creates in its own environment. When an agent adds an MCP server to the registry, or builds an [app](/docs/chat/apps), that resource lands in the agent's environment — so the agent can still see it afterwards. A new app created from the Apps page follows the same rule: it lands in the environment of the chat agent that opens with it. An agent with no environment of its own uses the landing environment configured for that kind of resource. You can name a different environment explicitly when adding a server.
+An agent creates in its own environment. When an agent adds an MCP server to the registry, or builds an [app](/docs/workspace/apps), that resource lands in the agent's environment — so the agent can still see it afterwards. A new app created from the Apps page follows the same rule: it lands in the environment of the chat agent that opens with it. An agent with no environment of its own uses the landing environment configured for that kind of resource. You can name a different environment explicitly when adding a server.
 
 An agent also configures only its own environment. It can assign and remove tools on agents and gateways in that environment, and nowhere else.
 

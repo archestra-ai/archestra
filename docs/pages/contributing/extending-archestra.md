@@ -13,7 +13,7 @@ Archestra provides modular extension points for adding model providers, knowledg
 
 <span id="adding-llm-providers"></span>
 
-A provider touches two parts of Archestra. The [LLM Proxy](/docs/llm-proxy) route receives client requests, applies security guardrails, logs token usage, and forwards requests to the provider. [Chat](/docs/chat) queries the provider's models and renders completions in the built-in interface.
+A provider touches two parts of Archestra. The [LLM Proxy](/docs/llm-proxy) route receives client requests, applies security guardrails, logs token usage, and forwards requests to the provider. [Chat](/docs/workspace) queries the provider's models and renders completions in the built-in interface.
 
 Most providers serve an OpenAI-compatible API. They reuse OpenAI's schemas and adapter with minimal custom code. Providers with proprietary wire formats also require custom schemas, adapters, and a translator for the Model Router. The Moonshot (Kimi) provider (`backend/src/routes/proxy/adapters/kimi.ts`) serves as the reference implementation for OpenAI-compatible providers.
 

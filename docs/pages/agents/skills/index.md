@@ -66,7 +66,7 @@ By default, an agent can use every skill its user can use. To narrow that:
 Archestra ships these skills:
 
 - **Archestra Platform Operations:** set up MCP servers, tools, team access, and policies through Archestra's own tools.
-- **Build App:** build an interactive [app](/docs/chat/apps) from chat.
+- **Build App:** build an interactive [app](/docs/workspace/apps) from chat.
 - **Agent Runtime Handoff:** move work between your machine and [Agent Runtime](/docs/agents/runtime).
 - **appa-guide:** configure [Guardrails](/docs/agents/guardrails). It appears only when guardrails are on.
 

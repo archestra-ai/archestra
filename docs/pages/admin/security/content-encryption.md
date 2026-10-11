@@ -7,7 +7,7 @@ lastUpdated: 2026-10-06
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Content encryption at rest (Enterprise, disabled by default) encrypts stored conversation and tool content on the server. To keep individual chats private from the team that runs Archestra, see [Encrypted Chats](/docs/chat#encrypted-chats) — the two features work separately or together.
+Content encryption at rest (Enterprise, disabled by default) encrypts stored conversation and tool content on the server. To keep individual chats private from the team that runs Archestra, see [Encrypted Chats](/docs/workspace#encrypted-chats) — the two features work separately or together.
 
 > **Enterprise feature:** Content encryption at rest requires an enterprise license. Contact sales@archestra.ai for licensing information.
 
@@ -46,7 +46,7 @@ On every startup Archestra verifies the configured key against previously encryp
 
 ## Recovering an Encrypted Chat
 
-[Encrypted chats](/docs/chat#encrypted-chats) use a separate, browser-held key per chat. A key holder recovers one outside Archestra, with the escrow private key and direct database access:
+[Encrypted chats](/docs/workspace#encrypted-chats) use a separate, browser-held key per chat. A key holder recovers one outside Archestra, with the escrow private key and direct database access:
 
 1. Read `wrappedDek` from `conversations.encrypted_chat_escrow`. Decrypt it with the private key (RSA-OAEP, SHA-256) to get the chat key.
 2. Decrypt each value with AES-256-GCM. The AAD is `<table>.<column>|incognito:<conversation id>`. Each value decrypts to `{"v": <value>}`.

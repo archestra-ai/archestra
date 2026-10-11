@@ -7,7 +7,7 @@ lastUpdated: 2026-10-05
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-The HTML of an [MCP App](/docs/chat/apps) runs against the `window.archestra` SDK, the platform's injected styles, and the limits of its sandbox. Agents write apps with the built-in **Build App** skill, which follows the same rules.
+The HTML of an [MCP App](/docs/workspace/apps) runs against the `window.archestra` SDK, the platform's injected styles, and the limits of its sandbox. Agents write apps with the built-in **Build App** skill, which follows the same rules.
 
 ## The SDK
 

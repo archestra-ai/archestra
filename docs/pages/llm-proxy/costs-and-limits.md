@@ -29,7 +29,7 @@ Go to **Costs & Limits → Costs** and pick a timeframe. You need [`llmCost:read
 | --- | --- | --- |
 | **LLM Proxy** | Which key or app spent it? | A shared key names no person. Requests with no known sign-in show as unknown. |
 | **People** | Who uses AI the most? | Subscription use bills $0, so compare requests and tokens. To see other people, you also need access to the member list. |
-| **Apps** | What did an [app](/docs/chat/apps) cost to build and run? | When one chat built several apps, each app shows the chat's full cost. Savings are estimates. |
+| **Apps** | What did an [app](/docs/workspace/apps) cost to build and run? | When one chat built several apps, each app shows the chat's full cost. Savings are estimates. |
 | **Skills** | What do turns with a [skill](/docs/agents/skills) cost? | A turn's cost covers the whole conversation, so skills can overlap. |
 
 Team, agent, and model views are there too.

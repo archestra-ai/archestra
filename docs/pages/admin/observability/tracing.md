@@ -101,7 +101,7 @@ Each LLM call is a `SpanKind.CLIENT` span named `{operation} {model}`, for examp
 | `archestra.trigger.source` | Where the call came from, for example `api`, `chat`, `chatops:slack`, or `knowledge:embedding` |
 | `archestra.auth.method` | How the request authenticated, for example `virtual_key` or `oauth_user` |
 | `archestra.virtual_key.id`, `archestra.passthrough_virtual_key.id` | The [virtual key](/docs/llm-proxy/authentication) used, if any |
-| `archestra.app.id`, `archestra.app.name` | The [app](/docs/chat/apps) that made the call, if any |
+| `archestra.app.id`, `archestra.app.name` | The [app](/docs/workspace/apps) that made the call, if any |
 | `archestra.external_agent_id` | The [`X-Archestra-Agent-Id`](/docs/llm-proxy#custom-headers) header value |
 | `archestra.run.id` | The [`X-Archestra-Run-Id`](/docs/llm-proxy#custom-headers) header value |
 | `error.type` | The error class, when the call fails |

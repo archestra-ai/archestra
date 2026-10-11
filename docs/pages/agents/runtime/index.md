@@ -73,7 +73,7 @@ What to know:
 
 ## Run a Task
 
-Select the agent in Chat or in a [Project](/docs/chat/projects) and send a task. This starts a **run**: a container that works on your task. Follow-ups continue the same run. The live terminal opens and shows startup progress. Attach files before you send, and the agent reads them in its container.
+Select the agent in Chat or in a [Project](/docs/workspace/projects) and send a task. This starts a **run**: a container that works on your task. Follow-ups continue the same run. The live terminal opens and shows startup progress. Attach files before you send, and the agent reads them in its container.
 
 - **Leave and come back:** the run keeps working. Reopen it from the sidebar and send a follow-up.
 - **Past runs:** the agent's **Runs** tab lists live and finished runs. **Resume** reopens a run without sending a message.

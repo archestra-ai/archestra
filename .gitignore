@@ -23,6 +23,7 @@ __pycache__/
 .ruff_cache/
 
 .claude/worktrees/
+worktrees/
 **/.claude/*.lock
 .turbo/
 .dev-stack.pid

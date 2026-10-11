@@ -182,7 +182,7 @@ Add a pending period (`for: 5m`) to skip transient spikes.
 | <span id="task_queue_task_duration_seconds"></span>`task_queue_task_duration_seconds` | `task_type` | Task duration |
 | <span id="task_queue_active_tasks"></span>`task_queue_active_tasks` | `task_type` | Tasks running now |
 | <span id="task_queue_stuck_tasks_reset_total"></span>`task_queue_stuck_tasks_reset_total` | | Stuck tasks returned to the queue |
-| <span id="schedule_trigger_runs_total"></span>`schedule_trigger_runs_total` | `agent_name`, `status` | [Scheduled task](/docs/chat/projects#scheduled-tasks) runs: `success`, `failed`, or `cancelled` |
+| <span id="schedule_trigger_runs_total"></span>`schedule_trigger_runs_total` | `agent_name`, `status` | [Scheduled task](/docs/workspace/projects#scheduled-tasks) runs: `success`, `failed`, or `cancelled` |
 
 Common `task_type` values are `connector_sync`, `batch_embedding`, `permission_sync`, and `schedule_trigger_run_execute`.
 

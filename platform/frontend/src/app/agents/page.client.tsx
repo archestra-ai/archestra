@@ -935,6 +935,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           "environment",
         ]}
         flexibleColumnIds={["name"]}
+        columnDropOrder={[
+          "environment",
+          "provider",
+          "lastUsedAt",
+          "subagentsCount",
+          "toolsCount",
+        ]}
         data={sectionRows}
         isLoading={showLoading}
         getRowId={getAgentListRowId}

@@ -129,9 +129,9 @@ interface DataTableProps<TData, TValue> {
   /** Column ids that absorb remaining table width. */
   flexibleColumnIds?: string[];
   /**
-   * Columns to drop first, in this order, when the table does not fit its
-   * container; the rest drop right to left after them. For a table whose
-   * least useful columns are not its last ones.
+   * Columns the table can do without, least useful first. When the table does
+   * not fit its container they drop in this order instead of the table
+   * scrolling sideways; unlisted columns always stay.
    */
   columnDropOrder?: string[];
 }
@@ -309,8 +309,8 @@ export function DataTable<TData, TValue>({
     }
   }, [isLoading, pageCount, pageIndex, table]);
 
-  // Drop columns, last first, until the rest fit the container, so a narrow
-  // window shows fewer columns instead of a horizontal scroll. Measured
+  // Drop the table's listed columns until the rest fit the container, so a
+  // narrow window shows fewer columns instead of a horizontal scroll. Measured
   // against the container, which does not grow with the table it scrolls.
   const shownByChoice = table
     .getAllLeafColumns()
@@ -376,7 +376,7 @@ export function DataTable<TData, TValue>({
           {/* The table never shrinks below the columns' summed sizes (tanstack
             defaults unsized columns to 150px; flexible ones count at their
             floor) instead of crushing columns until headers stack
-            letter-by-letter. Columns that do not fit are dropped first; the
+            letter-by-letter. Listed columns that do not fit drop first; the
             wrapper scrolls only when the ones that must stay still do not. */}
           <Table
             aria-busy={isLoading}
@@ -670,10 +670,10 @@ function getColumnStyle(params: {
 }
 
 /**
- * The columns to drop until the table's minimum width fits `width`: those in
- * `dropOrder` first, then the rest right to left. Kept whatever the width:
- * the selection checkbox, the actions, the flexible columns and the first
- * data column (each row's name), and any column marked `enableHiding: false`.
+ * The columns in `dropOrder` to drop, in that order, until the table's
+ * minimum width fits `width`. Only listed columns drop: which ones a table can
+ * do without depends on what it lists, so an unlisted column stays and the
+ * table scrolls instead.
  */
 function columnsToFit<TData>(params: {
   columns: Column<TData, unknown>[];
@@ -682,26 +682,10 @@ function columnsToFit<TData>(params: {
   dropOrder: string[];
 }): string[] {
   const { columns, width, flexibleColumnIds, dropOrder } = params;
-  const firstDataColumnId = columns.find(
-    (column) => column.id !== SELECT_COLUMN_ID,
-  )?.id;
-  const droppable = columns
-    .filter(
-      (column) =>
-        column.id !== SELECT_COLUMN_ID &&
-        column.id !== ACTIONS_COLUMN_ID &&
-        column.id !== firstDataColumnId &&
-        !flexibleColumnIds.includes(column.id) &&
-        column.columnDef.enableHiding !== false,
-    )
-    .reverse()
-    .sort((a, b) => dropRank(a.id) - dropRank(b.id));
-  // Listed columns rank by their place in the list; the rest share the
-  // last rank, and a stable sort keeps them right to left.
-  function dropRank(id: string): number {
-    const index = dropOrder.indexOf(id);
-    return index === -1 ? dropOrder.length : index;
-  }
+  const droppable = dropOrder.flatMap((id) => {
+    const column = columns.find((candidate) => candidate.id === id);
+    return column ? [column] : [];
+  });
   const hidden: string[] = [];
   let shown = columns;
   for (const column of droppable) {

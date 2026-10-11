@@ -231,7 +231,7 @@ describe("DataTable column widths", () => {
 });
 
 describe("DataTable in a narrow container", () => {
-  it("drops the last columns that do not fit instead of scrolling", () => {
+  it("drops the columns a table lists, in order, instead of scrolling", () => {
     // A container 700px wide, as the observer would report it.
     const width = vi
       .spyOn(HTMLElement.prototype, "clientWidth", "get")
@@ -262,10 +262,10 @@ describe("DataTable in a narrow container", () => {
       const headers = [...container.querySelectorAll("th")].map((th) =>
         th.getAttribute("data-column-id"),
       );
-      // 48 + 180 + 220 + 220 + 160 is wider than 700; without Owner it fits.
-      expect(headers).toEqual(["select", "name", "issue", "actions"]);
+      // Nothing is listed as droppable, so every column stays and it scrolls.
+      expect(headers).toEqual(["select", "name", "issue", "owner", "actions"]);
 
-      // A table that names its least useful column drops that one instead.
+      // 48 + 180 + 220 + 220 + 160 is wider than 700; without Issue it fits.
       rerender(
         <DataTable
           columns={columns}

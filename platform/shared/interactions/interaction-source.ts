@@ -18,6 +18,8 @@ export const InteractionSourceSchema = z.enum([
   "chat:tool_call_repair",
   "a2a:tool_call_repair",
   "skill:description_generation",
+  // Retained for historical logs after the legacy feature was removed.
+  "guardrail:dual_llm",
   "guardrail:annotator",
   "chatops:slack",
   "chatops:ms-teams",
@@ -57,6 +59,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "chat:tool_call_repair": { label: "Chat Tool Call Repair" },
   "a2a:tool_call_repair": { label: "Agent Tool Call Repair" },
   "skill:description_generation": { label: "Skill Description Generation" },
+  "guardrail:dual_llm": { label: "Dual LLM Sanitization (legacy)" },
   "guardrail:annotator": { label: "Guardrails Annotator" },
   "chatops:slack": { label: "Slack" },
   "chatops:ms-teams": { label: "MS Teams" },

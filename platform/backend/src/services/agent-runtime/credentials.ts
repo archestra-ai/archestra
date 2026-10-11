@@ -1,4 +1,5 @@
 import { isVaultReference } from "@archestra/shared";
+import { userHasPermission } from "@/auth";
 import logger from "@/logging";
 import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -44,6 +45,11 @@ export async function resolveAgentRuntimeCredentials(params: {
   userId: string | null;
 }): Promise<AgentRuntimeCredentialResolution> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
+  await requireSharedCredentialAccess({
+    shared,
+    organizationId: params.organizationId,
+    userId: params.userId,
+  });
   const batch = await CredentialResolutionBatch.create({
     organizationId: params.organizationId,
     credentialIds: [...shared, ...(params.userId ? perUser : [])].flatMap(
@@ -150,6 +156,11 @@ export async function preflightAgentRuntimeCredentials(params: {
   misconfigured: MissingAgentRuntimeCredential[];
 }> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
+  await requireSharedCredentialAccess({
+    shared,
+    organizationId: params.organizationId,
+    userId: params.userId,
+  });
   const batch = await CredentialResolutionBatch.create({
     organizationId: params.organizationId,
     credentialIds: [...shared, ...(params.userId ? perUser : [])].flatMap(
@@ -216,6 +227,31 @@ export async function preflightAgentRuntimeCredentials(params: {
   }
 
   return { configured, missing, misconfigured };
+}
+
+async function requireSharedCredentialAccess(params: {
+  shared: AgentRuntimeCredentialDeclaration[];
+  organizationId: string;
+  userId: string | null;
+}): Promise<void> {
+  if (
+    !params.userId ||
+    !params.shared.some((declaration) => declaration.credentialId)
+  ) {
+    return;
+  }
+  const permitted = await userHasPermission(
+    params.userId,
+    params.organizationId,
+    "organizationSettings",
+    "update",
+  );
+  if (!permitted) {
+    throw new ApiError(
+      403,
+      "Organization Agent settings permission is required to use shared credentials",
+    );
+  }
 }
 
 /**

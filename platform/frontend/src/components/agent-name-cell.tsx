@@ -77,8 +77,11 @@ export function AgentNameCell({
         {hasMetadata && (
           // The name comes first and keeps its width; badges take what is
           // left. One that does not fit wraps onto a second line this box
-          // hides, so a badge is shown whole or not at all, never cut.
+          // hides, so a badge is shown whole or not at all, never cut. The
+          // empty first item gives even the first badge a line to wrap from:
+          // a flex line's only item stays on it however wide it is.
           <RowClickShield className="flex h-6 min-w-0 flex-1 flex-wrap content-start items-center gap-x-1.5 gap-y-2 overflow-hidden [&>*]:shrink-0">
+            <span aria-hidden="true" className="-mr-1.5 h-6 w-0" />
             {builtIn && <BuiltInAgentBadge />}
             {extraBadges}
             {labels && labels.length > 0 && <LabelTags labels={labels} />}
@@ -86,13 +89,16 @@ export function AgentNameCell({
         )}
       </div>
       {(owner || description) && (
-        <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs font-normal text-muted-foreground [&>span]:inline">
+        // One line: the owner and the description each truncate rather
+        // than wrap, so a long owner email cannot make the row taller. The
+        // owner keeps its width, up to a cap; the description gives way.
+        <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs font-normal text-muted-foreground [&>span:not(:last-child)]:max-w-[60%] [&>span]:shrink-0 [&>span]:truncate">
           {owner && <PersonalResourceOwner {...owner} />}
           {description && (
             // The separator only when an owner was actually written before
             // it: the owner line renders nothing for an org-wide record.
             <span
-              className="min-w-0 truncate [&:not(:first-child)]:before:content-['·_']"
+              className="min-w-0 !max-w-none !shrink truncate [&:not(:first-child)]:before:content-['·_']"
               title={description}
             >
               {description}

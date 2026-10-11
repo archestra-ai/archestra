@@ -57,6 +57,23 @@ describe("classifyErrorForTracking", () => {
     }
   });
 
+  test("does not mistake an upstream relay's preserved socket cause for a database outage", () => {
+    const cause = Object.assign(new Error("provider connection closed"), {
+      code: "ECONNRESET",
+    });
+    const relay = new ApiError(503, "Provider unavailable");
+    relay.upstream = true;
+    relay.cause = cause;
+
+    expect(classifyErrorForTracking(relay)).toEqual({ report: false });
+    expect(
+      classifyErrorForTracking(new Error("Failed query", { cause })),
+    ).toMatchObject({
+      report: true,
+      fingerprint: ["db-transient", "ECONNRESET"],
+    });
+  });
+
   test("drops the handled upstream-empty-response condition", () => {
     const error = new ApiError(
       500,

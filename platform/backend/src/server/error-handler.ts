@@ -11,6 +11,7 @@ import {
   isDbStatementTimeoutError,
 } from "@/database/retry";
 import { ApiError } from "@/types";
+import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import { isFetchConnectivityError } from "@/utils/network-errors";
 import { captureServerException } from "./exception-capture";
 
@@ -21,6 +22,11 @@ export function handleServerError(
   reply: FastifyReply,
 ) {
   const requestContext = buildRequestErrorContext(request);
+
+  if (incomingRequestAbortTracker.isAbortedError(error)) {
+    this.log.info(requestContext, "Client closed the incoming request");
+    return reply.status(499).send();
+  }
 
   // Handle response serialization errors (when response doesn't match schema)
   if (isResponseSerializationError(error)) {

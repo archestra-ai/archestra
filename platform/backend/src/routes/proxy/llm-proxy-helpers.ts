@@ -805,6 +805,9 @@ export function handleError(
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
   const apiError = new ApiError(statusCode, errorMessage, internalCode);
+  // Keep the original cause chain for internal diagnostics. The response
+  // serializer emits only the public message and deliberately omits causes.
+  apiError.cause = error;
   // Keep the retry guidance an Archestra error already carries.
   if (error instanceof ApiError) {
     apiError.retryAfterSeconds = error.retryAfterSeconds;

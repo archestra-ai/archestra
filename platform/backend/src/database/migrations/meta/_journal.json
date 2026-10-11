@@ -3690,6 +3690,13 @@
       "when": 1791731977475,
       "tag": "0526_rename-appadvisor",
       "breakpoints": true
+    },
+    {
+      "idx": 527,
+      "version": "7",
+      "when": 1791742269490,
+      "tag": "0527_enable-personal-gateway-handoff-tools",
+      "breakpoints": true
     }
   ]
 }

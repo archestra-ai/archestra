@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { useSession } from "@/lib/auth/auth.query";
 import {
   clearPersistedQueryCache,
+  DEFAULT_STALE_TIME,
   restorePersistedQueryCache,
   startPersistingQueryCache,
   syncPersistedQueryCacheScope,
@@ -22,7 +23,7 @@ export const ArchestraQueryClientProvider = ({
           queries: {
             // With SSR, we want to set some default staleTime
             // above 0 to avoid refetching immediately on the client
-            staleTime: 60 * 1_000,
+            staleTime: DEFAULT_STALE_TIME,
             throwOnError: false,
             retry: false,
           },

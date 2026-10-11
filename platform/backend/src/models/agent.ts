@@ -24,6 +24,7 @@ import {
   eq,
   exists,
   getTableColumns,
+  getTableName,
   ilike,
   inArray,
   isNotNull,
@@ -36,7 +37,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import { unionAll } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, unionAll } from "drizzle-orm/pg-core";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
@@ -100,6 +101,8 @@ type AgentListFilters = {
   organizationId?: string;
   authorization?: { organizationId: string; baseReadTypes: AgentType[] };
   ids?: string[];
+  /** Rows the list shows elsewhere, such as the viewer's automatic pins. */
+  excludeIds?: string[];
   name?: string;
   agentType?: AgentType;
   agentTypes?: AgentType[];
@@ -1579,6 +1582,18 @@ class AgentModel {
         inArray(schema.a2aRemoteAgentsTable.authorId, params.filters.authorIds),
       );
     }
+    if (params.filters?.ids) {
+      externalWhereConditions.push(
+        params.filters.ids.length > 0
+          ? inArray(schema.a2aRemoteAgentsTable.id, params.filters.ids)
+          : sql<boolean>`false`,
+      );
+    }
+    if (params.filters?.excludeIds?.length) {
+      externalWhereConditions.push(
+        notInArray(schema.a2aRemoteAgentsTable.id, params.filters.excludeIds),
+      );
+    }
     if (params.filters?.excludeAuthorIds?.length) {
       const excludeAuthorsCondition = or(
         isNull(schema.a2aRemoteAgentsTable.authorId),
@@ -1637,9 +1652,12 @@ class AgentModel {
       ),
     );
 
+    const { regular: regularSortValue, external: externalSortValue } =
+      catalogSortValue(params.sorting?.sortBy);
     const regularCandidates = db
       .select({
         resourceType: sql<"agent" | "external">`'agent'`.as("resource_type"),
+        sortValue: regularSortValue.as("sort_value"),
         id: schema.agentsTable.id,
         name: schema.agentsTable.name,
         createdAt: schema.agentsTable.createdAt,
@@ -1662,6 +1680,7 @@ class AgentModel {
     const externalCandidates = db
       .select({
         resourceType: sql<"agent" | "external">`'external'`.as("resource_type"),
+        sortValue: externalSortValue.as("sort_value"),
         id: schema.a2aRemoteAgentsTable.id,
         name: schema.a2aRemoteAgentsTable.name,
         createdAt: schema.a2aRemoteAgentsTable.createdAt,
@@ -1686,13 +1705,22 @@ class AgentModel {
         ? candidates.name
         : params.sorting?.sortBy === "team"
           ? candidates.teamName
-          : candidates.createdAt;
+          : params.sorting?.sortBy &&
+              CATALOG_COMPUTED_SORTS.has(params.sorting.sortBy)
+            ? candidates.sortValue
+            : candidates.createdAt;
 
+    // The caller's own personal agents lead the default order. A column the
+    // caller sorts by orders the whole list, or "Last used" would show the
+    // most recent agent below every one of theirs.
+    const isDefaultOrder =
+      params.sorting?.sortBy === undefined ||
+      params.sorting.sortBy === "createdAt";
     const candidateOrder =
       params.filters?.pinned === true
         ? [desc(candidates.pinnedAt), asc(candidates.name), asc(candidates.id)]
         : [
-            asc(candidates.personalPriority),
+            ...(isDefaultOrder ? [asc(candidates.personalPriority)] : []),
             direction(sortColumn),
             asc(candidates.name),
             asc(candidates.resourceType),
@@ -2106,6 +2134,11 @@ class AgentModel {
         notInArray(schema.agentsTable.authorId, filters.excludeAuthorIds),
       );
       if (condition) whereConditions.push(condition);
+    }
+    if (filters?.excludeIds?.length) {
+      whereConditions.push(
+        notInArray(schema.agentsTable.id, filters.excludeIds),
+      );
     }
     if (filters?.excludeOtherPersonalAgents && userId) {
       whereConditions.push(
@@ -4999,4 +5032,83 @@ function agentGrantedTeamIds() {
         AND team_entry->'subject'->>'type' = 'team'
     ) granted_team
   ), array[]::text[])`;
+}
+
+// ===
+// Agent catalog sorting
+// ===
+
+const CATALOG_COMPUTED_SORTS = new Set<string>([
+  "toolsCount",
+  "subagentsCount",
+  "lastUsedAt",
+]);
+
+/**
+ * The value a catalog row sorts on for the columns the list computes, as each
+ * cell shows it: "All" ranks above any count, and an external agent, which
+ * has neither tools nor a last use here, sorts below every internal agent.
+ * Other sorts read a plain column, so this is a constant for them and costs
+ * nothing per row.
+ */
+function catalogSortValue(sortBy: string | undefined): {
+  regular: SQL;
+  external: SQL;
+} {
+  const assigned = (delegation: "IS NULL" | "IS NOT NULL") => sql`(
+    SELECT count(*)
+    FROM ${schema.agentToolsTable}
+    INNER JOIN ${schema.toolsTable}
+      ON ${qualified(schema.toolsTable.id)} = ${qualified(schema.agentToolsTable.toolId)}
+    WHERE ${qualified(schema.agentToolsTable.agentId)} = ${qualified(schema.agentsTable.id)}
+      AND ${qualified(schema.toolsTable.delegateToAgentId)} ${sql.raw(delegation)}
+  )`;
+  switch (sortBy) {
+    case "toolsCount":
+      return {
+        regular: sql`CASE WHEN ${qualified(schema.agentsTable.accessAllTools)}
+          THEN ${ALL_SORTS_ABOVE_ANY_COUNT}::bigint
+          ELSE ${assigned("IS NULL")} END`,
+        external: sql`-1::bigint`,
+      };
+    case "subagentsCount":
+      return {
+        regular: sql`CASE WHEN ${qualified(schema.agentsTable.accessAllSubagents)}
+          THEN ${ALL_SORTS_ABOVE_ANY_COUNT}::bigint
+          ELSE ${assigned("IS NOT NULL")} END`,
+        external: sql`-1::bigint`,
+      };
+    case "lastUsedAt":
+      // The later of the two signals, as the row displays it; correlated per
+      // agent for the reason given in `findAllPaginated`'s lastUsedAt sort.
+      return {
+        regular: sql`GREATEST(
+          COALESCE((
+            SELECT max(${qualified(schema.mcpToolCallsTable.createdAt)})
+            FROM ${schema.mcpToolCallsTable}
+            WHERE ${qualified(schema.mcpToolCallsTable.agentId)} = ${qualified(schema.agentsTable.id)}
+          ), '-infinity'::timestamp),
+          COALESCE((
+            SELECT max(${qualified(schema.interactionsTable.createdAt)})
+            FROM ${schema.interactionsTable}
+            WHERE ${qualified(schema.interactionsTable.profileId)} = ${qualified(schema.agentsTable.id)}
+          ), '-infinity'::timestamp)
+        )`,
+        external: sql`'-infinity'::timestamp`,
+      };
+    default:
+      return { regular: sql`0`, external: sql`0` };
+  }
+}
+
+const ALL_SORTS_ABOVE_ANY_COUNT = 2147483647;
+
+/**
+ * A column with its table's name. Selected inside the catalog's UNION, Drizzle
+ * renders a bare column name, which a correlated subquery would resolve
+ * against its own table: `"agent_id" = "id"` compares two `mcp_tool_calls`
+ * columns instead of reaching out to `agents`.
+ */
+function qualified(column: AnyPgColumn): SQL {
+  return sql`${sql.identifier(getTableName(column.table))}.${sql.identifier(column.name)}`;
 }

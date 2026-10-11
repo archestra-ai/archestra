@@ -48,44 +48,58 @@ export function AgentNameCell({
 }) {
   const hasMetadata = !!extraBadges || !!labels?.length || builtIn;
 
+  // Two short lines whatever the row holds — name and badges, then owner and
+  // description — so rows keep one height and a long description cannot make
+  // one of them several times taller than the rest.
   const content = (
-    <div className="font-medium">
-      <div className="flex flex-col gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          {href ? (
-            // The row itself navigates to the same page; the link stays for
-            // keyboard users and open-in-new-tab, and keeps its click to
-            // itself so the row handler does not fire a second navigation.
-            <Link
-              href={href}
-              className="max-w-full truncate leading-tight hover:underline"
-              title={name}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {name}
-            </Link>
-          ) : (
-            <span className="max-w-full truncate leading-tight" title={name}>
-              {name}
-            </span>
-          )}
-          {hasMetadata && (
-            // `contents` keeps the badges in the row's flex flow while giving
-            // their tooltips and label chips a node to swallow clicks on.
-            <RowClickShield className="contents">
-              {builtIn && <BuiltInAgentBadge />}
-              {extraBadges}
-              {labels && labels.length > 0 && <LabelTags labels={labels} />}
-            </RowClickShield>
-          )}
-        </div>
-        {owner && <PersonalResourceOwner {...owner} />}
-        {description && (
-          <div className="text-xs text-muted-foreground line-clamp-2">
-            {description}
-          </div>
+    <div className="min-w-0 font-medium">
+      <div className="flex min-w-0 items-center gap-2">
+        {href ? (
+          // The row itself navigates to the same page; the link stays for
+          // keyboard users and open-in-new-tab, and keeps its click to
+          // itself so the row handler does not fire a second navigation.
+          <Link
+            href={href}
+            className="max-w-full shrink-0 truncate leading-tight hover:underline"
+            title={name}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {name}
+          </Link>
+        ) : (
+          <span
+            className="max-w-full shrink-0 truncate leading-tight"
+            title={name}
+          >
+            {name}
+          </span>
+        )}
+        {hasMetadata && (
+          // The name comes first and keeps its width; badges take what is
+          // left. One that does not fit wraps onto a second line this box
+          // hides, so a badge is shown whole or not at all, never cut.
+          <RowClickShield className="flex h-6 min-w-0 flex-1 flex-wrap content-start items-center gap-x-1.5 gap-y-2 overflow-hidden [&>*]:shrink-0">
+            {builtIn && <BuiltInAgentBadge />}
+            {extraBadges}
+            {labels && labels.length > 0 && <LabelTags labels={labels} />}
+          </RowClickShield>
         )}
       </div>
+      {(owner || description) && (
+        <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs font-normal text-muted-foreground [&>span]:inline">
+          {owner && <PersonalResourceOwner {...owner} />}
+          {description && (
+            // The separator only when an owner was actually written before
+            // it: the owner line renders nothing for an org-wide record.
+            <span
+              className="min-w-0 truncate [&:not(:first-child)]:before:content-['·_']"
+              title={description}
+            >
+              {description}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 

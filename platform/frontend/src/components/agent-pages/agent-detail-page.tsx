@@ -529,6 +529,21 @@ function AgentDetails({
   };
 
   const formAgentType = agent.agentType === "profile" ? "profile" : kind;
+  // A gateway's settings are short, and who can use it is what someone opens
+  // them to check, so the block sits under the description instead of after
+  // every other field.
+  const accessBesideDescription =
+    showPermissions && kind === "mcp_gateway" && activeFormGroups.length > 0;
+  const permissionsBlock = (
+    <ResourcePermissions
+      embedded
+      standalone
+      resource={permissionResource}
+      scope={agent.id}
+      onDirtyChange={setPermissionsDirty}
+      registerSave={registerPermissionsSave}
+    />
+  );
 
   return (
     <PageLayout
@@ -735,6 +750,9 @@ function AgentDetails({
             )}
             {activeFormGroups.length > 0 && (
               <AgentForm
+                afterDescription={
+                  accessBesideDescription ? permissionsBlock : undefined
+                }
                 // A fresh mount per agent and per section: the form seeds
                 // several sets from per-agent reads and would otherwise carry
                 // one section's pending state into the next.
@@ -799,19 +817,10 @@ function AgentDetails({
                 }}
               />
             )}
-            {showPermissions && (
+            {showPermissions && !accessBesideDescription && (
               // Just the block, inline with the fields above it. It takes
               // back the form's bottom padding to sit at field spacing.
-              <div className="-mt-6">
-                <ResourcePermissions
-                  embedded
-                  standalone
-                  resource={permissionResource}
-                  scope={agent.id}
-                  onDirtyChange={setPermissionsDirty}
-                  registerSave={registerPermissionsSave}
-                />
-              </div>
+              <div className="-mt-6">{permissionsBlock}</div>
             )}
             {showPermissions && (
               // The slot, not the row inside it, sticks: a sticky element

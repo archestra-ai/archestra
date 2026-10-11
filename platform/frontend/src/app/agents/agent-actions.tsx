@@ -6,11 +6,10 @@ import {
   History,
   MessageSquare,
   Pencil,
-  Pin,
-  PinOff,
   Plug,
   RotateCcw,
   Star,
+  StarOff,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
@@ -19,6 +18,7 @@ import {
   getAgentActionModel,
 } from "@/components/agent-pages/agent-actions-model";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
+import { RowPinButton } from "@/components/row-pin-button";
 import {
   type TableRowAction,
   TableRowActions,
@@ -59,6 +59,11 @@ type AgentActionsProps = {
    * mutating buttons apply rather than RBAC alone.
    */
   onHistory: (agentId: string, canModify: boolean) => void;
+  /**
+   * `menu` puts every action in the "More actions" menu with no pin button,
+   * for a pinned tile, which shows its own pin.
+   */
+  variant?: "row" | "menu";
 };
 
 export function AgentActions({
@@ -74,6 +79,7 @@ export function AgentActions({
   onTogglePin,
   personalDefault,
   onHistory,
+  variant = "row",
 }: AgentActionsProps) {
   const admin = useIsGlobalAdmin();
   const isBuiltIn = Boolean(agent.builtIn);
@@ -149,17 +155,7 @@ export function AgentActions({
         };
 
   const primaryActions: TableRowAction[] = [
-    ...(connectAction.visible
-      ? [
-          {
-            icon: <Plug className="h-4 w-4" />,
-            label: connectAction.label,
-            permissions: connectAction.permissions,
-            href: connectAction.href,
-            testId: `${E2eTestId.ConnectAgentButton}-${agent.name}`,
-          },
-        ]
-      : []),
+    editOrViewAction,
     ...(chatAction.visible
       ? [
           {
@@ -173,25 +169,26 @@ export function AgentActions({
           },
         ]
       : []),
-    editOrViewAction,
   ];
 
   const dropdownActions: TableRowAction[] = [
-    {
-      icon: agent.pinnedAt ? (
-        <PinOff className="h-4 w-4" />
-      ) : (
-        <Pin className="h-4 w-4" />
-      ),
-      label: agent.pinnedAt ? "Unpin" : "Pin",
-      onClick: () => onTogglePin(agent),
-    },
+    ...(connectAction.visible
+      ? [
+          {
+            icon: <Plug className="h-4 w-4" />,
+            label: connectAction.label,
+            permissions: connectAction.permissions,
+            href: connectAction.href,
+            testId: `${E2eTestId.ConnectAgentButton}-${agent.name}`,
+          },
+        ]
+      : []),
     ...(personalDefault
       ? [
           personalDefault.isDefault
             ? {
-                icon: <PinOff className="h-4 w-4" />,
-                label: "Unpin default",
+                icon: <StarOff className="h-4 w-4" />,
+                label: "Unset default",
                 tooltip: "New chats go back to the organization default.",
                 onClick: () => personalDefault.onToggle(agent, false),
                 testId: `${E2eTestId.ToggleDefaultAgentButton}-${agent.name}`,
@@ -249,12 +246,30 @@ export function AgentActions({
     },
   ];
 
+  if (variant === "menu") {
+    return (
+      <TableRowActions
+        permissionScope={agent.id}
+        itemName={agent.name}
+        actions={[]}
+        dropdownActions={[...primaryActions, ...dropdownActions]}
+      />
+    );
+  }
+
   return (
-    <TableRowActions
-      permissionScope={agent.id}
-      itemName={agent.name}
-      actions={primaryActions}
-      dropdownActions={dropdownActions}
-    />
+    <div className="flex items-center gap-1.5">
+      <RowPinButton
+        name={agent.name}
+        pinned={Boolean(agent.pinnedAt)}
+        onToggle={() => onTogglePin(agent)}
+      />
+      <TableRowActions
+        permissionScope={agent.id}
+        itemName={agent.name}
+        actions={primaryActions}
+        dropdownActions={dropdownActions}
+      />
+    </div>
   );
 }

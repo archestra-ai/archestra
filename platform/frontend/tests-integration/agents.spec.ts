@@ -37,7 +37,6 @@ test.describe("Agents", () => {
     ]);
     await page.setViewportSize({ width: 1440, height: 900 });
     await agentsPage.goto();
-    await page.getByRole("button", { name: "View as table" }).click();
     const table = agentsPage.table.getByRole("table");
     await expect(table.getByText("All", { exact: true })).toHaveCount(2);
 
@@ -92,19 +91,10 @@ test.describe("Agents", () => {
     await agentsPage.goto();
 
     await expect(agentsPage.rowFor("Research Agent")).toBeVisible();
-    const externalCard = agentsPage.table.getByTestId(
-      "a2a-remote-agent-card-external-agent",
-    );
-    await expect(externalCard).toBeVisible();
-    await expect(externalCard.getByText("A2A", { exact: true })).toBeVisible();
+    // One list: there is no cards view to switch to.
     await expect(
-      externalCard.getByRole("checkbox", { name: "Select Partner Agent" }),
-    ).toBeEnabled();
-    await expect(
-      page.getByRole("button", { name: "View as table" }),
-    ).toHaveCount(1);
-
-    await page.getByRole("button", { name: "View as table" }).click();
+      page.getByRole("button", { name: "View as cards" }),
+    ).toHaveCount(0);
     await expect(
       agentsPage.table.getByRole("row", { name: /Partner Agent.*A2A/ }),
     ).toBeVisible();

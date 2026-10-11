@@ -201,7 +201,7 @@ describe("resolveSubagentTierSelection", () => {
     });
   });
 
-  test("only tiers that move off the parent's model are available", async ({
+  test("a tier resolving to the parent's own model is still available", async ({
     makeOrganization,
     makeLlmProviderApiKey,
   }) => {
@@ -217,7 +217,7 @@ describe("resolveSubagentTierSelection", () => {
       });
 
     expect(await tiers("claude-sonnet-5-5")).toEqual(["fast", "smart"]);
-    expect(await tiers("claude-opus-5-5")).toEqual(["fast"]);
+    expect(await tiers("claude-opus-5-5")).toEqual(["fast", "smart"]);
   });
 
   test("no tier is available when the parent's key serves no tier model", async ({

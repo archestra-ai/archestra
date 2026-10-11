@@ -263,9 +263,9 @@ export async function resolveSubagentTierSelection(params: {
 }
 
 /**
- * The tiers a fork of `parent` can actually move to: those resolving to a model
- * other than the parent's own. A tier that would just rerun the parent's model
- * is not offered.
+ * The tiers a fork of `parent` can run on: every tier that resolves to a model
+ * its key serves. A tier that lands on the parent's own model is still offered —
+ * what counts as fast or smart is the trio's owner's call.
  */
 export async function availableSubagentTiers(params: {
   parent: ConversationLlmSelection;
@@ -275,10 +275,9 @@ export async function availableSubagentTiers(params: {
   const { parent } = params;
   if (!parent.modelId) return [];
   const tierModels = await findTierModels(params);
-  return (["fast", "smart"] as const).filter((tier) => {
-    const model = tierModels[tier];
-    return model !== undefined && model.id !== parent.modelId;
-  });
+  return (["fast", "smart"] as const).filter(
+    (tier) => tierModels[tier] !== undefined,
+  );
 }
 
 async function findTierModels(params: {

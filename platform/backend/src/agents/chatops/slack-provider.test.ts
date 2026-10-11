@@ -3855,3 +3855,55 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 });
+
+describe("SlackProvider.getChannelDescription", () => {
+  test("reads the channel's purpose once, until Slack reports it changed", async () => {
+    const provider = createProvider();
+    const info = vi
+      .fn()
+      .mockResolvedValueOnce({
+        channel: { purpose: { value: " Release coordination " } },
+      })
+      .mockResolvedValueOnce({ channel: { purpose: { value: "Incidents" } } });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { conversations: { info } };
+
+    expect(await provider.getChannelDescription("C1")).toBe(
+      "Release coordination",
+    );
+    expect(await provider.getChannelDescription("C1")).toBe(
+      "Release coordination",
+    );
+    expect(info).toHaveBeenCalledTimes(1);
+
+    await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "message",
+          subtype: "channel_purpose",
+          channel: "C1",
+          text: "set the channel description: Incidents",
+        },
+      ),
+      {},
+    );
+
+    expect(await provider.getChannelDescription("C1")).toBe("Incidents");
+    expect(info).toHaveBeenCalledTimes(2);
+  });
+
+  test("a channel without a purpose has no description", async () => {
+    const provider = createProvider();
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = {
+      conversations: {
+        info: vi
+          .fn()
+          .mockResolvedValue({ channel: { purpose: { value: "" } } }),
+      },
+    };
+
+    expect(await provider.getChannelDescription("C2")).toBeNull();
+  });
+});

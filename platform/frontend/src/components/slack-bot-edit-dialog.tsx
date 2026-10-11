@@ -46,7 +46,7 @@ export function SlackBotEditDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={`@${handle}`}
-      description="The channels this bot answers in."
+      description="Channels this bot is in."
       headerAction={
         <Button size="sm" variant="ghost" asChild>
           <a
@@ -104,7 +104,10 @@ function BotChannels({
   const { data: canEdit } = useHasPermissions({
     organizationSettings: ["update"],
   });
-  const [detailsFor, setDetailsFor] = useState<Binding | null>(null);
+  const [detailsFor, setDetailsFor] = useState<{
+    binding: Binding;
+    description: string | null;
+  } | null>(null);
 
   if (channelsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading channels…</p>;
@@ -154,6 +157,18 @@ function BotChannels({
       ),
   );
   const joinable = channels.filter((channel) => !channel.isMember);
+  const detailsRepliesToAll = repliesToAllAgent(detailsFor?.binding);
+  const slackBotSettings = detailsFor
+    ? {
+        handle,
+        description: detailsFor.description,
+        repliesToAll: detailsRepliesToAll === agentId,
+        repliesToAllElsewhere:
+          detailsRepliesToAll && detailsRepliesToAll !== agentId
+            ? agentNameFor(detailsRepliesToAll)
+            : null,
+      }
+    : undefined;
 
   return (
     <div className="flex flex-col gap-3">
@@ -167,45 +182,36 @@ function BotChannels({
         <ul className="divide-y rounded-md border">
           {memberChannels.map((channel) => {
             const binding = bindingFor(channel.channelId);
-            const ownerId = binding?.agentId ?? null;
-            const ours = ownerId === agentId;
+            const repliesToAll = repliesToAllAgent(binding);
             return (
               <ChannelRow
                 key={channel.channelId}
                 name={channel.channelName ?? channel.channelId}
+                description={channel.description}
                 isPrivate={channel.isPrivate}
                 status={
-                  ownerId && !ours
-                    ? `Answers when mentioned · belongs to ${agentNameFor(ownerId)}`
-                    : binding?.answerAllMessages && ours
-                      ? "Answers every message"
-                      : "Answers when mentioned"
+                  repliesToAll === agentId
+                    ? "Replies to all messages"
+                    : repliesToAll
+                      ? `Replies when @mentioned · ${agentNameFor(repliesToAll)} replies to all`
+                      : "Replies when @mentioned"
                 }
                 hasInstructions={!!binding?.channelInstructions}
                 action={
-                  !binding || !canEdit ? null : ownerId && !ours ? (
+                  binding ? (
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={updateBinding.isPending}
                       onClick={() =>
-                        updateBinding.mutate({
-                          id: binding.id,
-                          body: { agentId },
+                        setDetailsFor({
+                          binding,
+                          description: channel.description,
                         })
                       }
                     >
-                      Make it this agent's
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setDetailsFor(binding)}
-                    >
                       Settings
                     </Button>
-                  )
+                  ) : null
                 }
               />
             );
@@ -295,10 +301,9 @@ function BotChannels({
         ))}
 
       <ChannelDetailsDialog
-        binding={detailsFor}
-        assignedAgent={
-          detailsFor ? { id: agentId, name: agentNameFor(agentId) } : null
-        }
+        binding={detailsFor?.binding ?? null}
+        assignedAgent={null}
+        slackBot={slackBotSettings}
         open={detailsFor !== null}
         readOnly={!canEdit}
         isSaving={updateBinding.isPending}
@@ -307,11 +312,20 @@ function BotChannels({
         }}
         onSave={async ({ channelInstructions, answerAllMessages }) => {
           if (!detailsFor) return;
+          const { binding } = detailsFor;
+          const ours = binding.agentId === agentId;
           const saved = await updateBinding.mutateAsync({
-            id: detailsFor.id,
-            // Saving a channel nobody owns makes it this agent's: answer-all
-            // only applies to the channel's own agent.
-            body: { channelInstructions, answerAllMessages, agentId },
+            id: binding.id,
+            // Replying to all belongs to the channel's agent, so turning it on
+            // moves the channel to this one. Turning it off, or leaving it off
+            // in another agent's channel, leaves that agent's setting alone.
+            body: answerAllMessages
+              ? { channelInstructions, answerAllMessages: true, agentId }
+              : ours
+                ? { channelInstructions, answerAllMessages: false }
+                : binding.agentId
+                  ? { channelInstructions }
+                  : { channelInstructions, agentId },
           });
           if (saved) setDetailsFor(null);
         }}
@@ -320,8 +334,17 @@ function BotChannels({
   );
 }
 
+/**
+ * The agent whose bot replies to every message in a channel, if any: the
+ * setting only takes effect for the channel's own agent.
+ */
+function repliesToAllAgent(binding: Binding | null | undefined) {
+  return binding?.answerAllMessages && binding.agentId ? binding.agentId : null;
+}
+
 function ChannelRow({
   name,
+  description,
   isPrivate,
   status,
   hasInstructions,
@@ -329,6 +352,7 @@ function ChannelRow({
   action,
 }: {
   name: string;
+  description?: string | null;
   isPrivate: boolean;
   status: string;
   hasInstructions?: boolean;
@@ -341,6 +365,11 @@ function ChannelRow({
       <Icon className="size-4 shrink-0 text-muted-foreground" />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-sm font-medium">{name}</span>
+        {description && (
+          <span className="truncate text-xs italic text-muted-foreground">
+            {description}
+          </span>
+        )}
         <span
           className={cn(
             "truncate text-xs",
@@ -350,7 +379,7 @@ function ChannelRow({
           )}
         >
           <span>{status}</span>
-          {hasInstructions && <span> · has instructions</span>}
+          {hasInstructions && <span> · custom instructions</span>}
         </span>
       </span>
       {action}

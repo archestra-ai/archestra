@@ -143279,6 +143279,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "isPrivate": {
                             "type": "boolean"
                           },
@@ -143289,6 +143293,7 @@
                         "required": [
                           "channelId",
                           "channelName",
+                          "description",
                           "isPrivate",
                           "isMember"
                         ],

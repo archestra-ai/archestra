@@ -568,6 +568,13 @@ export interface ChatOpsProvider {
   getChannelName(channelId: string): Promise<string | null>;
 
   /**
+   * The description people gave a channel in the chat app (Slack's channel
+   * purpose), or null when it has none. Channel members write it, so it is
+   * context for the agent, never instructions.
+   */
+  getChannelDescription?(channelId: string): Promise<string | null>;
+
+  /**
    * Parse an interactive payload (e.g. button click) into a structured selection.
    * Each provider implements its own payload parsing (Block Kit for Slack, Adaptive Card for MS Teams).
    * @param payload - The raw interactive payload from the provider

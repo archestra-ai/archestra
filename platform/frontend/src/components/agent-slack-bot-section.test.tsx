@@ -56,6 +56,7 @@ function setup(params: {
   channels?: Array<{
     channelId: string;
     channelName: string;
+    description?: string | null;
     isPrivate: boolean;
     isMember: boolean;
   }>;
@@ -126,22 +127,30 @@ async function openEditDialog() {
 }
 
 describe("AgentSlackBotSection", () => {
-  it("lists the bot's channels and who answers every message in them", async () => {
+  it("lists the bot's channels, their Slack descriptions, and which bot replies to all", async () => {
     setup({
       bindings: [
         binding("C1", "a1", { answerAllMessages: true }),
         binding("C2", "a2"),
+        binding("C3", "a2", { answerAllMessages: true }),
       ],
       channels: [
         {
           channelId: "C1",
           channelName: "alerts",
+          description: "Production alerts",
           isPrivate: false,
           isMember: true,
         },
         {
           channelId: "C2",
           channelName: "eng",
+          isPrivate: false,
+          isMember: true,
+        },
+        {
+          channelId: "C3",
+          channelName: "dev",
           isPrivate: false,
           isMember: true,
         },
@@ -151,22 +160,33 @@ describe("AgentSlackBotSection", () => {
     await openEditDialog();
 
     const alerts = screen.getByRole("listitem", { name: "alerts" });
-    expect(within(alerts).getByText("Answers every message")).toBeVisible();
+    expect(within(alerts).getByText("Production alerts")).toBeVisible();
+    expect(within(alerts).getByText("Replies to all messages")).toBeVisible();
+
+    // Another agent owning the channel changes nothing this bot does, so it
+    // is not shown; only another bot replying to all is.
+    const eng = screen.getByRole("listitem", { name: "eng" });
+    expect(within(eng).getByText("Replies when @mentioned")).toBeVisible();
+    const dev = screen.getByRole("listitem", { name: "dev" });
     expect(
-      within(alerts).getByRole("button", { name: "Settings" }),
+      within(dev).getByText("Replies when @mentioned · Coding replies to all"),
     ).toBeVisible();
 
-    const eng = screen.getByRole("listitem", { name: "eng" });
-    expect(within(eng).getByText(/belongs to Coding/)).toBeVisible();
+    for (const row of [alerts, eng, dev]) {
+      expect(
+        within(row).getByRole("button", { name: "Settings" }),
+      ).toBeVisible();
+    }
   });
 
-  it("hands a channel another agent owns over to this agent", async () => {
+  it("moves replying to all to this bot from another agent's", async () => {
     setup({
-      bindings: [binding("C2", "a2")],
+      bindings: [binding("C3", "a2", { answerAllMessages: true })],
       channels: [
         {
-          channelId: "C2",
-          channelName: "eng",
+          channelId: "C3",
+          channelName: "dev",
+          description: "Day-to-day engineering",
           isPrivate: false,
           isMember: true,
         },
@@ -174,13 +194,26 @@ describe("AgentSlackBotSection", () => {
     });
 
     await openEditDialog();
+    await userEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(screen.getAllByText("Day-to-day engineering")).toHaveLength(2);
     await userEvent.click(
-      screen.getByRole("button", { name: "Make it this agent's" }),
+      screen.getByRole("switch", { name: "Reply to all messages" }),
+    );
+    expect(
+      screen.getByText(/Coding does this now. Saving switches it to/),
+    ).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save channel details" }),
     );
 
     expect(update).toHaveBeenCalledWith({
-      id: "b-C2",
-      body: { agentId: "a1" },
+      id: "b-C3",
+      body: {
+        channelInstructions: null,
+        answerAllMessages: true,
+        agentId: "a1",
+      },
     });
   });
 

@@ -5616,6 +5616,51 @@ describe("ChatOpsManager per-channel instructions", () => {
     expect(agent?.systemPrompt ?? "").not.toContain(INSTRUCTIONS);
   });
 
+  test("gives the model the channel's Slack description as context", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const executorSpy = mockExecutor();
+    const { senderEmail } = await bindChannel(
+      {
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      },
+      { provider: "slack", channelId: "C_DESC", workspaceId: "T_DESC" },
+    );
+
+    await new ChatOpsManager().processMessage({
+      message: {
+        messageId: "1786399123.000200",
+        channelId: "C_DESC",
+        workspaceId: "T_DESC",
+        threadId: "1786399123.000200",
+        senderId: "U_DESC",
+        senderName: "Slack User",
+        text: "what is this channel for?",
+        rawText: "what is this channel for?",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: { channelType: "im", conversationType: "personal" },
+      },
+      provider: stubProvider({
+        providerId: "slack",
+        getUserEmail: async () => senderEmail,
+        getChannelDescription: async () => "Release coordination",
+      }),
+    });
+
+    const sent = executorSpy.mock.calls[0][0].message;
+    expect(sent).toContain("=== Channel description ===");
+    expect(sent).toContain("Release coordination");
+  });
+
   test("keeps the instructions next to the message they govern once the thread has history", async ({
     makeOrganization,
     makeUser,

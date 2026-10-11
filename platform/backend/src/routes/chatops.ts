@@ -2444,6 +2444,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
               z.object({
                 channelId: z.string(),
                 channelName: z.string().nullable(),
+                description: z.string().nullable(),
                 isPrivate: z.boolean(),
                 isMember: z.boolean(),
               }),

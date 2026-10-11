@@ -194,26 +194,19 @@ test("configures popular agent templates and preserves the creation wizard", asy
     await expect(page.getByRole("textbox", { name: /^Name\b/ })).toHaveValue(
       "Claude Code",
     );
-    // The catalog's pick shows as a summary; the full runtime picker is on
-    // the built-in agent's path.
+    // The catalog is where the runtime is chosen: a custom image is a card
+    // of its own, and the built-in agent's form does not ask again.
     await goToPage(page, "/agents/new");
+    await expect(
+      page.getByRole("button", { name: /Custom image/ }),
+    ).toBeVisible();
     await page.getByRole("button", { name: /^New .* agent/ }).click();
     const runtimeChoices = page.getByRole("radiogroup", {
       name: "Runtime",
       exact: true,
     });
-    await expect(runtimeChoices.getByRole("radio")).toHaveCount(4);
-    await expect(
-      runtimeChoices.getByRole("radio", { name: "Codex", exact: true }),
-    ).toBeVisible();
-    await expect(
-      runtimeChoices.getByRole("radio", { name: "Custom image", exact: true }),
-    ).toBeVisible();
-    for (const name of ["OpenCode", "Hermes", "OpenClaw"]) {
-      await expect(
-        runtimeChoices.getByRole("radio", { name, exact: true }),
-      ).toHaveCount(0);
-    }
+    await expect(page.getByRole("textbox", { name: /^Name\b/ })).toBeVisible();
+    await expect(runtimeChoices).toHaveCount(0);
 
     await goToPage(page, "/settings/agents");
     await expect(
@@ -225,20 +218,21 @@ test("configures popular agent templates and preserves the creation wizard", asy
       .click();
     await settings.getByRole("button", { name: /^Remove / }).click();
     await save();
+    // With every template hidden, a custom image is the coding agent left.
     await goToPage(page, "/agents/new");
+    for (const name of names) {
+      await expect(
+        page.getByRole("button", { name: new RegExp(name) }),
+      ).toHaveCount(0);
+    }
     await expect(
-      page.getByRole("heading", { name: "Coding agents", exact: true }),
-    ).toHaveCount(0);
+      page.getByRole("button", { name: /Custom image/ }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /^New .* agent/ }),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /Connect via A2A/ }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: /^New .* agent/ }).click();
-    await expect(runtimeChoices.getByRole("radio")).toHaveCount(2);
-    await expect(
-      runtimeChoices.getByRole("radio", { name: "Custom image", exact: true }),
     ).toBeVisible();
 
     await goToPage(page, "/settings/agents");
@@ -252,12 +246,9 @@ test("configures popular agent templates and preserves the creation wizard", asy
       await expect(
         page.getByRole("button", { name: new RegExp(name) }),
       ).toBeVisible();
-    await page.getByRole("button", { name: /^New .* agent/ }).click();
-    await expect(runtimeChoices.getByRole("radio")).toHaveCount(7);
-    for (const name of names)
-      await expect(
-        runtimeChoices.getByRole("radio", { name, exact: true }),
-      ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Custom image/ }),
+    ).toBeVisible();
   } finally {
     expect(
       (

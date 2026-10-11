@@ -339,6 +339,14 @@ export const handlers: HttpHandler[] = [
   // editor still renders its provider setup links and an empty assignment
   // table.
   ...getJson("/api/chatops/status", { providers: [] }),
+  // The record's Slack bot section: no bots, Slack not connected.
+  ...getJson("/api/chatops/config/slack/agents", {
+    bots: [],
+    canCreateApps: false,
+    oneClickInstall: false,
+    unassignedApp: null,
+    workspaceName: null,
+  }),
   ...getJson("/api/chatops/bindings", {
     data: [],
     pagination: {

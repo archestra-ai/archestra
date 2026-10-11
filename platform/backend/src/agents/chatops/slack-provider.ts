@@ -57,6 +57,7 @@ import { SlackReplyStream } from "./slack-reply-stream";
 import {
   EventDedupMap,
   errorMessage,
+  footerWithoutAgentName,
   formatApprovalToolArgs,
   isSlackDmChannel,
   Semaphore,
@@ -418,7 +419,8 @@ class SlackProvider implements ChatOpsProvider {
     //
     // A channel can also opt into answering EVERY message (a per-channel
     // "answer all messages" binding setting): a message the gate would normally
-    // ignore is processed instead, unless that thread was stopped.
+    // ignore is processed instead, unless that thread was stopped. A bot pinned
+    // to an agent does so only in channels assigned to that agent.
     if (!isDM) {
       const { proceed } = await applyChannelGate({
         provider: this.providerId,
@@ -429,7 +431,7 @@ class SlackProvider implements ChatOpsProvider {
         text: cleanedText,
         botDisplayName: this.botDisplayName,
         muteCommandsEnabled: false,
-        honorAnswerAll: !this.pinnedAgentId,
+        ...(this.pinnedAgentId && { pinnedAgentId: this.pinnedAgentId }),
         postMutedNotice: async () => {},
         resolveAnswerAllWorkspaceId: async () => body.team_id || null,
       });
@@ -543,7 +545,11 @@ class SlackProvider implements ChatOpsProvider {
       fitsOneMessage: (text) =>
         text.length <= MARKDOWN_BLOCK_CHAR_LIMIT &&
         estimateRenderedBlocks(text) <= MAX_ESTIMATED_RENDERED_BLOCKS,
-      buildTrailingBlocks: (options) => buildTrailingContextBlocks(options),
+      buildTrailingBlocks: (options) =>
+        buildTrailingContextBlocks({
+          ...options,
+          footer: this.visibleFooter(options.footer),
+        }),
       postReply: async (options, replaceTs) => {
         await this.postReply(
           { ...options, originalMessage: message },
@@ -572,6 +578,8 @@ class SlackProvider implements ChatOpsProvider {
     const body = options.footer
       ? stripDuplicateAgentFooter(options.text, options.footer)
       : options.text;
+
+    const footer = this.visibleFooter(options.footer);
 
     // Slack expands `markdown` blocks server-side into Block Kit primitives
     // (one per heading, table, list, code block, paragraph) and rejects any
@@ -607,7 +615,7 @@ class SlackProvider implements ChatOpsProvider {
           ],
         });
       } else {
-        blocks.push(...buildTrailingContextBlocks(options));
+        blocks.push(...buildTrailingContextBlocks({ ...options, footer }));
       }
 
       // Nothing to say and nothing to stamp — skip the post rather than send
@@ -615,10 +623,8 @@ class SlackProvider implements ChatOpsProvider {
       if (blocks.length === 0) continue;
 
       const fallbackText = truncateFallbackText(
-        isFinal && options.footer
-          ? [chunkText, options.footer]
-              .filter((part) => part.trim())
-              .join("\n\n")
+        isFinal && footer
+          ? [chunkText, footer].filter((part) => part.trim()).join("\n\n")
           : chunkText,
       );
 
@@ -1133,6 +1139,45 @@ class SlackProvider implements ChatOpsProvider {
       );
       return [];
     }
+  }
+
+  /**
+   * Channels this bot can be in: every public channel, marked with whether the
+   * bot has joined, and the private channels it was invited to. Unlike
+   * discoverChannels, a failure propagates so the caller can say Slack failed.
+   */
+  async listJoinableChannels(): Promise<SlackJoinableChannel[]> {
+    if (!this.client) throw new Error("SlackProvider not initialized");
+    const channels: SlackJoinableChannel[] = [];
+    let cursor: string | undefined;
+    do {
+      const result = await this.client.conversations.list({
+        types: "public_channel,private_channel",
+        exclude_archived: true,
+        limit: 999,
+        cursor,
+      });
+      for (const channel of result.channels ?? []) {
+        if (!channel.id) continue;
+        channels.push({
+          channelId: channel.id,
+          channelName: channel.name || null,
+          isPrivate: channel.is_private === true,
+          isMember: channel.is_member === true,
+        });
+      }
+      cursor = result.response_metadata?.next_cursor || undefined;
+    } while (cursor);
+    return channels;
+  }
+
+  /** Add this bot to a public channel (needs the channels:join scope). */
+  async joinChannel(
+    channelId: string,
+  ): Promise<{ channelName: string | null }> {
+    if (!this.client) throw new Error("SlackProvider not initialized");
+    const result = await this.client.conversations.join({ channel: channelId });
+    return { channelName: result.channel?.name || null };
   }
 
   /**
@@ -2365,6 +2410,14 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
+  /**
+   * A bot pinned to an agent already posts under that agent's name and icon,
+   * so its replies drop the agent-name footer and keep only any extra detail.
+   */
+  private visibleFooter(footer: string | undefined): string | undefined {
+    return this.pinnedAgentId ? footerWithoutAgentName(footer) : footer;
+  }
+
   private cleanBotMention(text: string): string {
     if (!this.botUserId) return text;
     // Slack mentions are formatted as <@U12345678>
@@ -2774,3 +2827,11 @@ function protectSlackUrlBoundaries(text: string): string {
     },
   );
 }
+
+/** A channel a bot pinned to an agent is in, or could join. */
+type SlackJoinableChannel = {
+  channelId: string;
+  channelName: string | null;
+  isPrivate: boolean;
+  isMember: boolean;
+};

@@ -238,12 +238,16 @@ export function useUpdateSlackChatOpsConfig() {
   });
 }
 
-export function useSlackAgentBots() {
+export function useSlackAgentBots(params?: {
+  /** No toast on failure: the caller hides itself instead (the agent page). */
+  quiet?: boolean;
+}) {
+  const quiet = params?.quiet ?? false;
   return useQuery({
     queryKey: ["chatops", "slack-agent-bots"],
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.listSlackAgentBots();
-      throwOnApiError(error);
+      throwOnApiError(error, { toastOnError: !quiet });
       return (
         data ?? {
           bots: [],
@@ -253,6 +257,47 @@ export function useSlackAgentBots() {
           workspaceName: null,
         }
       );
+    },
+  });
+}
+
+/** The Slack channels an agent's bot is in, and the public ones it can join. */
+export function useSlackAgentBotChannels(agentId: string | undefined) {
+  return useQuery({
+    queryKey: ["chatops", "slack-agent-bots", agentId, "channels"],
+    enabled: !!agentId,
+    queryFn: async () => {
+      if (!agentId) return null;
+      const { data, error } = await archestraApiSdk.listSlackAgentBotChannels({
+        path: { agentId },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
+export function useJoinSlackAgentBotChannel(agentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (channelId: string) => {
+      const { data, error } = await archestraApiSdk.joinSlackAgentBotChannel({
+        path: { agentId, channelId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      toast.success("The bot joined the channel");
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots", agentId, "channels"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
   });
 }

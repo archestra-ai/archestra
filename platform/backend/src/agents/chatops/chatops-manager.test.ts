@@ -1617,6 +1617,68 @@ describe("ChatOpsManager security validation", () => {
     expect(executeSpy).toHaveBeenCalledTimes(2);
   });
 
+  test("claims a channel nobody owns for its agent, and leaves an owned one alone", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const user = await makeUser({ email: "claim@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const marketing = await makeInternalAgent({ organizationId: org.id });
+    const coding = await makeInternalAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(marketing.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_UNCLAIMED",
+      workspaceId: "T_TEST",
+    });
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_CODING",
+      workspaceId: "T_TEST",
+      agentId: coding.id,
+    });
+
+    const provider: ChatOpsProvider = {
+      ...createMockProvider({ getUserEmail: async () => user.email }),
+      providerId: "slack",
+      parseWebhookNotification: async (payload) =>
+        payload as IncomingChatMessage,
+      pinnedAgentId: marketing.id,
+      stateScope: `agent:${marketing.id}`,
+    };
+    const manager = new ChatOpsManager();
+    const messageIn = (channelId: string): IncomingChatMessage => ({
+      ...createMockMessage({ messageId: `msg-${channelId}` }),
+      channelId,
+      workspaceId: "T_TEST",
+      metadata: { botMentioned: true, channelType: "channel" },
+    });
+
+    await manager.handleIncomingMessage(provider, messageIn("C_UNCLAIMED"));
+    await manager.handleIncomingMessage(provider, messageIn("C_NEW"));
+    await manager.handleIncomingMessage(provider, messageIn("C_CODING"));
+
+    const ownerOf = async (channelId: string) =>
+      (
+        await ChatOpsChannelBindingModel.findByChannel({
+          provider: "slack",
+          channelId,
+          workspaceId: "T_TEST",
+        })
+      )?.agentId;
+    expect(await ownerOf("C_UNCLAIMED")).toBe(marketing.id);
+    expect(await ownerOf("C_NEW")).toBe(marketing.id);
+    expect(await ownerOf("C_CODING")).toBe(coding.id);
+  });
+
   test("a background result for a pinned bot's thread is posted by that bot", async ({
     makeOrganization,
   }) => {

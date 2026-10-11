@@ -211,14 +211,27 @@ export async function isChannelAnswerAllEnabled(params: {
   provider: ChatOpsProviderType;
   channelId: string;
   workspaceId: string | null;
+  /**
+   * Asking for the bot pinned to this agent: only the agent the channel is
+   * assigned to answers everything, so several bots sharing the channel do not
+   * all reply to every message.
+   */
+  agentId?: string;
 }): Promise<boolean> {
   const key = answerAllKey(params);
-  const cached = await cacheManager.get<boolean>(key);
-  if (cached !== undefined) return cached;
-  const binding = await ChatOpsChannelBindingModel.findByChannel(params);
-  const enabled = binding?.answerAllMessages === true;
-  await cacheManager.set(key, enabled, ANSWER_ALL_CACHE_TTL_MS);
-  return enabled;
+  let state = await cacheManager.get<AnswerAllState>(key);
+  if (state === undefined) {
+    const binding = await ChatOpsChannelBindingModel.findByChannel(params);
+    state = {
+      enabled: binding?.answerAllMessages === true,
+      agentId: binding?.agentId ?? null,
+    };
+    await cacheManager.set(key, state, ANSWER_ALL_CACHE_TTL_MS);
+  }
+  return (
+    state.enabled &&
+    (params.agentId === undefined || state.agentId === params.agentId)
+  );
 }
 
 /** Drop the cached "answer all messages" flag so a toggle takes effect promptly. */
@@ -541,11 +554,12 @@ export async function applyChannelGate(params: {
    */
   muteCommandsEnabled?: boolean;
   /**
-   * Whether the channel's "answer all messages" setting applies. Off for a
-   * Slack bot pinned to one agent: in a channel shared by several such bots,
-   * every one of them would otherwise answer every message. Defaults to on.
+   * The agent a Slack bot is pinned to. Such a bot honors the channel's "answer
+   * all messages" setting only when the channel is assigned to its agent: in a
+   * channel shared by several bots, every one of them would otherwise answer
+   * every message.
    */
-  honorAnswerAll?: boolean;
+  pinnedAgentId?: string;
   postMutedNotice: () => Promise<void>;
   resolveAnswerAllWorkspaceId: () => Promise<string | null>;
 }): Promise<{ proceed: boolean; addressed: boolean }> {
@@ -569,15 +583,13 @@ export async function applyChannelGate(params: {
   // cancelled the in-flight runs — a lost confirmation notice beats a late reply
   // arriving after someone asked for quiet.
   let answerAll = false;
-  if (
-    (params.honorAnswerAll ?? true) &&
-    ((!botMentioned && !isActive) || wantsMute)
-  ) {
+  if ((!botMentioned && !isActive) || wantsMute) {
     try {
       answerAll = await isChannelAnswerAllEnabled({
         provider,
         channelId,
         workspaceId: await params.resolveAnswerAllWorkspaceId(),
+        agentId: params.pinnedAgentId,
       });
     } catch (error) {
       logger.warn(
@@ -679,6 +691,8 @@ function mutedKey(params: {
 function scopeSuffix(scope: string | undefined): string {
   return scope ? `::${scope}` : "";
 }
+
+type AnswerAllState = { enabled: boolean; agentId: string | null };
 
 function answerAllKey(params: {
   provider: ChatOpsProviderType;

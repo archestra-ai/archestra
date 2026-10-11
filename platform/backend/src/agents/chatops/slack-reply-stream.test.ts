@@ -72,7 +72,7 @@ describe("SlackReplyStream", () => {
     expect(chat.startStream).toHaveBeenCalledWith({
       channel: "C1",
       thread_ts: "100.1",
-      task_display_mode: "timeline",
+      task_display_mode: "plan",
       recipient_user_id: "U1",
       recipient_team_id: "T1",
       chunks: [

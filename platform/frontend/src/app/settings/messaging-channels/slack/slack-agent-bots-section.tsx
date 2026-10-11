@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
+import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
 import { SlackSetupDialog } from "@/components/slack-setup-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,6 +82,7 @@ export function SlackAgentBotsSection({
   const [manualAgent, setManualAgent] = useState<AgentRef | null>(null);
   const [finishBot, setFinishBot] = useState<FinishTarget | null>(null);
   const [removeBot, setRemoveBot] = useState<AgentRef | null>(null);
+  const [editBot, setEditBot] = useState<AgentBot | null>(null);
 
   useInstallResultToast();
 
@@ -100,7 +102,10 @@ export function SlackAgentBotsSection({
   const agentsWithoutBot = agents.filter(
     (agent) => !bots.some((bot) => bot.agentId === agent.id),
   );
-  const isEmpty = !isLoading && bots.length === 0 && !data?.unassignedApp;
+  // Converting an existing app goes through Slack's manifest API, so it needs
+  // the configuration token first: until then, the empty state asks for it.
+  const convertible = canCreateApps ? data?.unassignedApp : null;
+  const isEmpty = !isLoading && bots.length === 0 && !convertible;
 
   const openFinish = (bot: AgentBot) =>
     setFinishBot({
@@ -148,8 +153,8 @@ export function SlackAgentBotsSection({
         )}
       </div>
 
-      {!isLoading && data?.unassignedApp && (
-        <ConvertAppCard app={data.unassignedApp} agents={agentsWithoutBot} />
+      {!isLoading && convertible && (
+        <ConvertAppCard app={convertible} agents={agentsWithoutBot} />
       )}
 
       {isEmpty && (
@@ -184,8 +189,17 @@ export function SlackAgentBotsSection({
               )}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Takes about a minute. You paste one token from Slack; {appName}{" "}
-              creates the apps.
+              {data?.unassignedApp ? (
+                <span>
+                  You paste one token from Slack; then your existing app becomes
+                  an agent's bot, keeping its channels and DMs.
+                </span>
+              ) : (
+                <span>
+                  Takes about a minute. You paste one token from Slack;{" "}
+                  {appName} creates the apps.
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -248,6 +262,15 @@ export function SlackAgentBotsSection({
                       onClick={() => openFinish(bot)}
                     >
                       Finish setup
+                    </Button>
+                  )}
+                  {bot.installed && !bot.needsAppLevelToken && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditBot(bot)}
+                    >
+                      Edit
                     </Button>
                   )}
                   <DropdownMenu>
@@ -355,6 +378,21 @@ export function SlackAgentBotsSection({
           key={finishBot.id}
           target={finishBot}
           onClose={() => setFinishBot(null)}
+        />
+      )}
+
+      {editBot && (
+        <SlackBotEditDialog
+          key={editBot.agentId}
+          open
+          onOpenChange={(open) => {
+            if (!open) setEditBot(null);
+          }}
+          agentId={editBot.agentId}
+          handle={editBot.handle ?? slackHandleFor(appName, editBot.agentName)}
+          appId={editBot.appId}
+          installed={editBot.installed}
+          reinstallUrl={editBot.reinstallUrl}
         />
       )}
 

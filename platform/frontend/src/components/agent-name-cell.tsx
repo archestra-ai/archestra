@@ -87,7 +87,14 @@ export function AgentNameCell({
       </div>
       {(owner || description) && (
         <div className="mt-0.5 flex min-w-0 items-center gap-1 text-xs font-normal text-muted-foreground [&>span]:inline">
-          {owner && <PersonalResourceOwner {...owner} />}
+          {owner && (
+            // The owner keeps its one line; the description beside it is
+            // what truncates when the row runs out of width.
+            <PersonalResourceOwner
+              {...owner}
+              className="shrink-0 whitespace-nowrap"
+            />
+          )}
           {description && (
             // The separator only when an owner was actually written before
             // it: the owner line renders nothing for an org-wide record.

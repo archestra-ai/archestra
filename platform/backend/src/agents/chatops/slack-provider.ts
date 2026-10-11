@@ -2881,6 +2881,8 @@ function protectSlackUrlBoundaries(text: string): string {
  * Slack's markup in a channel purpose as plain text: links (<url|label>,
  * <url>) and channel or user references (<#C1|name>) lose their brackets, and
  * escaped &, < and > are restored.
+ *
+ * @public — exported for slack-provider.test.ts
  */
 export function plainSlackText(text: string | null | undefined): string {
   return (text ?? "")

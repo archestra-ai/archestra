@@ -325,6 +325,28 @@ it("lets readers inspect grants without offering mutations", async () => {
   expect(screen.getByTestId("audience-chip")).toHaveTextContent("Personal");
 });
 
+it("a locked object offers no sharing even to someone who manages permissions", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
+  client.setQueryData(["auth", "userPermissions"], {});
+  render(
+    <QueryClientProvider client={client}>
+      <ResourcePermissions
+        resource="mcpRegistry"
+        scope={policy.scope}
+        lockedReason="Only for its owner."
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByText("Build automation");
+  expect(screen.getByText("Only for its owner.")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", { name: "Add access" }),
+  ).not.toBeInTheDocument();
+});
+
 it("moves the audience chip with the draft grants before saving", async () => {
   server.use(
     http.get(`${endpoint}/subjects`, () =>

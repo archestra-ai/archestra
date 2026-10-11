@@ -274,7 +274,12 @@ export function ConnectionSettingsForm() {
 
   const currentDefaultUrl = resolveDefaultBaseUrl(envBaseUrls, baseUrlMeta);
 
-  const gatewayItems = mcpGateways ?? [];
+  // One member's personal gateway is no default for everyone; the sentinel
+  // already offers each user their own. A saved one stays listed until
+  // replaced, so the selector can still name it.
+  const gatewayItems = (mcpGateways ?? []).filter(
+    (gateway) => !gateway.isPersonalGateway || gateway.id === gatewayId,
+  );
 
   const providerKeysByProvider = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string }[]>();

@@ -12,7 +12,13 @@ vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({ label: (provider: string) => provider }),
 }));
 vi.mock("@/components/agent-selector", () => ({
-  AgentSelector: () => null,
+  AgentSelector: ({ agents }: { agents: { id: string; name: string }[] }) => (
+    <ul aria-label="Default MCP Gateway options">
+      {agents.map((agent) => (
+        <li key={agent.id}>{agent.name}</li>
+      ))}
+    </ul>
+  ),
 }));
 vi.mock("@/components/roles/with-permissions", () => ({
   WithPermissions: ({
@@ -349,5 +355,20 @@ describe("ConnectionSettingsForm", () => {
         connectionClientOrder: expect.anything(),
       }),
     );
+  });
+
+  it("offers shared gateways as the default but not a member's personal one", () => {
+    vi.mocked(useProfiles).mockReturnValue({
+      data: [
+        { id: "shared", name: "Team Gateway", isPersonalGateway: false },
+        { id: "personal", name: "My Gateway", isPersonalGateway: true },
+      ],
+    } as unknown as ReturnType<typeof useProfiles>);
+    render(<ConnectionSettingsForm />);
+    const options = screen.getByRole("list", {
+      name: "Default MCP Gateway options",
+    });
+    expect(within(options).getByText("Team Gateway")).toBeInTheDocument();
+    expect(within(options).queryByText("My Gateway")).not.toBeInTheDocument();
   });
 });

@@ -3950,6 +3950,25 @@ class AgentModel {
     return (await AgentModel.findById(row.id, userId, true)) ?? null;
   }
 
+  /** The author of a personal MCP gateway, or undefined if `id` is not one. */
+  static async findPersonalMcpGatewayAuthor(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<{ authorId: string | null } | undefined> {
+    const [row] = await db
+      .select({ authorId: schema.agentsTable.authorId })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.id, params.id),
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          eq(schema.agentsTable.isPersonalGateway, true),
+        ),
+      )
+      .limit(1);
+    return row;
+  }
+
   /**
    * Ensures the user has a personal MCP gateway for the given organization.
    * Idempotent: returns the existing one if present, otherwise creates one.

@@ -126,6 +126,11 @@ class SlackProvider implements ChatOpsProvider {
     defaultTtl: 10 * TimeInMs.Minute,
   });
   /**
+   * Reads the channel description on the way to a reply, so it must fail fast:
+   * the default client retries for minutes, holding the reply back.
+   */
+  private descriptionClient: WebClient | null = null;
+  /**
    * Set once agents.sessions.setStatus is rejected (an app not yet on the
    * Agent messaging experience), so status updates go straight to the legacy
    * assistant.threads.setStatus instead of failing first every time.
@@ -199,6 +204,10 @@ class SlackProvider implements ChatOpsProvider {
 
     const { botToken } = this.config;
     this.client = new WebClient(botToken);
+    this.descriptionClient = new WebClient(botToken, {
+      retryConfig: { retries: 0 },
+      timeout: 3 * TimeInMs.Second,
+    });
 
     // Single raw fetch to auth.test — reads both the JSON body (user/team info)
     // and the x-oauth-scopes response header (scope validation) in one API call.
@@ -1112,11 +1121,12 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async getChannelDescription(channelId: string): Promise<string | null> {
-    if (!this.client) return null;
+    const client = this.descriptionClient ?? this.client;
+    if (!client) return null;
     const cached = this.channelDescriptionCache.get(channelId);
     if (cached !== undefined) return cached || null;
     try {
-      const result = await this.client.conversations.info({
+      const result = await client.conversations.info({
         channel: channelId,
       });
       const purpose =
@@ -1130,6 +1140,8 @@ class SlackProvider implements ChatOpsProvider {
         { error: errorMessage(error), channelId },
         "[SlackProvider] Failed to get channel description",
       );
+      // Answer without it for a minute rather than wait on Slack every reply.
+      this.channelDescriptionCache.set(channelId, "", TimeInMs.Minute);
       return null;
     }
   }

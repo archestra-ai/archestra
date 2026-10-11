@@ -44,7 +44,7 @@ vi.mock("@/components/chat/chat-messages", () => ({
 }));
 
 const agent = makeAgent({
-  name: "OpenAPPA Configuration Agent",
+  name: "APPAdvisor",
   scope: "org",
   builtIn: true,
   builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
@@ -222,7 +222,7 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   ).toBeInTheDocument();
   expect(
     screen.getByRole("combobox", {
-      name: "OpenAPPA Configuration Agent",
+      name: "APPAdvisor",
     }),
   ).toBeEnabled();
 
@@ -256,15 +256,50 @@ test.each([
 
   await user.click(
     await screen.findByRole("combobox", {
-      name: "OpenAPPA Configuration Agent",
+      name: launch === "configuration launch" ? "APPAdvisor" : "Research Agent",
     }),
   );
+  expect(
+    screen.queryByRole("option", { name: /APPAdvisor/ }),
+  ).not.toBeInTheDocument();
   await user.click(
     await screen.findByRole("option", { name: /Research Agent/ }),
   );
   expect(
     await screen.findByRole("combobox", { name: "Research Agent" }),
   ).toBeEnabled();
+  expect(createBodies).toHaveLength(0);
+});
+
+test("a fresh stack selects My Assistant while hiding APPAdvisor from the picker", async () => {
+  const user = userEvent.setup();
+  const personal = makeAgent({
+    id: "personal-assistant",
+    name: "My Assistant",
+    scope: "personal",
+    authorId: makeSession().user.id,
+    modelId: "test-model",
+    llmApiKeyId: "test-llm-key",
+  });
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+  );
+  server.use(
+    http.get("/api/agents/all", () =>
+      HttpResponse.json([agent, otherAgent, personal]),
+    ),
+    http.get(`/api/agents/${personal.id}`, () => HttpResponse.json(personal)),
+  );
+  renderChat();
+  await user.click(
+    await screen.findByRole("combobox", { name: "My Assistant" }),
+  );
+  expect(
+    screen.queryByRole("option", { name: /APPAdvisor/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("option", { name: /My Assistant/ }),
+  ).toBeInTheDocument();
   expect(createBodies).toHaveLength(0);
 });
 
@@ -339,9 +374,7 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   expect(sent[0]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
-  await user.click(
-    screen.getByRole("combobox", { name: "OpenAPPA Configuration Agent" }),
-  );
+  await user.click(screen.getByRole("combobox", { name: "APPAdvisor" }));
   await user.click(
     await screen.findByRole("option", { name: /Research Agent/ }),
   );

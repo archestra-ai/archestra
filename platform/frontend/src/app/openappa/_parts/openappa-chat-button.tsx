@@ -3,6 +3,7 @@
 import {
   type Action,
   BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
   type OpenAppaPolicyTargetKind,
   type Permissions,
 } from "@archestra/shared";
@@ -63,7 +64,7 @@ export function OpenAppaChatButton({
         disabled: !agents.isError,
         title: agents.isError
           ? "Could not load the chat agent. Click to retry."
-          : "OpenAPPA Configuration Agent is unavailable",
+          : `${BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG} is unavailable`,
         onClick: (event) => {
           props.onClick?.(event);
           void agents.refetch();

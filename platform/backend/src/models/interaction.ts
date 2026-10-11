@@ -2319,6 +2319,9 @@ class InteractionModel {
       sessionKeys.map((k) => sql`${k}`),
       sql`, `,
     );
+    // Migration-created indexes use DESC NULLS LAST. PostgreSQL requires the
+    // same ordering to stop at LIMIT, even though created_at is NOT NULL.
+    // The reverse scan therefore needs ASC NULLS FIRST.
     const oldestBranch =
       oldest > 0
         ? sql`
@@ -2327,7 +2330,7 @@ class InteractionModel {
                 encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
-         ORDER BY created_at ASC, id ASC
+         ORDER BY created_at ASC NULLS FIRST, id ASC
          LIMIT ${oldest})`
         : sql``;
     const sessionlessBranch =
@@ -2376,7 +2379,7 @@ class InteractionModel {
                 encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
-         ORDER BY created_at DESC, id DESC
+         ORDER BY created_at DESC NULLS LAST, id DESC
          LIMIT ${newest})
         ${oldestBranch}
       ) t

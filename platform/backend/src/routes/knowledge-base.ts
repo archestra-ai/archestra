@@ -1683,6 +1683,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         organizationId,
         userId: user.id,
+        action: "update",
       });
 
       if (body.environmentId !== undefined) {
@@ -2032,6 +2033,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               id,
               organizationId,
               userId: user.id,
+              action: "update",
             }).catch(() => null);
             if (connector) found.set(id, connector);
           }
@@ -3540,6 +3542,7 @@ async function findConnectorOrThrow(params: {
   id: string;
   organizationId: string;
   userId: string;
+  action?: "read" | "update";
 }) {
   const connector = await KnowledgeBaseConnectorModel.findById(params.id);
   if (!connector || connector.organizationId !== params.organizationId) {
@@ -3550,9 +3553,17 @@ async function findConnectorOrThrow(params: {
       userId: params.userId,
       organizationId: params.organizationId,
     });
-  if (
-    !knowledgeSourceAccessControlService.canAccessConnector(access, connector)
-  ) {
+  const permitted =
+    params.action === "update"
+      ? knowledgeSourceAccessControlService.canUpdateConnector(
+          access,
+          connector,
+        )
+      : knowledgeSourceAccessControlService.canAccessConnector(
+          access,
+          connector,
+        );
+  if (!permitted) {
     throw new ApiError(404, "Connector not found");
   }
   return connector;

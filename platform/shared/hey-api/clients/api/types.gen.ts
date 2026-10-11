@@ -34208,6 +34208,307 @@ export type BedrockInvokeStreamWithAgentAndModelResponses = {
     200: unknown;
 };
 
+export type GetBootstrapData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/bootstrap';
+};
+
+export type GetBootstrapErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetBootstrapError = GetBootstrapErrors[keyof GetBootstrapErrors];
+
+export type GetBootstrapResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        permissions: {
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
+        };
+        scopedCapabilities: Array<{
+            organizationId: string;
+            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+            scope: '*' | string;
+            action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
+        }>;
+        organization: {
+            id: string;
+            name: string;
+            slug: string;
+            analyticsInstanceId: string;
+            logo: string | null;
+            logoDark: string | null;
+            createdAt: string;
+            metadata: string | null;
+            onboardingComplete: boolean;
+            onboardingSurveyCompletedAt: string | null;
+            theme: 'modern-minimal' | 'clean-slate' | 'mono' | 'twitter' | 'tangerine' | 'bubblegum' | 'caffeine' | 'amber-minimal' | 'cosmic-night' | 'doom-64' | 'mocha-mousse' | 'nature' | 'sunset-horizon' | 'neo-brutalism' | 'vercel' | 'claude' | 'vintage-paper' | 'boxy-minimalistic' | 'catppuccin' | 'solarized-dark' | 'gruvbox-dark' | 'dracula-dark' | 'monokai-dark' | 'moonlight-dark';
+            customFont: 'lato' | 'inter' | 'open-sans' | 'roboto' | 'source-sans-pro' | 'jetbrains-mono';
+            onlineMcpCatalogEnabled: boolean;
+            onlineSkillCatalogEnabled: boolean;
+            skillMarketplaceAnonymousAccess: boolean;
+            allowChatFileUploads: boolean;
+            allowToolAutoAssignment: boolean;
+            embeddingModel: string | null;
+            embeddingDimensions: EmbeddingDimensions | null;
+            embeddingChatApiKeyId: string | null;
+            rerankerChatApiKeyId: string | null;
+            rerankerModel: string | null;
+            ocrChatApiKeyId: string | null;
+            ocrModel: string | null;
+            kbBm25K1: number | null;
+            kbBm25B: number | null;
+            kbContextualRetrievalMode: ContextualRetrievalMode | null;
+            defaultLlmModel: string | null;
+            defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+            defaultModelId: string | null;
+            defaultLlmApiKeyId: string | null;
+            defaultUserLimitValue: number | null;
+            defaultUserLimitModel: Array<string> | null;
+            defaultUserLimitCleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+            defaultMemberRole: string | null;
+            defaultAgentId: string | null;
+            favicon: string | null;
+            appName: string | null;
+            ogDescription: string | null;
+            footerText: string | null;
+            chatLinks: Array<{
+                label: string;
+                url: string;
+            }> | null;
+            onboardingWizard: {
+                label: string;
+                pages: Array<{
+                    image?: string | null;
+                    content: string;
+                }>;
+            } | null;
+            chatPlaceholders: Array<string> | null;
+            animateChatPlaceholders: boolean;
+            iconLogo: string | null;
+            iconLogoDark: string | null;
+            chatErrorSupportMessage: string | null;
+            slimChatErrorUi: boolean;
+            requireTwoFactor: boolean;
+            sessionMaxAgeSeconds: number | null;
+            oauthAccessTokenLifetimeSeconds: number;
+            connectionDefaultMcpGatewayId: string | null;
+            connectionDefaultLlmProxyId: string | null;
+            connectionDefaultClientId: string | null;
+            connectionShownClientIds: Array<string> | null;
+            connectionClientOrder: Array<string> | null;
+            connectionShownProviders: Array<string> | null;
+            connectionBaseUrls: Array<{
+                url: string;
+                description: string;
+                isDefault: boolean;
+                visible: boolean;
+            }> | null;
+            connectionDefaultProviderKeys: {
+                [key: string]: string;
+            } | null;
+            connectionSkillsEnabled: boolean;
+            connectionLlmProxyEnabled: boolean;
+            connectionPluginsEnabled: boolean;
+            connectionRuntimeHandoffEnabled: boolean;
+            connectionRuntimeHandoffInstructions: string | null;
+            modelProviderOverrides: {
+                [key: string]: {
+                    hidden?: boolean;
+                    displayName?: string | null;
+                };
+            } | null;
+            messagingChannelOverrides: {
+                [key: string]: {
+                    hidden?: boolean;
+                };
+            } | null;
+            knowledgeConnectorOverrides: {
+                [key: string]: {
+                    hidden?: boolean;
+                };
+            } | null;
+            popularAgentOverrides: {
+                [key: string]: {
+                    hidden?: boolean;
+                    position?: number;
+                };
+            } | null;
+            defaultEnvironmentName: string | null;
+            defaultEnvironmentNamespace: string | null;
+            defaultEnvironmentDescription: string | null;
+            defaultNetworkPolicy: {
+                egressMode: 'off' | 'restricted' | 'unrestricted';
+                domainPreset: 'none' | 'common_dependencies' | 'package_managers';
+                allowedDomains: Array<string>;
+                allowedCidrs: Array<string>;
+            } | null;
+            defaultEnvironmentValidationRegex: string | null;
+            defaultEnvironmentTrustedImageRegistries: Array<string> | null;
+            skillToolsEnabled: boolean;
+            mcpIdleHibernationEnabled: boolean;
+            appsHackathonRecorderEnabled: boolean;
+            newAppsDisabledByDefault: boolean;
+            newAppsLockedByDefault: boolean;
+        } | null;
+        config: {
+            enterpriseFeatures: {
+                core: boolean;
+                knowledgeBase: boolean;
+                fullWhiteLabeling: boolean;
+            };
+            smallTeamTier: {
+                threshold: number;
+                userCount: number;
+                smallTeam: boolean;
+                envFlag: boolean;
+                communicate: boolean;
+            };
+            features: {
+                betaEnabled: boolean;
+                orchestratorK8sRuntime: boolean;
+                mcpIdleHibernationBetaEnabled: boolean;
+                sandbox: boolean;
+                agentRuntime: boolean;
+                agentRuntimeCatalogImages: {
+                    [key: string]: string;
+                };
+                agentRuntimeBackend: {
+                    name: 'kubernetes';
+                    available: boolean;
+                    defaultTtlHours: number;
+                    defaultIdleTimeoutMinutes: number;
+                    allowPrivileged: boolean;
+                    resources: {
+                        cpuRequest: string;
+                        memoryRequest: string;
+                        memoryLimit: string;
+                    };
+                };
+                plugins: boolean;
+                sandboxArtifactBytesLimit: number;
+                chatAttachmentStorageBytesLimit: number;
+                apiBodyLimitBytes: number;
+                byosEnabled: boolean;
+                byosVaultKvVersion: '1' | '2';
+                azureOpenAiEntraIdEnabled: boolean;
+                anthropicWifEnabled: boolean;
+                anthropicKeylessAuthEnabled: boolean;
+                anthropicVertexAiEnabled: boolean;
+                bedrockIamAuthEnabled: boolean;
+                geminiVertexAiEnabled: boolean;
+                incomingEmail: {
+                    enabled: boolean;
+                    provider?: 'outlook';
+                    displayName?: string;
+                    emailDomain?: string;
+                };
+                mcpServerBaseImage: string;
+                orchestratorK8sNamespace: string;
+                environmentNamespaces: Array<string>;
+                isQuickstart: boolean;
+                ngrokDomain: string;
+                virtualKeyDefaultExpirationSeconds: number;
+                mcpSandboxDomain: string | null;
+                maintenanceMode: string | null;
+                chatSecretScanEnabled: boolean;
+                encryptedChatEnabled: boolean;
+                openappaEnabled: boolean;
+                agentHooksEnabled: boolean;
+                chatopsTelegramEnabled: boolean;
+                kbMfilesConnectorEnabled: boolean;
+                kbMfilesOauthEnabled: boolean;
+                kbBm25DefaultK1: number;
+                kbBm25DefaultB: number;
+                kbContextualRetrievalDefaultMode: ContextualRetrievalMode;
+                kbGoogleDriveOAuth: {
+                    configured: boolean;
+                    redirectUri: string;
+                };
+                mcpGatewaySkillsEnabled: boolean;
+                hackathonRecorderEnabled: boolean;
+                hackathonVideoDownloadEnabled: boolean;
+                hackathonMaxFinalCutMs: number;
+                hackathonGalleryRepo: {
+                    owner: string;
+                    name: string;
+                } | null;
+            };
+            providerBaseUrls: {
+                [key: string]: string | null;
+            };
+        };
+    };
+};
+
+export type GetBootstrapResponse = GetBootstrapResponses[keyof GetBootstrapResponses];
+
 export type CerebrasChatCompletionsWithDefaultAgentData = {
     body: XaiChatCompletionRequestInput;
     headers: {

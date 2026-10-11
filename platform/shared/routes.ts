@@ -99,6 +99,7 @@ export const RouteId = {
 
   // Config Routes
   GetConfig: "getConfig",
+  GetBootstrap: "getBootstrap",
   GetPublicConfig: "getPublicConfig",
 
   // RUM Routes

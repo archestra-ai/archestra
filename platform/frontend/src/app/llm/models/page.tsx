@@ -787,7 +787,9 @@ export default function ModelsPage() {
             "contextLength",
             "outputLength",
           ]}
-          tableClassName="min-w-[1000px]"
+          // Cached pricing and the key a model came from matter least next
+          // to its prices and limits, so a narrow window drops them first.
+          columnDropOrder={["pricingCache", "apiKeys"]}
           data={filteredModels}
           getRowId={(row) => row.id}
           rowSelection={rowSelection}

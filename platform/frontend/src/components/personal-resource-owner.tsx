@@ -1,5 +1,4 @@
 import { describeAgentOwner } from "@/lib/agent-owner-label";
-import { cn } from "@/lib/utils/tailwind";
 
 type PersonalResource = {
   scope: "personal" | "team" | "org";
@@ -10,11 +9,9 @@ type PersonalResource = {
 export function PersonalResourceOwner({
   resource,
   currentUserId,
-  className,
 }: {
   resource: PersonalResource;
   currentUserId: string | null | undefined;
-  className?: string;
 }) {
   const owner = describeAgentOwner(
     {
@@ -34,9 +31,5 @@ export function PersonalResourceOwner({
         ? `Owned by ${owner.email}`
         : "Owner unavailable";
 
-  return (
-    <span className={cn("block text-xs text-muted-foreground", className)}>
-      {label}
-    </span>
-  );
+  return <span className="block text-xs text-muted-foreground">{label}</span>;
 }

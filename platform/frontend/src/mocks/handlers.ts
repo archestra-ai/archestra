@@ -232,6 +232,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/auth/organization/get-active-member-role", {
     role: sessionSeed.user.role,
   }),
+  // Unavailable by default, so the shell falls back to the individual reads
+  // below and per-test overrides of those endpoints keep taking effect.
+  ...paths("/api/bootstrap").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
   // An object's own permissions: none beyond the admin's, who may edit them.

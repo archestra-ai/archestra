@@ -122015,6 +122015,1431 @@
         }
       }
     },
+    "/api/bootstrap": {
+      "get": {
+        "operationId": "getBootstrap",
+        "tags": [
+          "Config"
+        ],
+        "description": "Get the signed-in user's permissions, organization, and platform config in one request\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "permissions": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "create",
+                            "read",
+                            "update",
+                            "delete",
+                            "cancel",
+                            "query",
+                            "impersonate",
+                            "full-view",
+                            "admin"
+                          ]
+                        }
+                      }
+                    },
+                    "scopedCapabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "resource": {
+                            "type": "string",
+                            "enum": [
+                              "agent",
+                              "mcpGateway",
+                              "mcpRegistry",
+                              "skill",
+                              "app",
+                              "llmModel",
+                              "project",
+                              "conversation",
+                              "agentRun",
+                              "plugin",
+                              "knowledgeBase",
+                              "knowledgeConnector",
+                              "knowledgeFile",
+                              "llmVirtualKey",
+                              "llmProviderApiKey",
+                              "externalAgent",
+                              "mcpOauthClient",
+                              "llmOauthClient",
+                              "environment",
+                              "serviceAccount",
+                              "scheduledTask"
+                            ]
+                          },
+                          "scope": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "*"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              }
+                            ]
+                          },
+                          "action": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions",
+                              "configure-deployment-spec"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "organizationId",
+                          "resource",
+                          "scope",
+                          "action"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "organization": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "slug": {
+                          "type": "string"
+                        },
+                        "analyticsInstanceId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "logo": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "logoDark": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "metadata": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "onboardingComplete": {
+                          "type": "boolean"
+                        },
+                        "onboardingSurveyCompletedAt": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "theme": {
+                          "type": "string",
+                          "enum": [
+                            "modern-minimal",
+                            "clean-slate",
+                            "mono",
+                            "twitter",
+                            "tangerine",
+                            "bubblegum",
+                            "caffeine",
+                            "amber-minimal",
+                            "cosmic-night",
+                            "doom-64",
+                            "mocha-mousse",
+                            "nature",
+                            "sunset-horizon",
+                            "neo-brutalism",
+                            "vercel",
+                            "claude",
+                            "vintage-paper",
+                            "boxy-minimalistic",
+                            "catppuccin",
+                            "solarized-dark",
+                            "gruvbox-dark",
+                            "dracula-dark",
+                            "monokai-dark",
+                            "moonlight-dark"
+                          ]
+                        },
+                        "customFont": {
+                          "type": "string",
+                          "enum": [
+                            "lato",
+                            "inter",
+                            "open-sans",
+                            "roboto",
+                            "source-sans-pro",
+                            "jetbrains-mono"
+                          ]
+                        },
+                        "onlineMcpCatalogEnabled": {
+                          "type": "boolean"
+                        },
+                        "onlineSkillCatalogEnabled": {
+                          "type": "boolean"
+                        },
+                        "skillMarketplaceAnonymousAccess": {
+                          "type": "boolean"
+                        },
+                        "allowChatFileUploads": {
+                          "type": "boolean"
+                        },
+                        "allowToolAutoAssignment": {
+                          "type": "boolean"
+                        },
+                        "embeddingModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "embeddingDimensions": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/EmbeddingDimensions"
+                            }
+                          ]
+                        },
+                        "embeddingChatApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "rerankerChatApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "rerankerModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ocrChatApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "ocrModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "kbBm25K1": {
+                          "nullable": true,
+                          "type": "number",
+                          "minimum": -140737488355328,
+                          "maximum": 140737488355327
+                        },
+                        "kbBm25B": {
+                          "nullable": true,
+                          "type": "number",
+                          "minimum": -140737488355328,
+                          "maximum": 140737488355327
+                        },
+                        "kbContextualRetrievalMode": {
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/ContextualRetrievalMode"
+                            }
+                          ]
+                        },
+                        "defaultLlmModel": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "defaultLlmProvider": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "openai",
+                            "gemini",
+                            "anthropic",
+                            "bedrock",
+                            "cohere",
+                            "cerebras",
+                            "mistral",
+                            "perplexity",
+                            "groq",
+                            "xai",
+                            "openrouter",
+                            "vllm",
+                            "ollama",
+                            "ollama-native",
+                            "zhipuai",
+                            "deepseek",
+                            "minimax",
+                            "kimi",
+                            "azure",
+                            "github-copilot",
+                            "microsoft-365-copilot",
+                            "archestra",
+                            "voyage",
+                            "jev"
+                          ]
+                        },
+                        "defaultModelId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "defaultLlmApiKeyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "defaultUserLimitValue": {
+                          "nullable": true,
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "defaultUserLimitModel": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "defaultUserLimitCleanupInterval": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "defaultMemberRole": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "defaultAgentId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "favicon": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "appName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "ogDescription": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "footerText": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "chatLinks": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 25
+                              },
+                              "url": {
+                                "type": "string",
+                                "maxLength": 2000
+                              }
+                            },
+                            "required": [
+                              "label",
+                              "url"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "onboardingWizard": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 25
+                            },
+                            "pages": {
+                              "minItems": 1,
+                              "maxItems": 10,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "image": {
+                                    "nullable": true,
+                                    "type": "string"
+                                  },
+                                  "content": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "content"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "label",
+                            "pages"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "chatPlaceholders": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "animateChatPlaceholders": {
+                          "type": "boolean"
+                        },
+                        "iconLogo": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "iconLogoDark": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "chatErrorSupportMessage": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "slimChatErrorUi": {
+                          "type": "boolean"
+                        },
+                        "requireTwoFactor": {
+                          "type": "boolean"
+                        },
+                        "sessionMaxAgeSeconds": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "oauthAccessTokenLifetimeSeconds": {
+                          "type": "integer",
+                          "minimum": 300,
+                          "maximum": 31536000
+                        },
+                        "connectionDefaultMcpGatewayId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectionDefaultLlmProxyId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "connectionDefaultClientId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "connectionShownClientIds": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "connectionClientOrder": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "connectionShownProviders": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "connectionBaseUrls": {
+                          "nullable": true,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "url": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 2000
+                              },
+                              "description": {
+                                "default": "",
+                                "type": "string",
+                                "maxLength": 500
+                              },
+                              "isDefault": {
+                                "default": false,
+                                "type": "boolean"
+                              },
+                              "visible": {
+                                "default": true,
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "url",
+                              "description",
+                              "isDefault",
+                              "visible"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "connectionDefaultProviderKeys": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "connectionSkillsEnabled": {
+                          "type": "boolean"
+                        },
+                        "connectionLlmProxyEnabled": {
+                          "type": "boolean"
+                        },
+                        "connectionPluginsEnabled": {
+                          "type": "boolean"
+                        },
+                        "connectionRuntimeHandoffEnabled": {
+                          "type": "boolean"
+                        },
+                        "connectionRuntimeHandoffInstructions": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "modelProviderOverrides": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "hidden": {
+                                "type": "boolean"
+                              },
+                              "displayName": {
+                                "nullable": true,
+                                "type": "string",
+                                "maxLength": 60
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "messagingChannelOverrides": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "hidden": {
+                                "type": "boolean"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "knowledgeConnectorOverrides": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "hidden": {
+                                "type": "boolean"
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "popularAgentOverrides": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "hidden": {
+                                "type": "boolean"
+                              },
+                              "position": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "defaultEnvironmentName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "defaultEnvironmentNamespace": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "defaultEnvironmentDescription": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "defaultNetworkPolicy": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "egressMode": {
+                              "type": "string",
+                              "enum": [
+                                "off",
+                                "restricted",
+                                "unrestricted"
+                              ]
+                            },
+                            "domainPreset": {
+                              "type": "string",
+                              "enum": [
+                                "none",
+                                "common_dependencies",
+                                "package_managers"
+                              ]
+                            },
+                            "allowedDomains": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "allowedCidrs": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "egressMode",
+                            "domainPreset",
+                            "allowedDomains",
+                            "allowedCidrs"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "defaultEnvironmentValidationRegex": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "defaultEnvironmentTrustedImageRegistries": {
+                          "nullable": true,
+                          "maxItems": 200,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255,
+                            "pattern": "^[a-z0-9._:/-]+$"
+                          }
+                        },
+                        "skillToolsEnabled": {
+                          "type": "boolean"
+                        },
+                        "mcpIdleHibernationEnabled": {
+                          "type": "boolean"
+                        },
+                        "appsHackathonRecorderEnabled": {
+                          "type": "boolean"
+                        },
+                        "newAppsDisabledByDefault": {
+                          "type": "boolean"
+                        },
+                        "newAppsLockedByDefault": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "slug",
+                        "analyticsInstanceId",
+                        "logo",
+                        "logoDark",
+                        "createdAt",
+                        "metadata",
+                        "onboardingComplete",
+                        "onboardingSurveyCompletedAt",
+                        "theme",
+                        "customFont",
+                        "onlineMcpCatalogEnabled",
+                        "onlineSkillCatalogEnabled",
+                        "skillMarketplaceAnonymousAccess",
+                        "allowChatFileUploads",
+                        "allowToolAutoAssignment",
+                        "embeddingModel",
+                        "embeddingDimensions",
+                        "embeddingChatApiKeyId",
+                        "rerankerChatApiKeyId",
+                        "rerankerModel",
+                        "ocrChatApiKeyId",
+                        "ocrModel",
+                        "kbBm25K1",
+                        "kbBm25B",
+                        "kbContextualRetrievalMode",
+                        "defaultLlmModel",
+                        "defaultLlmProvider",
+                        "defaultModelId",
+                        "defaultLlmApiKeyId",
+                        "defaultUserLimitValue",
+                        "defaultUserLimitModel",
+                        "defaultUserLimitCleanupInterval",
+                        "defaultMemberRole",
+                        "defaultAgentId",
+                        "favicon",
+                        "appName",
+                        "ogDescription",
+                        "footerText",
+                        "chatLinks",
+                        "onboardingWizard",
+                        "chatPlaceholders",
+                        "animateChatPlaceholders",
+                        "iconLogo",
+                        "iconLogoDark",
+                        "chatErrorSupportMessage",
+                        "slimChatErrorUi",
+                        "requireTwoFactor",
+                        "sessionMaxAgeSeconds",
+                        "oauthAccessTokenLifetimeSeconds",
+                        "connectionDefaultMcpGatewayId",
+                        "connectionDefaultLlmProxyId",
+                        "connectionDefaultClientId",
+                        "connectionShownClientIds",
+                        "connectionClientOrder",
+                        "connectionShownProviders",
+                        "connectionBaseUrls",
+                        "connectionDefaultProviderKeys",
+                        "connectionSkillsEnabled",
+                        "connectionLlmProxyEnabled",
+                        "connectionPluginsEnabled",
+                        "connectionRuntimeHandoffEnabled",
+                        "connectionRuntimeHandoffInstructions",
+                        "modelProviderOverrides",
+                        "messagingChannelOverrides",
+                        "knowledgeConnectorOverrides",
+                        "popularAgentOverrides",
+                        "defaultEnvironmentName",
+                        "defaultEnvironmentNamespace",
+                        "defaultEnvironmentDescription",
+                        "defaultNetworkPolicy",
+                        "defaultEnvironmentValidationRegex",
+                        "defaultEnvironmentTrustedImageRegistries",
+                        "skillToolsEnabled",
+                        "mcpIdleHibernationEnabled",
+                        "appsHackathonRecorderEnabled",
+                        "newAppsDisabledByDefault",
+                        "newAppsLockedByDefault"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "config": {
+                      "type": "object",
+                      "properties": {
+                        "enterpriseFeatures": {
+                          "type": "object",
+                          "properties": {
+                            "core": {
+                              "type": "boolean"
+                            },
+                            "knowledgeBase": {
+                              "type": "boolean"
+                            },
+                            "fullWhiteLabeling": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "core",
+                            "knowledgeBase",
+                            "fullWhiteLabeling"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "smallTeamTier": {
+                          "type": "object",
+                          "properties": {
+                            "threshold": {
+                              "type": "number"
+                            },
+                            "userCount": {
+                              "type": "number"
+                            },
+                            "smallTeam": {
+                              "type": "boolean"
+                            },
+                            "envFlag": {
+                              "type": "boolean"
+                            },
+                            "communicate": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "threshold",
+                            "userCount",
+                            "smallTeam",
+                            "envFlag",
+                            "communicate"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "features": {
+                          "type": "object",
+                          "properties": {
+                            "betaEnabled": {
+                              "type": "boolean"
+                            },
+                            "orchestratorK8sRuntime": {
+                              "type": "boolean"
+                            },
+                            "mcpIdleHibernationBetaEnabled": {
+                              "type": "boolean"
+                            },
+                            "sandbox": {
+                              "type": "boolean"
+                            },
+                            "agentRuntime": {
+                              "type": "boolean"
+                            },
+                            "agentRuntimeCatalogImages": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "string"
+                              }
+                            },
+                            "agentRuntimeBackend": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "enum": [
+                                    "kubernetes"
+                                  ]
+                                },
+                                "available": {
+                                  "type": "boolean"
+                                },
+                                "defaultTtlHours": {
+                                  "type": "number"
+                                },
+                                "defaultIdleTimeoutMinutes": {
+                                  "type": "number"
+                                },
+                                "allowPrivileged": {
+                                  "type": "boolean"
+                                },
+                                "resources": {
+                                  "type": "object",
+                                  "properties": {
+                                    "cpuRequest": {
+                                      "type": "string"
+                                    },
+                                    "memoryRequest": {
+                                      "type": "string"
+                                    },
+                                    "memoryLimit": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "cpuRequest",
+                                    "memoryRequest",
+                                    "memoryLimit"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "available",
+                                "defaultTtlHours",
+                                "defaultIdleTimeoutMinutes",
+                                "allowPrivileged",
+                                "resources"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "plugins": {
+                              "type": "boolean"
+                            },
+                            "sandboxArtifactBytesLimit": {
+                              "type": "number"
+                            },
+                            "chatAttachmentStorageBytesLimit": {
+                              "type": "number"
+                            },
+                            "apiBodyLimitBytes": {
+                              "type": "number"
+                            },
+                            "byosEnabled": {
+                              "type": "boolean"
+                            },
+                            "byosVaultKvVersion": {
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "1",
+                                "2"
+                              ]
+                            },
+                            "azureOpenAiEntraIdEnabled": {
+                              "type": "boolean"
+                            },
+                            "anthropicWifEnabled": {
+                              "type": "boolean"
+                            },
+                            "anthropicKeylessAuthEnabled": {
+                              "type": "boolean"
+                            },
+                            "anthropicVertexAiEnabled": {
+                              "type": "boolean"
+                            },
+                            "bedrockIamAuthEnabled": {
+                              "type": "boolean"
+                            },
+                            "geminiVertexAiEnabled": {
+                              "type": "boolean"
+                            },
+                            "incomingEmail": {
+                              "type": "object",
+                              "properties": {
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "provider": {
+                                  "type": "string",
+                                  "enum": [
+                                    "outlook"
+                                  ]
+                                },
+                                "displayName": {
+                                  "type": "string"
+                                },
+                                "emailDomain": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "enabled"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "mcpServerBaseImage": {
+                              "type": "string"
+                            },
+                            "orchestratorK8sNamespace": {
+                              "type": "string"
+                            },
+                            "environmentNamespaces": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "isQuickstart": {
+                              "type": "boolean"
+                            },
+                            "ngrokDomain": {
+                              "type": "string"
+                            },
+                            "virtualKeyDefaultExpirationSeconds": {
+                              "type": "number"
+                            },
+                            "mcpSandboxDomain": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "maintenanceMode": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "chatSecretScanEnabled": {
+                              "type": "boolean"
+                            },
+                            "encryptedChatEnabled": {
+                              "type": "boolean"
+                            },
+                            "openappaEnabled": {
+                              "type": "boolean"
+                            },
+                            "agentHooksEnabled": {
+                              "type": "boolean"
+                            },
+                            "chatopsTelegramEnabled": {
+                              "type": "boolean"
+                            },
+                            "kbMfilesConnectorEnabled": {
+                              "type": "boolean"
+                            },
+                            "kbMfilesOauthEnabled": {
+                              "type": "boolean"
+                            },
+                            "kbBm25DefaultK1": {
+                              "type": "number"
+                            },
+                            "kbBm25DefaultB": {
+                              "type": "number"
+                            },
+                            "kbContextualRetrievalDefaultMode": {
+                              "$ref": "#/components/schemas/ContextualRetrievalMode"
+                            },
+                            "kbGoogleDriveOAuth": {
+                              "type": "object",
+                              "properties": {
+                                "configured": {
+                                  "type": "boolean"
+                                },
+                                "redirectUri": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "configured",
+                                "redirectUri"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "mcpGatewaySkillsEnabled": {
+                              "type": "boolean"
+                            },
+                            "hackathonRecorderEnabled": {
+                              "type": "boolean"
+                            },
+                            "hackathonVideoDownloadEnabled": {
+                              "type": "boolean"
+                            },
+                            "hackathonMaxFinalCutMs": {
+                              "type": "integer",
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "hackathonGalleryRepo": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "owner": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "owner",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "betaEnabled",
+                            "orchestratorK8sRuntime",
+                            "mcpIdleHibernationBetaEnabled",
+                            "sandbox",
+                            "agentRuntime",
+                            "agentRuntimeCatalogImages",
+                            "agentRuntimeBackend",
+                            "plugins",
+                            "sandboxArtifactBytesLimit",
+                            "chatAttachmentStorageBytesLimit",
+                            "apiBodyLimitBytes",
+                            "byosEnabled",
+                            "byosVaultKvVersion",
+                            "azureOpenAiEntraIdEnabled",
+                            "anthropicWifEnabled",
+                            "anthropicKeylessAuthEnabled",
+                            "anthropicVertexAiEnabled",
+                            "bedrockIamAuthEnabled",
+                            "geminiVertexAiEnabled",
+                            "incomingEmail",
+                            "mcpServerBaseImage",
+                            "orchestratorK8sNamespace",
+                            "environmentNamespaces",
+                            "isQuickstart",
+                            "ngrokDomain",
+                            "virtualKeyDefaultExpirationSeconds",
+                            "mcpSandboxDomain",
+                            "maintenanceMode",
+                            "chatSecretScanEnabled",
+                            "encryptedChatEnabled",
+                            "openappaEnabled",
+                            "agentHooksEnabled",
+                            "chatopsTelegramEnabled",
+                            "kbMfilesConnectorEnabled",
+                            "kbMfilesOauthEnabled",
+                            "kbBm25DefaultK1",
+                            "kbBm25DefaultB",
+                            "kbContextualRetrievalDefaultMode",
+                            "kbGoogleDriveOAuth",
+                            "mcpGatewaySkillsEnabled",
+                            "hackathonRecorderEnabled",
+                            "hackathonVideoDownloadEnabled",
+                            "hackathonMaxFinalCutMs",
+                            "hackathonGalleryRepo"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "providerBaseUrls": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "required": [
+                            "openai",
+                            "gemini",
+                            "anthropic",
+                            "bedrock",
+                            "cohere",
+                            "cerebras",
+                            "mistral",
+                            "perplexity",
+                            "groq",
+                            "xai",
+                            "openrouter",
+                            "vllm",
+                            "ollama",
+                            "ollama-native",
+                            "zhipuai",
+                            "deepseek",
+                            "minimax",
+                            "kimi",
+                            "azure",
+                            "github-copilot",
+                            "microsoft-365-copilot",
+                            "archestra",
+                            "voyage",
+                            "jev"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "enterpriseFeatures",
+                        "smallTeamTier",
+                        "features",
+                        "providerBaseUrls"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "permissions",
+                    "scopedCapabilities",
+                    "organization",
+                    "config"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/v1/cerebras/chat/completions": {
       "post": {
         "operationId": "cerebrasChatCompletionsWithDefaultAgent",

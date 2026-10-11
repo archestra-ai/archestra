@@ -179,6 +179,34 @@ describe("AgentSlackBotSection", () => {
     }
   });
 
+  it("searches a long channel list by name and description", async () => {
+    const names = ["alerts", "eng", "dev", "ops", "sales", "support", "random"];
+    setup({
+      channels: names.map((name, index) => ({
+        channelId: `C${index}`,
+        channelName: name,
+        description: name === "random" ? "Watercooler chat" : null,
+        isPrivate: false,
+        isMember: true,
+      })),
+    });
+
+    await openEditDialog();
+    const search = screen.getByRole("textbox", { name: "Search channels" });
+
+    await userEvent.type(search, "sal");
+    expect(screen.getByRole("listitem", { name: "sales" })).toBeVisible();
+    expect(screen.queryByRole("listitem", { name: "eng" })).toBeNull();
+
+    await userEvent.clear(search);
+    await userEvent.type(search, "watercooler");
+    expect(screen.getByRole("listitem", { name: "random" })).toBeVisible();
+
+    await userEvent.clear(search);
+    await userEvent.type(search, "nothing-like-this");
+    expect(screen.getByText(/No channels match/)).toBeVisible();
+  });
+
   it("moves replying to all to this bot from another agent's", async () => {
     setup({
       bindings: [binding("C3", "a2", { answerAllMessages: true })],

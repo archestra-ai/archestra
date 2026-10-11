@@ -64,278 +64,278 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Get platform configuration and feature flags",
         tags: ["Config"],
         response: {
-          200: z.strictObject({
-            enterpriseFeatures: z.strictObject({
-              core: z.boolean(),
-              knowledgeBase: z.boolean(),
-              fullWhiteLabeling: z.boolean(),
-            }),
-            smallTeamTier: z.strictObject({
-              threshold: z.number(),
-              userCount: z.number(),
-              smallTeam: z.boolean(),
-              envFlag: z.boolean(),
-              communicate: z.boolean(),
-            }),
-            features: z.strictObject({
-              betaEnabled: z.boolean(),
-              orchestratorK8sRuntime: z.boolean(),
-              // SPDX-SnippetBegin
-              // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-              // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-              // Deployment-level gate for MCP idle hibernation (the beta flag
-              // AND the operator kill switch); the licence and the
-              // organization toggle sit behind it.
-              mcpIdleHibernationBetaEnabled: z.boolean(),
-              /** BETA: MCP registry attention and alert dismissal surfaces. */
-              // SPDX-SnippetEnd
-              sandbox: z.boolean(),
-              /**
-               * Delegated Agent tasks in dedicated runtimes.
-               * True only when the cluster serves the Agent Sandbox API — the
-               * UI must not offer to start a runtime nothing can schedule.
-               */
-              agentRuntime: z.boolean(),
-              /** Maintained catalog image per template, as this deployment pulls it. */
-              agentRuntimeCatalogImages: z.record(z.string(), z.string()),
-              /** Operator-owned defaults and health for the runtime backend. */
-              agentRuntimeBackend: z.object({
-                name: z.literal("kubernetes"),
-                available: z.boolean(),
-                defaultTtlHours: z.number(),
-                defaultIdleTimeoutMinutes: z.number(),
-                allowPrivileged: z.boolean(),
-                resources: z.object({
-                  cpuRequest: z.string(),
-                  memoryRequest: z.string(),
-                  memoryLimit: z.string(),
-                }),
-              }),
-              plugins: z.boolean(),
-              // Max size of a file the sandbox can stage. The chat composer caps
-              // sandbox-routed uploads at this instead of guessing.
-              sandboxArtifactBytesLimit: z.number(),
-              // Max size of a chat upload the conversation can store (Files
-              // panel). Bounds the composer's file picker and its per-file
-              // policy; independent of what the sandbox can stage.
-              chatAttachmentStorageBytesLimit: z.number(),
-              // Request body ceiling. A turn's attachments travel base64-encoded
-              // in one request, so the composer needs this to stop a send that
-              // the body parser would reject with an opaque 413.
-              apiBodyLimitBytes: z.number(),
-              byosEnabled: z.boolean(),
-              byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
-              azureOpenAiEntraIdEnabled: z.boolean(),
-              anthropicWifEnabled: z.boolean(),
-              anthropicKeylessAuthEnabled: z.boolean(),
-              anthropicVertexAiEnabled: z.boolean(),
-              bedrockIamAuthEnabled: z.boolean(),
-              geminiVertexAiEnabled: z.boolean(),
-              incomingEmail: z.object({
-                enabled: z.boolean(),
-                provider: EmailProviderTypeSchema.optional(),
-                displayName: z.string().optional(),
-                emailDomain: z.string().optional(),
-              }),
-              mcpServerBaseImage: z.string(),
-              orchestratorK8sNamespace: z.string(),
-              environmentNamespaces: z.array(z.string()),
-              isQuickstart: z.boolean(),
-              ngrokDomain: z.string(),
-              virtualKeyDefaultExpirationSeconds: z.number(),
-              mcpSandboxDomain: z.string().nullable(),
-              maintenanceMode: z.string().nullable(),
-              chatSecretScanEnabled: z.boolean(),
-              encryptedChatEnabled: z.boolean(),
-              openappaEnabled: z.boolean(),
-              agentHooksEnabled: z.boolean(),
-              chatopsTelegramEnabled: z.boolean(),
-              /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
-              kbMfilesConnectorEnabled: z.boolean(),
-              kbMfilesOauthEnabled: z.boolean(),
-              /**
-               * The BM25 tuning constants an organization inherits until it
-               * sets its own in Knowledge settings; the settings tab shows them
-               * as the effective values wherever the organization has not.
-               */
-              kbBm25DefaultK1: z.number(),
-              kbBm25DefaultB: z.number(),
-              /**
-               * Effective fallback for organizations that have not selected a
-               * contextual retrieval mode in Knowledge settings.
-               */
-              kbContextualRetrievalDefaultMode: ContextualRetrievalModeSchema,
-              /**
-               * Individual ("connect my own Drive") auth for the Google Drive
-               * knowledge connector. `redirectUri` is the exact string that
-               * has to be registered on the Google OAuth client, so the setup
-               * UI can state it instead of leaving an admin to work out how
-               * this deployment composes its own URL.
-               */
-              kbGoogleDriveOAuth: z.object({
-                configured: z.boolean(),
-                redirectUri: z.string(),
-              }),
-              /**
-               * BETA: publish local Skills over gateways and project Skills
-               * discovered from installed MCP servers.
-               */
-              mcpGatewaySkillsEnabled: z.boolean(),
-              /** App session recording (record/replay/download app demos). */
-              hackathonRecorderEnabled: z.boolean(),
-              /**
-               * The offline video export is offered. Off by default: a render
-               * drives a headless browser for as long as the cut runs, and the
-               * gallery submission does not depend on it.
-               */
-              hackathonVideoDownloadEnabled: z.boolean(),
-              /**
-               * The longest final cut this deployment accepts, in ms. Every
-               * length surface reads it from here, so the number the author is
-               * shown is always the number the checks enforce.
-               */
-              hackathonMaxFinalCutMs: z.number().int().positive(),
-              /**
-               * The public App Gallery repository shared recordings are
-               * submitted to, or null when this deployment does not offer
-               * sharing. The frontend files the PR against this repository
-               * directly on api.github.com.
-               */
-              hackathonGalleryRepo: z
-                .object({ owner: z.string(), name: z.string() })
-                .nullable(),
-            }),
-            providerBaseUrls: z.record(
-              SupportedProvidersSchema,
-              z.string().nullable(),
-            ),
-          }),
+          200: ConfigResponseSchema,
         },
       },
     },
-    async (_request, reply) => {
-      const tier = enterpriseTier.getState();
-
-      return reply.send({
-        enterpriseFeatures: {
-          core: tier.coreActive,
-          knowledgeBase: tier.knowledgeBaseActive,
-          fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
-        },
-        smallTeamTier: {
-          threshold: tier.threshold,
-          userCount: tier.userCount,
-          smallTeam: tier.smallTeam,
-          envFlag: tier.envFlag,
-          communicate: tier.communicate,
-        },
-        features: {
-          betaEnabled: config.beta,
-          orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
-          // SPDX-SnippetBegin
-          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          // The whole deployment-level gate, not the beta flag alone: an
-          // operator's hard kill switch must take the settings toggle and the
-          // per-server control with it, or the UI renders an operational
-          // feature nothing behind it will ever run.
-          mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
-          // SPDX-SnippetEnd
-          sandbox: skillSandboxRuntimeService.isEnabled,
-          agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),
-          agentRuntimeCatalogImages: config.agentRuntime.catalogImages,
-          agentRuntimeBackend: {
-            name: "kubernetes" as const,
-            available: isAnyAgentRuntimeBackendDriverEnabled(),
-            defaultTtlHours: config.agentRuntime.defaultTtlHours,
-            defaultIdleTimeoutMinutes:
-              config.agentRuntime.defaultIdleTimeoutMinutes,
-            allowPrivileged: config.agentRuntime.allowPrivileged,
-            resources: config.agentRuntime.resources,
-          },
-          plugins: config.plugins.enabled,
-          sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
-          chatAttachmentStorageBytesLimit:
-            config.chat.attachmentStorageBytesLimit,
-          apiBodyLimitBytes: config.api.bodyLimit,
-          byosEnabled: isByosEnabled(),
-          byosVaultKvVersion: getByosVaultKvVersion(),
-          azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
-          anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
-          anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
-          anthropicVertexAiEnabled: config.llm.anthropic.vertexAi.enabled,
-          bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
-          geminiVertexAiEnabled: isVertexAiEnabled(),
-          incomingEmail: getEmailProviderInfo(),
-          mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
-          orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
-          environmentNamespaces:
-            config.orchestrator.kubernetes.environmentNamespaces,
-          isQuickstart: config.isQuickstart,
-          ngrokDomain: ngrokTunnelManager.getPublicDomain(),
-          virtualKeyDefaultExpirationSeconds:
-            config.llmProxy.virtualKeyDefaultExpirationSeconds,
-          mcpSandboxDomain: config.mcpSandbox.domain,
-          maintenanceMode: config.maintenanceMode,
-          chatSecretScanEnabled: config.chat.secretScanEnabled,
-          encryptedChatEnabled: isEncryptedChatEnabled(),
-          openappaEnabled: enterpriseTier.isOpenappaActive(),
-          agentHooksEnabled: config.hooks.enabled,
-          chatopsTelegramEnabled: config.chatops.telegramEnabled,
-          kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
-          kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
-          kbBm25DefaultK1: config.kb.bm25K1,
-          kbBm25DefaultB: config.kb.bm25B,
-          kbContextualRetrievalDefaultMode: config.kb.contextualRetrievalEnabled
-            ? "document"
-            : "disabled",
-          kbGoogleDriveOAuth: {
-            configured: isGoogleDriveOAuthConfigured(),
-            redirectUri: getGoogleDriveOAuthRedirectUri(),
-          },
-          mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
-          hackathonRecorderEnabled: config.hackathonRecorder.enabled,
-          hackathonVideoDownloadEnabled:
-            config.hackathonRecorder.videoDownloadEnabled,
-          hackathonMaxFinalCutMs: config.hackathonRecorder.maxFinalCutMs,
-          hackathonGalleryRepo:
-            (config.hackathonRecorder.gallery.githubClientId &&
-              config.hackathonRecorder.gallery.repo) ||
-            null,
-        },
-        providerBaseUrls: {
-          openai: config.llm.openai.baseUrl || null,
-          openrouter: config.llm.openrouter.baseUrl || null,
-          anthropic: config.llm.anthropic.baseUrl || null,
-          gemini: config.llm.gemini.baseUrl || null,
-          bedrock: config.llm.bedrock.baseUrl || null,
-          cohere: config.llm.cohere.baseUrl || null,
-          voyage: config.llm.voyage.baseUrl || null,
-          jev: config.llm.jev.baseUrl || null,
-          cerebras: config.llm.cerebras.baseUrl || null,
-          mistral: config.llm.mistral.baseUrl || null,
-          perplexity: config.llm.perplexity.baseUrl || null,
-          groq: config.llm.groq.baseUrl || null,
-          xai: config.llm.xai.baseUrl || null,
-          vllm: config.llm.vllm.baseUrl || null,
-          ollama: config.llm.ollama.baseUrl || null,
-          "ollama-native": config.llm["ollama-native"].baseUrl || null,
-          zhipuai: config.llm.zhipuai.baseUrl || null,
-          minimax: config.llm.minimax.baseUrl || null,
-          deepseek: config.llm.deepseek.baseUrl || null,
-          archestra: config.llm.archestra.baseUrl || null,
-          kimi: config.llm.kimi.baseUrl || null,
-          "github-copilot": config.llm["github-copilot"].baseUrl || null,
-          "microsoft-365-copilot":
-            config.llm["microsoft-365-copilot"].baseUrl || null,
-          azure: config.llm.azure.baseUrl || null,
-        },
-      });
-    },
+    async (_request, reply) => reply.send(getConfigResponse()),
   );
 };
 
 export default configRoutes;
+
+export const ConfigResponseSchema = z.strictObject({
+  enterpriseFeatures: z.strictObject({
+    core: z.boolean(),
+    knowledgeBase: z.boolean(),
+    fullWhiteLabeling: z.boolean(),
+  }),
+  smallTeamTier: z.strictObject({
+    threshold: z.number(),
+    userCount: z.number(),
+    smallTeam: z.boolean(),
+    envFlag: z.boolean(),
+    communicate: z.boolean(),
+  }),
+  features: z.strictObject({
+    betaEnabled: z.boolean(),
+    orchestratorK8sRuntime: z.boolean(),
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // Deployment-level gate for MCP idle hibernation (the beta flag
+    // AND the operator kill switch); the licence and the
+    // organization toggle sit behind it.
+    mcpIdleHibernationBetaEnabled: z.boolean(),
+    /** BETA: MCP registry attention and alert dismissal surfaces. */
+    // SPDX-SnippetEnd
+    sandbox: z.boolean(),
+    /**
+     * Delegated Agent tasks in dedicated runtimes.
+     * True only when the cluster serves the Agent Sandbox API — the
+     * UI must not offer to start a runtime nothing can schedule.
+     */
+    agentRuntime: z.boolean(),
+    /** Maintained catalog image per template, as this deployment pulls it. */
+    agentRuntimeCatalogImages: z.record(z.string(), z.string()),
+    /** Operator-owned defaults and health for the runtime backend. */
+    agentRuntimeBackend: z.object({
+      name: z.literal("kubernetes"),
+      available: z.boolean(),
+      defaultTtlHours: z.number(),
+      defaultIdleTimeoutMinutes: z.number(),
+      allowPrivileged: z.boolean(),
+      resources: z.object({
+        cpuRequest: z.string(),
+        memoryRequest: z.string(),
+        memoryLimit: z.string(),
+      }),
+    }),
+    plugins: z.boolean(),
+    // Max size of a file the sandbox can stage. The chat composer caps
+    // sandbox-routed uploads at this instead of guessing.
+    sandboxArtifactBytesLimit: z.number(),
+    // Max size of a chat upload the conversation can store (Files
+    // panel). Bounds the composer's file picker and its per-file
+    // policy; independent of what the sandbox can stage.
+    chatAttachmentStorageBytesLimit: z.number(),
+    // Request body ceiling. A turn's attachments travel base64-encoded
+    // in one request, so the composer needs this to stop a send that
+    // the body parser would reject with an opaque 413.
+    apiBodyLimitBytes: z.number(),
+    byosEnabled: z.boolean(),
+    byosVaultKvVersion: z.enum(["1", "2"]).nullable(),
+    azureOpenAiEntraIdEnabled: z.boolean(),
+    anthropicWifEnabled: z.boolean(),
+    anthropicKeylessAuthEnabled: z.boolean(),
+    anthropicVertexAiEnabled: z.boolean(),
+    bedrockIamAuthEnabled: z.boolean(),
+    geminiVertexAiEnabled: z.boolean(),
+    incomingEmail: z.object({
+      enabled: z.boolean(),
+      provider: EmailProviderTypeSchema.optional(),
+      displayName: z.string().optional(),
+      emailDomain: z.string().optional(),
+    }),
+    mcpServerBaseImage: z.string(),
+    orchestratorK8sNamespace: z.string(),
+    environmentNamespaces: z.array(z.string()),
+    isQuickstart: z.boolean(),
+    ngrokDomain: z.string(),
+    virtualKeyDefaultExpirationSeconds: z.number(),
+    mcpSandboxDomain: z.string().nullable(),
+    maintenanceMode: z.string().nullable(),
+    chatSecretScanEnabled: z.boolean(),
+    encryptedChatEnabled: z.boolean(),
+    openappaEnabled: z.boolean(),
+    agentHooksEnabled: z.boolean(),
+    chatopsTelegramEnabled: z.boolean(),
+    /** BETA: auto-sync-permissions connector visibility and its Permissions tab UI. */
+    kbMfilesConnectorEnabled: z.boolean(),
+    kbMfilesOauthEnabled: z.boolean(),
+    /**
+     * The BM25 tuning constants an organization inherits until it
+     * sets its own in Knowledge settings; the settings tab shows them
+     * as the effective values wherever the organization has not.
+     */
+    kbBm25DefaultK1: z.number(),
+    kbBm25DefaultB: z.number(),
+    /**
+     * Effective fallback for organizations that have not selected a
+     * contextual retrieval mode in Knowledge settings.
+     */
+    kbContextualRetrievalDefaultMode: ContextualRetrievalModeSchema,
+    /**
+     * Individual ("connect my own Drive") auth for the Google Drive
+     * knowledge connector. `redirectUri` is the exact string that
+     * has to be registered on the Google OAuth client, so the setup
+     * UI can state it instead of leaving an admin to work out how
+     * this deployment composes its own URL.
+     */
+    kbGoogleDriveOAuth: z.object({
+      configured: z.boolean(),
+      redirectUri: z.string(),
+    }),
+    /**
+     * BETA: publish local Skills over gateways and project Skills
+     * discovered from installed MCP servers.
+     */
+    mcpGatewaySkillsEnabled: z.boolean(),
+    /** App session recording (record/replay/download app demos). */
+    hackathonRecorderEnabled: z.boolean(),
+    /**
+     * The offline video export is offered. Off by default: a render
+     * drives a headless browser for as long as the cut runs, and the
+     * gallery submission does not depend on it.
+     */
+    hackathonVideoDownloadEnabled: z.boolean(),
+    /**
+     * The longest final cut this deployment accepts, in ms. Every
+     * length surface reads it from here, so the number the author is
+     * shown is always the number the checks enforce.
+     */
+    hackathonMaxFinalCutMs: z.number().int().positive(),
+    /**
+     * The public App Gallery repository shared recordings are
+     * submitted to, or null when this deployment does not offer
+     * sharing. The frontend files the PR against this repository
+     * directly on api.github.com.
+     */
+    hackathonGalleryRepo: z
+      .object({ owner: z.string(), name: z.string() })
+      .nullable(),
+  }),
+  providerBaseUrls: z.record(SupportedProvidersSchema, z.string().nullable()),
+});
+
+export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
+  const tier = enterpriseTier.getState();
+
+  return {
+    enterpriseFeatures: {
+      core: tier.coreActive,
+      knowledgeBase: tier.knowledgeBaseActive,
+      fullWhiteLabeling: config.enterpriseFeatures.fullWhiteLabeling,
+    },
+    smallTeamTier: {
+      threshold: tier.threshold,
+      userCount: tier.userCount,
+      smallTeam: tier.smallTeam,
+      envFlag: tier.envFlag,
+      communicate: tier.communicate,
+    },
+    features: {
+      betaEnabled: config.beta,
+      orchestratorK8sRuntime: McpServerRuntimeManager.isEnabled,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // The whole deployment-level gate, not the beta flag alone: an
+      // operator's hard kill switch must take the settings toggle and the
+      // per-server control with it, or the UI renders an operational
+      // feature nothing behind it will ever run.
+      mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
+      // SPDX-SnippetEnd
+      sandbox: skillSandboxRuntimeService.isEnabled,
+      agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),
+      agentRuntimeCatalogImages: config.agentRuntime.catalogImages,
+      agentRuntimeBackend: {
+        name: "kubernetes" as const,
+        available: isAnyAgentRuntimeBackendDriverEnabled(),
+        defaultTtlHours: config.agentRuntime.defaultTtlHours,
+        defaultIdleTimeoutMinutes:
+          config.agentRuntime.defaultIdleTimeoutMinutes,
+        allowPrivileged: config.agentRuntime.allowPrivileged,
+        resources: config.agentRuntime.resources,
+      },
+      plugins: config.plugins.enabled,
+      sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
+      chatAttachmentStorageBytesLimit: config.chat.attachmentStorageBytesLimit,
+      apiBodyLimitBytes: config.api.bodyLimit,
+      byosEnabled: isByosEnabled(),
+      byosVaultKvVersion: getByosVaultKvVersion(),
+      azureOpenAiEntraIdEnabled: isAzureOpenAiEntraIdEnabled(),
+      anthropicWifEnabled: anthropicWorkloadIdentity.isEnabled(),
+      anthropicKeylessAuthEnabled: isAnthropicKeylessAuthEnabled(),
+      anthropicVertexAiEnabled: config.llm.anthropic.vertexAi.enabled,
+      bedrockIamAuthEnabled: isBedrockIamAuthEnabled(),
+      geminiVertexAiEnabled: isVertexAiEnabled(),
+      incomingEmail: getEmailProviderInfo(),
+      mcpServerBaseImage: config.orchestrator.mcpServerBaseImage,
+      orchestratorK8sNamespace: config.orchestrator.kubernetes.namespace,
+      environmentNamespaces:
+        config.orchestrator.kubernetes.environmentNamespaces,
+      isQuickstart: config.isQuickstart,
+      ngrokDomain: ngrokTunnelManager.getPublicDomain(),
+      virtualKeyDefaultExpirationSeconds:
+        config.llmProxy.virtualKeyDefaultExpirationSeconds,
+      mcpSandboxDomain: config.mcpSandbox.domain,
+      maintenanceMode: config.maintenanceMode,
+      chatSecretScanEnabled: config.chat.secretScanEnabled,
+      encryptedChatEnabled: isEncryptedChatEnabled(),
+      openappaEnabled: enterpriseTier.isOpenappaActive(),
+      agentHooksEnabled: config.hooks.enabled,
+      chatopsTelegramEnabled: config.chatops.telegramEnabled,
+      kbMfilesConnectorEnabled: config.kb.mfilesConnectorEnabled,
+      kbMfilesOauthEnabled: config.kb.mfilesOauthEnabled,
+      kbBm25DefaultK1: config.kb.bm25K1,
+      kbBm25DefaultB: config.kb.bm25B,
+      kbContextualRetrievalDefaultMode: config.kb.contextualRetrievalEnabled
+        ? "document"
+        : "disabled",
+      kbGoogleDriveOAuth: {
+        configured: isGoogleDriveOAuthConfigured(),
+        redirectUri: getGoogleDriveOAuthRedirectUri(),
+      },
+      mcpGatewaySkillsEnabled: config.mcpGateway.skillsEnabled,
+      hackathonRecorderEnabled: config.hackathonRecorder.enabled,
+      hackathonVideoDownloadEnabled:
+        config.hackathonRecorder.videoDownloadEnabled,
+      hackathonMaxFinalCutMs: config.hackathonRecorder.maxFinalCutMs,
+      hackathonGalleryRepo:
+        (config.hackathonRecorder.gallery.githubClientId &&
+          config.hackathonRecorder.gallery.repo) ||
+        null,
+    },
+    providerBaseUrls: {
+      openai: config.llm.openai.baseUrl || null,
+      openrouter: config.llm.openrouter.baseUrl || null,
+      anthropic: config.llm.anthropic.baseUrl || null,
+      gemini: config.llm.gemini.baseUrl || null,
+      bedrock: config.llm.bedrock.baseUrl || null,
+      cohere: config.llm.cohere.baseUrl || null,
+      voyage: config.llm.voyage.baseUrl || null,
+      jev: config.llm.jev.baseUrl || null,
+      cerebras: config.llm.cerebras.baseUrl || null,
+      mistral: config.llm.mistral.baseUrl || null,
+      perplexity: config.llm.perplexity.baseUrl || null,
+      groq: config.llm.groq.baseUrl || null,
+      xai: config.llm.xai.baseUrl || null,
+      vllm: config.llm.vllm.baseUrl || null,
+      ollama: config.llm.ollama.baseUrl || null,
+      "ollama-native": config.llm["ollama-native"].baseUrl || null,
+      zhipuai: config.llm.zhipuai.baseUrl || null,
+      minimax: config.llm.minimax.baseUrl || null,
+      deepseek: config.llm.deepseek.baseUrl || null,
+      archestra: config.llm.archestra.baseUrl || null,
+      kimi: config.llm.kimi.baseUrl || null,
+      "github-copilot": config.llm["github-copilot"].baseUrl || null,
+      "microsoft-365-copilot":
+        config.llm["microsoft-365-copilot"].baseUrl || null,
+      azure: config.llm.azure.baseUrl || null,
+    },
+  };
+}
 
 const PublicConfigResponseSchema = z.strictObject({
   disableBasicAuth: z.boolean(),

@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowUpRight, Hash, Lock } from "lucide-react";
+import { ArrowUpRight, Hash, Lock, Search } from "lucide-react";
 import { useState } from "react";
 import { ChannelDetailsDialog } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogBody } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -83,6 +84,9 @@ export function SlackBotEditDialog({
 // Internal Components
 // =============================================================================
 
+/** Past this many channels, the list gets a search field. */
+const SEARCH_FROM = 6;
+
 type Binding = NonNullable<
   ReturnType<typeof useAllChatOpsBindings>["data"]
 >["bindings"][number];
@@ -108,6 +112,7 @@ function BotChannels({
     binding: Binding;
     description: string | null;
   } | null>(null);
+  const [query, setQuery] = useState("");
 
   if (channelsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Loading channels…</p>;
@@ -157,6 +162,15 @@ function BotChannels({
       ),
   );
   const joinable = channels.filter((channel) => !channel.isMember);
+  const needle = query.trim().toLowerCase();
+  const matches = (...texts: Array<string | null | undefined>) =>
+    !needle || texts.some((text) => text?.toLowerCase().includes(needle));
+  const shownMembers = memberChannels.filter((channel) =>
+    matches(channel.channelName, channel.channelId, channel.description),
+  );
+  const shownMissing = missing.filter((binding) =>
+    matches(binding.channelName, binding.channelId),
+  );
   const detailsRepliesToAll = repliesToAllAgent(detailsFor?.binding);
   const slackBotSettings = detailsFor
     ? {
@@ -179,77 +193,97 @@ function BotChannels({
           in a Slack channel.
         </p>
       ) : (
-        <ul className="divide-y rounded-md border">
-          {memberChannels.map((channel) => {
-            const binding = bindingFor(channel.channelId);
-            const repliesToAll = repliesToAllAgent(binding);
-            return (
-              <ChannelRow
-                key={channel.channelId}
-                name={channel.channelName ?? channel.channelId}
-                description={channel.description}
-                isPrivate={channel.isPrivate}
-                status={
-                  repliesToAll === agentId
-                    ? "Replies to all messages"
-                    : repliesToAll
-                      ? `Replies when @mentioned · ${agentNameFor(repliesToAll)} replies to all`
-                      : "Replies when @mentioned"
-                }
-                hasInstructions={!!binding?.channelInstructions}
-                action={
-                  binding ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        setDetailsFor({
-                          binding,
-                          description: channel.description,
-                        })
-                      }
-                    >
-                      Settings
-                    </Button>
-                  ) : null
-                }
+        <>
+          {memberChannels.length + missing.length > SEARCH_FROM && (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="Search channels"
+                placeholder="Search channels…"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="pl-8"
               />
-            );
-          })}
-          {missing.map((binding) => {
-            const channel = channels.find(
-              (candidate) => candidate.channelId === binding.channelId,
-            );
-            // Slack lists every public channel, so one it does not list is
-            // private (or gone).
-            const isPrivate = channel?.isPrivate ?? true;
-            return (
-              <ChannelRow
-                key={binding.id}
-                name={binding.channelName ?? binding.channelId}
-                isPrivate={isPrivate}
-                status={
-                  isPrivate
-                    ? `The bot is not in it · type /invite @${handle} there`
-                    : "The bot is not in it, so nobody answers as this agent"
-                }
-                warn
-                action={
-                  canEdit && !isPrivate && canJoin ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={joinMutation.isPending}
-                      onClick={() => joinMutation.mutate(binding.channelId)}
-                    >
-                      Add bot
-                    </Button>
-                  ) : null
-                }
-              />
-            );
-          })}
-        </ul>
+            </div>
+          )}
+          {shownMembers.length + shownMissing.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No channels match “{query.trim()}”.
+            </p>
+          ) : (
+            <ul className="divide-y rounded-md border">
+              {shownMembers.map((channel) => {
+                const binding = bindingFor(channel.channelId);
+                const repliesToAll = repliesToAllAgent(binding);
+                return (
+                  <ChannelRow
+                    key={channel.channelId}
+                    name={channel.channelName ?? channel.channelId}
+                    description={channel.description}
+                    isPrivate={channel.isPrivate}
+                    status={
+                      repliesToAll === agentId
+                        ? "Replies to all messages"
+                        : repliesToAll
+                          ? `Replies when @mentioned · ${agentNameFor(repliesToAll)} replies to all`
+                          : "Replies when @mentioned"
+                    }
+                    hasInstructions={!!binding?.channelInstructions}
+                    action={
+                      binding ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setDetailsFor({
+                              binding,
+                              description: channel.description,
+                            })
+                          }
+                        >
+                          Settings
+                        </Button>
+                      ) : null
+                    }
+                  />
+                );
+              })}
+              {shownMissing.map((binding) => {
+                const channel = channels.find(
+                  (candidate) => candidate.channelId === binding.channelId,
+                );
+                // Slack lists every public channel, so one it does not list is
+                // private (or gone).
+                const isPrivate = channel?.isPrivate ?? true;
+                return (
+                  <ChannelRow
+                    key={binding.id}
+                    name={binding.channelName ?? binding.channelId}
+                    isPrivate={isPrivate}
+                    status={
+                      isPrivate
+                        ? `The bot is not in it · type /invite @${handle} there`
+                        : "The bot is not in it, so nobody answers as this agent"
+                    }
+                    warn
+                    action={
+                      canEdit && !isPrivate && canJoin ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={joinMutation.isPending}
+                          onClick={() => joinMutation.mutate(binding.channelId)}
+                        >
+                          Add bot
+                        </Button>
+                      ) : null
+                    }
+                  />
+                );
+              })}
+            </ul>
+          )}
+        </>
       )}
 
       {canEdit &&

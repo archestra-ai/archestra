@@ -292,7 +292,13 @@ export function AgentChatAppsEditor({
     optionOrder,
     currentIds,
   );
-  const normalizedSelectedIds = [...selectedIds].sort();
+  // A selected channel can vanish from the list after the selection was
+  // seeded (deleted, or its provider hidden). It has nothing left to save, so
+  // it must not count as a change.
+  const bindingIds = new Set(bindings.map((binding) => binding.id));
+  const normalizedSelectedIds = selectedIds
+    .filter((id) => id.startsWith(VIRTUAL_DM_PREFIX) || bindingIds.has(id))
+    .sort();
   const isDirty =
     initializedAgentId === subjectKey &&
     (normalizedSelectedIds.length !== currentIds.length ||
@@ -417,10 +423,20 @@ export function AgentChatAppsEditor({
       });
     }
 
+    const updates = [...changedAssignments.values()];
+    // Nothing to write: the API rejects an empty plan, and there is nothing
+    // for it to do anyway.
+    if (updates.length === 0 && plan.dmProviders.length === 0) {
+      setPendingChannelDetails({});
+      setPendingPlan(null);
+      resolveSave(true);
+      return;
+    }
+
     applyBindingPlanMutation.mutate(
       {
         targetAgentId,
-        updates: [...changedAssignments.values()],
+        updates,
         directMessages: plan.dmProviders.map((provider) => ({ provider })),
       },
       {

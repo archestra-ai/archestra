@@ -600,6 +600,51 @@ describe("AgentChatAppsEditor", () => {
     expect(applyBindingPlan).toHaveBeenCalled();
   });
 
+  it("does not treat a held channel that disappeared as a change to save", async () => {
+    const onDirtyChange = vi.fn();
+    let saveChanges: (() => Promise<boolean>) | null = null;
+    const { rerender } = render(
+      <AgentChatApps
+        agent={agent}
+        standaloneSave={false}
+        onDirtyChange={onDirtyChange}
+        onSaveHandlerChange={(handler) => {
+          saveChanges = handler;
+        }}
+      />,
+    );
+    expect(channelRow("General")).toBeVisible();
+
+    // The channel this agent held is gone from the next fetch.
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: { bindings: bindings.filter(({ id }) => id !== "binding-1") },
+      isPending: false,
+      isLoadingError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: refetchBindings,
+    } as never);
+    rerender(
+      <AgentChatApps
+        agent={agent}
+        standaloneSave={false}
+        onDirtyChange={onDirtyChange}
+        onSaveHandlerChange={(handler) => {
+          saveChanges = handler;
+        }}
+      />,
+    );
+
+    expect(onDirtyChange).not.toHaveBeenCalledWith(true);
+    let saved = false;
+    await act(async () => {
+      saved = (await saveChanges?.()) ?? false;
+    });
+    expect(saved).toBe(true);
+    expect(applyBindingPlan).not.toHaveBeenCalled();
+  });
+
   it("saves a new assignment and its staged settings in one request", async () => {
     const user = userEvent.setup();
     const unassigned = {

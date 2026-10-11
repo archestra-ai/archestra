@@ -2122,6 +2122,24 @@ impl State {
             // Retained so the child's side can find what its parent addressed to it.
             request["spawned_id"] = json!(input.spawned_id);
         }
+        // Reject host configuration and malformed reporting input before
+        // claiming a durable operation. No effect has started yet, so these
+        // refusals must not leave a pending receipt fencing the whole family.
+        let report = if input.event == HookEventKind::Yell {
+            let reporting = self
+                .reporting
+                .as_ref()
+                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
+            let args: YellArguments =
+                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+            let endpoint = match &input.yell_receiver {
+                Some(receiver) => receiver.endpoint()?,
+                None => reporting.endpoint.clone(),
+            };
+            Some((reporting, args, endpoint))
+        } else {
+            None
+        };
         if let Some(decision) = claim_operation(
             &self.store,
             &input,
@@ -2133,22 +2151,13 @@ impl State {
         )? {
             return Ok(decision);
         }
-        let decision = if input.event == HookEventKind::Yell {
-            let reporting = self
-                .reporting
-                .as_ref()
-                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
-            let args: YellArguments =
-                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+        let decision = if let Some((reporting, args, endpoint)) = report {
             let result = appa_runtime::yell::embedded::send(
                 &self.runtime,
                 appa_runtime::yell::embedded::Request {
                     actor: actor.clone(),
                     harness: adapter::harness(),
-                    endpoint: match &input.yell_receiver {
-                        Some(receiver) => receiver.endpoint()?,
-                        None => reporting.endpoint.clone(),
-                    },
+                    endpoint,
                     hostname: reporting.hostname.clone(),
                     message: args.message,
                     with_trajectory: args.with_trajectory,

@@ -807,9 +807,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       header: ({ column }) => (
         <SortableHeader column={column} label="Last used" />
       ),
-      size: 100,
+      size: 140,
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
+        <span className="whitespace-nowrap text-sm text-muted-foreground">
           {formatRelativeTimeFromNow(row.original.value.lastUsedAt ?? null, {
             neverLabel: "Never",
           })}
@@ -841,7 +841,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             id: "environment",
             header: FIELD_LABEL.environment,
             enableSorting: false,
-            size: 160,
+            size: 120,
             cell: ({ row }) => {
               if (row.original.type === "external") {
                 return <span className="text-muted-foreground">—</span>;
@@ -867,7 +867,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       id: "actions",
       header: "Actions",
       enableHiding: false,
-      size: 220,
+      // Pin, then Edit, Chat and the menu as one group.
+      size: 156,
       cell: ({ row }) => (
         // The whole cell, so a disabled action's tooltip wrapper cannot let
         // the click through to the row either.
@@ -1310,7 +1311,7 @@ function SortableHeader({
   return (
     <Button
       variant="ghost"
-      className="h-auto !p-0 font-medium hover:bg-transparent"
+      className="h-auto !p-0 font-medium whitespace-nowrap hover:bg-transparent"
       onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
     >
       <span>{label}</span>

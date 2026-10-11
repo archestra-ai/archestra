@@ -213,8 +213,9 @@ describe("DataTable column widths", () => {
     );
 
     expect(container.querySelector("table")).toHaveClass("w-full");
+    // The flexible name column counts at its 180px floor, not its 540px.
     expect(container.querySelector("table")).toHaveStyle({
-      minWidth: "1188px",
+      minWidth: `${DATA_TABLE_SELECT_COLUMN_SIZE + 180 + 220 + 220 + 160}px`,
     });
     expect(
       (container.querySelector('th[data-column-id="name"]') as HTMLElement)
@@ -226,6 +227,47 @@ describe("DataTable column widths", () => {
     expect(container.querySelector('th[data-column-id="owner"]')).toHaveStyle({
       width: "220px",
     });
+  });
+});
+
+describe("DataTable in a narrow container", () => {
+  it("drops the last columns that do not fit instead of scrolling", () => {
+    // A container 700px wide, as the observer would report it.
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(700);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const columns: ColumnDef<Row>[] = [
+      { id: "select", header: "Select", size: 36, cell: () => null },
+      { id: "name", accessorKey: "name", header: "Name", size: 540 },
+      { id: "issue", header: "Issue", size: 220, cell: () => null },
+      { id: "owner", header: "Owner", size: 220, cell: () => null },
+      { id: "actions", header: "Actions", size: 160, cell: () => null },
+    ];
+    try {
+      const { container } = render(
+        <DataTable
+          columns={columns}
+          data={[{ name: "row", files: 1 }]}
+          fixedWidthColumnIds={["select", "issue", "owner", "actions"]}
+          flexibleColumnIds={["name"]}
+        />,
+      );
+      const headers = [...container.querySelectorAll("th")].map((th) =>
+        th.getAttribute("data-column-id"),
+      );
+      // 48 + 180 + 220 + 220 + 160 is wider than 700; without Owner it fits.
+      expect(headers).toEqual(["select", "name", "issue", "actions"]);
+    } finally {
+      width.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });
 

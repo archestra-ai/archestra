@@ -6,10 +6,7 @@ import {
   deleteRuntimeCredentialConnection,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
-import {
-  resolveCredential,
-  resolveCredentialValue,
-} from "@/services/credentials";
+import { CredentialResolutionBatch } from "@/services/credentials";
 import type {
   AgentRuntime,
   AgentRuntimeCredentialDeclaration,
@@ -47,6 +44,12 @@ export async function resolveAgentRuntimeCredentials(params: {
   userId: string | null;
 }): Promise<AgentRuntimeCredentialResolution> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
+  const batch = await CredentialResolutionBatch.create({
+    organizationId: params.organizationId,
+    credentialIds: [...shared, ...(params.userId ? perUser : [])].flatMap(
+      (entry) => (entry.credentialId ? [entry.credentialId] : []),
+    ),
+  });
   const env: Record<string, string> = {};
   const renewableCredentials: Record<string, RenewableCredential> = {};
   const missing: MissingAgentRuntimeCredential[] = [];
@@ -56,7 +59,7 @@ export async function resolveAgentRuntimeCredentials(params: {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
       const credential = declaration.credentialId
-        ? await resolveCredential({
+        ? await batch.resolve({
             organizationId: params.organizationId,
             scope: "organization",
             credentialId: declaration.credentialId,
@@ -102,7 +105,7 @@ export async function resolveAgentRuntimeCredentials(params: {
     Object.assign(env, resolved.values);
     for (const declaration of perUser) {
       const credential = declaration.credentialId
-        ? await resolveCredential({
+        ? await batch.resolve({
             organizationId: params.organizationId,
             scope: "personal",
             userId: params.userId,
@@ -147,6 +150,12 @@ export async function preflightAgentRuntimeCredentials(params: {
   misconfigured: MissingAgentRuntimeCredential[];
 }> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
+  const batch = await CredentialResolutionBatch.create({
+    organizationId: params.organizationId,
+    credentialIds: [...shared, ...(params.userId ? perUser : [])].flatMap(
+      (entry) => (entry.credentialId ? [entry.credentialId] : []),
+    ),
+  });
   const configured: string[] = [];
   const missing: MissingAgentRuntimeCredential[] = [];
   const misconfigured: MissingAgentRuntimeCredential[] = [];
@@ -155,11 +164,13 @@ export async function preflightAgentRuntimeCredentials(params: {
     const bag = await readSharedBag(params.runtime.secretId);
     for (const declaration of shared) {
       const value = declaration.credentialId
-        ? await resolveCredentialValue({
-            organizationId: params.organizationId,
-            scope: "organization",
-            credentialId: declaration.credentialId,
-          })
+        ? (
+            await batch.resolve({
+              organizationId: params.organizationId,
+              scope: "organization",
+              credentialId: declaration.credentialId,
+            })
+          )?.value
         : bag[declaration.key];
       if (typeof value === "string" && value.length > 0) {
         configured.push(declaration.key);
@@ -186,12 +197,14 @@ export async function preflightAgentRuntimeCredentials(params: {
     for (const declaration of perUser) {
       const connected = declaration.credentialId
         ? Boolean(
-            await resolveCredentialValue({
-              organizationId: params.organizationId,
-              scope: "personal",
-              userId: params.userId,
-              credentialId: declaration.credentialId,
-            }),
+            (
+              await batch.resolve({
+                organizationId: params.organizationId,
+                scope: "personal",
+                userId: params.userId,
+                credentialId: declaration.credentialId,
+              })
+            )?.value,
           )
         : present.has(declaration.key);
       if (connected) {

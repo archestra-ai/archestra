@@ -733,6 +733,49 @@ describe("APPA feature boundary", () => {
   });
   // SPDX-SnippetEnd
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test("a result batch shares membership and refreshes it for the next batch", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    const user = await makeUser({ email: "result-member@example.com" });
+    await makeMember(user.id, organizationId);
+    const userSession = { ...session, caller_id: `user:${user.id}` };
+    const results = Array.from({ length: 5 }, (_, index) => ({
+      id: `result-${index}`,
+      name: "read_file",
+      content: `example ${index}`,
+      isError: false,
+    }));
+    const run = () =>
+      processProxyResults({
+        session: userSession,
+        results,
+        canonicalize: (name) => name,
+      });
+    const { result, statements } = await recordQueries(run);
+    expect(
+      Object.values(result.toolResultUpdates).map((update) => update.content),
+    ).toEqual(results.map((entry) => entry.content));
+    expect(
+      statements.filter((statement) => statement.includes('from "member"')),
+    ).toHaveLength(1);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(Array.from({ length: results.length + 1 }, () => user.email));
+
+    await MemberModel.deleteAllByUserId(user.id);
+    native.dispatchHook.mockClear();
+    await run();
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(Array.from({ length: results.length + 1 }, () => undefined));
+  });
+  // SPDX-SnippetEnd
+
   test("names a member's email as the session principal, and nobody else's", async ({
     makeUser,
     makeMember,

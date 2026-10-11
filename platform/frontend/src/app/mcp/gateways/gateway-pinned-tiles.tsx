@@ -119,7 +119,7 @@ export function GatewayPinnedTiles({
           gateway.lastUsedAt !== undefined
             ? `Last used ${formatRelativeTimeFromNow(
                 gateway.lastUsedAt ?? null,
-                { neverLabel: "never" },
+                { neverLabel: "never", strict: true },
               )}`
             : (gateway.description ?? ""),
         kind: <GatewayToolsChip gateway={gateway} />,

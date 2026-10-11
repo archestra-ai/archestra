@@ -81,6 +81,13 @@ function Tile({ tile }: { tile: PinnedTile }) {
           {/* The whole tile opens it; buttons inside sit above this link. */}
           <Link
             href={tile.href}
+            // The link covers the whole tile, so its tooltip is the one a
+            // hover finds: the name and status in full, however they truncate.
+            title={
+              typeof tile.status === "string" && tile.status
+                ? `${tile.name}\n${tile.status}`
+                : tile.name
+            }
             className="block truncate text-[15px] font-semibold after:absolute after:inset-0 after:rounded-xl"
           >
             {tile.name}

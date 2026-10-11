@@ -1,19 +1,11 @@
 import { E2eTestId } from "@archestra/shared";
-import {
-  Copy,
-  History,
-  Pencil,
-  Pin,
-  PinOff,
-  Plug,
-  RotateCcw,
-  Trash2,
-} from "lucide-react";
+import { Copy, History, Pencil, Plug, RotateCcw, Trash2 } from "lucide-react";
 import {
   agentAction,
   getAgentActionModel,
 } from "@/components/agent-pages/agent-actions-model";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
+import { RowPinButton } from "@/components/row-pin-button";
 import {
   type TableRowAction,
   TableRowActions,
@@ -42,6 +34,11 @@ type McpGatewayActionsProps = {
    * mutating buttons apply rather than RBAC alone.
    */
   onHistory: (agentId: string, canModify: boolean) => void;
+  /**
+   * `menu` puts every action in the "More actions" menu with no pin button,
+   * for a pinned tile, which shows its own pin.
+   */
+  variant?: "row" | "menu";
 };
 
 /**
@@ -61,6 +58,7 @@ export function McpGatewayActions({
   onClone,
   onTogglePin,
   onHistory,
+  variant = "row",
 }: McpGatewayActionsProps) {
   const admin = useIsGlobalAdmin();
   const actionModel = getAgentActionModel({ kind: "mcp_gateway", agent });
@@ -100,17 +98,6 @@ export function McpGatewayActions({
   }
 
   const primaryActions: TableRowAction[] = [
-    ...(connectAction.visible
-      ? [
-          {
-            icon: <Plug className="h-4 w-4" />,
-            label: connectAction.label,
-            permissions: connectAction.permissions,
-            href: connectAction.href,
-            testId: `${E2eTestId.ConnectAgentButton}-${agent.name}`,
-          },
-        ]
-      : []),
     {
       icon: <Pencil className="h-4 w-4" />,
       label: editAction.label,
@@ -126,15 +113,17 @@ export function McpGatewayActions({
   ];
 
   const dropdownActions: TableRowAction[] = [
-    {
-      icon: agent.pinnedAt ? (
-        <PinOff className="h-4 w-4" />
-      ) : (
-        <Pin className="h-4 w-4" />
-      ),
-      label: agent.pinnedAt ? "Unpin" : "Pin",
-      onClick: () => onTogglePin(agent),
-    },
+    ...(connectAction.visible
+      ? [
+          {
+            icon: <Plug className="h-4 w-4" />,
+            label: connectAction.label,
+            permissions: connectAction.permissions,
+            href: connectAction.href,
+            testId: `${E2eTestId.ConnectAgentButton}-${agent.name}`,
+          },
+        ]
+      : []),
     {
       icon: <Copy className="h-4 w-4" />,
       label: cloneAction.label,
@@ -170,12 +159,30 @@ export function McpGatewayActions({
     },
   ];
 
+  if (variant === "menu") {
+    return (
+      <TableRowActions
+        permissionScope={agent.id}
+        itemName={agent.name}
+        actions={[]}
+        dropdownActions={[...primaryActions, ...dropdownActions]}
+      />
+    );
+  }
+
   return (
-    <TableRowActions
-      permissionScope={agent.id}
-      itemName={agent.name}
-      actions={primaryActions}
-      dropdownActions={dropdownActions}
-    />
+    <div className="flex items-center gap-1.5">
+      <RowPinButton
+        name={agent.name}
+        pinned={Boolean(agent.pinnedAt)}
+        onToggle={() => onTogglePin(agent)}
+      />
+      <TableRowActions
+        permissionScope={agent.id}
+        itemName={agent.name}
+        actions={primaryActions}
+        dropdownActions={dropdownActions}
+      />
+    </div>
   );
 }

@@ -966,6 +966,8 @@ export interface AgentFormProps {
    * from the catalog, so the form shows that choice instead of asking again.
    */
   onChangeRuntimeTemplate?: () => void;
+  /** Shown right after the Description field, e.g. the page's access block. */
+  afterDescription?: ReactNode;
 }
 
 /**
@@ -992,6 +994,7 @@ export function AgentForm({
   readOnly = false,
   openToolsCombobox = false,
   onChangeRuntimeTemplate,
+  afterDescription,
 }: AgentFormProps) {
   const appName = useAppName();
   // Given to the footer so a submit button portaled out of this form (into a
@@ -3137,6 +3140,8 @@ export function AgentForm({
                       />
                     </div>
                   )}
+
+                  {afterDescription}
 
                   {showsModelControl &&
                     (agent ||

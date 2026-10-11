@@ -205,6 +205,8 @@ export function useProfilesPaginated(
     includeActivationSkillsCount,
     providerApiKeyId,
     pinned,
+    ids,
+    excludeIds,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -254,6 +256,8 @@ export function useProfilesPaginated(
         includeActivationSkillsCount,
         providerApiKeyId,
         pinned,
+        ids,
+        excludeIds,
       },
     ],
     queryFn: async () => {
@@ -278,6 +282,8 @@ export function useProfilesPaginated(
           includeActivationSkillsCount,
           providerApiKeyId,
           pinned,
+          ids,
+          excludeIds,
         },
       });
       throwOnApiError(error, { toastOnError: false });
@@ -613,12 +619,20 @@ export const memberDefaultAgentQueryKey = ["member-default-agent"] as const;
  */
 export function useDefaultAgentId() {
   return useQuery({
-    queryKey: memberDefaultAgentQueryKey,
-    queryFn: async () => {
-      const { data, error } = await getMemberDefaultAgent();
-      throwOnApiError(error, { toastOnError: false });
-      return data?.defaultAgentId ?? null;
-    },
+    ...memberAgentsQuery,
+    select: (agents) => agents.defaultAgentId,
+  });
+}
+
+/**
+ * The current user's personal chat agent: the oldest live personal agent they
+ * authored (the assistant seeded at their first login, unless deleted). It is
+ * reported whether or not it is also their default.
+ */
+export function usePersonalChatAgentId() {
+  return useQuery({
+    ...memberAgentsQuery,
+    select: (agents) => agents.personalChatAgentId,
   });
 }
 
@@ -661,7 +675,13 @@ export function useUpdateDefaultAgentId() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      queryClient.setQueryData(memberDefaultAgentQueryKey, data.defaultAgentId);
+      queryClient.setQueryData<MemberAgents>(
+        memberDefaultAgentQueryKey,
+        (previous) => ({
+          personalChatAgentId: previous?.personalChatAgentId ?? null,
+          defaultAgentId: data.defaultAgentId,
+        }),
+      );
     },
   });
 }
@@ -817,3 +837,21 @@ function findCachedAgent(
   }
   return undefined;
 }
+
+type MemberAgents = {
+  defaultAgentId: string | null;
+  personalChatAgentId: string | null;
+};
+
+/** One read for both of the member's agents, shared by the hooks above. */
+const memberAgentsQuery = {
+  queryKey: memberDefaultAgentQueryKey,
+  queryFn: async (): Promise<MemberAgents> => {
+    const { data, error } = await getMemberDefaultAgent();
+    throwOnApiError(error, { toastOnError: false });
+    return {
+      defaultAgentId: data?.defaultAgentId ?? null,
+      personalChatAgentId: data?.personalChatAgentId ?? null,
+    };
+  },
+};

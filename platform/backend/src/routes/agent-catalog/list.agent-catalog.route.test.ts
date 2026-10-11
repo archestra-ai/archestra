@@ -327,6 +327,36 @@ describe("GET /api/agent-catalog", () => {
       totals: { agents: 1, externalAgents: 1 },
     });
 
+    // The viewer's automatic pins show as tiles, so the table leaves them out
+    // of its rows, its count and its "select all".
+    const withoutAutomaticPins = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agent-catalog?pinned=false&excludeIds=${bravo.id}&sortBy=name&sortDirection=asc&limit=20&offset=0`,
+    });
+    expect(withoutAutomaticPins.statusCode, withoutAutomaticPins.body).toBe(
+      200,
+    );
+    expect(withoutAutomaticPins.json()).toMatchObject({
+      data: [{ type: "external", value: { id: external.id } }],
+      pagination: { total: 1 },
+      totals: { agents: 0, externalAgents: 1 },
+    });
+
+    // ...and reads those pins as list rows of their own.
+    const automaticPins = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agent-catalog?ids=${bravo.id},${zulu.id}&sortBy=name&sortDirection=asc&limit=20&offset=0`,
+    });
+    expect(automaticPins.statusCode, automaticPins.body).toBe(200);
+    expect(automaticPins.json()).toMatchObject({
+      data: [
+        { type: "agent", value: { id: bravo.id } },
+        { type: "agent", value: { id: zulu.id } },
+      ],
+      pagination: { total: 2 },
+      totals: { agents: 2, externalAgents: 0 },
+    });
+
     async function setPinnedAt(agentId: string, value: string) {
       await db
         .update(schema.agentPinsTable)
@@ -338,6 +368,90 @@ describe("GET /api/agent-catalog", () => {
           ),
         );
     }
+  });
+
+  test("sorts by the tools, subagents and last-use values the rows show", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInteraction,
+    makeMember,
+    makeTool,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const all = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Every tool",
+      accessAllTools: true,
+      accessAllSubagents: false,
+    });
+    const two = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Two tools",
+      accessAllTools: false,
+      accessAllSubagents: true,
+    });
+    const none = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "No tools",
+      accessAllTools: false,
+      accessAllSubagents: false,
+    });
+    for (const tool of [await makeTool(), await makeTool()]) {
+      await makeAgentTool(two.id, tool.id);
+    }
+    const external = await createA2aRemoteAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      input: {
+        name: "External agent",
+        source: { type: "inline_card", agentCard: makeAgentCard() },
+        auth: { type: "none" },
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+
+    const idsSortedBy = async (sortBy: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agent-catalog?sortBy=${sortBy}&sortDirection=desc&limit=20&offset=0`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .data.map((row: { value: { id: string } }) => row.value.id);
+    };
+
+    // "All" outranks any count; an external agent has neither.
+    expect(await idsSortedBy("toolsCount")).toEqual([
+      all.id,
+      two.id,
+      none.id,
+      external.id,
+    ]);
+    expect(await idsSortedBy("subagentsCount")).toEqual([
+      two.id,
+      all.id,
+      none.id,
+      external.id,
+    ]);
+    // Used beats never used; the never-used rest tie and fall back to name.
+    await makeInteraction(none.id);
+    expect(await idsSortedBy("lastUsedAt")).toEqual([
+      none.id,
+      all.id,
+      external.id,
+      two.id,
+    ]);
   });
 
   test("returns only rows the caller can bulk-select when requested", async ({

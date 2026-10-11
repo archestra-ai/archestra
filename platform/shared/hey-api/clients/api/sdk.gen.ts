@@ -808,7 +808,7 @@ export const getLabelKeys = <ThrowOnError extends boolean = false>(options?: Opt
 export const getLabelValues = <ThrowOnError extends boolean = false>(options?: Options<GetLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<GetLabelValuesResponses, GetLabelValuesErrors, ThrowOnError>({ url: '/api/agents/labels/values', ...options });
 
 /**
- * Get the current user's default agent ID
+ * Get the current user's default agent ID, and their personal chat agent (the oldest live personal agent they authored), if any
  *
  * Authentication:
  *

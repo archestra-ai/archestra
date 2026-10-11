@@ -14346,6 +14346,14 @@ export type GetAgentCatalogData = {
         excludeAuthorIds?: Array<string>;
         excludeOtherPersonalAgents?: boolean;
         /**
+         * Only these agents (comma-separated IDs), such as the viewer's automatic pins.
+         */
+        ids?: Array<string>;
+        /**
+         * Leave these agents out (comma-separated IDs), such as the ones the list already shows as automatic pins.
+         */
+        excludeIds?: Array<string>;
+        /**
          * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
          */
         access?: Array<'mine' | 'shared' | 'org' | 'others'>;
@@ -14370,7 +14378,7 @@ export type GetAgentCatalogData = {
         pinned?: boolean;
         limit?: number;
         offset?: number;
-        sortBy?: 'name' | 'createdAt' | 'team';
+        sortBy?: 'name' | 'createdAt' | 'team' | 'toolsCount' | 'subagentsCount' | 'lastUsedAt';
         sortDirection?: 'asc' | 'desc';
     };
     url: '/api/agent-catalog';
@@ -14681,6 +14689,14 @@ export type GetAgentsData = {
          * Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.
          */
         excludeAuthorIds?: Array<string>;
+        /**
+         * Only these agents (comma-separated IDs), such as the viewer's automatic pins.
+         */
+        ids?: Array<string>;
+        /**
+         * Leave these agents out (comma-separated IDs), such as the ones the list already shows as automatic pins.
+         */
+        excludeIds?: Array<string>;
         /**
          * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
          */
@@ -20573,6 +20589,7 @@ export type GetMemberDefaultAgentResponses = {
      */
     200: {
         defaultAgentId: string | null;
+        personalChatAgentId: string | null;
     };
 };
 

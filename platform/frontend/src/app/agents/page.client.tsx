@@ -7,6 +7,7 @@ import {
   MAX_BULK_IDS,
 } from "@archestra/shared";
 import type {
+  Column,
   ColumnDef,
   RowSelectionState,
   SortingState,
@@ -19,16 +20,11 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { A2aRemoteAgentActions } from "@/components/a2a-remote-agent-actions";
-import {
-  AgentAccessBadges,
-  AgentLastUsedFooter,
-} from "@/components/agent-card-meta";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
@@ -59,11 +55,9 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { ImportAgentDialog } from "@/components/import-agent-dialog";
-import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
-import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import {
   isProviderApiKeyId,
   ProviderKeyFilterSelect,
@@ -78,13 +72,7 @@ import {
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
-import {
-  TableCard,
-  TableCardList,
-  TableCardView,
-  TableCardViewContent,
-  TableCardViewToggle,
-} from "@/components/table-card-view";
+import { TableSectionHeading } from "@/components/table-section-heading";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -106,6 +94,7 @@ import {
   useDeleteProfile,
   useExportAgent,
   usePermanentlyDeleteProfile,
+  usePersonalChatAgentId,
   usePinAgent,
   useRestoreProfile,
   useUpdateDefaultAgentId,
@@ -124,9 +113,9 @@ import {
   reportBulkOutcome,
   runBulkAction,
 } from "@/lib/bulk-action";
+import { BulkRangeSelectionScope } from "@/lib/bulk-range-selection-context";
 import { FIELD_LABEL } from "@/lib/design/resource-lexicon";
 import { useEnvironments } from "@/lib/environment.query";
-import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
@@ -138,6 +127,7 @@ import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { resolveCatalogEnvironmentLabel } from "../mcp/registry/_parts/catalog-environment-label";
 import { AgentActions } from "./agent-actions";
+import { AgentPinnedTiles } from "./agent-pinned-tiles";
 
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
@@ -231,6 +221,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     | "name"
     | "createdAt"
     | "team"
+    | "toolsCount"
+    | "subagentsCount"
+    | "lastUsedAt"
     | null;
   const sortDirectionFromUrl = searchParams.get("sortDirection") as
     | "asc"
@@ -279,6 +272,38 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     "limit" | "offset"
   >;
 
+  const { data: personalDefaultAgentId } = useDefaultAgentId();
+  const { data: organization } = useOrganization();
+  // Exactly one agent starts this viewer's new chats, so exactly one row is
+  // badged — badging a personal pin AND the organization default would put two
+  // answers on screen to a question that has one.
+  const effectiveDefault = resolveDefaultAgentBadge({
+    personalDefaultAgentId,
+    organizationDefaultAgentId: organization?.defaultAgentId,
+  });
+  const { data: personalChatAgentId } = usePersonalChatAgentId();
+  // Pinned for the viewer without their pinning them: what starts their
+  // chats, the assistant made for them, and the organization's default.
+  const pinnedForViewer = collectPinReasons([
+    [personalDefaultAgentId, "Your default"],
+    [personalChatAgentId, "Personal agent"],
+    [organization?.defaultAgentId, "Org default"],
+  ]);
+  // The table leaves out what the viewer sees as automatic pins on the
+  // server, so its count, paging and "select all" match the rows it shows.
+  const excludeIds = isDeletedView
+    ? undefined
+    : pinnedForViewer.map(({ id }) => id).sort();
+  const listExclusions = excludeIds?.length ? { excludeIds } : {};
+  // The same pins as list rows, which carry everything the tile's menu acts on.
+  const { data: automaticPinsResponse } = useAgentCatalog({
+    limit: 20,
+    offset: 0,
+    ids: excludeIds,
+    enabled: !!excludeIds?.length,
+  });
+  const automaticPinRows: AgentListRow[] = automaticPinsResponse?.data ?? [];
+
   const {
     data: catalogResponse,
     isPending,
@@ -293,6 +318,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     pinned: isDeletedView ? undefined : false,
     ...catalogFilters,
+    ...listExclusions,
   });
   const {
     data: pinnedAgentsResponse,
@@ -353,15 +379,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const exportAgent = useExportAgent();
   const restoreAgent = useRestoreProfile();
-  const { data: personalDefaultAgentId } = useDefaultAgentId();
-  const { data: organization } = useOrganization();
-  // Exactly one agent starts this viewer's new chats, so exactly one row is
-  // badged — badging a personal pin AND the organization default would put two
-  // answers on screen to a question that has one.
-  const effectiveDefault = resolveDefaultAgentBadge({
-    personalDefaultAgentId,
-    organizationDefaultAgentId: organization?.defaultAgentId,
-  });
   const updateDefaultAgentId = useUpdateDefaultAgentId();
   const permanentlyDeleteAgent = usePermanentlyDeleteProfile();
 
@@ -418,11 +435,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         (row): row is Extract<AgentListRow, { type: "agent" }> =>
           row.type === "agent",
       );
-  const unpinnedRows: AgentListRow[] = catalogResponse?.data ?? [];
-  const rows = isDeletedView ? unpinnedRows : [...pinnedRows, ...unpinnedRows];
-  const regularTotal =
-    (catalogResponse?.totals.agents ?? 0) +
-    (isDeletedView ? 0 : (pinnedAgentsResponse?.totals.agents ?? 0));
+  const pageRows: AgentListRow[] = catalogResponse?.data ?? [];
+  // Agents pinned for the viewer are tiles too, so the table leaves them out
+  // like the ones they pinned themselves: each agent shows once.
+  const autoPinnedIds = new Set(pinnedForViewer.map(({ id }) => id));
+  const unpinnedRows = isDeletedView
+    ? pageRows
+    : pageRows.filter((row) => !autoPinnedIds.has(row.value.id));
+  // The table's rows: pinned agents are tiles above it with no checkbox, so
+  // selection and "page fully selected" count the table alone.
+  const rows = unpinnedRows;
+  const regularTotal = catalogResponse?.totals.agents ?? 0;
   const pagination = {
     pageIndex,
     pageSize,
@@ -469,22 +492,22 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       clearEscalation: () => setEscalatedFor(null),
       canSelect: canSelectRow,
     });
-  const cardSelection = useBulkCardSelection({
-    rows,
-    getRowId: getAgentListRowId,
-    rowSelection: effectiveRowSelection,
-    setRowSelection: onRowSelectionChange,
-    rangeSelection,
-    canSelect: canSelectRow,
-  });
   const {
     data: allMatching,
     isFetching: isFetchingAllMatching,
     isError: isAllMatchingError,
     refetch: refetchAllMatching,
-  } = useAllMatchingAgentCatalog(catalogFilters, {
-    enabled: allMatchingSelected,
-  });
+  } = useAllMatchingAgentCatalog(
+    // The rows "select all" means are the table's: pinned agents are tiles.
+    {
+      ...catalogFilters,
+      pinned: isDeletedView ? undefined : false,
+      ...listExclusions,
+    },
+    {
+      enabled: allMatchingSelected,
+    },
+  );
 
   useEffect(() => {
     if (!allMatchingSelected || !isAllMatchingError) return;
@@ -585,7 +608,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     });
   }, [updateQueryParams]);
 
-  const renderAgentActions = (agent: AgentData) => {
+  const renderAgentActions = (
+    agent: AgentData,
+    variant: "row" | "menu" = "row",
+  ) => {
     const canModify = computeCanModifyAgent({
       scopedGrants: scopedCapabilities.data ?? [],
       agent,
@@ -598,6 +624,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       <AgentActions
         agent={agent}
         canModify={canModify}
+        variant={variant}
         onEdit={(target) => router.push(agentConfigureHref("agent", target.id))}
         onView={(target) => router.push(agentDetailHref("agent", target.id))}
         onDelete={setDeletingAgentId}
@@ -671,105 +698,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     />
   );
 
-  const renderAgentCard = (row: AgentListRow) => {
-    if (row.type === "external") {
-      const agent = row.value;
-      return (
-        <TableCard
-          key={getAgentListRowId(row)}
-          testId={`a2a-remote-agent-card-${agent.id}`}
-          icon={<AgentIcon size={20} />}
-          title={
-            <span className="flex min-w-0 items-center gap-2">
-              <Link
-                href={a2aRemoteAgentDetailHref(agent.id)}
-                className="truncate"
-              >
-                {agent.name}
-              </Link>
-              <Badge variant="secondary" className="shrink-0">
-                A2A
-              </Badge>
-            </span>
-          }
-          description={agent.description || "External A2A agent"}
-          actions={renderExternalAgentActions(agent)}
-          onNavigate={() => openExternalAgent(agent)}
-          {...cardSelection(row)}
-          selectionLabel={`Select ${agent.name}`}
-          selectionDisabledTooltip="Requires permission to update external A2A agents"
-          footer={<AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={agent.connection.enabled ? "default" : "secondary"}>
-              {agent.connection.enabled ? "Enabled" : "Disabled"}
-            </Badge>
-            <Badge variant="outline">{agent.assignmentCount} assigned</Badge>
-          </div>
-        </TableCard>
-      );
-    }
-
-    const agent = row.value;
-    return (
-      <TableCard
-        key={getAgentListRowId(row)}
-        icon={<AgentIcon icon={agent.icon} size={20} />}
-        title={
-          <span className="flex min-w-0 items-center gap-1.5">
-            <Link
-              href={agentDetailHref("agent", agent.id)}
-              className="truncate"
-            >
-              {agent.name}
-            </Link>
-            <LabelTags labels={agent.labels} />
-          </span>
-        }
-        description={
-          <>
-            <PersonalResourceOwner
-              resource={agent}
-              currentUserId={currentUserId}
-            />
-            {agent.description && (
-              <span className="block">{agent.description}</span>
-            )}
-          </>
-        }
-        actions={renderAgentActions(agent)}
-        onNavigate={
-          isDeletedView
-            ? undefined
-            : () => router.push(agentDetailHref("agent", agent.id))
-        }
-        {...cardSelection(row)}
-        selectionLabel={`Select ${agent.name}`}
-        footer={<AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Badge row, not the title line: the title shares its line with
-              the action cluster and clips at phone width. */}
-          {agent.runtime != null && (
-            <RuntimeCapableIndicator variant="pill" runtime={agent.runtime} />
-          )}
-          {effectiveDefault?.agentId === agent.id ? (
-            <DefaultAgentTag source={effectiveDefault.source} />
-          ) : null}
-          <AgentAccessBadges agent={agent} />
-          <span className="ml-auto">
-            <AgentProviderIndicator
-              usesOrganizationDefault={!agent.llmApiKeyId && !agent.modelId}
-              provider={agent.resolvedLlmProvider}
-              keyName={agent.resolvedLlmProviderKeyName}
-              modelName={agent.resolvedLlmModelName}
-            />
-          </span>
-        </div>
-      </TableCard>
-    );
-  };
-
   const columns: ColumnDef<AgentListRow>[] = [
     // A deleted row can only be restored or purged, neither of which this
     // selection drives, so the trash view keeps its rows unselectable.
@@ -788,16 +716,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       id: "name",
       accessorFn: (row) => row.value.name,
       size: 240,
-      header: ({ column }) => (
-        <Button
-          variant="ghost"
-          className="h-auto !p-0 font-medium hover:bg-transparent"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-        >
-          Name
-          <SortIcon isSorted={column.getIsSorted()} />
-        </Button>
-      ),
+      header: ({ column }) => <SortableHeader column={column} label="Name" />,
       cell: ({ row }) => {
         const item = row.original;
         if (item.type === "external") {
@@ -845,9 +764,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       },
     },
     {
-      id: "tools",
-      header: "Tools",
-      enableSorting: false,
+      id: "toolsCount",
+      header: ({ column }) => <SortableHeader column={column} label="Tools" />,
       size: 90,
       // The same counts the card shows. Access used to sit here, as the word
       // "Permissions" linking to the tab that owns it, which is a link and
@@ -866,9 +784,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         ),
     },
     {
-      id: "subagents",
-      header: "Subagents",
-      enableSorting: false,
+      id: "subagentsCount",
+      header: ({ column }) => (
+        <SortableHeader column={column} label="Subagents" />
+      ),
       size: 100,
       cell: ({ row }) =>
         row.original.type === "external" ? (
@@ -885,8 +804,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     },
     {
       id: "lastUsedAt",
-      header: "Last used",
-      enableSorting: false,
+      header: ({ column }) => (
+        <SortableHeader column={column} label="Last used" />
+      ),
       size: 100,
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground">
@@ -960,100 +880,96 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     },
   ];
 
-  const pinnedColumns: ColumnDef<AgentListRow>[] = columns.map((column) =>
-    column.id === "name"
-      ? { ...column, header: "Name", enableSorting: false }
-      : column,
+  const bulkActions = (
+    <BulkActions
+      count={selectedCount}
+      noun="agent"
+      onClear={clearSelection}
+      busy={bulkBusy}
+      selectAllMatching={{
+        total: allMatchingSelected ? selectedCount : totalSelectableCount,
+        pageFullySelected:
+          selectablePageCount > 0 &&
+          pageSelection.length === selectablePageCount,
+        active: allMatchingSelected,
+        onSelectAll: () => setEscalatedFor(filterSignature),
+        matchDescription: nameFilter
+          ? "match this search query"
+          : "match the current filters",
+      }}
+    >
+      <PermissionButton
+        permissions={bulkDeletePermissions}
+        disabled={allMatchingSelectionUnavailable}
+        variant="destructive"
+        size="sm"
+        onClick={openBulkDelete}
+      >
+        <Trash2 className="h-4 w-4" />
+        <span>Delete</span>
+      </PermissionButton>
+    </BulkActions>
   );
 
   const renderAgentSection = ({
     title,
     sectionRows,
     sectionPagination,
-    forceTable = false,
-    sortable = true,
   }: {
-    title?: string;
+    title: string;
     sectionRows: AgentListRow[];
     sectionPagination?: { pageIndex: number; pageSize: number; total: number };
-    forceTable?: boolean;
-    sortable?: boolean;
   }) => (
     <section className="space-y-3">
-      {title ? (
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          {title}
-        </h2>
-      ) : null}
-      <TableCardViewContent
-        forceTable={forceTable}
-        cards={
-          <TableCardList
-            itemCount={sectionRows.length}
-            isLoading={showLoading}
-            emptyIcon={Bot}
-            emptyMessage="No agents found"
-            hasActiveFilters={hasActiveFilters}
-            filteredEmptyMessage="No agents match your filters"
-            onClearFilters={clearFilters}
-            pagination={sectionPagination}
-            onPaginationChange={
-              sectionPagination ? handlePaginationChange : undefined
-            }
-          >
-            {sectionRows.map(renderAgentCard)}
-          </TableCardList>
+      <TableSectionHeading title={title} bulkActions={bulkActions} />
+      <DataTable
+        columns={columns}
+        tableClassName="table-fixed"
+        fixedWidthColumnIds={[
+          "toolsCount",
+          "subagentsCount",
+          "lastUsedAt",
+          "team",
+          "provider",
+          "environment",
+        ]}
+        flexibleColumnIds={["name"]}
+        data={sectionRows}
+        isLoading={showLoading}
+        getRowId={getAgentListRowId}
+        rowSelection={effectiveRowSelection}
+        onRowSelectionChange={onRowSelectionChange}
+        rangeSelection={rangeSelection}
+        hideSelectedCount
+        sorting={sorting}
+        onSortingChange={handleSortingChange}
+        manualSorting
+        manualPagination
+        pagination={sectionPagination}
+        onPaginationChange={
+          sectionPagination ? handlePaginationChange : undefined
         }
-        table={
-          <DataTable
-            columns={sortable ? columns : pinnedColumns}
-            tableClassName="table-fixed"
-            fixedWidthColumnIds={[
-              "tools",
-              "subagents",
-              "team",
-              "provider",
-              "environment",
-            ]}
-            flexibleColumnIds={["name"]}
-            data={sectionRows}
-            isLoading={showLoading}
-            getRowId={getAgentListRowId}
-            rowSelection={effectiveRowSelection}
-            onRowSelectionChange={onRowSelectionChange}
-            rangeSelection={rangeSelection}
-            hideSelectedCount
-            sorting={sortable ? sorting : []}
-            onSortingChange={sortable ? handleSortingChange : undefined}
-            manualSorting
-            manualPagination
-            pagination={sectionPagination}
-            onPaginationChange={
-              sectionPagination ? handlePaginationChange : undefined
-            }
-            onRowClick={
-              isDeletedView
-                ? undefined
-                : (row, event) =>
-                    openRowOnPlainClick(event, () => {
-                      if (row.type === "external") {
-                        openExternalAgent(row.value);
-                      } else {
-                        router.push(agentDetailHref("agent", row.value.id));
-                      }
-                    })
-            }
-            emptyIcon={Bot}
-            emptyMessage="No agents found"
-            hasActiveFilters={hasActiveFilters}
-            filteredEmptyMessage={
-              isDeletedView
-                ? "No deleted agents found."
-                : "No agents match your filters"
-            }
-            onClearFilters={clearFilters}
-          />
+        onRowClick={
+          isDeletedView
+            ? undefined
+            : (row, event) =>
+                openRowOnPlainClick(event, () => {
+                  if (row.type === "external") {
+                    openExternalAgent(row.value);
+                  } else {
+                    router.push(agentDetailHref("agent", row.value.id));
+                  }
+                })
         }
+        emptyIcon={Bot}
+        emptyMessage="No agents found"
+        hasActiveFilters={hasActiveFilters}
+        filteredEmptyMessage={
+          isDeletedView
+            ? "No deleted agents found."
+            : "No agents match your filters"
+        }
+        onClearFilters={clearFilters}
       />
     </section>
   );
@@ -1099,14 +1015,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           }}
         />
       ) : (
-        <TableCardView storageKey="archestra-agents-view">
+        <BulkRangeSelectionScope>
           <div>
             <div>
               <CollectionFilters>
                 <FilterBar
                   leading
                   onClearFilters={hasActiveFilters ? clearFilters : undefined}
-                  actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                   search={
                     <SearchInput
                       isLoading={isFetching || isPinnedFetching}
@@ -1149,57 +1064,47 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 <ActiveFilterBadges queryParamsAdapter={queryParamsAdapter} />
               </CollectionFilters>
 
-              <BulkActions
-                count={selectedCount}
-                noun="agent"
-                onClear={clearSelection}
-                busy={bulkBusy}
-                selectAllMatching={{
-                  total: allMatchingSelected
-                    ? selectedCount
-                    : totalSelectableCount,
-                  pageFullySelected:
-                    selectablePageCount > 0 &&
-                    pageSelection.length === selectablePageCount,
-                  active: allMatchingSelected,
-                  onSelectAll: () => setEscalatedFor(filterSignature),
-                  matchDescription: nameFilter
-                    ? "match this search query"
-                    : "match the current filters",
-                }}
-              >
-                <PermissionButton
-                  permissions={bulkDeletePermissions}
-                  disabled={allMatchingSelectionUnavailable}
-                  variant="destructive"
-                  size="sm"
-                  onClick={openBulkDelete}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  <span>Delete</span>
-                </PermissionButton>
-              </BulkActions>
-
               <div data-testid={E2eTestId.AgentsTable} className="space-y-6">
-                {!isDeletedView && pinnedRows.length > 0
-                  ? renderAgentSection({
-                      title: "Pinned",
-                      sectionRows: pinnedRows,
-                      sortable: false,
-                    })
-                  : null}
+                {!isDeletedView && (
+                  <AgentPinnedTiles
+                    pinned={pinnedRows.flatMap((row) =>
+                      row.type === "agent" ? [row.value] : [],
+                    )}
+                    inView={[...automaticPinRows, ...pageRows].flatMap((row) =>
+                      row.type === "agent" ? [row.value] : [],
+                    )}
+                    pinnedFor={pinnedForViewer}
+                    renderMenu={(id) => {
+                      // The full row, which every action needs.
+                      const row = [
+                        ...automaticPinRows,
+                        ...pinnedRows,
+                        ...pageRows,
+                      ].find((candidate) => candidate.value.id === id);
+                      return row?.type === "agent"
+                        ? renderAgentActions(row.value, "menu")
+                        : null;
+                    }}
+                    isLoading={isPinnedPending}
+                    onUnpin={(agent) =>
+                      pinAgent.mutate({ id: agent.id, pinned: false })
+                    }
+                  />
+                )}
                 {isDeletedView
                   ? renderAgentSection({
+                      title: "Deleted agents",
                       sectionRows: unpinnedRows,
                       sectionPagination: {
                         pageIndex,
                         pageSize,
                         total: pagination.total,
                       },
-                      forceTable: true,
                     })
-                  : unpinnedRows.length > 0 || pinnedRows.length === 0
+                  : unpinnedRows.length > 0 ||
+                      (pinnedRows.length === 0 && pageRows.length === 0)
                     ? renderAgentSection({
+                        title: "All agents",
                         sectionRows: unpinnedRows,
                         sectionPagination: {
                           pageIndex,
@@ -1335,7 +1240,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
               />
             </div>
           </div>
-        </TableCardView>
+        </BulkRangeSelectionScope>
       )}
     </PageLayout>
   );
@@ -1376,5 +1281,40 @@ function DeleteAgentDialog({
       confirmLabel="Delete Agent"
       pendingLabel="Deleting..."
     />
+  );
+}
+
+/**
+ * Agents pinned for the viewer with every reason each one is, in the order
+ * given, so one agent that is both your default and your personal agent is
+ * one tile with two chips.
+ */
+function collectPinReasons(
+  entries: Array<[string | null | undefined, string]>,
+): Array<{ id: string; reasons: string[] }> {
+  const byId = new Map<string, string[]>();
+  for (const [id, reason] of entries) {
+    if (!id) continue;
+    byId.set(id, [...(byId.get(id) ?? []), reason]);
+  }
+  return [...byId].map(([id, reasons]) => ({ id, reasons }));
+}
+
+function SortableHeader({
+  column,
+  label,
+}: {
+  column: Column<AgentListRow>;
+  label: string;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      className="h-auto !p-0 font-medium hover:bg-transparent"
+      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+    >
+      <span>{label}</span>
+      <SortIcon isSorted={column.getIsSorted()} />
+    </Button>
   );
 }

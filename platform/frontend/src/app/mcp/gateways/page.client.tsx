@@ -688,6 +688,7 @@ function McpGateways({
       tableClassName="table-fixed"
       fixedWidthColumnIds={["toolsCount", "subagentsCount", "lastUsedAt"]}
       flexibleColumnIds={["name"]}
+      columnDropOrder={["lastUsedAt", "subagentsCount", "toolsCount"]}
       data={unpinnedAgents}
       isLoading={showLoading}
       getRowId={(row) => row.id}

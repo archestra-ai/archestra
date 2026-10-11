@@ -12,7 +12,10 @@ import {
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import {
+  PERSISTED_QUERY_META,
+  seedOnlyStaleTime,
+} from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
 
 const { getAgentCatalog } = archestraApiSdk;
@@ -79,6 +82,7 @@ export function useAgentCatalog(
       useInitialData && initialData && catalog.state.data === initialData
         ? true
         : "always",
+    staleTime: seedOnlyStaleTime(useInitialData ? initialData : undefined),
     enabled,
     meta: PERSISTED_QUERY_META,
   });

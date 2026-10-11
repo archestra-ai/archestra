@@ -13,10 +13,10 @@ export { default as appRecordingRoutes } from "./app-recording/app-recording.rou
 export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-proxy";
 export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
 export { default as authRoutes } from "./auth";
+export { default as bootstrapRoutes } from "./bootstrap";
 export { default as chatRoutes } from "./chat/routes";
 export { default as chatopsRoutes } from "./chatops";
 export { default as clientConnectionRoutes } from "./client-connection/client-connection.routes";
-export { default as bootstrapRoutes } from "./bootstrap";
 export { default as configRoutes } from "./config";
 export { default as connectedClientRoutes } from "./connected-client/connected-client.routes";
 export { default as connectionSetupRoutes } from "./connection-setup/connection-setup.routes";

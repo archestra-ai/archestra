@@ -283,6 +283,48 @@ describe("SlackAppFactory", () => {
     ]);
   });
 
+  test("adds a newly required scope to a managed app's manifest once", async () => {
+    await saveToken();
+    const bot = {
+      agentId: AGENT_ID,
+      enabled: true,
+      botToken: "xoxb-bot",
+      signingSecret: "s",
+      appId: "A_SCOPES",
+      managed: true,
+    };
+    slack.exportManifest.mockResolvedValue({
+      ok: true,
+      manifest: {
+        display_information: { name: "Bot" },
+        oauth_config: { scopes: { bot: ["chat:write"] } },
+      },
+    });
+    slack.update.mockResolvedValue({ ok: true, permissions_updated: true });
+
+    await slackAppFactory.ensureManifestScopes(bot);
+    await slackAppFactory.ensureManifestScopes(bot);
+
+    expect(slack.update).toHaveBeenCalledTimes(1);
+    expect(
+      slack.update.mock.calls[0][0].manifest.oauth_config.scopes.bot,
+    ).toContain("files:write");
+  });
+
+  test("leaves the manifest of an app it does not manage alone", async () => {
+    await saveToken();
+
+    await slackAppFactory.ensureManifestScopes({
+      agentId: AGENT_ID,
+      enabled: true,
+      botToken: "xoxb-bot",
+      signingSecret: "s",
+      appId: "A_HANDS_OFF",
+    });
+
+    expect(slack.exportManifest).not.toHaveBeenCalled();
+  });
+
   test("one app Slack refuses does not stop the others", async () => {
     await saveToken();
     await ChatOpsConfigModel.saveSlackConfig({

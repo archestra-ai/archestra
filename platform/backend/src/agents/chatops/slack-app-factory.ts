@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   buildSlackManifest,
   migrateSlackManifest,
+  SLACK_REQUIRED_BOT_SCOPES,
   slackHandleFor,
   TimeInMs,
 } from "@archestra/shared";
@@ -38,6 +39,9 @@ import { errorMessage } from "./utils";
  * so that one is always pasted.
  */
 class SlackAppFactory {
+  /** Apps whose manifest already asks for every required scope. */
+  private readonly manifestsWithScopes = new Set<string>();
+
   /** Validate and store an app configuration token pair. */
   async saveConfigToken(params: {
     accessToken: string;
@@ -273,6 +277,55 @@ class SlackAppFactory {
       }
     }
     return results;
+  }
+
+  /**
+   * A new Archestra version can need a scope an app's manifest does not ask
+   * for yet, and a reinstall only grants what the manifest asks for. So when a
+   * bot Archestra manages is missing scopes, add them to its manifest; the
+   * reinstall the settings page then asks for grants them. Checked once per
+   * app and scope list per process. Never throws.
+   */
+  async ensureManifestScopes(bot: SlackAgentBotConfig): Promise<void> {
+    if (!bot.appId || !(bot.managed || bot.clientId)) return;
+    const key = `${bot.appId}:${SLACK_REQUIRED_BOT_SCOPES.join(",")}`;
+    if (this.manifestsWithScopes.has(key)) return;
+    try {
+      if (!(await this.hasConfigToken())) return;
+      const token = await this.getAccessToken();
+      const client = new WebClient();
+      const exported = await client.apps.manifest.export({
+        token,
+        app_id: bot.appId,
+      });
+      if (!exported.manifest) {
+        throw new Error(exported.error ?? "Slack returned no manifest");
+      }
+      const manifest = exported.manifest as Record<string, unknown>;
+      const asked =
+        (manifest.oauth_config as { scopes?: { bot?: string[] } } | undefined)
+          ?.scopes?.bot ?? [];
+      if (!SLACK_REQUIRED_BOT_SCOPES.every((scope) => asked.includes(scope))) {
+        await client.apps.manifest.update({
+          token,
+          app_id: bot.appId,
+          // Slack's own export, patched: it is a valid manifest by construction.
+          manifest: migrateSlackManifest(manifest) as unknown as Parameters<
+            WebClient["apps"]["manifest"]["update"]
+          >[0]["manifest"],
+        });
+        logger.info(
+          { appId: bot.appId },
+          "[SlackAppFactory] Added newly required scopes to a Slack app's manifest",
+        );
+      }
+      this.manifestsWithScopes.add(key);
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), appId: bot.appId },
+        "[SlackAppFactory] Could not add required scopes to a Slack app's manifest",
+      );
+    }
   }
 
   /**

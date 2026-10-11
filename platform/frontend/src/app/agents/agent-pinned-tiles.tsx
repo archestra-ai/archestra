@@ -89,6 +89,7 @@ export function AgentPinnedTiles({
           agent.lastUsedAt !== undefined
             ? `Last used ${formatRelativeTimeFromNow(agent.lastUsedAt ?? null, {
                 neverLabel: "never",
+                strict: true,
               })}`
             : (agent.description ?? ""),
         kind:

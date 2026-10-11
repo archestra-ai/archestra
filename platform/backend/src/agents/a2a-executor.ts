@@ -385,6 +385,7 @@ export async function executeA2AMessage(
       organizationId,
       userId,
       agentId: agent.id,
+      isFork: params.selfFork === true,
     });
 
     logger.info(

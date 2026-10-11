@@ -76,6 +76,50 @@ test("organization filtering preserves mixed-owner isolation without per-row own
   expect(ownerReads.every((node) => node["Actual Loops"] <= 1)).toBe(true);
 });
 
+test("user filters rank only visible activity and preserve users with matching names", async ({
+  makeOrganization,
+  makeAgent,
+  makeUser,
+}) => {
+  const local = await makeOrganization();
+  const other = await makeOrganization();
+  const agent = await makeAgent({ organizationId: local.id });
+  const foreignAgent = await makeAgent({ organizationId: other.id });
+  const first = await makeUser({ name: "Alpha" });
+  const second = await makeUser({ name: "Alpha" });
+  const third = await makeUser({ name: "Zulu" });
+  for (const [userId, profileId] of [
+    [first.id, agent.id],
+    [second.id, agent.id],
+    [third.id, agent.id],
+    [third.id, foreignAgent.id],
+    [third.id, foreignAgent.id],
+  ]) {
+    await InteractionModel.create({
+      userId,
+      profileId,
+      type: "openai:chatCompletions",
+      request: { model: "example", messages: [] },
+      response: {
+        id: "example",
+        object: "chat.completion",
+        created: 0,
+        model: "example",
+        choices: [],
+      },
+    });
+  }
+  expect(
+    await InteractionModel.getUniqueUserIds({
+      organizationId: local.id,
+      isAgentAdmin: true,
+    }),
+  ).toEqual([
+    ...[first.id, second.id].sort().map((id) => ({ id, name: "Alpha" })),
+    { id: third.id, name: "Zulu" },
+  ]);
+});
+
 // === internals ===
 type PlanNode = {
   "Relation Name"?: string;

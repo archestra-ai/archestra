@@ -3,7 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
+import {
+  useAllChatOpsBindings,
+  useChatOpsStatus,
+} from "@/lib/chatops/chatops.query";
 import {
   useSlackAgentBotChannels,
   useSlackAgentBots,
@@ -15,6 +18,10 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/chatops/chatops.query", () => ({
   useAllChatOpsBindings: vi.fn(),
+  useChatOpsStatus: vi.fn(),
+}));
+vi.mock("@/lib/config/config.query", () => ({
+  useConfig: () => ({ data: { features: { chatopsTelegramEnabled: true } } }),
 }));
 vi.mock("@/lib/chatops/chatops-config.query", () => ({
   useSlackAgentBots: vi.fn(),
@@ -69,6 +76,15 @@ function mockBotChannels(memberCount: number) {
   } as unknown as ReturnType<typeof useSlackAgentBotChannels>);
 }
 
+function mockConnectedApps(ids: string[]) {
+  vi.mocked(useChatOpsStatus).mockReturnValue({
+    data: ["slack", "ms-teams", "telegram"].map((id) => ({
+      id,
+      configured: ids.includes(id),
+    })),
+  } as unknown as ReturnType<typeof useChatOpsStatus>);
+}
+
 function mockSetupReady(ready: boolean) {
   vi.mocked(useAgentRuntimePreflight).mockReturnValue({
     data: { ready },
@@ -85,6 +101,7 @@ beforeEach(() => {
   mockBindings([]);
   mockSlackBots([]);
   mockBotChannels(0);
+  mockConnectedApps(["slack", "ms-teams", "telegram"]);
 });
 
 describe("AgentWorkSources", () => {
@@ -162,7 +179,9 @@ describe("AgentWorkSources", () => {
       screen.getByRole("button", { name: "Show A2A details" }),
     );
     expect(showA2a).toHaveBeenCalledOnce();
-    expect(screen.getByRole("link", { name: "Add a channel" })).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Add MS Teams channel" }),
+    ).toHaveAttribute("href", "/agents/a1/edit?step=messaging");
     expect(
       screen.getByRole("link", { name: "Set up Agent Runtime" }),
     ).toHaveAttribute("href", "/agents/a1/edit");
@@ -253,12 +272,44 @@ describe("AgentWorkSources", () => {
 
     renderBuiltIn();
 
-    expect(screen.getByText(/Give it a Slack bot/)).toBeVisible();
+    expect(
+      screen.getByText(/Add it to Slack, MS Teams or Telegram/),
+    ).toBeVisible();
     expect(screen.getByRole("link", { name: "Add Slack bot" })).toHaveAttribute(
       "href",
       "/settings/messaging-channels/slack?addBot=a1",
     );
+    expect(
+      screen.getByRole("link", { name: "Add Telegram channel" }),
+    ).toBeVisible();
     expect(screen.queryByRole("link", { name: "Add a channel" })).toBeNull();
+  });
+
+  it("offers only the chat apps the organization has connected", () => {
+    mockSlackBots([], { perAgent: true });
+    mockConnectedApps(["ms-teams"]);
+
+    renderBuiltIn();
+
+    expect(screen.getByText(/Add it to MS Teams and people/)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Add MS Teams channel" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Add Slack bot" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Add Telegram channel" }),
+    ).toBeNull();
+  });
+
+  it("points to chat app setup when none is connected", () => {
+    mockConnectedApps([]);
+
+    renderBuiltIn();
+
+    expect(screen.getByText(/Once Slack, MS Teams or Telegram/)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Set up a chat app" }),
+    ).toHaveAttribute("href", "/settings/messaging-channels");
   });
 
   it("warns that Slack channels assigned to the agent have no bot to answer", () => {

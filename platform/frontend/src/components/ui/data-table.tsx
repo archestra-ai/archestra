@@ -128,6 +128,12 @@ interface DataTableProps<TData, TValue> {
   fixedWidthColumnIds?: string[];
   /** Column ids that absorb remaining table width. */
   flexibleColumnIds?: string[];
+  /**
+   * Columns to drop first, in this order, when the table does not fit its
+   * container; the rest drop right to left after them. For a table whose
+   * least useful columns are not its last ones.
+   */
+  columnDropOrder?: string[];
 }
 
 export function DataTable<TData, TValue>({
@@ -164,6 +170,7 @@ export function DataTable<TData, TValue>({
   tableClassName,
   fixedWidthColumnIds = [],
   flexibleColumnIds = [],
+  columnDropOrder = [],
 }: DataTableProps<TData, TValue>) {
   const localRangeSelection = useBulkRangeSelectionController();
   const rangeSelection = controlledRangeSelection ?? localRangeSelection;
@@ -315,6 +322,7 @@ export function DataTable<TData, TValue>({
         columns: shownByChoice,
         width: containerWidth,
         flexibleColumnIds,
+        dropOrder: columnDropOrder,
       });
   const nextAutoHiddenKey = nextAutoHidden.join(",");
   React.useLayoutEffect(() => {
@@ -662,17 +670,18 @@ function getColumnStyle(params: {
 }
 
 /**
- * The columns to drop, right to left, until the table's minimum width fits
- * `width`. Kept whatever the width: the selection checkbox, the actions, the
- * flexible columns and the first data column (each row's name), and any
- * column marked `enableHiding: false`.
+ * The columns to drop until the table's minimum width fits `width`: those in
+ * `dropOrder` first, then the rest right to left. Kept whatever the width:
+ * the selection checkbox, the actions, the flexible columns and the first
+ * data column (each row's name), and any column marked `enableHiding: false`.
  */
 function columnsToFit<TData>(params: {
   columns: Column<TData, unknown>[];
   width: number;
   flexibleColumnIds: string[];
+  dropOrder: string[];
 }): string[] {
-  const { columns, width, flexibleColumnIds } = params;
+  const { columns, width, flexibleColumnIds, dropOrder } = params;
   const firstDataColumnId = columns.find(
     (column) => column.id !== SELECT_COLUMN_ID,
   )?.id;
@@ -685,7 +694,14 @@ function columnsToFit<TData>(params: {
         !flexibleColumnIds.includes(column.id) &&
         column.columnDef.enableHiding !== false,
     )
-    .reverse();
+    .reverse()
+    .sort((a, b) => dropRank(a.id) - dropRank(b.id));
+  // Listed columns rank by their place in the list; the rest share the
+  // last rank, and a stable sort keeps them right to left.
+  function dropRank(id: string): number {
+    const index = dropOrder.indexOf(id);
+    return index === -1 ? dropOrder.length : index;
+  }
   const hidden: string[] = [];
   let shown = columns;
   for (const column of droppable) {

@@ -251,7 +251,7 @@ describe("DataTable in a narrow container", () => {
       { id: "actions", header: "Actions", size: 160, cell: () => null },
     ];
     try {
-      const { container } = render(
+      const { container, rerender } = render(
         <DataTable
           columns={columns}
           data={[{ name: "row", files: 1 }]}
@@ -264,6 +264,22 @@ describe("DataTable in a narrow container", () => {
       );
       // 48 + 180 + 220 + 220 + 160 is wider than 700; without Owner it fits.
       expect(headers).toEqual(["select", "name", "issue", "actions"]);
+
+      // A table that names its least useful column drops that one instead.
+      rerender(
+        <DataTable
+          columns={columns}
+          data={[{ name: "row", files: 1 }]}
+          fixedWidthColumnIds={["select", "issue", "owner", "actions"]}
+          flexibleColumnIds={["name"]}
+          columnDropOrder={["issue"]}
+        />,
+      );
+      expect(
+        [...container.querySelectorAll("th")].map((th) =>
+          th.getAttribute("data-column-id"),
+        ),
+      ).toEqual(["select", "name", "owner", "actions"]);
     } finally {
       width.mockRestore();
       vi.unstubAllGlobals();

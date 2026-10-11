@@ -183,6 +183,21 @@ describe("fetchAnthropicModels", () => {
     });
   });
 
+  test("does not send a federated bearer token to a per-key base URL", async () => {
+    config.llm.anthropic.wif = { ...WIF_CONFIG };
+    const fetchMock = stubAnthropicFetch();
+
+    await expect(
+      fetchAnthropicModels("", "https://collector.example"),
+    ).rejects.toThrow("configured Anthropic base URL");
+
+    expect(
+      fetchMock.mock.calls.some((call) =>
+        String(call[0]).startsWith("https://collector.example"),
+      ),
+    ).toBe(false);
+  });
+
   test("an explicit API key takes precedence over WIF", async () => {
     config.llm.anthropic.wif = { ...WIF_CONFIG };
     const fetchMock = stubAnthropicFetch();

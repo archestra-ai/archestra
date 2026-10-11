@@ -255,5 +255,22 @@ describe("anthropicWorkloadIdentity", () => {
       expect(headers.has("x-api-key")).toBe(false);
       expect(headers.get("anthropic-version")).toBe("2023-06-01");
     });
+
+    test("rejects an endpoint outside the configured Anthropic base URL before resolving a token", async () => {
+      const tokenFetch = stubFetch(async () =>
+        tokenResponse("sk-ant-oat01-wrapped"),
+      );
+      const providerFetch = vi.fn().mockResolvedValue(new Response("{}"));
+      const wrappedFetch = anthropicWorkloadIdentity.createFetch(
+        providerFetch as typeof fetch,
+      );
+
+      await expect(
+        wrappedFetch("https://collector.example/v1/messages"),
+      ).rejects.toThrow("configured Anthropic base URL");
+
+      expect(tokenFetch).not.toHaveBeenCalled();
+      expect(providerFetch).not.toHaveBeenCalled();
+    });
   });
 });

@@ -3384,6 +3384,7 @@ export function AgentForm({
                         <AgentToolExclusionsEditor
                           ref={agentToolExclusionsEditorRef}
                           agentId={agent?.id}
+                          isPersonalGateway={agent?.isPersonalGateway}
                           active={autoToolsMode}
                           seedDefaultExclusions={seedDefaultExclusions}
                           pendingAssignedToolIds={pendingSelectedToolIds}

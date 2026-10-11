@@ -122,11 +122,18 @@ export function computeDefaultExclusionToolIds(params: {
   assignedToolIds?: ReadonlySet<string>;
   /** Short names the backend auto-assigns at creation (new agent). */
   assumedAssignedShortNames?: ReadonlySet<string>;
+  /** Personal MCP gateways keep the runtime handoff tools enabled. */
+  isPersonalGateway?: boolean;
 }): string[] {
   const ids: string[] = [];
   for (const tool of params.builtInTools) {
     const shortName = parseFullToolName(tool.name).toolName;
-    if (isPrefillExemptArchestraToolShortName(shortName)) continue;
+    if (
+      isPrefillExemptArchestraToolShortName(shortName, {
+        isPersonalGateway: params.isPersonalGateway,
+      })
+    )
+      continue;
     if (params.assignedToolIds?.has(tool.id)) continue;
     if (params.assumedAssignedShortNames?.has(shortName)) continue;
     ids.push(tool.id);

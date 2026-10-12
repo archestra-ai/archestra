@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
-  BUILT_IN_AGENT_IDS,
   canDelegateScopedPermissions,
   hasScopedPermission,
   isBuiltInCatalogId,
   isResourcePermissionPreset,
   ManagedResourceSchema,
   ORGANIZATION_WIDE_RESOURCES,
+  PERMISSIONS_LOCKOUT_CODE,
   type PermissionSubject,
   PredefinedRoleNameSchema,
   type ResourcePermissionAction,
@@ -14,6 +14,8 @@ import {
   type ResourcePermissionGrant,
   type ResourcePermissionScope,
   ResourcePermissionScopeSchema,
+  ROLE_ASSIGNMENT_BLOCKED_CODE,
+  type RoleAssignmentBlockedDetails,
   roleDisplayNames,
   type ScopedPermission,
   type ScopedResource,
@@ -48,20 +50,28 @@ export class ResourcePermissions {
    * it. Without this, one member sharing a chat with the Member role would
    * stop every administrator from assigning Member to anyone. Grants kept on
    * a deleted object are skipped too: they reach nothing.
+   *
+   * A caller who can edit organization-wide policies skips the check: they
+   * can already grant themselves Full access on every object at `*`, so
+   * refusing them protects nothing. Without this, a custom role holding every
+   * permission still cannot assign a role, because only the built-in admin
+   * roles are seeded with `*` grants.
+   *
+   * A refusal names every object that blocked it (see
+   * {@link RoleAssignmentBlockedDetails}), so the caller learns what to fix.
    */
   static async validateSubjectAssignment(params: {
     organizationId: string;
     userId: string;
     subjects: PermissionSubject[];
   }): Promise<void> {
+    if (await ResourcePermissions.canManageGlobalPolicy(params)) return;
     const policies =
       await ResourcePermissionPolicyModel.findForSubjects(params);
     const keys = new Set(params.subjects.map(subjectKey));
-    const canManageGlobal =
-      await ResourcePermissions.canManageGlobalPolicy(params);
+    const blocked: RoleAssignmentBlockedDetails["items"] = [];
     for (const policy of policies) {
       if (!ManagedResourceSchema.safeParse(policy.resource).success) continue;
-      if (policy.scope === "*" && canManageGlobal) continue;
       if (isSessionObject({ resource: policy.resource, scope: policy.scope }))
         continue;
       const requested = policy.grants
@@ -91,11 +101,37 @@ export class ResourcePermissions {
       if (reservedToAuthor({ ...context, target })) continue;
       const grants = await ResourcePermissions.resolve(context);
       if (!canDelegateScopedPermissions({ grants, requested })) {
-        throw new ApiError(
-          403,
-          "You cannot assign a role or team whose scoped permissions you cannot grant",
-        );
+        // Delegating an action takes the action itself plus the right to
+        // share the object.
+        const needed = new Set<ResourcePermissionAction>([
+          ...requested.map((permission) => permission.action),
+          "manage-permissions",
+        ]);
+        blocked.push({
+          resource: ManagedResourceSchema.parse(policy.resource),
+          scope: policy.scope,
+          name: target?.name ?? null,
+          missing: ResourcePermissionActionSchema.options.filter(
+            (action) =>
+              needed.has(action) &&
+              !hasScopedPermission({
+                grants,
+                required: {
+                  organizationId: params.organizationId,
+                  resource: policy.resource,
+                  scope: policy.scope,
+                  action,
+                },
+              }),
+          ),
+        });
       }
+    }
+    if (blocked.length) {
+      throw roleAssignmentBlockedError({
+        subjectType: params.subjects[0]?.type === "team" ? "team" : "role",
+        items: blocked,
+      });
     }
   }
 
@@ -268,7 +304,11 @@ export class ResourcePermissions {
       );
   }
 
-  /** Move the previous owner's direct grant to the new owner after the row changed hands. */
+  /**
+   * Give the new owner the previous owner's direct grant after the row
+   * changed hands. The previous owner keeps theirs, so a handoff never locks
+   * out the person who made it; removing them is an ordinary grant edit.
+   */
   static async transferOwnerGrant(params: {
     organizationId: string;
     resource: ScopedResource;
@@ -277,7 +317,7 @@ export class ResourcePermissions {
     ownerId: string;
   }): Promise<void> {
     if (!params.previousOwnerId) return;
-    await ResourcePermissionPolicyModel.transferSubjectGrant({
+    await ResourcePermissionPolicyModel.copySubjectGrant({
       organizationId: params.organizationId,
       resource: params.resource,
       scope: params.scope,
@@ -394,6 +434,7 @@ export class ResourcePermissions {
       resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
       name: effective.target?.name ?? "All resources",
+      ownerId: ownerUserId(effective.target?.authorId),
       revision: policy?.revision ?? 0,
       grants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
@@ -407,6 +448,7 @@ export class ResourcePermissions {
         ...params,
         grants: effective.grants,
       }),
+      actorSubjects: await ResourcePermissions.getSubjects(params),
     };
   }
 
@@ -435,7 +477,23 @@ export class ResourcePermissions {
       if (target?.enabled === false)
         throw new ApiError(400, "Encrypted chats cannot be shared");
     }
-    await ResourcePermissions.assertAdvisorStaysOrganizationWide(params);
+    if (params.resource === "mcpGateway" && params.scope !== "*") {
+      // A personal gateway serves its owner's own installs and credentials,
+      // and is cleaned up with them when the owner's account goes.
+      const personal = await AgentModel.findPersonalMcpGatewayAuthor({
+        id: params.scope,
+        organizationId: params.organizationId,
+      });
+      if (
+        personal &&
+        params.grants.some(
+          (grant) =>
+            grant.subject.type !== "user" ||
+            grant.subject.id !== personal.authorId,
+        )
+      )
+        throw new ApiError(400, "Personal MCP gateways cannot be shared");
+    }
     const effective = await ResourcePermissions.getEffective(params);
     await ResourcePermissions.assertNoStaticPinsBroken({
       ...params,
@@ -465,6 +523,7 @@ export class ResourcePermissions {
       resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
       name: effective.target?.name ?? "All resources",
+      ownerId: ownerUserId(effective.target?.authorId),
       revision: policy.revision,
       grants: await ResourcePermissions.describeGrants({
         organizationId: params.organizationId,
@@ -481,6 +540,7 @@ export class ResourcePermissions {
         ...params,
         grants: updated.grants,
       }),
+      actorSubjects: await ResourcePermissions.getSubjects(params),
     };
   }
   /**
@@ -629,6 +689,7 @@ export class ResourcePermissions {
           "Granular access control requires an active Enterprise entitlement or the small-team allowance.",
         );
     }
+    await ResourcePermissions.assertSomeoneStillManages(params);
     await ResourcePermissions.validateRecipients(params);
     const policy = await ResourcePermissionPolicyModel.replace(params);
     if (!policy)
@@ -644,28 +705,6 @@ export class ResourcePermissions {
    * an agent or app out of the connection's team would leave the pin using a
    * credential its audience no longer shares, so the edit is refused.
    */
-  /**
-   * The advisor is one row that every agent in the organization reaches
-   * through delegation. Grants that no longer reach the whole organization
-   * would hide it from everyone outside them, so they are refused.
-   */
-  private static async assertAdvisorStaysOrganizationWide(
-    params: PermissionContext & { grants: ResourcePermissionGrant[] },
-  ) {
-    if (params.resource !== "agent" || params.scope === "*") return;
-    const advisor = await AgentModel.getBuiltInAgent(
-      BUILT_IN_AGENT_IDS.ADVISOR,
-      params.organizationId,
-    );
-    if (advisor?.id !== params.scope) return;
-    const next = ResourcePermissionPolicyModel.audienceOfGrants(params.grants);
-    if (next.audience !== "org")
-      throw new ApiError(
-        400,
-        "The Advisor is shared by the whole organization and cannot be narrowed",
-      );
-  }
-
   private static async assertNoStaticPinsBroken(
     params: PermissionContext & {
       grants: ResourcePermissionGrant[];
@@ -699,6 +738,41 @@ export class ResourcePermissions {
       permissions.accessPolicies?.some(
         (action) => action === "read" || action === "update",
       ) ?? false
+    );
+  }
+
+  /**
+   * Refuse a save that leaves nobody able to manage what the policy covers.
+   *
+   * On `*` this is what keeps an organization from lowering every role to
+   * "Can view": afterwards nobody can edit, delete, or share an object
+   * somebody else created, and the editor that undoes it is a screen few
+   * people find. On one object an inherited `*` manager still reaches it, so
+   * only a save that removes the last manager of both is refused. A policy
+   * nobody managed before the save is left alone, so this never blocks
+   * tidying an already orphaned one. Sessions are skipped: their owner always
+   * manages them.
+   */
+  private static async assertSomeoneStillManages(
+    params: PermissionContext & { grants: ResourcePermissionGrant[] },
+  ) {
+    if (isSessionObject(params)) return;
+    const manages = (grants: readonly ResourcePermissionGrant[]) =>
+      grants.some((grant) => grant.actions.includes("manage-permissions"));
+    if (params.scope !== "*") {
+      const inherited = inheritedPolicyGrants({
+        policies: await ResourcePermissionPolicyModel.findApplicable(params),
+        scope: params.scope,
+      });
+      if (manages(inherited)) return;
+    }
+    if (manages(params.grants)) return;
+    const current = await ResourcePermissionPolicyModel.find(params);
+    if (!manages(current?.grants ?? [])) return;
+    throw new ApiError(
+      400,
+      "At least one recipient must keep Full access. Without it, nobody can edit, delete, or share these items.",
+      PERMISSIONS_LOCKOUT_CODE,
     );
   }
 
@@ -842,6 +916,30 @@ function reservedToAuthor(params: {
   return params.resource === "llmProviderApiKey" && !!target.authorId;
 }
 
+/** The refusal names at most this many objects; `total` counts the rest. */
+const MAX_BLOCKED_ITEMS = 20;
+
+function roleAssignmentBlockedError(params: {
+  subjectType: RoleAssignmentBlockedDetails["subjectType"];
+  items: RoleAssignmentBlockedDetails["items"];
+}): ApiError {
+  const total = params.items.length;
+  const error = new ApiError(
+    403,
+    `Giving someone a ${params.subjectType} also shares every item in that ${params.subjectType}. ` +
+      "You can only share an item if you can manage its permissions. " +
+      `You don't have manage-permissions on ${total} ${total === 1 ? "item" : "items"} in this ${params.subjectType}. ` +
+      `accessPolicies:update would let you assign any ${params.subjectType}.`,
+    ROLE_ASSIGNMENT_BLOCKED_CODE,
+  );
+  error.details = {
+    subjectType: params.subjectType,
+    items: params.items.slice(0, MAX_BLOCKED_ITEMS),
+    total,
+  } satisfies RoleAssignmentBlockedDetails;
+  return error;
+}
+
 function subjectKey(subject: PermissionSubject): string {
   return JSON.stringify([subject.type, subject.id]);
 }
@@ -909,4 +1007,11 @@ function effectiveActionsForPolicy(
       },
     }),
   );
+}
+
+/** The author as a person, or null when nobody or a service account is. */
+function ownerUserId(authorId: string | null | undefined): string | null {
+  if (!authorId || authorId.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX))
+    return null;
+  return authorId;
 }

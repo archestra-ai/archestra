@@ -490,7 +490,7 @@ describe("custom role routes", () => {
       url: "/api/roles",
       payload: {
         name: "Test Role",
-        permission: { agent: ["read"], toolPolicy: ["read", "create"] },
+        permission: { agent: ["read"], mcpRegistry: ["read", "create"] },
       },
     });
 
@@ -500,7 +500,7 @@ describe("custom role routes", () => {
     expect(role.name).toBe("Test Role");
     expect(role.permission).toEqual({
       agent: ["read"],
-      toolPolicy: ["read", "create"],
+      mcpRegistry: ["read", "create"],
     });
     expect(role.predefined).toBe(false);
     expect(
@@ -574,7 +574,7 @@ describe("custom role routes", () => {
   test("POST /api/roles creates role with multiple complex permissions", async () => {
     const complexPermissions = {
       agent: ["read", "create", "delete"],
-      toolPolicy: ["read", "create", "update", "delete"],
+      llmLimit: ["read", "create", "update", "delete"],
       log: ["read"],
       mcpServerInstallation: ["read", "create", "delete"],
     };
@@ -628,7 +628,7 @@ describe("custom role routes", () => {
 
     const newPermissions = {
       agent: ["read", "create"],
-      toolPolicy: ["read"],
+      mcpRegistry: ["read"],
     };
 
     const response = await app.inject({

@@ -2,7 +2,7 @@
 title: Performance & Latency
 description: Reproducible LLM proxy latency measurements with a mock inference upstream
 order: 5
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -44,7 +44,7 @@ Added P50 is the proxy median minus the direct mock median. It estimates added l
 - **Data:** Disposable database, default configuration, synthetic requests
 - **Authentication:** Synthetic provider-key passthrough
 
-The backend uses the standard request path, including interaction persistence. Saving a streaming interaction does not delay the response to the client. The run excludes virtual-key validation, configured policy decisions, quarantine inference, and MCP execution.
+The backend uses the standard request path, including interaction persistence. Saving a streaming interaction does not delay the response to the client. The run excludes virtual-key validation, configured policy decisions and MCP execution.
 
 ## Method
 

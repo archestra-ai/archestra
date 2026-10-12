@@ -58,7 +58,6 @@ export async function serializeAgentForExport(
       systemPrompt: agent.systemPrompt,
       icon: agent.icon,
       scope: agent.scope,
-      considerContextUntrusted: agent.considerContextUntrusted,
       toolExposureMode: agent.toolExposureMode,
       missingCredentialBehavior: agent.missingCredentialBehavior,
       accessAllTools: agent.accessAllTools,

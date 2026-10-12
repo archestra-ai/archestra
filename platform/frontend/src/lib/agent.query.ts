@@ -21,7 +21,9 @@ import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import {
   BOOTSTRAP_QUERY_RETRY,
+  flushPersistedQueryCache,
   PERSISTED_QUERY_META,
+  seedOnlyStaleTime,
 } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
@@ -32,6 +34,7 @@ const {
   deleteAgent,
   exportAgent,
   getAgentCredentialReadiness,
+  getAgentDefaultSuggestedPrompts,
   getAgents,
   getAllAgents,
   getDefaultMcpGateway,
@@ -47,18 +50,6 @@ const {
   pinAgent,
   unpinAgent,
 } = archestraApiSdk;
-
-/** How many gateways a "Show" selection holds, for the filter's counts. */
-export async function countGateways(params: {
-  access: ResourceAccessRelation[];
-  agentTypes: Array<"mcp_gateway" | "profile">;
-}): Promise<number> {
-  const { data, error } = await getAgents({
-    query: { limit: 1, offset: 0, ...params },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.pagination.total ?? 0;
-}
 
 /**
  * The roster, without each agent's tools. No consumer of this list reads them
@@ -102,14 +93,8 @@ async function fetchChatAgents() {
 const delegationTargetAgentsQuery = {
   agentType: "agent",
   excludeBuiltIn: true,
-  includeAdvisor: true,
 } as const;
 
-/**
- * Agents that can be picked as a subagent. Separate from
- * {@link useInternalAgents} because the advisor belongs here and nowhere else:
- * it is a target to delegate to, not an agent to start a conversation with.
- */
 export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["agents", "all", delegationTargetAgentsQuery],
@@ -214,11 +199,15 @@ export function useProfilesPaginated(
     excludeAuthorIds,
     excludeOtherPersonalAgents,
     access,
+    sharedWith,
+    owner,
     labels,
     status,
     includeActivationSkillsCount,
     providerApiKeyId,
     pinned,
+    ids,
+    excludeIds,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -236,6 +225,8 @@ export function useProfilesPaginated(
     excludeAuthorIds === undefined &&
     excludeOtherPersonalAgents === initialDataExcludeOtherPersonalAgents &&
     isSameResourceAccess(access, initialDataAccess) &&
+    sharedWith === undefined &&
+    owner === undefined &&
     pinned === initialDataPinned &&
     labels === undefined &&
     status === undefined &&
@@ -259,11 +250,15 @@ export function useProfilesPaginated(
         excludeAuthorIds,
         excludeOtherPersonalAgents,
         access,
+        sharedWith,
+        owner,
         labels,
         status,
         includeActivationSkillsCount,
         providerApiKeyId,
         pinned,
+        ids,
+        excludeIds,
       },
     ],
     queryFn: async () => {
@@ -281,11 +276,15 @@ export function useProfilesPaginated(
           excludeAuthorIds,
           excludeOtherPersonalAgents,
           access,
+          sharedWith,
+          owner,
           labels,
           status,
           includeActivationSkillsCount,
           providerApiKeyId,
           pinned,
+          ids,
+          excludeIds,
         },
       });
       throwOnApiError(error, { toastOnError: false });
@@ -296,6 +295,9 @@ export function useProfilesPaginated(
     // A reload can restore the snapshot saved just before a pin mutation.
     // Revalidate both sections even while that snapshot is considered fresh.
     refetchOnMount: pinned !== undefined ? "always" : true,
+    ...(pinned !== undefined && {
+      staleTime: seedOnlyStaleTime(useInitialData ? initialData : undefined),
+    }),
     // The list pages restore their last rows on refresh and swap in the fresh
     // page when it lands, so a reload lands on a filled table rather than an
     // empty one. Keyed by the full filter set, so a restored page only ever
@@ -445,10 +447,14 @@ export function useUpdateProfile(options?: { successMessage?: string }) {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
+      queryClient.removeQueries({ queryKey: ["agents"], type: "inactive" });
       // Immediately update the specific agent's cache so navigating to
       // chat (or any other page using useProfile) shows fresh data
       queryClient.setQueryData(["agents", variables.id], data);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents", variables.id, "mcp-tools"],
+      });
       if (options?.successMessage) {
         toast.success(options.successMessage);
       }
@@ -465,6 +471,7 @@ export function useUpdateProfile(options?: { successMessage?: string }) {
       if (variables.data?.knowledgeBaseIds !== undefined) {
         queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       }
+      flushPersistedQueryCache(queryClient);
     },
   });
 }
@@ -616,12 +623,42 @@ export const memberDefaultAgentQueryKey = ["member-default-agent"] as const;
  */
 export function useDefaultAgentId() {
   return useQuery({
-    queryKey: memberDefaultAgentQueryKey,
+    ...memberAgentsQuery,
+    select: (agents) => agents.defaultAgentId,
+  });
+}
+
+/**
+ * The current user's personal chat agent: the oldest live personal agent they
+ * authored (the assistant seeded at their first login, unless deleted). It is
+ * reported whether or not it is also their default.
+ */
+export function usePersonalChatAgentId() {
+  return useQuery({
+    ...memberAgentsQuery,
+    select: (agents) => agents.personalChatAgentId,
+  });
+}
+
+/**
+ * Suggested prompts the platform offers for an agent with none of its own
+ * (today: the docs servers' prompts on the caller's personal assistant). The
+ * backend decides which apply. They are never stored on the agent.
+ */
+export function useAgentDefaultSuggestedPrompts(
+  agentId: string | null | undefined,
+  params: { enabled: boolean },
+) {
+  return useQuery({
+    queryKey: ["agents", agentId, "default-suggested-prompts"],
     queryFn: async () => {
-      const { data, error } = await getMemberDefaultAgent();
+      const { data, error } = await getAgentDefaultSuggestedPrompts({
+        path: { id: agentId as string },
+      });
       throwOnApiError(error, { toastOnError: false });
-      return data?.defaultAgentId ?? null;
+      return data ?? [];
     },
+    enabled: params.enabled && Boolean(agentId),
   });
 }
 
@@ -642,7 +679,13 @@ export function useUpdateDefaultAgentId() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      queryClient.setQueryData(memberDefaultAgentQueryKey, data.defaultAgentId);
+      queryClient.setQueryData<MemberAgents>(
+        memberDefaultAgentQueryKey,
+        (previous) => ({
+          personalChatAgentId: previous?.personalChatAgentId ?? null,
+          defaultAgentId: data.defaultAgentId,
+        }),
+      );
     },
   });
 }
@@ -798,3 +841,21 @@ function findCachedAgent(
   }
   return undefined;
 }
+
+type MemberAgents = {
+  defaultAgentId: string | null;
+  personalChatAgentId: string | null;
+};
+
+/** One read for both of the member's agents, shared by the hooks above. */
+const memberAgentsQuery = {
+  queryKey: memberDefaultAgentQueryKey,
+  queryFn: async (): Promise<MemberAgents> => {
+    const { data, error } = await getMemberDefaultAgent();
+    throwOnApiError(error, { toastOnError: false });
+    return {
+      defaultAgentId: data?.defaultAgentId ?? null,
+      personalChatAgentId: data?.personalChatAgentId ?? null,
+    };
+  },
+};

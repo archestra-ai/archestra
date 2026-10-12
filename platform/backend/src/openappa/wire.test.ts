@@ -4158,6 +4158,57 @@ describe("provider-bound sanitizer", () => {
     expect(functionCall).toEqual(unboundNotice);
     expect(toolFree).toEqual(asSent);
   });
+
+  test("still restores a forwarded body's history after stripping a proxy mark", () => {
+    const stamp = stampToolCallId({
+      callId: "call_1",
+      sessionId: "session-1",
+      organizationId: ORG,
+      callerId: "user:alice",
+      secret: SECRET,
+    });
+    const inputTokens = {
+      model: "gpt-5.5",
+      input: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [
+            {
+              type: "output_text",
+              text: appendSessionReceipt("summary", "AAA-AAAA"),
+            },
+          ],
+        },
+        {
+          type: "function_call",
+          call_id: stamp,
+          name: NOTICE,
+          arguments: JSON.stringify(
+            notice("shell", { command: "ls" }, "call_1"),
+          ),
+        },
+        { type: "function_call_output", call_id: stamp, output: "shown" },
+      ],
+    };
+
+    expect(sanitizeForwardedRequest(inputTokens)).toBe(true);
+
+    expect(inputTokens.input).toEqual([
+      {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "summary" }],
+      },
+      {
+        type: "function_call",
+        call_id: "call_1",
+        name: "shell",
+        arguments: JSON.stringify({ command: "ls" }),
+      },
+      { type: "function_call_output", call_id: "call_1", output: RULING },
+    ]);
+  });
 });
 
 function notice(

@@ -9,11 +9,19 @@ type AppaGithubSource = NonNullable<
   NonNullable<ReturnType<typeof useAppaGithubSync>["data"]>["source"]
 >;
 
-export function GithubManagedPolicyNotice() {
+export function GithubManagedPolicyNotice({
+  validationDirectory,
+}: {
+  validationDirectory?: string;
+} = {}) {
   const { data } = useAppaGithubSync();
   const source = data?.source;
   const failed = Boolean(source?.lastSyncError);
-  const href = githubPolicyFileUrl(source, "blob");
+  const validations = validationDirectory !== undefined;
+  const href =
+    validations && source?.repo
+      ? `https://github.com/${source.repo}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
+      : githubPolicyFileUrl(source, "blob");
 
   return (
     <InlineNotice variant={failed ? "error" : "neutral"}>
@@ -38,11 +46,17 @@ export function GithubManagedPolicyNotice() {
           <span>repository</span>
         )}{" "}
         <span>
-          {failed
-            ? "owns this policy, but its updates could not be synced."
-            : "owns this policy. Change its rules and batteries there."}
+          {validations
+            ? failed
+              ? "owns these validations, but its updates could not be synced."
+              : validationDirectory
+                ? "owns these validations. Change their files there."
+                : "owns these validations. Validations are disabled until you set a directory in sync settings."
+            : failed
+              ? "owns this policy, but its updates could not be synced."
+              : "owns this policy. Change its rules and batteries there."}
         </span>
-        {failed && (
+        {(failed || validationDirectory === "") && (
           <>
             {" "}
             <Link

@@ -60,7 +60,7 @@ describe("auth permissions", () => {
       expect(permissions.organization).toContain("update");
       expect(permissions.organization).toContain("delete");
       expect(permissions.agent).toBeDefined();
-      expect(permissions.toolPolicy).toBeDefined();
+      expect(permissions.mcpRegistry).toBeDefined();
 
       // Admin should have all resource permissions from allAvailableActions
       for (const [resource, actions] of Object.entries(allAvailableActions)) {
@@ -108,7 +108,7 @@ describe("auth permissions", () => {
       const customRole = await makeCustomRole(organizationId, {
         permission: {
           agent: ["read"],
-          toolPolicy: ["read"],
+          mcpRegistry: ["read"],
         },
       });
 
@@ -140,7 +140,7 @@ describe("auth permissions", () => {
 
       // Custom role should only have the explicitly granted permissions
       expect(permissions.agent).toEqual(["read"]);
-      expect(permissions.toolPolicy).toEqual(["read"]);
+      expect(permissions.mcpRegistry).toEqual(["read"]);
 
       // Custom role should NOT have organization-level permissions
       expect(permissions.organization).toBeUndefined();
@@ -185,7 +185,7 @@ describe("auth permissions", () => {
 
       // Members should have read access to agents
       expect(permissions.agent).toContain("read");
-      expect(permissions.toolPolicy).toEqual(["read"]);
+      expect(permissions.mcpRegistry).toEqual(["read"]);
 
       // Members should NOT have delete on organization
       expect(permissions.organization).not.toContain("delete");

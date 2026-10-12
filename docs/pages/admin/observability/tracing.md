@@ -2,7 +2,7 @@
 title: Tracing
 description: Send OpenTelemetry traces and logs for every LLM call, tool call, and agent run to your collector
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -121,7 +121,7 @@ Each tool call through the MCP Gateway is a span named `execute_tool {tool_name}
 | `gen_ai.tool.call.id` | The tool call ID |
 | `mcp.server.name` | The MCP server, for example `github` |
 | `mcp.is_error_result` | `true` when the tool returned an error result |
-| `mcp.blocked` | `true` when a [tool policy](/docs/agents/guardrails) blocked the call |
+| `mcp.blocked` | `true` when a [guardrail](/docs/agents/guardrails) blocked the call |
 | `mcp.blocked_reason` | Why the call was blocked |
 | `error.type` | The error class, when the call throws |
 

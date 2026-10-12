@@ -1169,6 +1169,7 @@ const HELP_TEXT = [
   "",
   "• Send me a message and I'll pass it to your assigned agent.",
   "• /select-agent — choose which agent answers in this chat.",
+  "• /reset — start a new conversation (outside topics).",
   "• AgentName > message — route one message to a different agent.",
   "• /start — link your Telegram account (DM only).",
 ].join("\n");

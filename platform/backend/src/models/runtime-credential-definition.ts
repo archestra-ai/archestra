@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type {
   InsertRuntimeCredentialDefinition,
@@ -112,6 +112,29 @@ export default class RuntimeCredentialDefinitionModel {
         ),
       )
       .orderBy(asc(schema.runtimeCredentialDefinitionsTable.name));
+  }
+
+  /** Definitions for one resolution batch, including absent keys. */
+  static async findByKeys(params: {
+    organizationId: string;
+    keys: string[];
+  }): Promise<Map<string, RuntimeCredentialDefinition>> {
+    if (params.keys.length === 0) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.runtimeCredentialDefinitionsTable)
+      .where(
+        and(
+          eq(
+            schema.runtimeCredentialDefinitionsTable.organizationId,
+            params.organizationId,
+          ),
+          inArray(schema.runtimeCredentialDefinitionsTable.key, [
+            ...new Set(params.keys),
+          ]),
+        ),
+      );
+    return new Map(rows.map((row) => [row.key, row]));
   }
 
   static async find(params: {

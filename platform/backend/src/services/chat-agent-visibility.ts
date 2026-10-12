@@ -1,6 +1,6 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { getAgentTypePermissionChecker } from "@/auth/agent-type-permissions";
-import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import { AgentModel } from "@/models";
 import type { Agent } from "@/types";
 
@@ -45,7 +45,7 @@ export async function chatAgentVisibilityFor(params: {
         (agent.builtIn &&
           (agent.builtInAgentConfig?.name !==
             BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG ||
-            !config.openappa.enabled))
+            !enterpriseTier.isOpenappaActive()))
       ) {
         return null;
       }

@@ -51,6 +51,7 @@ import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
 import { cleanupAfterMembershipRemoval } from "@/services/member-removal";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { ApiError } from "@/types";
 import type { AuditEventName } from "@/types/audit-log";
 import { devAutoLoginPlugin } from "./dev-auto-login";
 // SPDX-SnippetBegin
@@ -993,7 +994,15 @@ async function assertCallerCanGrantMemberRole(
       subjects: [{ type: "role", id: targetRole.id }],
     });
     // SPDX-SnippetEnd
-  } catch {
+  } catch (error) {
+    // The refusal names the objects that blocked it; keep that for the UI.
+    if (error instanceof ApiError && error.details) {
+      throw new APIError("FORBIDDEN", {
+        message: error.message,
+        code: error.internalCode,
+        details: error.details,
+      });
+    }
     throw new APIError("FORBIDDEN", {
       message:
         "You cannot assign a role whose scoped permissions you cannot grant",
@@ -1555,10 +1564,11 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
           expiresAt: invitation.expiresAt,
         };
 
-        // Delete placeholder user (cascades to member, invitation, user tokens)
-        await db
-          .delete(schema.usersTable)
-          .where(eq(schema.usersTable.id, existingUser.id));
+        // Delete placeholder user (cascades to member, invitation, user tokens).
+        // Through the model, not a raw delete: membership seeded the
+        // placeholder a personal MCP gateway, and `agents.author_id` is
+        // `set null`, so a raw delete would leave that gateway ownerless.
+        await UserModel.delete(existingUser.id);
 
         // Re-create invitation as "pending" for better-auth's normal sign-up flow
         await db.insert(schema.invitationsTable).values({

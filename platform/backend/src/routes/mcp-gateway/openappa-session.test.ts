@@ -3,7 +3,6 @@ import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TOOL_RUN_TOOL_FULL_NAME } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -31,10 +30,6 @@ import {
   stampRuntimeBinding,
   workloadPrincipal,
 } from "@/services/agent-runtime/runtime-identity";
-import {
-  CONNECTION_SETUP_CONTEXT_PARAM,
-  issueConnectionSetupContext,
-} from "@/services/connection-setup-context";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const RUNTIME_BINDING_ENV = "ARCHESTRA_AGENT_RUNTIME_BINDING";
@@ -70,7 +65,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
 
   beforeEach(async () => {
     openappa = config.openappa;
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -86,229 +81,6 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     config.openappa = openappa;
     vi.restoreAllMocks();
     await app.close();
-  });
-
-  describe("signed installer context", () => {
-    const secret = "test-offer-signing-secret-32chars";
-    let agentId: string;
-    let organizationId: string;
-    let userId: string;
-    let userToken: string;
-    let toolName: string;
-    let runToolAgentId: string;
-
-    beforeEach(
-      async ({
-        makeAgent,
-        makeAgentTool,
-        makeInternalMcpCatalog,
-        makeMember,
-        makeMcpServer,
-        makeTool,
-        makeToolPolicy,
-        makeUser,
-      }) => {
-        config.openappa = { ...config.openappa, offerSigningSecret: secret };
-        const agent = await makeAgent({ agentType: "mcp_gateway" });
-        const user = await makeUser();
-        await makeMember(user.id, agent.organizationId, { role: "admin" });
-        userToken = (await UserTokenModel.create(user.id, agent.organizationId))
-          .value;
-        const catalog = await makeInternalMcpCatalog({
-          organizationId: agent.organizationId,
-        });
-        await makeMcpServer({
-          catalogId: catalog.id,
-          ownerId: user.id,
-          scope: "personal",
-        });
-        const tool = await makeTool({
-          catalogId: catalog.id,
-          name: `connection_policy_${crypto.randomUUID().slice(0, 8)}`,
-        });
-        await makeAgentTool(agent.id, tool.id);
-        await makeToolPolicy(tool.id, {
-          action: "block_always",
-          reason: "Outside setup",
-          conditions: [
-            { key: "recipient", operator: "equal", value: "external" },
-          ],
-        });
-        const runToolAgent = await makeAgent({
-          organizationId: agent.organizationId,
-          agentType: "mcp_gateway",
-          toolExposureMode: "search_and_run_only",
-        });
-        await makeAgentTool(runToolAgent.id, tool.id);
-        agentId = agent.id;
-        organizationId = agent.organizationId;
-        userId = user.id;
-        toolName = tool.name;
-        runToolAgentId = runToolAgent.id;
-      },
-    );
-
-    function gatewayUrl(profileId: string, setupContext?: string) {
-      const url = new URL(`http://localhost/v1/mcp/${profileId}`);
-      if (setupContext) {
-        url.searchParams.set(CONNECTION_SETUP_CONTEXT_PARAM, setupContext);
-      }
-      return `${url.pathname}${url.search}`;
-    }
-
-    function issue(params: {
-      userId?: string;
-      organizationId?: string;
-      gatewayId?: string;
-    }) {
-      return issueConnectionSetupContext({
-        userId: params.userId ?? userId,
-        organizationId: params.organizationId ?? organizationId,
-        gatewayId: params.gatewayId ?? agentId,
-        setupId: crypto.randomUUID(),
-        secret,
-      });
-    }
-
-    function call(params: {
-      profileId?: string;
-      token?: string;
-      setupContext?: string;
-      sessionId?: string;
-      viaRunTool?: boolean;
-    }) {
-      return app.inject({
-        method: "POST",
-        url: gatewayUrl(params.profileId ?? agentId, params.setupContext),
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-          authorization: `Bearer ${params.token ?? userToken}`,
-          ...(params.sessionId
-            ? { "x-appa-session-id": params.sessionId }
-            : {}),
-        },
-        payload: {
-          jsonrpc: "2.0",
-          method: "tools/call",
-          params: params.viaRunTool
-            ? {
-                name: TOOL_RUN_TOOL_FULL_NAME,
-                arguments: {
-                  tool_name: toolName,
-                  tool_args: { recipient: "external" },
-                },
-              }
-            : { name: toolName, arguments: { recipient: "external" } },
-          id: 1,
-        },
-      });
-    }
-
-    test("bypasses the block for a signed URL and matching user token with no session header", async () => {
-      const allowed = await call({ setupContext: issue({}) });
-      expect(allowed.statusCode, allowed.body).toBe(200);
-      expect(allowed.body).not.toContain("Outside setup");
-
-      const nested = await call({
-        profileId: runToolAgentId,
-        setupContext: issue({ gatewayId: runToolAgentId }),
-        viaRunTool: true,
-      });
-      expect(nested.statusCode, nested.body).toBe(200);
-      expect(nested.body).not.toContain("Outside setup");
-    });
-
-    test("blocks the same user on an unmarked URL", async () => {
-      const blocked = await call({});
-      expect(blocked.statusCode, blocked.body).toBe(200);
-      expect(blocked.body).toContain("Outside setup");
-      expect(
-        (await call({ profileId: runToolAgentId, viaRunTool: true })).body,
-      ).toContain("Outside setup");
-    });
-
-    test("blocks a different user, organization, or gateway", async ({
-      makeMember,
-      makeUser,
-    }) => {
-      const other = await makeUser();
-      await makeMember(other.id, organizationId);
-      const { value: otherToken } = await UserTokenModel.create(
-        other.id,
-        organizationId,
-      );
-      const signed = issue({});
-      expect(
-        (await call({ token: otherToken, setupContext: signed })).body,
-      ).toContain("Outside setup");
-      expect(
-        (
-          await call({
-            setupContext: issue({ organizationId: crypto.randomUUID() }),
-          })
-        ).body,
-      ).toContain("Outside setup");
-      expect(
-        (
-          await call({
-            setupContext: issue({ gatewayId: runToolAgentId }),
-          })
-        ).body,
-      ).toContain("Outside setup");
-      expect(
-        (
-          await call({
-            profileId: runToolAgentId,
-            setupContext: signed,
-            viaRunTool: true,
-          })
-        ).body,
-      ).toContain("Outside setup");
-    });
-
-    test("blocks a tampered signed context", async () => {
-      const signed = issue({});
-      const tampered = `${signed.slice(0, -1)}${signed.endsWith("A") ? "B" : "A"}`;
-      const blocked = await call({ setupContext: tampered });
-      expect(blocked.statusCode, blocked.body).toBe(200);
-      expect(blocked.body).toContain("Outside setup");
-    });
-
-    test("rejects a signed context presented as Authorization", async () => {
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/mcp/${agentId}`,
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-          authorization: `Bearer ${issue({})}`,
-        },
-        payload: {
-          jsonrpc: "2.0",
-          method: "tools/call",
-          params: { name: toolName, arguments: { recipient: "external" } },
-          id: 1,
-        },
-      });
-      expect(response.statusCode, response.body).toBe(401);
-    });
-
-    test("does not bypass for a client session header alone", async () => {
-      const sessionId = crypto.randomUUID();
-      const blocked = await call({ sessionId });
-      expect(blocked.statusCode, blocked.body).toBe(200);
-      expect(blocked.body).toContain("Outside setup");
-      expect(
-        (
-          await call({
-            profileId: runToolAgentId,
-            sessionId,
-            viaRunTool: true,
-          })
-        ).body,
-      ).toContain("Outside setup");
-    });
   });
 
   test("uses bounded logical metadata for an external remedy receipt", async ({

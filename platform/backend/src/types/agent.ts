@@ -128,21 +128,6 @@ export type AgentScopeFilter = z.infer<typeof AgentScopeFilterSchema>;
 const OpenAppaConfigAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG),
 });
-// Policy Configuration Subagent config
-const PolicyConfigAgentConfigSchema = z.object({
-  name: z.literal(BUILT_IN_AGENT_IDS.POLICY_CONFIG),
-  autoConfigureOnToolDiscovery: z.boolean(),
-});
-
-const DualLlmMainAgentConfigSchema = z.object({
-  name: z.literal(BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN),
-  maxRounds: z.number().int().min(1).max(20),
-});
-
-const DualLlmQuarantineAgentConfigSchema = z.object({
-  name: z.literal(BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE),
-});
-
 const ContextCompactionAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION),
 });
@@ -155,32 +140,15 @@ const AppRuntimeAgentConfigSchema = z.object({
   name: z.literal(BUILT_IN_AGENT_IDS.APP_RUNTIME),
 });
 
-const AdvisorAgentConfigSchema = z.object({
-  name: z.literal(BUILT_IN_AGENT_IDS.ADVISOR),
-});
-
 // Discriminated union — add future built-in agents here
 export const BuiltInAgentConfigSchema = z.discriminatedUnion("name", [
   OpenAppaConfigAgentConfigSchema,
-  PolicyConfigAgentConfigSchema,
-  DualLlmMainAgentConfigSchema,
-  DualLlmQuarantineAgentConfigSchema,
   ContextCompactionAgentConfigSchema,
   ChatTitleGenerationAgentConfigSchema,
   AppRuntimeAgentConfigSchema,
-  AdvisorAgentConfigSchema,
 ]);
 
 export type BuiltInAgentConfig = z.infer<typeof BuiltInAgentConfigSchema>;
-export type PolicyConfigAgentConfig = z.infer<
-  typeof PolicyConfigAgentConfigSchema
->;
-export type DualLlmMainAgentConfig = z.infer<
-  typeof DualLlmMainAgentConfigSchema
->;
-export type DualLlmQuarantineAgentConfig = z.infer<
-  typeof DualLlmQuarantineAgentConfigSchema
->;
 export type ContextCompactionAgentConfig = z.infer<
   typeof ContextCompactionAgentConfigSchema
 >;
@@ -529,84 +497,3 @@ export type AgentAccessContext = Pick<
 >;
 export type InsertAgent = z.input<typeof InsertAgentSchema>;
 export type UpdateAgent = z.infer<typeof UpdateAgentSchema>;
-
-/**
- * Schema for auto-policy LLM analysis output.
- * Describes security policy recommendations for an MCP tool.
- */
-export const PolicyConfigSchema = z.object({
-  toolInvocationAction: z
-    .enum([
-      "allow_when_context_is_sensitive",
-      "block_when_context_is_sensitive",
-      "require_approval",
-      "block_always",
-    ])
-    .describe(
-      "When should this tool be allowed to be invoked? " +
-        "'allow_when_context_is_sensitive' - Allow invocation even when sensitive data is present (safe read-only tools). " +
-        "'block_when_context_is_sensitive' - Block when sensitive data is present, allow only when context is safe (tools that could leak data). " +
-        "'require_approval' - Require user confirmation before executing in chat; block in autonomous sessions (write/mutating tools that are not outright destructive: create/update/send/post/charge). " +
-        "'block_always' - Never allow automatic invocation (obviously destructive tools whose name is solely dedicated to deleting or destroying data).",
-    ),
-  trustedDataAction: z
-    .enum([
-      "mark_as_safe",
-      "mark_as_sensitive",
-      "sanitize_with_dual_llm",
-      "block_always",
-    ])
-    .describe(
-      "How should the tool's results be treated? " +
-        "'mark_as_safe' - Results are fully trusted and used directly (internal dev/config metadata, or external action tools that return no third-party content). " +
-        "'mark_as_sensitive' - Results contain organizational data from internal self-hosted systems (Jira, GitHub, databases, internal APIs, file systems) that must not leak to external tools. " +
-        "'sanitize_with_dual_llm' - Results come from untrusted external/third-party sources and may carry injected instructions; they are summarized through the Dual LLM workflow so the raw content never reaches the privileged model (web search, scraping/fetching arbitrary pages, untrusted inbound messages). " +
-        "'block_always' - Results are blocked entirely (highly sensitive or dangerous output).",
-    ),
-  reasoning: z
-    .string()
-    .describe(
-      "Brief explanation of why these settings were chosen for this tool.",
-    ),
-});
-
-export type PolicyConfig = z.infer<typeof PolicyConfigSchema>;
-
-/** Maps LLM-facing PolicyConfig enum values to the database-stored policy values. */
-const TOOL_INVOCATION_ACTION_MAP: Record<
-  PolicyConfig["toolInvocationAction"],
-  | "allow_when_context_is_untrusted"
-  | "block_when_context_is_untrusted"
-  | "require_approval"
-  | "block_always"
-> = {
-  allow_when_context_is_sensitive: "allow_when_context_is_untrusted",
-  block_when_context_is_sensitive: "block_when_context_is_untrusted",
-  require_approval: "require_approval",
-  block_always: "block_always",
-};
-
-const TRUSTED_DATA_ACTION_MAP: Record<
-  PolicyConfig["trustedDataAction"],
-  | "mark_as_trusted"
-  | "mark_as_untrusted"
-  | "sanitize_with_dual_llm"
-  | "block_always"
-> = {
-  mark_as_safe: "mark_as_trusted",
-  mark_as_sensitive: "mark_as_untrusted",
-  sanitize_with_dual_llm: "sanitize_with_dual_llm",
-  block_always: "block_always",
-};
-
-export function mapToolInvocationAction(
-  action: PolicyConfig["toolInvocationAction"],
-) {
-  return TOOL_INVOCATION_ACTION_MAP[action];
-}
-
-export function mapTrustedDataAction(
-  action: PolicyConfig["trustedDataAction"],
-) {
-  return TRUSTED_DATA_ACTION_MAP[action];
-}

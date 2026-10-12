@@ -1,6 +1,7 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { openappaGithubSyncTable } from "@/database/schemas/openappa-github-sync";
+import { PolicyTestDirectorySchema } from "./openappa-policy-tests";
 
 const AppaSyncIntervalSchema = z.enum(["15m", "1h", "1d"]);
 export type AppaSyncInterval = z.infer<typeof AppaSyncIntervalSchema>;
@@ -45,6 +46,9 @@ export const AppaGithubSourceSchema = z
         "Use a repository-relative .toml file path",
       ),
     interval: AppaSyncIntervalSchema,
+    validationDirectory: z
+      .union([z.literal(""), PolicyTestDirectorySchema])
+      .optional(),
     githubPatId: z.string().uuid().nullable().default(null),
     githubAppConfigId: z.string().uuid().nullable().default(null),
   })
@@ -77,6 +81,7 @@ export const AppaGithubSyncStatusSchema = z.object({
   enabled: z.boolean(),
   source: AppaGithubSyncSchema.nullable(),
   hasPolicy: z.boolean(),
+  validationDirectory: z.string(),
 });
 /** What accepting a held pull published, and what it changed to publish it. */
 export const AcceptedHeldPullSchema = z.object({

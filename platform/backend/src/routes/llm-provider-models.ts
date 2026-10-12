@@ -6,6 +6,8 @@ import {
   LAZY_MODEL_SYNC_STATUS_HEADER,
   LAZY_MODEL_SYNC_STATUS_PENDING,
   providerRequiresPerUserCredential,
+  ResourceAccessQuerySchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   type SupportedProvider,
   SupportedProviders,
@@ -34,6 +36,7 @@ import {
   OrganizationModel,
   TeamModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import {
   modelSyncService,
@@ -370,10 +373,14 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get all synced LLM models with their linked provider API keys.",
         tags: ["LLM Models"],
+        querystring: z.object({
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+        }),
         response: constructResponseSchema(z.array(ModelWithApiKeysSchema)),
       },
     },
-    async ({ organizationId, user }, reply) => {
+    async ({ organizationId, user, query }, reply) => {
       const allModelsWithApiKeys =
         await LlmProviderApiKeyModelLinkModel.getAllModelsWithApiKeys();
 
@@ -423,7 +430,7 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           ModelLabelModel.getLabelsForMany(enrichedModelIds),
         ]);
 
-      const response = [
+      const enriched = [
         ...modelsWithApiKeys.map(({ model, isBest, apiKeys }) =>
           toModelWithApiKeysResponse({
             model,
@@ -445,6 +452,26 @@ const llmModelsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }),
         ),
       ];
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      const access = await ResourcePermissionSubjectModel.resolveAccessFilter({
+        userId: user.id,
+        organizationId,
+        relations: query.access,
+        sharedWith: query.sharedWith,
+      });
+      const matching =
+        access &&
+        (await ModelModel.idsMatchingAccess({
+          organizationId,
+          ids: enriched.map((model) => model.id),
+          access,
+        }));
+      // SPDX-SnippetEnd
+      const response = matching
+        ? enriched.filter((model) => matching.has(model.id))
+        : enriched;
 
       logger.debug(
         { modelCount: response.length },

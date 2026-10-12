@@ -186,7 +186,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 
   const currentAgentSummary = useMemo(
     () =>
-      allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
+      allAgents.find((a) => a.id === currentAgentId) ??
+      allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
+      allAgents.find((a) => !a.builtIn) ??
+      null,
     [allAgents, currentAgentId],
   );
   // The roster omits large embedded icons and editing-only fields. Hydrate one
@@ -219,9 +222,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
-  const { data: canReadToolPolicy } = useHasPermissions({
-    toolPolicy: ["read"],
-  });
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeSource: ["read"],
   });
@@ -231,10 +231,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId: effectiveAgentId ?? undefined },
     skipPagination: true,
-    enabled:
-      shouldLoadAgentManagementDetails &&
-      !!effectiveAgentId &&
-      !!canReadToolPolicy,
+    enabled: shouldLoadAgentManagementDetails && !!effectiveAgentId,
   });
 
   const assignedCatalogs = useMemo(() => {

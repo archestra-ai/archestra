@@ -11,6 +11,7 @@ import { vi } from "vitest";
 import config from "@/config";
 import { scopedSessionId } from "@/openappa/actor";
 import { currentTrajectory } from "@/openappa/current-trajectory";
+import { openappaDeclarations } from "@/openappa/declarations";
 import {
   consumeHitlRuling,
   getHitlAskUserArguments,
@@ -1773,11 +1774,11 @@ describe("list_guardrails_battery_fits", () => {
     return (result.structuredContent as any).fits;
   };
 
-  test("advertises a required nullable server ID for strict tool schemas", () => {
+  test("advertises an optional server ID that strict tool schemas can pass as null", () => {
     const tool = getAllArchestraMcpTools().find(
       (candidate) => candidate.name === toolFullName,
     );
-    expect(tool?.inputSchema.required).toContain("mcpServerId");
+    expect(tool?.inputSchema.required ?? []).not.toContain("mcpServerId");
     expect(tool?.inputSchema.properties?.mcpServerId).toMatchObject({
       anyOf: [{ type: "string", format: "uuid" }, { type: "null" }],
     });
@@ -1829,6 +1830,34 @@ describe("list_guardrails_battery_fits", () => {
     ]);
   });
 
+  test("carries the battery's benefit and its setup as separate steps", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const { context } = await setUp({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+    });
+    const linear = (await openappaDeclarations.bundledBatteries()).find(
+      (battery) => battery.name === "linear",
+    );
+
+    const [fit] = await fits({ mcpServerId: null }, context);
+    expect(fit.benefit).toBe(linear?.benefit);
+    expect(fit.setup.length).toBeGreaterThan(1);
+    expect(fit.setup.join("\n")).toBe(linear?.setup);
+  });
+
   test("narrows to one server", async ({
     makeOrganization,
     makeUser,
@@ -1851,6 +1880,9 @@ describe("list_guardrails_battery_fits", () => {
     expect(
       await fits({ mcpServerId: catalogIds.linear }, context),
     ).toHaveLength(1);
+    expect(await fits({}, context)).toEqual(
+      await fits({ mcpServerId: null }, context),
+    );
     expect(await fits({ mcpServerId: catalogIds.acme }, context)).toEqual([]);
   });
 

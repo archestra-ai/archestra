@@ -72,8 +72,10 @@ describe("GET /api/openappa/coverage/entities", () => {
 
     await expect(
       ToolModel.findCoverageInventory(ctx.organizationId, {
-        userId: ctx.user.id,
-        agentTypes: ["agent", "mcp_gateway"],
+        visibility: {
+          userId: ctx.user.id,
+          agentTypes: ["agent", "mcp_gateway"],
+        },
       }),
     ).resolves.toMatchObject({ entities: expect.any(Array) });
   });

@@ -28,9 +28,10 @@ export const limitKeys = {
   detail: (id: string | undefined) => [...limitKeys.details(), id] as const,
 };
 
-export function useLimits() {
+export function useLimits(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: limitKeys.lists(),
+    enabled: params?.enabled,
     queryFn: async () => {
       const { data, error } = await getLimits();
       throwOnApiError(error, { toastOnError: false });

@@ -16,6 +16,7 @@ vi.mock("@/agents/incoming-email", () => ({
   }),
 }));
 
+import { CHATOPS_NO_REPLY_SENTINEL } from "@/agents/chatops/constants";
 import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
 import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
 import { describe, expect, test } from "@/test";
@@ -90,6 +91,71 @@ describe("watchTaskCompletion", () => {
       text: "Task failed. Authentication failed: your session has expired.\nReconnect your account and retry the task. (Runtime exit status 75.)",
     });
     expect(sendEmailReply).not.toHaveBeenCalled();
+    expect(
+      (await AgentRunModel.findByTaskId(task.id))?.completionNotifiedAt,
+    ).toEqual(expect.any(Date));
+  });
+
+  test("posts nothing to the thread when the agent chose to stay silent", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent();
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const task = await A2ATaskModel.createForRun({
+      contextId: context.id,
+      agentId: agent.id,
+    });
+    const target = {
+      type: "chatops" as const,
+      bindingId: crypto.randomUUID(),
+      threadId: "group-thread",
+    };
+    await AgentRunModel.create({
+      organizationId: agent.organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName: `runner-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+      completionTarget: target,
+    });
+    const silence = `This is addressed to someone else. ${CHATOPS_NO_REPLY_SENTINEL}`;
+    await A2ATaskModel.completeRun({
+      taskId: task.id,
+      agentMessage: {
+        id: crypto.randomUUID(),
+        contextId: context.id,
+        role: "ROLE_AGENT",
+        parts: [{ text: silence }],
+        content: {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          parts: [{ type: "text", text: silence }],
+        },
+      },
+      artifact: {
+        id: crypto.randomUUID(),
+        name: "agent-response",
+        parts: [{ text: silence }],
+      },
+      eventPayloads: [],
+    });
+
+    await watchTaskCompletion({
+      taskId: task.id,
+      target,
+      agentName: agent.name,
+    });
+
+    expect(notifyBindingThread).not.toHaveBeenCalled();
     expect(
       (await AgentRunModel.findByTaskId(task.id))?.completionNotifiedAt,
     ).toEqual(expect.any(Date));

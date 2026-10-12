@@ -25,7 +25,6 @@ vi.mock("@/lib/auth/auth.query", () => ({
         "/settings/connection",
         "/settings/apps",
         "/settings/skills",
-        "/settings/security",
         "/settings/openappa",
         "/settings/knowledge",
         "/settings/environments",
@@ -50,11 +49,10 @@ vi.mock("@/lib/config/config.query", () => ({
 }));
 
 describe("settings navigation", () => {
-  // Security and OpenAPPA are one slot with two occupants: the legacy tab
-  // while OpenAPPA is off, its settings once it is on. Either way the rest of
-  // the order must match.
+  // The OpenAPPA tab only renders while OpenAPPA is on; either way the rest
+  // of the order must match.
   it.each([
-    { openappa: true, hidden: "/settings/security" },
+    { openappa: true, hidden: null },
     { openappa: false, hidden: "/settings/openappa" },
   ])("lists the same tabs, in the same order, as the settings page renders (openappa=%j)", ({
     openappa,

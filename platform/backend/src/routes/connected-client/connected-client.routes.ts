@@ -6,6 +6,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { ConnectedClientModel } from "@/models";
+import { lastDays } from "@/models/connected-client";
 import {
   disconnectClient,
   listConnectedClients,
@@ -17,13 +18,34 @@ import {
   ConnectedClientSchema,
   ConnectionEventActionSchema,
   ConnectionEventSchema,
-  ConnectionSetupClientIdSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
 } from "@/types";
 
-/** How far back traffic is read; calls in this window make a member active. */
-const ADOPTION_LOOKBACK_DAYS = 30;
+/** The window when none is picked; calls in the window make a member active. */
+const DEFAULT_WINDOW_DAYS = 30;
+
+const WindowQuerySchema = z.object({
+  startDate: z
+    .string()
+    .datetime()
+    .optional()
+    .describe(
+      "Traffic on or after this date (ISO 8601); the last 30 days when left out",
+    ),
+  endDate: z
+    .string()
+    .datetime()
+    .optional()
+    .describe("Traffic on or before this date (ISO 8601); now when left out"),
+});
+
+function adoptionWindow(query: z.infer<typeof WindowQuerySchema>) {
+  const until = query.endDate ? new Date(query.endDate) : new Date();
+  return query.startDate
+    ? { since: new Date(query.startDate), until }
+    : lastDays(DEFAULT_WINDOW_DAYS, until);
+}
 
 const routes: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -54,9 +76,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             .string()
             .optional()
             .describe("Only events for this user's clients"),
-          clientId: ConnectionSetupClientIdSchema.optional().describe(
-            "Only events for this client",
-          ),
           action: ConnectionEventActionSchema.optional().describe(
             "Only connects or only disconnects",
           ),
@@ -78,13 +97,12 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async ({
       organizationId,
-      query: { limit, cursor, userId, clientId, action, startDate, endDate },
+      query: { limit, cursor, userId, action, startDate, endDate },
     }) =>
       ConnectedClientModel.listEvents({
         organizationId,
         pagination: { limit, cursor },
         userId,
-        clientId,
         action,
         startDate,
         endDate,
@@ -97,15 +115,16 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetAgentAdoption,
         description:
-          "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the last 30 days; setups and sign-ins alone only show the installer ran.",
+          "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.",
         tags: ["Connection Setups"],
+        querystring: WindowQuerySchema,
         response: constructResponseSchema(AgentAdoptionSchema),
       },
     },
-    async ({ organizationId }) =>
+    async ({ organizationId, query }) =>
       ConnectedClientModel.getAdoption({
         organizationId,
-        lookbackDays: ADOPTION_LOOKBACK_DAYS,
+        window: adoptionWindow(query),
       }),
   );
 
@@ -115,9 +134,9 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetAgentAdoptionUsage,
         description:
-          "MCP gateway and LLM proxy calls from members' agents per day over the last 30 days, for one member or the whole organization. Counts the same traffic as the adoption summary.",
+          "MCP gateway and LLM proxy calls from members' agents per UTC day over the window (the last 30 days unless picked), for one member or the whole organization. Counts the same traffic as the adoption summary.",
         tags: ["Connection Setups"],
-        querystring: z.object({
+        querystring: WindowQuerySchema.extend({
           userId: z
             .string()
             .optional()
@@ -131,7 +150,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     async ({ organizationId, query }) =>
       ConnectedClientModel.getAdoptionUsage({
         organizationId,
-        lookbackDays: ADOPTION_LOOKBACK_DAYS,
+        window: adoptionWindow(query),
         userId: query.userId,
       }),
   );

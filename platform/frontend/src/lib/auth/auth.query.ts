@@ -4,7 +4,7 @@ import {
   type Permissions,
   ResourcePermissionActionSchema,
 } from "@archestra/shared";
-import { useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import { hasPagePermissions, hasPermissions } from "@/lib/auth/auth.utils";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
@@ -31,8 +31,15 @@ export const authQueryKeys = {
 export function useSession() {
   return useQuery({
     queryKey: authQueryKeys.session(),
-    queryFn: async () => {
-      const { data } = await authClient.getSession();
+    queryFn: async ({ client: queryClient }) => {
+      // Cold load only: a refresh restores the session from the persisted
+      // snapshot, and the shell's queries are already running by then.
+      const isColdLoad =
+        queryClient.getQueryData(authQueryKeys.session()) === undefined;
+      const [{ data }] = await Promise.all([
+        authClient.getSession(),
+        isColdLoad ? seedBootstrapQueries(queryClient) : undefined,
+      ]);
       return data;
     },
     staleTime: 5 * 60 * 1000,
@@ -242,4 +249,31 @@ export function useDefaultCredentialsEnabled() {
     // Keep data fresh with shorter stale time
     staleTime: 10000, // 10 seconds
   });
+}
+
+// ===
+
+/**
+ * Seeds the queries the app shell waits on (permissions, scoped capabilities,
+ * organization, config) from one `/api/bootstrap` request. Fired alongside the
+ * session check on a cold load, so those queries are already fresh when the
+ * session resolves and enables them, instead of starting a second wave.
+ *
+ * Best-effort: when signed out or on any failure nothing is seeded and each
+ * query fetches its own endpoint as before. The keys are spelled out rather
+ * than imported because the modules owning them import this one.
+ */
+async function seedBootstrapQueries(queryClient: QueryClient) {
+  try {
+    const { data } = await archestraApiSdk.getBootstrap();
+    if (!data) return;
+    queryClient.setQueryData(authQueryKeys.userPermissions(), data.permissions);
+    queryClient.setQueryData(["scoped-capabilities"], data.scopedCapabilities);
+    queryClient.setQueryData(["config"], data.config);
+    if (data.organization) {
+      queryClient.setQueryData(["organization", "details"], data.organization);
+    }
+  } catch {
+    // Fall back to the individual requests.
+  }
 }

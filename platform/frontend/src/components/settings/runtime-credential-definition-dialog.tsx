@@ -51,7 +51,7 @@ export function RuntimeCredentialDefinitionDialog({
   onClose: () => void;
   initialKind?: "secret" | "github_app" | "github_app_user";
   initialScope?: "personal" | "organization";
-  initialValues?: { name: string; description: string; icon: string };
+  initialValues?: { name: string; description: string; icon: string | null };
   setupNotice?: ReactNode;
   hideProvidedBy?: boolean;
   onCreated?: (id: string) => void;
@@ -502,7 +502,7 @@ const DefinitionFormSchema = z
 
 type DefinitionFormValues = z.infer<typeof DefinitionFormSchema>;
 
-function slugifyCredentialKey(value: string): string {
+export function slugifyCredentialKey(value: string): string {
   return (
     "credential-" +
     value

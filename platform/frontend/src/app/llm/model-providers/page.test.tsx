@@ -378,6 +378,10 @@ describe("ApiKeysPage", () => {
       search: null,
       provider: null,
       labels: null,
+      access: null,
+      sharedWith: null,
+      owner: null,
+      builtIn: null,
     });
   });
 

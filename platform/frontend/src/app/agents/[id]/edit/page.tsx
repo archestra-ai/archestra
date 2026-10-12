@@ -1,4 +1,4 @@
-import { AgentConfigurationRedirect } from "@/components/agent-pages/agent-configuration-redirect";
+import { AgentEditPage } from "@/components/agent-pages/agent-edit-page";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,5 @@ export default async function AgentEditPageServer({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return (
-    <AgentConfigurationRedirect kind="agent" id={decodeURIComponent(id)} />
-  );
+  return <AgentEditPage id={decodeURIComponent(id)} />;
 }

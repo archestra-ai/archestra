@@ -60,7 +60,6 @@ describe("Agent export/import routes", () => {
       systemPrompt: "Be helpful",
       icon: "🤖",
       scope: "org",
-      considerContextUntrusted: false,
       toolExposureMode: "full",
       llmModel: null,
       incomingEmailEnabled: false,

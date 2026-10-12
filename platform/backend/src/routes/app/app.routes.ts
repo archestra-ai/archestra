@@ -6,6 +6,8 @@ import {
   parseLabelsParam,
   ResourceAccessQuerySchema,
   type ResourceAccessRelation,
+  ResourceOwnerQuerySchema,
+  ResourceSharedWithQuerySchema,
   type ResourceVisibilityScope,
   RouteId,
 } from "@archestra/shared";
@@ -35,6 +37,7 @@ import {
   UserModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { resolveEncryptedChatCreationIfRequested } from "@/routes/chat/encrypted-chat";
 import {
   assignToolToApp,
@@ -212,6 +215,8 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
           access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(AppListItemSchema),
@@ -233,7 +238,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId,
         userId: user.id,
-        access: query.access,
+        access: resourceAccessSelection(query),
       });
       // Grants are the only way to reach an app, so there is no longer a set
       // an administrator sees only through oversight.
@@ -426,6 +431,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // have no comparable author and none are oversight-only, so drop them
           // whenever an author filter is active rather than mis-attributing them.
           if (authorFilterActive) return false;
+          // Nor do they carry a policy of their own, so the "Shared with" and
+          // "Owner" filters never match one.
+          if (query.sharedWith?.length || query.owner?.length) return false;
           // An install the caller reaches is their own personal one, one
           // shared with a team of theirs, or the organization's; never
           // oversight-only, so `others` holds no external app.

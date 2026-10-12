@@ -61,8 +61,8 @@ describe("azureResponsesAdapterFactory", () => {
   test("reads messages that omit `type` (the AI SDK's easy input message shape)", () => {
     // The Responses API defaults an input item's `type` to "message", and the AI
     // SDK relies on that, sending bare `{role, content}`. Dropping those left
-    // getMessages() empty, so trusted-data / Dual LLM policy evaluation ran
-    // against an empty conversation instead of the user's actual prompt.
+    // getMessages() empty, an empty conversation instead of the user's actual
+    // prompt.
     const adapter = azureResponsesAdapterFactory.createRequestAdapter({
       model: "gpt-4.1",
       input: [
@@ -127,9 +127,8 @@ describe("azureResponsesAdapterFactory", () => {
       content: '{"value":1}',
       isError: false,
     };
-    // The output is paired with the call behind it: that is the shape
-    // trusted-data / Dual LLM policy evaluation reads, and without it the
-    // conversation looks tool-free to the evaluator.
+    // The output is paired with the call behind it: without that the
+    // conversation looks tool-free to common-format readers.
     expect(adapter.getMessages()).toEqual([
       { role: "user", content: "hello from responses" },
       { role: "tool", content: '{"value":1}', toolCalls: [result] },
@@ -169,7 +168,7 @@ describe("azureResponsesAdapterFactory", () => {
         isError: false,
       },
     ]);
-    // Still untrusted data: the default trusted-data policies apply to it.
+    // Still a tool result, surfaced under the "unknown" name.
     expect(adapter.getMessages()).toEqual([
       {
         role: "tool",
@@ -187,8 +186,7 @@ describe("azureResponsesAdapterFactory", () => {
   });
 
   // Codex calls a namespaced tool by its bare name and names the namespace
-  // beside it; the pair is the tool's identity, so trusted-data evaluation
-  // must see both.
+  // beside it; the pair is the tool's identity, so the plugins must see both.
   test("carries the namespace a paired history call named", () => {
     const adapter = azureResponsesAdapterFactory.createRequestAdapter({
       model: "gpt-4.1",

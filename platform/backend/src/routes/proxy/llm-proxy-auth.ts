@@ -109,12 +109,16 @@ export interface VirtualKeyValidationResult {
   virtualKeyIsPersonal?: boolean;
   /** Owner of the resolved key (for cross-credential user-consistency checks). */
   virtualKeyAuthorId?: string | null;
+  /** Team the key's spend is charged to, when it has one. */
+  billingTeamId?: string;
 }
 
 export interface PassthroughVirtualKeyResult {
   /** Owner of the passthrough key — the acting Archestra user. */
   userId: string;
   passthroughVirtualKeyId: string;
+  /** Team the key's spend is charged to, when it has one. */
+  billingTeamId?: string;
 }
 
 type ResolvedVirtualApiKey = NonNullable<
@@ -268,6 +272,7 @@ export async function validateVirtualApiKey(params: {
       resolved.virtualKey,
     ),
     virtualKeyAuthorId: resolved.virtualKey.authorId,
+    billingTeamId: resolved.virtualKey.billingTeamId ?? undefined,
   };
 }
 
@@ -351,6 +356,7 @@ export async function validatePassthroughVirtualKey(params: {
   return {
     userId: virtualKey.authorId,
     passthroughVirtualKeyId: virtualKey.id,
+    billingTeamId: virtualKey.billingTeamId ?? undefined,
   };
 }
 
@@ -386,6 +392,8 @@ export type LlmOAuthAccessTokenValidationResult = {
     clientId: string;
   };
   userId?: string;
+  /** Team a client-credentials client's spend is charged to, when it has one. */
+  billingTeamId?: string;
 };
 
 export async function validateLlmOAuthAccessToken(params: {
@@ -992,7 +1000,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     );
   }
 
-  return resolveOAuthProviderApiKey({
+  const resolvedKey = await resolveOAuthProviderApiKey({
     chatApiKeyId: providerApiKey.id,
     secretId: providerApiKey.secretId,
     baseUrl: providerApiKey.inferenceBaseUrl ?? providerApiKey.baseUrl,
@@ -1005,6 +1013,10 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
       clientId: oauthClient.clientId,
     },
   });
+  return {
+    ...resolvedKey,
+    billingTeamId: oauthClient.billingTeamId ?? undefined,
+  };
 }
 
 async function validateUserLlmOAuthAccessToken(params: {

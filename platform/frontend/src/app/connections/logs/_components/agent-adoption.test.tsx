@@ -4,51 +4,68 @@ import type {
   AgentAdoption,
   AgentAdoptionMember,
 } from "@/lib/connected-client.query";
-import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { AgentAdoptionOverview } from "./agent-adoption";
+
+const WINDOW = {
+  startDate: "2026-09-07T00:00:00.000Z",
+  label: "last 30 days",
+  picked: false,
+};
 
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
 };
+// Picking a state scrolls to the users table; jsdom lacks scrollIntoView.
+Element.prototype.scrollIntoView = vi.fn();
 
 const mockUseAgentAdoption = vi.fn();
+const mockReplace = vi.fn();
+let mockSearch = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: mockReplace }),
   usePathname: () => "/connections/logs",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mockSearch,
 }));
 
 vi.mock("@/lib/connected-client.query", () => ({
   useAgentAdoption: () => mockUseAgentAdoption(),
   useAgentAdoptionUsage: () => ({
-    data: { lookbackDays: 30, days: [] },
+    data: {
+      since: now,
+      until: now,
+      days: [
+        { date: "2026-10-06", gatewayCalls: 10, llmCalls: 5 },
+        { date: "2026-10-07", gatewayCalls: 20, llmCalls: 15 },
+      ],
+    },
     isPending: false,
     isLoadingError: false,
   }),
 }));
+
+const now = new Date().toISOString();
 
 function member(overrides: Partial<AgentAdoptionMember>): AgentAdoptionMember {
   return {
     userId: "user-1",
     name: "Ada Lovelace",
     email: "ada@example.com",
-    status: "inactive",
+    status: "notConnected",
     gatewayLastSeenAt: null,
     llmLastSeenAt: null,
+    agents: [],
     gatewayUses: [],
     llmUses: [],
-    skillSyncs: [],
     ...overrides,
   };
 }
 
-const now = new Date().toISOString();
-
 const adoption: AgentAdoption = {
-  lookbackDays: 30,
+  since: "2026-09-07T00:00:00.000Z",
+  until: "2026-10-07T00:00:00.000Z",
   members: [
     member({ userId: "u-ada" }),
     member({
@@ -57,21 +74,26 @@ const adoption: AgentAdoption = {
       email: "grace@example.com",
       status: "active",
       gatewayLastSeenAt: now,
-      llmLastSeenAt: now,
-      gatewayUses: [
+      agents: [
         {
-          via: { id: "gw-1", name: "Engineering tools" },
-          agent: { clientId: null, name: "Droid" },
-          calls: 12,
-          lastSeenAt: now,
+          clientId: "claude-code",
+          name: "Claude Code",
+          status: "active",
+          setupAt: now,
+          signedIn: false,
+          viaToken: false,
+          lastGatewayCallAt: now,
+          lastLlmCallAt: null,
         },
-      ],
-      llmUses: [
         {
-          via: { id: null, name: "LLM proxy" },
-          agent: { clientId: "generic", name: "Generic client" },
-          calls: 3,
-          lastSeenAt: now,
+          clientId: null,
+          name: "Unknown agent",
+          status: "inactive",
+          setupAt: null,
+          signedIn: false,
+          viaToken: true,
+          lastGatewayCallAt: now,
+          lastLlmCallAt: null,
         },
       ],
     }),
@@ -80,15 +102,15 @@ const adoption: AgentAdoption = {
       name: "Alan Turing",
       email: "alan@example.com",
       status: "inactive",
-      skillSyncs: [
-        { agent: { clientId: "codex", name: "Codex" }, lastSyncedAt: now },
-      ],
+      gatewayLastSeenAt: "2026-01-01T00:00:00.000Z",
     }),
   ],
 };
 
 describe("AgentAdoptionOverview", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockSearch = new URLSearchParams();
     mockUseAgentAdoption.mockReturnValue({
       data: adoption,
       isPending: false,
@@ -97,49 +119,69 @@ describe("AgentAdoptionOverview", () => {
     });
   });
 
-  it("lists all members by name, without a Skills column", () => {
-    render(<AgentAdoptionOverview />);
+  it("lists users without an agent first, then inactive, then active", () => {
+    render(<AgentAdoptionOverview window={WINDOW} />);
 
-    const table = screen.getAllByRole("table")[0];
+    const table = screen.getByRole("table");
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining("Ada Lovelace"),
-      expect.stringContaining("Alan Turing"),
-      expect.stringContaining("Grace Hopper"),
+      expect.stringMatching(/Not connected.*Ada Lovelace.*None.*Never/),
+      expect.stringMatching(/Inactive.*Alan Turing/),
+      expect.stringMatching(/Active.*Grace Hopper/),
     ]);
+    for (const name of ["Last MCP tool call", "Last LLM proxy call"]) {
+      expect(
+        within(table).getByRole("columnheader", { name }),
+      ).toBeInTheDocument();
+    }
+  });
+
+  it("opens a user's agents with how each got there", () => {
+    render(<AgentAdoptionOverview window={WINDOW} />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show Grace Hopper's agents" }),
+    );
+
+    expect(screen.getByText(/^Set up /)).toBeInTheDocument();
+    expect(screen.getByText("Calls on a pasted token")).toBeInTheDocument();
+  });
+
+  it("filters the table by state from the URL", () => {
+    mockSearch = new URLSearchParams("state=inactive");
+    render(<AgentAdoptionOverview window={WINDOW} />);
+
+    const rows = within(screen.getByRole("table")).getAllByRole("row");
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toHaveTextContent("Alan Turing");
+  });
+
+  it("puts a state picked on the donut in the URL", () => {
+    render(<AgentAdoptionOverview window={WINDOW} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Active\s*1/ }));
+
+    expect(mockReplace).toHaveBeenCalledWith("/connections/logs?state=active", {
+      scroll: false,
+    });
+  });
+
+  it("shows adoption, agents in use and agent calls on top", () => {
+    render(<AgentAdoptionOverview window={WINDOW} />);
+
     expect(
-      within(table).getByRole("columnheader", { name: "Skills synced" }),
+      screen.getByRole("img", {
+        name: "Active: 1, Inactive: 1, Not connected: 1",
+      }),
     ).toBeInTheDocument();
-    // A skills sync alone doesn't make a member active.
-    const alan = within(table).getByText("Alan Turing").closest("tr");
-    expect(alan).toHaveTextContent(formatRelativeTimeFromNow(now));
-    expect(alan).toHaveTextContent("No calls in 30 days");
-  });
-
-  it("notes quiet members and opens a member's calls on click", () => {
-    render(<AgentAdoptionOverview />);
-
-    const table = screen.getAllByRole("table")[0];
-    const alan = within(table).getByText("Alan Turing").closest("tr");
-    expect(alan).toHaveTextContent("No calls in 30 days");
-
-    const grace = within(table).getByText("Grace Hopper").closest("tr");
-    fireEvent.click(grace as HTMLElement);
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByText("Droid")).toBeInTheDocument();
-    expect(within(dialog).getByText("Engineering tools")).toBeInTheDocument();
-    expect(within(dialog).getByText("12")).toBeInTheDocument();
-  });
-
-  it("counts gateway and LLM proxy use in the tiles", () => {
-    render(<AgentAdoptionOverview />);
-
-    const tile = (label: string) =>
-      screen
-        .getByText(label, { exact: false })
-        .closest("[data-slot=card]") as HTMLElement;
-    expect(tile("Members using MCP gateway")).toHaveTextContent("1of 3 · 33%");
-    expect(tile("Members using LLM proxy")).toHaveTextContent("1of 3 · 33%");
-    expect(tile("Active members")).toHaveTextContent("1of 3 · 33%");
+    // Only active agents count, and the pasted-token one is not named.
+    const inUse = screen
+      .getByText(/^Most used agents/)
+      .closest("[data-slot=card]");
+    expect(inUse).toHaveTextContent("Claude Code1");
+    expect(screen.getByText("50")).toBeInTheDocument();
+    expect(
+      screen.getByText("30 tool calls · 20 LLM calls"),
+    ).toBeInTheDocument();
   });
 });

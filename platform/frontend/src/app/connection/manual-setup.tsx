@@ -1,7 +1,7 @@
 "use client";
 
 // The manual setup blocks (endpoint, MCP gateway, LLM proxy, skills) for
-// apps that cannot run the connect prompt, such as n8n.
+// apps without an installer or a prompt, such as n8n and Generic client.
 
 import type { ReactNode } from "react";
 import type { ConnectClient } from "./clients";
@@ -16,25 +16,30 @@ import {
 
 /**
  * How an app gets set up:
- * - "prompt": first-party apps; one prompt, approve in the browser.
- * - "generic-prompt": other agents (Amp, Kiro, OpenClaw...); the generic
- *   prompt only. The agent works out what it supports, which manual steps
- *   can't (Amp has no LLM proxy setting, for one).
- * - "prompt-or-manual": Generic client; the generic prompt by default,
- *   manual setup one toggle away.
- * - "manual": n8n (and anything that can't run a prompt); manual only.
+ * - "script": apps with an installer; one terminal command, approve in the
+ *   browser.
+ * - "download": Claude Desktop; a downloaded installer.
+ * - "prompt": other agents (Amp, Kiro, OpenClaw...); the generic prompt. The
+ *   agent works out what it supports, which manual steps can't (Amp has no
+ *   LLM proxy setting, for one).
+ * - "manual": Generic client and n8n (anything that can't run a prompt).
  */
-export type SetupMode =
-  | "prompt"
-  | "generic-prompt"
-  | "prompt-or-manual"
-  | "manual";
+export type SetupMode = "script" | "download" | "prompt" | "manual";
 
 export function setupModeFor(client: ConnectClient): SetupMode {
-  if (isInstallerClientId(client.id)) return "prompt";
-  if (usesGenericInstructions(client))
-    return client.id === "generic" ? "prompt-or-manual" : "generic-prompt";
+  if (client.id === "claude-desktop") return "download";
+  if (isInstallerClientId(client.id)) return "script";
+  if (usesGenericInstructions(client) && client.id !== "generic")
+    return "prompt";
   return "manual";
+}
+
+/**
+ * An agent on the other end can read a prompt (the starter and cleanup
+ * prompts). Generic client is set up by hand but is still an agent; n8n isn't.
+ */
+export function readsPrompts(client: ConnectClient): boolean {
+  return setupModeFor(client) !== "manual" || client.id === "generic";
 }
 
 export interface ManualStep {

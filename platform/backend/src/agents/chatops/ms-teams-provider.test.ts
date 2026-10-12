@@ -289,6 +289,64 @@ describe("MSTeamsProvider.parseWebhookNotification is mention-agnostic", () => {
   });
 });
 
+describe("MSTeamsProvider conversation sessions", () => {
+  test("1:1 and group chats keep their history server-side; channel threads read Graph", async () => {
+    const provider = createProvider();
+    const channel = await provider.parseWebhookNotification(
+      makeActivity({ replyToId: "root-1" }),
+      {},
+    );
+    const personal = await provider.parseWebhookNotification(
+      makeActivity({
+        conversation: { id: "a:b", conversationType: "personal" },
+        channelData: { tenant: { id: "tenant-1" } },
+      }),
+      {},
+    );
+    const group = await provider.parseWebhookNotification(
+      makeActivity({
+        conversation: {
+          id: "19:meeting_abc@thread.v2",
+          conversationType: "groupChat",
+        },
+        channelData: { tenant: { id: "tenant-1" } },
+      }),
+      {},
+    );
+    if (!channel || !personal || !group) throw new Error("not parsed");
+
+    expect(provider.usesServerSideSessionsFor(channel)).toBe(false);
+    expect(provider.usesServerSideSessionsFor(personal)).toBe(true);
+    expect(provider.usesServerSideSessionsFor(group)).toBe(true);
+  });
+
+  test("a quoted reply in a 1:1 chat stays in the chat's single conversation", async () => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        conversation: { id: "a:b", conversationType: "personal" },
+        replyToId: "quoted-message-id",
+        channelData: { tenant: { id: "tenant-1" } },
+      }),
+      {},
+    );
+
+    expect(result?.threadId).toBeUndefined();
+    expect(result?.isThreadReply).toBe(false);
+  });
+
+  test("a channel reply keeps its thread", async () => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeActivity({ replyToId: "root-1" }),
+      {},
+    );
+
+    expect(result?.threadId).toBe("root-1");
+    expect(result?.isThreadReply).toBe(true);
+  });
+});
+
 describe("MSTeamsProvider file attachment downloads", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());

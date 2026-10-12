@@ -55,6 +55,46 @@ test("shows a reviewable policy diff and the pull request link", () => {
   );
 });
 
+test("shows only the changed hunks when the backend sends its diff", () => {
+  render(
+    <OpenAppaPolicyChange
+      output={{
+        structuredContent: {
+          stage: "preview",
+          delivery: "revision",
+          before: "a\nb\nc\nd\ne\nf\ng\nh\n",
+          after: "a\nb\nc\nd\ne\nf\ng\nH\n",
+          diff: "--- a/p\n+++ b/p\n@@ -5,4 +5,4 @@\n e\n f\n g\n-h\n+H\n",
+        },
+      }}
+    />,
+  );
+
+  const diff = screen.getByLabelText("Policy diff");
+  expect(diff).toHaveTextContent("@@ -5,4 +5,4 @@");
+  expect(diff).not.toHaveTextContent(" a b c");
+});
+
+test("shows the whole policy when a first preview keeps the starter as is", () => {
+  render(
+    <OpenAppaPolicyChange
+      output={{
+        structuredContent: {
+          stage: "preview",
+          delivery: "revision",
+          before: "[policy]\nversion = 2\n",
+          after: "[policy]\nversion = 2\n",
+        },
+      }}
+    />,
+  );
+
+  expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Policy")).toHaveTextContent(
+    "[policy] version = 2",
+  );
+});
+
 const saved = {
   delivery: "revision",
   revision: 1,

@@ -7,8 +7,7 @@ import { makeResponsesFromChatAdapterFactory } from "./openai-responses-from-cha
 import { perplexityResponsesAdapterFactory } from "./perplexity-responses";
 import { fromResponsesUsage, toResponsesUsage } from "./responses-usage";
 
-// When the proxy replaces a turn — a tool-invocation refusal, or the dual-LLM
-// guardrail failing closed — it synthesizes the whole Responses stream itself
+// When the proxy replaces a turn — a plugin's tool-call refusal — it synthesizes the whole Responses stream itself
 // instead of relaying upstream's. That synthesized `response.completed` is the
 // client's only usage report for the turn, and it used to hard-code every token
 // count to zero, so a refused turn always looked free.

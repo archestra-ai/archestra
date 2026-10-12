@@ -1,19 +1,24 @@
 import {
   type AgentType,
-  BUILT_IN_AGENT_IDS,
   createPaginatedResponseSchema,
+  DEFAULT_APP_NAME,
   getResourceForAgentType,
   isModelSelectionComplete,
   PaginationQuerySchema,
   parseLabelsParam,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
+  resolveMcpClientServerName,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
+import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
 import {
   getAgentTypePermissionChecker,
   hasAnyAgentTypeReadPermission,
@@ -26,7 +31,6 @@ import {
 // must keep running in those tests rather than silently becoming no-ops.
 import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
-import config from "@/config";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
@@ -37,14 +41,13 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   MemberModel,
   OrganizationModel,
   ProjectModel,
-  TeamModel,
 } from "@/models";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { initializeObservabilityMetrics } from "@/observability";
+import { buildAgentMcpToolList } from "@/routes/mcp-gateway/utils";
 import { listPolicyIndependentAvailableAgentSkills } from "@/services/agent-activation-skill-candidates";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
 import {
@@ -57,16 +60,22 @@ import { importAgentFromPayload } from "@/services/agent-import";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import { transferAgentOwnership } from "@/services/agent-ownership";
-import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
+import {
+  assertAgentRuntimeModelCompatibility,
+  requireAgentRuntimePermission,
+} from "@/services/agent-runtime/agent-config-validation";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { restoreAgentVersion } from "@/services/agent-version-restore";
 import { findVisibleChatAgent } from "@/services/chat-agent-visibility";
+import { getObservedClaudeCodeToolTokenCount } from "@/services/claude-code-tool-token-count";
+import { getDocsSuggestedPrompts } from "@/services/docs-mcp-servers";
 import {
   assertCanAssignEnvironment,
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
+import { estimateMcpToolTokens } from "@/services/mcp-tool-token-estimate";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   type Agent,
@@ -75,7 +84,6 @@ import {
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
   AgentListItemSchema,
-  type AgentRuntime,
   type AgentScope,
   AgentScopeFilterSchema,
   AgentSkillAssignmentsResponseSchema,
@@ -96,6 +104,8 @@ import {
   PatchAgentActivationSkillPolicySchema,
   RetiredSharingUpdateFieldSchema,
   SelectAgentSchema,
+  SuggestedPromptInputSchema,
+  ToolExposureModeSchema,
   UpdateAgentSchemaBase,
   UuidIdSchema,
 } from "@/types";
@@ -163,7 +173,29 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
               ),
+            ids: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Only these agents (comma-separated IDs), such as the viewer's automatic pins.",
+              ),
+            excludeIds: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Leave these agents out (comma-separated IDs), such as the ones the list already shows as automatic pins.",
+              ),
             access: ResourceAccessQuerySchema,
+            sharedWith: ResourceSharedWithQuerySchema,
+            owner: ResourceOwnerQuerySchema,
             labels: z
               .string()
               .optional()
@@ -238,7 +270,11 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds,
           authorIds,
           excludeAuthorIds,
+          ids,
+          excludeIds,
           access,
+          sharedWith,
+          owner,
           labels,
           excludeOtherPersonalAgents,
           status,
@@ -295,10 +331,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // authorIds and excludeAuthorIds are admin-only
           authorIds: isAdmin ? authorIds : undefined,
           excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
+          ids,
+          excludeIds,
           excludeOtherPersonalAgents: isAdmin
             ? excludeOtherPersonalAgents
             : undefined,
-          access,
+          access: resourceAccessSelection({ access, sharedWith, owner }),
           labels: parseLabelsParam(labels),
           status,
           providerApiKeyId,
@@ -384,12 +422,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.",
             ),
-          includeAdvisor: z
-            .preprocess((val) => val === "true" || val === true, z.boolean())
-            .optional()
-            .describe(
-              "Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to.",
-            ),
           scope: AgentScopeFilterSchema.optional().describe(
             "Filter by scope: personal, team, org, or built_in.",
           ),
@@ -430,7 +462,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType,
           agentTypes,
           excludeBuiltIn,
-          includeAdvisor,
           scope,
           excludeOtherPersonalAgents,
           status,
@@ -475,7 +506,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
           excludeBuiltIn,
-          includeAdvisor,
           scope:
             scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
           excludeOtherPersonalAgents: isAdmin
@@ -717,7 +747,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // `builtInAgentConfig` is server-owned: only the seeder sets it, and it
-      // is a trust attribute (the advisor discriminator drives the delegation
       // environment exception), so a client-supplied value is dropped here.
       if (initialGrants !== undefined) {
         // SPDX-SnippetBegin
@@ -745,19 +774,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // The retired visibility column is NOT NULL; nothing reads it.
         scope: "personal" as const,
       };
-      // Whether a new record starts out able to consult the Advisor is decided
-      // here, not by a follow-up write from the client: that second write
-      // forks another version and silently never happens for roles without
-      // `agent:read`.
-      const defaultExcludedSubagentIds =
-        await agentSubagentExclusionsService.getCreationDefaultExclusions({
-          organizationId,
-          agentType,
-          accessAllSubagents: createData.accessAllSubagents === true,
-        });
-
       const agent = await AgentModel.create(createData, user.id, {
-        defaultExcludedSubagentIds,
         deferInitialVersionFork: body.activationSkillPolicy !== undefined,
         initialPermissionGrants: initialGrants ?? [],
       });
@@ -809,6 +826,35 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       return reply.send(agent);
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/default-suggested-prompts",
+    {
+      schema: {
+        operationId: RouteId.GetAgentDefaultSuggestedPrompts,
+        description:
+          "Suggested prompts the platform offers for an agent that has none " +
+          "of its own. They are not stored on the agent.",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.array(SuggestedPromptInputSchema)),
+      },
+    },
+    async ({ params: { id }, user, organizationId }, reply) => {
+      const agent = await requireReadableAgent({
+        id,
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(
+        await getDocsSuggestedPrompts({
+          agent,
+          userId: user.id,
+          organizationId,
+        }),
+      );
     },
   );
 
@@ -1183,6 +1229,118 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(await serializeAgentForExport(agent));
+    },
+  );
+
+  fastify.get(
+    "/api/agents/:id/mcp-tool-preview",
+    {
+      schema: {
+        operationId: RouteId.GetAgentMcpToolPreview,
+        description:
+          "Preview the gateway's initial tools/list for the current user, with estimated tool-definition context tokens",
+        tags: ["Agents"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          client: z.enum(["claude-code", "generic"]).default("generic"),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            toolExposureMode: ToolExposureModeSchema,
+            tokenCount: z.discriminatedUnion("source", [
+              z.object({
+                total: z.number().int().nonnegative(),
+                source: z.literal("claude-provider"),
+                model: z.string(),
+                observedAt: z.iso.datetime(),
+              }),
+              z.object({
+                total: z.number().int().nonnegative(),
+                source: z.literal("estimate"),
+                model: z.null(),
+                observedAt: z.null(),
+              }),
+            ]),
+            tools: z.array(
+              z.object({
+                name: z.string(),
+                description: z.string(),
+                catalogId: z.string().nullable(),
+                tokens: z.number().int().nonnegative(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (
+      { params: { id }, query: { client }, user, organizationId },
+      reply,
+    ) => {
+      const agent = await AgentModel.findGatewayAgentById(id);
+      if (!agent || agent.organizationId !== organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const checker = await getAgentTypePermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      try {
+        checker.require(agent.agentType, { action: "read", scope: agent.id });
+      } catch {
+        throw new ApiError(404, "Agent not found");
+      }
+      if (
+        !checker.isAdmin(agent.agentType) &&
+        !(await AgentModel.findById(id, user.id, false))
+      ) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      // Preview the external user's tool surface, including the attestation
+      // bytes a harness receives, without issuing an access token or recording a call.
+      const { tools, catalogIdsByName } = await buildAgentMcpToolList({
+        agent,
+        tokenAuth: { userId: user.id, organizationId },
+      });
+      const organization = await OrganizationModel.getById(organizationId);
+      const serverName = resolveMcpClientServerName({
+        gatewayName: agent.name,
+        appName: organization?.appName ?? DEFAULT_APP_NAME,
+        isPersonalGateway: agent.isPersonalGateway,
+      });
+      const tokens = estimateMcpToolTokens({
+        tools,
+        client,
+        serverName,
+      });
+      const observed =
+        client === "claude-code"
+          ? await getObservedClaudeCodeToolTokenCount({
+              organizationId,
+              gatewayId: agent.id,
+              tools,
+              serverName,
+            })
+          : null;
+      return reply.send({
+        toolExposureMode: agent.toolExposureMode ?? "full",
+        tokenCount: observed
+          ? { ...observed, source: "claude-provider" as const }
+          : {
+              total: tokens.reduce((sum, count) => sum + count, 0),
+              source: "estimate" as const,
+              model: null,
+              observedAt: null,
+            },
+        tools: tools.map((tool, index) => ({
+          name: tool.name,
+          description: removeAttestationTokens(tool.description ?? ""),
+          catalogId: catalogIdsByName.get(tool.name) ?? null,
+          tokens: tokens[index],
+        })),
+      });
     },
   );
 
@@ -1930,20 +2088,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // The advisor is one org-wide row every environment's agents reach
-        // through delegation. An environment would re-fence it, so reject a
-        // narrowing change rather than silently scoping a shared resource.
-        if (
-          existingAgent.builtInAgentConfig.name === BUILT_IN_AGENT_IDS.ADVISOR
-        ) {
-          if (body.environmentId !== undefined && body.environmentId !== null) {
-            throw new ApiError(
-              400,
-              "The Advisor is org-wide and cannot be assigned to an environment",
-            );
-          }
-        }
-
         // Only allow specific fields for built-in agents.
         updateData = {
           ...(body.builtInAgentConfig !== undefined && {
@@ -1959,7 +2103,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       } else {
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
-        // the advisor delegation exception), so a client cannot promote an
+        // built-in behavior), so a client cannot promote an
         // ordinary agent into a built-in by supplying it on update.
         const { builtInAgentConfig: _ignoredBuiltIn, ...bodyWithoutBuiltIn } =
           body;
@@ -2023,6 +2167,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!agent) {
         throw new ApiError(404, "Agent not found");
       }
+
+      // A Slack bot of this agent follows its name and icon (best effort).
+      void slackAppFactory.syncAgentIdentity(id);
 
       // Only re-init metrics when labels were part of the update payload,
       // since that's the only field that can introduce new label keys.
@@ -2362,19 +2509,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetMemberDefaultAgent,
-        description: "Get the current user's default agent ID",
+        description:
+          "Get the current user's default agent ID, and their personal chat " +
+          "agent (the oldest live personal agent they authored), if any",
         tags: ["Members"],
         response: constructResponseSchema(
-          z.object({ defaultAgentId: z.string().uuid().nullable() }),
+          z.object({
+            defaultAgentId: z.string().uuid().nullable(),
+            personalChatAgentId: z.string().uuid().nullable(),
+          }),
         ),
       },
     },
     async ({ user, organizationId }, reply) => {
-      const defaultAgentId = await MemberModel.getDefaultAgentId(
-        user.id,
-        organizationId,
-      );
-      return reply.send({ defaultAgentId });
+      const [defaultAgentId, personalChatAgentId] = await Promise.all([
+        MemberModel.getDefaultAgentId(user.id, organizationId),
+        // A lookup only: reading the list must never seed an assistant.
+        AgentModel.findPersonalChatAgentId({ userId: user.id, organizationId }),
+      ]);
+      return reply.send({ defaultAgentId, personalChatAgentId });
     },
   );
 
@@ -2788,79 +2941,3 @@ const AGENT_READ_FORBIDDEN_MESSAGE =
  */
 const LLM_PROXY_MANAGED_MESSAGE =
   "The LLM Proxy is managed on the LLM Proxy page.";
-
-function requireAgentRuntimePermission(params: {
-  agentType: AgentType;
-  runtime?: AgentRuntime | null;
-  isAdmin: boolean;
-}): void {
-  if (params.runtime == null) return;
-  if (!config.agentRuntime.enabled) {
-    throw new ApiError(400, "Agent Runtime is not enabled");
-  }
-  if (params.agentType !== "agent") {
-    throw new ApiError(400, "Agent Runtime can only be configured for Agents");
-  }
-  if (params.runtime.privileged && !params.isAdmin) {
-    throw new ApiError(
-      403,
-      "Only Agent administrators can enable a privileged background deployment",
-    );
-  }
-  if (params.runtime.privileged && !config.agentRuntime.allowPrivileged) {
-    throw new ApiError(
-      403,
-      "Privileged background deployments are disabled by the deployment operator",
-    );
-  }
-}
-
-async function assertAgentRuntimeModelCompatibility(params: {
-  runtime:
-    | Pick<AgentRuntime, "command" | "inferenceProtocol">
-    | null
-    | undefined;
-  agent: Pick<Agent, "llmApiKeyId" | "modelId">;
-  organizationId: string;
-  userId: string;
-}): Promise<void> {
-  const { runtime } = params;
-  if (!runtime) return;
-  if (params.agent.llmApiKeyId || params.agent.modelId) {
-    if (!params.agent.llmApiKeyId || !params.agent.modelId) {
-      throw new ApiError(
-        400,
-        "An agent's model and API key must be set together",
-      );
-    }
-    const userTeamIds = await TeamModel.getUserTeamIds(params.userId);
-    const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
-      params.organizationId,
-      params.userId,
-      userTeamIds,
-    );
-    const selectedKey = availableKeys.find(
-      (key) => key.id === params.agent.llmApiKeyId,
-    );
-    const selectedModelIsLinked = selectedKey
-      ? (
-          await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
-            selectedKey.id,
-          ])
-        ).some(({ model }) => model.id === params.agent.modelId)
-      : false;
-    if (!selectedModelIsLinked) {
-      throw new ApiError(
-        400,
-        "The selected model and API key must be linked and available to you",
-      );
-    }
-  }
-  const result = await getResolvedAgentRuntimeModelCompatibility({
-    ...params,
-    runtime,
-  });
-  if (!result.compatibility.compatible) {
-    throw new ApiError(409, result.compatibility.message);
-  }
-}

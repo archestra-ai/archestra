@@ -17,12 +17,14 @@ import {
   MessageCircle,
   MoreHorizontal,
   PencilRuler,
+  Plus,
+  Search,
   Slack,
   Star,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import React from "react";
+import React, { useSyncExternalStore } from "react";
 import { ChatSidebarSection } from "@/app/_parts/chat-sidebar-section";
 import { getCostsNavigationUrl } from "@/app/_parts/costs-navigation";
 import { SidebarUserMenu } from "@/app/_parts/sidebar-user-menu";
@@ -55,6 +57,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
@@ -312,8 +315,25 @@ const NavPrimary = ({
             </SidebarMenuButton>
           </SidebarMenuItem>
         )}
-        {permittedHeaderItems.map(renderItem)}
-        <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
+        {permittedHeaderItems.map((item) =>
+          item.url === "/chat" ? (
+            // New chat and Search lead the Chats list as its two actions,
+            // above the places it links to.
+            <React.Fragment key={item.url}>
+              <SidebarNewChatItem />
+              <SidebarSearchItem />
+            </React.Fragment>
+          ) : (
+            renderItem(item)
+          ),
+        )}
+        {/* The rail's search, for Studio, whose list has no Search row. */}
+        <SidebarMenuItem
+          className={cn(
+            "hidden",
+            !hasNewChat && "group-data-[collapsible=icon]:block",
+          )}
+        >
           <SidebarMenuButton
             tooltip="Search chats"
             onClick={() => {
@@ -506,7 +526,6 @@ export function AppSidebar() {
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
   const pluginsEnabled = useFeature("plugins");
-  const openappaEnabled = useFeature("openappaEnabled");
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
@@ -540,16 +559,6 @@ export function AppSidebar() {
         ...group,
         items: group.items
           .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
-          .filter(
-            (item) => item.url !== "/openappa" || openappaEnabled === true,
-          )
-          // The legacy guardrails page steps aside once OpenAPPA is on: the
-          // flag alone decides, so turning it off brings the page back with
-          // its policies untouched. Waits for the flag answer like Plugins.
-          .filter(
-            (item) =>
-              item.url !== "/mcp/tool-guardrails" || openappaEnabled === false,
-          )
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -587,12 +596,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [
-      pluginsEnabled,
-      openappaEnabled,
-      guardrailsDeployment?.enabled,
-      permissionMap,
-    ],
+    [pluginsEnabled, guardrailsDeployment?.enabled, permissionMap],
   );
 
   return (
@@ -786,3 +790,91 @@ function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
 }
 
 const NO_UNSEEN_KEYS: Set<NavDotKey> = new Set();
+
+/**
+ * The Chats sidebar's first action: an outlined button, set apart from the
+ * plain rows below it, with the shortcut that does the same (Alt+N, handled
+ * by `useConversationSearch`). In the collapsed rail it is a plain icon like
+ * its neighbours. An action rather than a place, so it never shows as the
+ * current page.
+ */
+function SidebarNewChatItem() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        tooltip="New chat"
+        className="h-9 rounded-lg border bg-background font-medium shadow-xs group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none"
+      >
+        <SidebarPrefetchLink
+          href="/chat"
+          onClick={() => {
+            if (isMobile) setOpenMobile(false);
+          }}
+        >
+          <Plus />
+          <span className="min-w-0 flex-1 truncate">New chat</span>
+          <ShortcutHint modifier="alt" letter={SHORTCUT_NEW_CHAT.label} />
+        </SidebarPrefetchLink>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+/** Opens the chat search palette, which Cmd/Ctrl+K also toggles. */
+function SidebarSearchItem() {
+  const { isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        tooltip="Search chats"
+        className="text-muted-foreground"
+        onClick={() => {
+          if (isMobile) setOpenMobile(false);
+          window.dispatchEvent(
+            new CustomEvent("open-conversation-search", {
+              detail: { recentChatsView: true },
+            }),
+          );
+        }}
+      >
+        <Search />
+        <span className="min-w-0 flex-1 truncate">Search</span>
+        <ShortcutHint modifier="mod" letter={SHORTCUT_SEARCH.label} />
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+/**
+ * The shortcut as the viewer's keyboard labels it: ⌥N / ⌘K on a Mac, Alt+N /
+ * Ctrl+K elsewhere. Rendered only in the browser — the server cannot know the
+ * platform, and a guess would flip on hydration.
+ */
+function ShortcutHint({
+  modifier,
+  letter,
+}: {
+  modifier: "mod" | "alt";
+  letter: string;
+}) {
+  const isMac = useSyncExternalStore(
+    subscribeToNothing,
+    () => navigator.platform.toUpperCase().includes("MAC"),
+    () => null,
+  );
+  if (isMac === null) return null;
+  const prefix =
+    modifier === "mod" ? (isMac ? "⌘" : "Ctrl+") : isMac ? "⌥" : "Alt+";
+  return (
+    <kbd className="ml-auto shrink-0 font-sans text-[11px] tracking-wide text-muted-foreground group-data-[collapsible=icon]:hidden">
+      {prefix}
+      {letter}
+    </kbd>
+  );
+}
+
+function subscribeToNothing() {
+  return () => {};
+}

@@ -9,6 +9,7 @@ mod deployments;
 #[allow(dead_code)]
 mod peer;
 mod policy;
+mod replay;
 
 use appa_eventlog::{
     Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
@@ -152,6 +153,9 @@ struct OfferInput {
     /// Recorded as the remedy result.
     #[serde(default)]
     precheck_refusal: Option<String>,
+    /// As on [`Input`]: a remedy's consults are recorded like any dispatch's.
+    #[serde(default)]
+    withhold_consult_content: bool,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -244,6 +248,10 @@ struct Input {
     ruling: Option<RulingInput>,
     #[serde(default)]
     precheck_refusal: Option<String>,
+    /// The host's Log Content mode is Metadata only: this dispatch's consult
+    /// rows keep no content.
+    #[serde(default)]
+    withhold_consult_content: bool,
 }
 
 /// Maximum byte length for precheck refusal text.
@@ -310,6 +318,46 @@ struct RecordedCall {
 
 fn error(message: impl ToString) -> napi::Error {
     napi::Error::from_reason(message.to_string())
+}
+
+/// The upstream pin and host replay boundary version stored with each run.
+#[napi(js_name = "getOpenappaReplayEngineVersion")]
+pub fn get_openappa_replay_engine_version() -> String {
+    replay::ENGINE_VERSION.to_string()
+}
+
+/// Parse scenario files into tools and assertion counts without loading a policy
+/// or evaluating any call.
+#[napi(js_name = "inspectOpenappaPolicyTests")]
+pub async fn inspect_openappa_policy_tests(input: String) -> napi::Result<String> {
+    AssertUnwindSafe(async move {
+        let response = replay::inspect(&input).map_err(error)?;
+        serde_json::to_string(&response).map_err(error)
+    })
+    .catch_unwind()
+    .await
+    .map_err(|_| error("OpenAPPA scenario inspection failed unexpectedly"))?
+}
+
+/// Evaluate bounded `.appa` scenarios against the supplied effective policy. The
+/// replay core answers consults through an in-process stand-in, never a live party,
+/// and keeps every trajectory in memory.
+#[napi(js_name = "replayOpenappaPolicy")]
+pub async fn replay_openappa_policy(input: String) -> napi::Result<String> {
+    static REPLAY_SLOT: Semaphore = Semaphore::const_new(1);
+    AssertUnwindSafe(async move {
+        let _permit = REPLAY_SLOT
+            .try_acquire()
+            .map_err(|_| error("An OpenAPPA replay is already running; retry later"))?;
+        let request = replay::Request::parse(&input).map_err(error)?;
+        let response = tokio::time::timeout(Duration::from_secs(15), replay::run(request))
+            .await
+            .map_err(|_| error("OpenAPPA replay exceeded its 15 second limit"))?;
+        serde_json::to_string(&response).map_err(error)
+    })
+    .catch_unwind()
+    .await
+    .map_err(|_| error("OpenAPPA replay failed unexpectedly"))?
 }
 fn required<'a>(value: &'a Option<String>, name: &str) -> napi::Result<&'a str> {
     value
@@ -608,6 +656,14 @@ pub struct CredentialDeclaration {
     pub line: u32,
 }
 
+/// A root external or profile naming a `token_env`; `reader` is its `externals`
+/// path.
+#[napi(object)]
+pub struct TokenEnvReader {
+    pub variable: String,
+    pub reader: String,
+}
+
 #[napi(object)]
 pub struct PolicyDeclarations {
     pub include: Vec<IncludeDeclaration>,
@@ -619,6 +675,8 @@ pub struct PolicyDeclarations {
     /// or profile of the document names them as its `token_env`. A dispatch carries
     /// their values in `DispatchPolicy.credentials`.
     pub runtime_credentials: Vec<String>,
+    /// Every root external or profile naming a `token_env`, bound or not.
+    pub token_env_readers: Vec<TokenEnvReader>,
     /// A shape the reader could not make sense of, naming the key and its line. An
     /// unparsable document is one error and no declarations.
     pub errors: Vec<String>,
@@ -660,6 +718,14 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                     .collect(),
                 routed_annotators: parsed.routed_annotators,
                 runtime_credentials: parsed.runtime_credentials,
+                token_env_readers: parsed
+                    .token_env_readers
+                    .into_iter()
+                    .map(|reader| TokenEnvReader {
+                        variable: reader.variable,
+                        reader: reader.reader,
+                    })
+                    .collect(),
                 errors: parsed.errors,
             })
             .map_err(|_| error("OpenAPPA declaration parsing failed"))
@@ -756,6 +822,7 @@ pub struct BatteryPackage {
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
     pub externals: Vec<BatteryExternal>,
+    pub benefit: Option<String>,
     pub setup: Option<String>,
     pub files: Vec<BatteryFileInput>,
 }
@@ -781,6 +848,7 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
                     token_env: external.token_env.clone(),
                 })
                 .collect(),
+            benefit: info.benefit.clone(),
             setup: info.setup.clone(),
             files: info
                 .files
@@ -1099,6 +1167,7 @@ pub async fn execute_remedy_by_offer(
         presentation: Some(input.presentation),
         ruling: input.ruling,
         precheck_refusal: input.precheck_refusal,
+        withhold_consult_content: input.withhold_consult_content,
     };
     validate(&input)?;
     let response: Value = serde_json::from_str(&run(input, policy.into()).await?).map_err(error)?;
@@ -1744,6 +1813,7 @@ impl State {
             organization_id: input.organization_id.clone(),
             session_id: input.session_id.clone(),
             caller_id: input.caller_id.clone(),
+            withhold_content: input.withhold_consult_content,
         };
         let result = leased.state.dispatch_on_lease(input, root, key).await;
         // On the dispatch's own connection, after its session lock is released.
@@ -2052,6 +2122,24 @@ impl State {
             // Retained so the child's side can find what its parent addressed to it.
             request["spawned_id"] = json!(input.spawned_id);
         }
+        // Reject host configuration and malformed reporting input before
+        // claiming a durable operation. No effect has started yet, so these
+        // refusals must not leave a pending receipt fencing the whole family.
+        let report = if input.event == HookEventKind::Yell {
+            let reporting = self
+                .reporting
+                .as_ref()
+                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
+            let args: YellArguments =
+                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+            let endpoint = match &input.yell_receiver {
+                Some(receiver) => receiver.endpoint()?,
+                None => reporting.endpoint.clone(),
+            };
+            Some((reporting, args, endpoint))
+        } else {
+            None
+        };
         if let Some(decision) = claim_operation(
             &self.store,
             &input,
@@ -2063,22 +2151,13 @@ impl State {
         )? {
             return Ok(decision);
         }
-        let decision = if input.event == HookEventKind::Yell {
-            let reporting = self
-                .reporting
-                .as_ref()
-                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
-            let args: YellArguments =
-                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+        let decision = if let Some((reporting, args, endpoint)) = report {
             let result = appa_runtime::yell::embedded::send(
                 &self.runtime,
                 appa_runtime::yell::embedded::Request {
                     actor: actor.clone(),
                     harness: adapter::harness(),
-                    endpoint: match &input.yell_receiver {
-                        Some(receiver) => receiver.endpoint()?,
-                        None => reporting.endpoint.clone(),
-                    },
+                    endpoint,
                     hostname: reporting.hostname.clone(),
                     message: args.message,
                     with_trajectory: args.with_trajectory,
@@ -2447,16 +2526,6 @@ enum OutputSource {
 }
 
 #[derive(Serialize)]
-struct RenderedRemedy {
-    decision: &'static str,
-    approved_output: String,
-    output_source: OutputSource,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<&'static str>,
-    result: HostToolResult,
-}
-
-#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HostToolResult {
     is_error: bool,
@@ -2592,7 +2661,7 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             reason.detail().to_owned(),
         ),
     };
-    serde_json::to_value(RenderedRemedy {
+    serde_json::to_value(HostMcpResult {
         decision: "mcp_result",
         approved_output: text.clone(),
         output_source,
@@ -2865,8 +2934,6 @@ fn cancellation_operation(call_id: &str) -> String {
 }
 
 struct CompletedOperation {
-    #[allow(dead_code)]
-    root: String,
     input: Value,
     context: Option<Value>,
     decision: Value,
@@ -2881,7 +2948,7 @@ fn read_completed_operation(
     let organization_id = key.session.organization_id.clone();
     pg.with_client(move |client| {
         let row = client.query_opt(
-            "SELECT root, input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
+            "SELECT input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
             &[&session_id, &operation_id, &organization_id],
         )?;
         let Some(row) = row else {
@@ -2891,7 +2958,6 @@ fn read_completed_operation(
         if status != "complete" {
             return Ok(None);
         }
-        let root: String = row.get("root");
         let input: Value = row.get("input");
         let decision: Option<Value> = row.get("decision");
         let Some(decision) = decision else {
@@ -2909,7 +2975,6 @@ fn read_completed_operation(
             (input, None)
         };
         Ok(Some(CompletedOperation {
-            root,
             input: actual_input,
             context,
             decision,

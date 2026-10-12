@@ -44,8 +44,27 @@ export const TOOL_PERMISSIONS: Record<
     resource: "openappaDiagnostics",
     action: "update",
   },
+  list_openappa_yells: { resource: "openappaDiagnostics", action: "read" },
   list_openappa_consults: { resource: "openappaDiagnostics", action: "read" },
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
+  get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
+  run_openappa_policy_tests: { resource: "openappaPolicy", action: "update" },
+  discover_openappa_validation_scenarios: {
+    resource: "openappaPolicy",
+    action: "read",
+  },
+  draft_openappa_validation_scenario: {
+    resource: "openappaPolicy",
+    action: "read",
+  },
+  preview_openappa_validation_change: {
+    resource: "openappaPolicy",
+    action: "read",
+  },
+  publish_openappa_validation_change: {
+    resource: "openappaPolicy",
+    action: "update",
+  },
   list_guardrails_battery_fits: { resource: "openappaPolicy", action: "read" },
   inspect_guardrails_server: { resource: "openappaPolicy", action: "read" },
   validate_guardrails_policy: { resource: "openappaPolicy", action: "read" },
@@ -54,11 +73,17 @@ export const TOOL_PERMISSIONS: Record<
     action: "read",
   },
   update_guardrails_policy: { resource: "openappaPolicy", action: "update" },
+  // The handler also requires credential:update, as the REST route does.
+  bind_guardrails_credential: { resource: "openappaPolicy", action: "update" },
   get_guardrails_policy_change_status: {
     resource: "openappaPolicy",
     action: "read",
   },
   create_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
+  connect_guardrails_repository: {
     resource: "organizationSettings",
     action: "update",
   },
@@ -71,11 +96,13 @@ export const TOOL_PERMISSIONS: Record<
     resource: "credential",
     action: "create",
   },
+  request_battery_credentials: { resource: "credential", action: "create" },
 
   // Agents
   create_agent: { resource: "agent", action: "create" },
   get_agent: { resource: "agent", action: "read" },
   list_agents: { resource: "agent", action: "read" },
+  list_llm_models: { resource: "llmModel", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
 
   // Agent lifecycle hooks — mirror the REST hook routes' permissions
@@ -135,19 +162,6 @@ export const TOOL_PERMISSIONS: Record<
   delete_limit: { resource: "llmLimit", action: "delete" },
   get_agent_token_usage: { resource: "llmLimit", action: "read" },
   get_llm_proxy_token_usage: { resource: "llmLimit", action: "read" },
-
-  // Policies
-  get_autonomy_policy_operators: { resource: "toolPolicy", action: "read" },
-  get_tool_invocation_policies: { resource: "toolPolicy", action: "read" },
-  create_tool_invocation_policy: { resource: "toolPolicy", action: "create" },
-  get_tool_invocation_policy: { resource: "toolPolicy", action: "read" },
-  update_tool_invocation_policy: { resource: "toolPolicy", action: "update" },
-  delete_tool_invocation_policy: { resource: "toolPolicy", action: "delete" },
-  get_trusted_data_policies: { resource: "toolPolicy", action: "read" },
-  create_trusted_data_policy: { resource: "toolPolicy", action: "create" },
-  get_trusted_data_policy: { resource: "toolPolicy", action: "read" },
-  update_trusted_data_policy: { resource: "toolPolicy", action: "update" },
-  delete_trusted_data_policy: { resource: "toolPolicy", action: "delete" },
 
   // Tool Assignment
   bulk_assign_tools_to_agents: { resource: "agent", action: "update" },

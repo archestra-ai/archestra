@@ -37,11 +37,6 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     title: "Apps",
     description: "How apps behave when an agent creates one.",
   },
-  "/settings/security": {
-    title: "Security",
-    description:
-      "Organization-wide security defaults for tools your agents use.",
-  },
   "/settings/openappa": {
     title: "OpenAPPA settings",
     description: "Sync the OpenAPPA policy from a GitHub repository.",

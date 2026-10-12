@@ -69,6 +69,7 @@ describe("CompactToolGroup", () => {
     // the default code path. Tests that exercise the SkillPill branch can
     // override per-call.
     mockGetToolShortName.mockReturnValue(null);
+    vi.mocked(useSession).mockReturnValue({ data: undefined } as never);
     vi.mocked(useHasPermissions).mockReturnValue({ data: false } as never);
     vi.mocked(useExternalMcpSkills).mockReturnValue({ data: [] } as never);
   });
@@ -116,6 +117,167 @@ describe("CompactToolGroup", () => {
     expect(
       screen.getByRole("button", { name: "update guardrails policy" }),
     ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows combined policy previews only when the proposal changes the policy", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const client = new QueryClient();
+    const proposal = {
+      stage: "preview",
+      delivery: "revision",
+      policy: {
+        before: '[policy]\nversion = 2\nname = "old"\n',
+        after: '[policy]\nversion = 2\nname = "new"\n',
+        changed: true,
+      },
+      counts: { passed: 1, failed: 1, cannotRun: 1 },
+    };
+    const show = (name: string, output: unknown) => (
+      <QueryClientProvider client={client}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "preview",
+              toolName: `archestra__${name}`,
+              part: {
+                type: `tool-archestra__${name}`,
+                state: "output-available",
+                toolCallId: "preview",
+                input: {},
+                output,
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(
+      show("preview_openappa_validation_change", {
+        structuredContent: proposal,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "preview openappa validation change",
+      }),
+    );
+    expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
+      '+name = "new"',
+    );
+    expect(screen.getByText("Proposed policy")).toBeInTheDocument();
+    expect(
+      screen.getByText("1 passed, 1 failed, 1 could not run."),
+    ).toBeInTheDocument();
+    rerender(
+      show("preview_openappa_validation_change", {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              ...proposal,
+              policy: { ...proposal.policy, changed: false },
+            }),
+          },
+        ],
+      }),
+    );
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+    expect(screen.queryByText("Proposed policy")).not.toBeInTheDocument();
+    rerender(show("unrelated_tool", { structuredContent: proposal }));
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+  });
+
+  it("keeps saved validations and draft replay outcomes visible without claiming policy activation", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.replace(/^archestra__/, ""),
+    );
+    const client = new QueryClient();
+    const publication = {
+      delivery: "revision",
+      revision: 2,
+      version: "specs-v2",
+      policyChanged: false,
+      counts: { passed: 2, failed: 0, cannotRun: 0 },
+    };
+    const show = (output: unknown) => (
+      <QueryClientProvider client={client}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "publish",
+              toolName: "archestra__publish_openappa_validation_change",
+              part: {
+                type: "tool-archestra__publish_openappa_validation_change",
+                state: "output-available",
+                toolCallId: "publish",
+                input: {},
+                output,
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(show({ structuredContent: publication }));
+    expect(screen.getByText("Saved validations")).toBeInTheDocument();
+    expect(
+      screen.getByText("Draft replay: 2 passed, 0 failed, 0 could not run."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "View Validations" }),
+    ).toHaveAttribute("href", "/openappa/validation");
+    expect(
+      screen.getByRole("button", {
+        name: "publish openappa validation change",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText(/Enforcement confirmed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
+    const withFailures = {
+      ...publication,
+      counts: { passed: 1, failed: 1, cannotRun: 1 },
+    };
+    rerender(show({ content: JSON.stringify(withFailures) }));
+    expect(
+      screen.getByText("Draft replay: 1 passed, 1 failed, 1 could not run."),
+    ).toBeInTheDocument();
+    rerender(
+      show({
+        structuredContent: {
+          ...withFailures,
+          delivery: "pull_request",
+          number: 17,
+          url: "https://github.com/example/policies/pull/17",
+          before: "unchanged policy",
+          after: "unchanged policy",
+        },
+      }),
+    );
+    expect(
+      screen.getByRole("link", { name: "Review pull request" }),
+    ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
+    expect(
+      screen.getByText(/Review and merge to apply these changes/),
+    ).toHaveTextContent("1 failed, 1 could not run");
+    expect(screen.queryByText("Saved validations")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "publish openappa validation change",
+      }),
+    );
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+    rerender(show({ structuredContent: publication, isError: true }));
+    expect(
+      screen.queryByRole("link", { name: "View Validations" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens the native credential dialog for a completed compact chat tool call", () => {

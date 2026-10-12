@@ -13,7 +13,7 @@ import {
 } from "fastify-type-provider-zod";
 import { HttpResponse } from "msw";
 import OpenAIProvider from "openai";
-import { type MockInstance, vi } from "vitest";
+import { vi } from "vitest";
 import { createChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import {
   buildMcpGatewayTool,
@@ -23,8 +23,6 @@ import { internalCallHeader } from "@/clients/internal-call";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
-import * as toolInvocation from "@/guardrails/tool-invocation";
-import * as trustedData from "@/guardrails/trusted-data";
 import { logRingBuffer } from "@/logging/log-ring-buffer";
 import {
   A2AContextModel,
@@ -61,7 +59,6 @@ import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra"
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
-import { beginConnectionPromptSession } from "@/services/connection-prompt-session";
 import {
   issueConnectionProxySetupContext,
   rewriteConnectionProxySetupUrl,
@@ -135,14 +132,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    // These provider stubs exercise direct Anthropic credentials, independent
+    // of a developer's configured Vertex project.
+    config.llm.anthropic.vertexAi.enabled = false;
+    config.openappa = parseOpenAppaConfig();
     // The server flag alone no longer enforces: the deployment-wide switch has
     // to be on too, and every case here is about APPA actually enforcing.
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -477,7 +474,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           teamId: null,
           isOrganizationToken: true,
         },
-        considerContextUntrusted: false,
         repeatTracker: new ToolCallRepeatTracker(),
         modelAcceptsImageToolResults: false,
       },
@@ -1453,11 +1449,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test("block mode lets the platform's own guardrail models through ungoverned", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
-    for (const source of ["guardrail:annotator", "guardrail:dual_llm"]) {
-      const response = await guardrailCall(source);
-      expect(response.statusCode, response.body).toBe(200);
-    }
-    expect(providerRequests).toHaveLength(2);
+    const response = await guardrailCall("guardrail:annotator");
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
     expect(events).toHaveLength(0);
     const [proofHeader] = Object.keys(internalCallHeader());
     for (const [, options] of vi.mocked(anthropicAdapterFactory.createClient)
@@ -3814,656 +3808,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(providerRequests).toHaveLength(0);
   });
 
-  test("binds Claude Code and OpenCode setup sessions without exempting unrelated requests", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
-    const providerKey = await makeLlmProviderApiKey(
-      agent.organizationId,
-      secret.id,
-      { provider: "anthropic" },
-    );
-    const { value: virtualKey } = await VirtualApiKeyModel.create({
-      organizationId: agent.organizationId,
-      authorId: userId,
-      name: "connection setup client",
-      providerApiKeys: [
-        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
-      ],
-    });
-    const prompt =
-      "Read https://ai.example.com/connect.md?client=claude-code and connect Claude Code.";
-    await beginConnectionPromptSession({
-      userId,
-      organizationId: agent.organizationId,
-      clientId: "claude-code",
-      origin: "https://ai.example.com",
-    });
-    const firstSession = crypto.randomUUID();
-    const send = async (
-      session: string,
-      messages: unknown[],
-      stream = false,
-      deferredTool = false,
-      client: "claude-code" | "opencode" = "claude-code",
-    ) => {
-      const requestPayload = payload(stream, messages);
-      return await app.inject({
-        method: "POST",
-        url: url(),
-        remoteAddress: "203.0.113.20",
-        headers: {
-          authorization: `Bearer ${virtualKey}`,
-          "anthropic-version": "2023-06-01",
-          "user-agent":
-            client === "opencode"
-              ? "opencode/1.17.0"
-              : "claude-cli/2.1.278 (external, cli)",
-          ...(client === "opencode"
-            ? { "x-opencode-session": session }
-            : { "x-claude-code-session-id": session }),
-        },
-        payload: deferredTool
-          ? {
-              ...requestPayload,
-              tools: [
-                ...requestPayload.tools,
-                {
-                  name: "deferred_setup_tool",
-                  input_schema: { type: "object", properties: {} },
-                  defer_loading: true,
-                },
-              ],
-            }
-          : requestPayload,
-      });
-    };
-    const allowsTool = (body: string) =>
-      expect(JSON.parse(body).content).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ type: "tool_use", name: "get_weather" }),
-        ]),
-      );
-
-    block = true;
-    const ignored = await send(crypto.randomUUID(), [
-      { role: "user", content: "Read the docs and connect." },
-      { role: "assistant", content: prompt },
-      {
-        role: "user",
-        content: [
-          { type: "tool_result", tool_use_id: "toolu_x", content: prompt },
-        ],
-      },
-    ]);
-    expect(ignored.statusCode, ignored.body).toBe(200);
-    expect(JSON.parse(ignored.body).content).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "tool_use", name: "get_weather" }),
-      ]),
-    );
-
-    const unboundDeferred = await send(
-      crypto.randomUUID(),
-      [{ role: "user", content: "Unrelated work" }],
-      false,
-      true,
-    );
-    expect(unboundDeferred.statusCode).toBe(400);
-    expect(unboundDeferred.body).toContain("defers its tools to a tool search");
-
-    providerRequests.length = 0;
-    events.length = 0;
-    const first = await send(
-      firstSession,
-      [
-        { role: "user", content: [{ type: "text", text: prompt }] },
-        {
-          role: "assistant",
-          content: [
-            { type: "tool_use", id: "toolu_setup", name: "Bash", input: {} },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: "toolu_setup",
-              content: "done",
-            },
-          ],
-        },
-        { role: "system", content: [{ type: "text", text: "Tool status" }] },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "<system-reminder>Background command completed</system-reminder>",
-            },
-          ],
-        },
-      ],
-      false,
-      true,
-    );
-    expect(first.statusCode, first.body).toBe(200);
-    allowsTool(first.body);
-    expect(JSON.stringify(providerRequests)).toContain(prompt);
-    expect(JSON.stringify(providerRequests)).toContain('"content":"done"');
-    expect(JSON.stringify(providerRequests)).not.toContain(
-      "OpenAPPA withheld raw child transcript access",
-    );
-    expect(JSON.stringify(providerRequests)).not.toContain("archestra_setup_");
-    expect(JSON.stringify(providerRequests)).not.toContain("archestra_con_");
-    expect(events).not.toContainEqual(
-      expect.objectContaining({ event: "tool_call" }),
-    );
-
-    const continued = await send(firstSession, [
-      { role: "user", content: "Continue the setup" },
-    ]);
-    expect(continued.statusCode, continued.body).toBe(200);
-    allowsTool(continued.body);
-
-    options.streamingToolUse = {
-      name: "get_weather",
-      input: { location: "SF" },
-    };
-    const streamed = await send(
-      firstSession,
-      [{ role: "user", content: "Finish connecting" }],
-      true,
-    );
-    expect(streamed.statusCode, streamed.body).toBe(200);
-    expect(streamed.body).toContain('"name":"get_weather"');
-    expect(events).not.toContainEqual(
-      expect.objectContaining({ event: "tool_call" }),
-    );
-
-    providerRequests.length = 0;
-    events.length = 0;
-    const unrelated = await send(crypto.randomUUID(), [
-      { role: "user", content: prompt },
-    ]);
-    expect(unrelated.statusCode, unrelated.body).toBe(200);
-    expect(JSON.parse(unrelated.body).content).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "tool_use", name: "get_weather" }),
-      ]),
-    );
-    expect(JSON.stringify(providerRequests)).toContain(prompt);
-    expect(events).toContainEqual(
-      expect.objectContaining({ event: "tool_call" }),
-    );
-
-    await beginConnectionPromptSession({
-      userId,
-      organizationId: agent.organizationId,
-      clientId: "opencode",
-      origin: "https://ai.example.com",
-    });
-    providerRequests.length = 0;
-    events.length = 0;
-    const openCodeSession = crypto.randomUUID();
-    const openCodePrompt =
-      "Read https://ai.example.com/connect.md?client=opencode and connect OpenCode.";
-    const openCode = await send(
-      openCodeSession,
-      [{ role: "user", content: openCodePrompt }],
-      false,
-      true,
-      "opencode",
-    );
-    expect(openCode.statusCode, openCode.body).toBe(200);
-    allowsTool(openCode.body);
-    expect(events).not.toContainEqual(
-      expect.objectContaining({ event: "tool_call" }),
-    );
-
-    const unrelatedOpenCode = await send(
-      crypto.randomUUID(),
-      [{ role: "user", content: openCodePrompt }],
-      false,
-      false,
-      "opencode",
-    );
-    expect(unrelatedOpenCode.statusCode, unrelatedOpenCode.body).toBe(200);
-    expect(JSON.parse(unrelatedOpenCode.body).content).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "tool_use", name: "get_weather" }),
-      ]),
-    );
-  });
-
-  test("binds an authenticated OpenCode chat-completions session from x-session-id only", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-    makeMember,
-    makeUser,
-  }) => {
-    const providerSecret = await makeSecret({
-      secret: { apiKey: "sk-openai-test" },
-    });
-    const providerKey = await makeLlmProviderApiKey(
-      agent.organizationId,
-      providerSecret.id,
-      { provider: "openai" },
-    );
-    const { value: virtualKey } = await VirtualApiKeyModel.create({
-      organizationId: agent.organizationId,
-      authorId: userId,
-      name: "opencode setup",
-      providerApiKeys: [
-        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
-      ],
-    });
-    const otherUserId = (await makeUser()).id;
-    await makeMember(otherUserId, agent.organizationId);
-    const otherSecret = await makeSecret({
-      secret: { apiKey: "sk-openai-other" },
-    });
-    const otherProviderKey = await makeLlmProviderApiKey(
-      agent.organizationId,
-      otherSecret.id,
-      { provider: "openai" },
-    );
-    const { value: otherKey } = await VirtualApiKeyModel.create({
-      organizationId: agent.organizationId,
-      authorId: otherUserId,
-      name: "other opencode user",
-      providerApiKeys: [
-        {
-          provider: otherProviderKey.provider,
-          providerApiKeyId: otherProviderKey.id,
-        },
-      ],
-    });
-    await ModelModel.upsert({
-      externalId: "openai/gpt-4o",
-      provider: "openai",
-      modelId: "gpt-4o",
-      inputModalities: null,
-      outputModalities: null,
-      lastSyncedAt: new Date(),
-    });
-    await app.register(openAiProxyRoutes);
-    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
-      const client = createOpenAiTestClient({
-        nonStreamingToolCalls: [
-          {
-            id: "call_weather",
-            name: "get_weather",
-            arguments: JSON.stringify({ location: "SF" }),
-          },
-        ],
-      });
-      const create = client.chat.completions.create;
-      client.chat.completions.create = async (params) => {
-        providerRequests.push(structuredClone(params));
-        return create(params);
-      };
-      return client as never;
-    });
-    const prompt =
-      "Read https://ai.example.com/connect.md?client=opencode and connect OpenCode.";
-    const secret = "RAW OPENCODE SECRET";
-    await beginConnectionPromptSession({
-      userId,
-      organizationId: agent.organizationId,
-      clientId: "opencode",
-      origin: "https://ai.example.com",
-    });
-    const session = crypto.randomUUID();
-    const evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-    const evaluateTrustedData = vi.spyOn(
-      trustedData,
-      "evaluateIfContextIsTrusted",
-    );
-    block = true;
-    const send = (token: string, sessionId: string, messages: unknown[]) =>
-      app.inject({
-        method: "POST",
-        url: `/v1/openai/${agent.id}/chat/completions`,
-        remoteAddress: "203.0.113.21",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "user-agent": "opencode/1.18.31",
-          "x-session-id": sessionId,
-        },
-        payload: {
-          model: "gpt-4o",
-          stream: false,
-          messages,
-          tools: [
-            "get_weather",
-            "archestra__execute_remedy_plan",
-            "archestra__get_remedy_plans",
-          ].map((name) => ({
-            type: "function",
-            function: {
-              name,
-              parameters: { type: "object", properties: {} },
-            },
-          })),
-        },
-      });
-    const names = (body: string) =>
-      (
-        (JSON.parse(body).choices?.[0]?.message?.tool_calls ?? []) as {
-          function: { name: string };
-        }[]
-      ).map((call) => call.function.name);
-    const governed = async (token: string, sessionId: string, text: string) => {
-      evaluatePolicies.mockClear();
-      evaluateTrustedData.mockClear();
-      providerRequests.length = 0;
-      events.length = 0;
-      const response = await send(token, sessionId, [
-        { role: "user", content: text },
-        {
-          role: "assistant",
-          content: null,
-          tool_calls: [
-            {
-              id: "call_prev",
-              type: "function",
-              function: { name: "get_weather", arguments: "{}" },
-            },
-          ],
-        },
-        { role: "tool", tool_call_id: "call_prev", content: secret },
-      ]);
-      expect(response.statusCode, response.body).toBe(200);
-      expect(names(response.body)).not.toContain("get_weather");
-      expect(evaluatePolicies).toHaveBeenCalled();
-      expect(JSON.stringify(evaluatePolicies.mock.calls)).toContain(
-        "get_weather",
-      );
-      expect(evaluateTrustedData).toHaveBeenCalled();
-      expect(JSON.stringify(providerRequests)).not.toContain(secret);
-      expect(JSON.stringify(providerRequests)).toContain(
-        "APPROVED REPLACEMENT",
-      );
-      expect(events).toContainEqual(
-        expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
-      );
-    };
-
-    await governed(virtualKey, crypto.randomUUID(), "Unrelated work");
-
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
-    providerRequests.length = 0;
-    events.length = 0;
-    const bound = await send(virtualKey, session, [
-      { role: "user", content: prompt },
-      {
-        role: "assistant",
-        content: null,
-        tool_calls: [
-          {
-            id: "call_prev",
-            type: "function",
-            function: { name: "get_weather", arguments: "{}" },
-          },
-        ],
-      },
-      { role: "tool", tool_call_id: "call_prev", content: secret },
-    ]);
-    expect(bound.statusCode, bound.body).toBe(200);
-    expect(names(bound.body)).toContain("get_weather");
-    expect(evaluatePolicies).not.toHaveBeenCalled();
-    expect(evaluateTrustedData).not.toHaveBeenCalled();
-    expect(JSON.stringify(providerRequests)).toContain(prompt);
-    expect(JSON.stringify(providerRequests)).toContain(secret);
-    expect(JSON.stringify(providerRequests)).not.toContain("archestra_setup_");
-    expect(events).not.toContainEqual(
-      expect.objectContaining({ event: "tool_call" }),
-    );
-
-    const continued = await send(virtualKey, session, [
-      { role: "user", content: "Continue the setup" },
-    ]);
-    expect(continued.statusCode, continued.body).toBe(200);
-    expect(names(continued.body)).toContain("get_weather");
-
-    await governed(virtualKey, crypto.randomUUID(), prompt);
-    await governed(otherKey, session, prompt);
-  });
-
-  test("binds an authenticated Codex responses thread from x-codex-turn-metadata only", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-    makeMember,
-    makeUser,
-  }) => {
-    const providerSecret = await makeSecret({
-      secret: { apiKey: "sk-openai-test" },
-    });
-    const providerKey = await makeLlmProviderApiKey(
-      agent.organizationId,
-      providerSecret.id,
-      { provider: "openai" },
-    );
-    const { value: virtualKey } = await VirtualApiKeyModel.create({
-      organizationId: agent.organizationId,
-      authorId: userId,
-      name: "codex setup",
-      providerApiKeys: [
-        { provider: providerKey.provider, providerApiKeyId: providerKey.id },
-      ],
-    });
-    const otherUserId = (await makeUser()).id;
-    await makeMember(otherUserId, agent.organizationId);
-    const otherSecret = await makeSecret({
-      secret: { apiKey: "sk-openai-other" },
-    });
-    const otherProviderKey = await makeLlmProviderApiKey(
-      agent.organizationId,
-      otherSecret.id,
-      { provider: "openai" },
-    );
-    const { value: otherKey } = await VirtualApiKeyModel.create({
-      organizationId: agent.organizationId,
-      authorId: otherUserId,
-      name: "other codex user",
-      providerApiKeys: [
-        {
-          provider: otherProviderKey.provider,
-          providerApiKeyId: otherProviderKey.id,
-        },
-      ],
-    });
-    await ModelModel.upsert({
-      externalId: "openai/gpt-5.5",
-      provider: "openai",
-      modelId: "gpt-5.5",
-      inputModalities: null,
-      outputModalities: null,
-      lastSyncedAt: new Date(),
-    });
-    await app.register(openAiProxyRoutes);
-    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
-      () =>
-        ({
-          responses: {
-            create: async (params: unknown) => {
-              providerRequests.push(structuredClone(params));
-              return {
-                id: "resp_setup",
-                object: "response",
-                created_at: 1,
-                status: "completed",
-                model: "gpt-5.5",
-                output: [
-                  {
-                    type: "function_call",
-                    id: "fc_weather",
-                    call_id: "call_weather",
-                    name: "get_weather",
-                    arguments: JSON.stringify({ location: "SF" }),
-                    status: "completed",
-                  },
-                ],
-                usage: {
-                  input_tokens: 10,
-                  output_tokens: 5,
-                  total_tokens: 15,
-                },
-              };
-            },
-          },
-        }) as never,
-    );
-    const prompt =
-      "Read https://ai.example.com/connect.md?client=codex and connect Codex.";
-    const secret = "RAW CODEX SECRET";
-    const thread = crypto.randomUUID();
-    await beginConnectionPromptSession({
-      userId,
-      organizationId: agent.organizationId,
-      clientId: "codex",
-      origin: "https://ai.example.com",
-    });
-    const evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-    const evaluateTrustedData = vi.spyOn(
-      trustedData,
-      "evaluateIfContextIsTrusted",
-    );
-    block = true;
-    const send = (
-      token: string,
-      threadId: string,
-      input: unknown[],
-      deferred = false,
-    ) =>
-      app.inject({
-        method: "POST",
-        url: `/v1/openai/${agent.id}/responses`,
-        remoteAddress: "203.0.113.22",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json",
-          "user-agent": "codex_cli_rs/0.154.0",
-          originator: "codex_cli_rs",
-          "x-codex-turn-metadata": JSON.stringify({ thread_id: threadId }),
-        },
-        payload: {
-          model: "gpt-5.5",
-          stream: false,
-          input,
-          tools: [
-            ...[
-              "get_weather",
-              "archestra__execute_remedy_plan",
-              "archestra__get_remedy_plans",
-            ].map((name) => ({
-              type: "function",
-              name,
-              parameters: { type: "object", properties: {} },
-            })),
-            ...(deferred
-              ? [
-                  {
-                    type: "function",
-                    name: "deferred_setup_tool",
-                    parameters: { type: "object", properties: {} },
-                    defer_loading: true,
-                  },
-                ]
-              : []),
-          ],
-        },
-      });
-    const names = (body: string) =>
-      ((JSON.parse(body).output ?? []) as { type?: string; name?: string }[])
-        .filter((item) => item.type === "function_call")
-        .map((item) => item.name);
-    const withSecret = (text: string) => [
-      {
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text }],
-      },
-      {
-        type: "function_call",
-        call_id: "call_prev",
-        name: "get_weather",
-        arguments: "{}",
-      },
-      {
-        type: "function_call_output",
-        call_id: "call_prev",
-        output: secret,
-      },
-    ];
-    const governed = async (token: string, threadId: string, text: string) => {
-      evaluatePolicies.mockClear();
-      evaluateTrustedData.mockClear();
-      providerRequests.length = 0;
-      events.length = 0;
-      const response = await send(token, threadId, withSecret(text));
-      expect(response.statusCode, response.body).toBe(200);
-      expect(names(response.body)).not.toContain("get_weather");
-      expect(evaluatePolicies).toHaveBeenCalled();
-      expect(JSON.stringify(evaluatePolicies.mock.calls)).toContain(
-        "get_weather",
-      );
-      expect(evaluateTrustedData).toHaveBeenCalled();
-      expect(JSON.stringify(providerRequests)).not.toContain(secret);
-      expect(JSON.stringify(providerRequests)).toContain(
-        "APPROVED REPLACEMENT",
-      );
-      expect(events).toContainEqual(
-        expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
-      );
-    };
-
-    providerRequests.length = 0;
-    const deferred = await send(
-      virtualKey,
-      crypto.randomUUID(),
-      withSecret("Unrelated work"),
-      true,
-    );
-    expect(deferred.statusCode, deferred.body).toBe(400);
-    expect(deferred.body).toContain("defers its tools to a tool search");
-    expect(providerRequests).toHaveLength(0);
-
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
-    providerRequests.length = 0;
-    events.length = 0;
-    const bound = await send(virtualKey, thread, withSecret(prompt), true);
-    expect(bound.statusCode, bound.body).toBe(200);
-    expect(names(bound.body)).toContain("get_weather");
-    expect(evaluatePolicies).not.toHaveBeenCalled();
-    expect(evaluateTrustedData).not.toHaveBeenCalled();
-    expect(JSON.stringify(providerRequests)).toContain(prompt);
-    expect(JSON.stringify(providerRequests)).toContain(secret);
-    expect(JSON.stringify(providerRequests)).not.toContain("archestra_setup_");
-    expect(events).not.toContainEqual(
-      expect.objectContaining({ event: "tool_call" }),
-    );
-
-    const continued = await send(virtualKey, thread, [
-      {
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text: "Continue the setup" }],
-      },
-    ]);
-    expect(continued.statusCode, continued.body).toBe(200);
-    expect(names(continued.body)).toContain("get_weather");
-
-    await governed(virtualKey, crypto.randomUUID(), prompt);
-    await governed(otherKey, thread, prompt);
-  });
-
-  test("governs Codex direct-mode inline namespaced tools unless a personal key binds the setup prompt", async ({
+  test("governs Codex direct-mode inline namespaced tools, the old setup prompt included", async ({
     makeSecret,
     makeLlmProviderApiKey,
     makeUser,
@@ -4543,17 +3888,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const namespace = "mcp__gw";
     const thread = crypto.randomUUID();
     const probeThread = crypto.randomUUID();
-    await beginConnectionPromptSession({
-      userId,
-      organizationId: agent.organizationId,
-      clientId: "codex",
-      origin: "https://ai.example.com",
-    });
-    const evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-    const evaluateTrustedData = vi.spyOn(
-      trustedData,
-      "evaluateIfContextIsTrusted",
-    );
     block = true;
     const directTools = [
       {
@@ -4618,19 +3952,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       },
     ];
     const governed = async (token: string, threadId: string, text: string) => {
-      evaluatePolicies.mockClear();
-      evaluateTrustedData.mockClear();
       providerRequests.length = 0;
       events.length = 0;
       const response = await send(token, threadId, withSecret(text));
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).not.toContain("defers its tools to a tool search");
       expect(names(response.body)).not.toContain("get_weather");
-      expect(evaluatePolicies).toHaveBeenCalled();
-      expect(JSON.stringify(evaluatePolicies.mock.calls)).toContain(
-        "get_weather",
-      );
-      expect(evaluateTrustedData).toHaveBeenCalled();
       expect(JSON.stringify(providerRequests)).not.toContain(secret);
       expect(JSON.stringify(providerRequests)).toContain(
         "APPROVED REPLACEMENT",
@@ -4644,45 +3971,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     await governed(virtualKey, probeThread, probe);
     await governed(virtualKey, probeThread, "Continue without the prompt");
 
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
-    providerRequests.length = 0;
-    events.length = 0;
-    const bound = await send(virtualKey, thread, withSecret(prompt));
-    expect(bound.statusCode, bound.body).toBe(200);
-    expect(names(bound.body)).toContain("get_weather");
-    expect(evaluatePolicies).not.toHaveBeenCalled();
-    expect(evaluateTrustedData).not.toHaveBeenCalled();
-    expect(JSON.stringify(providerRequests)).toContain(prompt);
-    expect(JSON.stringify(providerRequests)).toContain(secret);
-    expect(JSON.stringify(providerRequests)).toContain(namespace);
-    expect(JSON.stringify(providerRequests)).not.toContain(
-      "APPROVED REPLACEMENT",
-    );
-    expect(JSON.stringify(providerRequests)).not.toContain("archestra_setup_");
-    expect(events).not.toContainEqual(
-      expect.objectContaining({ event: "tool_call" }),
-    );
+    // Pasting the old connect prompt no longer opens a setup bypass.
+    await governed(virtualKey, thread, prompt);
 
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
-    providerRequests.length = 0;
-    const continued = await send(virtualKey, thread, [
-      {
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text: "Continue the setup" }],
-      },
-    ]);
-    expect(continued.statusCode, continued.body).toBe(200);
-    expect(names(continued.body)).toContain("get_weather");
-    expect(evaluatePolicies).not.toHaveBeenCalled();
-    expect(evaluateTrustedData).not.toHaveBeenCalled();
-    expect(JSON.stringify(providerRequests)).toContain("Continue the setup");
-    expect(JSON.stringify(providerRequests)).not.toContain(prompt);
-
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
     providerRequests.length = 0;
     events.length = 0;
     const orgThread = crypto.randomUUID();
@@ -4690,15 +3981,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(org.statusCode, org.body).toBe(200);
     expect(org.body).not.toContain("defers its tools to a tool search");
     expect(names(org.body)).not.toContain("get_weather");
-    expect(evaluatePolicies).toHaveBeenCalled();
-    expect(evaluateTrustedData).toHaveBeenCalled();
     expect(JSON.stringify(providerRequests)).not.toContain(secret);
     expect(JSON.stringify(providerRequests)).toContain("APPROVED REPLACEMENT");
     expect(events).toContainEqual(
       expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
     );
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
     providerRequests.length = 0;
     events.length = 0;
     const orgContinued = await send(orgKey, orgThread, [
@@ -4710,8 +3997,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
     expect(orgContinued.statusCode, orgContinued.body).toBe(200);
     expect(names(orgContinued.body)).not.toContain("get_weather");
-    expect(evaluatePolicies).toHaveBeenCalled();
-    expect(evaluateTrustedData).toHaveBeenCalled();
   });
 
   test("scopes an external client's explicit session to its credential", async ({
@@ -5707,91 +4992,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   for (const stream of [true, false]) {
-    test(`existing invocation policies remain enforced alongside APPA (stream=${stream})`, async ({
-      makeTool,
-      makeToolPolicy,
-    }) => {
-      const tool = await makeTool({ name: "get_weather", agentId: agent.id });
-      await makeToolPolicy(tool.id, {
-        action: "block_always",
-        conditions: [],
-        reason: "Platform weather policy refused this call",
-      });
-      const evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-      const request = {
-        method: "POST" as const,
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: headers(),
-        payload: payload(stream),
-      };
-
-      const denied = await app.inject(request);
-      expect(denied.statusCode, denied.body).toBe(200);
-      expect(denied.body).toContain(
-        "Platform weather policy refused this call",
-      );
-      expect(denied.body).not.toContain('"type":"tool_use"');
-      expect(events.some((event) => event.event === "tool_call")).toBe(false);
-      expect(evaluatePolicies).toHaveBeenCalledOnce();
-      evaluatePolicies.mockClear();
-
-      config.openappa.enabled = false;
-      config.llmProxy.plugins = parseLlmProxyPlugins("appa", false);
-      unregisterAppaPlugin();
-      // Other plugins allowing a call must still run the ordinary policy check.
-      const unregisterObserver = registerLlmProxyPlugin({
-        id: "test-allow",
-        async onToolCalls({ toolCalls }) {
-          return { decision: "allow", toolCalls };
-        },
-      });
-      const nativeCalls = events.length;
-      try {
-        const blocked = await app.inject(request);
-        expect(blocked.statusCode, blocked.body).toBe(200);
-        expect(blocked.body).toContain(
-          "Platform weather policy refused this call",
-        );
-        expect(blocked.body).not.toContain('"type":"tool_use"');
-        expect(evaluatePolicies).toHaveBeenCalledOnce();
-        expect(events).toHaveLength(nativeCalls);
-        // A refusal is a terminal answer on both paths: the turn ends, so
-        // the offers of this turn do not outlive it.
-        expect(events).toContainEqual(
-          expect.objectContaining({ event: "turn_end" }),
-        );
-      } finally {
-        unregisterObserver();
-      }
-    });
-  }
-
-  for (const stream of [true, false]) {
-    test(`deployment toggle off preserves existing enforcement without APPA headers (stream=${stream})`, async ({
-      makeTool,
-      makeToolPolicy,
-    }) => {
-      await GuardrailsDeploymentModel.setEnabled(false);
-      const target = await makeTool({ name: "get_weather", agentId: agent.id });
-      await makeToolPolicy(target.id, {
-        action: "block_always",
-        conditions: [],
-        reason: "Existing guardrails still active",
-      });
-      const response = await app.inject({
-        method: "POST",
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: { "x-api-key": "test-key", "anthropic-version": "2023-06-01" },
-        payload: payload(stream),
-      });
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.body).toContain("Existing guardrails still active");
-      expect(response.body).not.toContain('"type":"tool_use"');
-      expect(events).toEqual([]);
-    });
-
     test(`deployment toggle off reads no records for a Claude Code session's messages and subagent results (stream=${stream})`, async () => {
       await GuardrailsDeploymentModel.setEnabled(false);
       native.loadChildReturns.mockClear();
@@ -5848,48 +5048,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(JSON.stringify(providerRequests)).toContain(
         "Three triggers are stuck",
       );
-    });
-
-    test(`legacy policies check plugin rewrites before APPA reserves a call (stream=${stream})`, async ({
-      makeTool,
-      makeToolPolicy,
-    }) => {
-      const target = await makeTool({
-        name: "get_weather",
-        agentId: agent.id,
-      });
-      await makeToolPolicy(target.id, {
-        action: "block_always",
-        conditions: [{ key: "location", operator: "equal", value: "blocked" }],
-        reason: "Rewritten target blocked",
-      });
-      const unregisterRewriter = registerLlmProxyPlugin({
-        id: "test-rewriter",
-        async onToolCalls({ toolCalls }) {
-          return {
-            decision: "allow",
-            toolCalls: toolCalls.map((call) => ({
-              ...call,
-              arguments: JSON.stringify({ location: "blocked" }),
-            })),
-          };
-        },
-      });
-      try {
-        const response = await app.inject({
-          method: "POST",
-          url: url(),
-          remoteAddress: "127.0.0.1",
-          headers: headers(),
-          payload: payload(stream),
-        });
-        expect(response.statusCode, response.body).toBe(200);
-        expect(response.body).toContain("Rewritten target blocked");
-        expect(response.body).not.toContain('"type":"tool_use"');
-        expect(events.some((event) => event.event === "tool_call")).toBe(false);
-      } finally {
-        unregisterRewriter();
-      }
     });
   }
 
@@ -5983,10 +5141,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   test("substitutes saved approved results before the provider sees resent history", async () => {
-    const evaluateTrustedData = vi.spyOn(
-      trustedData,
-      "evaluateIfContextIsTrusted",
-    );
     for (const raw of ["RAW SECRET", "ALTERED RAW SECRET"]) {
       const messages = [
         { role: "user", content: "Weather" },
@@ -6033,25 +5187,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         outcome: "success",
       }),
     ]);
-    expect(evaluateTrustedData).toHaveBeenCalledTimes(2);
   });
 
-  test("OpenAPPA replaces results and controls calls without legacy trusted-data blocking", async ({
-    makeTool,
-    makeToolPolicy,
-    makeTrustedDataPolicy,
-  }) => {
-    const target = await makeTool({ name: "get_weather", agentId: agent.id });
-    await makeTrustedDataPolicy(target.id, {
-      action: "block_always",
-      conditions: [{ key: "secret", operator: "equal", value: "RAW SECRET" }],
-      description: "Unsafe result",
-    });
-    await makeToolPolicy(target.id, {
-      action: "block_when_context_is_untrusted",
-      conditions: [],
-      reason: "Existing untrusted-context policy",
-    });
+  test("OpenAPPA replaces results and releases the approved call", async () => {
     const messages = [
       { role: "user", content: "Weather" },
       {
@@ -6095,7 +5233,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
     expect(JSON.stringify(providerRequests)).toContain("APPROVED REPLACEMENT");
     expect(JSON.stringify(providerRequests)).not.toContain("RAW SECRET");
-    expect(response.body).not.toContain("this session contains sensitive data");
     expect(response.body).toContain('"type":"tool_use"');
   });
 
@@ -11289,8 +10426,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     let otherPassthroughToken: string;
     let otherPassthroughKeyId: string;
     let otherAgent: Agent;
-    let evaluatePolicies: MockInstance;
-    let evaluateTrustedData: MockInstance;
 
     beforeEach(
       async ({
@@ -11459,11 +10594,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 },
               },
             }) as never,
-        );
-        evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-        evaluateTrustedData = vi.spyOn(
-          trustedData,
-          "evaluateIfContextIsTrusted",
         );
       },
     );
@@ -11661,8 +10791,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       headers?: Record<string, string>;
       url?: string;
     }) => {
-      evaluatePolicies.mockClear();
-      evaluateTrustedData.mockClear();
       providerRequests.length = 0;
       events.length = 0;
       const profileId = params.profileId ?? agent.id;
@@ -11716,8 +10844,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.body).not.toContain("cps1_");
       expect(response.body).not.toContain(token);
       expect(events).toEqual([]);
-      expect(evaluatePolicies).not.toHaveBeenCalled();
-      expect(evaluateTrustedData).not.toHaveBeenCalled();
       expect(providerRequests).toHaveLength(1);
       const sent = JSON.stringify(providerRequests);
       expect(sent).toContain(prompt);
@@ -11741,7 +10867,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
       expect(providerRequests).toHaveLength(0);
       expect(events).toEqual([]);
-      expect(evaluatePolicies).not.toHaveBeenCalled();
     };
 
     const expectStillGoverned = (response: {
@@ -11754,8 +10879,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events).toContainEqual(
         expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
       );
-      expect(evaluatePolicies).toHaveBeenCalled();
-      expect(evaluateTrustedData).toHaveBeenCalled();
       expect(providerRequests).toHaveLength(1);
       const sent = JSON.stringify(providerRequests);
       expect(sent).not.toContain(secret);
@@ -12032,7 +11155,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         );
         expect(providerRequests).toHaveLength(0);
         expect(events).toEqual([]);
-        expect(evaluatePolicies).not.toHaveBeenCalled();
       }
 
       const openai = await postSetup({
@@ -12156,12 +11278,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -14632,12 +13751,9 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",

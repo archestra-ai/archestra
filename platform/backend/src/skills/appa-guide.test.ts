@@ -8,8 +8,13 @@ import {
   guardrailsPolicyService,
   initialPolicy,
 } from "@/services/guardrails-policy";
+import { inspectOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { describe, expect, test } from "@/test";
 import { APPA_GUIDE_SKILL } from "./appa-guide";
+import {
+  APPA_CONTRACTS_PARTS,
+  appaContractsPartPath,
+} from "./appa-guide-contracts";
 import { builtInSkillSourceRef } from "./built-in-skills";
 import { buildSkillCatalogPrompt } from "./skill-catalog-prompt";
 
@@ -67,7 +72,7 @@ describe("APPA Guide feature availability", () => {
     expect(JSON.stringify(loaded)).toContain(
       "archestra__get_guardrails_policy",
     );
-    for (const path of ["references/contracts.md", "references/archestra.md"]) {
+    for (const { path } of APPA_GUIDE_SKILL.files) {
       const reference = await executeArchestraTool(
         "archestra__load_skill",
         { name: APPA_GUIDE_SKILL.name, path },
@@ -187,6 +192,24 @@ describe("APPA Guide feature availability", () => {
     }
   });
 
+  test("binds battery credentials with the bind tool, never a [credentials] line", () => {
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/archestra.md",
+    )?.content;
+    if (!reference) throw new Error("Archestra reference not found");
+    for (const text of [APPA_GUIDE_SKILL.content, reference]) {
+      expect(text).toContain("archestra__bind_guardrails_credential");
+      // A text line wins over the stored binding and locks it in the UI.
+      for (const [, toml] of text.matchAll(/```toml\n([\s\S]*?)```/g))
+        expect(toml).not.toContain("[credentials]");
+      expect(text).not.toContain("`[server_aliases]`, and `[credentials]`");
+      expect(text).not.toContain("`[server_aliases]` and `[credentials]`");
+    }
+    expect(APPA_GUIDE_SKILL.content).toContain(
+      "overrides the stored binding and locks it in the Batteries dialog; do not add one",
+    );
+  });
+
   test("inlines OpenAPPA's shared policy-writing rules into the always-loaded skill body", () => {
     const core = readFileSync(
       new URL("./appa-guide.core.generated.md", import.meta.url),
@@ -198,15 +221,113 @@ describe("APPA Guide feature availability", () => {
     ).toBe(false);
   });
 
-  test("serves OpenAPPA's policy reference unchanged", () => {
-    const contracts = readFileSync(
+  test("validation-writing examples parse with the embedded scenario parser", async () => {
+    config.openappa.enabled = true;
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/validation-writing.md",
+    );
+    if (!reference) throw new Error("Validation-writing reference is missing");
+    const examples = [...reference.content.matchAll(/```appa\n([\s\S]*?)```/g)];
+    expect(examples.length).toBeGreaterThan(0);
+    const inspection = await inspectOpenAppaPolicyTests(
+      examples.map((example, index) => ({
+        path: `traces/example-${index}.appa`,
+        content: example[1],
+      })),
+    );
+    for (const file of inspection.files) {
+      expect(file.error, file.path).toBeNull();
+      expect(file.assertionCount).toBeGreaterThan(0);
+    }
+  });
+
+  test("the validation example isolates the read restriction and catches its removal", async () => {
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/validation-read-restriction.md",
+    )?.content;
+    if (!reference) throw new Error("Validation-writing reference is missing");
+    const policy = reference.match(/```toml\n([\s\S]*?)```/)?.[1];
+    const scenario = reference.match(/```appa\n([\s\S]*?)```/)?.[1];
+    if (!policy || !scenario) throw new Error("Validation example is missing");
+    const { replayOpenappaPolicy } = await import("@archestra/openappa-rs");
+    const replay = async (content: string) =>
+      JSON.parse(
+        await replayOpenappaPolicy(
+          JSON.stringify({
+            content,
+            files: [{ path: "traces/private-read.appa", content: scenario }],
+          }),
+        ),
+      ).files[0];
+
+    const baseline = await replay(policy);
+    expect(baseline.status).toBe("passed");
+    expect(
+      baseline.steps.map((step: { actual: string }) => step.actual),
+    ).toEqual(["allow", "allow", "deny"]);
+
+    const unprotected = await replay(
+      policy.replace('delta = { audience = ["internal"] }', "delta = {}"),
+    );
+    expect(unprotected.status).toBe("failed");
+    expect(unprotected.steps.at(-1)).toMatchObject({
+      expected: "deny",
+      actual: "allow",
+    });
+
+    const alwaysBlocked = await replay(
+      policy.replace(
+        'contains = ["public"] } }',
+        'contains = ["public"] }, attention = ["blocked"] }',
+      ),
+    );
+    expect(alwaysBlocked.status).toBe("failed");
+    expect(alwaysBlocked.steps[0]).toMatchObject({
+      expected: "allow",
+      actual: "deny",
+    });
+  });
+
+  test("every file the skill points to is bundled with it", () => {
+    const bundled = new Set(APPA_GUIDE_SKILL.files.map((file) => file.path));
+    const referenced = [
+      APPA_GUIDE_SKILL.content,
+      ...APPA_GUIDE_SKILL.files.map((file) => file.content),
+    ].flatMap((text) => [...text.matchAll(/references\/[\w/-]+\.md/g)]);
+    for (const [path] of referenced) {
+      expect(bundled, path).toContain(path);
+    }
+  });
+
+  test("the served contracts parts rebuild OpenAPPA's policy reference", () => {
+    const upstream = readFileSync(
       new URL("./appa-guide.contracts.generated.md", import.meta.url),
       "utf8",
     );
-    expect(
-      APPA_GUIDE_SKILL.files.find(
-        (file) => file.path === "references/contracts.md",
-      )?.content,
-    ).toBe(contracts);
+    const starts = APPA_CONTRACTS_PARTS.flatMap(({ slug, headings }) =>
+      headings.map((heading) => {
+        const at = upstream.indexOf(`\n${heading}\n`) + 1;
+        expect(at, heading).toBeGreaterThan(0);
+        expect(upstream.indexOf(`\n${heading}\n`, at), heading).toBe(-1);
+        return { slug, at };
+      }),
+    ).sort((a, b) => a.at - b.at);
+    // Only the website frontmatter and intro precede the first part.
+    expect(upstream.slice(0, starts[0].at)).not.toMatch(/^## /m);
+    const expected = new Map<string, string>();
+    starts.forEach(({ slug, at }, index) => {
+      const section = upstream.slice(at, starts[index + 1]?.at);
+      expected.set(slug, (expected.get(slug) ?? "") + section);
+    });
+    const served = new Map(
+      APPA_GUIDE_SKILL.files.map((file) => [file.path, file.content]),
+    );
+    for (const { slug } of APPA_CONTRACTS_PARTS) {
+      const part = served.get(appaContractsPartPath(slug));
+      expect(
+        part?.replaceAll(/\]\(references\/contracts\/[\w-]+\.md#/g, "](#"),
+        slug,
+      ).toBe(expected.get(slug)?.replaceAll(/\[([^\]]+)\]\(\/[^)]*\)/g, "$1"));
+    }
   });
 });

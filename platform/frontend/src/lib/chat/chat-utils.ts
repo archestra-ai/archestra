@@ -175,9 +175,12 @@ export function getConversationShareTooltip(
   return "Shared with your organization";
 }
 
+type ManualCompactionResponse =
+  archestraApiTypes.CompactChatConversationResponses["200"];
+
 export function getManualCompactionSkippedMessage(
-  reason: string | undefined,
-  status?: string,
+  reason: ManualCompactionResponse["reason"],
+  status?: ManualCompactionResponse["status"],
 ): string {
   switch (reason) {
     case "nothing_to_compact":

@@ -8,8 +8,7 @@
  * OpenAI shapes.
  *
  * Everything between the route and these translations (auth, cost optimization,
- * trusted-data / tool-invocation policies, OTEL, interaction
- * logging) runs on Converse shapes, reusing the battle-tested Bedrock adapter.
+ * proxy plugin rulings, OTEL, interaction logging) runs on Converse shapes, reusing the battle-tested Bedrock adapter.
  */
 
 import type { ConverseStreamOutput } from "@aws-sdk/client-bedrock-runtime";
@@ -146,8 +145,8 @@ class BedrockOpenaiStreamAdapter
   private upstreamUsage?: BedrockResponse["usage"];
   /**
    * Tool-call events translated at arrival (once) and cached here. The handler
-   * retrieves them via `getRawToolCallEvents()` after the per-tool policy
-   * decides they can be streamed; for blocked tools the handler simply never
+   * retrieves them via `getRawToolCallEvents()` after the proxy plugins
+   * decide they can be streamed; for blocked tools the handler simply never
    * calls that method and the bytes are discarded when the stream ends.
    * Translating at arrival (not at flush) avoids repeated encoder state
    * advancement when the handler polls multiple times across chunks.

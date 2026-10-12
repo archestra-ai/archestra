@@ -1,7 +1,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
-import config from "@/config";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   A2AContextModel,
   A2AMessageModel,
@@ -43,8 +43,9 @@ test("refuses an incompatible Gemini runtime before creating a detached task", a
     llmApiKeyId: providerKey.id,
     runtime: agentRuntime("anthropic"),
   });
-  const previousRuntimeEnabled = config.agentRuntime.enabled;
-  config.agentRuntime.enabled = true;
+  const sandboxInstalled = vi
+    .spyOn(agentSandboxApi, "isInstalled", "get")
+    .mockReturnValue(true);
   vi.spyOn(
     kubernetesAgentRuntimeBackendDriver,
     "assertReady",
@@ -107,7 +108,7 @@ test("refuses an incompatible Gemini runtime before creating a detached task", a
     ).rejects.toMatchObject({ statusCode: 409 });
     expect(await A2AMessageModel.findByContextId(context.id)).toEqual([]);
   } finally {
-    config.agentRuntime.enabled = previousRuntimeEnabled;
+    sandboxInstalled.mockRestore();
   }
 });
 

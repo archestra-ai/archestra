@@ -4,6 +4,7 @@ import {
   type archestraApiTypes,
   extractMcpExecutedAs,
   isEncryptedChatUnavailableContent,
+  isLogContentNotStored,
   parseFullToolName,
 } from "@archestra/shared";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -31,7 +32,10 @@ import {
   formatCallerIdentity,
   useMcpToolCall,
 } from "@/lib/mcp/mcp-tool-call.query";
-import { resolveMcpToolCallStatus } from "@/lib/mcp-logs/tool-call-status";
+import {
+  canShowMcpToolCallStatus,
+  resolveMcpToolCallStatus,
+} from "@/lib/mcp-logs/tool-call-status";
 import { formatDate } from "@/lib/utils/date-time";
 
 export function McpToolCallDetailPage({
@@ -121,12 +125,14 @@ function McpToolCallDetail({
     ? mcpToolCall.toolResult
     : null;
 
-  const toolCall = lockedToolCall
-    ? null
-    : (mcpToolCall.toolCall as {
-        name?: string;
-        arguments?: unknown;
-      } | null);
+  // A metadata-only row withholds the arguments but keeps the tool's name.
+  const toolCall =
+    lockedToolCall && !isLogContentNotStored(lockedToolCall)
+      ? null
+      : (mcpToolCall.toolCall as {
+          name?: string;
+          arguments?: unknown;
+        } | null);
   const toolResult = lockedToolResult
     ? null
     : (mcpToolCall.toolResult as {
@@ -135,14 +141,21 @@ function McpToolCallDetail({
         content?: unknown;
       } | null);
 
+  // A metadata-only row keeps the call's outcome and identity in its marker,
+  // just not the result itself.
+  const notStoredResult = isLogContentNotStored(mcpToolCall.toolResult)
+    ? mcpToolCall.toolResult
+    : null;
+  const outcome = toolResult ?? notStoredResult;
+
   // Whose credential served the call upstream, recorded with the result.
-  const executedAs = extractMcpExecutedAs(toolResult);
+  const executedAs = extractMcpExecutedAs(outcome);
 
   // Success / error / cancelled — a cancelled call (the user stopped the run
   // or the background task) is neither a success nor a failure.
   const status =
-    method === "tools/call" && toolResult
-      ? resolveMcpToolCallStatus(toolResult)
+    method === "tools/call" && outcome
+      ? resolveMcpToolCallStatus(outcome)
       : "success";
 
   // What was actually called, which is the record's identity. A `tools/call`
@@ -234,9 +247,11 @@ function McpToolCallDetail({
           <PageBackLink href="/mcp/logs">Back to MCP Logs</PageBackLink>
         }
         // Whether the call succeeded is the one live fact about this record,
-        // which is exactly what the header's status slot is for.
+        // which is exactly what the header's status slot is for. Without an
+        // outcome, it says "Not stored" rather than asserting one.
         status={
-          lockedToolResult ? (
+          lockedToolResult &&
+          !canShowMcpToolCallStatus(method, lockedToolResult) ? (
             <EncryptedChatContentUnavailableLabel value={lockedToolResult} />
           ) : (
             <Badge

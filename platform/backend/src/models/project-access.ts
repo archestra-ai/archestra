@@ -1,14 +1,13 @@
-import type {
-  ResourceAccessRelation,
-  ResourcePermissionGrant,
-} from "@archestra/shared";
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { Project, ProjectLifecycle, ProjectVisibility } from "@/types";
 import ResourcePermissionAccessModel from "./resource-permission-access";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessSelection,
+} from "./resource-permission-subject";
 
 /** Who a project reaches besides its owner, read from its permission policy. */
 type ProjectAudience = {
@@ -89,14 +88,14 @@ class ProjectAccessModel {
   }
 
   /**
-   * Ids of the org's active projects in any of `relations` for the caller,
-   * the list's "Show" filter; see
+   * Ids of the org's active projects the caller's "Show", "Shared with", and
+   * "Owner" filters keep; see
    * {@link ResourcePermissionPolicyModel.accessRelationCondition}.
    */
   static async getIdsInAccessRelations(params: {
     userId: string;
     organizationId: string;
-    relations: ResourceAccessRelation[];
+    selection: ResourceAccessSelection;
   }): Promise<string[]> {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -119,7 +118,7 @@ class ProjectAccessModel {
             ownerColumn: schema.projectsTable.userId,
             userId: params.userId,
             subjects: principal.subjects,
-            relations: params.relations,
+            ...params.selection,
           }),
         ),
       );

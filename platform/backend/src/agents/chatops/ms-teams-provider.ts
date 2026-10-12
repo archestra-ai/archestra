@@ -91,6 +91,15 @@ class MSTeamsProvider implements ChatOpsProvider {
     );
   }
 
+  /**
+   * Channel threads read their history from Graph. 1:1 and group chats have
+   * no reply threads, so each chat is one server-side session instead.
+   */
+  usesServerSideSessionsFor(message: IncomingChatMessage): boolean {
+    const type = message.metadata?.conversationType;
+    return type === "personal" || type === "groupChat";
+  }
+
   async initialize(): Promise<void> {
     if (!this.isConfigured()) {
       logger.info("[MSTeamsProvider] Not configured, skipping initialization");
@@ -277,10 +286,17 @@ class MSTeamsProvider implements ChatOpsProvider {
     // replying to the thread. That gating is enforced by the webhook route via
     // wasBotMentioned() + channel-activation, not here, so parsing stays pure.
 
+    // Only team channels have reply threads. A 1:1 or group chat is one flat
+    // stream: a quoted reply there still carries a replyToId, which must not
+    // split the chat into separate sessions.
+    const threadId = isTeamsChannel(activity)
+      ? extractThreadId(activity)
+      : undefined;
     const conversationId = activity.conversation?.id;
     const isThreadReply =
-      Boolean(activity.replyToId) ||
-      Boolean(conversationId?.includes(";messageid="));
+      isTeamsChannel(activity) &&
+      (Boolean(activity.replyToId) ||
+        Boolean(conversationId?.includes(";messageid=")));
 
     // Extract team ID - prefer aadGroupId (proper UUID) over team.id (may be conversation ID)
     const teamData = activity.channelData?.team;
@@ -308,7 +324,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       messageId: activity.id || `teams-${Date.now()}`,
       channelId,
       workspaceId,
-      threadId: extractThreadId(activity),
+      threadId,
       senderId: activity.from?.aadObjectId || activity.from?.id || "unknown",
       senderName: activity.from?.name || "Unknown User",
       text: cleanedText,
@@ -1088,7 +1104,11 @@ class MSTeamsProvider implements ChatOpsProvider {
         ? payload.workspaceId
         : teamData?.aadGroupId || teamData?.id || null;
     const threadId =
-      payload.threadId || extractThreadId(context.activity) || undefined;
+      payload.threadId ||
+      (isTeamsChannel(context.activity)
+        ? extractThreadId(context.activity)
+        : undefined) ||
+      undefined;
     const messageId =
       payload.messageId ||
       context.activity.replyToId ||
@@ -1110,6 +1130,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         : new Date(),
       isThreadReply: Boolean(threadId),
       metadata: {
+        conversationType: context.activity.conversation?.conversationType,
         turnContext: context,
         conversationReference: TurnContext.getConversationReference(
           context.activity as Parameters<
@@ -1839,6 +1860,13 @@ function extractThreadId(activity: {
     return activity.replyToId;
   }
   return extractThreadIdFromConversationId(activity.conversation?.id);
+}
+
+/** Whether an activity belongs to a team channel, the only Teams surface with reply threads. */
+function isTeamsChannel(activity: {
+  conversation?: { conversationType?: string };
+}): boolean {
+  return activity.conversation?.conversationType === "channel";
 }
 
 /** The `;messageid=<root>` thread id encoded in a Teams conversation id, if any. */

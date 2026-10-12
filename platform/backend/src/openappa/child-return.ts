@@ -180,12 +180,7 @@ export function collectAndStripChildReturns(
     }
 
     for (const [key, entry] of Object.entries(record)) {
-      if (
-        key === "__proto__" ||
-        key === "constructor" ||
-        key === "prototype" ||
-        (key === "status" && canonicalStatus)
-      ) {
+      if (key === "__proto__" || key === "constructor" || key === "prototype") {
         continue;
       }
       const entryContext: WalkContext = {

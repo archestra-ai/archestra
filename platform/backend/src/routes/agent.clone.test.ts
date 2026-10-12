@@ -100,7 +100,6 @@ describe("clone agent route", () => {
       knowledgeBaseIds: [kb.id],
       connectorIds: [connector.id],
       suggestedPrompts: [{ summaryTitle: "S1", prompt: "P1" }],
-      considerContextUntrusted: true,
     });
 
     await makeAgentTool(sourceAgent.id, baseTool.id, {
@@ -120,8 +119,6 @@ describe("clone agent route", () => {
 
     expect(cloned.id).not.toBe(sourceAgent.id);
     expect(cloned.name).toBe(`Copy of ${sourceAgent.name}`);
-    expect(cloned.considerContextUntrusted).toBe(true);
-
     // Associations via API response
     expect(cloned.labels).toEqual(sourceAgent.labels);
     expect(cloned.knowledgeBaseIds).toEqual([kb.id]);
@@ -211,8 +208,7 @@ describe("clone agent route", () => {
       name: "Built In",
       builtInAgentConfig: {
         // Any valid built-in discriminator works here
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolDiscovery: false,
+        name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       },
       labels: [],
       knowledgeBaseIds: [],
@@ -780,29 +776,6 @@ describe("clone agent route", () => {
     const cloned = response.json() as Agent;
 
     expect(cloned.systemPrompt).toBe(systemPrompt);
-  });
-
-  test("clones agent with considerContextUntrusted", async ({
-    makeInternalAgent,
-  }) => {
-    const sourceAgent = await makeInternalAgent({
-      organizationId,
-      name: "Untrusted Agent",
-      labels: [],
-      knowledgeBaseIds: [],
-      connectorIds: [],
-      considerContextUntrusted: true,
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/agents/${sourceAgent.id}/clone`,
-    });
-
-    expect(response.statusCode).toBe(200);
-    const cloned = response.json() as Agent;
-
-    expect(cloned.considerContextUntrusted).toBe(true);
   });
 
   test("clones agent with multiple labels", async ({ makeInternalAgent }) => {

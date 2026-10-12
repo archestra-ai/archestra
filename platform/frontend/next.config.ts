@@ -214,7 +214,7 @@ function getAllowedDevOrigins(): string[] {
     .filter((value): value is string => !!value)
     .map((value) => {
       try {
-        return new URL(value).host;
+        return new URL(value).hostname;
       } catch {
         return value;
       }

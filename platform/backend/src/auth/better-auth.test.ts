@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  AUTO_PROVISIONED_INVITATION_STATUS,
   MEMBER_ROLE_NAME,
   OWNER_ROLE_NAME,
   type Permissions,
@@ -21,6 +22,7 @@ vi.mock("@/logging");
 import logger from "@/logging";
 import {
   AccountModel,
+  AgentModel,
   MemberModel,
   SessionModel,
   TeamModel,
@@ -494,6 +496,46 @@ describe("handleBeforeHook", () => {
 
       const result = await handleBeforeHook(ctx);
       expect(result).toBe(ctx);
+    });
+
+    test("removes an auto-provisioned placeholder's personal gateway with it", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInvitation,
+    }) => {
+      const org = await makeOrganization();
+      await makeUser();
+      const placeholder = await makeUser({ email: "provisioned@example.com" });
+      await makeMember(placeholder.id, org.id);
+      const gateway = await AgentModel.ensurePersonalMcpGateway({
+        userId: placeholder.id,
+        organizationId: org.id,
+      });
+      // Auto-provisioning makes the placeholder its own inviter.
+      const invitation = await makeInvitation(org.id, placeholder.id, {
+        email: "provisioned@example.com",
+        status: AUTO_PROVISIONED_INVITATION_STATUS,
+      });
+
+      const ctx = createMockContext({
+        path: "/sign-up/email",
+        method: "POST",
+        body: {
+          email: "provisioned@example.com",
+          callbackURL: "/chat",
+          invitationId: invitation.id,
+        },
+      });
+
+      await handleBeforeHook(ctx);
+
+      expect(await UserModel.getById(placeholder.id)).toBeFalsy();
+      const [row] = await db
+        .select({ deletedAt: schema.agentsTable.deletedAt })
+        .from(schema.agentsTable)
+        .where(eq(schema.agentsTable.id, gateway.id));
+      expect(row.deletedAt).not.toBeNull();
     });
   });
 

@@ -1,3 +1,4 @@
+import { ASK_USER_OTHER_ANSWER_FIELD } from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -266,6 +267,219 @@ describe("McpElicitationCard", () => {
       id: "q-region",
       action: "accept",
       content: { choice: "EU" },
+    });
+  });
+
+  it("takes a typed Other answer inline without auto-advancing, and sends it on Submit", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const owner = {
+      ...singleChoice({
+        id: "q-owner",
+        header: "Owner",
+        message: "Which GitHub account owns the repository?",
+        options: ["my-user", "my-org"],
+      }),
+      requestedSchema: {
+        type: "object",
+        properties: {
+          choice: {
+            type: "string",
+            title: "Choice",
+            enum: ["my-user", "my-org"],
+          },
+          [ASK_USER_OTHER_ANSWER_FIELD]: { type: "string", title: "Other" },
+        },
+        required: [],
+      },
+    };
+    expect(isChoiceElicitationRequest(owner)).toBe(true);
+
+    render(
+      <McpElicitationCard
+        requests={[
+          owner,
+          singleChoice({
+            id: "q-name",
+            message: "Repository name?",
+            options: ["openappa-policy", "guardrails"],
+          }),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "Other" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Other" }));
+    expect(screen.getByRole("textbox", { name: "Other" })).toHaveFocus();
+    await user.keyboard("acme");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveTextContent(
+      "(answered)",
+    );
+
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
+    await user.click(screen.getByRole("radio", { name: "guardrails" }));
+    await user.click(screen.getByTestId("mcp-elicitation-submit"));
+
+    expect(onRespond).toHaveBeenCalledWith({
+      id: "q-owner",
+      action: "accept",
+      content: { choice: "", [ASK_USER_OTHER_ANSWER_FIELD]: "acme" },
+    });
+    expect(onRespond).toHaveBeenCalledWith({
+      id: "q-name",
+      action: "accept",
+      content: { choice: "guardrails" },
+    });
+  });
+
+  it("stays on the question when the user types right after clicking an option", async () => {
+    const user = userEvent.setup();
+    render(
+      <McpElicitationCard
+        requests={[
+          withOther(
+            singleChoice({
+              id: "q-owner",
+              header: "Owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+          ),
+          singleChoice({
+            id: "q-name",
+            message: "Repository name?",
+            options: ["openappa-policy", "guardrails"],
+          }),
+        ]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "my-org" }));
+    await user.click(screen.getByRole("radio", { name: "Other" }));
+    await user.type(screen.getByRole("textbox", { name: "Other" }), "a");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("sends checked options with typed Other text, and drops the text once Other is unchecked", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    render(
+      <McpElicitationCard
+        requests={[
+          withOther(
+            multiChoice({
+              id: "q-steps",
+              message: "Which steps should run?",
+              options: ["Run tests", "Deploy"],
+            }),
+          ),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: "Run tests" }));
+    await user.click(screen.getByRole("checkbox", { name: "Other" }));
+    await user.type(screen.getByRole("textbox", { name: "Other" }), "lint");
+    await user.click(screen.getByRole("checkbox", { name: "Other" }));
+    expect(
+      screen.queryByRole("textbox", { name: "Other" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Other" }));
+    await user.type(screen.getByRole("textbox", { name: "Other" }), "build");
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "q-steps",
+      action: "accept",
+      content: {
+        option_0: true,
+        option_1: false,
+        [ASK_USER_OTHER_ANSWER_FIELD]: "build",
+      },
+    });
+  });
+
+  it("keeps an enum and an independent optional text field off the inline card", () => {
+    const request: ChatMcpElicitationRequest = {
+      ...singleChoice({
+        id: "q-deploy",
+        message: "Deploy where?",
+        options: ["staging", "production"],
+      }),
+      toolName: "deployer__deploy",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          environment: { type: "string", enum: ["staging", "production"] },
+          comment: { type: "string", title: "Comment" },
+        },
+        required: ["environment"],
+      },
+    };
+
+    expect(isChoiceElicitationRequest(request)).toBe(false);
+  });
+
+  it("clears a typed Other answer when an option is picked instead", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    render(
+      <McpElicitationCard
+        requests={[
+          {
+            ...singleChoice({
+              id: "q-owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+            requestedSchema: {
+              type: "object",
+              properties: {
+                choice: { type: "string", enum: ["my-user", "my-org"] },
+                [ASK_USER_OTHER_ANSWER_FIELD]: {
+                  type: "string",
+                  title: "Other",
+                },
+              },
+              required: [],
+            },
+          },
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    const submit = screen.getByRole("button", { name: "Submit" });
+    expect(submit).toBeDisabled();
+    await user.click(screen.getByRole("radio", { name: "Other" }));
+    expect(submit).toBeDisabled();
+    await user.type(screen.getByRole("textbox", { name: "Other" }), "acme");
+    await user.click(screen.getByRole("radio", { name: "my-org" }));
+    expect(
+      screen.queryByRole("textbox", { name: "Other" }),
+    ).not.toBeInTheDocument();
+    await user.click(submit);
+
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "q-owner",
+      action: "accept",
+      content: { choice: "my-org", [ASK_USER_OTHER_ANSWER_FIELD]: "" },
     });
   });
 
@@ -1032,6 +1246,25 @@ describe("McpElicitationCard", () => {
     });
   });
 });
+
+function withOther(
+  request: ChatMcpElicitationRequest,
+): ChatMcpElicitationRequest {
+  const schema = request.requestedSchema as {
+    properties: Record<string, unknown>;
+  };
+  return {
+    ...request,
+    requestedSchema: {
+      type: "object",
+      properties: {
+        ...schema.properties,
+        [ASK_USER_OTHER_ANSWER_FIELD]: { type: "string", title: "Other" },
+      },
+      required: [],
+    },
+  };
+}
 
 function singleChoice(params: {
   id: string;

@@ -101,6 +101,7 @@ const CODEX_FIRST_PARTY_ORIGINATORS = new Set<string>([
   "codex_exec",
   "codex-tui",
   "codex_vscode",
+  "codex_work_desktop",
 ]);
 
 /**

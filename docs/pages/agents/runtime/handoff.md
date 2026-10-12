@@ -2,8 +2,8 @@
 title: Hand Off Work
 description: Hand a task from your coding agent to Agent Runtime, then bring the result back
 order: 2
-lastUpdated: 2026-10-05
-beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). Then set [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED). See [Setup](/docs/agents/runtime/setup)."
+alpha: "Agent Runtime is in Alpha and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

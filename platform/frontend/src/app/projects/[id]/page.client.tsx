@@ -45,7 +45,6 @@ import { FileDropZone } from "@/components/files/file-drop-zone";
 import { FormDialog } from "@/components/form-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
-import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +56,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useStartAgentRun } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConversation } from "@/lib/chat/chat.query";
@@ -100,17 +98,6 @@ function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: project, isPending, isLoadingError, refetch } = useProject(id);
-  const ownership = useResourceOwnershipTransfer({
-    kind: "project",
-    resource: project
-      ? {
-          ...project,
-          authorId: project.createdBy?.id ?? null,
-          scope: projectVisibilityToScope(project.visibility),
-        }
-      : null,
-    onTransferred: () => router.push("/projects"),
-  });
   // Chats are hidden from admin oversight, so don't even fetch them there.
   const { data: conversations } = useProjectConversations(id, {
     enabled: !!project && project.viewerRole !== "admin",
@@ -238,7 +225,6 @@ function ProjectDetail() {
                       Edit details
                     </DropdownMenuItem>
                   )}
-                  {ownership.menuItem}
                   {canManage && canDelete && (
                     <DropdownMenuItem
                       variant="destructive"
@@ -250,7 +236,6 @@ function ProjectDetail() {
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              {ownership.dialog}
             </div>
           }
         >

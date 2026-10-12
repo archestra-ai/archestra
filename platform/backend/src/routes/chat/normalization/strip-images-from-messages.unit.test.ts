@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { ChatMessage } from "@/types";
+import { CAPPED_TOOL_RESULT_META_KEY } from "@/utils/tool-result-cap";
 import { __test, stripImagesFromMessages } from "./strip-images-from-messages";
 
 const { isBase64ImageData, stripImagesFromObject, IMAGE_STRIPPED_PLACEHOLDER } =
@@ -332,5 +333,36 @@ describe("strip-images-from-messages", () => {
         "The page shows a welcome message.",
       );
     });
+  });
+
+  test("keeps the saved sandbox path when replacing a capped browser result", () => {
+    const messages: ChatMessage[] = [
+      {
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "playwright__browser_snapshot",
+            toolCallId: "c1",
+            state: "output-available",
+            output: {
+              content: `Page URL: https://example.com\n${"a".repeat(5000)}`,
+              _meta: {
+                [CAPPED_TOOL_RESULT_META_KEY]: {
+                  totalChars: 300_000,
+                  path: "/home/sandbox/tool-results/snap.txt",
+                },
+              },
+            },
+          },
+        ],
+      },
+    ];
+
+    const [message] = stripImagesFromMessages(messages);
+
+    expect(message.parts?.[0]?.output).toBe(
+      "[Page https://example.com browser_snapshot was here; full result saved in the sandbox at /home/sandbox/tool-results/snap.txt]",
+    );
   });
 });

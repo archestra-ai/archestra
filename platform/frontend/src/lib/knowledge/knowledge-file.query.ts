@@ -36,14 +36,22 @@ const DIRECTORIES_KEY = "knowledge-directories";
 
 // ===== Queries =====
 
-export function useKnowledgeFiles(params: {
-  limit: number;
-  offset: number;
-  directoryId?: string;
-  search?: string;
-  /** Serialized `?labels=` filter; resolved server-side. */
-  labels?: string;
-}) {
+/** The list's access filters, resolved server-side. */
+type KnowledgeFileAccessFilters = Pick<
+  NonNullable<archestraApiTypes.GetKnowledgeFilesData["query"]>,
+  "access" | "sharedWith" | "owner"
+>;
+
+export function useKnowledgeFiles(
+  params: {
+    limit: number;
+    offset: number;
+    directoryId?: string;
+    search?: string;
+    /** Serialized `?labels=` filter; resolved server-side. */
+    labels?: string;
+  } & KnowledgeFileAccessFilters,
+) {
   return useQuery({
     queryKey: [FILES_KEY, params],
     queryFn: async () => {
@@ -63,7 +71,11 @@ export function useKnowledgeFiles(params: {
  * so nothing about them is hidden behind a page.
  */
 export function useAllMatchingKnowledgeFiles(
-  params: { directoryId?: string; search?: string; labels?: string },
+  params: {
+    directoryId?: string;
+    search?: string;
+    labels?: string;
+  } & KnowledgeFileAccessFilters,
   options?: { enabled?: boolean },
 ) {
   return useAllMatching({

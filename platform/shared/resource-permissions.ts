@@ -97,12 +97,70 @@ export type ResourcePermissionGrant = z.infer<
   typeof ResourcePermissionGrantSchema
 >;
 
+/**
+ * `internal_code` of a permissions save refused because afterwards nobody
+ * could manage the objects the policy covers.
+ */
+export const PERMISSIONS_LOCKOUT_CODE = "permissions_lockout";
+
+/**
+ * `internal_code` of a role or team assignment refused because it would share
+ * objects the caller cannot share. The error's `details` follow
+ * {@link RoleAssignmentBlockedDetailsSchema}.
+ */
+export const ROLE_ASSIGNMENT_BLOCKED_CODE = "role_assignment_blocked";
+
+export const RoleAssignmentBlockedDetailsSchema = z.object({
+  subjectType: z.enum(["role", "team"]),
+  /** The first objects that blocked it; `total` counts all of them. */
+  items: z.array(
+    z.object({
+      resource: ManagedResourceSchema,
+      scope: ResourcePermissionScopeSchema,
+      /** Null for an organization-wide (`*`) policy. */
+      name: z.string().nullable(),
+      /** The actions on this object the caller would need but lacks. */
+      missing: z.array(ResourcePermissionActionSchema),
+    }),
+  ),
+  total: z.number().int(),
+});
+
+export type RoleAssignmentBlockedDetails = z.infer<
+  typeof RoleAssignmentBlockedDetailsSchema
+>;
+
 export type ScopedPermission = {
   organizationId: string;
   resource: ScopedResource;
   scope: ResourcePermissionScope;
   action: ResourcePermissionAction;
 };
+
+/**
+ * The audience an object's own grants give it, the client twin of the
+ * backend's `audienceIs` / `sharedAudience`: only grants that include `read`
+ * count; one to the organization or a role is `org`, then one to a team is
+ * `team`, and anything else — the owner alone, named people, service
+ * accounts — is `personal`. `ownerId` is accepted for symmetry with the
+ * server, which reads it only to tell the owner from other named people; both
+ * are `personal`, so it never changes the result.
+ */
+export function grantsAudience(
+  grants: readonly ResourcePermissionGrant[],
+  _ownerId?: string | null,
+): "personal" | "team" | "org" {
+  const readers = grants.filter((grant) => grant.actions.includes("read"));
+  if (
+    readers.some(
+      (grant) =>
+        grant.subject.type === "organization" || grant.subject.type === "role",
+    )
+  )
+    return "org";
+  if (readers.some((grant) => grant.subject.type === "team")) return "team";
+  return "personal";
+}
 
 /** Check the whole tuple: independent action/scope unions escalate access. */
 export function hasScopedPermission(params: {
@@ -192,7 +250,7 @@ export function resourcePermissionPresetsFor(
     return {
       ...resourcePermissionPresets,
       deploy: {
-        label: "Full access + deployment",
+        label: "Full access + deploy",
         actions: [
           ...resourcePermissionPresets.manage.actions,
           "configure-deployment-spec",

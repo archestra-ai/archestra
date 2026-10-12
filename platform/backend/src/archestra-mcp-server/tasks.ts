@@ -141,6 +141,9 @@ export async function startDelegatedTask(params: {
             type: "chatops" as const,
             bindingId: context.chatOpsBindingId,
             threadId: context.chatOpsThreadId,
+            ...(context.chatOpsPinnedAgentId && {
+              pinnedAgentId: context.chatOpsPinnedAgentId,
+            }),
           }
         : undefined;
     const taskRow = await startDetachedAgentTask({
@@ -168,6 +171,7 @@ export async function startDelegatedTask(params: {
         bindingId: context.chatOpsBindingId,
         threadId: context.chatOpsThreadId,
         agentName: agent.name,
+        pinnedAgentId: context.chatOpsPinnedAgentId,
       }).catch((error) => {
         logger.warn(
           { error, taskId: taskRow.id },
@@ -1186,6 +1190,7 @@ const registry = defineArchestraTools([
         await chatOpsManager.uploadFileToBindingThread({
           bindingId: target.bindingId,
           threadId: target.threadId,
+          pinnedAgentId: target.pinnedAgentId,
           filename: args.filename,
           data,
           comment: args.comment,

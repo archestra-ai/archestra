@@ -2,7 +2,7 @@
 title: Chat
 description: Work with agents, files, projects, and apps in Archestra's built-in chat
 order: 6
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,7 +37,7 @@ Type `/` to see commands. Each skill you can use becomes a command — a "Deep R
 
 ## Tool Calls
 
-The agent's tool calls appear inline in the conversation. Some tools need your approval first: select **Approve** or **Decline** on the card. A call blocked by a [guardrail](/docs/agents/guardrails) shows **Rejected**. If you can edit policies, **Edit policy** opens the rule.
+The agent's tool calls appear inline in the conversation. Some tools need your approval first: select **Approve** or **Decline** on the card.
 
 A tool can also ask you a question mid-run. Answer it in the card, or select **Dismiss question**.
 

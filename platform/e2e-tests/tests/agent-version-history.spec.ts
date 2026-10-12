@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 import { goToPage } from "../fixtures";
 import {
   openAgentRowMenu,
-  selectAgentTableView,
+  waitForAgentsTable,
   waitForElementWithReload,
 } from "../utils";
 import { expect, test } from "./api-fixtures";
@@ -62,7 +62,7 @@ test("browses, compares, and restores an agent version from the row menu", async
     });
 
     await goToPage(page, "/agents");
-    await selectAgentTableView(page);
+    await waitForAgentsTable(page);
 
     // Names are CSS-truncated, so the full string lives on the title
     // attribute, not in visible text.
@@ -139,7 +139,7 @@ test("opens an MCP gateway's version history from its row button", async ({
     });
 
     await goToPage(page, "/mcp/gateways");
-    await selectAgentTableView(page);
+    await waitForAgentsTable(page);
 
     // Version history sits in the row's "More actions" menu on every entity
     // list, so the row has to arrive before the menu can be opened.

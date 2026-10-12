@@ -35,12 +35,12 @@ type PermissionButtonProps = ButtonProps & {
  *
  * @example
  * <PermissionButton
- *   permissions={{ toolPolicy: ["update"] }}
+ *   permissions={{ agent: ["update"] }}
  *   onClick={handleAction}
  *   size="sm"
  *   variant="outline"
  * >
- *   Dual LLM
+ *   Edit agent
  * </PermissionButton>
  *
  * Note that the alternative approach, wrapping a Button into an abstract WithPermission component

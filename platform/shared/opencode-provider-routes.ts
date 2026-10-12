@@ -1,4 +1,15 @@
-import type { SupportedProvider } from "./model-constants";
+import {
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  type SupportedProvider,
+} from "./model-constants";
+
+/** Virtual keys also support providers translated by the Model Router. */
+export const OPENCODE_PRIMARY_PROVIDERS: readonly SupportedProvider[] = [
+  ...MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  "kimi",
+  "archestra",
+  "microsoft-365-copilot",
+];
 
 export interface OpenCodeProviderRoute {
   provider: SupportedProvider;

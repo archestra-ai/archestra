@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 
+import type {
+  PermissionSubject,
+  ResourceAccessRelation,
+  ResourcePermissionGrant,
+} from "@archestra/shared";
+import { and, eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { describe, expect, test } from "@/test";
@@ -399,5 +406,182 @@ describe("resource permission policy persistence", () => {
           policy.resource === "agent",
       ),
     ).toBe(true);
+  });
+});
+
+describe("accessRelationCondition sharedWith and ownerIds", () => {
+  test("narrows by the subjects an object's own policy grants read to, by owner, and ANDs them with relations", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+    makeTeam,
+    makeCustomRole,
+    makeServiceAccount,
+  }) => {
+    const organization = await makeOrganization();
+    const caller = await makeUser();
+    const other = await makeUser();
+    const named = await makeUser();
+    const team = await makeTeam(organization.id, caller.id);
+    const otherTeam = await makeTeam(organization.id, caller.id);
+    const role = await makeCustomRole(organization.id, { permission: {} });
+    const serviceAccount = await makeServiceAccount(organization.id);
+
+    const agentWith = async (params: {
+      name: string;
+      authorId: string;
+      grants: ResourcePermissionGrant[];
+    }) => {
+      const agent = await makeAgent({
+        name: params.name,
+        organizationId: organization.id,
+        authorId: params.authorId,
+        agentType: "agent",
+        access: "personal",
+      });
+      const key = {
+        organizationId: organization.id,
+        resource: "agent" as const,
+        scope: agent.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [
+          {
+            subject: { type: "user", id: params.authorId },
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
+          },
+          ...params.grants,
+        ],
+      });
+      return agent;
+    };
+    await agentWith({ name: "Private", authorId: caller.id, grants: [] });
+    await agentWith({
+      name: "Team",
+      authorId: caller.id,
+      grants: [{ subject: { type: "team", id: team.id }, actions: ["read"] }],
+    });
+    await agentWith({
+      name: "Other team",
+      authorId: other.id,
+      grants: [
+        { subject: { type: "team", id: otherTeam.id }, actions: ["read"] },
+      ],
+    });
+    await agentWith({
+      name: "Role",
+      authorId: other.id,
+      grants: [{ subject: { type: "role", id: role.id }, actions: ["read"] }],
+    });
+    await agentWith({
+      name: "Org",
+      authorId: other.id,
+      grants: [
+        { subject: { type: "organization", id: "*" }, actions: ["read"] },
+      ],
+    });
+    await agentWith({
+      name: "Named user",
+      authorId: other.id,
+      grants: [{ subject: { type: "user", id: named.id }, actions: ["read"] }],
+    });
+    await agentWith({
+      name: "Service account",
+      authorId: caller.id,
+      grants: [
+        {
+          subject: { type: "serviceAccount", id: serviceAccount.id },
+          actions: ["read"],
+        },
+      ],
+    });
+
+    const list = async (filter: {
+      relations?: ResourceAccessRelation[];
+      sharedWith?: PermissionSubject[];
+      ownerIds?: string[];
+    }) => {
+      const table = schema.agentsTable;
+      const condition = ResourcePermissionPolicyModel.accessRelationCondition({
+        organizationId: table.organizationId,
+        resource: "agent",
+        scopeColumn: table.id,
+        ownerColumn: table.authorId,
+        userId: caller.id,
+        subjects: [{ type: "user", id: caller.id }],
+        ...filter,
+      });
+      const rows = await db
+        .select({ name: table.name })
+        .from(table)
+        .where(and(eq(table.organizationId, organization.id), condition));
+      return rows.map((row) => row.name).sort();
+    };
+
+    expect(
+      ResourcePermissionPolicyModel.accessRelationCondition({
+        organizationId: organization.id,
+        resource: "agent",
+        scopeColumn: schema.agentsTable.id,
+        ownerColumn: schema.agentsTable.authorId,
+        userId: caller.id,
+        subjects: [],
+      }),
+    ).toBeUndefined();
+    expect(await list({ sharedWith: [{ type: "team", id: team.id }] })).toEqual(
+      ["Team"],
+    );
+    expect(
+      await list({
+        sharedWith: [
+          { type: "team", id: team.id },
+          { type: "team", id: otherTeam.id },
+        ],
+      }),
+    ).toEqual(["Other team", "Team"]);
+    // Literal: a role grant is not a grant to everyone, and vice versa.
+    expect(await list({ sharedWith: [{ type: "role", id: role.id }] })).toEqual(
+      ["Role"],
+    );
+    expect(
+      await list({ sharedWith: [{ type: "organization", id: "*" }] }),
+    ).toEqual(["Org"]);
+    expect(
+      await list({ sharedWith: [{ type: "user", id: named.id }] }),
+    ).toEqual(["Named user"]);
+    expect(
+      await list({
+        sharedWith: [{ type: "serviceAccount", id: serviceAccount.id }],
+      }),
+    ).toEqual(["Service account"]);
+    expect(await list({ ownerIds: [other.id] })).toEqual([
+      "Named user",
+      "Org",
+      "Other team",
+      "Role",
+    ]);
+    expect(
+      await list({
+        ownerIds: [caller.id],
+        sharedWith: [
+          { type: "team", id: team.id },
+          { type: "team", id: otherTeam.id },
+        ],
+      }),
+    ).toEqual(["Team"]);
+    // `org` relation counts role grants too; sharedWith then narrows.
+    expect(await list({ relations: ["org"] })).toEqual(["Org", "Role"]);
+    expect(
+      await list({
+        relations: ["org"],
+        sharedWith: [{ type: "role", id: role.id }],
+      }),
+    ).toEqual(["Role"]);
+    expect(await list({ relations: ["mine"], ownerIds: [other.id] })).toEqual(
+      [],
+    );
   });
 });

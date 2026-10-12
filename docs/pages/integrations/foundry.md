@@ -2,7 +2,7 @@
 title: Microsoft Foundry
 description: Connect a Foundry agent to Archestra MCP Gateway tools
 order: 8
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,4 +30,4 @@ Ask the agent to perform a read-only action supported by an assigned tool. Revie
 
 If Foundry cannot discover tools, check the gateway URL, network reachability, bearer token, and tool assignments. With progressive tool loading enabled, the initial list contains discovery tools rather than every assigned tool; see [Progressive Tool Loading](/docs/mcp/gateway#load-tools-when-needed).
 
-Configure [guardrails](/docs/agents/guardrails) on the gateway tools when you need invocation or result policies. Foundry's approval settings remain separate from those policies.
+Use [guardrails](/docs/agents/guardrails) to control which gateway tool calls an agent can make. Foundry's approval settings are separate from guardrails.

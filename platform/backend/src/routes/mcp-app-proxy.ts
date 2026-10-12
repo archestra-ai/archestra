@@ -157,8 +157,6 @@ const mcpAppProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (body.method === "tools/call") {
         const denied = await rejectDisallowedToolCall({
           appId,
-          organizationId,
-          userId,
           body,
           reply,
         });
@@ -368,18 +366,16 @@ function jsonRpcError(
 
 /**
  * Fail-closed gate for an app's tools/call. Delegates to the shared runtime gate
- * (assignment allowlist + visibility + invocation policy) so the proxy and
+ * (assignment allowlist + environment + visibility) so the proxy and
  * preview_app_tool can never diverge. Returns a JSON-RPC error body to
  * short-circuit the request, or null to allow it through.
  */
 async function rejectDisallowedToolCall(params: {
   appId: string;
-  organizationId: string;
-  userId: string;
   body: Record<string, unknown>;
   reply: StatusReply;
 }): Promise<object | null> {
-  const { appId, organizationId, userId, body, reply } = params;
+  const { appId, body, reply } = params;
   const callParams =
     body.params && typeof body.params === "object"
       ? (body.params as { name?: unknown; arguments?: unknown })
@@ -400,29 +396,11 @@ async function rejectDisallowedToolCall(params: {
   if (toolName === APP_LAUNCH_TOOL_NAME) {
     return null;
   }
-  const toolInput =
-    callParams?.arguments && typeof callParams.arguments === "object"
-      ? (callParams.arguments as Record<string, unknown>)
-      : {};
-
-  // The app runtime is treated as trusted for policy purposes: only an explicit
-  // block_always/require_approval gates it, so a no-policy assigned tool keeps
-  // working as before. No approval UI exists inside the sandbox, so a
-  // require_approval policy blocks at runtime (an authoring agent can still
-  // exercise it through preview_app_tool, which carries its own approval gate).
-  const decision = await gateAppToolCall({
-    appId,
-    organizationId,
-    userId,
-    toolName,
-    toolInput,
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: true,
-  });
+  const decision = await gateAppToolCall({ appId, toolName });
   if (!decision.allowed) {
     return jsonRpcError(reply, body.id, decision.code, decision.reason);
   }
-  // Dispatch the exact tool the gate resolved (and evaluated policy on), so a
+  // Dispatch the exact tool the gate resolved, so a
   // suffix-addressed name can't re-resolve to a different row at execution.
   if (decision.kind === "upstream" && callParams) {
     callParams.name = decision.resolvedToolName;

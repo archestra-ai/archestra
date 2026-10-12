@@ -20,6 +20,8 @@ describe("Codex originator", () => {
     expect(isCodexOriginator("codex_exec")).toBe(true);
     expect(isCodexOriginator("codex-tui")).toBe(true);
     expect(isCodexOriginator("codex_vscode")).toBe(true);
+    expect(isCodexOriginator("codex_work_desktop")).toBe(true);
+    expect(isCodexUserAgent("codex_work_desktop/0.162.0")).toBe(true);
     expect(isCodexOriginator("Codex 1.2.3")).toBe(true);
     expect(isCodexUserAgent("archestra_codex_connection/1.0.0")).toBe(true);
   });

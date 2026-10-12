@@ -24,6 +24,8 @@ export type ConnectionEventAction = ConnectionEvent["action"];
 export type AgentAdoption = archestraApiTypes.GetAgentAdoptionResponses["200"];
 export type AgentAdoptionMember = AgentAdoption["members"][number];
 export type AgentAdoptionStatus = AgentAdoptionMember["status"];
+/** The span adoption reads; the last 30 days when no start is given. */
+export type AdoptionWindow = { startDate?: string; endDate?: string };
 export type AgentAdoptionUsage =
   archestraApiTypes.GetAgentAdoptionUsageResponses["200"];
 
@@ -32,9 +34,16 @@ const connectedClientKeys = {
   mine: () => [...connectedClientKeys.all, "mine"] as const,
   log: (query: ConnectionLogQuery) =>
     [...connectedClientKeys.all, "log", query] as const,
-  adoption: () => [...connectedClientKeys.all, "adoption"] as const,
-  usage: (userId?: string) =>
-    [...connectedClientKeys.all, "adoption", "usage", userId ?? null] as const,
+  adoption: (window: AdoptionWindow) =>
+    [...connectedClientKeys.all, "adoption", window] as const,
+  usage: (window: AdoptionWindow, userId?: string) =>
+    [
+      ...connectedClientKeys.all,
+      "adoption",
+      "usage",
+      window,
+      userId ?? null,
+    ] as const,
 };
 
 /**
@@ -89,11 +98,11 @@ export function useConnectionLog(query: ConnectionLogQuery) {
 }
 
 /** Every member with the agents they set up and their agents' last traffic. */
-export function useAgentAdoption() {
+export function useAgentAdoption(window: AdoptionWindow) {
   return useQuery({
-    queryKey: connectedClientKeys.adoption(),
+    queryKey: connectedClientKeys.adoption(window),
     queryFn: async () => {
-      const response = await getAgentAdoption();
+      const response = await getAgentAdoption({ query: window });
       throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? null;
     },
@@ -101,15 +110,13 @@ export function useAgentAdoption() {
 }
 
 /** Daily gateway and LLM proxy calls for one member, or everyone. */
-export function useAgentAdoptionUsage(
-  userId?: string,
-  options?: { enabled?: boolean },
-) {
+export function useAgentAdoptionUsage(window: AdoptionWindow, userId?: string) {
   return useQuery({
-    enabled: options?.enabled ?? true,
-    queryKey: connectedClientKeys.usage(userId),
+    queryKey: connectedClientKeys.usage(window, userId),
     queryFn: async () => {
-      const response = await getAgentAdoptionUsage({ query: { userId } });
+      const response = await getAgentAdoptionUsage({
+        query: { ...window, userId },
+      });
       throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? null;
     },

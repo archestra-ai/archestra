@@ -815,6 +815,54 @@ describe("knowledge file routes", () => {
       expect([400, 404]).toContain(response.statusCode);
     });
   });
+
+  describe("list access filters", () => {
+    test("access, sharedWith and owner narrow the list", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      await makeMember(user.id, organizationId, { role: "admin" });
+      const named = (filename: string) => ({
+        filename,
+        content: textFile(`Notes kept in ${filename}.`),
+      });
+      expect((await upload(named("mine.txt"))).statusCode).toBe(200);
+      expect(
+        (await upload({ ...named("shared.txt"), initialGrants: everyone }))
+          .statusCode,
+      ).toBe(200);
+      const colleague = await makeUser({ email: "owner@test.com" });
+      await makeMember(colleague.id, organizationId, { role: "admin" });
+      await bootAs(colleague, organizationId);
+      expect(
+        (await upload({ ...named("theirs.txt"), initialGrants: everyone }))
+          .statusCode,
+      ).toBe(200);
+      await bootAs(user, organizationId);
+
+      const list = async (params: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/knowledge-files?${params}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response
+          .json()
+          .data.map((file: { filename: string }) => file.filename)
+          .sort();
+      };
+
+      expect(await list("access=mine")).toEqual(["mine.txt", "shared.txt"]);
+      expect(await list(`owner=${colleague.id}`)).toEqual(["theirs.txt"]);
+      expect(await list("sharedWith=org")).toEqual([
+        "shared.txt",
+        "theirs.txt",
+      ]);
+      expect(await list(`sharedWith=org&owner=${user.id}`)).toEqual([
+        "shared.txt",
+      ]);
+    });
+  });
 });
 
 /**

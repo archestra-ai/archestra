@@ -32,7 +32,7 @@ const inlineNoticeVariants = cva(
     variants: {
       variant: {
         warning:
-          "border-amber-500/50 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-200 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400 *:data-[slot=inline-notice-text]:text-amber-800 dark:*:data-[slot=inline-notice-text]:text-amber-300",
+          "border-[#EBCB8B] bg-[#FFFAEE] text-[#6A3E0E] dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-200 [&>svg]:text-[#A25E07] dark:[&>svg]:text-amber-400 *:data-[slot=inline-notice-text]:text-[#8A5A1C] dark:*:data-[slot=inline-notice-text]:text-amber-300",
         error:
           "border-destructive/40 bg-destructive/5 text-destructive [&>svg]:text-destructive *:data-[slot=inline-notice-text]:text-destructive/90",
         success:
@@ -57,7 +57,7 @@ const inlineNoticeVariants = cva(
       {
         variant: "warning",
         floating: true,
-        class: "bg-amber-50/90 dark:bg-amber-950/60",
+        class: "bg-[#FFFAEE]/90 dark:bg-amber-950/60",
       },
       { variant: "error", floating: true, class: "bg-destructive/10" },
       {

@@ -2,17 +2,29 @@
 
 // Connect page pieces: picker, dialogs, helpers.
 
+import type { ResourceVisibilityScope } from "@archestra/shared";
 import {
   ArrowLeft,
+  ArrowUpRight,
   Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   History,
   Search,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { type ReactNode, useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "react";
+import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { SCOPE_META } from "@/components/scope-vocabulary";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -38,20 +50,24 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useSkill } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
+import { skillDetailHref } from "../skills/_parts/skill-page-config";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import type { ConnectChoices } from "./connect-choices";
 import type { ConnectPageData, ConnectPageSkill } from "./connect-page-data";
 
-const MODAL_ROW_CAP = 200;
-
-// The markdown renderer is large; only a skill being read needs it.
+// The skill viewer is the Skills pages' editor; it loads when a skill opens.
 const Response = dynamic(
   () => import("@/components/ai-elements/response").then((m) => m.Response),
   { ssr: false },
 );
+
+const MODAL_ROW_CAP = 200;
+
+// The markdown renderer is large; only a skill being read needs it.
 
 // === Agent picker: the searchable list behind "Other agents" ===
 
@@ -60,10 +76,13 @@ export function AgentSearch({
   selectedId,
   lastConnectedId,
   onPick,
+  tiled,
   children,
 }: {
   data: ConnectPageData;
   selectedId: string;
+  /** The agents with their own tile; the list holds the rest. */
+  tiled?: ConnectClient[];
   /** The agent the user connected last, marked in the list. */
   lastConnectedId?: string;
   onPick: (id: string) => void;
@@ -71,19 +90,17 @@ export function AgentSearch({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const featuredIds = new Set(data.featuredClients.map((c) => c.id));
-  // One flat list of the non-featured agents by name, filtered here (not
-  // by cmdk, which reorders by score) so Generic client always stays last,
-  // whatever the search, as the fallback.
+  const featuredIds = new Set((tiled ?? data.featuredClients).map((c) => c.id));
+  // Filter here instead of cmdk so search preserves the picker order.
   const needle = query.trim().toLowerCase();
-  const agents = data.clients
-    .filter(
-      (c) =>
-        !featuredIds.has(c.id) &&
-        c.id !== "generic" &&
-        `${c.label} ${c.sub}`.toLowerCase().includes(needle),
-    )
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const agents = data.clients.filter(
+    (c) =>
+      !featuredIds.has(c.id) &&
+      c.id !== "generic" &&
+      `${c.label} ${c.sub}`.toLowerCase().includes(needle),
+  );
+  if (!data.hasClientOrder)
+    agents.sort((a, b) => a.label.localeCompare(b.label));
   const generic = data.clients.find((c) => c.id === "generic");
   const shown = generic ? [...agents, generic] : agents;
   const choose = (id: string) => {
@@ -209,7 +226,12 @@ export function BrowseDialog({
   const reading = tab === "skills" && openSkill;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(85dvh,46rem)] max-w-3xl">
+      {/* Reading a skill gets a taller, wider dialog for its SKILL.md. */}
+      <DialogContent
+        className={
+          reading ? "h-[85dvh] max-w-4xl" : "h-[min(85dvh,46rem)] max-w-3xl"
+        }
+      >
         <DialogHeader className="px-6">
           <DialogTitle>What {client.label} gets</DialogTitle>
           <DialogDescription className="sr-only">
@@ -247,9 +269,14 @@ export function BrowseDialog({
             <DialogBody className="space-y-3 px-6 pb-6">
               {tab === "servers" ? (
                 <>
-                  {data.allServers && (
+                  {/* Said once here, not on every row: both are gateway-wide. */}
+                  {(data.allServers || data.progressive) && (
                     <p className="text-xs text-muted-foreground">
-                      New servers your org adds join automatically.
+                      {data.allServers && data.progressive
+                        ? "New servers your org adds join automatically, and tools load on demand."
+                        : data.allServers
+                          ? "New servers your org adds join automatically."
+                          : "Tools load on demand."}
                     </p>
                   )}
                   <ul className="divide-y rounded-lg border">
@@ -379,13 +406,24 @@ export function BrowseDialog({
               ) : (
                 <ul className="divide-y rounded-lg border">
                   {pluginMatch.map((p) => (
-                    <li key={p.id} className="px-4 py-2.5">
-                      <div className="text-sm">{p.name}</div>
-                      {p.description && (
-                        <div className="truncate text-xs text-muted-foreground">
-                          {p.description}
-                        </div>
-                      )}
+                    <li key={p.id}>
+                      {/* The plugin's own page shows what it contains. */}
+                      <Link
+                        href={`/plugins/${encodeURIComponent(p.id)}`}
+                        className="group/row flex min-w-0 items-center gap-3 px-4 py-2.5 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm group-hover/row:underline">
+                            {p.name}
+                          </span>
+                          {p.description && (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {p.description}
+                            </span>
+                          )}
+                        </span>
+                        <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
+                      </Link>
                     </li>
                   ))}
                   {pluginMatch.length === 0 && <Empty>No plugins match.</Empty>}
@@ -408,25 +446,38 @@ function SkillReader({
   onBack: () => void;
 }) {
   const { data: detail, isLoading } = useSkill(skill.id);
+  // Just SKILL.md, rendered; the skill page has the rest.
   const body = detail?.content ? stripFrontmatter(detail.content) : "";
   return (
     <>
-      <div className="flex min-w-0 items-center gap-2 px-6 pt-4">
+      <div className="flex min-w-0 items-start gap-2 px-6 pt-4">
         <Button variant="ghost" size="icon-sm" onClick={onBack}>
           <ArrowLeft />
           <span className="sr-only">Back to skills</span>
         </Button>
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-          {skill.name}
-        </span>
-        <span className="text-xs capitalize text-muted-foreground">
-          {skill.scope}
-        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 truncate text-sm font-semibold">
+              {skill.name}
+            </span>
+            <ScopeBadge scope={skill.scope} />
+          </div>
+          {skill.description && (
+            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+              {skill.description}
+            </p>
+          )}
+        </div>
+        <Link
+          href={skillDetailHref(skill.id)}
+          className="inline-flex shrink-0 items-center gap-1 rounded-sm pt-1 text-sm font-medium underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          Open skill page
+          <ArrowUpRight className="size-3.5" />
+        </Link>
       </div>
-      <DialogBody className="space-y-4 px-6 pb-6">
-        {skill.description && (
-          <p className="text-sm text-muted-foreground">{skill.description}</p>
-        )}
+      {/* Only the SKILL.md box scrolls; the header stays put. */}
+      <DialogBody className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6">
         {isLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-4 w-2/3" />
@@ -434,7 +485,7 @@ function SkillReader({
             <Skeleton className="h-4 w-5/6" />
           </div>
         ) : body ? (
-          <div className="rounded-lg border p-5 text-sm">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border p-5 text-sm">
             <Response>{body}</Response>
           </div>
         ) : (
@@ -479,10 +530,116 @@ function Empty({ children }: { children: ReactNode }) {
   );
 }
 
+// === Shared bits: text links, the prompt row ===
+
+/** A quiet underlined button, for links within a line of muted text. */
+export function TextButton({
+  className,
+  ...props
+}: ComponentProps<typeof UnstyledButton>) {
+  return (
+    <UnstyledButton
+      type="button"
+      className={cn(
+        "rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** Copies text with a brief "Copied" on the button, or a toast on failure. */
+export function useCopy() {
+  const [copied, setCopied] = useState(false);
+  const copy = async (text: string) => {
+    try {
+      await copyToClipboard(text);
+    } catch {
+      toast.error("Could not copy. Select the prompt and copy it manually.");
+      return false;
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+    return true;
+  };
+  return { copied, copy };
+}
+
+/** A prompt shown whole, wrapped, so it can be read before copying. */
+export function PromptRow({
+  text,
+  placeholder,
+  copied,
+  disabled,
+  onCopy,
+  onSelectionCopy,
+  className,
+}: {
+  /** null shows the placeholder instead. */
+  text: string | null;
+  placeholder?: string;
+  copied: boolean;
+  disabled?: boolean;
+  onCopy: () => void;
+  /** The text was selected and copied by hand. */
+  onSelectionCopy?: () => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-16 items-center gap-3 rounded-2xl border bg-background py-2 pr-2 pl-5 shadow-sm",
+        className,
+      )}
+    >
+      <code
+        onCopy={onSelectionCopy}
+        className={cn(
+          "min-w-0 flex-1 font-mono text-sm leading-relaxed [overflow-wrap:anywhere]",
+          !text && "font-sans text-muted-foreground",
+        )}
+      >
+        {text ?? placeholder}
+      </code>
+      <Button
+        size="lg"
+        onClick={onCopy}
+        disabled={!text || disabled}
+        className="h-12 shrink-0 rounded-xl px-6"
+      >
+        {copied ? <Check /> : <Copy />}
+        {copied ? "Copied" : "Copy prompt"}
+      </Button>
+    </div>
+  );
+}
+
 // === Helpers ===
+
+/**
+ * Every agent the picker offers, in its order: the featured tiles, then the
+ * Other agents list, with Generic client last.
+ */
+export function agentsInPickerOrder(data: ConnectPageData): ConnectClient[] {
+  const featuredIds = new Set(data.featuredClients.map((c) => c.id));
+  const others = data.clients.filter(
+    (c) => !featuredIds.has(c.id) && c.id !== "generic",
+  );
+  if (!data.hasClientOrder)
+    others.sort((a, b) => a.label.localeCompare(b.label));
+  const generic = data.clients.find((c) => c.id === "generic");
+  return [...data.featuredClients, ...others, ...(generic ? [generic] : [])];
+}
 
 export function nameOf(client: ConnectClient) {
   return client.id === "generic" ? "your agent" : client.label;
+}
+
+/** nameOf, to start a sentence: "Your agent", "Cursor". */
+export function sentenceNameOf(client: ConnectClient) {
+  const name = nameOf(client);
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 export function plural(n: number, word: string) {
@@ -495,20 +652,41 @@ export function fmt(n: number) {
 
 /** A token estimate, rounded so it doesn't read as exact: "~3.2K tokens". */
 export function approxTokens(n: number) {
+  if (n === 0) return "~0 tokens";
   if (n < 1000) return `~${Math.max(100, Math.round(n / 100) * 100)} tokens`;
   const k = n / 1000;
-  return `~${k < 10 ? k.toFixed(1).replace(/\.0$/, "") : fmt(Math.round(k))}K tokens`;
+  return `~${k < 100 ? k.toFixed(1).replace(/\.0$/, "") : fmt(Math.round(k))}K tokens`;
 }
 
-/** One server's share of the context: its tokens, or that it loads when used. */
+/**
+ * One server's share of the context. On-demand loading is gateway-wide, so
+ * the dialog says it once above the list instead.
+ */
 function serverCost(data: ConnectPageData, key: string) {
-  if (!data.toolTokens) return "";
-  if (data.progressive) return " · on demand";
+  if (!data.toolTokens || data.progressive) return "";
   const tokens = data.toolTokens.byServer[key];
   return tokens ? ` · ${approxTokens(tokens)}` : "";
 }
 
-/** A SKILL.md body without its YAML frontmatter (name, description). */
+/** SKILL.md without its YAML frontmatter blocks (name, description...). */
 function stripFrontmatter(content: string) {
-  return content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
+  let body = content.trimStart();
+  for (;;) {
+    const next = body
+      .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "")
+      .trimStart();
+    if (next === body) return body.trim();
+    body = next;
+  }
+}
+
+/** Who the skill is for, in the app's one scope vocabulary. */
+function ScopeBadge({ scope }: { scope: ResourceVisibilityScope }) {
+  const { label, icon: Icon, styles } = SCOPE_META[scope];
+  return (
+    <Badge variant="outline" className={cn("gap-1 font-normal", styles)}>
+      <Icon className="size-3" />
+      {label}
+    </Badge>
+  );
 }

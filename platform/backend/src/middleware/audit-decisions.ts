@@ -25,6 +25,7 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
@@ -39,9 +40,6 @@ import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
-import ToolModel from "@/models/tool";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 
@@ -173,17 +171,16 @@ export const AUDIT_DECISIONS = {
   skillsTable: { audited: true, model: SkillModel },
   teamsTable: { audited: true, model: TeamModel },
   teamTokensTable: { audited: true, model: TeamTokenModel },
-  toolsTable: { audited: true, model: ToolModel },
-  toolInvocationPoliciesTable: {
-    audited: true,
-    model: ToolInvocationPolicyModel,
+  toolsTable: {
+    audited: false,
+    reason:
+      "derived from MCP server discovery and catalog sync; no route mutates tools directly, and the install/catalog routes that drive discovery are audited",
   },
   toolObservationsTable: {
     audited: false,
     reason:
       "runtime attribution metadata written by the LLM proxy (who observed a tool, via which client); not admin-mutable state",
   },
-  trustedDataPoliciesTable: { audited: true, model: TrustedDataPolicyModel },
   userTokensTable: { audited: true, model: UserTokenModel },
   virtualApiKeysTable: { audited: true, model: VirtualApiKeyModel },
 
@@ -946,11 +943,6 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "chat active run event stream; child of chatActiveRunsTable",
   },
-  chatToolExecutionClaimsTable: {
-    audited: false,
-    reason:
-      "per-tool-call idempotency ledger; runtime dedup state, mcp_tool_calls audits the execution",
-  },
 
   // =========================================================================
   // Site notifications
@@ -971,6 +963,10 @@ export const AUDIT_DECISIONS = {
   openappaBatteryPackagesTable: {
     audited: true,
     model: OpenAppaBatteryPackageModel,
+  },
+  openappaCredentialBindingsTable: {
+    audited: true,
+    model: OpenAppaCredentialBindingModel,
   },
   openappaEffectivePoliciesTable: {
     audited: false,
@@ -1017,6 +1013,16 @@ export const AUDIT_DECISIONS = {
   openappaUnenforcedCallsTable: {
     audited: false,
     reason: "proxy record of tool calls made while enforcement was off",
+  },
+  openappaPolicyTestSuitesTable: {
+    audited: false,
+    reason:
+      "test scenario definitions do not change enforced policy or authorization; exact inputs are retained with run evidence",
+  },
+  openappaPolicyTestRunsTable: {
+    audited: false,
+    reason:
+      "bounded replay result history; evaluation does not mutate enforced policy or authorization",
   },
   openappaYellsTable: { audited: true, model: OpenAppaYellModel },
   openappaExternalConsultsTable: {

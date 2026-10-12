@@ -101,6 +101,23 @@ export const CHATOPS_CONTEXT_COMPACTED_NOTICE =
   "🗜️ This conversation got long, so I've summarized the older messages to keep answering well. Recent messages are kept as-is — if something important got lost, just mention it again.";
 
 /**
+ * A chat without reply threads (a DM or a plain group chat) is one rolling
+ * server-side session. After this long without a message, the next message
+ * starts a new session, so yesterday's topic does not leak into today's.
+ */
+export const CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS = 8 * TimeInMs.Hour;
+
+/** Reply to a reset command. */
+export const CHATOPS_SESSION_RESET_REPLY =
+  "🆕 Started a new conversation. I no longer have the earlier messages in this chat in context.";
+
+/**
+ * Hint on the first reply after an idle rollover. Without it, the agent
+ * forgetting the earlier topic reads as a bug.
+ */
+export const CHATOPS_SESSION_ROLLOVER_HINT = `New conversation: this chat was idle for more than ${CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS / TimeInMs.Hour} hours, so earlier messages are not in my context. Send "reset" to start over at any time.`;
+
+/**
  * Bot commands recognized by the chatops system
  */
 export const CHATOPS_COMMANDS = {

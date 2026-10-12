@@ -248,6 +248,23 @@ test("offers no chat while every included battery is enforced and none fits", as
   ).not.toBeInTheDocument();
 });
 
+test("offers to fix a broken battery without a coverage share while there is no tool", async () => {
+  renderCharts({
+    summary: totals({}),
+    batteries: {
+      active: [],
+      broken: [{ name: "github", status: "server_missing", tools: 0 }],
+      available: [],
+    },
+  });
+
+  const batteries = card(await screen.findByRole("link", { name: /^To fix/ }));
+  expect(
+    await batteries.findByRole("link", { name: "Configure with chat" }),
+  ).toBeVisible();
+  expect(document.body.textContent).not.toMatch(/NaN/);
+});
+
 test("shows no batteries card while no battery is included or fits", async () => {
   renderCharts({ summary: totals({ tools: 2, root: 2 }) });
 

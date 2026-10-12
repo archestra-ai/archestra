@@ -2,13 +2,15 @@
 title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
-alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-05
+alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Guardrails check every tool call an agent makes against your organization's policy, before the call runs. So an agent that has read an untrusted web page cannot then email your customer list. The [OpenAPPA](https://www.openappa.com/) policy engine decides by rules, not by asking another model. It runs outside the agent's loop, so a prompt injection cannot change its decisions.
+
+> **Platform + AI Security** — see [Pricing Model](/docs/get-started/pricing-model#platform--ai-security). OpenAPPA itself is MIT-licensed; its integration here is the licensed part. Once the instance has 30 or more users, the integration turns off until [`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED) is set.
 
 ![The Guardrails Overview tab with the enforcement, GitHub sync, and yells cards above the policy coverage charts](/docs/automated_screenshots/platform-ai-tool-guardrails_overview.webp)
 
@@ -46,6 +48,10 @@ What to know:
 
 - The starting policy covers only Archestra's own tools. Every other tool runs without restrictions. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled by your organization's default model before each command, so reading a credentials file narrows who can see the result. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
 - Enforcement applies to sessions that start while it is on. Start a new session after you turn it on.
+
+## Validations
+
+Check that a policy still allows and refuses the behavior you intended. The **Validations** card shows the latest saved result, execution time and file count. Click **View Validations** to [write checks or review runs](/docs/agents/guardrails/policies#validations).
 
 ## Blocked Calls
 

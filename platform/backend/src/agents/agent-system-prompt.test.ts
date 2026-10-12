@@ -1,6 +1,5 @@
 import {
   ADMIN_ROLE_NAME,
-  ADVISOR_DELEGATION_TOOL_NAME,
   type ArchestraToolShortName,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
@@ -193,7 +192,7 @@ describe("buildAgentSystemPrompt", () => {
     // Enforcement needs both switches; otherwise no ruling can reach the
     // model and the remedy instruction is omitted.
     const openappa = config.openappa;
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
 
     try {
@@ -247,7 +246,7 @@ describe("buildAgentSystemPrompt", () => {
     await makeMember(user.id, agent.organizationId);
 
     const openappa = config.openappa;
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(false);
 
     try {
@@ -501,43 +500,6 @@ describe("buildAgentSystemPrompt", () => {
     });
     expect(withoutCopy).not.toContain(brand(TOOL_COPY_FILE_SHORT_NAME));
     expect(withoutCopy).not.toContain("keeps the source's filename");
-  });
-
-  test("adds the advisor consult policy only when the delegation tool is present", async ({
-    makeAgent,
-    makeUser,
-    makeMember,
-  }) => {
-    const agent = await makeAgent({
-      systemPrompt: "You are helpful.",
-      toolExposureMode: "full",
-    });
-    const user = await makeUser();
-    await makeMember(user.id, agent.organizationId);
-
-    const base = {
-      agent,
-      organizationId: agent.organizationId,
-      userId: user.id,
-      agentId: agent.id,
-    };
-
-    const withAdvisor = await buildAgentSystemPrompt({
-      ...base,
-      mcpTools: { [ADVISOR_DELEGATION_TOOL_NAME]: {} as Tool },
-    });
-    // The policy names the tool and mandates a pre-final-answer consult with
-    // raw-evidence sharing — the load-bearing clauses; presence of the branded
-    // block is asserted via its stable opening.
-    expect(withAdvisor).toContain(ADVISOR_DELEGATION_TOOL_NAME);
-    expect(withAdvisor).toContain("You have an Advisor");
-    expect(withAdvisor).toContain("verbatim samples");
-
-    const withoutAdvisor = await buildAgentSystemPrompt({
-      ...base,
-      mcpTools: someTool,
-    });
-    expect(withoutAdvisor).not.toContain("You have an Advisor");
   });
 
   test("adds the tool-result instruction only when tools are present", async ({

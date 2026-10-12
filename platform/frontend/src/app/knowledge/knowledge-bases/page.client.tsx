@@ -33,7 +33,10 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
-import { ResourceAccessFilter } from "@/components/resource-access-filter";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ResourceDeletedStatusFilter,
@@ -82,7 +85,6 @@ import {
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import {
-  countKnowledgeBases,
   useAllMatchingKnowledgeBases,
   useBulkDeleteKnowledgeBases,
   useDeleteKnowledgeBase,
@@ -280,7 +282,7 @@ function KnowledgeBasesList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
-      "access",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
     ]) {
       params.delete(key);
     }
@@ -507,7 +509,6 @@ function KnowledgeBasesList() {
                 <ResourceAccessFilter
                   resource="knowledgeBase"
                   noun="knowledge bases"
-                  countItems={countKnowledgeBases}
                 />
               )}
               <ResourceDeletedStatusFilter

@@ -1,5 +1,6 @@
 import {
   boolean,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -27,6 +28,8 @@ export const openappaGithubSyncTable = pgTable("openappa_github_sync", {
   revision: uuid("revision").notNull().defaultRandom(),
   content: text("content"),
   sourceCommit: text("source_commit"),
+  // Poll the initial policy PR before importing anything from the template branch.
+  setupPullRequestNumber: integer("setup_pull_request_number"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   lastSyncError: text("last_sync_error"),
   // The migration window: the declarations this deployment authored are not in the repository yet.

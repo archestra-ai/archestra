@@ -46,6 +46,7 @@ import { ApiError } from "@/types";
 import {
   anthropicAdapterFactory,
   azureAdapterFactory,
+  azureResponsesAdapterFactory,
   bedrockAdapterFactory,
   cerebrasAdapterFactory,
   cohereAdapterFactory,
@@ -627,6 +628,9 @@ describe("model router proxy routes", () => {
     vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
       () => createResponsesTestClient() as never,
     );
+    vi.spyOn(azureResponsesAdapterFactory, "createClient").mockImplementation(
+      () => createResponsesTestClient() as never,
+    );
     vi.spyOn(azureAdapterFactory, "createClient").mockImplementation(
       () => createAzureTestClient() as never,
     );
@@ -740,7 +744,12 @@ describe("model router proxy routes", () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({
         object: "response",
-        model: provider === "openai" ? modelId : `${provider}:${modelId}`,
+        // OpenAI and Azure OpenAI deployments use native Responses, which
+        // reports the upstream model rather than the router alias.
+        model:
+          provider === "openai" || provider === "azure"
+            ? modelId
+            : `${provider}:${modelId}`,
       });
     });
 

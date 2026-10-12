@@ -8,6 +8,12 @@ import type {
 } from "@/lib/connected-client.query";
 import { ConnectionLogTable } from "./connection-log-table";
 
+const WINDOW = {
+  startDate: "2026-09-07T00:00:00.000Z",
+  label: "last 30 days",
+  picked: false,
+};
+
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}
@@ -43,8 +49,9 @@ function event(overrides: Partial<ConnectionEvent>): ConnectionEvent {
     platform: "macos",
     deviceName: "work-laptop",
     mcpGateway: null,
-    modelRouting: false,
+    llmProxy: null,
     includeSkills: false,
+    skillCount: 0,
     disconnectedBy: null,
     ...overrides,
   };
@@ -65,7 +72,7 @@ function renderTable(search = "") {
   );
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <ConnectionLogTable />
+      <ConnectionLogTable window={WINDOW} />
     </QueryClientProvider>,
   );
 }
@@ -93,7 +100,7 @@ describe("ConnectionLogTable", () => {
         }),
         event({
           mcpGateway: { id: "gw-1", name: "Engineering tools" },
-          modelRouting: true,
+          llmProxy: { id: "proxy-1", name: "Default" },
         }),
       ]),
       isFetching: false,
@@ -110,24 +117,23 @@ describe("ConnectionLogTable", () => {
     expect(
       within(connect).getByText("work-laptop · macOS"),
     ).toBeInTheDocument();
-    expect(
-      within(connect).getByText("Tools: Engineering tools"),
-    ).toBeInTheDocument();
-    expect(within(connect).getByText("Model routing")).toBeInTheDocument();
+    expect(within(connect).getByText("MCP gateway")).toBeInTheDocument();
+    expect(within(connect).getByText("LLM proxy")).toBeInTheDocument();
+    // A disconnect adds nothing.
+    expect(within(disconnect).getByText("—")).toBeInTheDocument();
   });
 
-  it("asks for the user, agent and action in the URL", () => {
+  it("asks for the user and action in the URL", () => {
     mockUseConnectionLog.mockReturnValue({
       data: page([]),
       isFetching: false,
     });
 
-    renderTable("userId=user-1&agent=cursor&action=disconnected");
+    renderTable("userId=user-1&action=disconnected");
 
     expect(mockUseConnectionLog).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: "user-1",
-        clientId: "cursor",
         action: "disconnected",
       }),
     );

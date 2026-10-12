@@ -1,4 +1,4 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, type SupportedProvider } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
+import { useState } from "react";
 
 vi.mock("next/navigation");
 
@@ -39,11 +40,6 @@ vi.mock("@/lib/connection-setup.query", () => ({
   useCreateConnectionSetup: () => ({
     mutateAsync: createSetupMock,
     isPending: false,
-  }),
-  useConnectionPromptSession: (clientId?: string) => ({
-    data: clientId ? { expiresAt: "2099-01-01" } : undefined,
-    isError: false,
-    refetch: vi.fn(),
   }),
 }));
 
@@ -343,7 +339,7 @@ describe("ConnectCommandPanel", () => {
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 
-  it("gives the Connect page one Desktop installer download that keeps left-out parts out", async () => {
+  it("keeps the gateway in Desktop downloads while honoring optional exclusions", async () => {
     availableKeysMock.mockReturnValue({ data: [] });
     createSetupMock.mockResolvedValue({
       id: "desktop-setup",
@@ -356,7 +352,7 @@ describe("ConnectCommandPanel", () => {
     renderPanel({
       client: findClient("claude-desktop"),
       variant: "download",
-      exclude: ["tools"],
+      exclude: ["tools", "skills", "proxy", "plugins"],
     });
     const link = await screen.findByRole("link", {
       name: "Download installer",
@@ -369,11 +365,52 @@ describe("ConnectCommandPanel", () => {
       expect.objectContaining({ clientId: "claude-desktop" }),
     );
     expect(createSetupMock).toHaveBeenLastCalledWith(
-      expect.not.objectContaining({ mcpGatewayId: "g1" }),
+      expect.objectContaining({
+        mcpGatewayId: "g1",
+        llmProxyId: undefined,
+        skills: undefined,
+        pluginIds: [],
+      }),
     );
     expect(
       screen.queryByRole("button", { name: "Customize setup" }),
     ).toBeNull();
+  });
+
+  it("can re-enable an omitted proxy and skills from Desktop customization", async () => {
+    const user = userEvent.setup();
+    renderPanel({
+      client: findClient("claude-desktop"),
+      exclude: ["proxy", "skills"],
+    });
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          mcpGatewayId: "g1",
+          llmProxyId: undefined,
+          skills: undefined,
+        }),
+      ),
+    );
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Route model requests through the LLM Proxy",
+      }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Install shared skills",
+      }),
+    );
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          mcpGatewayId: "g1",
+          llmProxyId: "p1",
+          skills: { skillIds: ["s1", "s2"], ttlDays: null },
+        }),
+      ),
+    );
   });
 
   it("regenerates Desktop setup when the platform or API-key authentication changes", async () => {
@@ -553,6 +590,11 @@ describe("ConnectCommandPanel", () => {
         screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
       ).toBeNull();
       await user.click(screen.getByRole("button", { name: "Customize setup" }));
+      const gateway = screen.getByRole("checkbox", {
+        name: "Connect the MCP gateway (required)",
+      });
+      expect(gateway).toBeChecked();
+      expect(gateway).toBeDisabled();
       await user.click(
         screen.getByRole("checkbox", { name: "Install shared skills" }),
       );
@@ -579,6 +621,98 @@ describe("ConnectCommandPanel", () => {
         "Connection approved. Return to your terminal to finish setup.",
       );
       expect(decisions).toEqual([{ decision: "approve", setupId: "setup-1" }]);
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      server.close();
+      archestraApiClient.setConfig({ baseUrl: "" });
+    }
+  });
+
+  it("lets approval re-enable omitted optional parts while keeping the gateway required", async () => {
+    const server = setupServer(
+      http.get("http://localhost:9000/api/client-connections/demo", () =>
+        HttpResponse.json({
+          clientId: "claude-code",
+          platform: "macos",
+          exclude: ["tools", "proxy", "skills", "plugins"],
+          userCode: "ABCD-1234",
+          expiresAt: "2099-01-01T00:00:00Z",
+        }),
+      ),
+    );
+    server.listen({ onUnhandledRequest: "error" });
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("connectRequest=demo&platform=macos") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConnectCommandPanel {...renderPanelProps()} />
+      </QueryClientProvider>,
+    );
+    try {
+      const gateway = await screen.findByRole("checkbox", {
+        name: "Connect the MCP gateway (required)",
+      });
+      expect(gateway).toBeChecked();
+      expect(gateway).toBeDisabled();
+      await user.click(gateway);
+      const optionalLabels = [
+        "Route model requests through the LLM Proxy",
+        "Install shared skills",
+        "Install compatible plugins",
+      ];
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            mcpGatewayId: "g1",
+            llmProxyId: undefined,
+            skills: undefined,
+            pluginIds: [],
+          }),
+        ),
+      );
+      for (const name of optionalLabels) {
+        const checkbox = screen.getByRole("checkbox", { name });
+        expect(checkbox).not.toBeChecked();
+        expect(checkbox).toBeEnabled();
+        await user.click(checkbox);
+      }
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            mcpGatewayId: "g1",
+            llmProxyId: "p1",
+            skills: { skillIds: ["s1", "s2"], ttlDays: null },
+            pluginIds: ["b1"],
+          }),
+        ),
+      );
+      // A refetch must not reapply the initial opt-outs over the user's edits.
+      await queryClient.invalidateQueries();
+      for (const name of optionalLabels) {
+        expect(screen.getByRole("checkbox", { name })).toBeChecked();
+      }
+      for (const name of optionalLabels) {
+        await user.click(screen.getByRole("checkbox", { name }));
+      }
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            mcpGatewayId: "g1",
+            llmProxyId: undefined,
+            skills: undefined,
+            pluginIds: [],
+          }),
+        ),
+      );
     } finally {
       view.unmount();
       queryClient.clear();
@@ -1524,41 +1658,140 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it("leaves OpenCode provider and model selection unchanged", async () => {
-      renderPanel({ client: findClient("opencode") });
-
-      expect(await screen.findByText(COMMAND)).toBeInTheDocument();
-      expect(
-        screen.queryByTestId("connect-change-model"),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.getByTestId("connect-change-proxy").closest("li"),
-      ).toHaveTextContent(
-        "Route supported OpenCode providers through the LLM Proxy using their existing local credentials",
+    it("sends the selected OpenCode routing mode without retaining an individual provider in all-provider mode", async () => {
+      const user = userEvent.setup();
+      availableKeysMock.mockReturnValue({
+        data: [
+          { provider: "anthropic", isPrimary: true },
+          { provider: "bedrock", isPrimary: false },
+        ],
+      });
+      function OpenCodePanel() {
+        const [provider, setProvider] = useState<SupportedProvider | null>(
+          null,
+        );
+        return (
+          <ConnectCommandPanel
+            {...renderPanelProps({
+              client: findClient("opencode"),
+              urlProvider: provider,
+              onProviderSelect: setProvider,
+            })}
+          />
+        );
+      }
+      render(<OpenCodePanel />, { wrapper: queryWrapper() });
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            proxyAuth: "primary-providers",
+            provider: undefined,
+          }),
+        ),
+      );
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Model provider" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(screen.getByRole("option", { name: "AWS Bedrock" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            proxyAuth: "virtual-key",
+            provider: "bedrock",
+          }),
+        ),
+      );
+      await user.click(screen.getByRole("tab", { name: "Your provider key" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ proxyAuth: "provider-key" }),
+        ),
+      );
+      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Model provider" }),
+        { key: "ArrowDown" },
+      );
+      await user.click(
+        screen.getByRole("option", { name: "All model providers" }),
       );
       await waitFor(() =>
-        expect(createSetupMock).toHaveBeenCalledWith(
+        expect(createSetupMock).toHaveBeenLastCalledWith(
           expect.objectContaining({
-            clientId: "opencode",
-            proxyAuth: "provider-key",
-            model: undefined,
+            proxyAuth: "primary-providers",
+            provider: undefined,
           }),
         ),
       );
     });
 
-    it("offers the org's synced models for the provider as a dropdown", async () => {
+    it("does not offer unconfigured or expired OpenCode provider credentials", async () => {
+      const user = userEvent.setup();
+      availableKeysMock.mockReturnValue({
+        data: [
+          { provider: "anthropic", isPrimary: true },
+          { provider: "openai", requiresReauthentication: true },
+          { provider: "vllm", baseUrl: "  " },
+          {
+            provider: "microsoft-365-copilot",
+            requiresReauthentication: false,
+          },
+        ],
+      });
+      renderPanel({ client: findClient("opencode") });
+      await screen.findByText(COMMAND);
+      await user.click(screen.getByTestId("connect-change-proxy"));
+      fireEvent.keyDown(
+        screen.getByRole("combobox", { name: "Model provider" }),
+        { key: "ArrowDown" },
+      );
+      expect(screen.getByRole("option", { name: "Anthropic" })).toBeVisible();
+      expect(
+        screen.getByRole("option", { name: "Microsoft 365 Copilot" }),
+      ).toBeVisible();
+      for (const name of ["GitHub Copilot", "OpenAI", "OpenAI-compatible"]) {
+        expect(screen.queryByRole("option", { name })).not.toBeInTheDocument();
+      }
+    });
+
+    it("filters synced models and regenerates setup with the keyboard selection", async () => {
       modelsByProviderMock.mockReturnValue({
-        openai: [{ id: "gpt-5.5" }, { id: "o4-mini" }],
+        openai: [
+          ...Array.from({ length: 100 }, (_, index) => ({
+            id: `synced-model-${index}`,
+          })),
+          { id: "o4-mini" },
+        ],
       });
       const user = userEvent.setup();
       renderPanel({ client: findClient("copilot-cli") });
       await screen.findByText(COMMAND);
 
       await user.click(screen.getByTestId("connect-change-model"));
-      // a Select (not the free-text input) backs multi-option providers
-      expect(screen.queryByPlaceholderText("Model id")).not.toBeInTheDocument();
-      expect(screen.getByRole("combobox")).toBeInTheDocument();
+      const picker = screen.getByRole("combobox", { name: "Model" });
+      await user.click(picker);
+      // Keep the default reachable even when it isn't in the synced catalog.
+      expect(screen.getByRole("option", { name: "gpt-5.5" })).toBeVisible();
+      const search = screen.getByPlaceholderText("Search models...");
+      await user.type(search, "missing-model");
+      expect(screen.getByText("No models found.")).toBeVisible();
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+
+      await user.clear(search);
+      await user.type(search, "O4-MINI");
+      expect(screen.getAllByRole("option")).toHaveLength(1);
+      expect(screen.getByRole("option", { name: "o4-mini" })).toBeVisible();
+      await user.keyboard("{ArrowDown}{Enter}");
+
+      expect(picker).toHaveTextContent("o4-mini");
+      expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ model: "o4-mini" }),
+        ),
+      );
     });
 
     it("shows no model row for clients without provider env wiring", async () => {

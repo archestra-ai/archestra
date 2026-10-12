@@ -6,6 +6,7 @@ import {
   type AuthRequiredMcpToolError,
   ENCRYPTED_CHAT_REDACTED_MARKER,
   getArchestraAppResourceUri,
+  isLogContentNotStored,
   isPlaywrightCatalogItem,
   LINKED_IDP_SSO_MODE,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
@@ -84,6 +85,11 @@ import {
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
+import {
+  filterToolsByCallerCatalogAccess,
+  getCallerAccessibleCatalogIds,
+  isToolCatalogAccessible,
+} from "@/services/caller-catalog-access";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import {
   type ResolvedEnterpriseTransportCredential,
@@ -649,6 +655,38 @@ class McpClient {
     const { tool, catalogItem, resolvedToolCall } = validationResult;
     // Use the resolved name (may have been prefixed by suffix fallback lookup)
     toolCall = resolvedToolCall;
+
+    // Sharing an agent does not share its tools' MCP servers: a user reaches an
+    // assigned tool only when they can see its catalog item. This is the deep
+    // gate behind every agent dispatch path (gateway tools/call, run_tool, and
+    // chat's cached tool wrappers); the listing surfaces drop the same tools.
+    // Refused like an unknown tool so the server's existence is not disclosed.
+    if (
+      owner.type === "agent" &&
+      !isToolCatalogAccessible(
+        tool,
+        await getCallerAccessibleCatalogIds({
+          userId: tokenAuth?.userId,
+          organizationId: tokenAuth?.organizationId,
+        }),
+      )
+    ) {
+      const message = unavailableThirdPartyToolMessage(toolCall.name);
+      return this.createErrorResult({
+        toolCall,
+        owner,
+        error: message,
+        mcpServerName: tool.catalogName || catalogItem.name,
+        authInfo,
+        structuredError: {
+          type: "tool_state",
+          code: "unknown_tool",
+          message,
+          toolName: toolCall.name,
+        },
+        encryptedChatContent,
+      });
+    }
 
     if (
       isPlaywrightCatalogItem(catalogItem.id) &&
@@ -3901,9 +3939,12 @@ class McpClient {
       };
 
       // The app log stays content-free for every encrypted-chat call, encrypted
-      // rows included: the row is protected at rest, the log line is not.
+      // rows included: the row is protected at rest, the log line is not. The
+      // same goes for a call the Log Content mode kept out of the row.
       if (isEncryptedChat) {
         logData.resultContent = "[redacted: encrypted chat]";
+      } else if (isLogContentNotStored(savedToolCall.toolResult)) {
+        logData.resultContent = "[not stored: log content mode]";
       } else if (toolResult.isError) {
         // Tool errors routinely echo request/response payloads — cap them
         // the same way as the success-path content preview.
@@ -4781,9 +4822,19 @@ class McpClient {
     const effectiveExclusions =
       exclusionSets ??
       (await agentToolExclusionsService.getActiveExclusionSets(agentId));
+    // An assigned tool whose catalog the calling user cannot see does not
+    // resolve the resource either (its server is not theirs to read from).
+    const accessibleCatalogIds = await getCallerAccessibleCatalogIds({
+      userId: tokenAuth?.userId,
+      organizationId: tokenAuth?.organizationId,
+    });
     const matchingTools = (
       await ToolModel.findToolsByUiResourceUri(agentId, uri)
-    ).filter((match) => !isToolRowExcluded(match.tool, effectiveExclusions));
+    ).filter(
+      (match) =>
+        !isToolRowExcluded(match.tool, effectiveExclusions) &&
+        isToolCatalogAccessible(match, accessibleCatalogIds),
+    );
     let catalogId = matchingTools[0]?.catalogId ?? null;
 
     // Assignment miss: a tool the agent reaches only through dynamic access
@@ -5016,11 +5067,16 @@ class McpClient {
     // excluded tools' resource URIs). Callers pass the sets they already
     // loaded; loaded here otherwise. Empty (no-op) unless the agent's
     // accessAllTools setting is on.
-    const { tools, exclusionSets: effectiveExclusions } =
+    const { tools: agentTools, exclusionSets: effectiveExclusions } =
       await agentToolExclusionsService.getFilteredMcpToolsByAgent(
         agentId,
         exclusionSets,
       );
+    // A catalog the calling user cannot see is not listed through the agent.
+    const tools = await filterToolsByCallerCatalogAccess(agentTools, {
+      userId: tokenAuth?.userId,
+      organizationId: tokenAuth?.organizationId,
+    });
     const assignedTools = await ToolModel.getMcpToolsAssignedToAgent(
       tools.map((tool) => tool.name),
       agentId,

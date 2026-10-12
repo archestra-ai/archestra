@@ -12,22 +12,13 @@ import {
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import {
+  PERSISTED_QUERY_META,
+  seedOnlyStaleTime,
+} from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
 
 const { getAgentCatalog } = archestraApiSdk;
-
-/** How many Agents-page rows a "Show" selection holds, for the filter's counts. */
-export async function countAgentCatalog(params: {
-  access: ResourceAccessRelation[];
-  includeBuiltIn?: boolean;
-}): Promise<number> {
-  const { data, error } = await getAgentCatalog({
-    query: { limit: 1, offset: 0, ...params },
-  });
-  throwOnApiError(error, { toastOnError: false });
-  return data?.pagination.total ?? 0;
-}
 
 export const agentCatalogQueryKeys = {
   all: ["agents", "catalog"] as const,
@@ -68,6 +59,8 @@ export function useAgentCatalog(
     query.excludeOtherPersonalAgents ===
       initialDataExcludeOtherPersonalAgents &&
     isSameResourceAccess(query.access, initialDataAccess) &&
+    query.sharedWith === undefined &&
+    query.owner === undefined &&
     query.pinned === initialDataPinned &&
     query.labels === undefined &&
     query.status === undefined &&
@@ -89,6 +82,7 @@ export function useAgentCatalog(
       useInitialData && initialData && catalog.state.data === initialData
         ? true
         : "always",
+    staleTime: seedOnlyStaleTime(useInitialData ? initialData : undefined),
     enabled,
     meta: PERSISTED_QUERY_META,
   });

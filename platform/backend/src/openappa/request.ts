@@ -497,10 +497,11 @@ export function sanitizeForwardedRequest(body: object): boolean {
     interactionType,
     body: target,
   }).length;
-  return (
-    marks ||
-    stamps + sanitizeProviderBoundRequest({ body: target, interactionType }) > 0
-  );
+  const sanitized = sanitizeProviderBoundRequest({
+    body: target,
+    interactionType,
+  });
+  return marks || stamps + sanitized > 0;
 }
 
 /**

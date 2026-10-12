@@ -26,6 +26,7 @@ export interface BatteryPackage {
   helpers: Array<string>
   credentials: Array<string>
   externals: Array<BatteryExternal>
+  benefit?: string
   setup?: string
   files: Array<BatteryFileInput>
 }
@@ -131,6 +132,9 @@ export declare function editOpenappaPolicy(content: string, edits: Array<PolicyE
  */
 export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy): Promise<string>
 
+/** The upstream pin and host replay boundary version stored with each run. */
+export declare function getOpenappaReplayEngineVersion(): string
+
 /** Read the current label of a started session without mutating its trajectory. */
 export declare function getOpenappaStatus(organizationId: string, sessionId: string): Promise<OpenappaStatus | null>
 
@@ -157,6 +161,12 @@ export declare function initializeOpenappa(databaseUrl: string, postgresMaxConne
  * what the host needs from it. The message names the first refusal.
  */
 export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): Promise<BatteryPackage>
+
+/**
+ * Parse scenario files into tools and assertion counts without loading a policy
+ * or evaluating any call.
+ */
+export declare function inspectOpenappaPolicyTests(input: string): Promise<string>
 
 /**
  * The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,
@@ -225,6 +235,8 @@ export interface PolicyDeclarations {
    * their values in `DispatchPolicy.credentials`.
    */
   runtimeCredentials: Array<string>
+  /** Every root external or profile naming a `token_env`, bound or not. */
+  tokenEnvReaders: Array<TokenEnvReader>
   /**
    * A shape the reader could not make sense of, naming the key and its line. An
    * unparsable document is one error and no declarations.
@@ -250,6 +262,13 @@ export interface PolicyEditInput {
 
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
+/**
+ * Evaluate bounded `.appa` scenarios against the supplied effective policy. The
+ * replay core answers consults through an in-process stand-in, never a live party,
+ * and keeps every trajectory in memory.
+ */
+export declare function replayOpenappaPolicy(input: string): Promise<string>
+
 export interface ReportingOptions {
   endpoint: string
   hostname?: string
@@ -261,6 +280,15 @@ export interface ServerAliasDeclaration {
   namespace: string
   servers: Array<string>
   line: number
+}
+
+/**
+ * A root external or profile naming a `token_env`; `reader` is its `externals`
+ * path.
+ */
+export interface TokenEnvReader {
+  variable: string
+  reader: string
 }
 
 /**

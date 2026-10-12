@@ -603,6 +603,77 @@ describe("chat model routes", () => {
     ]);
   });
 
+  test("GET /api/llm-models narrows by access and sharedWith", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeTeam,
+  }) => {
+    const secret = await makeSecret({ secret: { apiKey: "test-key" } });
+    const apiKey = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "openai",
+    });
+    const team = await makeTeam(organizationId, user.id);
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const share = async (
+      modelId: string,
+      subject: { type: "team"; id: string } | { type: "organization"; id: "*" },
+    ) => {
+      const model = await ModelModel.create({
+        externalId: `openai/${modelId}-${suffix}`,
+        provider: "openai",
+        modelId: `${modelId}-${suffix}`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        lastSyncedAt: new Date(),
+      });
+      const key = {
+        organizationId,
+        resource: "llmModel" as const,
+        scope: model.id,
+      };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [{ subject, actions: ["read", "use"] }],
+      });
+      return model;
+    };
+    const teamModel = await share("team-model", { type: "team", id: team.id });
+    const orgModel = await share("org-model", {
+      type: "organization",
+      id: "*",
+    });
+    // One sync: it replaces the key's whole model set.
+    await LlmProviderApiKeyModelLinkModel.syncModelsForApiKey(
+      apiKey.id,
+      [teamModel, orgModel].map((model) => ({
+        id: model.id,
+        modelId: model.modelId,
+      })),
+      "openai",
+    );
+    const ours = new Set([teamModel.id, orgModel.id]);
+
+    const list = async (params: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/llm-models?${params}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .filter((model: { id: string }) => ours.has(model.id))
+        .map((model: { id: string }) => model.id);
+    };
+
+    expect((await list("")).sort()).toEqual([...ours].sort());
+    expect(await list(`sharedWith=team:${team.id}`)).toEqual([teamModel.id]);
+    expect(await list("sharedWith=org")).toEqual([orgModel.id]);
+    // Nobody authors a synced model.
+    expect(await list("access=mine")).toEqual([]);
+  });
+
   describe("GET /api/llm-models — effectiveContextLength", () => {
     /**
      * The models table shows the window Ollama will actually enforce, while

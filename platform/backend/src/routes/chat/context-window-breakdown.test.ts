@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import type { ChatMessage } from "@/types";
-import { __testEstimateChatMessagesTokens } from "./context-compaction";
+import { estimateChatMessagesTokens } from "./compaction/message-text";
 import {
   BINARY_BYTES_PER_TOKEN,
   buildContextWindowBreakdown,
@@ -637,11 +637,11 @@ describe("buildContextWindowBreakdown", () => {
       ...refMessage,
       parts: [{ type: "text" as const, text: "" }],
     };
-    const withRef = __testEstimateChatMessagesTokens({
+    const withRef = estimateChatMessagesTokens({
       provider: "anthropic",
       messages: [refMessage as ChatMessage],
     });
-    const withoutRef = __testEstimateChatMessagesTokens({
+    const withoutRef = estimateChatMessagesTokens({
       provider: "anthropic",
       messages: [headerOnly as ChatMessage],
     });

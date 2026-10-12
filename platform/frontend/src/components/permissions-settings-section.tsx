@@ -1,48 +1,28 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
+import type { ResourceVisibilityScope } from "@archestra/shared";
 import type { ReactNode } from "react";
+import { AccessAudienceHeader } from "@/components/audience-chip";
 import { SettingsSection } from "@/components/settings-section";
 
-export function permissionsSettingsDescription(resourceName: string) {
-  return `Choose who can access this ${resourceName} and what they can do. Organization grants also apply.`;
-}
-
-/** Shared presentation for draft grants and an existing resource's policy. */
+/**
+ * The access block as one section of a settings surface. It is always the
+ * plain full-width block: no title column and no card, because "Who can use
+ * it" already names it.
+ */
 export function PermissionsSettingsSection({
-  resourceName,
-  directCount,
-  inheritedCount,
-  action,
+  audience,
   children,
 }: {
-  resourceName: string;
-  directCount: number;
-  inheritedCount: number;
-  action?: ReactNode;
+  /** What the grants add up to; null where there is no single object. */
+  audience: ResourceVisibilityScope | null;
   children: ReactNode;
 }) {
-  const summary = [
-    `${directCount} added ${directCount === 1 ? "grant" : "grants"}`,
-    ...(inheritedCount > 0
-      ? [
-          `${inheritedCount} organization ${inheritedCount === 1 ? "grant" : "grants"}`,
-        ]
-      : []),
-  ].join(" · ");
-
   return (
-    <SettingsSection
-      title="Permissions"
-      description={permissionsSettingsDescription(resourceName)}
-    >
-      <div className="rounded-md border px-3">
-        <div className="flex items-center justify-between gap-3 py-3">
-          <span className="min-w-0 text-sm text-muted-foreground">
-            {summary}
-          </span>
-          {action}
-        </div>
+    <SettingsSection>
+      <div className="space-y-2">
+        {audience && <AccessAudienceHeader audience={audience} />}
         {children}
       </div>
     </SettingsSection>

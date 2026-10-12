@@ -92,7 +92,6 @@ const uiTestMatch = [
   "**/skill-version-history.spec.ts",
   "**/skills-bulk-actions.spec.ts",
   "**/static-credentials-management.spec.ts",
-  "**/tool-guardrails.spec.ts",
   "**/users-role-filter.spec.ts",
 ];
 
@@ -102,7 +101,6 @@ const uiTestMatch = [
 // orchestrator.
 const apiTestMatch = [
   "**/a2a-public-origin.spec.ts",
-  "**/built-in-agents.spec.ts",
   "**/knowledge-permission-sync.spec.ts",
   "**/custom-yaml-restart.spec.ts",
   "**/mcp-gateway-jwks-credential-priority.ee.spec.ts",
@@ -184,7 +182,6 @@ const chromiumShard2TestMatch = [
   "**/skill-version-history.spec.ts",
   "**/skills-bulk-actions.spec.ts",
   "**/static-credentials-management.spec.ts",
-  "**/tool-guardrails.spec.ts",
   "**/users-role-filter.spec.ts",
 ];
 const chromiumShard = process.env.E2E_CHROMIUM_SHARD;

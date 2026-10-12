@@ -2,7 +2,9 @@
 import { describe, expect, test } from "vitest";
 import {
   canDelegateScopedPermissions,
+  grantsAudience,
   hasScopedPermission,
+  type ResourcePermissionGrant,
   ResourcePermissionScopeSchema,
   type ScopedPermission,
   widenToPreset,
@@ -146,5 +148,57 @@ describe("widenToPreset", () => {
     ).toEqual(["read", "manage-permissions"]);
     expect(widenToPreset(["use"], "log")).toEqual([]);
     expect(widenToPreset([], "agent")).toEqual([]);
+  });
+});
+
+describe("grantsAudience", () => {
+  const owner = "owner-user";
+  const read = (subject: ResourcePermissionGrant["subject"]) => ({
+    subject,
+    actions: ["read" as const],
+  });
+
+  test("an organization or role grant is org", () => {
+    expect(grantsAudience([read({ type: "organization", id: "*" })])).toBe(
+      "org",
+    );
+    expect(grantsAudience([read({ type: "role", id: "role-1" })])).toBe("org");
+  });
+
+  test("a team grant is team, unless a role grant widens it to org", () => {
+    expect(grantsAudience([read({ type: "team", id: "team-1" })])).toBe("team");
+    expect(
+      grantsAudience([
+        read({ type: "team", id: "team-1" }),
+        read({ type: "role", id: "role-1" }),
+      ]),
+    ).toBe("org");
+  });
+
+  test("people, service accounts, and the owner alone are personal", () => {
+    expect(grantsAudience([], owner)).toBe("personal");
+    expect(grantsAudience([read({ type: "user", id: owner })], owner)).toBe(
+      "personal",
+    );
+    expect(
+      grantsAudience([read({ type: "user", id: "someone-else" })], owner),
+    ).toBe("personal");
+    expect(
+      grantsAudience([
+        read({
+          type: "serviceAccount",
+          id: "00000000-0000-4000-8000-000000000003",
+        }),
+      ]),
+    ).toBe("personal");
+  });
+
+  test("grants without read are ignored", () => {
+    expect(
+      grantsAudience([
+        { subject: { type: "organization", id: "*" }, actions: ["use"] },
+        { subject: { type: "team", id: "team-1" }, actions: ["update"] },
+      ]),
+    ).toBe("personal");
   });
 });

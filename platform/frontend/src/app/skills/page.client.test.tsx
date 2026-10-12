@@ -20,7 +20,6 @@ vi.mock("@/lib/organization.query");
 // The scope check behind Edit/Delete asks which teams the caller belongs to.
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/skills/skill.query", () => ({
-  countSkills: async () => 0,
   useAllMatchingSkills: () => ({ data: [] }),
   useBulkDeleteSkills: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSkillsList: vi.fn(),

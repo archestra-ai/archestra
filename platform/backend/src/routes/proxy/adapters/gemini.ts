@@ -1018,9 +1018,9 @@ export function getUsageTokens(usage: {
 
 /**
  * Identifier for a `functionResponse` the client sent without one — optional in
- * Gemini's API and omitted by the AI SDK, so most requests need it. Trusted-data
- * policies are evaluated in one pass over the request and their replacements
- * written back in another, so this has to be derived from something both passes
+ * Gemini's API and omitted by the AI SDK, so most requests need it. Tool results
+ * are read in one pass over the request and their replacements written back in
+ * another, so this has to be derived from something both passes
  * observe: the response's position in the request.
  */
 function syntheticToolCallId(contentIndex: number, partIndex: number): string {

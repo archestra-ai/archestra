@@ -1,24 +1,22 @@
 "use client";
 
-import {
-  INSTALLER_CLIENT_IDS,
-  INSTALLER_CLIENT_LABELS,
-  isInstallerClientId,
-} from "@archestra/shared/connection-setup";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Plug, PlugZap, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
-  filterControlClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import {
   type ConnectionEvent,
@@ -26,10 +24,10 @@ import {
   useConnectionLog,
 } from "@/lib/connected-client.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
-import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useMemberSearch } from "@/lib/member.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { AgentIcon, agentLabel } from "./agent-icon";
+import type { ConnectionsWindow } from "./connections-window";
 
 const ALL_VALUE = "all";
 const USER_FILTER_LIMIT = 100;
@@ -42,17 +40,9 @@ const ACTION_LABEL: Record<ConnectionEventAction, string> = {
 };
 
 const ACTION_OPTIONS = [
-  { value: ALL_VALUE, label: "All actions" },
+  { value: ALL_VALUE, label: "All events" },
   { value: "connected", label: ACTION_LABEL.connected },
   { value: "disconnected", label: ACTION_LABEL.disconnected },
-];
-
-const AGENT_OPTIONS = [
-  { value: ALL_VALUE, label: "All agents" },
-  ...INSTALLER_CLIENT_IDS.map((id) => ({
-    value: id,
-    label: INSTALLER_CLIENT_LABELS[id],
-  })),
 ];
 
 const PLATFORM_LABEL: Record<
@@ -72,15 +62,12 @@ function parseAction(value: string | null): ConnectionEventAction | undefined {
  * Each time a member connected an agent through the Connect page, and each
  * time one was disconnected.
  */
-export function ConnectionLogTable() {
+export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const userId = searchParams.get("userId") ?? undefined;
-  const agentParam = searchParams.get("agent");
-  const clientId =
-    agentParam && isInstallerClientId(agentParam) ? agentParam : undefined;
   const action = parseAction(searchParams.get("action"));
 
   const cursorPagination = useCursorPagination({
@@ -108,26 +95,20 @@ export function ConnectionLogTable() {
     [cursorPagination.goNewest, updateUrlParams],
   );
 
-  const dateTimePicker = useDateTimeRangePicker({
-    startDateFromUrl: searchParams.get("startDate"),
-    endDateFromUrl: searchParams.get("endDate"),
-    onDateRangeChange: useCallback(
-      ({ startDate, endDate }) => {
-        cursorPagination.goNewest();
-        updateUrlParams({ startDate, endDate });
-      },
-      [cursorPagination.goNewest, updateUrlParams],
-    ),
-  });
+  // A new page-wide range starts over from the newest event.
+  const { goNewest } = cursorPagination;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on a range change
+  useEffect(() => {
+    goNewest();
+  }, [window.startDate, window.endDate, goNewest]);
 
   const { data, isFetching, isLoadingError, refetch } = useConnectionLog({
     limit: cursorPagination.pageSize,
     cursor: cursorPagination.cursor ?? undefined,
     userId,
-    clientId,
     action,
-    startDate: dateTimePicker.startDateParam,
-    endDate: dateTimePicker.endDateParam,
+    startDate: window.startDate,
+    endDate: window.endDate,
   });
 
   const {
@@ -148,24 +129,12 @@ export function ConnectionLogTable() {
     [users],
   );
 
-  const hasFilters =
-    userId !== undefined ||
-    clientId !== undefined ||
-    action !== undefined ||
-    dateTimePicker.startDate !== undefined ||
-    dateTimePicker.endDate !== undefined;
+  const hasFilters = userId !== undefined || action !== undefined;
 
   const clearFilters = useCallback(() => {
     cursorPagination.goNewest();
-    dateTimePicker.clearDateRange();
-    updateUrlParams({
-      userId: null,
-      agent: null,
-      action: null,
-      startDate: null,
-      endDate: null,
-    });
-  }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
+    updateUrlParams({ userId: null, action: null });
+  }, [cursorPagination.goNewest, updateUrlParams]);
 
   if (isLoadingError) {
     return (
@@ -195,34 +164,11 @@ export function ConnectionLogTable() {
             inactiveValue={ALL_VALUE}
           />
           <FilterSelect
-            value={clientId ?? ALL_VALUE}
-            onValueChange={filterChange("agent")}
-            placeholder="Filter by agent"
-            items={AGENT_OPTIONS}
-            inactiveValue={ALL_VALUE}
-          />
-          <FilterSelect
             value={action ?? ALL_VALUE}
             onValueChange={filterChange("action")}
             placeholder="Filter by action"
             items={ACTION_OPTIONS}
             inactiveValue={ALL_VALUE}
-          />
-          <DateTimeRangePicker
-            startDate={dateTimePicker.startDate}
-            endDate={dateTimePicker.endDate}
-            isDialogOpen={dateTimePicker.isDateDialogOpen}
-            tempStartDate={dateTimePicker.tempStartDate}
-            tempEndDate={dateTimePicker.tempEndDate}
-            displayText={dateTimePicker.getDateRangeDisplay()}
-            onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-            onTempStartDateChange={dateTimePicker.setTempStartDate}
-            onTempEndDateChange={dateTimePicker.setTempEndDate}
-            onOpenDialog={dateTimePicker.openDateDialog}
-            onApply={dateTimePicker.handleApplyDateRange}
-            className={filterControlClass({
-              active: dateTimePicker.startDate !== undefined,
-            })}
           />
         </FilterBar>
       </CollectionFilters>
@@ -250,7 +196,7 @@ export function ConnectionLogTable() {
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
         emptyIcon={PlugZap}
-        emptyMessage="No agent connections yet. They will appear here when members connect an agent from the Connect page."
+        emptyMessage={`No agent connections in ${window.picked ? "this date range" : `the ${window.label}`}. They appear here when members connect an agent from the Connect page.`}
         filteredEmptyMessage="No agent connections match your filters"
         onClearFilters={clearFilters}
       />
@@ -330,33 +276,62 @@ const columns: ColumnDef<ConnectionEvent>[] = [
     },
   },
   {
-    id: "setup",
-    header: "Included",
+    id: "added",
+    header: "Added",
     size: 240,
     minSize: 160,
     cell: ({ row }) => {
-      const { via, mcpGateway, modelRouting, includeSkills } = row.original;
-      const parts = [
-        via === "oauthSignIn" && "Gateway sign-in",
-        mcpGateway && `Tools: ${mcpGateway.name}`,
-        modelRouting && "Model routing",
-        includeSkills && "Skills",
-      ].filter((part): part is string => Boolean(part));
-      return parts.length === 0 ? (
+      const added = addedTo(row.original);
+      return added.length === 0 ? (
         <div className="text-xs text-muted-foreground">—</div>
       ) : (
         <div className="flex flex-wrap gap-1">
-          {parts.map((part) => (
-            <Badge
-              key={part}
-              variant="outline"
-              className="px-1.5 py-0 text-[10px] font-normal"
-            >
-              {part}
-            </Badge>
+          {added.map(({ label, detail }) => (
+            <Tooltip key={label}>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className="cursor-default px-1.5 py-0 text-[10px] font-normal"
+                >
+                  {label}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">{detail}</TooltipContent>
+            </Tooltip>
           ))}
         </div>
       );
     },
   },
 ];
+
+/**
+ * What connecting gave the agent, each named in its tooltip as "label: value"
+ * so a gateway called "My Gateway" never reads as a stutter. A disconnect adds
+ * nothing. An agent that signed in to the gateway itself gets its tools from
+ * it, but which gateway is only known once it calls a tool.
+ */
+function addedTo(event: ConnectionEvent): { label: string; detail: string }[] {
+  if (event.action === "disconnected") return [];
+  const added: { label: string; detail: string }[] = [];
+  if (event.mcpGateway || event.via === "oauthSignIn") {
+    added.push({
+      label: "MCP gateway",
+      detail: `MCP gateway: ${event.mcpGateway?.name ?? "not known yet"}`,
+    });
+  }
+  if (event.llmProxy) {
+    added.push({
+      label: "LLM proxy",
+      detail: `LLM proxy: ${event.llmProxy.name}`,
+    });
+  }
+  if (event.includeSkills) {
+    const count = event.skillCount;
+    added.push({
+      label: "Skills",
+      detail: count > 0 ? `Skills: ${count} added` : "Skills: added",
+    });
+  }
+  return added;
+}

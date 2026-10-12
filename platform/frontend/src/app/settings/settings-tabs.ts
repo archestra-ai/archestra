@@ -14,7 +14,6 @@ import {
   MessagesSquare,
   Palette,
   Plug,
-  ShieldCheck,
   ShieldUser,
   UserCog,
   Users,
@@ -80,11 +79,6 @@ export function useSettingsTabs() {
       : []),
     ...(permissionMap?.["/settings/skills"]
       ? [{ label: "Skills", href: "/settings/skills", Icon: BookOpen }]
-      : []),
-    // Legacy security defaults step aside once OpenAPPA is on; the flag alone
-    // decides, so turning it off brings the tab back unchanged.
-    ...(permissionMap?.["/settings/security"] && openappaEnabled === false
-      ? [{ label: "Security", href: "/settings/security", Icon: ShieldCheck }]
       : []),
     ...(openappaEnabled && permissionMap?.["/settings/openappa"]
       ? [{ label: "OpenAPPA", href: "/settings/openappa", Icon: OpenAppaIcon }]

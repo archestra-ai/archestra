@@ -40,7 +40,6 @@ import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import {
-  AgentModel,
   AgentTeamModel,
   TeamModel,
   TeamTokenModel,
@@ -48,6 +47,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { isAppaDelegatedRun } from "@/openappa/service";
+import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
@@ -836,6 +836,7 @@ export async function getChatMcpTools({
   actorTeamId,
   chatOpsBindingId,
   chatOpsThreadId,
+  chatOpsPinnedAgentId,
   enabledToolIds,
   conversationId,
   isolationKey,
@@ -845,7 +846,6 @@ export async function getChatMcpTools({
   abortSignal,
   elicitation,
   user,
-  blockOnApprovalRequired,
   scheduleTriggerRunId,
   hookRunCollector,
   kbChunksCollector,
@@ -855,6 +855,7 @@ export async function getChatMcpTools({
   suppressContentLogging,
   encryptedChatAudit,
   modelAcceptsImageToolResults,
+  appaSubagent,
 }: {
   agentName: string;
   agentId: string;
@@ -866,6 +867,8 @@ export async function getChatMcpTools({
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   enabledToolIds?: string[];
   /**
    * Id of a persisted `conversations` row — tools may persist it as a foreign
@@ -891,8 +894,6 @@ export async function getChatMcpTools({
   elicitation?: ChatMcpElicitationBridge;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
-  /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
-  blockOnApprovalRequired?: boolean;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
@@ -937,6 +938,12 @@ export async function getChatMcpTools({
    * Omitted by headless/legacy callers to preserve their current behavior.
    */
   modelAcceptsImageToolResults?: boolean;
+  /**
+   * The child trajectory an OpenAPPA spawn bound this delegated run to. The
+   * run then governs its own calls, remedies included. Never cached: it is
+   * one spawn's.
+   */
+  appaSubagent?: SubagentBinding;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -945,7 +952,7 @@ export async function getChatMcpTools({
     scopeKey,
     delegationChain,
   );
-  const shouldUseToolCache = !abortSignal;
+  const shouldUseToolCache = !abortSignal && !appaSubagent;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -1030,8 +1037,10 @@ export async function getChatMcpTools({
     // Tools with _meta.ui.visibility that does not include "model" are intended
     // for app-iframe use only and must not appear in the LLM's tool list.
     // Default (no visibility field) = visible to both model and app.
-    // A2A-delegated runs cannot execute OpenAPPA tools, so do not offer them.
-    const delegatedRun = isAppaDelegatedRun(agentId, delegationChain);
+    // A2A-delegated runs cannot execute OpenAPPA tools, so do not offer them,
+    // unless a spawn bound the run to a child trajectory of its own.
+    const delegatedRun =
+      !appaSubagent && isAppaDelegatedRun(agentId, delegationChain);
     const filteredMcpTools = mcpTools.filter((tool) => {
       if (isAgentTool(tool.name)) return false;
       if (
@@ -1059,14 +1068,11 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch the agent (for its trust config) and the agent's + user's teams
-    // (for trace span attributes).
-    const [agent, teams, userTeams] = await Promise.all([
-      AgentModel.findById(agentId),
+    // The agent's + user's teams, for trace span attributes.
+    const [teams, userTeams] = await Promise.all([
       AgentTeamModel.getTeamLabelInfoForAgent(agentId),
       TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
     ]);
-    const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
     const toolContext: ChatToolContext = {
@@ -1079,19 +1085,18 @@ export async function getChatMcpTools({
       openedAppId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsPinnedAgentId,
       sessionId,
       delegationChain,
       scheduleTriggerRunId,
       abortSignal,
       elicitation,
       user,
-      blockOnApprovalRequired,
       hookRunCollector,
       kbChunksCollector,
       subagentToolStream,
       taskBridge,
       mcpGwToken,
-      considerContextUntrusted,
       suppressContentLogging,
       encryptedChatAudit,
       modelAcceptsImageToolResults: modelAcceptsImageToolResults ?? true,
@@ -1101,6 +1106,7 @@ export async function getChatMcpTools({
       // otherwise a fresh one. On a cache hit it is rebound (see above) so
       // repeat counts never carry across runs.
       repeatTracker: repeatTracker ?? new ToolCallRepeatTracker(),
+      appaSubagent,
     };
     const aiTools: Record<string, Tool> = {};
 

@@ -22,11 +22,16 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { HttpResponse, http } from "msw";
-import { ModelModel } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import {
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+  VirtualApiKeyModel,
+} from "@/models";
+import { accessGrants, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import { ApiError, GithubCopilot } from "@/types";
 import githubCopilotProxyRoutes from "./github-copilot";
+import modelRouterProxyRoutes from "./model-router";
 
 beforeEach(async () => {
   await ModelModel.create({
@@ -296,6 +301,131 @@ describe("GitHub Copilot Responses account routing", () => {
 });
 
 describe("GitHub Copilot chat completion compatibility", () => {
+  test.for([
+    { envelope: { object: "chat.completion", created: 123 }, status: 200 },
+    { envelope: { object: "completion", created: 123 }, status: 200 },
+    { envelope: {}, status: 200 },
+    { envelope: { object: 42, created: 123 }, status: 500 },
+  ])("Model Router validates completion envelopes like the direct proxy: %j", async ({
+    envelope,
+    status,
+  }, {
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createTestApp();
+    await app.register(githubCopilotProxyRoutes);
+    await app.register(modelRouterProxyRoutes);
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id);
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Copilot Router Compatibility",
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    const githubToken = uniqueGithubToken();
+    const secret = await makeSecret({ secret: { apiKey: githubToken } });
+    const providerKey = await makeLlmProviderApiKey(
+      organization.id,
+      secret.id,
+      { provider: "github-copilot", userId: user.id },
+    );
+    const model = await ModelModel.findByProviderAndModelId(
+      "github-copilot",
+      "gpt-4",
+    );
+    if (!model) throw new Error("Copilot fixture model was not created");
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      model.id,
+    ]);
+    const { value } = await VirtualApiKeyModel.create({
+      organizationId: organization.id,
+      name: "Copilot Router Key",
+      authorId: user.id,
+      ...accessGrants("personal"),
+      providerApiKeys: [
+        { provider: "github-copilot", providerApiKeyId: providerKey.id },
+      ],
+    });
+    stubTokenExchange();
+    const toolCall = {
+      id: "call_lookup",
+      type: "function",
+      function: { name: "lookup", arguments: '{"key":"example"}' },
+    };
+    const completion = {
+      ...envelope,
+      id: "completion-router-test",
+      model: "gpt-4",
+      provider_metadata: { region: "synthetic" },
+      choices: [
+        {
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            content: "Checking the example",
+            tool_calls: [toolCall],
+          },
+        },
+      ],
+      usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
+    };
+    let upstreamCalls = 0;
+    server.use(
+      http.post(COPILOT_CHAT_COMPLETIONS_URL, async ({ request }) => {
+        upstreamCalls++;
+        expect(await request.json()).toMatchObject({
+          model: "gpt-4",
+          stream: false,
+        });
+        return HttpResponse.json(completion);
+      }),
+    );
+    try {
+      for (const path of [
+        `/v1/github-copilot/${agent.id}`,
+        "/v1/model-router",
+        `/v1/model-router/${agent.id}`,
+      ]) {
+        const direct = path.startsWith("/v1/github-copilot");
+        const response = await app.inject({
+          method: "POST",
+          url: `${path}/chat/completions`,
+          headers: {
+            authorization: `Bearer ${direct ? githubToken : value}`,
+          },
+          payload: {
+            model: direct ? "gpt-4" : "github-copilot:gpt-4",
+            messages: [{ role: "user", content: "Look up the example" }],
+          },
+        });
+        expect(response.statusCode, `${path}: ${response.body}`).toBe(status);
+        if (status === 200) {
+          expect(response.json()).toEqual({
+            ...completion,
+            choices: [{ ...completion.choices[0], index: 0 }],
+          });
+        } else {
+          expect(response.json()).toEqual({
+            error: {
+              message: "Response doesn't match the schema",
+              type: "api_internal_server_error",
+            },
+          });
+        }
+      }
+      expect(upstreamCalls).toBe(3);
+    } finally {
+      await app.close();
+    }
+  });
+
   test("the chat client accepts a completion whose upstream choices omit their indices", async ({
     makeAgent,
   }) => {

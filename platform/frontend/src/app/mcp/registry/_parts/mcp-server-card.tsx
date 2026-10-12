@@ -27,8 +27,8 @@ import { type MouseEventHandler, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { TableCard } from "@/components/table-card-view";
+import { TableRowActions } from "@/components/table-row-actions";
 import {
   Avatar,
   AvatarFallback,
@@ -1053,9 +1053,7 @@ export function McpServerCard({
           </span>
         }
         actions={
-          <ResourceTableRowActions
-            kind="catalog"
-            resource={item}
+          <TableRowActions
             itemName={item.name}
             actions={
               canEditCatalog

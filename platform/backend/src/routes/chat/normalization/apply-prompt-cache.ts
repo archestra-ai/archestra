@@ -28,12 +28,19 @@ const CLAUDE_45_ONE_HOUR_CACHE_MODEL = /claude-(?:sonnet|haiku|opus)-4-5(?!\d)/;
 // https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html
 const BEDROCK_PROMPT_CACHE_MODEL = /claude|nova-2-/;
 
+// OpenRouter honors explicit `cache_control` breakpoints only on Anthropic
+// models; the other families it serves cache automatically.
+// https://openrouter.ai/docs/guides/best-practices/prompt-caching
+const OPENROUTER_PROMPT_CACHE_MODEL = /^anthropic\//;
+
 // Per-provider cache-breakpoint marker, written into a message's
 // `providerOptions`. Anthropic and Amazon Bedrock both require explicit
 // breakpoints and both cap at 4 per request; only the providerOptions key and
 // value shape differ:
 //   - Anthropic: `{ anthropic: { cacheControl: { type: "ephemeral" } } }`
 //   - Bedrock:   `{ bedrock:   { cachePoint:   { type: "default"   } } }`
+//   - OpenRouter: `{ openaiCompatible: { cache_control: { type: "ephemeral" } } }`,
+//     which @ai-sdk/openai-compatible spreads onto the wire message or part.
 const CACHE_BREAKPOINTS = {
   anthropic: {
     key: "anthropic",
@@ -47,6 +54,15 @@ const CACHE_BREAKPOINTS = {
     type: "default",
     oneHourCacheModel: CLAUDE_45_ONE_HOUR_CACHE_MODEL,
     promptCacheModel: BEDROCK_PROMPT_CACHE_MODEL,
+  },
+  // 5-minute only: OpenRouter may serve a Claude model from Bedrock, which
+  // rejects the 1h TTL on some models.
+  openrouter: {
+    key: "openaiCompatible",
+    field: "cache_control",
+    type: "ephemeral",
+    oneHourCacheModel: null,
+    promptCacheModel: OPENROUTER_PROMPT_CACHE_MODEL,
   },
 } as const;
 
@@ -70,7 +86,7 @@ function supportsOneHourCache(
   config: CacheBreakpointConfig,
   model: string,
 ): boolean {
-  return config.oneHourCacheModel.test(model);
+  return config.oneHourCacheModel?.test(model) ?? false;
 }
 
 // Anthropic and Bedrock both reject a request with more than 4 cache
@@ -103,9 +119,9 @@ const MAX_CACHE_BREAKPOINTS = 4;
  * On models that support it the breakpoints use a 1-hour TTL; both breakpoints
  * share the same TTL so there is no ordering constraint between them.
  *
- * No-op for providers other than Anthropic and Bedrock: OpenAI, Gemini,
- * DeepSeek, etc. cache prefixes automatically and reject or ignore explicit
- * markers.
+ * No-op for providers other than Anthropic, Bedrock and OpenRouter (Anthropic
+ * models only): OpenAI, Gemini, DeepSeek, etc. cache prefixes automatically
+ * and reject or ignore explicit markers.
  */
 export function applyPromptCacheBreakpoints(params: {
   provider: string;
@@ -173,7 +189,7 @@ export function applyPromptCacheBreakpoints(params: {
   // message collapses both candidates to index 0.
   const candidates = lastIndex === 0 ? [0] : [lastIndex, 0];
 
-  const indicesToMark = new Set<number>();
+  const markedMessages = new Map<number, ModelMessage>();
   for (const index of candidates) {
     if (budget <= 0) break;
     // Already cacheable via its own marker — don't spend budget re-marking it.
@@ -185,19 +201,36 @@ export function applyPromptCacheBreakpoints(params: {
     // place a standalone cachePoint after a document). Skip the breakpoint for
     // such messages; the breakpoint budget is spent on other candidates.
     if (config.key === "bedrock" && hasDocumentPart(messages[index])) continue;
-    indicesToMark.add(index);
+    const marked = withCacheBreakpoint(messages[index], config, markerValue);
+    if (!marked) continue;
+    markedMessages.set(index, marked);
     budget--;
   }
 
-  if (indicesToMark.size === 0) {
+  if (markedMessages.size === 0) {
     return messages;
   }
 
-  return messages.map((message, index) =>
-    indicesToMark.has(index)
-      ? withCacheBreakpoint(message, config, markerValue)
-      : message,
-  );
+  return messages.map((message, index) => markedMessages.get(index) ?? message);
+}
+
+/**
+ * Whether a tool loop on this provider moves a breakpoint each step. Narrower
+ * than {@link applyPromptCacheBreakpoints}, which also marks Bedrock; the
+ * model filter still applies per step.
+ */
+export function usesStepPromptCache(params: {
+  provider: string;
+  anthropicNativeEndpoint: boolean;
+}): boolean {
+  switch (params.provider) {
+    case "anthropic":
+      return params.anthropicNativeEndpoint;
+    case "openrouter":
+      return true;
+    default:
+      return false;
+  }
 }
 
 /**
@@ -291,21 +324,84 @@ function hasCacheBreakpoint(
   return Boolean(providerEntry?.[config.field]);
 }
 
+/** Null when the message has no place where the provider carries a marker. */
 function withCacheBreakpoint(
   message: ModelMessage,
   config: CacheBreakpointConfig,
   markerValue: { type: string; ttl?: string },
-): ModelMessage {
-  const providerOptions = (message.providerOptions ?? {}) as Record<
+): ModelMessage | null {
+  return config.key === "openaiCompatible"
+    ? withOpenAICompatibleCacheBreakpoint(message, config, markerValue)
+    : withMarker(message, config, markerValue);
+}
+
+// @ai-sdk/openai-compatible reads system and assistant markers from the
+// message, but user and tool markers only from content parts (a single-text
+// user message is flattened to a string that carries its part's marker).
+function withOpenAICompatibleCacheBreakpoint(
+  message: ModelMessage,
+  config: CacheBreakpointConfig,
+  markerValue: { type: string; ttl?: string },
+): ModelMessage | null {
+  switch (message.role) {
+    case "system":
+      return withMarker(message, config, markerValue);
+    case "assistant": {
+      // Text is the only assistant content the marker can attach to.
+      const hasText =
+        typeof message.content === "string"
+          ? message.content.length > 0
+          : message.content.some(
+              (part) => part.type === "text" && part.text.length > 0,
+            );
+      return hasText ? withMarker(message, config, markerValue) : null;
+    }
+    case "user": {
+      const parts =
+        typeof message.content === "string"
+          ? [{ type: "text" as const, text: message.content }]
+          : message.content;
+      const index = parts.findLastIndex((part) => part.type === "text");
+      if (index < 0) return null;
+      return {
+        ...message,
+        content: parts.map((part, i) =>
+          i === index ? withMarker(part, config, markerValue) : part,
+        ),
+      };
+    }
+    case "tool": {
+      const index = message.content.findLastIndex(
+        (part) => part.type === "tool-result",
+      );
+      if (index < 0) return null;
+      return {
+        ...message,
+        content: message.content.map((part, i) =>
+          i === index && part.type === "tool-result"
+            ? withMarker(part, config, markerValue)
+            : part,
+        ),
+      };
+    }
+  }
+}
+
+function withMarker<T extends { providerOptions?: unknown }>(
+  target: T,
+  config: CacheBreakpointConfig,
+  markerValue: { type: string; ttl?: string },
+): T {
+  const providerOptions = (target.providerOptions ?? {}) as Record<
     string,
     Record<string, unknown>
   >;
   const providerEntry = providerOptions[config.key] ?? {};
   return {
-    ...message,
+    ...target,
     providerOptions: {
       ...providerOptions,
       [config.key]: { ...providerEntry, [config.field]: markerValue },
     },
-  } as ModelMessage;
+  };
 }

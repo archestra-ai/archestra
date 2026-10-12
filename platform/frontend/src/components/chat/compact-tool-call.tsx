@@ -6,6 +6,7 @@ import {
   parseFullToolName,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon, WebhookIcon } from "lucide-react";
@@ -37,7 +38,12 @@ import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils/tailwind";
 import { useApps } from "./apps-context";
 import {
+  BatteryCredentialsTool,
+  parseBatteryCredentialRequest,
+} from "./battery-credentials-tool";
+import {
   type AppEntryRender,
+  getToolCardTitle,
   resolveAppEntryRender,
   resolveRunToolTargetName,
 } from "./chat-messages.utils";
@@ -53,11 +59,13 @@ import {
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
+  OpenAppaValidationCompletion,
 } from "./openappa-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { RuntimeCredentialSetupTool } from "./runtime-credential-setup-tool";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import type { ToolIconMap } from "./tool-icon-map";
 import { ToolStatusRow } from "./tool-status-row";
 
 type CompactToolEntry = {
@@ -158,7 +166,10 @@ function CompactCircle({
           : state === "denied"
             ? " (denied)"
             : "";
-  const accessibleName = `${parseFullToolName(toolName).toolName.replace(/_/g, " ")}${stateSuffix}`;
+  const label =
+    getToolCardTitle(toolName) ??
+    parseFullToolName(toolName).toolName.replace(/_/g, " ");
+  const accessibleName = `${label}${stateSuffix}`;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -202,7 +213,7 @@ function CompactCircle({
           </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          <span>{parseFullToolName(toolName).toolName.replace(/_/g, " ")}</span>
+          <span>{label}</span>
           {isCancelled ? (
             <span>{" (cancelled)"}</span>
           ) : isBackground ? (
@@ -344,11 +355,6 @@ function HookCircle({
     </TooltipProvider>
   );
 }
-
-export type ToolIconMap = Map<
-  string,
-  { icon?: string | null; catalogId?: string }
->;
 
 export function CompactToolGroup({
   tools,
@@ -550,6 +556,16 @@ export function CompactToolGroup({
         const name = resolveRunToolTargetName(entry.part, entry.toolName, {
           getToolShortName,
         });
+        if (getToolShortName(name) === "publish_openappa_validation_change") {
+          if (entry.part.state !== "output-available" && !entry.toolResultPart)
+            return null;
+          return (
+            <OpenAppaValidationCompletion
+              key={entry.key}
+              output={entry.toolResultPart?.output ?? entry.part.output}
+            />
+          );
+        }
         if (getToolShortName(name) !== "update_guardrails_policy") return null;
         return (
           <OpenAppaPolicyCompletion
@@ -572,6 +588,27 @@ export function CompactToolGroup({
           <RuntimeCredentialSetupTool
             key={entry.key}
             ready
+            toolCallId={entry.part.toolCallId}
+            onSendMessage={appContext?.onSendMessage}
+          />
+        );
+      })}
+      {tools.map((entry) => {
+        if (entry.kind === "hook" || entry.errorText) return null;
+        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
+          getToolShortName,
+        });
+        const request =
+          getToolShortName(name) === TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME
+            ? parseBatteryCredentialRequest(
+                entry.toolResultPart?.output ?? entry.part.output,
+              )
+            : null;
+        if (!request) return null;
+        return (
+          <BatteryCredentialsTool
+            key={entry.key}
+            request={request}
             toolCallId={entry.part.toolCallId}
             onSendMessage={appContext?.onSendMessage}
           />
@@ -658,15 +695,23 @@ function ExpandedToolCard({
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const toolShortName = getToolShortName(toolName);
   const policyOutput = toolResultPart?.output ?? part.output;
+  const resolvedPolicyToolName = resolveRunToolTargetName(part, toolName, {
+    getToolShortName,
+  });
+  const policyToolName = parseFullToolName(resolvedPolicyToolName).toolName;
+  const validationChange = [
+    "preview_openappa_validation_change",
+    "publish_openappa_validation_change",
+  ].includes(getToolShortName(resolvedPolicyToolName) ?? "");
   const policyChange =
-    ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
-      parseFullToolName(
-        resolveRunToolTargetName(part, toolName, { getToolShortName }),
-      ).toolName,
-    ) &&
+    (validationChange ||
+      ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
+        policyToolName,
+      )) &&
     !errorText &&
-    isOpenAppaPolicyChange(policyOutput);
+    isOpenAppaPolicyChange(policyOutput, validationChange);
   const input = withoutProxyTransportArguments({
+    toolName,
     shortName: toolShortName,
     input:
       toolShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME
@@ -698,18 +743,21 @@ function ExpandedToolCard({
     <Tool open>
       <ToolHeader
         type={`tool-${toolName}`}
+        title={getToolCardTitle(toolName)}
         state={headerState}
         statusLabel={humanRuling?.label}
         isCollapsible={false}
         actionButton={logsButton}
         identityBadge={
-          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            Called as
-            <ExecutedAsBadge
-              executedAs={executedAs}
-              meUserId={session?.user?.id}
-            />
-          </span>
+          executedAs ? (
+            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              Called as
+              <ExecutedAsBadge
+                executedAs={executedAs}
+                meUserId={session?.user?.id}
+              />
+            </span>
+          ) : undefined
         }
       />
       <ToolContent>
@@ -720,7 +768,9 @@ function ExpandedToolCard({
             isCancelling={isCancellingTask}
           />
         ) : null}
-        {hasInput ? <ToolInput input={input} defaultOpen /> : null}
+        {hasInput && !policyChange ? (
+          <ToolInput input={input} defaultOpen />
+        ) : null}
         {nestedToolCalls}
         {isApprovalRequested &&
           onToolApprovalResponse &&
@@ -757,7 +807,12 @@ function ExpandedToolCard({
             />
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
-        {policyChange && <OpenAppaPolicyChange output={policyOutput} />}
+        {policyChange && (
+          <OpenAppaPolicyChange
+            output={policyOutput}
+            validationChange={validationChange}
+          />
+        )}
         {toolResultPart && !policyChange && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}

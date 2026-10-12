@@ -237,6 +237,10 @@ export function McpOauthManagement({
         onSubmit={async (id, body) => {
           if (await update.mutateAsync({ id, body })) setEditing(null);
         }}
+        onRotateSecret={(client) => {
+          setEditing(null);
+          setRotating(client);
+        }}
         isSubmitting={update.isPending}
       />
       <DeleteConfirmDialog

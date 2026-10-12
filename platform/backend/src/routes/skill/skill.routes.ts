@@ -6,7 +6,9 @@ import {
   PaginationQuerySchema,
   parseLabelsParam,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   ResourceVisibilityScopeSchema,
   RouteId,
 } from "@archestra/shared";
@@ -407,6 +409,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
           access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -431,6 +435,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           status,
           labels,
           access,
+          sharedWith,
+          owner,
           ...sorting
         },
         organizationId,
@@ -593,6 +599,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
           relations: access,
+          sharedWith,
+          ownerIds: owner,
         }),
       };
 

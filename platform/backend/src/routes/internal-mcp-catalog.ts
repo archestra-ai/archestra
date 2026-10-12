@@ -5,8 +5,10 @@ import {
   isMetadataOnlyEdit,
   mcpRuntimeAlertSource,
   ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionActionSchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   SERVER_NAME_PLACEHOLDER,
 } from "@archestra/shared";
@@ -49,6 +51,7 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
@@ -63,6 +66,7 @@ import {
   assertCanWriteMcpDeploymentYaml,
 } from "@/services/mcp-advanced-settings";
 import {
+  assertCatalogCredentialRecovery,
   extractLocalConfigSecrets,
   getCatalogClientSecretValues,
   upsertCatalogClientSecretValue,
@@ -180,6 +184,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               "Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.",
             ),
           access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           z.array(
@@ -230,7 +236,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
-        access: request.query.access,
+        access: resourceAccessSelection(request.query),
         readGrantContext: (await userHasPermission(
           request.user.id,
           request.organizationId,
@@ -814,6 +820,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // still need an access-checked backing row.
       if (!isBuiltInCatalogId(id)) {
         const catalogItem = await InternalMcpCatalogModel.findById(id, {
+          expandSecrets: false,
           userId: request.user.id,
           isAdmin,
           organizationId: request.organizationId,
@@ -1030,6 +1037,41 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         currentLocalConfig: originalCatalogItem.localConfig,
       });
 
+      const clientSecretRecovery = {
+        requiredKeys: [
+          ...(originalCatalogItem.oauthConfig ? ["client_secret"] : []),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ...(originalCatalogItem.enterpriseManagedConfig
+            ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
+            : []),
+          // SPDX-SnippetEnd
+        ],
+        values: {
+          ...(restBody.oauthConfig?.client_secret
+            ? { client_secret: restBody.oauthConfig.client_secret }
+            : {}),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ...(restBody.enterpriseManagedConfig?.clientSecretOverride
+            ? {
+                [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]:
+                  restBody.enterpriseManagedConfig.clientSecretOverride,
+              }
+            : {}),
+          // SPDX-SnippetEnd
+        },
+      };
+      await assertCatalogCredentialRecovery({
+        localSecretId: originalCatalogItem.localConfigSecretId,
+        existingLocalConfig: originalCatalogItemForGate.localConfig,
+        localConfig: restBody.localConfig,
+        clientSecretId: originalCatalogItem.clientSecretId,
+        clientRecovery: clientSecretRecovery,
+      });
+
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
       // gated (409) and applied atomically by renameCascade — a pure DB
@@ -1167,6 +1209,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             catalogName: originalCatalogItem.name,
             key: "client_secret",
             value: clientSecret,
+            recovery: clientSecretRecovery,
           });
           clientSecretId = result.id;
           if (result.rotated) catalogSharedSecretValuesRotated = true;
@@ -1176,6 +1219,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete restBody.oauthConfig.client_secret;
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       const enterpriseManagedClientSecretOverride =
         restBody.enterpriseManagedConfig?.clientSecretOverride;
       if (enterpriseManagedClientSecretOverride) {
@@ -1184,6 +1230,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogName: originalCatalogItem.name,
           key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
           value: enterpriseManagedClientSecretOverride,
+          recovery: clientSecretRecovery,
         });
         clientSecretId = result.id;
         if (result.rotated) catalogSharedSecretValuesRotated = true;
@@ -1191,6 +1238,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.clientSecretId = clientSecretId;
         delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
+
+      // SPDX-SnippetEnd
 
       // Handle local config secrets - either via Readonly Vault or direct values
       if (localConfigVaultPath && localConfigVaultKey) {
@@ -1238,6 +1287,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           localConfig: restBody.localConfig,
           existingSecretId: localConfigSecretId,
           catalogName: originalCatalogItem.name,
+          existingLocalConfig: originalCatalogItemForGate.localConfig,
         });
         // A userConfig-only edit reaches here with no localConfig. Assigning
         // the (undefined) result would still create the key, and `update()`

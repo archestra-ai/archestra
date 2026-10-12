@@ -64,6 +64,18 @@ describe("openappaFailure", () => {
     expect(failure.cause).toBe(cause);
   });
 
+  test("an interrupted session requires recovery rather than automatic retries", () => {
+    const cause = new Error(
+      "OpenAPPA session has interrupted processing; operator recovery is required",
+    );
+    const failure = openappaFailure(cause);
+    expect(failure.statusCode).toBe(409);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).toContain("requires administrator recovery");
+    expect(failure.cause).toBe(cause);
+  });
+
   test("strips URL credentials and bounds the detail of a refused policy", () => {
     const failure = openappaFailure(
       new Error(

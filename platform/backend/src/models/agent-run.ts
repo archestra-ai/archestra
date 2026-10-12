@@ -23,6 +23,7 @@ import type {
   InsertAgentRunRecord,
 } from "@/types";
 import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
+import type { AgentWorkspace } from "@/types/agent-workspace";
 import A2AMessageModel from "./a2a/message";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
@@ -217,6 +218,61 @@ class AgentRunModel {
       result.workspace.expiresAt.getTime() > Date.now()
       ? result.run
       : null;
+  }
+
+  /**
+   * The latest run a person started on this Agent from one chat thread, with
+   * its workspace. A follow-up message in the thread continues that workspace,
+   * the same way a protocol task continues its context's latest workspace.
+   */
+  static async findLatestInChatOpsThread(params: {
+    bindingId: string;
+    threadId: string;
+    agentId: string;
+    organizationId: string;
+    actorKind: AgentRunRecord["actorKind"];
+    actorId: string;
+  }): Promise<{
+    run: AgentRunRecord;
+    workspace: Pick<
+      AgentWorkspace,
+      "state" | "expiresAt" | "activeTaskId"
+    > | null;
+  } | null> {
+    const [result] = await db
+      .select({
+        run: getTableColumns(schema.agentRunsTable),
+        workspace: {
+          state: schema.agentWorkspacesTable.state,
+          expiresAt: schema.agentWorkspacesTable.expiresAt,
+          activeTaskId: schema.agentWorkspacesTable.activeTaskId,
+        },
+      })
+      .from(schema.agentRunsTable)
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentRunsTable.workloadName,
+          schema.agentWorkspacesTable.workloadName,
+        ),
+      )
+      .where(
+        and(
+          sql`${schema.agentRunsTable.completionTarget}->>'type' = 'chatops'`,
+          sql`${schema.agentRunsTable.completionTarget}->>'bindingId' = ${params.bindingId}`,
+          sql`${schema.agentRunsTable.completionTarget}->>'threadId' = ${params.threadId}`,
+          eq(schema.agentRunsTable.agentId, params.agentId),
+          eq(schema.agentRunsTable.organizationId, params.organizationId),
+          eq(schema.agentRunsTable.actorKind, params.actorKind),
+          eq(schema.agentRunsTable.actorId, params.actorId),
+        ),
+      )
+      .orderBy(
+        desc(schema.agentRunsTable.startedAt),
+        desc(schema.agentRunsTable.id),
+      )
+      .limit(1);
+    return result ?? null;
   }
 
   static async updateAttentionState(params: {

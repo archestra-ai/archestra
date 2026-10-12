@@ -1,14 +1,7 @@
-import {
-  CLIENT_MCP_TOOL_NAME_PREFIX,
-  clientForExternalAgentIds,
-  isAgentTool,
-  isOpenCodeClientAgentId,
-  OPENCODE_MCP_TOOL_NAME_PREFIX,
-} from "@archestra/shared";
+import { isAgentTool } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { ToolModel, ToolObservationModel } from "@/models";
-import type { ToolInvocation, TrustedData } from "@/types";
 
 /**
  * Persist tools if present in the request
@@ -18,7 +11,11 @@ import type { ToolInvocation, TrustedData } from "@/types";
  *
  * Uses bulk operations to avoid N+1 queries
  */
-export const persistTools = async (
+export const persistTools = async ({
+  tools,
+  agentId,
+  observer,
+}: {
   tools: Array<{
     toolName: string;
     toolParameters?: Record<string, unknown>;
@@ -29,13 +26,8 @@ export const persistTools = async (
      * built-ins are identified by name.
      */
     servedByGateway?: boolean;
-  }>,
-  agentId: string,
-  /** Org-configured defaults applied to each newly discovered tool's policies. */
-  defaults?: {
-    invocationAction?: ToolInvocation.ToolInvocationPolicyAction;
-    resultAction?: TrustedData.TrustedDataPolicyAction;
-  },
+  }>;
+  agentId: string;
   /**
    * Who is making the request and through which client app, when known.
    * Recorded as tool observations so the guardrails page can filter observed
@@ -44,8 +36,8 @@ export const persistTools = async (
   observer?: {
     userId?: string;
     externalAgentId?: string | null;
-  },
-) => {
+  };
+}) => {
   logger.debug(
     { agentId, toolCount: tools.length },
     "[tools] persistTools: starting tool persistence",
@@ -74,7 +66,7 @@ export const persistTools = async (
   // under client names would create duplicate catalog entries.
   // With verified attestations, `servedByGateway` identifies gateway tools
   // regardless of client labels. Unattested lookalikes are discovered as
-  // foreign tools using organization defaults.
+  // foreign tools.
   // Without attestations, `archestraMcpBranding.isLikelyToolName` identifies
   // built-ins across standard prefixes, branded prefixes, and decorated names.
   const seenToolNames = new Set<string>();
@@ -112,29 +104,6 @@ export const persistTools = async (
       "[tools] persistTools: no new tools to auto-discover",
     );
   } else {
-    // A coding CLI's native tools (Bash, shell, apply_patch, …) default to
-    // "Allow always" regardless of the org's discovered-tool call policy: a
-    // strict default would block them on the first sensitive tool result and
-    // make the CLI unusable — which drives users to disconnect the proxy and
-    // lose every guardrail. Claude and Codex namespace their MCP-server tools
-    // with `mcp__`; OpenCode uses `mcp:`. Those gateway tools (and everything
-    // else) keep the org default, and the override is a visible per-tool policy
-    // an admin can tighten.
-    const observerClientFamily = clientForExternalAgentIds([
-      observer?.externalAgentId,
-    ]);
-    const isOpenCodeClient = isOpenCodeClientAgentId(observer?.externalAgentId);
-    const nativeClientToolOverride = (toolName: string) =>
-      (observerClientFamily || isOpenCodeClient) &&
-      !(isOpenCodeClient
-        ? toolName.startsWith(OPENCODE_MCP_TOOL_NAME_PREFIX)
-        : toolName.startsWith(CLIENT_MCP_TOOL_NAME_PREFIX))
-        ? {
-            action: "allow_when_context_is_untrusted" as const,
-            reason: `Native ${observerClientFamily?.label ?? "OpenCode"} client tool, allowed by default so the client keeps working in sensitive context`,
-          }
-        : undefined;
-
     // Bulk create tools (single query to check existing + single insert for new)
     logger.debug(
       { agentId, toolCount: toolsToAutoDiscover.length },
@@ -146,11 +115,9 @@ export const persistTools = async (
           name: toolName,
           parameters: toolParameters,
           description: toolDescription,
-          invocationDefaultOverride: nativeClientToolOverride(toolName),
         }),
       ),
       agentId,
-      defaults,
     );
 
     logger.debug(

@@ -6,8 +6,11 @@ import {
   CircleCheck,
   CircleDashed,
   CircleX,
+  ClipboardCheck,
   Github,
+  LoaderCircle,
   MessageCircle,
+  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,6 +28,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { InlineNotice } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -33,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
@@ -42,9 +47,15 @@ import {
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import {
+  useAppaGithubSync,
+  useUpdateAppaGithubSync,
+} from "@/lib/openappa-github-sync.query";
+import { useOpenAppaPolicyTestRuns } from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
+import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import {
   OpenAppaCreateRepositoryDialog,
   OpenAppaSourceForm,
@@ -56,7 +67,7 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 /**
  * Where OpenAPPA setup stands. A fresh organization sees only the first step,
  * saving a policy in the policy chat (which turns enforcement on). After that,
- * three compact cards report enforcement, GitHub sync, and unresolved yells.
+ * compact cards report enforcement, GitHub sync, validation, and unresolved yells.
  * The first unfinished one is highlighted as the next step.
  */
 export function OverviewSetupCards() {
@@ -68,6 +79,9 @@ export function OverviewSetupCards() {
   const { data: canReadSettings } = useHasPermissions({
     organizationSettings: ["read"],
   });
+  const { data: canReadPolicy } = useHasPermissions({
+    openappaPolicy: ["read"],
+  });
   if (isFresh === undefined) return null;
   if (isFresh) return <PolicyStep />;
   const source = sync.data?.source;
@@ -77,17 +91,27 @@ export function OverviewSetupCards() {
     : sync.data?.enabled && !synced
       ? "github"
       : null;
+  const cardCount =
+    Number(Boolean(canReadSettings)) * 2 +
+    Number(Boolean(canReadPolicy)) +
+    Number(Boolean(canReadYells));
   return (
     <div className="space-y-4">
       {source?.lastSyncError && <GithubManagedPolicyNotice />}
       <div
         className={cn(
           "grid gap-4",
-          canReadYells ? "xl:grid-cols-3" : "lg:grid-cols-2",
+          cardCount > 1 && "md:grid-cols-2",
+          cardCount === 4
+            ? "2xl:grid-cols-4"
+            : cardCount === 3
+              ? "xl:grid-cols-3"
+              : undefined,
         )}
       >
         {canReadSettings && <EnforcementCard next={next === "enforcement"} />}
         {canReadSettings && <GithubSyncCard next={next === "github"} />}
+        {canReadPolicy && <ValidationCard />}
         {canReadYells && <YellsCard />}
       </div>
     </div>
@@ -198,6 +222,7 @@ function EnforcementCard({ next }: { next: boolean }) {
 
 function GithubSyncCard({ next }: { next: boolean }) {
   const sync = useAppaGithubSync();
+  const update = useUpdateAppaGithubSync();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
@@ -216,6 +241,11 @@ function GithubSyncCard({ next }: { next: boolean }) {
         status={
           !sync.data ? null : failed ? (
             <Status failed>Sync failed</Status>
+          ) : connected && source?.setupPullRequestNumber ? (
+            <Badge variant="outline">
+              <LoaderCircle className="animate-spin text-muted-foreground" />
+              <span>Awaiting initial merge</span>
+            </Badge>
           ) : next ? (
             <Badge>Step 2 of 2</Badge>
           ) : connected ? (
@@ -227,7 +257,17 @@ function GithubSyncCard({ next }: { next: boolean }) {
           )
         }
         description={
-          connected && source?.repo ? (
+          connected && source?.setupPullRequestNumber ? (
+            <span>
+              Merge the initial policy pull request to finish setup. Your
+              current policy stays active until it merges.{" "}
+              <span aria-live="polite">
+                {source.lastSyncedAt
+                  ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}.`
+                  : "Checking for the merge…"}
+              </span>
+            </span>
+          ) : connected && source?.repo ? (
             <span>
               {appName} pulls the policy from{" "}
               <span className="font-mono text-foreground">{source.repo}</span>.
@@ -244,7 +284,36 @@ function GithubSyncCard({ next }: { next: boolean }) {
           label: "CI checks",
         }}
         action={
-          !sync.data?.enabled ? null : !canManage ? (
+          !sync.data?.enabled ? null : connected &&
+            source?.setupPullRequestNumber ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <a
+                  href={`https://github.com/${source.repo}/pull/${source.setupPullRequestNumber}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>Review and merge PR</span>
+                  <ArrowRight />
+                </a>
+              </Button>
+              {canManage && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={update.isPending}
+                  onClick={() => update.mutate({ action: "sync" })}
+                >
+                  <RefreshCw
+                    className={cn(update.isPending && "animate-spin")}
+                  />
+                  <span>
+                    {update.isPending ? "Checking…" : "Check if merged"}
+                  </span>
+                </Button>
+              )}
+            </div>
+          ) : !canManage ? (
             connected ? null : (
               <p className="text-sm text-muted-foreground">
                 Ask an administrator to connect a repository.
@@ -270,7 +339,11 @@ function GithubSyncCard({ next }: { next: boolean }) {
         }
       />
       {editing && (
-        <OpenAppaSourceForm source={source} onOpenChange={setEditing} />
+        <OpenAppaSourceForm
+          source={source}
+          validationDirectory={sync.data?.validationDirectory}
+          onOpenChange={setEditing}
+        />
       )}
       {creating && (
         <OpenAppaCreateRepositoryDialog
@@ -285,6 +358,80 @@ function GithubSyncCard({ next }: { next: boolean }) {
   );
 }
 
+function ValidationCard() {
+  const history = useOpenAppaPolicyTestRuns(true);
+  const run = history.data?.[0];
+  const status = run
+    ? run.executionError || !run.validation.valid || !run.files.length
+      ? "cannot_run"
+      : run.files.some((file) => file.status === "failed")
+        ? "failed"
+        : run.files.some((file) => file.status === "cannot_run")
+          ? "cannot_run"
+          : "passed"
+    : null;
+  const statusLabel = status
+    ? { passed: "Passed", failed: "Failed", cannot_run: "Cannot run" }[status]
+    : "";
+  const qualifiers = [run?.draft && "draft", run?.stale && "outdated"].filter(
+    Boolean,
+  );
+  const validationNoun = run?.files.length === 1 ? "validation" : "validations";
+  return (
+    <StatusCard
+      icon={<ClipboardCheck />}
+      title="Validations"
+      status={
+        !history.isError && status ? (
+          <ValidationStatusBadge status={status}>
+            <span>{`${statusLabel}${qualifiers.length ? ` (${qualifiers.join(", ")})` : ""}`}</span>
+          </ValidationStatusBadge>
+        ) : undefined
+      }
+      action={
+        <Button size="sm" variant="outline" asChild>
+          <Link href="/openappa/validation">
+            <span>View Validations</span>
+            <ArrowRight />
+          </Link>
+        </Button>
+      }
+    >
+      {history.isError ? (
+        <InlineNotice variant="error">
+          <CircleX />
+          <span className="font-medium">Could not load validation</span>
+          <Button size="xs" variant="outline" onClick={() => history.refetch()}>
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : history.isPending ? (
+        <Skeleton className="h-12 w-full" />
+      ) : run ? (
+        <section
+          className="space-y-3"
+          aria-label="Last validation run"
+          aria-live="polite"
+        >
+          <CardDescription className="leading-relaxed">
+            {`Last run executed on ${formatDate({ date: run.createdAt })}.`}
+          </CardDescription>
+          <p className="flex items-baseline gap-2">
+            <span className="text-3xl font-semibold tabular-nums">
+              {run.files.length}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {`${validationNoun} in this run`}
+            </span>
+          </p>
+        </section>
+      ) : (
+        <p className="text-sm text-muted-foreground">No runs yet.</p>
+      )}
+    </StatusCard>
+  );
+}
+
 function YellsCard() {
   const summary = useOpenAppaYellsSummary();
   return (
@@ -295,7 +442,7 @@ function YellsCard() {
         </span>
       }
       title="Yells"
-      description="Reports of confusing blocks or remedies. Investigate them with the configuration agent."
+      description="Agent reports of blocks it could not make sense of or get past. Investigate them with the configuration agent."
       action={
         <Button size="sm" variant="outline" asChild>
           <Link href="/openappa/yells">
@@ -433,7 +580,7 @@ function StatusCard({
   icon: ReactNode;
   title: string;
   status?: ReactNode;
-  description: ReactNode;
+  description?: ReactNode;
   children?: ReactNode;
   learnMore?: { href: string; label: string };
   action: ReactNode;
@@ -451,9 +598,11 @@ function StatusCard({
         {status}
       </CardHeader>
       <CardContent className="flex-1 px-4 space-y-3">
-        <CardDescription className="leading-relaxed">
-          {description}
-        </CardDescription>
+        {description && (
+          <CardDescription className="leading-relaxed">
+            {description}
+          </CardDescription>
+        )}
         {children}
       </CardContent>
       {(action || learnMore) && (

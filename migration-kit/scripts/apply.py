@@ -40,10 +40,8 @@ from archestra_client import (
     LocalConfig,
     McpEnvVar,
     McpInstall,
-    PolicyCondition,
     SkillCreate,
     SkillFile,
-    ToolInvocationPolicyCreate,
     to_payload,
 )
 from contracts import (
@@ -60,14 +58,12 @@ from contracts import (
     LocalToolItem,
     McpServerItem,
     Outcome,
-    PolicyAction,
     ResultOp,
     Scope,
     SkillItem,
     SubagentItem,
     archestra_file_name,
     archestra_hook_event,
-    optional_action,
     optional_agent_id,
     optional_file_name,
     parse_inventory,
@@ -77,7 +73,6 @@ from contracts import (
     require_dict,
     require_hook_content,
     require_list,
-    require_operator,
     require_provider,
     require_requirements,
     require_str_field,
@@ -86,11 +81,10 @@ from contracts import (
 )
 from frontmatter import emit_frontmatter, fm_str, parse_frontmatter, set_name
 
-# deterministic apply order: keys before the agent, skills/catalog next, install, then policies,
-# then hooks (they attach to the already-created primary agent).
+# deterministic apply order: keys before the agent, skills/catalog next, install, then hooks
+# (they attach to the already-created primary agent).
 _ORDER: dict[str, int] = {
-    "llm_key": 0, "agent": 1, "skill": 2, "mcp_catalog": 3, "mcp_install": 4,
-    "tool_policy": 5, "hook": 6,
+    "llm_key": 0, "agent": 1, "skill": 2, "mcp_catalog": 3, "mcp_install": 4, "hook": 5,
 }
 
 
@@ -131,14 +125,6 @@ class BuiltInstall:
 
 
 @dataclass(frozen=True)
-class BuiltPolicy:
-    tool_name: str
-    conditions: list[PolicyCondition]
-    action: PolicyAction
-    reason: str | None
-
-
-@dataclass(frozen=True)
 class BuiltHook:
     event: HookEvent
     file_name: str
@@ -150,7 +136,7 @@ class BuiltHook:
 
 
 Built = Union[
-    AgentCreate, SkillCreate, CatalogCreate, BuiltInstall, LlmKeyCreate, BuiltPolicy, BuiltHook
+    AgentCreate, SkillCreate, CatalogCreate, BuiltInstall, LlmKeyCreate, BuiltHook
 ]
 
 
@@ -378,21 +364,6 @@ def _build_payload(decision: Decision, item: Item) -> tuple[str, Built]:
                 teamId=_team_id(decision, ctx=ctx),
             )
 
-        case "tool_policy":
-            # the model must extract the guard's semantics into user_answers.
-            condition = PolicyCondition(
-                key=require_answer(answers, "key", ctx=ctx),
-                operator=require_operator(answers, ctx=ctx),
-                value=require_answer(answers, "value", ctx=ctx),
-            )
-            reason = answers.get("reason")
-            return name, BuiltPolicy(
-                tool_name=require_answer(answers, "tool_name", ctx=ctx),
-                conditions=[condition],
-                action=optional_action(answers, ctx=ctx),
-                reason=reason if isinstance(reason, str) else None,
-            )
-
         case "hook":
             if not isinstance(item, HookItem):
                 raise ContractError(f"hook target requires a hook item, got {item.kind}")
@@ -508,10 +479,6 @@ def _redacted_for_print(built: Built) -> dict[str, JsonValue]:
                                  for e in local.environment],
                 ))
             return to_payload(payload)
-        case BuiltPolicy():
-            return {"tool_name": built.tool_name,
-                    "conditions": [to_jsonable(c) for c in built.conditions],
-                    "action": built.action, "reason": built.reason}
         case BuiltHook():
             # never echo the script body in dry-run output: a bundled hook is migrated verbatim and
             # may carry credentials that token-shape scrubbing won't catch. show only its size.
@@ -545,8 +512,6 @@ def _preview_detail(built: Built) -> str:
             )
         case LlmKeyCreate() as payload:
             return f"scope={payload.scope}; provider={payload.provider}; api_key=<redacted>"
-        case BuiltPolicy():
-            return f"tool={built.tool_name}; action={built.action}; conditions={len(built.conditions)}"
         case BuiltHook():
             agent = built.agent_id or "primary"
             return (f"event={built.event}; file={built.file_name}; "
@@ -617,25 +582,6 @@ def _execute(client: ArchestraClient, decision: Decision, name: str, built: Buil
                           detail="llm key with this name+provider+scope already exists")
             created = client.create_llm_key(payload)
             return op("created", archestra_id=require_str_field(created, "id", ctx="llm key create response"))
-
-        case BuiltPolicy():
-            tool = next((t for t in client.list_tools(search=built.tool_name)
-                         if t.get("name") == built.tool_name), None)
-            if tool is None:
-                proposed = json.dumps({"conditions": [to_jsonable(c) for c in built.conditions],
-                                       "action": built.action, "reason": built.reason})
-                return op("manual",
-                          detail=(f"no archestra tool named '{built.tool_name}' to attach the guard to; "
-                                  f"apply this policy manually once the target tool exists. proposed: {proposed}"))
-            tool_id = require_str_field(tool, "id", ctx="tool")
-            cond_dicts = [to_jsonable(c) for c in built.conditions]
-            existing = client.list_tool_invocation_policies(tool_id=tool_id)
-            if any(p.get("action") == built.action and p.get("conditions") == cond_dicts for p in existing):
-                return op("skipped", detail="an equivalent tool-invocation policy already exists")
-            created = client.create_tool_invocation_policy(ToolInvocationPolicyCreate(
-                toolId=tool_id, conditions=built.conditions, action=built.action, reason=built.reason,
-            ))
-            return op("created", archestra_id=require_str_field(created, "id", ctx="policy create response"))
 
         case BuiltHook():
             if built.agent_id is None:

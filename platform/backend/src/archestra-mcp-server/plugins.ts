@@ -33,7 +33,12 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
-import { resourceAccessToolArg } from "./resource-access-tool-arg";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import {
   type AppliedEditSpan,
   applyStrReplaceEdits,
@@ -61,6 +66,8 @@ import type { ArchestraContext } from "./types";
 
 const ListPluginsSchema = z.object({
   access: resourceAccessToolArg({ examplePlural: "plugins" }),
+  shared_with: resourceSharedWithToolArg,
+  owner_ids: resourceOwnerIdsToolArg,
 });
 
 const GetPluginSchema = z.object({
@@ -270,7 +277,7 @@ const registry = defineArchestraTools([
         access: await ResourcePermissionSubjectModel.resolveAccessFilter({
           userId: ctx.userId,
           organizationId: ctx.organizationId,
-          relations: args.access,
+          ...toolAccessSelection(args),
         }),
       });
       if (plugins.length === 0) {

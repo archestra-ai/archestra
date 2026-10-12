@@ -3,6 +3,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { guardrailsPolicyRevisionsTable as table } from "@/database/schemas/guardrails-policy";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
+import type { PolicyTestFile } from "@/types/openappa-policy-tests";
 
 class GuardrailsPolicyModel {
   static async findLatest(organizationId: string) {
@@ -21,7 +22,8 @@ class GuardrailsPolicyModel {
     contentHash: string;
     updatedBy: string;
     expectedRevision: number;
-  }): Promise<GuardrailsPolicy | null> {
+    validation?: { expectedVersion: string; files?: PolicyTestFile[] };
+  }): Promise<(GuardrailsPolicy & { validationVersion?: string }) | null> {
     return db.transaction(async (tx) => {
       await lockGuardrailsPolicy(tx, params.organizationId);
       const [source] = await tx
@@ -34,8 +36,35 @@ class GuardrailsPolicyModel {
           ),
         );
       if (source?.interval) return null;
-      const { expectedRevision, ...values } = params;
-      return insertRevision(tx, { ...values, expectedRevision });
+      const { expectedRevision, validation, ...values } = params;
+      let validationVersion: string | undefined;
+      if (validation) {
+        const suites = schema.openappaPolicyTestSuitesTable;
+        const [current] = await tx
+          .select()
+          .from(suites)
+          .where(eq(suites.organizationId, params.organizationId));
+        if ((current?.version ?? "empty") !== validation.expectedVersion)
+          return null;
+        validationVersion = current?.version ?? "empty";
+      }
+      const saved = await insertRevision(tx, { ...values, expectedRevision });
+      if (!saved) return null;
+      if (validation?.files) {
+        const suites = schema.openappaPolicyTestSuitesTable;
+        validationVersion = randomUUID();
+        const data = {
+          files: validation.files,
+          version: validationVersion,
+          sourceRevision: null,
+          sourceCommit: null,
+        };
+        await tx
+          .insert(suites)
+          .values({ organizationId: params.organizationId, ...data })
+          .onConflictDoUpdate({ target: suites.organizationId, set: data });
+      }
+      return validation ? { ...saved, validationVersion } : saved;
     });
   }
 

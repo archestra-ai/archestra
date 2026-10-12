@@ -513,10 +513,10 @@ function learnGatewayDecorationPrefixes(
  * Compat: strip a learned decoration prefix, refusing to produce a branded
  * built-in name.
  *
- * Built-ins bypass tool-invocation and trusted-data policies, so granting that
- * status on the strength of a learned prefix would let a hostile server opt its
- * own tools out of enforcement by naming them after ours. Everything else the
- * prefix reveals is a third-party tool name that gets looked up and policied.
+ * Built-ins are trusted as the platform's own, so granting that status on the
+ * strength of a learned prefix would let a hostile server opt its own tools
+ * out of enforcement by naming them after ours. Everything else the prefix
+ * reveals is a third-party tool name that gets looked up and policied.
  * The `run_tool` wrapper does not need this path: compat recognizes it behind
  * a decoration with the loose dispatch scan.
  */

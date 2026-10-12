@@ -841,6 +841,33 @@ describe("OpenAPPA child-return markers", () => {
     );
   });
 
+  test("reports a return the body walk cannot read and leaves it as the client sent it", () => {
+    // The walk reads the returns of every other client. This one is an
+    // OpenCode background completion without its result framing.
+    const body = {
+      messages: [
+        {
+          role: "user",
+          content: '<task id="child" state="completed">RAW</task>',
+        },
+        { role: "user", content: "Carry on" },
+      ],
+    };
+    const sent = structuredClone(body);
+    const refusals: string[] = [];
+
+    const collected = collectAndStripChildReturns(body, {
+      openCodeBackgroundReturns: true,
+      onRefusal: (refusal) => refusals.push(refusal.message),
+    });
+
+    expect(refusals).toEqual([
+      "OpenAPPA withheld a malformed child completion",
+    ]);
+    expect(collected.completions).toEqual([]);
+    expect(body).toEqual(sent);
+  });
+
   test("bounds marker scanning and scans large indentation linearly", () => {
     const marker = requiredMarker(RETURN);
     const result = collectNativeResult(

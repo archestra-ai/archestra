@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import db, { schema } from "@/database";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { openappaActor } from "@/openappa/actor";
 import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as service from "@/openappa/service";
@@ -10,6 +11,7 @@ import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-na
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { AgentRuntimeSchema } from "@/types/agent-runtime";
+import type { RuntimeLaunchOutcome } from "@/types/openappa-runtime-launch";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaPluginArchestra } from "./plugin";
@@ -204,32 +206,18 @@ describe("protected runtime protocol", () => {
     }
   }
 
-  // After the launch, the client reports the gateway's result in its own
-  // form. The model must get the run's id from each of them, and only the id.
-  test.for([
-    {
-      form: "Codex's framed text",
-      content: (launched: Record<string, unknown>) =>
-        `Wall time: 0.1793 seconds\nOutput:\n${JSON.stringify(launched)}`,
-    },
-    {
-      form: "text parts",
-      content: (launched: Record<string, unknown>) => [
-        { type: "text", text: JSON.stringify(launched, null, 2) },
-      ],
-    },
-    {
-      form: "an MCP result",
-      content: (launched: Record<string, unknown>) => ({
-        content: [{ type: "text", text: JSON.stringify(launched) }],
-      }),
-    },
-  ])("gives the model the run's handle from a launch result reported as $form", async ({
-    content,
-  }, { makeOrganization }) => {
+  // After a launch, the model reads what the gateway recorded for the call.
+  // The result the client sends back is not read: not its form, not its text.
+  test("gives the model the run the gateway recorded, not the one the client reports", async ({
+    makeOrganization,
+  }) => {
     const org = await makeOrganization();
-    const { plugin, context } = await releasedLaunch(org.id);
     const sessionId = randomUUID();
+    const { plugin, context } = await releasedLaunch(org.id, {
+      kind: "launched",
+      session_id: sessionId,
+      state: "submitted",
+    });
 
     const outcome = await plugin.onToolResults({
       ...context,
@@ -237,12 +225,10 @@ describe("protected runtime protocol", () => {
         {
           id: "runtime-call",
           name: "archestra__run_tool",
-          content: content({
-            run: { task_id: sessionId, state: "submitted" },
-            session_id: sessionId,
-            run_url: `http://localhost:3000/chat/runs/${sessionId}`,
-            runtime: "dedicated",
-          }),
+          // The frame Codex puts around a tool result.
+          content: `Wall time: 0.1793 seconds\nOutput:\n${JSON.stringify({
+            session_id: randomUUID(),
+          })}`,
           isError: false,
         },
       ],
@@ -252,11 +238,43 @@ describe("protected runtime protocol", () => {
       JSON.parse(String(outcome?.toolResultUpdates["runtime-call"])),
     ).toEqual({
       session_id: sessionId,
+      state: "submitted",
       message: "Use get_run to retrieve admitted runtime output.",
     });
   });
 
-  test("reports no handle for a failed launch, and none of its text", async ({
+  test("tells the model why the gateway started no run", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const setupUrl = "http://localhost:3000/agents/example?setup=credentials";
+    const { plugin, context, processed } = await releasedLaunch(org.id, {
+      kind: "failed",
+      reason: "credentials_needed",
+      setup_url: setupUrl,
+    });
+    const reported = {
+      id: "runtime-call",
+      name: "archestra__run_tool",
+      content: "Error: text that the client reports",
+      // The record decides, whatever the client says about the call.
+      isError: false,
+    };
+
+    const outcome = await plugin.onToolResults({
+      ...context,
+      toolResults: [reported],
+    });
+
+    expect(outcome?.toolResultUpdates["runtime-call"]).toBe(
+      `No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet. Ask the user to add them here, then start the run again: ${setupUrl}`,
+    );
+    expect(processed.mock.calls[0][0].classifySpawnResult?.(reported)).toBe(
+      "failed",
+    );
+  });
+
+  test("gives the model no handle when the gateway recorded no launch", async ({
     makeOrganization,
   }) => {
     const org = await makeOrganization();
@@ -268,15 +286,8 @@ describe("protected runtime protocol", () => {
         {
           id: "runtime-call",
           name: "archestra__run_tool",
-          // The form Codex reports a failed MCP call in.
-          content: [
-            { type: "input_text", text: "Wall time: 0.0924 seconds\nOutput:" },
-            {
-              type: "input_text",
-              text: `Error: run ${randomUUID()} could not start.`,
-            },
-          ],
-          isError: true,
+          content: JSON.stringify({ session_id: randomUUID() }),
+          isError: false,
         },
       ],
     });
@@ -347,8 +358,14 @@ describe("protected runtime protocol", () => {
   });
 });
 
-/** A session whose `start_run` call, sent through `run_tool`, was released. */
-async function releasedLaunch(organizationId: string) {
+/**
+ * A session whose `start_run` call, sent through `run_tool`, was released,
+ * with the outcome the gateway recorded for it, if any.
+ */
+async function releasedLaunch(
+  organizationId: string,
+  recorded?: RuntimeLaunchOutcome,
+) {
   const context = request(organizationId);
   const { session } = context.resources.get(
     APPA_PLUGIN_TRUSTED_CONTEXT,
@@ -378,13 +395,22 @@ async function releasedLaunch(organizationId: string) {
     },
     decision: { decision: "allow_call" },
   });
+  if (recorded) {
+    await OpenAppaSpawnCorrelationModel.recordRuntimeLaunch({
+      organizationId,
+      callerId: session.caller_id,
+      sessionId: session.session_id,
+      toolCallId: "runtime-call",
+      outcome: recorded,
+    });
+  }
   vi.spyOn(service, "loadChildReturns").mockResolvedValue([]);
-  vi.spyOn(service, "processProxyResults").mockResolvedValue({
-    toolResultUpdates: {},
-  });
+  const processed = vi
+    .spyOn(service, "processProxyResults")
+    .mockResolvedValue({ toolResultUpdates: {} });
   const plugin = new AppaPluginArchestra([]);
   await plugin.onSessionInit(context);
-  return { plugin, context };
+  return { plugin, context, processed };
 }
 
 function runtimeConfig() {

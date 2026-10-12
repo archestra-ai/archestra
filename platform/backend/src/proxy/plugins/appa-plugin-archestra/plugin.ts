@@ -123,6 +123,7 @@ import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-nam
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
+import type { RuntimeLaunchOutcome } from "@/types/openappa-runtime-launch";
 import { claudeCodeNativeChildIds } from "./adapters/claude-code";
 import {
   appendPeerMessageMarker,
@@ -383,6 +384,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       session: this.governedSession(binding),
       spawnIds: runtimeSpawns,
     });
+    const governed = this.governedSession(binding);
+    const runtimeLaunches = await OpenAppaSpawnCorrelationModel.runtimeLaunches(
+      {
+        organizationId: governed.organization_id,
+        callerId: governed.caller_id,
+        sessionId: governed.session_id,
+        toolCallIds: [...runtimeSpawns],
+      },
+    );
     const nonHandbackResults = results
       .filter(
         (result) =>
@@ -402,7 +412,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return { ...result, content: subagentReturn };
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(result.id))) {
-          const content = runtimeLaunchHandle(result.content);
+          const content = runtimeLaunchResult(
+            runtimeLaunches.get(withoutTrajectoryStamp(result.id)),
+          );
           childResultUpdates[result.id] = content;
           return { ...result, content };
         }
@@ -421,6 +433,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return "pending";
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
+          const launch = runtimeLaunches.get(withoutTrajectoryStamp(answer.id));
+          if (launch) return launch.kind === "launched" ? "pending" : "failed";
           return answer.isError ? "failed" : "pending";
         }
         if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
@@ -1878,36 +1892,36 @@ async function releasedRuntimeSpawns(params: {
   );
 }
 
-/** Only ids and a known state leave a launch result; its text does not. */
-function runtimeLaunchHandle(content: unknown): string {
-  const handle = findInToolResult(content, 0, (record) => {
-    const found: Record<string, string> = {};
-    for (const key of ["session_id", "task_id", "agent_id"]) {
-      const id = record[key];
-      if (typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id))
-        found[key] = id;
-    }
-    if (Object.keys(found).length === 0) return null;
-    if (
-      typeof record.state === "string" &&
-      [
-        "submitted",
-        "working",
-        "input-required",
-        "completed",
-        "failed",
-        "canceled",
-      ].includes(record.state)
-    ) {
-      found.state = record.state;
-    }
-    return found;
-  });
-  if (!handle) return "The runtime launch returned no verifiable handle.";
-  return JSON.stringify({
-    ...handle,
-    message: "Use get_run to retrieve admitted runtime output.",
-  });
+/**
+ * What the model reads as the result of a runtime launch: what the gateway
+ * recorded for the call, in text written here. The result the client sends
+ * back is not read, so its form and its text do not matter.
+ */
+function runtimeLaunchResult(
+  outcome: RuntimeLaunchOutcome | undefined,
+): string {
+  if (!outcome) return "The runtime launch returned no verifiable handle.";
+  if (outcome.kind === "launched") {
+    return JSON.stringify({
+      session_id: outcome.session_id,
+      ...(outcome.state ? { state: outcome.state } : {}),
+      message: "Use get_run to retrieve admitted runtime output.",
+    });
+  }
+  switch (outcome.reason) {
+    case "agent_not_found":
+      return "No runtime was started. The Agent was not found.";
+    case "credentials_needed":
+      return outcome.setup_url
+        ? `No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet. Ask the user to add them here, then start the run again: ${outcome.setup_url}`
+        : "No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet.";
+    case "credentials_misconfigured":
+      return "No runtime was started. This Agent is missing shared Agent Runtime credentials that an administrator must configure.";
+    case "refused":
+      return "No runtime was started. OpenAPPA refused this launch.";
+    case "failed":
+      return "No runtime was started. An internal error occurred while starting the run.";
+  }
 }
 
 async function approveChildReturnCarriers(params: {
@@ -4642,74 +4656,49 @@ function reviewResultStatus(
   value: unknown,
   depth: number,
 ): { offerId: string; outcome: HitlReviewOutcome } | null {
-  return findInToolResult(value, depth, (record) =>
-    (record.outcome === "review_required" ||
-      record.outcome === "review_unanswered" ||
-      record.outcome === "review_cancelled" ||
-      record.outcome === "review_unavailable" ||
-      record.outcome === "review_invalid") &&
-    typeof record.offer_id === "string" &&
-    record.offer_id.length > 0
-      ? { offerId: record.offer_id, outcome: record.outcome }
-      : null,
-  );
-}
-
-/**
- * Finds what `pick` accepts in a tool result, in the forms clients report
- * one: the record itself, its JSON text, an MCP result, or text parts. Codex
- * frames text as `Wall time: 0.1 seconds\nOutput:\n<text>`, so text that is
- * not JSON is read line by line.
- */
-function findInToolResult<T>(
-  value: unknown,
-  depth: number,
-  pick: (record: Record<string, unknown>) => T | null,
-): T | null {
-  if (depth > TOOL_RESULT_MAX_DEPTH || value === null || value === undefined)
-    return null;
+  if (depth > 4 || value === null || value === undefined) return null;
   if (typeof value === "string") {
-    let parsed: unknown;
     try {
-      parsed = JSON.parse(value);
+      return reviewResultStatus(JSON.parse(value), depth + 1);
     } catch {
       for (const line of value.split(/\r?\n/)) {
         const candidate = line.trim();
         if (!candidate.startsWith("{") && !candidate.startsWith("[")) continue;
         try {
-          const found = findInToolResult(
-            JSON.parse(candidate),
-            depth + 1,
-            pick,
-          );
-          if (found) return found;
+          const status = reviewResultStatus(JSON.parse(candidate), depth + 1);
+          if (status) return status;
         } catch {
           // Continue past non-JSON log lines and bounded metadata.
         }
       }
       return null;
     }
-    return findInToolResult(parsed, depth + 1, pick);
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = findInToolResult(item, depth + 1, pick);
-      if (found) return found;
+      const status = reviewResultStatus(item, depth + 1);
+      if (status) return status;
     }
     return null;
   }
   if (!isRecord(value)) return null;
-  const picked = pick(value);
-  if (picked) return picked;
+  if (
+    (value.outcome === "review_required" ||
+      value.outcome === "review_unanswered" ||
+      value.outcome === "review_cancelled" ||
+      value.outcome === "review_unavailable" ||
+      value.outcome === "review_invalid") &&
+    typeof value.offer_id === "string" &&
+    value.offer_id.length > 0
+  ) {
+    return { offerId: value.offer_id, outcome: value.outcome };
+  }
   for (const nested of [value.structuredContent, value.content, value.text]) {
-    const found = findInToolResult(nested, depth + 1, pick);
-    if (found) return found;
+    const status = reviewResultStatus(nested, depth + 1);
+    if (status) return status;
   }
   return null;
 }
-
-/** Deep enough for the JSON text of an MCP result whose text part is JSON. */
-const TOOL_RESULT_MAX_DEPTH = 5;
 
 function hitlQuestionGuidance(offerIds: readonly string[]): string {
   return [

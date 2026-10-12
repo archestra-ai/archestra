@@ -23,6 +23,7 @@ import {
   ModelModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { openappaActor } from "@/openappa/actor";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
@@ -249,6 +250,51 @@ describe("runtime crossing", () => {
     expect(backend.continueRun).not.toHaveBeenCalled();
   });
 
+  // The proxy tells the model what the gateway recorded for the call, so the
+  // record must exist before the client gets the result.
+  test("records the run that a released launch started", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const actor = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(actor.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: actor.id,
+      runtime: runtimeConfig(),
+    });
+    await releasedSpawn(org.id);
+    vi.spyOn(backend, "assertReady").mockResolvedValue();
+    vi.spyOn(openappa, "startRuntimeChild").mockResolvedValue({
+      contract: "CONTRACT",
+    });
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: actor.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).not.toBe(true);
+    const started = result.structuredContent as { session_id: string };
+    expect(await recordedLaunch(org.id)).toMatchObject({
+      kind: "launched",
+      session_id: started.session_id,
+    });
+  });
+
   afterEach(async () => {
     await drainBackgroundWork();
     config.agentRuntime.platformBaseUrl = originalBaseUrl;
@@ -316,6 +362,8 @@ describe("model-facing runtime tools", () => {
       authorId: actor.id,
     });
 
+    await releasedSpawn(org.id);
+
     const result = await startDelegatedTask({
       agentId: agent.id,
       message: "Do the work",
@@ -335,6 +383,61 @@ describe("model-facing runtime tools", () => {
     expect(JSON.stringify(result.content)).toContain(
       "no longer the resolved target",
     );
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "refused",
+    });
+  });
+
+  test("records that a launch needs credentials, with the setup link", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const actor = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(actor.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: actor.id,
+      runtime: {
+        ...runtimeConfig(),
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub token",
+            scope: "per_user",
+            required: true,
+          },
+        ],
+      },
+    });
+    await releasedSpawn(org.id);
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: actor.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "credentials_needed",
+      setup_url: expect.stringContaining(
+        `/agents/${agent.id}?setup=credentials&keys=GITHUB_TOKEN`,
+      ),
+    });
   });
 
   test("a parent gets only the exact admitted turn value", async ({
@@ -607,6 +710,47 @@ function proofSession(organizationId: string) {
     caller_id: "user:parent",
     session_id: PARENT,
   };
+}
+
+/** The released `call-1` spawn of the proof session, as the proxy leaves it. */
+async function releasedSpawn(organizationId: string) {
+  const session = proofSession(organizationId);
+  await db.insert(schema.openappaSessionsTable).values({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    actor: openappaActor(session.session_id),
+    root: openappaActor(session.session_id),
+    parentId: null,
+    startDecision: { decision: "ack" },
+  });
+  await db.insert(schema.openappaOperationsTable).values({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    operationId: "call:call-1",
+    root: openappaActor(session.session_id),
+    status: "complete",
+    input: {
+      semantic: {
+        event: "tool_call",
+        tool: "archestra__start_run",
+        spawn: true,
+      },
+    },
+    decision: { decision: "allow_call" },
+  });
+}
+
+async function recordedLaunch(organizationId: string) {
+  const session = proofSession(organizationId);
+  const launches = await OpenAppaSpawnCorrelationModel.runtimeLaunches({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    toolCallIds: ["call-1"],
+  });
+  return launches.get("call-1");
 }
 
 function runtimeConfig() {

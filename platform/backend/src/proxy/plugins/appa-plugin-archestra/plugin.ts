@@ -123,7 +123,10 @@ import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-nam
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
-import type { RuntimeLaunchOutcome } from "@/types/openappa-runtime-launch";
+import type {
+  RuntimeLaunchFailureReason,
+  RuntimeLaunchOutcome,
+} from "@/types/openappa-runtime-launch";
 import { claudeCodeNativeChildIds } from "./adapters/claude-code";
 import {
   appendPeerMessageMarker,
@@ -330,9 +333,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       results,
     });
     Object.assign(childResultUpdates, childReturns.updates);
+    const governed = this.governedSession(binding);
     await admitRelayReports({
       binding,
-      session: this.governedSession(binding),
+      session: governed,
       results,
       updates: childResultUpdates,
     });
@@ -340,7 +344,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // A root that declared nothing has nothing to submit. A bound child still
     // starts, so its return contract is delivered before inference.
     if (
-      !this.governedSession(binding).parent_id &&
+      !governed.parent_id &&
       !binding.request.tools &&
       toolResults.length === 0 &&
       binding.request.declaredTools.length === 0
@@ -371,20 +375,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // child return that OpenAPPA ignores never reaches the runtime.
     await withholdUnrecordedPeerReads({
       binding,
-      session: this.governedSession(binding),
+      session: governed,
       results,
       updates: childResultUpdates,
     });
     const runtimeSpawns = await releasedRuntimeSpawns({
       binding,
-      session: this.governedSession(binding),
+      session: governed,
       toolResults,
     });
     const subagentReturns = await admitSubagentReturns({
-      session: this.governedSession(binding),
+      session: governed,
       spawnIds: runtimeSpawns,
     });
-    const governed = this.governedSession(binding);
     const runtimeLaunches = await OpenAppaSpawnCorrelationModel.runtimeLaunches(
       {
         organizationId: governed.organization_id,
@@ -426,7 +429,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         return content === undefined ? result : { ...result, content };
       });
     const result = await processProxyResults({
-      session: this.governedSession(binding),
+      session: governed,
       results: nonHandbackResults,
       canonicalize: (name: string, namespace?: string) =>
         this.canonicalize(binding, { name, namespace }),
@@ -1994,21 +1997,24 @@ function runtimeLaunchResult(
       message: "Use get_run to retrieve admitted runtime output.",
     });
   }
-  switch (outcome.reason) {
-    case "agent_not_found":
-      return "No runtime was started. The Agent was not found.";
-    case "credentials_needed":
-      return outcome.setup_url
-        ? `No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet. Ask the user to add them here, then start the run again: ${outcome.setup_url}`
-        : "No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet.";
-    case "credentials_misconfigured":
-      return "No runtime was started. This Agent is missing shared Agent Runtime credentials that an administrator must configure.";
-    case "refused":
-      return "No runtime was started. OpenAPPA refused this launch.";
-    case "failed":
-      return "No runtime was started. An internal error occurred while starting the run.";
-  }
+  const text = RUNTIME_LAUNCH_FAILURE_TEXT[outcome.reason];
+  return outcome.reason === "credentials_needed" && outcome.setup_url
+    ? `${text} Ask the user to add them here, then start the run again: ${outcome.setup_url}`
+    : text;
 }
+
+/** One entry for each reason, so a new reason does not compile without text. */
+const RUNTIME_LAUNCH_FAILURE_TEXT: Record<RuntimeLaunchFailureReason, string> =
+  {
+    agent_not_found: "No runtime was started. The Agent was not found.",
+    credentials_needed:
+      "No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet.",
+    credentials_misconfigured:
+      "No runtime was started. This Agent is missing shared Agent Runtime credentials that an administrator must configure.",
+    refused: "No runtime was started. OpenAPPA refused this launch.",
+    failed:
+      "No runtime was started. An internal error occurred while starting the run.",
+  };
 
 async function approveChildReturnCarriers(params: {
   binding: AppaPluginBinding;

@@ -91,7 +91,7 @@ export async function startDelegatedTask(params: {
   context: ArchestraContext;
 }) {
   const { result, outcome } = await launchDelegatedTask(params);
-  await recordRuntimeLaunch(params.context, outcome);
+  if (outcome) await recordRuntimeLaunch(params.context, outcome);
   return result;
 }
 
@@ -100,7 +100,7 @@ async function launchDelegatedTask(params: {
   message: string;
   attachments?: A2AAttachment[];
   context: ArchestraContext;
-}): Promise<{ result: CallToolResult; outcome: RuntimeLaunchOutcome }> {
+}): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
   try {
     const actor = requireActor(context);
@@ -214,11 +214,16 @@ async function launchDelegatedTask(params: {
           : null,
         runtime: runtime ? "dedicated" : "foreground",
       }),
-      outcome: {
-        kind: "launched",
-        session_id: taskRow.id,
-        ...(state.success ? { state: state.data } : {}),
-      },
+      // A foreground start opens no runtime session, so it has no outcome.
+      ...(runtime
+        ? {
+            outcome: {
+              kind: "launched" as const,
+              session_id: taskRow.id,
+              ...(state.success ? { state: state.data } : {}),
+            },
+          }
+        : {}),
     };
   } catch (error) {
     const needed = missingCredentialsFrom(error);

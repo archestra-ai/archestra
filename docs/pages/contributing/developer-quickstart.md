@@ -2,7 +2,7 @@
 title: Developer Quickstart
 description: Run Archestra from source with Tilt and a local Kubernetes cluster.
 order: 1
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -47,14 +47,6 @@ Two features deploy extra services only when you turn them on:
 
 - [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) deploys the Dagger engine behind the [Code Sandbox](/docs/agents#code-sandbox).
 - [`ARCHESTRA_FILE_STORAGE_PROVIDER=s3`](/docs/reference/configuration#ARCHESTRA_FILE_STORAGE_PROVIDER) deploys MinIO as the file store.
-
-## VS Code
-
-Open `platform/` as the workspace folder to apply the repository's editor settings.
-
-- Rust analysis uses four worker threads and two Cargo build jobs. Startup cache warming is disabled, so analysis happens as you use Rust files; the first request may take longer. Rust checks on save remain enabled.
-- Biome scanning and VS Code file watching exclude generated build directories, including nested Next.js caches and Rust's `target`.
-- Experimental whole-project TypeScript diagnostics are disabled. Run `pnpm type-check` for a complete workspace check.
 
 ## Everyday Commands
 

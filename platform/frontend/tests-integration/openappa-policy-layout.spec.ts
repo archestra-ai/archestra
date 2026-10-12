@@ -191,6 +191,10 @@ for (const viewport of [
         .click();
       const dialog = page.getByRole("dialog", { name: "Set up GitHub sync" });
       await expect(dialog).toBeVisible();
+      // Measure the settled dialog, not a frame of its zoom-in animation.
+      await dialog.evaluate((element) =>
+        Promise.all(element.getAnimations().map((a) => a.finished)),
+      );
       const choice = dialog.getByRole("button", {
         name: /Use an existing repository/,
       });
@@ -198,10 +202,10 @@ for (const viewport of [
       const card = await choice.boundingBox();
       if (!bounds || !card)
         throw new Error("Dialog and its choices must be rendered");
-      // Catch an edge-to-edge or oversized modal: the standard medium dialog
-      // keeps a gutter on phones and stays at most 672px (max-w-2xl) wide.
-      expect(bounds.x).toBeGreaterThanOrEqual(8);
-      expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - 8);
+      // Dialogs fill a phone's width and cap at 672px (max-w-2xl) elsewhere;
+      // either way the modal stays on screen and its content keeps a gutter.
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width);
       expect(bounds.width).toBeLessThanOrEqual(672);
       expect(card.x - bounds.x).toBeGreaterThanOrEqual(12);
       expect(

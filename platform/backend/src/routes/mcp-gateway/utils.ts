@@ -295,6 +295,26 @@ const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 ]);
 
+/**
+ * `_meta` key a client that defers tools to a tool search (Claude Code) reads
+ * to declare a tool inline instead of behind the search.
+ */
+const ANTHROPIC_ALWAYS_LOAD_META_KEY = "anthropic/alwaysLoad";
+
+/**
+ * OpenAPPA's session tools: the notice and control tools of a remedy, ask_user
+ * for a remedy that needs a person, the peer inbox, and yell. A tool the
+ * request does not declare is one the proxy cannot verify, and a session must
+ * not have to search for the tools that explain a block, so these are declared
+ * from the first request. The policy tools stay behind the search: only a
+ * session that configures the policy uses them.
+ */
+const ALWAYS_LOADED_SHORT_NAMES: ReadonlySet<string> = new Set([
+  ...APPA_IMPLICIT_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
+  "yell",
+]);
+
 /** Build the exact caller-scoped gateway tools/list surface without logging a request. */
 export async function buildAgentMcpToolList(params: {
   agent: GatewayAgent;
@@ -613,7 +633,11 @@ export async function buildAgentMcpToolList(params: {
                 undefined),
       inputSchema: parameters,
       annotations: meta?.annotations || {},
-      _meta: meta?._meta || {},
+      _meta: ALWAYS_LOADED_SHORT_NAMES.has(
+        archestraMcpBranding.getToolShortName(name) ?? "",
+      )
+        ? { ...meta?._meta, [ANTHROPIC_ALWAYS_LOAD_META_KEY]: true }
+        : meta?._meta || {},
     }));
   // Names are unique after dedupe, so the name keys each tool's provenance.
   const builtInToolNames = new Set(

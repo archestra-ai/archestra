@@ -191,6 +191,8 @@ type ProcessedToolResult = {
   outputSource: OutputSource;
   reason?: RuntimeReason;
   code?: string;
+  /** The runtime denied this call, so `content` is its ruling, not an output. */
+  denied?: true;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -754,6 +756,7 @@ async function approveToolResult(params: {
     outputSource,
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
+    ...(decision.decision === "deny_call" ? { denied: true as const } : {}),
   };
 }
 // SPDX-SnippetEnd

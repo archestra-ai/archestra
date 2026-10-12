@@ -5299,6 +5299,88 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(starts[0].parent_id).toBeUndefined();
   });
 
+  test("has Claude Code wait for the gateway when its first request has no remedy tools, then delivers the ruling", async () => {
+    // Claude Code sends its first request while the gateway is still
+    // connecting: no remedy tools yet, but its own WaitForMcpServers. The
+    // denied call goes back as that wait, so the turn continues. The next
+    // request declares the remedy tools and reads the runtime's ruling where
+    // the wait's output was.
+    block = true;
+    options.nonStreamingToolUse = {
+      name: "Read",
+      input: { file_path: "/tmp/notes" },
+    };
+    const localTools = ["Read", "WaitForMcpServers"].map((name) => ({
+      name,
+      description: name,
+      input_schema: { type: "object", properties: {} },
+    }));
+    const send = (body: Record<string, unknown>) =>
+      app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.289 (external, cli)",
+          "x-claude-code-session-id": "6f0e7f0e-3a53-4f0c-9d0e-6c1f5b2a9d11",
+        },
+        payload: body,
+      });
+    const prompt = { role: "user", content: "Read my notes" };
+
+    const first = await send({
+      ...payload(false, [prompt]),
+      tools: localTools,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const wait = first
+      .json()
+      .content.find((part: { type: string }) => part.type === "tool_use");
+    expect(wait).toMatchObject({ name: "WaitForMcpServers", input: {} });
+    expect(first.body).not.toContain("Send your message again");
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ event: "cancel_call" }),
+    );
+
+    options.nonStreamingToolUse = {
+      id: "toolu_test_retry",
+      name: "Read",
+      input: { file_path: "/tmp/notes" },
+    };
+    const second = await send({
+      ...payload(false, [
+        prompt,
+        { role: "assistant", content: [wait] },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: wait.id,
+              content:
+                "ready: true Connected (their tools are now available — call them directly): archestra",
+            },
+          ],
+        },
+      ]),
+      tools: [...localTools, ...payload().tools.slice(1)],
+    });
+    expect(second.statusCode, second.body).toBe(200);
+    const forwarded = JSON.stringify(providerRequests.at(-1));
+    // The model never called the wait tool, so the ruling says whose it is.
+    expect(forwarded).toContain(
+      "OpenAPPA sent this WaitForMcpServers call in place of the tool call you made. Your call did not run.",
+    );
+    expect(forwarded).toContain("[appa] NATIVE REFUSAL");
+    expect(forwarded).not.toContain("ready: true");
+    expect(
+      second
+        .json()
+        .content.find((part: { type: string }) => part.type === "tool_use"),
+    ).toMatchObject({ name: "archestra__get_remedy_plans" });
+  });
+
   // Claude Code's agent teams and subagents trade messages through
   // SendMessage. The client delivers each message as an envelope in its
   // recipient's next turn.

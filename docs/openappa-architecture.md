@@ -255,7 +255,9 @@ tool:      call_send -> <runtime feedback and offered plans>
 
 The proxy restores the original call using the embedded ruling, without a database lookup. Restoration depends on declared tool identity and host metadata. This request-local restoration survives restarts and replica changes. The native runtime separately checks result admission against released calls and retained records. The runtime withholds results for call IDs it never released.
 
-If the client did not declare the notice tool, the proxy cannot deliver this protocol. It refuses the call, attempts to cancel sibling calls, and writes a client failure report. A missing notice tool does not authorize releasing the denied call.
+If the client did not declare the notice tool, the proxy cannot deliver this protocol. A client can be in this state for a moment: Claude Code connects MCP servers in the background and can send a session's first request before the gateway tools are listed. In such a request, Claude Code declares its own `WaitForMcpServers` tool. The proxy then sends the denied call back as that wait call, once per session. The call keeps its ID and takes no arguments. The runtime answers its result with the ruling, so nothing the wait tool returns reaches the model. The proxy adds a line that says the model's own call did not run. The history keeps the wait call; the proxy does not restore the original call. The next request can declare the remedy tools.
+
+Without that tool, or after the one wait, the proxy refuses the call and attempts to cancel sibling calls. The first refusal in a session asks the user to send the message again. A repeat writes a client failure report. A missing notice tool does not authorize releasing the denied call.
 
 When a client uses a `run_tool` wrapper, OpenAPPA evaluates the call as the underlying target. The runtime receives the target tool name and arguments. This ensures that policy rules, annotators, and wildcards match the tool that runs, not the wrapper. If denied, the notice identifies the target tool. If allowed, the call uses the wrapper declared by the client.
 

@@ -1634,12 +1634,13 @@ export async function handleLLMProxy<
           "OpenAPPA session does not match the authenticated runtime workspace",
         );
       }
+      const runtimeBindingToken = firstHeaderValue(
+        headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
+      );
       const runtimeBindingMatches =
         runtimeIdentity !== null &&
         runtimeBindingAuthorizes({
-          token: firstHeaderValue(
-            headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
-          ),
+          token: runtimeBindingToken,
           secret: config.openappa.offerSigningSecret,
           identity: runtimeIdentity,
         });
@@ -1649,9 +1650,23 @@ export async function handleLLMProxy<
         runtimeIdentity &&
         !runtimeBindingMatches
       ) {
+        // An image whose client predates the binding sends none. Only that
+        // case is named: why a presented binding failed stays undisclosed.
+        const bindingMissing = !runtimeBindingToken;
+        logger.warn(
+          {
+            agentId: runtimeIdentity.agentId,
+            workspaceId: runtimeIdentity.workspaceId,
+            taskId: runtimeIdentity.taskId,
+            reason: bindingMissing ? "missing" : "invalid",
+          },
+          "OpenAPPA rejected a runtime request without a verified binding",
+        );
         throw new ApiError(
           400,
-          "OpenAPPA runtime binding does not match this run",
+          bindingMissing
+            ? "This run's image did not send the X-Archestra-Runtime-Binding header that Guardrails require. Rebuild the image on a current maintained agent image, or send ARCHESTRA_AGENT_RUNTIME_BINDING in that header. Then start a new run."
+            : "OpenAPPA runtime binding does not match this run",
         );
       }
       const runtimeSession =

@@ -155,7 +155,7 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
 | `openappa_external_consults` | One row per external consult a dispatch made, written after the engine returns (migration `0487`) |
-| `openappa_dispatch_leases` | One row per family with a dispatch in progress or stopped: its owner, the family's last event sequence when it began, and how many dispatches in a row stopped (migration `0529`) |
+| `openappa_dispatch_leases` | One row per family with a dispatch in progress or stopped: its owner, the family's last event sequence when it began, and how many dispatches in a row stopped (migration `0530`) |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. The
@@ -211,7 +211,7 @@ answers the retry from its completed receipt.
 Peer operations and remedies take no lease. Peer messages are stored outside
 the event log, and a remedy completes two receipts one after the other, so the
 log cannot show how far a stopped one got. A receipt that they leave pending
-closes the family. Receipts claimed before migration `0529` have no lease and
+closes the family. Receipts claimed before migration `0530` have no lease and
 also close the family.
 
 A tool result is recorded in the event log before its output sanitizer is

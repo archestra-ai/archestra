@@ -3,7 +3,10 @@ import { createUIMessageStreamResponse, type UIMessageChunk } from "ai";
 import type { FastifyReply } from "fastify";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
-import { activeChatRunService } from "@/services/active-chat-run";
+import {
+  ActiveChatRunPersistenceError,
+  activeChatRunService,
+} from "@/services/active-chat-run";
 import { withChatHeartbeats } from "./heartbeat-stream";
 
 /**
@@ -51,7 +54,19 @@ export async function sendGatedUiMessageStreamResponse(params: {
       // See: https://ai-sdk.dev/docs/troubleshooting/streaming-not-working-when-proxied
       "Content-Encoding": "none",
     },
-    stream: responseStream,
+    stream: responseStream.pipeThrough(
+      new TransformStream<UIMessageChunk, UIMessageChunk>({
+        async flush(controller) {
+          await settled(terminalReady);
+          // Read after the drain settles: its last flush can fail after the
+          // model stream has already finished.
+          const reason = abortController.signal.reason;
+          if (reason instanceof ActiveChatRunPersistenceError) {
+            controller.enqueue({ type: "error", errorText: reason.message });
+          }
+        },
+      }),
+    ),
   });
 
   // Log response headers for debugging
@@ -72,27 +87,24 @@ export async function sendGatedUiMessageStreamResponse(params: {
   if (!response.body) {
     throw new ApiError(400, "No response body");
   }
-  const gatedBody = (response.body as ReadableStream<Uint8Array>).pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      async flush() {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        try {
-          await Promise.race([
-            terminalReady,
-            new Promise<void>((resolve) => {
-              timer = setTimeout(resolve, TERMINAL_CLOSE_GATE_TIMEOUT_MS);
-            }),
-          ]);
-        } finally {
-          if (timer) {
-            clearTimeout(timer);
-          }
-        }
-      },
-    }),
-  );
   // biome-ignore lint/suspicious/noExplicitAny: Fastify reply.send accepts ReadableStream but TypeScript requires explicit cast
-  return reply.send(gatedBody as any);
+  return reply.send(response.body as any);
+}
+
+async function settled(terminalReady: Promise<void>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      terminalReady,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, TERMINAL_CLOSE_GATE_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
 }
 
 // Upper bound on how long the response body's close waits for the active-run row

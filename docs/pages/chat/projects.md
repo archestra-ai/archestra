@@ -1,23 +1,23 @@
 ---
 title: Projects & Schedules
-description: Keep chats, agent runs, files, instructions, and schedules in one shared workspace
-order: 2
-lastUpdated: 2026-10-11
+description: Keep chats, agent runs, files, instructions, and schedules in one shared project
+order: 1
+lastUpdated: 2026-10-12
 ---
 
-A project groups conversations, dedicated Agent Runtime sessions, shared files, instructions, and scheduled tasks into a unified workspace. Start with a private workspace, then grant access to team members as work progresses.
+A project groups conversations, dedicated Agent Runtime sessions, shared files, instructions, and scheduled tasks. Start with a private project, then grant access to team members as work progresses.
 
 ![A project with its chat composer, files panel, and schedules](/docs/automated_screenshots/platform-projects_project-overview.webp)
 
 ## Creating a Project
 
-Organize related conversations, agent sessions, and persistent assets into a scoped workspace.
+Organize related conversations, agent sessions, and persistent assets into a shared project.
 
 1. Go to **Projects** and select **New project**. Creating projects requires [`project:create`](/docs/reference/permissions#project:create).
 2. Enter a project name and optional description.
 3. Configure an optional default agent to preselect that agent for new chats and schedules.
 
-You can also convert an existing chat into a project by opening the chat's context menu and selecting **Create project**. To move an ongoing conversation or Agent Runtime session into a project, select **Change project** from its menu. Choosing **Remove from project** returns the session to the main workspace list.
+You can also convert an existing chat into a project by opening the chat's context menu and selecting **Create project**. To move an ongoing conversation or Agent Runtime session into a project, select **Change project** from its menu. Choosing **Remove from project** returns the session to the main chat list.
 
 ## Shared Files and Instructions
 
@@ -53,17 +53,17 @@ Transfer project ownership to another member from the permissions tab. The previ
 
 ## Project Labels
 
-Categorize projects with key-value labels to filter active workspaces across large teams.
+Categorize projects with key-value labels to filter active projects across large teams.
 
 Add labels under **Advanced** when creating or editing a project (for example, `team: infra` or `stage: active`).
 
-Use the label filter bar on the **Projects** page to narrow down workspaces by key and value.
+Use the label filter bar on the **Projects** page to narrow down projects by key and value.
 
 ## Deleting and Restoring Projects
 
-Move finished projects to the trash or restore previously removed workspaces.
+Move finished projects to the trash or restore previously removed projects.
 
-Deleting a project moves it to the trash ([`project:delete`](/docs/reference/permissions#project:delete)). Its conversations and runtime sessions return to the main workspace list, while project files and schedules are hidden.
+Deleting a project moves it to the trash ([`project:delete`](/docs/reference/permissions#project:delete)). Its conversations and runtime sessions return to the main chat list, while project files and schedules are hidden.
 
 To recover a project, select the **Deleted** status filter on the **Projects** page and click **Restore**.
 

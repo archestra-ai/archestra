@@ -1,11 +1,13 @@
 ---
-title: Chat
+title: Chat & Projects
 description: Start conversations, delegate tasks, attach files, and collaborate with autonomous agents in real time
-order: 1
+order: 6
 lastUpdated: 2026-10-12
 ---
 
-Start a conversation to delegate tasks to an agent, attach reference files, and collaborate in real time. Every message turn runs through your configured model and tools with real-time streaming and tool approvals.
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
+Start a conversation to delegate tasks to an agent, attach reference files, and collaborate in real time. Every prompt flows through the [LLM Proxy](/docs/llm-proxy) and [MCP Gateway](/docs/mcp/gateway), enforcing guardrails, access policies, and audit logging.
 
 ![The chat composer with agent and model selectors](/docs/automated_screenshots/chat_composer.webp)
 
@@ -13,8 +15,8 @@ Start a conversation to delegate tasks to an agent, attach reference files, and 
 
 Choose an agent and prompt it to analyze data, run commands, or generate code.
 
-1. Select **New chat** in the sidebar, or press `Alt+N`.
-2. Choose an agent from the **Agent** menu. Starting conversations requires [`chat:create`](/docs/reference/permissions#chat:create).
+1. Select **New chat** in the sidebar, or press `Alt+N`. Starting conversations requires [`chat:create`](/docs/reference/permissions#chat:create).
+2. Choose an agent from the **Agent** menu.
 3. Enter your prompt in the composer and press `Enter` to send. Press `Escape` to halt an active completion.
 
 You can continue typing while the agent generates a response. Queued messages wait in line and send automatically when the current turn finishes. Viewing past chats requires [`chat:read`](/docs/reference/permissions#chat:read).
@@ -45,25 +47,13 @@ When a tool requires human approval, execution pauses and an approval card appea
 
 If an agent requires clarification mid-run, an interactive question prompt renders in the message feed. Submit your response directly in the card or select **Dismiss question**.
 
-## Message History and Feedback
+## Managing and Sharing Conversations
 
-Refine prompt inputs or correct model replies directly in the message history.
+Manage conversations from the sidebar or share transcripts across your team.
 
-Hover over any message to access quick actions: copy text, edit content, or regenerate a completion. Rate answers with **Good response** or **Bad response** to log feedback for observability. Editing an earlier user message truncates subsequent history and resends the prompt; editing an assistant message updates the stored transcript directly.
+The sidebar lists recent conversations chronologically. Open a chat's context menu to pin it to the top of the list, rename it, assign it to a [project](/docs/chat/projects), or remove it with [`chat:delete`](/docs/reference/permissions#chat:delete). Press `Cmd+K` (or `Ctrl+K`) to open the search palette and jump across chats instantly.
 
-The side panel beside the message thread includes three tabs:
-
-- **Files** — Displays attachments, files written by the agent, and code artifacts that can be downloaded or exported as PDF. In a project chat, this panel displays the project's shared files.
-- **Browser** — Renders the real-time browser preview when an agent navigates web pages using browser automation tools.
-- **Apps** — Displays [interactive apps](/docs/workspace/apps) embedded or launched within the active conversation.
-
-## Organizing and Sharing Chats
-
-Manage conversations from the sidebar or share transcripts with team members.
-
-The sidebar lists recent conversations chronologically. Open a chat's context menu to pin it to the top of the list, rename it, assign it to a [project](/docs/workspace/projects), or remove it with [`chat:delete`](/docs/reference/permissions#chat:delete). Press `Cmd+K` (or `Ctrl+K`) to open the search palette and jump across chats instantly.
-
-Open **Chat actions** in the conversation header and choose **Share** to share with individual users, teams, service accounts, roles, or everyone in the organization. Shared chats are read-only for recipients; viewers can select **Start New Chat from here** to fork the history into their own editable conversation. To save an offline transcript, select **Export Markdown** from the same header menu.
+Open **Chat actions** in the conversation header and choose **Share** to grant access to individual users, teams, or roles. Shared chats are read-only for recipients; viewers can select **Start New Chat from here** to fork the history into their own editable conversation. To save an offline transcript, select **Export Markdown** from the same header menu.
 
 ## Encrypted Chats
 
@@ -71,12 +61,12 @@ Protect sensitive discussions with end-to-end encryption where only the originat
 
 Select the lock icon in the composer, or press `Alt+I`, before sending your first message. Your browser generates a unique AES key client-side and retains it locally. Archestra encrypts conversation messages, attachments, logs, and error outputs with that key before saving them to the database.
 
-Encrypted conversations open only on the browser and device that created them. On other devices, the conversation appears in the list, but its encrypted content cannot be unlocked.
-
-Because encryption protects stored records rather than real-time generation, the LLM provider still processes message prompts. Sharing, chat forking, project assignment, compaction, and saving files to knowledge are disabled for encrypted conversations.
+Encrypted conversations open only on the browser and device that created them. Sharing, chat forking, project assignment, compaction, and saving files to knowledge are disabled for encrypted conversations.
 
 ### Key Escrow
 
 Configure an organization escrow public key so designated key holders can recover encrypted chats if local browser access is lost.
 
 Setting [`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`](/docs/reference/configuration#ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY) enables encrypted chats across your organization. Archestra encrypts each conversation's local encryption key with this RSA public key before saving it. Key holders can recover conversations offline using their private key; see [Recovering an Encrypted Chat](/docs/admin/security/content-encryption#recovering-an-encrypted-chat).
+
+<span id="encrypted-chats"></span><span id="key-escrow"></span>

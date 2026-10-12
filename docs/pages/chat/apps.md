@@ -1,8 +1,8 @@
 ---
 title: Interactive Apps
 description: Build, run, share, and govern agent-scaffolded interactive apps and dashboards
-order: 3
-lastUpdated: 2026-10-11
+order: 2
+lastUpdated: 2026-10-12
 ---
 
 An app is an interactive interface you build on demand by prompting an agent — such as a dashboard, intake form, or status tracker. Apps execute inside a secure browser sandbox, maintain persistent state, and invoke MCP tools using the credentials of the person running them.
@@ -23,7 +23,7 @@ Each modification saves a new revision to history. To revert a change, open the 
 
 ## Running an App
 
-Launch apps from the workspace gallery, embedded inside conversations, or standalone in full screen.
+Launch apps from the Apps gallery, embedded inside conversations, or standalone in full screen.
 
 - **From the Apps gallery:** Select an app card from **Apps** (`/apps`). Opening an app creates a new chat session that joins your chat list once you interact ([`app:read`](/docs/reference/permissions#app:read)).
 - **Standalone:** Open the app at `/a/<slug>` for a focused view without chat chrome.

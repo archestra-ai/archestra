@@ -23,4 +23,4 @@ What to know:
 | **APPAdvisor** | Explains your [Guardrails](/docs/agents/guardrails) policy, and changes it when you ask. Open its chat from Guardrails. It stays out of the chat agent picker and shows each change before it publishes. |
 | **Context Compaction Subagent** | Summarizes older history when a chat nears the model's context limit. Recent turns stay word for word, and the full history stays visible. |
 | **Chat Title Generation Subagent** | Names each chat in three to six words. |
-| **App Runtime LLM Agent** | Serves `archestra.llm.complete()` for [MCP Apps](/docs/workspace/apps). Apps cannot pick a model, so set one here. |
+| **App Runtime LLM Agent** | Serves `archestra.llm.complete()` for [MCP Apps](/docs/chat/apps). Apps cannot pick a model, so set one here. |

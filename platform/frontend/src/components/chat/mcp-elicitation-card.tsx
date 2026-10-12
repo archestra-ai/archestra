@@ -15,12 +15,6 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-} from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils/tailwind";
@@ -37,7 +31,12 @@ import {
   isSingleChoiceForm,
   normalizeValues,
 } from "./mcp-elicitation-fields";
-import { parseReviewPresentation } from "./openappa-review-presentation";
+import {
+  getReviewDecisionContent,
+  getReviewDecisionField,
+  type ReviewDecision,
+} from "./openappa-review-presentation";
+import { OpenappaReviewToolCard } from "./openappa-review-tool-card";
 
 /**
  * Long enough for the picked row to visibly highlight before the next
@@ -238,6 +237,12 @@ export function McpElicitationCard({
     pendingQuestions.length > 0 &&
     pendingQuestions.every((question) => question.isAnswered);
   const activeRequestId = activeQuestion?.request.id;
+  // A lone OpenAPPA review renders as a tool approval card: its own
+  // Approve/Deny row replaces the card header, fields, and footer.
+  const isSingleReview =
+    !allMembersSettled &&
+    !isMultiple &&
+    activeQuestion?.request.kind === "openappa_review";
 
   useEffect(
     () => () => {
@@ -470,6 +475,58 @@ export function McpElicitationCard({
     }));
   };
 
+  /**
+   * Approve/Deny answer the review with the same content its form did. A
+   * review that is the only pending question submits at once; among other
+   * questions it records the pick, like a radio, and Submit sends all.
+   */
+  const decideReview = (question: CardQuestion, decision: ReviewDecision) => {
+    if (isSubmitting || !question.isPending) {
+      return;
+    }
+    const othersPending = pendingQuestions.some(
+      (pending) => pending.request.id !== question.request.id,
+    );
+    if (othersPending) {
+      setFieldValue({
+        question,
+        fieldName: getReviewDecisionField(question.request.requestedSchema),
+        value: decision,
+      });
+      return;
+    }
+    void respondToAll(({ request }) => ({
+      id: request.id,
+      action: "accept",
+      content: getReviewDecisionContent({
+        requestedSchema: request.requestedSchema,
+        decision,
+      }),
+    }));
+  };
+
+  const renderReview = (question: CardQuestion) => {
+    const picked =
+      question.values[getReviewDecisionField(question.request.requestedSchema)];
+    return (
+      <OpenappaReviewToolCard
+        id={questionMessageId(question.request.id)}
+        message={question.request.message}
+        reviewedTool={question.request.reviewedTool}
+        reviewedArguments={question.request.reviewedArguments}
+        disabled={isSubmitting || !question.isPending}
+        secondaryText={
+          isSubmitting ? (
+            <span>Saving answer...</span>
+          ) : picked === "approve" || picked === "deny" ? (
+            <span>Selected: {picked === "approve" ? "Approve" : "Deny"}</span>
+          ) : undefined
+        }
+        onDecide={(decision) => decideReview(question, decision)}
+      />
+    );
+  };
+
   // Enter on a picked option confirms it, like the click that auto-advances.
   // Escape on an option or tab dismisses the pending questions.
   const handleKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
@@ -653,14 +710,11 @@ export function McpElicitationCard({
         "not-prose relative mb-4 w-full overflow-hidden rounded-lg",
         allMembersSettled
           ? "max-w-2xl"
-          : "border border-border/60 bg-card shadow-sm",
-        !allMembersSettled &&
-          (isMultiple || activeQuestion?.request.kind === "openappa_review") &&
-          "max-w-4xl",
-        !allMembersSettled &&
-          !isMultiple &&
-          activeQuestion?.request.kind !== "openappa_review" &&
-          "max-w-2xl",
+          : isSingleReview
+            ? "max-w-4xl"
+            : "border border-border/60 bg-card shadow-sm",
+        !allMembersSettled && isMultiple && "max-w-4xl",
+        !allMembersSettled && !isMultiple && !isSingleReview && "max-w-2xl",
       )}
       onPointerDown={() => {
         lastInputRef.current = "pointer";
@@ -697,11 +751,19 @@ export function McpElicitationCard({
               value={question.request.id}
               className="flex min-w-0 flex-col gap-4 p-4"
             >
-              <ElicitationMessage request={question.request} />
-              {renderFields(question)}
+              {question.request.kind === "openappa_review" ? (
+                renderReview(question)
+              ) : (
+                <>
+                  <ElicitationMessage request={question.request} />
+                  {renderFields(question)}
+                </>
+              )}
             </TabsContent>
           ))}
         </Tabs>
+      ) : isSingleReview ? (
+        renderReview(activeQuestion)
       ) : (
         <>
           {header}
@@ -714,7 +776,7 @@ export function McpElicitationCard({
           </div>
         </>
       )}
-      {!allMembersSettled ? (
+      {!allMembersSettled && !isSingleReview ? (
         <div
           data-testid="mcp-elicitation-footer"
           className={cn(
@@ -787,58 +849,13 @@ function ElicitationMessage({
 }: {
   request: ChatMcpElicitationRequest;
 }) {
-  const id = questionMessageId(request.id);
-  if (request.kind !== "openappa_review") {
-    return (
-      <p
-        id={id}
-        className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
-      >
-        {request.message}
-      </p>
-    );
-  }
-
-  const presentation = parseReviewPresentation({
-    message: request.message,
-    reviewedTool: request.reviewedTool,
-    reviewedArguments: request.reviewedArguments,
-  });
-  const toolType = `tool-${presentation.tool ?? "call"}` as const;
-
   return (
-    <div id={id} className="flex min-w-0 flex-col gap-3">
-      {presentation.intro ? (
-        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
-          {presentation.intro}
-        </p>
-      ) : null}
-      {presentation.tool || presentation.arguments !== undefined ? (
-        <Tool defaultOpen className="mb-0">
-          <ToolHeader
-            type={toolType}
-            state="approval-requested"
-            title={presentation.tool}
-            isCollapsible={false}
-            statusLabel="Needs review"
-          />
-          {presentation.arguments !== undefined ? (
-            <ToolContent>
-              <ToolInput input={presentation.arguments} />
-            </ToolContent>
-          ) : null}
-        </Tool>
-      ) : (
-        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
-          {request.message}
-        </p>
-      )}
-      {presentation.rest ? (
-        <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
-          {presentation.rest}
-        </p>
-      ) : null}
-    </div>
+    <p
+      id={questionMessageId(request.id)}
+      className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
+    >
+      {request.message}
+    </p>
   );
 }
 

@@ -56,7 +56,6 @@ import {
 import {
   errorMessage,
   formatApprovalReviewText,
-  formatApprovalToolArgs,
   stripDuplicateAgentFooter,
 } from "./utils";
 
@@ -586,61 +585,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       throw new Error("MSTeamsProvider not initialized");
     }
 
-    const buildAction = (approved: boolean) => ({
-      type: "Action.Submit",
-      title: approved ? "Approve" : "Decline",
-      data: {
-        action: "approvalDecision",
-        approvalId: options.approvalId,
-        approved,
-        taskId: options.taskId,
-        toolName: options.toolName,
-        channelId: options.channelId,
-        workspaceId: options.originalMessage.workspaceId,
-        threadId: options.threadId,
-        originalSenderEmail: options.originalMessage.senderEmail,
-        messageId: options.originalMessage.messageId,
-      },
-    });
-
-    const argsText = options.reviewText
-      ? formatApprovalReviewText(options.reviewText)
-      : formatApprovalToolArgs(options.toolArgs);
-    const approvalCard = {
-      type: "AdaptiveCard",
-      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-      version: "1.4",
-      body: [
-        // An OpenAPPA review's text names the reviewed call itself; the tool
-        // here is only the remedy that carries it.
-        ...(options.reviewText
-          ? []
-          : [
-              {
-                type: "TextBlock",
-                text: `\`${options.toolName}\``,
-                wrap: true,
-              },
-            ]),
-        ...(argsText
-          ? [
-              {
-                type: "TextBlock",
-                text: argsText,
-                wrap: true,
-                fontType: "Monospace",
-                spacing: "Small",
-              },
-            ]
-          : []),
-        {
-          type: "ActionSet",
-          spacing: "Small",
-          actions: [buildAction(true), buildAction(false)],
-        },
-      ],
-    };
-
+    const approvalCard = buildApprovalRequestCard(options);
     const approvalMessage = {
       type: ActivityTypes.Message,
       text: "",
@@ -1019,6 +964,7 @@ class MSTeamsProvider implements ChatOpsProvider {
     approvalId: string;
     approved: boolean;
     toolName?: string;
+    toolLabel?: string;
     taskId: string;
     channelId?: string;
     workspaceId?: string | null;
@@ -1035,6 +981,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       approvalId?: unknown;
       approved?: unknown;
       toolName?: unknown;
+      toolLabel?: unknown;
       taskId?: unknown;
       channelId?: unknown;
       workspaceId?: unknown;
@@ -1046,6 +993,8 @@ class MSTeamsProvider implements ChatOpsProvider {
       approvalId: value.approvalId as string,
       approved: value.approved as boolean,
       toolName: value.toolName as string | undefined,
+      toolLabel:
+        typeof value.toolLabel === "string" ? value.toolLabel : undefined,
       taskId: value.taskId as string,
       channelId: value.channelId as string | undefined,
       workspaceId: value.workspaceId as string | null | undefined,
@@ -1061,6 +1010,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       approvalId: string;
       approved: boolean;
       toolName?: string;
+      toolLabel?: string;
       taskId: string;
       channelId?: string;
       workspaceId?: string | null;
@@ -1175,10 +1125,17 @@ class MSTeamsProvider implements ChatOpsProvider {
       await context.updateActivity({
         id: approvalMessageId,
         type: ActivityTypes.Message,
-        text: `${payload.toolName || "Approval"}: ${
-          payload.approved ? "Approved" : "Declined"
-        }${context.activity.from?.name ? ` by ${context.activity.from.name}` : ""}`,
-        attachments: [],
+        text: "",
+        attachments: [
+          {
+            contentType: "application/vnd.microsoft.card.adaptive",
+            content: buildApprovalDecisionCard({
+              toolLabel: payload.toolLabel,
+              approved: payload.approved,
+              deciderName: context.activity.from?.name,
+            }),
+          },
+        ],
       });
     };
 
@@ -2018,4 +1975,208 @@ function safeHostname(url: string): string {
   } catch {
     return "invalid-url";
   }
+}
+
+// === Approval cards (Adaptive Card 1.4) ===
+// Teams ignores Action `style` (positive/destructive), so the cards rely on
+// labels and text color only.
+
+const APPROVAL_ARGS_CONTAINER_ID = "args";
+const APPROVAL_ACTIONS_SHOW_ID = "approval-actions-show";
+const APPROVAL_ACTIONS_HIDE_ID = "approval-actions-hide";
+const APPROVAL_ARG_VALUE_MAX_LENGTH = 500;
+
+/**
+ * The approval prompt: the tool, a line saying it waits for review, and its
+ * arguments behind a "Show arguments" toggle. With only an OpenAPPA review
+ * text (no structured tool), the text is shown in place of tool and arguments.
+ */
+function buildApprovalRequestCard(
+  options: Pick<
+    AddApprovalRequestFormOptions,
+    | "approvalId"
+    | "taskId"
+    | "toolName"
+    | "toolArgs"
+    | "reviewText"
+    | "channelId"
+    | "threadId"
+    | "originalMessage"
+  >,
+): Record<string, unknown> {
+  const isReviewTextFallback = Boolean(options.reviewText);
+  const decisionAction = (approved: boolean) => ({
+    type: "Action.Submit",
+    title: approved ? "Approve" : "Deny",
+    data: {
+      action: "approvalDecision",
+      approvalId: options.approvalId,
+      approved,
+      taskId: options.taskId,
+      toolName: options.toolName,
+      // The name the decided card shows; absent when the prompt showed only
+      // review text, whose tool is the remedy rather than the reviewed call.
+      ...(isReviewTextFallback ? {} : { toolLabel: options.toolName }),
+      channelId: options.channelId,
+      workspaceId: options.originalMessage.workspaceId,
+      threadId: options.threadId,
+      originalSenderEmail: options.originalMessage.senderEmail,
+      messageId: options.originalMessage.messageId,
+    },
+  });
+  const decisionActions = [decisionAction(true), decisionAction(false)];
+
+  const body: Array<Record<string, unknown>> = [
+    {
+      type: "TextBlock",
+      text: "Approval required",
+      weight: "Bolder",
+      wrap: true,
+    },
+  ];
+
+  if (options.reviewText) {
+    body.push(
+      {
+        type: "TextBlock",
+        text: formatApprovalReviewText(options.reviewText),
+        wrap: true,
+        fontType: "Monospace",
+        spacing: "Small",
+      },
+      { type: "ActionSet", spacing: "Small", actions: decisionActions },
+    );
+    return approvalCardEnvelope(body, "Approval required");
+  }
+
+  body.push(
+    {
+      type: "TextBlock",
+      text: options.toolName,
+      fontType: "Monospace",
+      wrap: true,
+      spacing: "Small",
+    },
+    {
+      type: "TextBlock",
+      text: "Review this tool call before it can continue.",
+      isSubtle: true,
+      wrap: true,
+      spacing: "Small",
+    },
+  );
+
+  const facts = Object.entries(options.toolArgs ?? {}).map(([name, value]) => ({
+    title: name,
+    value: formatApprovalArgValue(value),
+  }));
+  if (facts.length === 0) {
+    body.push({
+      type: "ActionSet",
+      spacing: "Small",
+      actions: decisionActions,
+    });
+    return approvalCardEnvelope(body, `Approval required: ${options.toolName}`);
+  }
+
+  // Each toggle flips the arguments and swaps which ActionSet is visible, so
+  // the button reads "Show arguments" or "Hide arguments" as appropriate.
+  const toggleAction = (title: string) => ({
+    type: "Action.ToggleVisibility",
+    title,
+    targetElements: [
+      APPROVAL_ARGS_CONTAINER_ID,
+      APPROVAL_ACTIONS_SHOW_ID,
+      APPROVAL_ACTIONS_HIDE_ID,
+    ],
+  });
+  body.push(
+    {
+      type: "Container",
+      id: APPROVAL_ARGS_CONTAINER_ID,
+      isVisible: false,
+      spacing: "Small",
+      items: [{ type: "FactSet", facts }],
+    },
+    {
+      type: "ActionSet",
+      id: APPROVAL_ACTIONS_SHOW_ID,
+      spacing: "Small",
+      actions: [...decisionActions, toggleAction("Show arguments")],
+    },
+    {
+      type: "ActionSet",
+      id: APPROVAL_ACTIONS_HIDE_ID,
+      isVisible: false,
+      spacing: "Small",
+      actions: [...decisionActions, toggleAction("Hide arguments")],
+    },
+  );
+  return approvalCardEnvelope(body, `Approval required: ${options.toolName}`);
+}
+
+/**
+ * The card that replaces the prompt once someone approves or denies it.
+ *
+ * @internal exported for tests
+ */
+export function buildApprovalDecisionCard(params: {
+  toolLabel?: string;
+  approved: boolean;
+  deciderName?: string;
+}): Record<string, unknown> {
+  const verdict = params.approved ? "Approved" : "Denied";
+  const status = params.deciderName
+    ? `${verdict} by ${params.deciderName}`
+    : verdict;
+  const body: Array<Record<string, unknown>> = [];
+  if (params.toolLabel) {
+    body.push({
+      type: "TextBlock",
+      text: params.toolLabel,
+      fontType: "Monospace",
+      wrap: true,
+    });
+  }
+  body.push({
+    type: "TextBlock",
+    text: status,
+    wrap: true,
+    spacing: "Small",
+    color: params.approved ? "Good" : "Attention",
+    ...(params.approved ? { weight: "Bolder" } : {}),
+  });
+  return approvalCardEnvelope(
+    body,
+    params.toolLabel ? `${params.toolLabel}: ${status}` : status,
+  );
+}
+
+function approvalCardEnvelope(
+  body: Array<Record<string, unknown>>,
+  fallbackText: string,
+): Record<string, unknown> {
+  return {
+    type: "AdaptiveCard",
+    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+    version: "1.4",
+    fallbackText,
+    body,
+  };
+}
+
+function formatApprovalArgValue(value: unknown): string {
+  let text: string;
+  if (typeof value === "string") {
+    text = value;
+  } else {
+    try {
+      text = JSON.stringify(value) ?? String(value);
+    } catch {
+      text = String(value);
+    }
+  }
+  return text.length > APPROVAL_ARG_VALUE_MAX_LENGTH
+    ? `${text.slice(0, APPROVAL_ARG_VALUE_MAX_LENGTH)}… (truncated)`
+    : text;
 }

@@ -1613,7 +1613,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Canonical HITL review."="Approve". You can now continue with the user\'s answers in mind.',
+        'Your questions have been answered: "Approve archestra__whoami?"="Approve". You can now continue with the user\'s answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -1625,7 +1625,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Canonical HITL review."="Deny". You can now continue with the user\'s answers in mind.',
+        'Your questions have been answered: "Approve archestra__whoami?"="Deny". You can now continue with the user\'s answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -1776,7 +1776,33 @@ describe("asking through the client's own question tool", () => {
 
       expect(question.name).toBe(nativeName);
       expect(question.namespace).toBe("");
-      expect(question.arguments).toContain("Canonical HITL review.");
+      if (client === "Claude Code") {
+        // Claude Code asks the short question and previews the reviewed call.
+        expect(JSON.parse(question.arguments as string)).toEqual({
+          questions: [
+            {
+              question: "Approve archestra__whoami?",
+              header: "Approval",
+              options: [
+                {
+                  label: "Approve",
+                  description: "Allow this exact tool call.",
+                  preview: "Approve",
+                },
+                {
+                  label: "Deny",
+                  description: "Keep this tool call blocked.",
+                  preview: "Deny",
+                },
+              ],
+              multiSelect: false,
+            },
+          ],
+        });
+      } else {
+        expect(question.arguments).toContain("Canonical HITL review.");
+        expect(question.arguments).not.toContain("preview");
+      }
       expect(question.arguments).not.toContain("Model copy must not appear.");
       expect(outerStamp.callId).toMatch(ISSUED_NATIVE_QUESTION_ID);
       expect(prepared.toolCalls[0].wireId).toBe(outerStamp.callId);

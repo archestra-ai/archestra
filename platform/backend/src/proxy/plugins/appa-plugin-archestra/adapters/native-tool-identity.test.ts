@@ -81,6 +81,64 @@ describe("native local tool identities", () => {
     });
   });
 
+  const previewedReview: AskUserArguments = {
+    question: "Full review text.",
+    previewQuestion: "Approve slack__send_message?",
+    header: "Approval",
+    options: [
+      {
+        label: "Approve",
+        description: "Allow this exact tool call.",
+        preview: "Approve\n\ntext  Hello",
+      },
+      {
+        label: "Deny",
+        description: "Keep this tool call blocked.",
+        preview: "Deny\n\ntext  Hello",
+      },
+    ],
+    allowMultiple: false,
+  };
+
+  test("shows Claude Code the short question with option previews", () => {
+    expect(
+      new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(previewedReview),
+    ).toEqual({
+      questions: [
+        {
+          question: "Approve slack__send_message?",
+          header: "Approval",
+          options: previewedReview.options,
+          multiSelect: false,
+        },
+      ],
+    });
+  });
+
+  test("keeps the full question when Claude Code cannot show previews", () => {
+    const [question] = new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser({
+      ...previewedReview,
+      allowMultiple: true,
+    }).questions as Array<{
+      question: string;
+      options: Array<Record<string, unknown>>;
+    }>;
+    expect(question.question).toBe("Full review text.");
+    expect(question.options.some((option) => "preview" in option)).toBe(false);
+  });
+
+  test("other native question tools ignore previews", () => {
+    for (const converted of [
+      new AppaCodexAdapter().nativeQuestion.fromAskUser(previewedReview),
+      new AppaOpenCodeAdapter().nativeQuestion.fromAskUser(previewedReview),
+    ]) {
+      const text = JSON.stringify(converted);
+      expect(text).toContain("Full review text.");
+      expect(text).not.toContain("preview");
+      expect(text).not.toContain("Approve slack__send_message?");
+    }
+  });
+
   test("converts ask_user to Codex's native question schema", () => {
     const nativeQuestion = new AppaCodexAdapter().nativeQuestion;
     expect(nativeQuestion.isAvailable({})).toBe(false);

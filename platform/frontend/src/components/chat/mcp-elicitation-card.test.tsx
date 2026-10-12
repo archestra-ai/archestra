@@ -73,7 +73,7 @@ describe("McpElicitationCard", () => {
     });
   });
 
-  it("renders an OpenAPPA review inline with formatted arguments and submits approval", async () => {
+  it("renders an OpenAPPA review as a collapsed tool card and submits approval from Approve", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
     const request = openappaReview();
@@ -84,14 +84,20 @@ describe("McpElicitationCard", () => {
     const card = screen.getByTestId("mcp-elicitation-card");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("archestra__todo_write")).toBeInTheDocument();
+    expect(screen.getByText("Approval requested")).toBeInTheDocument();
+    // Arguments stay collapsed until the header opens them.
+    expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
+    await user.click(screen.getByText("archestra__todo_write"));
     expect(screen.getByText(/qa-hitl/)).toBeInTheDocument();
     expect(card).not.toHaveTextContent(/\\"/);
 
-    const submit = screen.getByRole("button", { name: "Submit" });
-    expect(submit).toBeDisabled();
-    await user.click(screen.getByRole("radio", { name: "approve" }));
-    expect(submit).toBeEnabled();
-    await user.click(submit);
+    expect(card).not.toHaveTextContent("APPA asks you to rule");
+    expect(card).not.toHaveTextContent("What this ruling would cover");
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Approve" }));
 
     expect(onRespond).toHaveBeenCalledExactlyOnceWith({
       id: "review-1",

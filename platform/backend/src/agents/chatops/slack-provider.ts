@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   buildSlackSlashCommandsForCommand,
   getSlackSlashCommandAction,
@@ -182,6 +182,12 @@ class SlackProvider implements ChatOpsProvider {
   }
 
   async handleInteractivePayload(payload: unknown): Promise<void> {
+    const argumentsView = this.parseViewArgumentsPayload(payload);
+    if (argumentsView) {
+      await this.openApprovalArgumentsView(argumentsView);
+      return;
+    }
+
     const approvalDecision = this.parseApprovalPayload(payload);
     if (approvalDecision) {
       await this.eventHandler?.handleInteractiveApprovalDecision(
@@ -751,9 +757,23 @@ class SlackProvider implements ChatOpsProvider {
       };
     };
 
-    const argsText = options.reviewText
-      ? undefined
-      : formatApprovalToolArgs(options.toolArgs);
+    // The arguments stay out of the message: "View arguments" opens them in
+    // a modal. A review without a structured tool shows its own text instead,
+    // and the remedy call's arguments it would otherwise get only name the plan.
+    const hasArgs =
+      !options.reviewText &&
+      !!options.toolArgs &&
+      Object.keys(options.toolArgs).length > 0;
+    const argumentsKey = hasArgs
+      ? await this.storeApprovalArguments({
+          toolName: options.toolName,
+          args: options.toolArgs ?? {},
+        })
+      : null;
+    const subject = options.reviewText
+      ? // The review text may carry column-aligned art; keep it monospace.
+        `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``
+      : `\`${options.toolName}\``;
     const postArgs = {
       channel: options.channelId,
       text: "",
@@ -762,28 +782,28 @@ class SlackProvider implements ChatOpsProvider {
           type: "section" as const,
           text: {
             type: "mrkdwn" as const,
-            // The review text may carry column-aligned art; keep it monospace.
-            text: options.reviewText
-              ? `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``
-              : `\`${options.toolName}\``,
+            text: `*Approval required*\n${subject}\nReview this tool call before it can continue.`,
           },
         },
-        ...(argsText
-          ? [
-              {
-                type: "section" as const,
-                text: {
-                  type: "mrkdwn" as const,
-                  text: `\`\`\`\n${argsText}\n\`\`\``,
-                },
-              },
-            ]
-          : []),
         {
           type: "actions" as const,
           elements: [
             generateButton("Approve", "primary", true, "approve"),
-            generateButton("Decline", "danger", false, "decline"),
+            generateButton("Deny", "danger", false, "decline"),
+            ...(argumentsKey
+              ? [
+                  {
+                    type: "button" as const,
+                    text: {
+                      type: "plain_text" as const,
+                      text: "View arguments",
+                      emoji: true,
+                    },
+                    action_id: `${VIEW_ARGUMENTS_ACTION_PREFIX}${options.approvalId}`,
+                    value: argumentsKey,
+                  },
+                ]
+              : []),
           ],
         },
       ],
@@ -804,7 +824,7 @@ class SlackProvider implements ChatOpsProvider {
     }
     const status = options.approved
       ? ":white_check_mark: Approved"
-      : ":x: Declined";
+      : ":x: Denied";
     const text = options.decidedByUserId
       ? `\`${options.toolName}\`: ${status} by <@${options.decidedByUserId}>`
       : `\`${options.toolName}\`: ${status}`;
@@ -2490,6 +2510,97 @@ class SlackProvider implements ChatOpsProvider {
     cleaned = decodeSlackEntities(cleaned);
     return cleaned;
   }
+
+  /**
+   * Parse a click on an approval's "View arguments" button. It is not a
+   * decision: the button only opens the arguments in a modal.
+   */
+  private parseViewArgumentsPayload(
+    payload: unknown,
+  ): { argumentsKey: string; triggerId: string } | null {
+    const p = payload as SlackInteractivePayload;
+    if (p.type !== "block_actions" || !p.actions?.length) {
+      return null;
+    }
+    const action = p.actions[0];
+    if (
+      !action.action_id?.startsWith(VIEW_ARGUMENTS_ACTION_PREFIX) ||
+      !action.value ||
+      !p.trigger_id
+    ) {
+      return null;
+    }
+    return { argumentsKey: action.value, triggerId: p.trigger_id };
+  }
+
+  /**
+   * Keep an approval's arguments where its "View arguments" click can reach
+   * them: a Slack button value is capped at 2,000 chars, so the button carries
+   * only the key.
+   */
+  private async storeApprovalArguments(
+    entry: SlackApprovalArguments,
+  ): Promise<string> {
+    const key = randomUUID();
+    await cacheManager.set(
+      approvalArgumentsCacheKey(key),
+      entry,
+      APPROVAL_ARGUMENTS_TTL_MS,
+    );
+    return key;
+  }
+
+  private async openApprovalArgumentsView(params: {
+    argumentsKey: string;
+    triggerId: string;
+  }): Promise<void> {
+    if (!this.client) {
+      throw new Error("SlackProvider not initialized");
+    }
+    const entry = await cacheManager.get<SlackApprovalArguments>(
+      approvalArgumentsCacheKey(params.argumentsKey),
+    );
+    const argsText = entry ? formatApprovalToolArgs(entry.args) : null;
+    const blocks = entry
+      ? [
+          {
+            type: "section" as const,
+            text: { type: "mrkdwn" as const, text: `\`${entry.toolName}\`` },
+          },
+          {
+            type: "section" as const,
+            text: {
+              type: "mrkdwn" as const,
+              text: `\`\`\`\n${argsText ?? "{}"}\n\`\`\``,
+            },
+          },
+        ]
+      : [
+          {
+            type: "section" as const,
+            text: {
+              type: "mrkdwn" as const,
+              text: "These arguments are no longer available.",
+            },
+          },
+        ];
+    try {
+      await this.client.views.open({
+        trigger_id: params.triggerId,
+        view: {
+          type: "modal",
+          title: { type: "plain_text", text: "Arguments" },
+          close: { type: "plain_text", text: "Close" },
+          blocks,
+        },
+      });
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error) },
+        "[SlackProvider] views.open (approval arguments) failed",
+      );
+    }
+  }
 }
 
 export default SlackProvider;
@@ -2872,6 +2983,22 @@ interface SlackInteractivePayload {
   team?: { id: string };
   message?: { ts: string; thread_ts?: string };
   response_url?: string;
+  trigger_id?: string;
+}
+
+/** The call an approval's "View arguments" modal shows. */
+type SlackApprovalArguments = {
+  toolName: string;
+  args: Record<string, unknown>;
+};
+
+const VIEW_ARGUMENTS_ACTION_PREFIX = "approval_view_arguments_";
+
+/** As long as an approval can wait for a decision. */
+const APPROVAL_ARGUMENTS_TTL_MS = 7 * TimeInMs.Day;
+
+function approvalArgumentsCacheKey(key: string): AllowedCacheKey {
+  return `${CacheKey.SlackApprovalArguments}-${key}`;
 }
 
 /** Slack's markdown converter can absorb the next line into a bare URL. */

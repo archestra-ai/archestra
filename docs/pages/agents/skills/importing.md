@@ -17,13 +17,15 @@ You can bring skills in from three places:
 
 ## Import from GitHub or GitLab
 
-Point Archestra at a repository, and it finds every skill folder in it, however deep. `skills/security/appsec/threat-model/` works as well as `skills/pdf/`.
+Point Archestra at a repository, and it finds every folder with a `SKILL.md`, however deep. `skills/security/appsec/threat-model/` works as well as `skills/pdf/`.
 
 1. Go to **Skills** and click **Add new skill**. Pick a popular repository, search the skill index, or click **Git repository**.
 2. Pick **GitHub** or **GitLab**.
 3. Pick how to sign in: a GitHub App, a GitLab token, or **Public repository** (**Public project** on GitLab).
-4. Pick the repository from the list, or paste its URL. A link to a folder imports only that folder. To set a branch or folder, open **Advanced**.
+4. Pick the repository, or paste its URL. A link to a folder imports only that folder. To set a branch or folder, open **Advanced**.
 5. Click **Find skills**, select the skills, pick a **Keep in sync** schedule and who can use them, and click **Import**.
+
+The skills then show on **Skills**, marked **synced**.
 
 ![The Import skills dialog, asking whether the repository is on GitHub or GitLab](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
 
@@ -36,7 +38,7 @@ A private repository needs a credential that the whole organization shares:
 - **GitHub:** a GitHub App installed on the repository. Add one under **Settings → Credentials**.
 - **GitLab:** an access token. Click **Add a GitLab token**, and enter the GitLab URL, a name, and a project, group, or personal access token with the `read_api` scope.
 
-Saving a credential needs [`credential:create`](/docs/reference/permissions#credential:create).
+Picking a saved credential needs [`credential:read`](/docs/reference/permissions#credential:read). Saving one needs [`credential:create`](/docs/reference/permissions#credential:create).
 
 <span id="github-enterprise-server"></span>
 

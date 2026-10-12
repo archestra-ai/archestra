@@ -19,7 +19,11 @@ A **GitHub App** always belongs to the organization. It holds an API URL, app ID
 
 Install the GitHub App on the repositories it needs. Its installation permissions determine the token's access. Individual integrations describe their required permissions.
 
-A **GitLab token** always belongs to the organization. It holds a GitLab URL and a project, group, or personal access token. Skills, plugins, and [Git sync](/docs/agents/guardrails/policies#git-sync) use it for gitlab.com and self-managed GitLab. Add one with **Add a GitLab token** when you pick a GitLab repository. Archestra checks the token before it saves it.
+A **GitLab token** always belongs to the organization. Skills, plugins, and [Git sync](/docs/agents/guardrails/policies#git-sync) use it for gitlab.com and self-managed GitLab.
+
+- It holds a GitLab URL and an access token.
+- You add it while you pick a GitLab repository. See [Private Repositories](/docs/agents/skills/importing#private-repositories).
+- Archestra checks the token with GitLab before it saves it.
 
 A **GitHub user connection** links your account to an organization-managed App. Authorize once through GitHub. Every harness using that credential acts as your GitHub user. Access is limited to permissions held by both you and the App.
 

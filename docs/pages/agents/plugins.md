@@ -29,16 +29,18 @@ Archestra stores the files as you write them. It does not convert them between c
 
 ## Import From GitHub or GitLab
 
-Import a whole marketplace from a GitHub or GitLab repository, on the cloud or your own host. A repository without a marketplace file works too: Archestra lists its plugin folders, such as `plugins/<name>/` with a `plugin.json`.
+Bring a team's plugins in from any GitHub or GitLab repository, on the cloud or your own host, and review every update before it installs. A repository without a marketplace file works too: Archestra lists each folder with a `plugin.json`, such as `plugins/<name>/`.
 
 1. Go to **Plugins** and click **Add new plugin**. Pick a popular marketplace, or click **Git repository**.
 2. Pick **GitHub** or **GitLab**, then how to sign in, then the repository.
 3. Click **Find plugins**, select the plugins, preview their files, and import them.
 
+The plugins then show on **Plugins**.
+
 What to know:
 
-- **Private and self-hosted repositories** need a GitHub App or a GitLab token. They work the same way as for [skills](/docs/agents/skills/importing#private-repositories).
-- Imported files are read-only here. Edit them in their repository. The **Source** section on the plugin's page sets the ref, the check schedule, and the credential.
+- Private and self-hosted repositories need a GitHub App or a GitLab token, as for [skills](/docs/agents/skills/importing#private-repositories).
+- Imported files are read-only here. Edit them in their repository. The **Source** section on the plugin's page sets the **Branch**, **Keep in sync**, and **Access**.
 - Updates wait for you. A new commit shows **Review update**. Compare the files and click **Approve and apply**. Until then, the current files stay in use.
 
 <span id="reviewing-updates"></span><span id="installing-plugins"></span>

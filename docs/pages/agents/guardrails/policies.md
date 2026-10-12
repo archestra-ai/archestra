@@ -82,19 +82,18 @@ With Git sync, the policy lives in a GitHub or GitLab repository, and every chan
 2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install a new App on the policy repository only.
 3. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
-If repository rules block the commit, setup opens an initial pull request instead. Your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass. Until then, the Guardrails pages show **Merge your initial policy**.
+If repository rules block the commit, setup opens an initial pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass. Until then, the Guardrails pages show **Merge your initial policy**.
 
 ### GitLab
 
 GitLab sync works with gitlab.com and self-managed GitLab, through an access token with the `api` scope.
 
-1. Pick a saved token, or click **Add a GitLab token** and enter the GitLab URL, a name, and the token.
-2. Choose the policy project:
-   - **New project:** pick a **Group**, or leave **Your namespace**, and enter a **Project name**. Click **Create project**. Setup creates a private project and adds the OpenAPPA files with your current policy.
+1. Pick a saved token, or click [**Add a GitLab token**](/docs/agents/skills/importing#private-repositories).
+2. Choose the policy project. To change the branch, policy file, validations folder, or schedule, open **Advanced** first.
+   - **New project:** pick a **Group**, or **Your namespace** for your own account, and enter a **Project name**. Click **Create project**. Setup creates a private project and adds the OpenAPPA files with your current policy.
    - **Existing project:** pick it and click **Connect project**.
-3. To change the branch, policy file, validations folder, or schedule, open **Advanced** before you connect.
 
-If GitLab refuses the first commit to a protected branch, setup stops with an error. Use a token with the Maintainer role, or allow the initial push to that branch.
+If GitLab refuses the first commit to a protected branch, setup stops with an error. To fix it, use a token with the Maintainer role, or allow the initial push to that branch.
 
 ### Repository Checks
 
@@ -111,7 +110,7 @@ After the configuration agent saves a policy, the banner in chat links to **Set 
 
 What to know:
 
-- Setting up sync needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update). Creating a GitHub App or saving a GitLab token also needs [`credential:create`](/docs/reference/permissions#credential:create).
+- Setting up sync needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) and, to pick a saved App or token, [`credential:read`](/docs/reference/permissions#credential:read). Creating a GitHub App or saving a GitLab token also needs [`credential:create`](/docs/reference/permissions#credential:create).
 - The GitHub App needs only the policy repository, with **Read & write** on Contents and Pull requests. On GitHub Enterprise Server, an App created in setup also gets Workflows **Read & write**.
 - A change that edits a battery credential waits until someone with [`credential:update`](/docs/reference/permissions#credential:update) clicks **Accept repository text** on **Batteries**.
 

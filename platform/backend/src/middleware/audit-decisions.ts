@@ -993,6 +993,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "approved tool outputs and processing receipts",
   },
+  openappaDispatchLeasesTable: {
+    audited: false,
+    reason: "native dispatch ownership markers; no user-facing state",
+  },
   openappaEmbeddedPeerMessagesTable: {
     audited: false,
     reason: "runtime-owned peer inbox; admissions belong to OpenAPPA history",

@@ -973,21 +973,14 @@ export async function evaluateToolCalls(
   policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
-  // Validate tool call IDs and arguments before dispatch.
+  const malformedIds = new Set<string>();
   for (const call of calls) {
     if (!call.id || ids.has(call.id)) {
       throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
     }
     ids.add(call.id);
-    if (typeof call.arguments === "string") {
-      try {
-        JSON.parse(call.arguments);
-      } catch {
-        throw new ApiError(
-          400,
-          "OpenAPPA cannot release malformed tool arguments",
-        );
-      }
+    if (typeof call.arguments === "string" && !isJson(call.arguments)) {
+      malformedIds.add(call.id);
     }
   }
   const normalized = normalizeToolCallsForPolicy(calls, {
@@ -998,6 +991,15 @@ export async function evaluateToolCalls(
   const dispatchCall = sessionDispatch(session, policy);
   const results = await Promise.allSettled(
     calls.map(async (call, index) => {
+      // Malformed arguments (often a truncated stream) are denied before any
+      // bypass or dispatch, so nothing runs on them and the batch stands.
+      if (malformedIds.has(call.id)) {
+        return {
+          kind: "deny" as const,
+          feedback:
+            "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.",
+        };
+      }
       const target = normalized[index];
       // Direct remedy control calls bypass evaluation and execute via gateway.
       // Only the declared control tool itself, in its own namespace: a
@@ -1144,6 +1146,15 @@ export async function evaluateToolCalls(
   return results.map(
     (result) => (result as PromiseFulfilledResult<AppaCallDecision>).value,
   );
+}
+
+function isJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Verdict on a call the provider already ran. */

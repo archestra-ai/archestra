@@ -13,7 +13,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -42,6 +42,7 @@ import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SecretInput } from "@/components/ui/secret-input";
 import { useInternalAgents } from "@/lib/agent.query";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   useConvertSlackAppToAgentBot,
   useCreateSlackAgentBotApp,
@@ -59,8 +60,9 @@ type ConnectionMode = "socket" | "webhook";
 /**
  * Slack, set up as one bot per agent. Each bot is its own Slack app that
  * always answers as its agent, so people @mention the agent by name — several
- * can share a channel and a thread. With a Slack app configuration token saved,
- * Archestra creates each app itself.
+ * can share a channel and a thread. With their own Slack app configuration
+ * token saved, Archestra creates each app for the person adding the bot. Slack
+ * makes that person the app's only collaborator, so they then add their team.
  */
 export function SlackAgentBotsSection({
   connectionMode,
@@ -76,15 +78,38 @@ export function SlackAgentBotsSection({
   const canCreateApps = data?.canCreateApps ?? false;
   const { data: agents = [] } = useInternalAgents();
   const deleteMutation = useDeleteSlackAgentBot();
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
 
   const [connectOpen, setConnectOpen] = useState(false);
+  // Opened from "Add Slack bot": go on to add one once the token is saved.
+  const [addAfterConnect, setAddAfterConnect] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [manualAgent, setManualAgent] = useState<AgentRef | null>(null);
   const [finishBot, setFinishBot] = useState<FinishTarget | null>(null);
   const [removeBot, setRemoveBot] = useState<AgentRef | null>(null);
   const [editBot, setEditBot] = useState<AgentBot | null>(null);
+  const [shareBot, setShareBot] = useState<ShareTarget | null>(null);
 
-  useInstallResultToast();
+  // Right after a one-click install, the creator gives their team access.
+  useInstallResult((agentId) => {
+    const bot = bots.find((candidate) => candidate.agentId === agentId);
+    if (bot && bot.createdBy?.id === userId) {
+      setShareBot({
+        appId: bot.appId,
+        handle: bot.handle ?? slackHandleFor(appName, bot.agentName),
+      });
+    }
+  }, isLoading || !userId);
+
+  const startAdd = () => {
+    if (canCreateApps) {
+      setAddOpen(true);
+    } else {
+      setAddAfterConnect(true);
+      setConnectOpen(true);
+    }
+  };
 
   // Arriving from an agent's page (?addBot=<agentId>): add that agent's bot.
   const searchParams = useSearchParams();
@@ -94,8 +119,12 @@ export function SlackAgentBotsSection({
   useEffect(() => {
     if (!addBotFor || isLoading) return;
     setPresetAgentId(addBotFor);
-    if (canCreateApps) setAddOpen(true);
-    else setConnectOpen(true);
+    if (canCreateApps) {
+      setAddOpen(true);
+    } else {
+      setAddAfterConnect(true);
+      setConnectOpen(true);
+    }
     router.replace("/settings/messaging-channels/slack");
   }, [addBotFor, isLoading, canCreateApps, router]);
 
@@ -114,6 +143,7 @@ export function SlackAgentBotsSection({
       appId: bot.appId,
       needsBotToken: !bot.installed,
       needsAppLevelToken: bot.needsAppLevelToken,
+      addTeam: Boolean(userId) && bot.createdBy?.id === userId,
     });
 
   return (
@@ -141,12 +171,7 @@ export function SlackAgentBotsSection({
           </p>
         </div>
         {!isEmpty && (
-          <Button
-            size="sm"
-            onClick={() =>
-              canCreateApps ? setAddOpen(true) : setConnectOpen(true)
-            }
-          >
+          <Button size="sm" onClick={startAdd}>
             <Plus />
             <span>Add Slack bot</span>
           </Button>
@@ -177,11 +202,7 @@ export function SlackAgentBotsSection({
                 its answers and has a Stop button.
               </p>
             </div>
-            <Button
-              onClick={() =>
-                canCreateApps ? setAddOpen(true) : setConnectOpen(true)
-              }
-            >
+            <Button onClick={startAdd}>
               {canCreateApps ? (
                 <span>Add Slack bot</span>
               ) : (
@@ -191,12 +212,12 @@ export function SlackAgentBotsSection({
             <p className="text-xs text-muted-foreground">
               {data?.unassignedApp ? (
                 <span>
-                  You paste one token from Slack; then your existing app becomes
-                  an agent's bot, keeping its channels and DMs.
+                  You paste your token from Slack; then your existing app
+                  becomes an agent's bot, keeping its channels and DMs.
                 </span>
               ) : (
                 <span>
-                  Takes about a minute. You paste one token from Slack;{" "}
+                  Takes about a minute. You paste your token from Slack;{" "}
                   {appName} creates the apps.
                 </span>
               )}
@@ -248,6 +269,13 @@ export function SlackAgentBotsSection({
                         </span>
                       )}
                     </span>
+                    {bot.createdBy && (
+                      <span className="truncate text-xs text-muted-foreground">
+                        {bot.createdBy.id === userId
+                          ? "Your Slack app"
+                          : `${bot.createdBy.name ?? "A teammate"}'s Slack app — ask them to add you in Slack`}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="truncate pl-12 text-sm @3xl:pl-0">
@@ -293,6 +321,20 @@ export function SlackAgentBotsSection({
                           Open in Slack
                         </a>
                       </DropdownMenuItem>
+                      {bot.createdBy?.id === userId && (
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            setShareBot({
+                              appId: bot.appId,
+                              handle:
+                                bot.handle ??
+                                slackHandleFor(appName, bot.agentName),
+                            })
+                          }
+                        >
+                          Give your team access
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         variant="destructive"
                         onSelect={() =>
@@ -336,11 +378,22 @@ export function SlackAgentBotsSection({
       {connectOpen && (
         <ConnectSlackDialog
           replacing={canCreateApps}
-          onClose={() => setConnectOpen(false)}
+          onClose={() => {
+            setConnectOpen(false);
+            setAddAfterConnect(false);
+          }}
           onConnected={() => {
             setConnectOpen(false);
-            if (bots.length === 0 && !data?.unassignedApp) setAddOpen(true);
+            if (addAfterConnect && !data?.unassignedApp) setAddOpen(true);
+            setAddAfterConnect(false);
           }}
+        />
+      )}
+
+      {shareBot && (
+        <ShareWithTeamDialog
+          target={shareBot}
+          onClose={() => setShareBot(null)}
         />
       )}
 
@@ -433,7 +486,11 @@ type FinishTarget = AgentRef & {
   appId: string;
   needsBotToken: boolean;
   needsAppLevelToken: boolean;
+  /** The viewer created the app, so only they can add the team in Slack. */
+  addTeam: boolean;
 };
+
+type ShareTarget = { appId: string; handle: string };
 
 /** Soft tints that tell bots apart at a glance; text stays readable on each. */
 const TONES = [
@@ -692,12 +749,14 @@ function AdvancedSettings({
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-col gap-0.5">
-            <p className="text-sm font-semibold">Slack configuration token</p>
+            <p className="text-sm font-semibold">
+              Your Slack configuration token
+            </p>
             <p className="text-sm text-muted-foreground">
               {canCreateApps ? (
                 <span>Saved, and renewed automatically.</span>
               ) : (
-                <span>Not saved — Slack apps are set up by hand.</span>
+                <span>Yours is not saved. Add it to create Slack bots.</span>
               )}
             </p>
           </div>
@@ -710,8 +769,8 @@ function AdvancedSettings({
             <div className="flex flex-col gap-0.5">
               <p className="text-sm font-semibold">Update Slack apps</p>
               <p className="text-sm text-muted-foreground">
-                Re-apply the agent experience, events, and scopes to every
-                connected app.
+                Re-apply the agent experience, events, and scopes to the
+                connected apps you can manage in Slack.
               </p>
             </div>
             <Button
@@ -734,8 +793,9 @@ function AdvancedSettings({
 }
 
 /**
- * Asks once for the token pair that lets Archestra create Slack apps. Slack
- * shows it under "Your App Configuration Tokens" on api.slack.com/apps.
+ * Asks once per person for the token pair that lets Archestra create Slack
+ * apps for them. Slack shows it under "Your App Configuration Tokens" on
+ * api.slack.com/apps.
  */
 function ConnectSlackDialog({
   replacing,
@@ -759,8 +819,8 @@ function ConnectSlackDialog({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={replacing ? "Replace configuration token" : "Connect Slack"}
-      description={`${appName} creates a Slack app for each agent with this token. You do this once; the token renews itself.`}
+      title={replacing ? "Replace your configuration token" : "Connect Slack"}
+      description={`${appName} creates Slack apps with your own token, so they are yours in Slack. You do this once; the token renews itself.`}
       size="small"
     >
       <DialogForm
@@ -926,6 +986,7 @@ function AddBotDialog({
             appId: created.appId,
             needsBotToken: true,
             needsAppLevelToken: connectionMode === "socket",
+            addTeam: true,
           });
         }}
       >
@@ -1054,6 +1115,8 @@ function FinishSetupDialog({
   const canSave =
     (!target.needsBotToken || botToken) &&
     (!target.needsAppLevelToken || appLevelToken);
+  const teamStep =
+    Number(target.needsBotToken) + Number(target.needsAppLevelToken) + 1;
 
   return (
     <FormDialog
@@ -1123,6 +1186,11 @@ function FinishSetupDialog({
                 </div>
               </Step>
             )}
+            {target.addTeam && (
+              <Step number={teamStep}>
+                <TeamAccessText appId={target.appId} />
+              </Step>
+            )}
           </ol>
         </DialogBody>
         <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
@@ -1164,17 +1232,78 @@ function SlackAppLink({
   );
 }
 
-/** Report the result of a one-click install Slack redirected back from. */
-function useInstallResultToast() {
+/**
+ * Slack makes whoever created an app its only collaborator, and has no API to
+ * add others, so the creator adds their team on the app's Slack page.
+ */
+function TeamAccessText({ appId }: { appId: string }) {
+  return (
+    <span>
+      Only you can open this app's settings in Slack. On its{" "}
+      <SlackAppLink appId={appId} path="collaborators">
+        Collaborators page
+      </SlackAppLink>
+      , add the teammates who should manage it too.
+    </span>
+  );
+}
+
+function ShareWithTeamDialog({
+  target,
+  onClose,
+}: {
+  target: ShareTarget;
+  onClose: () => void;
+}) {
+  return (
+    <FormDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      title={`Give your team access to @${target.handle}`}
+      description="Slack created the app under your account."
+      size="small"
+    >
+      <DialogBody className="text-sm leading-relaxed">
+        <TeamAccessText appId={target.appId} />
+      </DialogBody>
+      <DialogStickyFooter className="mt-0 border-t-0 shadow-none">
+        <Button type="button" onClick={onClose}>
+          Done
+        </Button>
+      </DialogStickyFooter>
+    </FormDialog>
+  );
+}
+
+/**
+ * Report the result of a one-click install Slack redirected back from, and
+ * hand the installed bot's agent to `onInstalled` once the bots are loaded.
+ */
+function useInstallResult(
+  onInstalled: (agentId: string) => void,
+  loading: boolean,
+) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const installed = searchParams.get("slackBotInstalled");
   const error = searchParams.get("slackBotError");
+  const onInstalledRef = useRef(onInstalled);
+  onInstalledRef.current = onInstalled;
+  // Each result is reported once, even before the URL drops it.
+  const handled = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!installed && !error) return;
-    if (installed) toast.success("Slack bot installed");
+    if (loading || (!installed && !error)) return;
+    const result = `${installed}|${error}`;
+    if (handled.current === result) return;
+    handled.current = result;
+    if (installed) {
+      toast.success("Slack bot installed");
+      onInstalledRef.current(installed);
+    }
     if (error) toast.error(`Slack bot install failed: ${error}`);
     router.replace("/settings/messaging-channels/slack");
-  }, [installed, error, router]);
+  }, [installed, error, router, loading]);
 }

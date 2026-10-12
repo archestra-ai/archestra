@@ -64,6 +64,19 @@ describe("openappaFailure", () => {
     expect(failure.cause).toBe(cause);
   });
 
+  test("a dispatch that lost its lease asks the client to retry", () => {
+    const failure = openappaFailure(
+      new Error("OpenAPPA lost its lease on this operation; retry the request"),
+    );
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+    expect(failure.retryAfterSeconds).toBeGreaterThan(0);
+    expect(failure.message).toBe(
+      "OpenAPPA could not safely complete this operation: another request of this session took over this operation. Retry the request.",
+    );
+  });
+
   test("an interrupted session requires recovery rather than automatic retries", () => {
     const cause = new Error(
       "OpenAPPA session has interrupted processing; operator recovery is required",

@@ -31,14 +31,17 @@ const a2aTaskApprovalRequestTable = pgTable(
     /** The exact `execute_remedy_plan` arguments, proxy stamps included. */
     remedyArguments: jsonb("remedy_arguments").$type<Record<string, unknown>>(),
     /**
-     * The only user who may decide, in Slack. Null when the A2A caller
+     * The only user who may decide, in a chat (Slack or MS Teams). Null when
+     * the A2A caller
      * answers the task's approvals.
      */
     reviewerUserId: text("reviewer_user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),
-    slackChannelId: text("slack_channel_id"),
-    slackThreadTs: text("slack_thread_ts"),
+    // The chat channel and thread the review was posted to. The columns were
+    // named when only Slack posted reviews; they hold MS Teams ids too.
+    chatChannelId: text("slack_channel_id"),
+    chatThreadId: text("slack_thread_ts"),
     expiresAt: timestamp("expires_at", { mode: "date" }),
     ruling: text("ruling").$type<"approve" | "deny">(),
     decidedAt: timestamp("decided_at", { mode: "date" }),

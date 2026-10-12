@@ -27,7 +27,10 @@ import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import db, { schema } from "@/database";
 import {
+  A2AContextModel,
   A2AMessageModel,
+  A2ATaskApprovalRequestModel,
+  A2ATaskModel,
   AgentModel,
   AgentTeamModel,
   ChatOpsChannelBindingModel,
@@ -97,6 +100,28 @@ describe("matchesAgentName", () => {
     expect(matchesAgentName("SalesTeam", "Sales")).toBe(false);
   });
 });
+
+/** A paused task waiting on one plain tool approval, as a click finds it. */
+async function pausedTaskWithPlainApproval(actorId: string): Promise<string> {
+  const context = await A2AContextModel.create({ actorKind: "user", actorId });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    state: "TASK_STATE_INPUT_REQUIRED",
+  });
+  await A2ATaskApprovalRequestModel.bulkCreate({
+    taskId: task.id,
+    approvalRequests: [
+      {
+        approvalId: "approval-1",
+        toolCallId: "call-1",
+        toolName: "some_tool",
+        approved: false,
+        resolved: false,
+      },
+    ],
+  });
+  return task.id;
+}
 
 describe("ChatOpsManager security validation", () => {
   /**
@@ -2245,7 +2270,7 @@ describe("ChatOpsManager security validation", () => {
     const manager = new ChatOpsManager();
 
     const decision: ChatOpsApprovalDecision = {
-      taskId: "task-1",
+      taskId: await pausedTaskWithPlainApproval(user.id),
       approvalId: "approval-1",
       approved: true,
       toolName: "some_tool",
@@ -2307,7 +2332,7 @@ describe("ChatOpsManager security validation", () => {
     const manager = new ChatOpsManager();
 
     const decision: ChatOpsApprovalDecision = {
-      taskId: "task-1",
+      taskId: await pausedTaskWithPlainApproval(user.id),
       approvalId: "approval-1",
       approved: true,
       toolName: "some_tool",

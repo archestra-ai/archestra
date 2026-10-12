@@ -21,17 +21,20 @@ const CHANNEL = "C123";
 const THREAD = "1700000000.000100";
 const SESSION_ID = `chatops:slack:${CHANNEL}:${THREAD}`;
 
-function slackProvider(emails: Record<string, string>) {
+function chatProvider(
+  providerId: "slack" | "ms-teams",
+  emails: Record<string, string>,
+) {
   const provider = {
-    providerId: "slack",
-    displayName: "Slack",
+    providerId,
+    displayName: providerId,
     isConfigured: () => true,
     initialize: async () => {},
     cleanup: async () => {},
     validateWebhookRequest: async () => true,
     handleValidationChallenge: () => null,
     parseWebhookNotification: async () => null,
-    sendReply: async () => "reply-id",
+    sendReply: vi.fn(async () => "reply-id"),
     parseInteractivePayload: () => null,
     sendAgentSelectionCard: async () => {},
     getThreadHistory: async () => [],
@@ -51,10 +54,12 @@ function slackProvider(emails: Record<string, string>) {
 }
 
 async function setup({
+  providerId,
   makeUser,
   makeOrganization,
   makeInternalAgent,
 }: {
+  providerId: "slack" | "ms-teams";
   makeUser: (o?: { email?: string }) => Promise<{ id: string; email: string }>;
   makeOrganization: () => Promise<{ id: string }>;
   makeInternalAgent: (o: { organizationId: string }) => Promise<{ id: string }>;
@@ -65,7 +70,7 @@ async function setup({
   const agent = await makeInternalAgent({ organizationId: org.id });
   await ChatOpsChannelBindingModel.create({
     organizationId: org.id,
-    provider: "slack",
+    provider: providerId,
     channelId: CHANNEL,
     workspaceId: "T1",
     agentId: agent.id,
@@ -105,10 +110,10 @@ async function setup({
     taskId: task.id,
     approvalRequests,
     answerer: {
-      kind: "slack",
+      kind: "chat",
       reviewerUserId: reviewer.id,
       channelId: CHANNEL,
-      threadTs: THREAD,
+      threadId: THREAD,
     },
     now: new Date(),
   });
@@ -153,11 +158,12 @@ test("only the reviewer's Slack click decides the OpenAPPA review", async ({
     .spyOn(A2AManager.prototype, "sendMessage")
     .mockResolvedValue({});
   const { decision } = await setup({
+    providerId: "slack",
     makeUser,
     makeOrganization,
     makeInternalAgent,
   });
-  const provider = slackProvider({
+  const provider = chatProvider("slack", {
     U_REVIEWER: "reviewer@example.com",
     U_BYSTANDER: "bystander@example.com",
   });
@@ -206,6 +212,62 @@ test("only the reviewer's Slack click decides the OpenAPPA review", async ({
     expect(provider.sendEphemeralMessage).toHaveBeenLastCalledWith(
       expect.objectContaining({ text: "This review was already declined." }),
     );
+  } finally {
+    resume.mockRestore();
+  }
+});
+
+test("only the reviewer's MS Teams click decides the OpenAPPA review", async ({
+  makeUser,
+  makeOrganization,
+  makeInternalAgent,
+}) => {
+  const resume = vi
+    .spyOn(A2AManager.prototype, "sendMessage")
+    .mockResolvedValue({});
+  const { decision } = await setup({
+    providerId: "ms-teams",
+    makeUser,
+    makeOrganization,
+    makeInternalAgent,
+  });
+  const provider = chatProvider("ms-teams", {});
+  // MS Teams resolves the clicker's email itself and updates the card
+  // through its own callback.
+  const teamsClick = (email: string, approved: boolean) => ({
+    ...decision("aad-id", approved),
+    approverEmail: email,
+  });
+  const updateCard = vi.fn(async () => {});
+  const manager = new ChatOpsManager();
+
+  try {
+    await manager.handleInteractiveApprovalDecision(
+      provider,
+      teamsClick("bystander@example.com", true),
+      updateCard,
+    );
+    expect(resume).not.toHaveBeenCalled();
+    expect(updateCard).not.toHaveBeenCalled();
+    // MS Teams cannot show a message to one person, so the refusal is a reply.
+    expect(provider.sendReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Only the person who asked for this action can approve or decline it.",
+      }),
+    );
+
+    await manager.handleInteractiveApprovalDecision(
+      provider,
+      teamsClick("reviewer@example.com", true),
+      updateCard,
+    );
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(resume.mock.calls[0][0].request.message.metadata).toMatchObject({
+      taskOps: {
+        approvalDecisions: [{ approvalId: "approval-1", approved: true }],
+      },
+    });
+    expect(updateCard).toHaveBeenCalledTimes(1);
   } finally {
     resume.mockRestore();
   }

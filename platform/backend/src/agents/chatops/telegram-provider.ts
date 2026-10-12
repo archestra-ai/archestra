@@ -27,6 +27,7 @@ import {
 } from "./constants";
 import {
   errorMessage,
+  formatApprovalReviewText,
   formatApprovalToolArgs,
   stripDuplicateAgentFooter,
 } from "./utils";
@@ -277,10 +278,16 @@ class TelegramProvider implements ChatOpsProvider {
       APPROVAL_CALLBACK_TTL_MS,
     );
 
-    const argsText = formatApprovalToolArgs(options.toolArgs);
-    const text = argsText
-      ? `\`${options.toolName}\`\n\`\`\`\n${argsText}\n\`\`\``
-      : `\`${options.toolName}\``;
+    // An OpenAPPA review's text names the reviewed call itself; the tool is
+    // only the remedy that carries it.
+    const argsText = options.reviewText
+      ? undefined
+      : formatApprovalToolArgs(options.toolArgs);
+    const text = options.reviewText
+      ? `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``
+      : argsText
+        ? `\`${options.toolName}\`\n\`\`\`\n${argsText}\n\`\`\``
+        : `\`${options.toolName}\``;
 
     const metadata = options.originalMessage.metadata ?? {};
     await this.callApi("sendMessage", {
@@ -309,7 +316,9 @@ class TelegramProvider implements ChatOpsProvider {
     await this.callApi("editMessageText", {
       chat_id: options.channelId,
       message_id: Number(options.messageKey),
-      text: `${options.toolName}: ${status}`,
+      text: options.decidedByName
+        ? `${options.toolName}: ${status} by ${options.decidedByName}`
+        : `${options.toolName}: ${status}`,
     });
   }
 

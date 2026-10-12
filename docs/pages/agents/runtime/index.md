@@ -55,7 +55,21 @@ What to know:
 
 - Each person connects their own subscription before their first run. Subscription usage shows in the logs, but it does not count toward cost limits.
 - Tools run with the permissions of the person who started the run.
-- Repository tokens and other secrets go under **Environment variables** on the **Agent Runtime** tab. Mark them **Secret**. Connections that several agents share go in [Credentials](/docs/admin/security/credentials).
+
+### Clone a Private GitHub Repository
+
+The built-in coding agent images use `GITHUB_TOKEN` to authenticate Git commands, including `git clone`.
+
+1. Save a GitHub token in [Credentials](/docs/admin/security/credentials), with access to the repository. Cloning needs read access to repository contents; pushing needs write access.
+2. Open the agent's **Agent Runtime** tab. Under **Environment**, click **Add variable**.
+3. Set **Key** to `GITHUB_TOKEN` and **Type** to **Secret**. Under **Secret source**, select your saved credential.
+4. Save the agent, start a new run, and ask it to clone the repository using its HTTPS URL. A successful clone creates the repository's directory in the workspace.
+
+What to know:
+
+- For a token used only by this agent, choose **Resource-specific secret** instead. Secret values are provided after saving; turn on **Required variable** to have Chat prompt for a missing value before a run.
+- **Accept credentials from a connected client** controls [credential transfers during handoff](/docs/agents/runtime/handoff#pass-a-credential). It is not required for secrets configured under **Environment**.
+- To compile code with an additional toolchain, such as Go, [extend the agent image](/docs/agents/runtime/custom-images#add-a-toolchain).
 
 ## Run a Task
 

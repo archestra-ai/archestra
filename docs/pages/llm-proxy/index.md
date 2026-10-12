@@ -58,7 +58,7 @@ In `X-Archestra-Meta`, a segment can be empty, but no value can contain `/`. A s
 
 To tie a request to a person for certain, use a credential that names them. See [Attribution in Logs](/docs/llm-proxy/authentication#attribution-in-logs).
 
-For Guardrails, send a session ID too. Claude Code, Codex CLI, and OpenCode send it by themselves. Any other client, such as [n8n](/docs/integrations/n8n) or custom apps, adds `X-Appa-Session-ID`. See [Session Headers](/docs/agents/guardrails/clients#session-headers).
+For Guardrails, send a session ID too. Claude Code, Codex CLI, and OpenCode send it by themselves. Any other client, such as [n8n](/docs/integrations/web-ui-and-automation#n8n) or custom apps, adds `X-Appa-Session-ID`. See [Session Headers](/docs/agents/guardrails/clients#session-headers).
 
 <span id="authentication"></span><span id="openai-compatible-model-router"></span><span id="supported-providers"></span>
 

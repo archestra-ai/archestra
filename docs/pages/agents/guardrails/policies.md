@@ -59,7 +59,7 @@ For every field, see the [policy reference](https://www.openappa.com/contracts).
 
 ## Human Review
 
-Use `requires = { attention = ["human-approval"] }` for potentially destructive actions or publishing outside the company, not every tool call. The starting policy's reviewer covers this mark, any other mark but `blocked`, data below `trusted`, and a missing `public` audience. With GitHub sync, copy its `hitl` authority into `appa.toml` in your repository to get this default.
+Use `requires = { attention = ["human-approval"] }` for potentially destructive actions or publishing outside the company, not every tool call. The starting policy's reviewer covers this mark, any other mark but `blocked`, data below `trusted`, and a missing `public` audience. A policy saved earlier keeps its reviewer; copy the `hitl` authority from the starting policy into it (or into `appa.toml` with GitHub sync) to get this default.
 
 In Slack, Microsoft Teams, and Telegram, the agent pauses and posts the review in the conversation with **Approve** and **Decline** buttons. Only the person who sent the message can answer, within 24 hours. After that the action stays blocked. An approval lets the agent continue only when the policy allows it.
 

@@ -108,7 +108,10 @@ import {
   useSkillsList,
   useSkillsPaginated,
 } from "@/lib/skills/skill.query";
-import { parseRepoFromSourceRef } from "@/lib/skills/skill-source";
+import {
+  parseRepoFromSourceRef,
+  repositoryLabel,
+} from "@/lib/skills/skill-source";
 import { computeCanModifySkill } from "@/lib/skills/use-skill-access";
 import { useMyTeams } from "@/lib/teams/team.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
@@ -987,7 +990,9 @@ function SkillsList() {
                               <span aria-hidden>
                                 <RepositoryOwnerIcon repo={sourceRepo} />
                               </span>
-                              <span className="truncate">{sourceRepo}</span>
+                              <span className="truncate">
+                                {repositoryLabel(sourceRepo)}
+                              </span>
                             </span>
                           ) : (
                             <span>All repositories</span>
@@ -1006,7 +1011,7 @@ function SkillsList() {
                               </span>
                             }
                           >
-                            {repo}
+                            {repositoryLabel(repo)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -1463,7 +1468,7 @@ function listedSkillSource(item: ListedSkill): {
     item.skill.sourceProvider,
   );
   return repo
-    ? { label: repo, isRepo: true }
+    ? { label: repositoryLabel(repo), isRepo: true }
     : {
         label: item.skill.sourceType === "github" ? "GitHub" : "Manual",
         isRepo: false,

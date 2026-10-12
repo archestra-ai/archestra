@@ -306,17 +306,23 @@ describe("Enterprise GitHub App skill import", () => {
     await makeMember(ctx.user.id, ctx.organizationId, {
       role: ADMIN_ROLE_NAME,
     });
-    for (const sourceOrigin of [null, origin]) {
+    // gitlab.com, like github.com, is stored without an origin.
+    for (const [name, sourceProvider, sourceOrigin] of [
+      ["public-source", "github", null],
+      ["enterprise-source", "github", origin],
+      ["gitlab-source", "gitlab", null],
+    ] as const) {
       await SkillModel.createWithFiles({
         skill: {
           organizationId: ctx.organizationId,
           authorId: ctx.user.id,
-          name: sourceOrigin ? "enterprise-source" : "public-source",
+          name,
           description: "A synced skill",
           content: "# Skill",
           metadata: {},
           sourceType: "github",
           sourceRef: `acme/skills@${firstCommit}:pdf`,
+          sourceProvider,
           sourceOrigin,
         },
         files: [],
@@ -329,11 +335,16 @@ describe("Enterprise GitHub App skill import", () => {
     });
     expect(sources.statusCode, sources.body).toBe(200);
     expect(sources.json().repos.sort()).toEqual(
-      ["acme/skills", `${origin}/acme/skills`].sort(),
+      [
+        "acme/skills",
+        `${origin}/acme/skills`,
+        "https://gitlab.com/acme/skills",
+      ].sort(),
     );
     for (const [sourceRepo, expectedName] of [
       ["acme/skills", "public-source"],
       [`${origin}/acme/skills`, "enterprise-source"],
+      ["https://gitlab.com/acme/skills", "gitlab-source"],
     ]) {
       const filtered = await ctx.app.inject({
         method: "GET",

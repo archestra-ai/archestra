@@ -22,6 +22,11 @@ export function parseRepoFromSourceRef(
   return origin !== DEFAULT_GIT_WEB_URLS.github ? `${origin}/${repo}` : repo;
 }
 
+/** A repository identity for display: `gitlab.com/group/project`, not a URL. */
+export function repositoryLabel(identity: string): string {
+  return identity.replace(/^https?:\/\//i, "");
+}
+
 /**
  * GitHub or GitLab URL for a skill's directory as it stood at one commit.
  *

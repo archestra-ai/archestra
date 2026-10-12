@@ -108,6 +108,11 @@ import {
 } from "@/components/knowledge-sources-editor";
 import { LlmProviderApiKeyDropdown } from "@/components/llm-provider-api-key-dropdown";
 import { McpConflictServerList } from "@/components/mcp-conflict-server-list";
+import {
+  EMPTY_MODEL_TIERS,
+  ModelTierPickers,
+  type ModelTierSelection,
+} from "@/components/model-tier-pickers";
 import { PageHeaderBanner } from "@/components/page-header-banner";
 import { SettingIcon } from "@/components/setting-icon";
 import {
@@ -206,6 +211,7 @@ import {
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { isReportedApiError } from "@/lib/utils/api";
 import { cn } from "@/lib/utils/tailwind";
@@ -1252,6 +1258,21 @@ export function AgentForm({
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [llmApiKeyId, setLlmApiKeyId] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState<string | null>(null);
+  // Fast/smart models belong to the key they were picked for; any other key
+  // sees them as unset.
+  const [keyedModelTiers, setKeyedModelTiers] = useState<{
+    keyId: string | null;
+    tiers: ModelTierSelection;
+  }>({ keyId: null, tiers: EMPTY_MODEL_TIERS });
+  const modelTiers =
+    keyedModelTiers.keyId === llmApiKeyId
+      ? keyedModelTiers.tiers
+      : EMPTY_MODEL_TIERS;
+  const { data: organization } = useOrganization();
+  const organizationModelTiers: ModelTierSelection = {
+    fast: organization?.defaultFastModelId ?? null,
+    smart: organization?.defaultSmartModelId ?? null,
+  };
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   // The tools editor's live selection (pending edits included), so the
@@ -1639,6 +1660,10 @@ export function AgentForm({
             labels: agentData.labels,
             llmApiKeyId: agentData.llmApiKeyId,
             llmModel: agentData.modelId,
+            modelTiers: {
+              fast: agentData.fastModelId ?? null,
+              smart: agentData.smartModelId ?? null,
+            },
             identityProviderId: agentData.identityProviderId ?? undefined,
             environmentId: agentData.environmentId ?? undefined,
             knowledgeBaseIds: agentData.knowledgeBaseIds,
@@ -1669,6 +1694,7 @@ export function AgentForm({
             labels: [],
             llmApiKeyId: null,
             llmModel: null,
+            modelTiers: EMPTY_MODEL_TIERS,
             identityProviderId: undefined,
             environmentId: undefined,
             knowledgeBaseIds: [],
@@ -1693,6 +1719,10 @@ export function AgentForm({
       setSuggestedPromptsOpen(false);
       setLlmApiKeyId(nextValues.llmApiKeyId);
       setLlmModel(nextValues.llmModel);
+      setKeyedModelTiers({
+        keyId: nextValues.llmApiKeyId,
+        tiers: nextValues.modelTiers,
+      });
       setAssignedTeamIds(nextValues.assignedTeamIds);
       setAssignedUserIds(nextValues.assignedUserIds);
       setLabels(nextValues.labels);
@@ -2086,7 +2116,9 @@ export function AgentForm({
   const llmSelectionChanged =
     !!persistedAgent &&
     ((llmApiKeyId ?? null) !== (persistedAgent.llmApiKeyId ?? null) ||
-      (llmModel ?? null) !== (persistedAgent.modelId ?? null));
+      (llmModel ?? null) !== (persistedAgent.modelId ?? null) ||
+      modelTiers.fast !== (persistedAgent.fastModelId ?? null) ||
+      modelTiers.smart !== (persistedAgent.smartModelId ?? null));
   const hasCompleteLlmSelection = Boolean(llmApiKeyId) === Boolean(llmModel);
   const needsClaudeProviderKey =
     !agent &&
@@ -2200,6 +2232,8 @@ export function AgentForm({
             ...(llmSelectionChanged && {
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
+              fastModelId: modelTiers.fast,
+              smartModelId: modelTiers.smart,
             }),
           },
         });
@@ -2235,6 +2269,8 @@ export function AgentForm({
                 ...(llmSelectionChanged && {
                   llmApiKeyId: llmApiKeyId || null,
                   modelId: llmModel || null,
+                  fastModelId: modelTiers.fast,
+                  smartModelId: modelTiers.smart,
                 }),
               }),
             }),
@@ -2300,6 +2336,8 @@ export function AgentForm({
             systemPrompt: trimmedSystemPrompt || null,
             llmApiKeyId: llmApiKeyId || null,
             modelId: llmModel || null,
+            fastModelId: modelTiers.fast,
+            smartModelId: modelTiers.smart,
             suggestedPrompts: validSuggestedPrompts,
             ...(activationSkillPolicy && { activationSkillPolicy }),
           }),
@@ -2599,6 +2637,7 @@ export function AgentForm({
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
     runtimeHasLocalChanges,
+    modelTiers,
   ]);
 
   const handleSave = useCallback(async () => {
@@ -2688,6 +2727,7 @@ export function AgentForm({
     labels,
     llmApiKeyId,
     llmModel,
+    modelTiers,
     identityProviderId,
     environmentId,
     knowledgeBaseIds,
@@ -3027,10 +3067,26 @@ export function AgentForm({
               }
             />
           ) : (
-            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-              <div className="min-w-0">{providerKeyControl}</div>
-              <div className="min-w-0">{modelControl}</div>
-            </div>
+            <>
+              <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="min-w-0">{providerKeyControl}</div>
+                <div className="min-w-0">{modelControl}</div>
+              </div>
+              {selectedApiKey && (
+                <div className="sm:max-w-sm">
+                  <ModelTierPickers
+                    apiKeyId={selectedApiKey.id}
+                    provider={selectedApiKey.provider}
+                    value={modelTiers}
+                    onChange={(tiers) =>
+                      setKeyedModelTiers({ keyId: selectedApiKey.id, tiers })
+                    }
+                    inherited={organizationModelTiers}
+                    disabled={readOnly}
+                  />
+                </div>
+              )}
+            </>
           )}
           {runtimeModelIncompatibility &&
             !needsClaudeProviderKey &&
@@ -4239,6 +4295,7 @@ type AgentFormFields = {
   labels: ProfileLabel[];
   llmApiKeyId: string | null;
   llmModel: string | null;
+  modelTiers: ModelTierSelection;
   identityProviderId: string | null | undefined;
   environmentId: string | null | undefined;
   knowledgeBaseIds: string[];

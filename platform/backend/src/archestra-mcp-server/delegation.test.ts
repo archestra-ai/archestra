@@ -291,7 +291,10 @@ describe("delegation tool execution", () => {
 
       expect(result.isError).toBe(false);
       expect(result.content).toEqual([
-        { type: "text", text: "Handled by subagent" },
+        {
+          type: "text",
+          text: "Task:\nReview the latest findings.\n\nResult:\nHandled by subagent",
+        },
       ]);
       expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -304,6 +307,35 @@ describe("delegation tool execution", () => {
       );
     });
   }
+
+  test("a long task is echoed only in part, so the answer keeps its place", async ({
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const targetAgent = await makeAgent({
+      organizationId: testAgent.organizationId,
+      name: "Long Task Agent",
+    });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(testAgent.id, delegationTool.id);
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "subagent-message-1",
+      text: "done",
+      finishReason: "stop",
+    });
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+      { message: "📄".repeat(70_000) },
+      mockContext,
+    );
+
+    expect(result.content).toEqual([
+      { type: "text", text: `Task:\n${"📄".repeat(500)}…\n\nResult:\ndone` },
+    ]);
+  });
 
   test("uses the caller user when the gateway token is not user-scoped", async ({
     makeAgent,
@@ -917,6 +949,39 @@ describe("self-fork and attested returns", () => {
         _meta: expect.objectContaining({ targetAgentId: parent.id }),
       }),
     );
+    // No model resolves for the agent, so no tier can move the fork anywhere.
+    expect(
+      tools.find((tool) => tool.name === SELF_FORK_TOOL_NAME)?.inputSchema
+        .properties,
+    ).not.toHaveProperty("tier");
+  });
+
+  test("a fork is not offered a fork of its own", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const forkNames = async (delegationChain: string) =>
+      (
+        await getAgentTools({
+          agentId: parent.id,
+          organizationId: organization.id,
+          userId: user.id,
+          delegationChain,
+        })
+      )
+        .map((tool) => tool.name)
+        .filter((name) => name === SELF_FORK_TOOL_NAME);
+
+    expect(await forkNames(parent.id)).toEqual([SELF_FORK_TOOL_NAME]);
+    expect(await forkNames(`${parent.id}:${parent.id}`)).toEqual([]);
   });
 
   for (const active of [true, false]) {
@@ -991,5 +1056,82 @@ describe("self-fork and attested returns", () => {
         parentDelegationChain: parent.id,
       }),
     );
+  });
+
+  test("only a fork runs on a model tier, starting from the parent's model", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, target } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "m",
+      text: "done",
+      finishReason: "stop",
+    });
+    const parentLlm = {
+      modelId: crypto.randomUUID(),
+      apiKeyId: crypto.randomUUID(),
+    };
+    const context = {
+      userId: user.id,
+      agent: { id: parent.id, name: parent.name },
+      agentId: parent.id,
+      organizationId: organization.id,
+      parentLlm,
+    };
+
+    await executeArchestraTool(
+      SELF_FORK_TOOL_NAME,
+      { message: "Grep the transcripts.", tier: "fast" },
+      context,
+    );
+    expect(mockExecuteA2AMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selfFork: true, tier: "fast", parentLlm }),
+    );
+
+    await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+      { message: "Configure the policy.", tier: "smart" },
+      context,
+    );
+    const specialistRun = mockExecuteA2AMessage.mock.lastCall?.[0];
+    expect(specialistRun).toMatchObject({ agentId: target.id });
+    expect(specialistRun).not.toHaveProperty("tier");
+    expect(specialistRun).not.toHaveProperty("parentLlm");
+  });
+
+  test("rejects an unknown tier", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    const result = await executeArchestraTool(
+      SELF_FORK_TOOL_NAME,
+      { message: "Think hard.", tier: "genius" },
+      {
+        userId: user.id,
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+      },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
 });

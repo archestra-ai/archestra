@@ -3,6 +3,7 @@ import {
   isAlwaysExposedArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isRequiredOpenAppaToolShortName,
+  type ModelSelection,
   parseFullToolName,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -220,6 +221,7 @@ const registry = defineArchestraTools([
         userId: context.userId,
         conversationId: context.conversationId,
         delegationChain: context.delegationChain,
+        parentLlm: context.parentLlm,
       });
 
       let matches: SearchCandidate[];
@@ -393,6 +395,7 @@ async function getSearchableTools(params: {
   userId?: string;
   conversationId?: string;
   delegationChain?: string;
+  parentLlm?: ModelSelection;
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
   const delegatedRun = isAppaDelegatedRun(agentId, params.delegationChain);
@@ -460,6 +463,8 @@ async function getSearchableTools(params: {
           organizationId,
           userId,
           skipAccessCheck: userId === "system",
+          parentLlm: params.parentLlm,
+          delegationChain: params.delegationChain,
         })
       : [];
   // Agent-designated skills are searchable through their skill__<slug>

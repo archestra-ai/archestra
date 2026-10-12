@@ -763,6 +763,31 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(runSpy).toHaveBeenCalled();
     });
 
+    test("target with the nil UUID resolves to the conversation default sandbox", async () => {
+      const ctx = await makeConversationCtx();
+      const runSpy = stubRunCommand("x");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        {
+          command: "echo hi",
+          target: { fresh: false, id: "00000000-0000-0000-0000-000000000000" },
+        },
+        ctx,
+      );
+
+      expect(result.isError).toBeFalsy();
+      const sandboxes = await SkillSandboxModel.listForConversation({
+        conversationId: ctx.conversationId as string,
+        organizationId,
+      });
+      expect(sandboxes).toHaveLength(1);
+      expect(sandboxes[0].isDefault).toBe(true);
+      expect(runSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ sandboxId: sandboxes[0].id }),
+      );
+    });
+
     test("target with a non-empty but malformed id returns a clear error", async () => {
       const ctx = await makeConversationCtx();
       stubRunCommand("x");

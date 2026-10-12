@@ -67,6 +67,7 @@ beforeEach(
     vi.spyOn(backend, "assertReady").mockResolvedValue();
     vi.spyOn(backend, "stopRun").mockResolvedValue(undefined);
     vi.spyOn(backend, "releaseRun").mockResolvedValue();
+    vi.spyOn(backend, "teardown").mockResolvedValue();
 
     const user = await makeUser({ email: "runtime-chat@example.com" });
     userId = user.id;

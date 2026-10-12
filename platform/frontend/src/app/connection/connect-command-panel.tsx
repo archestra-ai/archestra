@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  DEFAULT_MODELS,
   DocsPage,
   OPENCODE_PRIMARY_PROVIDERS,
+  PROVIDER_MODEL_TIERS,
   PROVIDERS_REQUIRING_BASE_URL,
   providerRequiresPerUserCredential,
   resolveMcpClientServerName,
@@ -485,7 +485,7 @@ export function ConnectCommandPanel({
       ? (modelChoice ??
         (client.id === "claude-desktop"
           ? "claude-haiku-4-5-20251001"
-          : DEFAULT_MODELS[provider]))
+          : PROVIDER_MODEL_TIERS[provider].normal))
       : null;
   const modelOptions = useMemo(() => {
     if (!supportsModelChoice || !provider) return [];

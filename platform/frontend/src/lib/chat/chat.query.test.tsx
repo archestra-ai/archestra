@@ -18,7 +18,6 @@ import {
   useDeleteConversation,
   useKeepViewedConversationRead,
   useMarkConversationRead,
-  useMemberDefaultModel,
   useResolveChatMcpElicitation,
   useStopChatStream,
   useUpdateConversation,
@@ -29,7 +28,6 @@ vi.mock("@archestra/shared", () => ({
     getChatConversations: vi.fn(),
     getChatConversation: vi.fn(),
     getChatConversationFiles: vi.fn(),
-    getMemberDefaultModel: vi.fn(),
     getConversationEnabledTools: vi.fn(),
     markChatConversationRead: vi.fn(),
     deleteChatConversation: vi.fn(),
@@ -199,52 +197,6 @@ describe("useConversation error handling", () => {
 
     await waitFor(() => expect(result.current.data).toBeNull());
     expect(mockedHandleApiError).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("useMemberDefaultModel error handling", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("returns the null model/key fallback on an HTTP error", async () => {
-    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue(
-      errorResult(500) as Awaited<
-        ReturnType<typeof archestraApiSdk.getMemberDefaultModel>
-      >,
-    );
-
-    const { result } = renderHook(() => useMemberDefaultModel(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() =>
-      expect(result.current.data).toEqual({
-        modelId: null,
-        chatApiKeyId: null,
-      }),
-    );
-    expect(mockedHandleApiError).toHaveBeenCalledTimes(1);
-  });
-
-  it("returns the fallback without throwing on a network error", async () => {
-    vi.mocked(archestraApiSdk.getMemberDefaultModel).mockResolvedValue(
-      errorResult(undefined) as Awaited<
-        ReturnType<typeof archestraApiSdk.getMemberDefaultModel>
-      >,
-    );
-
-    const { result } = renderHook(() => useMemberDefaultModel(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() =>
-      expect(result.current.data).toEqual({
-        modelId: null,
-        chatApiKeyId: null,
-      }),
-    );
-    expect(result.current.isError).toBe(false);
   });
 });
 

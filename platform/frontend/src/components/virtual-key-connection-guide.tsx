@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  DEFAULT_MODELS,
   E2eTestId,
   isModelRouterSupportedProvider,
+  PROVIDER_MODEL_TIERS,
   providerSupportsChat,
   requiresPerplexityAgentApi,
   type SupportedProvider,
@@ -487,7 +487,7 @@ export function RequestExample({
   // provider's default model stands in rather than leaving the step empty.
   if (!isPending && modelOptions.length === 0 && target.kind === "provider") {
     modelOptions.push({
-      value: DEFAULT_MODELS[target.provider],
+      value: PROVIDER_MODEL_TIERS[target.provider].normal,
       supportedEndpoints: null,
     });
   }

@@ -69,6 +69,7 @@ import {
   repeatCeilingStopCondition,
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import { orderToolResultsByCall } from "@/clients/tool-result-order";
 import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import db, { withDbTransaction } from "@/database";
@@ -950,6 +951,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 organizationId,
                 modelAcceptsImageToolResults:
                   selected.inputModalities?.includes("image") === true,
+                // A per-user provider model has no stored key; the fork then
+                // re-resolves the acting user's own credential for it.
+                parentLlm: conversation.modelId
+                  ? {
+                      modelId: conversation.modelId,
+                      apiKeyId: conversation.chatApiKeyId,
+                    }
+                  : undefined,
                 hookSessionContext,
                 projectInstructions,
                 openedApp,
@@ -1362,19 +1371,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       toolExecutionErrors.add(event.error);
                     }
                   },
-                  ...(usesStepPromptCache({
-                    provider,
-                    anthropicNativeEndpoint,
-                  }) && {
-                    prepareStep: ({ messages }) => ({
-                      messages: applyStepPromptCacheBreakpoint({
+                  prepareStep: ({ messages }) => {
+                    const ordered = orderToolResultsByCall(messages);
+                    return {
+                      messages: usesStepPromptCache({
                         provider,
-                        model: selectedModel,
                         anthropicNativeEndpoint,
-                        messages,
-                      }),
-                    }),
-                  }),
+                      })
+                        ? applyStepPromptCacheBreakpoint({
+                            provider,
+                            model: selectedModel,
+                            anthropicNativeEndpoint,
+                            messages: ordered,
+                          })
+                        : ordered,
+                    };
+                  },
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,

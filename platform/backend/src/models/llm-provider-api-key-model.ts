@@ -1,6 +1,6 @@
 import {
   type CompleteModelSelection,
-  MODEL_MARKER_PATTERNS,
+  findTierDefault,
   type SupportedProvider,
 } from "@archestra/shared";
 import { and, asc, desc, eq, inArray, notInArray, or, sql } from "drizzle-orm";
@@ -177,15 +177,8 @@ class LlmProviderApiKeyModelLinkModel {
 
       // Insert new links
       if (uniqueModels.length > 0) {
-        // Detect the best model using pattern matching
-        // Patterns are checked in order (first pattern = highest priority)
-        const patterns = MODEL_MARKER_PATTERNS[provider];
-        const sorted = [...uniqueModels].sort((a, b) =>
-          a.modelId.localeCompare(b.modelId),
-        );
-
-        // Find first matching model respecting pattern priority order
-        const bestModel = findFirstMatchByPatternPriority(sorted, patterns);
+        // `is_best` marks the provider's default-trio `normal` model.
+        const bestModel = findTierDefault(uniqueModels, provider, "normal");
 
         // Build values with markers
         const syncedAt = new Date();
@@ -760,24 +753,4 @@ function toDateOrNull(value: Date | string | null): Date | null {
     return value;
   }
   return new Date(value);
-}
-
-/**
- * Find the first model matching patterns, respecting pattern priority order.
- * Patterns are checked in order (first pattern = highest priority).
- * For each pattern, returns the first alphabetically sorted match.
- */
-function findFirstMatchByPatternPriority(
-  sortedModels: Array<{ id: string; modelId: string }>,
-  patterns: string[],
-): { id: string; modelId: string } | undefined {
-  for (const pattern of patterns) {
-    const match = sortedModels.find((m) =>
-      m.modelId.toLowerCase().includes(pattern.toLowerCase()),
-    );
-    if (match) {
-      return match;
-    }
-  }
-  return undefined;
 }

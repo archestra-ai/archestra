@@ -21,7 +21,6 @@ import {
   DEFAULT_CHILD_CHUNK_SIZE_TOKENS,
   DEFAULT_CHUNK_SIZE_TOKENS,
   DEFAULT_CONTEXT_EXPANSION_RADIUS,
-  DEFAULT_MODELS,
   DEFAULT_VAULT_TOKEN,
   getAgentCatalogImages,
   getAgentCatalogImageTag,
@@ -36,7 +35,6 @@ import {
   MIN_CHUNK_SIZE_TOKENS,
   parsePublicHostSchemes,
   type SupportedProvider,
-  SupportedProviders,
 } from "@archestra/shared";
 import type { OTLPExporterNodeConfigBase } from "@opentelemetry/otlp-exporter-base";
 import dotenv from "dotenv";
@@ -3062,18 +3060,6 @@ const config = {
     azure: {
       apiKey: process.env.ARCHESTRA_CHAT_AZURE_OPENAI_API_KEY || "",
     },
-    defaultModel:
-      process.env.ARCHESTRA_CHAT_DEFAULT_MODEL || DEFAULT_MODELS.anthropic,
-    defaultProvider: ((): SupportedProvider => {
-      const provider = process.env.ARCHESTRA_CHAT_DEFAULT_PROVIDER;
-      if (
-        provider &&
-        SupportedProviders.includes(provider as SupportedProvider)
-      ) {
-        return provider as SupportedProvider;
-      }
-      return "anthropic";
-    })(),
     activeRun: {
       replayPollIntervalMs: parseActiveChatRunPollIntervalMs({
         value: process.env.ARCHESTRA_CHAT_ACTIVE_RUN_REPLAY_POLL_INTERVAL_MS,

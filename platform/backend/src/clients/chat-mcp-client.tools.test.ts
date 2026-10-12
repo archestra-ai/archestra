@@ -710,7 +710,7 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
       execOptions("call-4"),
     );
 
-    expect(result).toBe("child says hi");
+    expect(result).toBe("Task:\ndo the work\n\nResult:\nchild says hi");
     expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
     expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
       expect.objectContaining({

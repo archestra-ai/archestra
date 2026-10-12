@@ -18,6 +18,9 @@
 services:
   bench-postgres:
     image: pgvector/pgvector:pg18
+    # Postgres as PID 1 inherits orphans, e.g. a pg_isready whose shell the healthcheck
+    # timeout killed, and crash-restarts when one exits non-zero. An init reaps them instead.
+    init: true
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -26,7 +29,7 @@ services:
       - "5544:5432"
     command: ["postgres", "-c", "max_connections=200"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
       interval: 1s
       timeout: 3s
       retries: 60

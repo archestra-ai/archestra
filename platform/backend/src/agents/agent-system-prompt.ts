@@ -191,6 +191,8 @@ export async function buildAgentSystemPrompt(params: {
    * answer it there, so their prompt never steers the model toward it.
    */
   canAskUser?: boolean;
+  /** This run is a fork of the agent, which may not fork or delegate to itself. */
+  isFork?: boolean;
 }): Promise<string | undefined> {
   const {
     agent,
@@ -204,6 +206,7 @@ export async function buildAgentSystemPrompt(params: {
     openedApp,
     projectFileNames,
     canAskUser = false,
+    isFork = false,
   } = params;
 
   const renderedPrompt = await renderAgentPrompt({
@@ -283,6 +286,7 @@ export async function buildAgentSystemPrompt(params: {
     [
       toolLoadingInstructions,
       renderedPrompt,
+      isFork ? FORK_RUN_INSTRUCTION : null,
       projectInstructionsPrompt,
       projectFilesPrompt,
       openedAppPrompt,
@@ -330,6 +334,9 @@ function buildAskUserChoiceInstruction(): string {
   const askUser = archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME);
   return buildElicitationMandateInstruction({ askUserToolName: askUser });
 }
+
+const FORK_RUN_INSTRUCTION =
+  "You are running as a fork: a fresh copy of this agent, started to do one task and report back. You cannot fork or delegate to yourself, so do the task with your own tools, even where the instructions above say to delegate.";
 
 const INVISIBLE_CHARACTERS = /[\p{Cf}\u2028\u2029]/gu;
 

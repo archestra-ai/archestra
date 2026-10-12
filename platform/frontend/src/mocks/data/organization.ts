@@ -50,6 +50,8 @@ export function makeOrganization(
     defaultLlmProvider: "openai",
     defaultLlmApiKeyId: null,
     defaultModelId: null,
+    defaultFastModelId: null,
+    defaultSmartModelId: null,
     defaultUserLimitValue: null,
     defaultUserLimitModel: null,
     defaultUserLimitCleanupInterval: "1h",

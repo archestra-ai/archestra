@@ -3711,6 +3711,13 @@
       "when": 1791804549189,
       "tag": "0529_cleanup-orphaned-personal-agents",
       "breakpoints": true
+    },
+    {
+      "idx": 530,
+      "version": "7",
+      "when": 1791807511563,
+      "tag": "0530_mighty_sumo",
+      "breakpoints": true
     }
   ]
 }

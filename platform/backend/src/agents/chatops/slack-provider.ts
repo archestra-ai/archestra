@@ -58,6 +58,7 @@ import {
   EventDedupMap,
   errorMessage,
   footerWithoutAgentName,
+  formatApprovalReviewText,
   formatApprovalToolArgs,
   isSlackDmChannel,
   Semaphore,
@@ -750,7 +751,9 @@ class SlackProvider implements ChatOpsProvider {
       };
     };
 
-    const argsText = formatApprovalToolArgs(options.toolArgs);
+    const argsText = options.reviewText
+      ? undefined
+      : formatApprovalToolArgs(options.toolArgs);
     const postArgs = {
       channel: options.channelId,
       text: "",
@@ -759,7 +762,10 @@ class SlackProvider implements ChatOpsProvider {
           type: "section" as const,
           text: {
             type: "mrkdwn" as const,
-            text: `\`${options.toolName}\``,
+            // The review text may carry column-aligned art; keep it monospace.
+            text: options.reviewText
+              ? `\`\`\`\n${formatApprovalReviewText(options.reviewText)}\n\`\`\``
+              : `\`${options.toolName}\``,
           },
         },
         ...(argsText
@@ -799,10 +805,15 @@ class SlackProvider implements ChatOpsProvider {
     const status = options.approved
       ? ":white_check_mark: Approved"
       : ":x: Declined";
+    const text = options.decidedByUserId
+      ? `\`${options.toolName}\`: ${status} by <@${options.decidedByUserId}>`
+      : `\`${options.toolName}\`: ${status}`;
     await this.client.chat.update({
       channel: options.channelId,
       ts: options.messageKey,
-      text: `\`${options.toolName}\`: ${status}`,
+      text,
+      // Replacing the blocks removes the buttons, so no one clicks twice.
+      blocks: [{ type: "section", text: { type: "mrkdwn", text } }],
     });
   }
 

@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import type { A2AArchestraApprovalRequest } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import type {
@@ -77,6 +77,102 @@ class A2ATaskApprovalRequestModel {
       byTask.set(req.taskId, list);
     }
     return byTask;
+  }
+
+  static async findByTaskIdAndApprovalId(params: {
+    taskId: string;
+    approvalId: string;
+  }): Promise<A2ATaskApprovalRequest | null> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const [req] = await db
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.taskId, params.taskId),
+          eq(table.approvalId, params.approvalId),
+        ),
+      )
+      .limit(1);
+    return req ?? null;
+  }
+
+  /** Links a paused `execute_remedy_plan` call to its OpenAPPA review. */
+  static async attachOpenappaReview(params: {
+    taskId: string;
+    approvalId: string;
+    offerId: string;
+    reviewText: string;
+    remedyArguments: Record<string, unknown>;
+    reviewerUserId: string;
+    slackChannelId: string;
+    slackThreadTs: string | undefined;
+    expiresAt: Date;
+  }): Promise<A2ATaskApprovalRequest | null> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const [req] = await db
+      .update(table)
+      .set({
+        openappaOfferId: params.offerId,
+        openappaReviewText: params.reviewText,
+        remedyArguments: params.remedyArguments,
+        reviewerUserId: params.reviewerUserId,
+        slackChannelId: params.slackChannelId,
+        slackThreadTs: params.slackThreadTs ?? null,
+        expiresAt: params.expiresAt,
+      })
+      .where(
+        and(
+          eq(table.taskId, params.taskId),
+          eq(table.approvalId, params.approvalId),
+          eq(table.resolved, false),
+        ),
+      )
+      .returning();
+    return req ?? null;
+  }
+
+  /**
+   * Records the reviewer's ruling once. Returns null when the review is
+   * already decided, has expired, or belongs to another reviewer.
+   */
+  static async recordOpenappaRuling(params: {
+    id: string;
+    reviewerUserId: string;
+    ruling: "approve" | "deny";
+    now: Date;
+  }): Promise<A2ATaskApprovalRequest | null> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const [req] = await db
+      .update(table)
+      .set({ ruling: params.ruling, decidedAt: params.now })
+      .where(
+        and(
+          eq(table.id, params.id),
+          eq(table.reviewerUserId, params.reviewerUserId),
+          isNotNull(table.openappaOfferId),
+          isNull(table.ruling),
+          gt(table.expiresAt, params.now),
+        ),
+      )
+      .returning();
+    return req ?? null;
+  }
+
+  /**
+   * Paused tasks whose OpenAPPA review expired. A row outlives its review only
+   * while the task has not resumed, so a decided row here means the resume
+   * never happened.
+   */
+  static async findTaskIdsWithExpiredOpenappaReviews(
+    now: Date,
+  ): Promise<string[]> {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    const rows = await db
+      .selectDistinct({ taskId: table.taskId })
+      .from(table)
+      .where(and(isNotNull(table.openappaOfferId), lte(table.expiresAt, now)));
+    return rows.map((row) => row.taskId);
   }
 
   static async delete(id: string): Promise<void> {

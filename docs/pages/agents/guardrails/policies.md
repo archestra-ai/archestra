@@ -61,6 +61,8 @@ For every field, see the [policy reference](https://www.openappa.com/contracts).
 
 Use `requires = { attention = ["human-approval"] }` for potentially destructive actions or publishing outside the company, not every tool call. The starting policy includes a reviewer for this mark.
 
+In Slack, the agent pauses and posts the review in the thread with **Approve** and **Decline** buttons. Only the person who sent the message can answer, within 24 hours. After that the action stays blocked. An approval lets the agent continue only when the policy allows it.
+
 ## GitHub Sync
 
 With GitHub sync, the policy lives in a repository. The agent opens a pull request instead of saving, and a change applies after merge and successful sync.

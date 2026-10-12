@@ -90,7 +90,7 @@ If the request is unclear, ask with one \`archestra__ask_user\` question what th
 
 ## Tool-call human approval
 
-Use \`human-approval\` for potentially destructive actions or publishing/sharing outside the company, not every tool call. Scope it with argument selectors or annotators when only some calls need review. The default \`hitl\` authority covers this and every other attention mark but \`blocked\`, data below \`trusted\`, and a missing \`public\` audience; preserve its permissions unless the operator explicitly requests a change.
+Use \`human-approval\` for potentially destructive actions or publishing/sharing outside the company, not every tool call. Scope it with argument selectors or annotators when only some calls need review. The default \`hitl\` authority covers this and every other attention mark but \`blocked\`, data below \`trusted\`, and a missing \`public\` audience; preserve the saved policy's reviewer permissions unless the operator explicitly requests a change, overriding shared battery-support advice to expand them.
 
 ## Approval in Archestra
 

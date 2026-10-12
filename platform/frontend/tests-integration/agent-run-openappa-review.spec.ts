@@ -41,8 +41,16 @@ test("the run owner reviews the exact offer and posts only its decision", async 
     },
   ]);
   await page.goto(`/chat/runs/${taskId}`);
-  await expect(page.getByText("Review the exact QA action")).toBeVisible();
   await expect(page.getByText("mcp/example/write")).toBeVisible();
+  await expect(
+    page.getByText("Review this tool call before it can continue."),
+  ).toBeVisible();
+  // The card shows the reviewed call, not OpenAPPA's review text, and keeps
+  // the arguments closed until the header is opened.
+  await expect(page.getByText("Review the exact QA action")).toBeHidden();
+  await expect(page.getByText("qa.txt")).toBeHidden();
+  await page.getByText("mcp/example/write").click();
+  await expect(page.getByText("qa.txt")).toBeVisible();
   const posted = page.waitForRequest(
     (call) =>
       call.method() === "POST" &&

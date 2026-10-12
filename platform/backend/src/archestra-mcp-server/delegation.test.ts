@@ -308,6 +308,35 @@ describe("delegation tool execution", () => {
     });
   }
 
+  test("a long task is echoed only in part, so the answer keeps its place", async ({
+    makeAgent,
+    makeAgentTool,
+  }) => {
+    const targetAgent = await makeAgent({
+      organizationId: testAgent.organizationId,
+      name: "Long Task Agent",
+    });
+    const delegationTool = await ToolModel.findOrCreateDelegationTool(
+      targetAgent.id,
+    );
+    await makeAgentTool(testAgent.id, delegationTool.id);
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "subagent-message-1",
+      text: "done",
+      finishReason: "stop",
+    });
+
+    const result = await executeArchestraTool(
+      `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`,
+      { message: "📄".repeat(70_000) },
+      mockContext,
+    );
+
+    expect(result.content).toEqual([
+      { type: "text", text: `Task:\n${"📄".repeat(500)}…\n\nResult:\ndone` },
+    ]);
+  });
+
   test("uses the caller user when the gateway token is not user-scoped", async ({
     makeAgent,
     makeAgentTool,

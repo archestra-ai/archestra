@@ -445,7 +445,7 @@ export async function handleDelegation(
         ...(history.length > 0 ? { messages: history } : {}),
       });
       const admitted = await admittedSubagentReturn(spawn.binding.child);
-      if (admitted !== undefined) return delegationResult(message, admitted);
+      if (admitted !== undefined) return successResult(admitted);
       history = [
         ...history,
         { role: "user", content: turn },
@@ -936,10 +936,18 @@ function dedupeDelegationTools(tools: Tool[]): Tool[] {
 }
 
 /**
- * A delegated answer carries the task it answers. A caller that delegates
- * several tasks at once otherwise has to pair answers with tasks by tool call
- * id alone, and models sometimes pair them by position instead.
+ * A delegated answer carries the start of the task it answers. A caller that
+ * delegates several tasks at once otherwise has to pair answers with tasks by
+ * tool call id alone, and models sometimes pair them by position instead. The
+ * excerpt is bounded so the result's size budget stays with the answer.
  */
 function delegationResult(task: string, answer: string) {
-  return successResult(`Task:\n${task}\n\nResult:\n${answer}`);
+  const chars = Array.from(task);
+  const excerpt =
+    chars.length > TASK_ECHO_MAX_CHARS
+      ? `${chars.slice(0, TASK_ECHO_MAX_CHARS).join("")}…`
+      : task;
+  return successResult(`Task:\n${excerpt}\n\nResult:\n${answer}`);
 }
+
+const TASK_ECHO_MAX_CHARS = 500;

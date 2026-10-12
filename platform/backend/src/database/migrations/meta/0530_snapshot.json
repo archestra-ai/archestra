@@ -1,5 +1,5 @@
 {
-  "id": "48f6338b-73bc-4395-be53-1fbf9b3555cc",
+  "id": "8b423996-929d-49d9-8f6b-f5f95d0b9630",
   "prevId": "0bbf337f-4243-4c72-a991-426968962e33",
   "version": "7",
   "dialect": "postgresql",
@@ -1352,60 +1352,6 @@
           "notNull": true,
           "default": false
         },
-        "openappa_offer_id": {
-          "name": "openappa_offer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "openappa_review_text": {
-          "name": "openappa_review_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "remedy_arguments": {
-          "name": "remedy_arguments",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reviewer_user_id": {
-          "name": "reviewer_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "slack_channel_id": {
-          "name": "slack_channel_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "slack_thread_ts": {
-          "name": "slack_thread_ts",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ruling": {
-          "name": "ruling",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -1442,22 +1388,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "a2a_task_approval_request_openappa_expiry_idx": {
-          "name": "a2a_task_approval_request_openappa_expiry_idx",
-          "columns": [
-            {
-              "expression": "expires_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"a2a_task_approval_request\".\"openappa_offer_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -1467,19 +1397,6 @@
           "tableTo": "a2a_task",
           "columnsFrom": [
             "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "a2a_task_approval_request_reviewer_user_id_user_id_fk": {
-          "name": "a2a_task_approval_request_reviewer_user_id_user_id_fk",
-          "tableFrom": "a2a_task_approval_request",
-          "tableTo": "user",
-          "columnsFrom": [
-            "reviewer_user_id"
           ],
           "columnsTo": [
             "id"
@@ -26708,6 +26625,49 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.openappa_dispatch_leases": {
+      "name": "openappa_dispatch_leases",
+      "schema": "",
+      "columns": {
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_seq": {
+          "name": "event_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempt": {
+          "name": "attempt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "openappa_dispatch_leases_attempt": {
+          "name": "openappa_dispatch_leases_attempt",
+          "value": "\"openappa_dispatch_leases\".\"attempt\" >= 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.openappa_embedded_peer_messages": {

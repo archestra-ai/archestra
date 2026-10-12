@@ -522,10 +522,21 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           agentId: UuidIdSchema,
         }),
+        querystring: z.object({
+          catalogId: z
+            .string()
+            .optional()
+            .describe(
+              "Only return tools from this catalog item, e.g. to check whether one server's tools are assigned without loading every tool's schema",
+            ),
+        }),
         response: constructResponseSchema(z.array(AssignedToolSchema)),
       },
     },
-    async ({ params: { agentId }, user, organizationId }, reply) => {
+    async (
+      { params: { agentId }, query: { catalogId }, user, organizationId },
+      reply,
+    ) => {
       // Fetch the resource first so we can enforce type- and scope-aware access.
       const agent = await AgentModel.findById(agentId, user.id, true);
       if (!agent) {
@@ -555,7 +566,10 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const tools = await ToolModel.getToolsByAgent(agentId);
+      const allTools = await ToolModel.getToolsByAgent(agentId);
+      const tools = catalogId
+        ? allTools.filter((tool) => tool.catalogId === catalogId)
+        : allTools;
 
       // A user who can only use the agent sees the tools the gateway would
       // serve them: an assigned tool whose MCP server they cannot access is

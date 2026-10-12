@@ -662,6 +662,11 @@ export async function handleLLMProxy<
   // Removes receipts and delegation markers before forwarding requests.
   // Markers must not reach providers or logs, even when OpenAPPA is off.
   // When active, OpenAPPA resolves extracted markers into lineage evidence.
+  // A child return the proxy cannot read is withheld from a governed parent
+  // only, and the proxy does not know yet whether OpenAPPA governs this
+  // request. Until it does, the first refusal waits here and that return stays
+  // as the client sent it.
+  let childReturnRefusal: ApiError | undefined;
   const requestWireFamily = appaWireFamily(provider.interactionType);
   let strippedReceiptCodes: string[] = [];
   let delegationMarkers: AppaDelegationMarker[] | undefined;
@@ -699,6 +704,9 @@ export async function handleLLMProxy<
     childReturns = collectAndStripChildReturns(body, {
       openCodeBackgroundReturns: nativeClient === "opencode",
       codexMailboxReturns: nativeClient === "codex",
+      onRefusal: (refusal) => {
+        childReturnRefusal ??= refusal;
+      },
     });
   }
   // Restores original provider call IDs before request processing, logging,
@@ -1634,12 +1642,13 @@ export async function handleLLMProxy<
           "OpenAPPA session does not match the authenticated runtime workspace",
         );
       }
+      const runtimeBindingToken = firstHeaderValue(
+        headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
+      );
       const runtimeBindingMatches =
         runtimeIdentity !== null &&
         runtimeBindingAuthorizes({
-          token: firstHeaderValue(
-            headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
-          ),
+          token: runtimeBindingToken,
           secret: config.openappa.offerSigningSecret,
           identity: runtimeIdentity,
         });
@@ -1649,9 +1658,23 @@ export async function handleLLMProxy<
         runtimeIdentity &&
         !runtimeBindingMatches
       ) {
+        // An image whose client predates the binding sends none. Only that
+        // case is named: why a presented binding failed stays undisclosed.
+        const bindingMissing = !runtimeBindingToken;
+        logger.warn(
+          {
+            agentId: runtimeIdentity.agentId,
+            workspaceId: runtimeIdentity.workspaceId,
+            taskId: runtimeIdentity.taskId,
+            reason: bindingMissing ? "missing" : "invalid",
+          },
+          "OpenAPPA rejected a runtime request without a verified binding",
+        );
         throw new ApiError(
           400,
-          "OpenAPPA runtime binding does not match this run",
+          bindingMissing
+            ? "This run's image did not send the X-Archestra-Runtime-Binding header that Guardrails require. Rebuild the image on a current maintained agent image, or send ARCHESTRA_AGENT_RUNTIME_BINDING in that header. Then start a new run."
+            : "OpenAPPA runtime binding does not match this run",
         );
       }
       const runtimeSession =
@@ -1933,6 +1956,9 @@ export async function handleLLMProxy<
         openappaSession = undefined;
       }
       if (openappaSession) {
+        // OpenAPPA governs this request, so a child return the proxy could not
+        // read at its entry is refused now.
+        if (childReturnRefusal) throw childReturnRefusal;
         // A Chat session is a conversation, and the request must name the
         // user whose conversation it is: without one there is nothing to
         // check the binding against, so the request is refused rather than

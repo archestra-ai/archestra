@@ -83682,6 +83682,15 @@
         "parameters": [
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "catalogId",
+            "required": false,
+            "description": "Only return tools from this catalog item, e.g. to check whether one server's tools are assigned without loading every tool's schema"
+          },
+          {
+            "schema": {
               "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -91072,6 +91081,15 @@
             "name": "owner",
             "required": false,
             "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "pinned",
+            "required": false,
+            "description": "Only return apps the current user has pinned."
           }
         ],
         "responses": {
@@ -142546,6 +142564,24 @@
                           "createdByArchestra": {
                             "type": "boolean"
                           },
+                          "createdBy": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
                           "agentId": {
                             "type": "string"
                           },
@@ -142585,6 +142621,7 @@
                           "installed",
                           "needsAppLevelToken",
                           "createdByArchestra",
+                          "createdBy",
                           "agentId",
                           "agentName",
                           "enabled",
@@ -143799,7 +143836,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Save a Slack app configuration token used to create Slack apps automatically\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Save your Slack app configuration token, used to create and update Slack apps for you\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {

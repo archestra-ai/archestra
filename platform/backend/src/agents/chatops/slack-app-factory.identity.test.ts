@@ -51,10 +51,13 @@ beforeEach(async () => {
   slack.update.mockResolvedValue({ ok: true });
   slack.apiCall.mockResolvedValue({ ok: true });
   await slackAppFactory.saveConfigToken({
+    userId: USER_ID,
     accessToken: "xoxe.xoxp-pasted",
     refreshToken: "xoxe-1",
   });
 });
+
+const USER_ID = "user-1";
 
 async function connectManagedBot(
   agentId: string,
@@ -67,6 +70,7 @@ async function connectManagedBot(
     signingSecret: "s",
     appId: "A_BOT",
     managed: true,
+    configTokenUserId: USER_ID,
     handleFollowsAgent: true,
     ...overrides,
   });

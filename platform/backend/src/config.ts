@@ -628,6 +628,11 @@ export const getOtelExporterOtlpLogEndpoint = (
     return normalizedUrl;
   }
 
+  // The same variable is accepted as a traces URL; logs share its base.
+  if (normalizedUrl.endsWith(OTEL_TRACES_PATH)) {
+    return `${normalizedUrl.slice(0, -OTEL_TRACES_PATH.length)}${OTEL_LOGS_PATH}`;
+  }
+
   if (normalizedUrl.endsWith("/v1")) {
     return `${normalizedUrl}/logs`;
   }

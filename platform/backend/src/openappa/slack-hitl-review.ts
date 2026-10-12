@@ -17,6 +17,8 @@ import { loadOfferReview } from "./service";
 /**
  * How long a Slack reviewer has to answer. OpenAPPA offers have no clock of
  * their own; past this the A2A reaper cancels the paused task.
+ *
+ * @internal exported for tests
  */
 export const SLACK_HITL_REVIEW_TTL_MS = 24 * TimeInMs.Hour;
 

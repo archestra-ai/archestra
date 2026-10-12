@@ -303,7 +303,7 @@ export async function handleDelegation(
         message,
         context,
       });
-      return successResult(text);
+      return delegationResult(message, text);
     } catch (error) {
       if (isAbortLikeError(error)) throw error;
       return errorResult(
@@ -427,7 +427,8 @@ export async function handleDelegation(
     const task =
       promptWithContract(message, spawn.binding?.contract) ?? message;
     if (!spawn.binding) {
-      return successResult(
+      return delegationResult(
+        message,
         (await executeA2AMessage({ ...run, message: task })).text,
       );
     }
@@ -444,7 +445,7 @@ export async function handleDelegation(
         ...(history.length > 0 ? { messages: history } : {}),
       });
       const admitted = await admittedSubagentReturn(spawn.binding.child);
-      if (admitted !== undefined) return successResult(admitted);
+      if (admitted !== undefined) return delegationResult(message, admitted);
       history = [
         ...history,
         { role: "user", content: turn },
@@ -932,4 +933,13 @@ function dedupeDelegationTools(tools: Tool[]): Tool[] {
     names.add(tool.name);
     return true;
   });
+}
+
+/**
+ * A delegated answer carries the task it answers. A caller that delegates
+ * several tasks at once otherwise has to pair answers with tasks by tool call
+ * id alone, and models sometimes pair them by position instead.
+ */
+function delegationResult(task: string, answer: string) {
+  return successResult(`Task:\n${task}\n\nResult:\n${answer}`);
 }

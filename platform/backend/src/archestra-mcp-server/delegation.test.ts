@@ -291,7 +291,10 @@ describe("delegation tool execution", () => {
 
       expect(result.isError).toBe(false);
       expect(result.content).toEqual([
-        { type: "text", text: "Handled by subagent" },
+        {
+          type: "text",
+          text: "Task:\nReview the latest findings.\n\nResult:\nHandled by subagent",
+        },
       ]);
       expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
         expect.objectContaining({

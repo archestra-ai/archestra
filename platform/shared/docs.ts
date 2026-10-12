@@ -55,7 +55,7 @@ export const DocsPage = {
   PlatformArchestraMcpServer: "reference/archestra-mcp-server",
   PlatformApiReference: "reference/api",
   PlatformBuiltInSubagents: "agents/subagents/built-in",
-  PlatformChat: "workspace",
+  PlatformChat: "workspace/chat",
   PlatformClaudeCodeExample: "integrations/claude-code",
   PlatformClaudeDesktopExample: "integrations/claude-desktop",
   PlatformConnection: "get-started/connect",

@@ -1,7 +1,7 @@
 ---
 title: Projects & Schedules
 description: Keep chats, agent runs, files, instructions, and schedules in one shared workspace
-order: 1
+order: 2
 lastUpdated: 2026-10-11
 ---
 

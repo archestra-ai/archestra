@@ -7,8 +7,6 @@ import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 interface GitTreeEntry {
   path: string;
   type: "blob" | "tree";
-  /** Git file mode, e.g. 100644; 120000 is a symlink. */
-  mode?: string;
   /** Bytes, when the host reports it (GitHub does, GitLab does not). */
   size?: number;
   /** Git file mode, e.g. `100644`, `100755`, or `120000` for a symlink. */

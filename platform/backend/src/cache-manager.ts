@@ -137,6 +137,8 @@ export const CacheKey = {
    * read an old boolean and mistake it for "not an encrypted chat".
    */
   EncryptedChatSession: "encrypted-chat-session-v2",
+  /** Arguments behind a Slack approval's "View arguments" button (a button value is capped at 2,000 chars) */
+  SlackApprovalArguments: "chatops-slack-approval-arguments",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

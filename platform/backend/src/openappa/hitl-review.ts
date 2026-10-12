@@ -4,6 +4,11 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { sessionCallerId } from "./actor";
+import {
+  formatArgumentLines,
+  parseReviewedArguments,
+  reviewedToolLabel,
+} from "./review-display";
 import type { OpenAppaSession } from "./service";
 
 type HitlRuling = "approve" | "deny" | "none";
@@ -25,8 +30,9 @@ type PendingHitlReview = {
 
 type HitlAskUserArguments = {
   question: string;
+  previewQuestion?: string;
   header: string;
-  options: Array<{ label: string; description: string }>;
+  options: Array<{ label: string; description: string; preview?: string }>;
   allowMultiple: false;
   remedy_offer_ids: [string];
 };
@@ -197,23 +203,44 @@ export async function getHitlAskUserArguments(params: {
   const offerId = params.offerIds[0];
   const review = await getHitlReview({ session: params.session, offerId });
   if (!review) return undefined;
+  const options = [
+    { label: "Approve", description: "Allow this exact tool call." },
+    { label: "Deny", description: "Keep this tool call blocked." },
+  ];
+  const question = formatReviewQuestion(review.text);
+  if (!review.tool) {
+    return {
+      question,
+      header: "Approval",
+      options,
+      allowMultiple: false,
+      remedy_offer_ids: [offerId],
+    };
+  }
+  // Hosts with option previews (Claude Code) ask the short question and show
+  // the reviewed arguments beside each choice. Other hosts keep the full
+  // review text and ignore the previews.
+  const argumentLines = formatArgumentLines(
+    parseReviewedArguments(review.arguments) ?? {},
+    REVIEW_PREVIEW_WIDTH,
+  );
   return {
-    question: formatReviewQuestion(review.text),
+    question,
+    previewQuestion: `Approve ${reviewedToolLabel(review.tool)}?`,
     header: "Approval",
-    options: [
-      {
-        label: "Approve",
-        description: "Allow this exact tool call.",
-      },
-      {
-        label: "Deny",
-        description: "Keep this tool call blocked.",
-      },
-    ],
+    options: options.map((option) => ({
+      ...option,
+      preview: argumentLines
+        ? `${option.label}\n\n${argumentLines}`
+        : option.label,
+    })),
     allowMultiple: false,
     remedy_offer_ids: [offerId],
   };
 }
+
+/** Columns of Claude Code's preview pane beside the option list. */
+const REVIEW_PREVIEW_WIDTH = 56;
 
 export async function recordHitlRuling(params: {
   session: OpenAppaSession;

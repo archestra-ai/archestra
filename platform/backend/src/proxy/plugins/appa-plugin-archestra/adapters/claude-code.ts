@@ -79,20 +79,32 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
-    fromAskUser: (args: AskUserArguments) => ({
-      questions: [
-        {
-          question: args.question,
-          // Claude Code's AskUserQuestion tab label is at most 12 characters.
-          header: questionHeader(args.header, 12),
-          options: args.options.map((option) => ({
-            label: option.label,
-            description: option.description ?? option.label,
-          })),
-          multiSelect: args.allowMultiple === true,
-        },
-      ],
-    }),
+    fromAskUser: (args: AskUserArguments) => {
+      // AskUserQuestion shows option previews for single-select questions only.
+      const previews =
+        args.allowMultiple !== true &&
+        args.options.some((option) => typeof option.preview === "string");
+      return {
+        questions: [
+          {
+            question:
+              previews && typeof args.previewQuestion === "string"
+                ? args.previewQuestion
+                : args.question,
+            // Claude Code's AskUserQuestion tab label is at most 12 characters.
+            header: questionHeader(args.header, 12),
+            options: args.options.map((option) => ({
+              label: option.label,
+              description: option.description ?? option.label,
+              ...(previews && typeof option.preview === "string"
+                ? { preview: option.preview }
+                : {}),
+            })),
+            multiSelect: args.allowMultiple === true,
+          },
+        ],
+      };
+    },
     rulingFromResult: structuredQuestionRuling,
   };
   // Claude Code connects MCP servers in the background and declares this tool

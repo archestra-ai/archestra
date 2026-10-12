@@ -1678,83 +1678,215 @@ describe("SlackProvider.addApprovalRequestForm", () => {
     }
   });
 
-  test("renders the tool's arguments as a code block when provided", async () => {
+  test("asks for approval of the tool, with arguments behind a View arguments button", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
     (provider as any).client = { chat: { postMessage } };
 
     await provider.addApprovalRequestForm({
-      channelId: "C1",
-      threadId: "T1",
-      approvalId: "appr-1",
-      taskId: "task-1",
+      ...approvalFormOptions(),
       toolName: "github__create_issue",
       toolArgs: { repo: "octo/repo", title: "Bug" },
-      originalMessage: {
-        messageId: "1234567890.123456",
-        channelId: "C1",
-        workspaceId: "W1",
-        threadId: "T1",
-        senderId: "U_SENDER",
-        senderEmail: "user@example.com",
-        senderName: "Test User",
-        text: "do it",
-        rawText: "do it",
-        timestamp: new Date(),
-        isThreadReply: false,
-      },
     });
 
-    const callArgs = postMessage.mock.calls[0][0];
-    const sectionTexts = callArgs.blocks
-      .filter((b: { type: string }) => b.type === "section")
-      .map((b: { text: { text: string } }) => b.text.text);
-    // The underlying tool name is shown...
-    expect(sectionTexts).toContain("`github__create_issue`");
-    // ...alongside a fenced code block carrying the arguments.
-    const argsBlock = sectionTexts.find((t: string) => t.startsWith("```"));
-    expect(argsBlock).toBeDefined();
-    expect(argsBlock).toContain('"repo": "octo/repo"');
-    expect(argsBlock).toContain('"title": "Bug"');
+    const { blocks } = postMessage.mock.calls[0][0];
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0].text.text).toBe(
+      "*Approval required*\n`github__create_issue`\nReview this tool call before it can continue.",
+    );
+    // The arguments are not in the message.
+    expect(JSON.stringify(blocks[0])).not.toContain("octo/repo");
+    const buttons = blocks[1].elements;
+    expect(
+      buttons.map((b: { text: { text: string }; style?: string }) => [
+        b.text.text,
+        b.style,
+      ]),
+    ).toEqual([
+      ["Approve", "primary"],
+      ["Deny", "danger"],
+      ["View arguments", undefined],
+    ]);
+    expect(JSON.parse(buttons[1].value).approved).toBe(false);
   });
 
-  test("omits the arguments code block when there are no arguments", async () => {
+  test("omits View arguments when there are no arguments", async () => {
     const provider = createProvider();
     const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
     (provider as any).client = { chat: { postMessage } };
 
     await provider.addApprovalRequestForm({
-      channelId: "C1",
-      threadId: "T1",
-      approvalId: "appr-1",
-      taskId: "task-1",
-      toolName: "dangerous_tool",
+      ...approvalFormOptions(),
       toolArgs: {},
-      originalMessage: {
-        messageId: "1234567890.123456",
-        channelId: "C1",
-        workspaceId: "W1",
-        threadId: "T1",
-        senderId: "U_SENDER",
-        senderEmail: "user@example.com",
-        senderName: "Test User",
-        text: "do it",
-        rawText: "do it",
-        timestamp: new Date(),
-        isThreadReply: false,
-      },
     });
 
-    const callArgs = postMessage.mock.calls[0][0];
-    const sectionTexts = callArgs.blocks
-      .filter((b: { type: string }) => b.type === "section")
-      .map((b: { text: { text: string } }) => b.text.text);
-    expect(sectionTexts).toContain("`dangerous_tool`");
-    expect(sectionTexts.some((t: string) => t.startsWith("```"))).toBe(false);
+    const { blocks } = postMessage.mock.calls[0][0];
+    expect(
+      blocks[1].elements.map((b: { text: { text: string } }) => b.text.text),
+    ).toEqual(["Approve", "Deny"]);
+  });
+
+  test("shows a review without a structured tool as its text, without View arguments", async () => {
+    const provider = createProvider();
+    const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage } };
+
+    await provider.addApprovalRequestForm({
+      ...approvalFormOptions(),
+      toolName: "execute_remedy_plan",
+      toolArgs: { plan: "narrow" },
+      reviewText: "Allow sending to #general?",
+    });
+
+    const { blocks } = postMessage.mock.calls[0][0];
+    expect(blocks[0].text.text).toBe(
+      "*Approval required*\n```\nAllow sending to #general?\n```\nReview this tool call before it can continue.",
+    );
+    expect(
+      blocks[1].elements.map((b: { text: { text: string } }) => b.text.text),
+    ).toEqual(["Approve", "Deny"]);
   });
 });
+
+// =============================================================================
+// View arguments
+// =============================================================================
+
+describe("SlackProvider View arguments", () => {
+  async function postForm(provider: SlackProvider, toolArgs: object) {
+    const postMessage = vi.fn().mockResolvedValue({ ts: "4444444444.000000" });
+    const open = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postMessage }, views: { open } };
+    await provider.addApprovalRequestForm({
+      ...approvalFormOptions(),
+      toolName: "context7__query-docs",
+      toolArgs: toolArgs as Record<string, unknown>,
+    });
+    const button = postMessage.mock.calls[0][0].blocks[1].elements[2];
+    return { button, open };
+  }
+
+  function clickPayload(button: { action_id: string; value: string }) {
+    return {
+      type: "block_actions",
+      trigger_id: "trigger-1",
+      actions: [{ action_id: button.action_id, value: button.value }],
+      channel: { id: "C1" },
+      team: { id: "W1" },
+      user: { id: "U2", name: "Approver" },
+      message: { ts: "9.9", thread_ts: "T1" },
+    };
+  }
+
+  test("opens the stored arguments in a modal, not as a decision", async () => {
+    const provider = createProvider();
+    const handleInteractiveApprovalDecision = vi.fn();
+    const handleInteractiveSelection = vi.fn();
+    provider.setEventHandler({
+      handleInteractiveApprovalDecision,
+      handleInteractiveSelection,
+    } as unknown as Parameters<SlackProvider["setEventHandler"]>[0]);
+    // Larger than a button value may hold, so only the cache can carry it.
+    const query = "q".repeat(3000);
+    const { button, open } = await postForm(provider, {
+      libraryId: "/vercel/next.js",
+      query,
+    });
+    expect(button.value.length).toBeLessThan(100);
+
+    await provider.handleInteractivePayload(clickPayload(button));
+
+    expect(handleInteractiveApprovalDecision).not.toHaveBeenCalled();
+    expect(handleInteractiveSelection).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
+    const { trigger_id, view } = open.mock.calls[0][0];
+    expect(trigger_id).toBe("trigger-1");
+    expect(view.type).toBe("modal");
+    expect(view.title.text).toBe("Arguments");
+    expect(view.close.text).toBe("Close");
+    expect(view.submit).toBeUndefined();
+    expect(view.blocks[0].text.text).toBe("`context7__query-docs`");
+    const argsText: string = view.blocks[1].text.text;
+    expect(argsText.startsWith("```\n{\n")).toBe(true);
+    expect(argsText).toContain('"libraryId": "/vercel/next.js"');
+    expect(argsText).toContain("… (truncated)");
+    expect(argsText.length).toBeLessThanOrEqual(3000);
+  });
+
+  test("says the arguments are gone once the cache entry expired", async () => {
+    const provider = createProvider();
+    const { button, open } = await postForm(provider, { a: 1 });
+    await cacheManager.delete(
+      `${CacheKey.SlackApprovalArguments}-${button.value}`,
+    );
+
+    await provider.handleInteractivePayload(clickPayload(button));
+
+    expect(open.mock.calls[0][0].view.blocks[0].text.text).toBe(
+      "These arguments are no longer available.",
+    );
+  });
+});
+
+// =============================================================================
+// updateApprovalRequest
+// =============================================================================
+
+describe("SlackProvider.updateApprovalRequest", () => {
+  test.each([
+    [
+      true,
+      "U9",
+      "`context7__query-docs`: :white_check_mark: Approved by <@U9>",
+    ],
+    [false, "U9", "`context7__query-docs`: :x: Denied by <@U9>"],
+    [false, undefined, "`context7__query-docs`: :x: Denied"],
+  ])("approved=%s decidedBy=%s", async (approved, decidedByUserId, text) => {
+    const provider = createProvider();
+    const update = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { update } };
+
+    await provider.updateApprovalRequest({
+      channelId: "C1",
+      messageKey: "9.9",
+      toolName: "context7__query-docs",
+      approved,
+      decidedByUserId,
+    });
+
+    expect(update.mock.calls[0][0].blocks).toEqual([
+      { type: "section", text: { type: "mrkdwn", text } },
+    ]);
+  });
+});
+
+function approvalFormOptions() {
+  return {
+    channelId: "C1",
+    threadId: "T1",
+    approvalId: "appr-1",
+    taskId: "task-1",
+    toolName: "dangerous_tool",
+    originalMessage: {
+      messageId: "1234567890.123456",
+      channelId: "C1",
+      workspaceId: "W1",
+      threadId: "T1",
+      senderId: "U_SENDER",
+      senderEmail: "user@example.com",
+      senderName: "Test User",
+      text: "do it",
+      rawText: "do it",
+      timestamp: new Date(),
+      isThreadReply: false,
+    },
+  };
+}
 
 // =============================================================================
 // parseApprovalPayload

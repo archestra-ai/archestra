@@ -12,6 +12,7 @@ import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   clearHitlReview,
   consumeHitlRuling,
+  getHitlAskUserArguments,
   recordHitlRuling,
   stageHitlReview,
 } from "@/openappa/hitl-review";
@@ -526,6 +527,56 @@ describe("chat tool execution", () => {
       selected: ["Approve"],
     });
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+  });
+
+  test("accepts the proxy's rewritten review call with option previews", async () => {
+    const offerId = "offer-hitl-preview";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
+    await stageHitlReview({
+      session,
+      review: {
+        offerId,
+        text: "Full review text.",
+        tool: "mcp/example/write",
+        arguments: '{"value":1}',
+      },
+    });
+    const rewritten = await getHitlAskUserArguments({
+      session,
+      offerIds: [offerId],
+    });
+    expect(rewritten?.options[0].preview).toBe("Approve\n\nvalue  1");
+    const requests: Array<{ message: string }> = [];
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async (request) => {
+          requests.push(request);
+          return {
+            status: "answered" as const,
+            result: { action: "accept" as const, content: { choice: "Deny" } },
+          };
+        },
+      },
+    };
+
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      { ...rewritten, trajectory: trajectory() },
+      mockContext,
+    );
+
+    // MCP forms keep the full review text; they have no preview pane.
+    expect(requests.map((request) => request.message)).toEqual([
+      "Full review text.",
+    ]);
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Deny"],
+    });
+    expect(await consumeHitlRuling({ session, offerId })).toBe("deny");
   });
 
   for (const [outcome, message] of [

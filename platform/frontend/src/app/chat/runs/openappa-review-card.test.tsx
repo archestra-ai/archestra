@@ -57,6 +57,9 @@ it("lets the owner approve the exact offer and hides that offer from a shared vi
   expect(
     await screen.findByRole("button", { name: "Approve" }),
   ).toBeInTheDocument();
+  // Arguments stay collapsed until the tool header opens them.
+  expect(document.body).not.toHaveTextContent("secret.txt");
+  await user.click(screen.getByText("mcp/example/write"));
   expect(document.body).toHaveTextContent("secret.txt");
   await user.click(screen.getByRole("button", { name: "Approve" }));
   await waitFor(() =>

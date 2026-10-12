@@ -9,6 +9,8 @@ import { z } from "zod";
 
 export type CommonMcpToolDefinition = {
   name: string;
+  /** The namespace the tool is declared in, on a wire that has them. */
+  namespace?: string;
   description?: string;
   inputSchema: Record<string, unknown>;
   _meta?: Record<string, unknown>;

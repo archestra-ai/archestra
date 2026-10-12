@@ -78,6 +78,7 @@ export * from "./member";
 export * from "./message";
 export * from "./model";
 export * from "./oauth-client";
+export * from "./observed-mcp-server";
 export * from "./organization";
 export * from "./plugin";
 export * from "./plugin-marketplace";

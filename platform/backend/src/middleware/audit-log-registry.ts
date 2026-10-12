@@ -682,12 +682,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
   },
 
-  // Stored GitHub personal access tokens
+  // GitLab access tokens, stored as organization credentials
   "/api/git-credentials/gitlab": {
     resourceType: "credential",
     fetchById: (id, orgId) =>
       RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
   },
+  // Stored GitHub personal access tokens
   "/api/github-pats": {
     resourceType: "credential",
     fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),

@@ -1,6 +1,7 @@
 import {
   HEADER_NAME_REGEX,
   HEADER_NAME_VALIDATION_MESSAGE,
+  HttpUrlSchema,
   LocalConfigFormSchema,
   ResourcePermissionGrantSchema,
 } from "@archestra/shared";
@@ -201,11 +202,7 @@ const activeAuthFormSchema = z
     icon: z.string().nullable().optional(),
     serverType: z.enum(["remote", "local"]),
     multitenant: z.boolean().optional(),
-    serverUrl: z
-      .string()
-      .url({ error: "Must be a valid URL" })
-      .optional()
-      .or(z.literal("")),
+    serverUrl: HttpUrlSchema.optional().or(z.literal("")),
     authMethod: z.enum([
       "none",
       "bearer",
@@ -325,7 +322,7 @@ const activeAuthFormSchema = z
     },
     {
       message:
-        "Either command or Docker image must be provided. If Docker image is set, command is optional.",
+        "Either command or container image must be provided. If container image is set, command is optional.",
       path: ["localConfig", "command"],
     },
   )

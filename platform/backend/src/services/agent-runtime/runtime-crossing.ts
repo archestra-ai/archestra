@@ -6,7 +6,10 @@ import {
   returnRuntimeValue,
   startRuntimeChild,
 } from "@/openappa/service";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  getGuardrailsDeployment,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import type { AgentRunActorKind } from "@/types";
 import { ApiError } from "@/types";
 import {
@@ -49,23 +52,52 @@ function crossingFromContext(
   };
 }
 
+/**
+ * A call without a proof comes from a client whose model requests did not pass
+ * the proxy. The organization's setting for unrecognized clients decides it
+ * here as it does there: such a caller has no session to bind, so it may only
+ * open and use runtimes that have no parent (see `refuseUnrecognizedCaller`).
+ */
 export async function guardRuntimeCrossing(
   context: Pick<ArchestraContext, "openappaRuntimeCall">,
 ): Promise<
   | { kind: "inactive" }
   | { kind: "proof"; crossing: RuntimeCrossing }
+  | { kind: "unrecognized" }
   | { kind: "refused"; reason: string }
 > {
   if (!(await isGuardrailsV2Active())) return { kind: "inactive" };
   const crossing = crossingFromContext(context);
-  if (!crossing) {
+  if (crossing) return { kind: "proof", crossing };
+  const { unsupportedClientAction } = await getGuardrailsDeployment();
+  if (unsupportedClientAction === "block") {
     return {
       kind: "refused",
       reason:
-        "This runtime crossing has no verified source. The request was not sent.",
+        "Guardrails do not recognize this client, so the request was not sent. Send the client's model requests through the LLM Proxy, or ask an administrator to allow unrecognized clients.",
     };
   }
-  return { kind: "proof", crossing };
+  return { kind: "unrecognized" };
+}
+
+/**
+ * A runtime bound to a parent answers only to that parent's proof. Returns the
+ * refusal for a caller without one, or undefined when the runtime has no
+ * parent. A runtime whose session cannot be resolved is refused, not assumed
+ * to be unbound.
+ */
+export async function refuseUnrecognizedCaller(params: {
+  organizationId: string;
+  workspaceId: string | undefined;
+}): Promise<string | undefined> {
+  const resolved = params.workspaceId
+    ? await resolveRuntimeSessionForWorkspace({
+        organizationId: params.organizationId,
+        workspaceId: params.workspaceId,
+      })
+    : null;
+  if (!resolved) return UNVERIFIED_RUNTIME_SESSION;
+  return resolved.session.parent_id ? BOUND_TO_ANOTHER_SESSION : undefined;
 }
 
 export function promptWithContract(
@@ -174,11 +206,7 @@ export async function classifyRuntimeCaller(params: {
     workspaceId: params.workspaceId,
   });
   if (!resolved) {
-    return {
-      kind: "refused",
-      reason:
-        "This runtime session could not be verified. The request was refused.",
-    };
+    return { kind: "refused", reason: UNVERIFIED_RUNTIME_SESSION };
   }
   if (
     params.crossing.source.session_id === resolved.session.session_id &&
@@ -194,11 +222,7 @@ export async function classifyRuntimeCaller(params: {
     };
   }
   if (resolved.session.parent_id !== params.crossing.source.session_id) {
-    return {
-      kind: "refused",
-      reason:
-        "This runtime is bound to a different session. The request was refused.",
-    };
+    return { kind: "refused", reason: BOUND_TO_ANOTHER_SESSION };
   }
   return { kind: "parent", child: resolved.session };
 }
@@ -266,3 +290,9 @@ export async function crossRuntimeFile(params: {
   }
   return result.value;
 }
+
+const UNVERIFIED_RUNTIME_SESSION =
+  "This runtime session could not be verified. The request was refused.";
+
+const BOUND_TO_ANOTHER_SESSION =
+  "This runtime is bound to a different session. The request was refused.";

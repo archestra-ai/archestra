@@ -633,8 +633,8 @@ class AnthropicStreamAdapter
 {
   readonly provider = "anthropic" as const;
   readonly state: StreamAccumulatorState;
-  private toolUseBlockIndices = new Set<number>();
-  private currentToolCallIndex = -1;
+  /** Upstream content-block index → position in `state.toolCalls`. */
+  private toolCallByBlockIndex = new Map<number, number>();
   // Upstream content-block index -> the index the client is given, assigned in
   // the order blocks are actually emitted. Withholding a tool block, or holding
   // it back and releasing it after later text, would otherwise leave the client
@@ -828,8 +828,10 @@ class AnthropicStreamAdapter
               })}\n\n`;
             }
           }
-          this.toolUseBlockIndices.add(chunk.index);
-          this.currentToolCallIndex = this.state.toolCalls.length;
+          this.toolCallByBlockIndex.set(
+            chunk.index,
+            this.state.toolCalls.length,
+          );
           this.state.toolCalls.push({
             id: chunk.content_block.id,
             name: chunk.content_block.name,
@@ -857,10 +859,11 @@ class AnthropicStreamAdapter
       case "content_block_delta":
         if (
           chunk.delta.type === "input_json_delta" &&
-          this.toolUseBlockIndices.has(chunk.index)
+          this.toolCallByBlockIndex.has(chunk.index)
         ) {
-          if (this.currentToolCallIndex >= 0) {
-            this.state.toolCalls[this.currentToolCallIndex].arguments +=
+          const position = this.toolCallByBlockIndex.get(chunk.index);
+          if (position !== undefined) {
+            this.state.toolCalls[position].arguments +=
               chunk.delta.partial_json;
           }
           // Store raw event for replay after policy approval
@@ -900,7 +903,7 @@ class AnthropicStreamAdapter
         break;
 
       case "content_block_stop":
-        if (!this.toolUseBlockIndices.has(chunk.index)) {
+        if (!this.toolCallByBlockIndex.has(chunk.index)) {
           const event = `event: content_block_stop\ndata: ${JSON.stringify(
             this.withOutIndex(chunk),
           )}\n\n`;
@@ -908,7 +911,9 @@ class AnthropicStreamAdapter
         } else {
           // A tool called with no input streams no `partial_json`; its input
           // is `{}`, not the empty string policy evaluation would reject.
-          const call = this.state.toolCalls[this.currentToolCallIndex];
+          const position = this.toolCallByBlockIndex.get(chunk.index);
+          const call =
+            position === undefined ? undefined : this.state.toolCalls[position];
           if (call?.arguments === "") call.arguments = "{}";
           // Store raw event for replay after policy approval
           this.state.rawToolCallEvents.push(chunk);
@@ -1086,8 +1091,7 @@ class AnthropicStreamAdapter
     this.state.rawToolCallEvents = [];
     this.state.stopReason = "end_turn";
     this.toolCallsReleased = false;
-    this.toolUseBlockIndices.clear();
-    this.currentToolCallIndex = 0;
+    this.toolCallByBlockIndex.clear();
     // Upstream data about the replaced turn (verdicts on its tool calls) does
     // not describe what the client receives.
     this.upstreamMessageDelta = null;

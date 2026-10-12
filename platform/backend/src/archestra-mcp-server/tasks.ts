@@ -29,6 +29,7 @@ import {
   AgentTeamModel,
   AgentWorkspaceModel,
 } from "@/models";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { RouteCategory } from "@/observability/tracing";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
@@ -42,6 +43,7 @@ import {
   crossRuntimeOutput,
   guardRuntimeCrossing,
   type RuntimeCrossing,
+  refuseUnrecognizedCaller,
   SPAWN_TARGET_MISMATCH,
 } from "@/services/agent-runtime/runtime-crossing";
 import {
@@ -63,6 +65,11 @@ import {
 } from "@/types";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
+  type RuntimeLaunchFailureReason,
+  type RuntimeLaunchOutcome,
+  RuntimeLaunchStateSchema,
+} from "@/types/openappa-runtime-launch";
+import {
   agentCredentialSetupUrl,
   catchError,
   defineArchestraTool,
@@ -83,12 +90,23 @@ export async function startDelegatedTask(params: {
   attachments?: A2AAttachment[];
   context: ArchestraContext;
 }) {
+  const { result, outcome } = await launchDelegatedTask(params);
+  if (outcome) await recordRuntimeLaunch(params.context, outcome);
+  return result;
+}
+
+async function launchDelegatedTask(params: {
+  agentId: string;
+  message: string;
+  attachments?: A2AAttachment[];
+  context: ArchestraContext;
+}): Promise<{ result: CallToolResult; outcome?: RuntimeLaunchOutcome }> {
   const { agentId, message, context } = params;
   try {
     const actor = requireActor(context);
     const agent = await AgentModel.findById(agentId);
     if (!agent || agent.organizationId !== actor.organizationId) {
-      return errorResult("Agent not found");
+      return failedLaunch("agent_not_found", errorResult("Agent not found"));
     }
     const isAgentAdmin = await ResourcePermissions.allows({
       userId: actor.id,
@@ -106,13 +124,15 @@ export async function startDelegatedTask(params: {
         action: "use",
       }))
     ) {
-      return errorResult("Agent not found");
+      return failedLaunch("agent_not_found", errorResult("Agent not found"));
     }
 
     const runtime = resolveAgentRuntime(agent);
     if (runtime) resolveAgentRuntimeBackendDriver(runtime.backend);
     const crossing = await runtimeCrossingForStart(context, Boolean(runtime));
-    if (typeof crossing === "string") return errorResult(crossing);
+    if (typeof crossing === "string") {
+      return failedLaunch("refused", errorResult(crossing));
+    }
 
     // Refuse before creating a task when the caller can already fix the
     // missing credential. Otherwise the detached task fails after its handle
@@ -124,13 +144,16 @@ export async function startDelegatedTask(params: {
         userId: actor.id,
       });
       if (preflight.missing.length > 0) {
-        return credentialsNeededResult(agent.id, preflight.missing);
+        return credentialsNeededLaunch(agent.id, preflight.missing);
       }
       if (preflight.misconfigured.length > 0) {
-        return errorResult(
-          `Agent "${agent.name}" is missing shared Agent Runtime credentials an administrator must configure: ${preflight.misconfigured
-            .map((entry) => entry.label)
-            .join(", ")}`,
+        return failedLaunch(
+          "credentials_misconfigured",
+          errorResult(
+            `Agent "${agent.name}" is missing shared Agent Runtime credentials an administrator must configure: ${preflight.misconfigured
+              .map((entry) => entry.label)
+              .join(", ")}`,
+          ),
         );
       }
     }
@@ -180,22 +203,36 @@ export async function startDelegatedTask(params: {
       });
     }
 
-    return structuredSuccessResult({
-      run: runSummary(taskRow),
-      session_id: runtime ? taskRow.id : null,
-      run_url: runtime
-        ? `${config.frontendBaseUrl}/chat/runs/${taskRow.id}`
-        : null,
-      runtime: runtime ? "dedicated" : "foreground",
-    });
+    const run = runSummary(taskRow);
+    const state = RuntimeLaunchStateSchema.safeParse(run.state);
+    return {
+      result: structuredSuccessResult({
+        run,
+        session_id: runtime ? taskRow.id : null,
+        run_url: runtime
+          ? `${config.frontendBaseUrl}/chat/runs/${taskRow.id}`
+          : null,
+        runtime: runtime ? "dedicated" : "foreground",
+      }),
+      // A foreground start opens no runtime session, so it has no outcome.
+      ...(runtime
+        ? {
+            outcome: {
+              kind: "launched" as const,
+              session_id: taskRow.id,
+              ...(state.success ? { state: state.data } : {}),
+            },
+          }
+        : {}),
+    };
   } catch (error) {
     const needed = missingCredentialsFrom(error);
     if (needed) {
-      return credentialsNeededResult(needed.agentId, needed.missing);
+      return credentialsNeededLaunch(needed.agentId, needed.missing);
     }
     const refused = crossingRefusal(error);
-    if (refused) return errorResult(refused);
-    return catchError(error, "starting the run");
+    if (refused) return failedLaunch("refused", errorResult(refused));
+    return failedLaunch("failed", catchError(error, "starting the run"));
   }
 }
 
@@ -976,7 +1013,11 @@ const registry = defineArchestraTools([
         const workspace = await AgentWorkspaceModel.findByWorkloadName(
           session.workloadName,
         );
-        const crossing = await parentCrossing(context, workspace?.id);
+        const crossing = await parentCrossing({
+          context,
+          organizationId: actor.organizationId,
+          workspaceId: workspace?.id,
+        });
         if (typeof crossing === "string") return errorResult(crossing);
         if (crossing && workspace) {
           await admitRuntimeSteer({
@@ -1362,6 +1403,58 @@ async function requireAccessibleTask({
   return { row };
 }
 
+function failedLaunch(
+  reason: RuntimeLaunchFailureReason,
+  result: CallToolResult,
+  details: { setup_url?: string } = {},
+): { result: CallToolResult; outcome: RuntimeLaunchOutcome } {
+  return { result, outcome: { kind: "failed", reason, ...details } };
+}
+
+function credentialsNeededLaunch(
+  agentId: string,
+  missing: Array<{ key: string; label: string; description?: string }>,
+) {
+  return failedLaunch(
+    "credentials_needed",
+    credentialsNeededResult(agentId, missing),
+    {
+      setup_url: agentCredentialSetupUrl(
+        agentId,
+        missing.map(({ key }) => key),
+      ),
+    },
+  );
+}
+
+/**
+ * Stores the outcome of a launch that OpenAPPA released as a spawn, before the
+ * client gets the result. The proxy tells the model what this record says. A
+ * record that fails to write leaves the model with no handle; it does not
+ * fail a run that already started.
+ */
+async function recordRuntimeLaunch(
+  context: Pick<ArchestraContext, "openappaRuntimeCall">,
+  outcome: RuntimeLaunchOutcome,
+): Promise<void> {
+  const call = context.openappaRuntimeCall;
+  if (!call?.spawn) return;
+  try {
+    await OpenAppaSpawnCorrelationModel.recordRuntimeLaunch({
+      organizationId: call.session.organization_id,
+      callerId: call.session.caller_id,
+      sessionId: call.session.session_id,
+      toolCallId: call.toolCallId,
+      outcome,
+    });
+  } catch (error) {
+    logger.warn(
+      { err: error, toolCallId: call.toolCallId },
+      "OpenAPPA could not record the outcome of a runtime launch",
+    );
+  }
+}
+
 async function runtimeCrossingForStart(
   context: Parameters<typeof guardRuntimeCrossing>[0],
   runtime: boolean,
@@ -1373,20 +1466,32 @@ async function runtimeCrossingForStart(
   }
   const gate = await guardRuntimeCrossing(context);
   if (gate.kind === "refused") return gate.reason;
-  if (gate.kind === "inactive") return undefined;
+  // An unrecognized client has no session to bind: its run starts unbound,
+  // like one started from the run page.
+  if (gate.kind === "inactive" || gate.kind === "unrecognized") {
+    return undefined;
+  }
   if (!gate.crossing.spawn) {
     return "This start was not classified as a protected spawn. No runtime was started.";
   }
   return gate.crossing;
 }
 
-async function parentCrossing(
-  context: Parameters<typeof guardRuntimeCrossing>[0],
-  workspaceId: string | undefined,
-): Promise<RuntimeCrossing | undefined | string> {
-  const gate = await guardRuntimeCrossing(context);
+async function parentCrossing(params: {
+  context: Parameters<typeof guardRuntimeCrossing>[0];
+  organizationId: string;
+  workspaceId: string | undefined;
+}): Promise<RuntimeCrossing | undefined | string> {
+  const { workspaceId } = params;
+  const gate = await guardRuntimeCrossing(params.context);
   if (gate.kind === "refused") return gate.reason;
-  if (gate.kind !== "proof") return undefined;
+  if (gate.kind === "unrecognized") {
+    return refuseUnrecognizedCaller({
+      organizationId: params.organizationId,
+      workspaceId,
+    });
+  }
+  if (gate.kind === "inactive") return undefined;
   if (!workspaceId) {
     return "This runtime session could not be verified. The request was refused.";
   }
@@ -1417,7 +1522,16 @@ async function protectedFileAccess(params: {
   if (gate.kind === "refused") {
     return { kind: "error", result: errorResult(gate.reason) };
   }
-  if (gate.kind !== "proof") return { kind: "open" };
+  if (gate.kind === "unrecognized") {
+    const refusal = await refuseUnrecognizedCaller({
+      organizationId: params.actor.organizationId,
+      workspaceId: workspace.id,
+    });
+    return refusal
+      ? { kind: "error", result: errorResult(refusal) }
+      : { kind: "open" };
+  }
+  if (gate.kind === "inactive") return { kind: "open" };
   const relation = await classifyRuntimeCaller({
     crossing: gate.crossing,
     organizationId: params.actor.organizationId,
@@ -1455,6 +1569,13 @@ async function governedRunOutput(params: {
   const gate = await guardRuntimeCrossing(params.context);
   if (gate.kind === "inactive") return undefined;
   if (gate.kind === "refused") return errorResult(gate.reason);
+  if (gate.kind === "unrecognized") {
+    const refusal = await refuseUnrecognizedCaller({
+      organizationId: params.actor.organizationId,
+      workspaceId: workspace.id,
+    });
+    return refusal ? errorResult(refusal) : undefined;
+  }
   const crossed = await crossRuntimeOutput({
     crossing: gate.crossing,
     organizationId: params.actor.organizationId,

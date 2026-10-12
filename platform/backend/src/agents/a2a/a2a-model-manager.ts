@@ -8,7 +8,13 @@ import {
   A2ATaskModel,
 } from "@/models";
 import { A2AMessageIdExistsError } from "@/models/a2a/message";
-import type { A2AArtifact, A2AContext, A2AMessage, A2ATask } from "@/types";
+import type {
+  A2AArtifact,
+  A2AContext,
+  A2AMessage,
+  A2ATask,
+  A2ATaskApprovalRequest,
+} from "@/types";
 import { type A2AActor, A2AError, A2AErrorKind } from "./a2a-base";
 import {
   type A2AArchestraApprovalRequest,
@@ -221,9 +227,7 @@ export class A2ATaskManager {
       A2AMessageModel.findByTaskId(task.id),
       A2AArtifactModel.findByTaskId(task.id),
     ]);
-    const approvalRequests = z
-      .array(A2AArchestraApprovalRequestSchema)
-      .parse(approvalRequestRows);
+    const approvalRequests = approvalRequestRows.map(toApprovalRequest);
 
     // The status message is the latest AGENT message: surfacing whatever
     // happens to be last would hand a just-appended USER turn back as the
@@ -259,13 +263,9 @@ export class A2ATaskManager {
     );
 
     return tasks.map((task) => {
-      const approvalRequests = z
-        .array(A2AArchestraApprovalRequestSchema)
-        .parse(
-          (approvalsByTask.get(task.id) ?? []).sort((a, b) =>
-            a.approvalId.localeCompare(b.approvalId),
-          ),
-        );
+      const approvalRequests = (approvalsByTask.get(task.id) ?? [])
+        .sort((a, b) => a.approvalId.localeCompare(b.approvalId))
+        .map(toApprovalRequest);
       const history = historyByTask.get(task.id) ?? [];
       const statusMessage = [...history]
         .reverse()
@@ -436,6 +436,28 @@ export function getApprovalRequestsMap(
     map[r.approvalId] = r;
   });
   return map;
+}
+
+/** A stored approval row as the protocol's approval request. */
+export function toApprovalRequest(
+  row: A2ATaskApprovalRequest,
+): A2AArchestraApprovalRequest {
+  return {
+    approvalId: row.approvalId,
+    toolCallId: row.toolCallId,
+    toolName: row.toolName,
+    approved: row.approved,
+    resolved: row.resolved,
+    ...(row.openappaOfferId &&
+      row.openappaReviewText &&
+      row.expiresAt && {
+        openappaReview: {
+          offerId: row.openappaOfferId,
+          text: row.openappaReviewText,
+          expiresAt: row.expiresAt.toISOString(),
+        },
+      }),
+  };
 }
 
 function getA2AProtocolMessageByA2AModelMessage(

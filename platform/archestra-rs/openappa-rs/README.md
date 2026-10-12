@@ -155,6 +155,7 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
 | `openappa_external_consults` | One row per external consult a dispatch made, written after the engine returns (migration `0487`) |
+| `openappa_dispatch_leases` | One row per family with a dispatch in progress or stopped: its owner, the family's last event sequence when it began, and how many dispatches in a row stopped (migration `0530`) |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. The
@@ -171,7 +172,51 @@ consult an external authority, the binding commits a `pending` receipt. Hook
 event writes and the completed receipt/approved output then commit as separate
 short transactions. The runtime keeps no trajectory state in memory between
 events, so a failed dispatch leaves nothing to discard. A durable pending
-receipt blocks further work in that family after an interruption.
+receipt blocks further work in that family until it is completed or released.
+
+### Dispatch leases
+
+A backend process can stop between a receipt's claim and its completion: a
+rollout, an out-of-memory kill, a lost database connection. The receipt then
+stays pending. Before its first claim, a hook dispatch takes the family's lease
+in `openappa_dispatch_leases`. The lease names the dispatch and records where
+the family's event log ended.
+
+The lease lasts as long as its owner's connection. The owner holds the family's
+advisory lock for the whole dispatch, and PostgreSQL drops that lock when the
+connection ends. A later dispatch that holds the lock and still finds pending
+receipts therefore knows that their owner no longer works on them. No clock is
+compared. It then reads the event log:
+
+- The log still ends where the lease recorded. The runtime kept nothing of the
+  stopped work. The dispatch deletes the pending receipts and continues. The
+  stopped operation runs again when the client submits it again, with its
+  external consults.
+- The log advanced. The runtime kept part of a decision that the host never
+  received. The family stays closed, and each dispatch returns the
+  interrupted-processing error.
+
+A dispatch that fails while its process continues to run applies the same rule
+to its own receipts before it returns. A failure that left the event log
+unchanged does not close the family.
+
+After three dispatches in a row stop with pending receipts, the family stays
+closed. This prevents a repeat of an operation that stops its process each time.
+
+A working dispatch reads its lease every five seconds. If the read fails or the
+lease has another owner, the dispatch stops and returns the lost-lease error.
+The host reports that error as retryable. The dispatch that took the family
+answers the retry from its completed receipt.
+
+Peer operations and remedies take no lease. Peer messages are stored outside
+the event log, and a remedy completes two receipts one after the other, so the
+log cannot show how far a stopped one got. A receipt that they leave pending
+closes the family. Receipts claimed before migration `0530` have no lease and
+also close the family.
+
+A tool result is recorded in the event log before its output sanitizer is
+consulted. A process that stops during that consult therefore leaves the family
+closed. A process that stops during a tool call's annotator consult does not.
 
 Completed result keys are session ID + tool call ID. Operation keys are session ID + operation ID. Remedy-execution receipts bind the authenticated spender. Submitting different result bytes under a completed result key returns the saved approved output without re-evaluating hooks. Submitting changed arguments under an existing logical call ID is refused.
 
@@ -190,11 +235,12 @@ including across a chain of forks. If the parent admits a result after the fork 
 the fork withholds that result. If a process stops unexpectedly before writing
 the session row, recovery sets a NULL watermark and inherits no results.
 
-Pending receipts deliberately require operator investigation. Inspect the
-scoped operation/result, native event history, and external authority records.
-Do not blindly delete the pending row or retry the consult: an external side
-effect may have happened before the process lost its response. No automatic
-recovery/reset endpoint is provided. This guarantees conservative replay
+Pending receipts that a dispatch lease does not release require operator
+investigation. Inspect the scoped operation/result, native event history, and
+external authority records. Do not blindly delete the pending row: the runtime
+recorded part of the operation, and a second run can apply it twice. No
+recovery/reset endpoint is provided for these receipts. A released operation
+consults its external authorities again, so this guarantees conservative replay
 behavior, not exactly-once execution of arbitrary external services.
 
 ## Remedies and current limits

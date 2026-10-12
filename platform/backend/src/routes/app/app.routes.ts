@@ -217,6 +217,13 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           access: ResourceAccessQuerySchema,
           sharedWith: ResourceSharedWithQuerySchema,
           owner: ResourceOwnerQuerySchema,
+          pinned: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value === "true" : value),
+              z.boolean(),
+            )
+            .optional()
+            .describe("Only return apps the current user has pinned."),
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(AppListItemSchema),
@@ -445,7 +452,9 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return true;
         });
 
-      const items: AppListItem[] = [...ownedItems, ...externalItems];
+      const items: AppListItem[] = [...ownedItems, ...externalItems].filter(
+        (item) => !query.pinned || item.pinnedAt !== null,
+      );
       items.sort((a, b) => a.name.localeCompare(b.name));
 
       return reply.send({

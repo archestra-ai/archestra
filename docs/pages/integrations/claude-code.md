@@ -2,7 +2,7 @@
 title: Claude Code
 description: Connect Claude Code with subscription or API-key inference
 order: 1
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,3 +30,13 @@ Send `Reply with connection verified.` In Archestra, open **Logs → LLM Proxy**
 Run `/mcp` and confirm that the gateway is connected. Enable the gateway if it is disabled. Ask Claude Code to list the tools available from that gateway. The list reflects the tools assigned in Archestra and your permissions.
 
 If inference works but tools do not, authenticate the gateway separately. If no request appears in the proxy logs, check that you started a new session and that another Claude configuration does not override the generated settings.
+
+## Gateway Tool Permissions
+
+Setup lets Claude Code run gateway tools through [`run_tool`](/docs/reference/archestra-mcp-server#run_tool) without asking each time. A permission prompt or Claude Code's auto mode then does not stop a task such as a [handoff](/docs/agents/runtime/handoff) halfway. Setup adds the allow rule to `permissions.allow` in `settings.json`.
+
+What to know:
+
+- The rule covers every tool on the gateway. A Claude Code rule cannot match a tool's arguments, so it cannot be narrower.
+- Your access rules and [Guardrails](/docs/agents/guardrails) still apply to each call.
+- To approve each call yourself, run `/permissions` in Claude Code and add the same rule as an ask rule. An ask rule wins over an allow rule.

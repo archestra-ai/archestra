@@ -285,6 +285,19 @@ describe("AgentWorkSources", () => {
     expect(screen.queryByRole("link", { name: "Add a channel" })).toBeNull();
   });
 
+  it("shows no channel buttons until it knows whether Slack has a bot per agent", () => {
+    vi.mocked(useSlackAgentBots).mockReturnValue({
+      data: undefined,
+      isPending: true,
+    } as unknown as ReturnType<typeof useSlackAgentBots>);
+
+    renderBuiltIn();
+
+    // Not "Add Slack channel" first, then "Add Slack bot" once it loads.
+    expect(screen.queryByRole("link", { name: /Add Slack/ })).toBeNull();
+    expect(screen.getByText("Loading channels…")).toBeVisible();
+  });
+
   it("offers only the chat apps the organization has connected", () => {
     mockSlackBots([], { perAgent: true });
     mockConnectedApps(["ms-teams"]);

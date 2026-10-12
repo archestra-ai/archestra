@@ -65,6 +65,7 @@ type AppsParams = Pick<
   | "sharedWith"
   | "owner"
   | "labels"
+  | "pinned"
 >;
 type AppDetailQueryOptions = { toastOnError?: boolean };
 

@@ -9,6 +9,7 @@ import {
 import {
   REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
+  TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared/archestra-mcp-server";
 import { CLAUDE_CODE_GUARD_CLIENT } from "../guard/clients";
 import { starterPrompt } from "../steps/ending";
@@ -49,17 +50,12 @@ const [
   AWS_BEARER_TOKEN_KEY,
 ] = CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
-/**
- * Claude Code's post-install OAuth step, shared by the bash and PowerShell
- * renderers. Registering the gateway is not enough: it authorizes each user
- * individually, so its tools unlock only after a one-time browser sign-in.
- * The running session never picks the server up — only a new one reads the
- * updated config — so the step must send the user to a NEW session; naming
- * `/mcp` alone strands them in a session where the gateway does not exist.
- */
 /** @public — asserted by the setup script unit tests, which knip --production ignores. */
 export const CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING =
-  "Skipped Claude Code helper allow rules. The gateway name or tool prefix cannot be used in an exact permission rule. MCP setup continues without pre-approving those calls.";
+  "Skipped the Claude Code allow rules for gateway tools. The gateway name or tool prefix cannot be used in an exact permission rule. MCP setup continues without pre-approving those calls.";
+
+const CLAUDE_APPA_PERMISSIONS_NOTICE =
+  "Claude Code can call gateway tools and the guardrail helpers without asking each time. Gateway sign-in, access rules, and required human reviews still apply.";
 
 /**
  * True when both names can be embedded as exact Claude allow rules.
@@ -75,7 +71,17 @@ export function claudeCodeAppaPermissionsAreLiteral(
   );
 }
 
-/** @public — asserted by the setup script unit tests, which knip --production ignores. */
+/**
+ * Exact allow rules for the gateway's tool runner and the APPA helpers.
+ *
+ * `run_tool` dispatches every other gateway tool, and a Claude Code rule cannot
+ * match tool arguments, so its rule pre-approves all of them. Without it, auto
+ * mode's classifier can block one dispatched call, such as a credential
+ * transfer, and stop a runtime handoff midway. The gateway enforces access
+ * rules and guardrails on every call either way.
+ *
+ * @public — asserted by the setup script unit tests, which knip --production ignores.
+ */
 export function claudeCodeAppaPermissionRules(
   mcp: SetupScriptMcpSection,
 ): string[] {
@@ -84,9 +90,11 @@ export function claudeCodeAppaPermissionRules(
       "Claude MCP permission rules require literal server and tool names",
     );
   }
-  return [...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES, TOOL_ASK_USER_SHORT_NAME].map(
-    (name) => `mcp__${mcp.serverName}__${mcp.toolPrefix}${name}`,
-  );
+  return [
+    TOOL_RUN_TOOL_SHORT_NAME,
+    ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+    TOOL_ASK_USER_SHORT_NAME,
+  ].map((name) => `mcp__${mcp.serverName}__${mcp.toolPrefix}${name}`);
 }
 
 // Runs before the gateway is registered so a missing interpreter leaves the client untouched.
@@ -104,14 +112,14 @@ function claudeAppaPermissionsBash(mcp: SetupScriptMcpSection): string {
   if (!claudeCodeAppaPermissionsAreLiteral(mcp)) {
     return `warn ${sh(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING)}`;
   }
-  return `say 'Allowing the guardrail (APPA) helpers in Claude Code'
+  return `say 'Allowing gateway tools and the guardrail (APPA) helpers in Claude Code'
 ARCHESTRA_MCP_NAME=${sh(mcp.serverName)} \\
 ARCHESTRA_MCP_LEGACY_NAMES=${sh(JSON.stringify(legacyServerNames(mcp)))} \\
 ARCHESTRA_APPA_PERMISSION_RULES=${sh(JSON.stringify(claudeCodeAppaPermissionRules(mcp)))} \\
 python3 - <<'ARCHESTRA_APPA_PERMISSIONS_PY'
 ${CLAUDE_APPA_PERMISSIONS_MERGE_PY}
 ARCHESTRA_APPA_PERMISSIONS_PY
-ok 'Claude Code can call the guardrail helpers without asking each time. Gateway sign-in and required human reviews still apply.'`;
+ok ${sh(CLAUDE_APPA_PERMISSIONS_NOTICE)}`;
 }
 
 const CLAUDE_APPA_PERMISSIONS_MERGE_PY = `import json, os, pathlib, shutil
@@ -156,8 +164,9 @@ path.write_text(json.dumps(settings, indent=2) + "\\n")
 print(f"Updated {path}")`;
 
 /**
- * MCP connect allowlists the four APPA helpers in Claude Code settings, with
- * or without a proxy. Ownership lives in ~/.archestra/claude-appa-permissions.json,
+ * MCP connect allowlists the gateway tool runner and the APPA helpers in Claude
+ * Code settings, with or without a proxy. Ownership lives in
+ * ~/.archestra/claude-appa-permissions.json,
  * or CLAUDE_CONFIG_DIR/.archestra when that profile is selected, and only covers
  * rules this installer added. Invalid JSON or types abort
  * before any write. JSON uses ConvertFrom-Json -AsHashtable on PowerShell 6+
@@ -173,10 +182,10 @@ Warn ${psq(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING)}
   const rulesJson = JSON.stringify(claudeCodeAppaPermissionRules(mcp));
   const legacyJson = JSON.stringify(legacyServerNames(mcp));
   return `# >>> archestra:claude-appa-permissions >>>
-Say 'Allowing the guardrail (APPA) helpers in Claude Code'
+Say 'Allowing gateway tools and the guardrail (APPA) helpers in Claude Code'
 ${claudeAppaPermissionsSnippet({ serverName: mcp.serverName, rulesJson, legacyJson })}
 Write-Host ('Updated ' + $archAppaSettingsPath)
-Ok 'Claude Code can call the guardrail helpers without asking each time. Gateway sign-in and required human reviews still apply.'
+Ok ${psq(CLAUDE_APPA_PERMISSIONS_NOTICE)}
 # <<< archestra:claude-appa-permissions <<<`;
 }
 
@@ -1039,6 +1048,14 @@ ${pluginInstalls}`);
   return withStartupGuardPowerShell(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 }
 
+/**
+ * Claude Code's post-install OAuth step, shared by the bash and PowerShell
+ * renderers. Registering the gateway is not enough: it authorizes each user
+ * individually, so its tools unlock only after a one-time browser sign-in.
+ * The running session never picks the server up — only a new one reads the
+ * updated config — so the step must send the user to a NEW session; naming
+ * `/mcp` alone strands them in a session where the gateway does not exist.
+ */
 function claudeCodeEnding(ctx: SetupScriptContext): AgentEnding {
   const plugins = ctx.skills?.pluginNames?.length ?? 0;
   return {

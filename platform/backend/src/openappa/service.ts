@@ -191,6 +191,8 @@ type ProcessedToolResult = {
   outputSource: OutputSource;
   reason?: RuntimeReason;
   code?: string;
+  /** The runtime denied this call, so `content` is its ruling, not an output. */
+  denied?: true;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -754,6 +756,7 @@ async function approveToolResult(params: {
     outputSource,
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
+    ...(decision.decision === "deny_call" ? { denied: true as const } : {}),
   };
 }
 // SPDX-SnippetEnd
@@ -927,6 +930,11 @@ type AppaCallDecision =
       feedback: string;
       offers?: string[];
       review?: Array<{ offer_id: string; text: string }>;
+      /**
+       * The runtime recorded this denial under the call's id, so it answers
+       * that id's result with the ruling.
+       */
+      recorded?: true;
     };
 
 // SPDX-SnippetBegin
@@ -970,21 +978,14 @@ export async function evaluateToolCalls(
   policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
-  // Validate tool call IDs and arguments before dispatch.
+  const malformedIds = new Set<string>();
   for (const call of calls) {
     if (!call.id || ids.has(call.id)) {
       throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
     }
     ids.add(call.id);
-    if (typeof call.arguments === "string") {
-      try {
-        JSON.parse(call.arguments);
-      } catch {
-        throw new ApiError(
-          400,
-          "OpenAPPA cannot release malformed tool arguments",
-        );
-      }
+    if (typeof call.arguments === "string" && !isJson(call.arguments)) {
+      malformedIds.add(call.id);
     }
   }
   const normalized = normalizeToolCallsForPolicy(calls, {
@@ -995,6 +996,15 @@ export async function evaluateToolCalls(
   const dispatchCall = sessionDispatch(session, policy);
   const results = await Promise.allSettled(
     calls.map(async (call, index) => {
+      // Malformed arguments (often a truncated stream) are denied before any
+      // bypass or dispatch, so nothing runs on them and the batch stands.
+      if (malformedIds.has(call.id)) {
+        return {
+          kind: "deny" as const,
+          feedback:
+            "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.",
+        };
+      }
       const target = normalized[index];
       // Direct remedy control calls bypass evaluation and execute via gateway.
       // Only the declared control tool itself, in its own namespace: a
@@ -1107,6 +1117,9 @@ export async function evaluateToolCalls(
               ? decision.review
               : undefined
             : undefined,
+        ...(decision.decision === "deny_call"
+          ? { recorded: true as const }
+          : {}),
       };
     }),
   );
@@ -1141,6 +1154,15 @@ export async function evaluateToolCalls(
   return results.map(
     (result) => (result as PromiseFulfilledResult<AppaCallDecision>).value,
   );
+}
+
+function isJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Verdict on a call the provider already ran. */
@@ -1312,12 +1334,20 @@ export async function returnRuntimeValue(params: {
     : { kind: "held", reason: outcome.content };
 }
 
-/** Verifies that a parent carrier contains bytes admitted through ChildEnd. */
+/**
+ * Verifies that a parent carrier contains bytes admitted through ChildEnd.
+ *
+ * The runtime keeps one approved return for each spawn call. A child that
+ * answers a follow-up returns again under the same call, and the runtime then
+ * answers with the return it approved first. `crossedReturns` names every
+ * return of this child that crossed, so that answer is accepted too.
+ */
 export async function approveSpawnReturn(params: {
   session: OpenAppaSession;
   toolCallId: string;
   childId: string;
   value: string;
+  crossedReturns?: ReadonlySet<string>;
 }): Promise<void> {
   const decision = await dispatch(params.session, {
     event: "tool_result",
@@ -1353,7 +1383,7 @@ export async function approveSpawnReturn(params: {
     );
   }
   const approved = extractApprovedOutput(decision, params.value);
-  if (approved !== params.value) {
+  if (approved !== params.value && !params.crossedReturns?.has(approved)) {
     throw openappaFailure(
       new Error("OpenAPPA changed an already crossed child return"),
     );

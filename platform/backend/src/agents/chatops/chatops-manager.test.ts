@@ -27,7 +27,10 @@ import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import db, { schema } from "@/database";
 import {
+  A2AContextModel,
   A2AMessageModel,
+  A2ATaskApprovalRequestModel,
+  A2ATaskModel,
   AgentModel,
   AgentTeamModel,
   ChatOpsChannelBindingModel,
@@ -97,6 +100,28 @@ describe("matchesAgentName", () => {
     expect(matchesAgentName("SalesTeam", "Sales")).toBe(false);
   });
 });
+
+/** A paused task waiting on one plain tool approval, as a click finds it. */
+async function pausedTaskWithPlainApproval(actorId: string): Promise<string> {
+  const context = await A2AContextModel.create({ actorKind: "user", actorId });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    state: "TASK_STATE_INPUT_REQUIRED",
+  });
+  await A2ATaskApprovalRequestModel.bulkCreate({
+    taskId: task.id,
+    approvalRequests: [
+      {
+        approvalId: "approval-1",
+        toolCallId: "call-1",
+        toolName: "some_tool",
+        approved: false,
+        resolved: false,
+      },
+    ],
+  });
+  return task.id;
+}
 
 describe("ChatOpsManager security validation", () => {
   /**
@@ -258,6 +283,77 @@ describe("ChatOpsManager security validation", () => {
     });
 
     expect((await refetchBinding())?.agentId).toBe(agent.id);
+  });
+
+  test("re-assigns a channel whose bound agent is no longer an internal agent", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const org = await makeOrganization();
+    const sender = await makeUser({ email: "channel-member@example.com" });
+    await makeMember(sender.id, org.id);
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: gateway.id,
+    });
+
+    const provider = createMockProvider();
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage({ senderEmail: sender.email }),
+      provider,
+    });
+
+    expect(result.success).toBe(true);
+    expect((await refetchBinding())?.agentId).toBe(agent.id);
+  });
+
+  test("prompts with the picker when the bound agent is stale and the choice is ambiguous", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const sender = await makeUser({ email: "channel-member@example.com" });
+    await makeMember(sender.id, org.id);
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+    });
+    await makeInternalAgent({ organizationId: org.id });
+    await makeInternalAgent({ organizationId: org.id });
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: "test-channel-id",
+      workspaceId: "test-workspace-id",
+      agentId: gateway.id,
+    });
+
+    const cardSpy = vi.fn().mockResolvedValue(undefined);
+    const provider = createMockProvider();
+    provider.sendAgentSelectionCard = cardSpy;
+
+    const result = await makeManagerWith(provider).processMessage({
+      message: createMockMessage({ senderEmail: sender.email }),
+      provider,
+    });
+
+    expect(cardSpy).toHaveBeenCalled();
+    expect(result.success).toBe(true);
   });
 
   test("auto-assigns the org-wide default agent over other candidates", async ({
@@ -2174,7 +2270,7 @@ describe("ChatOpsManager security validation", () => {
     const manager = new ChatOpsManager();
 
     const decision: ChatOpsApprovalDecision = {
-      taskId: "task-1",
+      taskId: await pausedTaskWithPlainApproval(user.id),
       approvalId: "approval-1",
       approved: true,
       toolName: "some_tool",
@@ -2236,7 +2332,7 @@ describe("ChatOpsManager security validation", () => {
     const manager = new ChatOpsManager();
 
     const decision: ChatOpsApprovalDecision = {
-      taskId: "task-1",
+      taskId: await pausedTaskWithPlainApproval(user.id),
       approvalId: "approval-1",
       approved: true,
       toolName: "some_tool",

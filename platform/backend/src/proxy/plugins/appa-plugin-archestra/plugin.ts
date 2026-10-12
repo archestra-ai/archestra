@@ -123,6 +123,10 @@ import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-nam
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
+import type {
+  RuntimeLaunchFailureReason,
+  RuntimeLaunchOutcome,
+} from "@/types/openappa-runtime-launch";
 import { claudeCodeNativeChildIds } from "./adapters/claude-code";
 import {
   appendPeerMessageMarker,
@@ -329,9 +333,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       results,
     });
     Object.assign(childResultUpdates, childReturns.updates);
+    const governed = this.governedSession(binding);
     await admitRelayReports({
       binding,
-      session: this.governedSession(binding),
+      session: governed,
       results,
       updates: childResultUpdates,
     });
@@ -339,7 +344,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // A root that declared nothing has nothing to submit. A bound child still
     // starts, so its return contract is delivered before inference.
     if (
-      !this.governedSession(binding).parent_id &&
+      !governed.parent_id &&
       !binding.request.tools &&
       toolResults.length === 0 &&
       binding.request.declaredTools.length === 0
@@ -370,19 +375,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // child return that OpenAPPA ignores never reaches the runtime.
     await withholdUnrecordedPeerReads({
       binding,
-      session: this.governedSession(binding),
+      session: governed,
       results,
       updates: childResultUpdates,
     });
     const runtimeSpawns = await releasedRuntimeSpawns({
       binding,
-      session: this.governedSession(binding),
+      session: governed,
       toolResults,
     });
     const subagentReturns = await admitSubagentReturns({
-      session: this.governedSession(binding),
+      session: governed,
       spawnIds: runtimeSpawns,
     });
+    const runtimeLaunches = await OpenAppaSpawnCorrelationModel.runtimeLaunches(
+      {
+        organizationId: governed.organization_id,
+        callerId: governed.caller_id,
+        sessionId: governed.session_id,
+        toolCallIds: [...runtimeSpawns],
+      },
+    );
+    // The runtime withholds the output of a spawn that failed. What the gateway
+    // recorded about the launch is not that output, so it is restored after.
+    const failedLaunchResults: Record<string, string> = {};
     const nonHandbackResults = results
       .filter(
         (result) =>
@@ -402,15 +418,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return { ...result, content: subagentReturn };
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(result.id))) {
-          const content = runtimeLaunchHandle(result.content);
+          const launch = runtimeLaunches.get(withoutTrajectoryStamp(result.id));
+          const content = runtimeLaunchResult(launch);
           childResultUpdates[result.id] = content;
+          if (launch?.kind === "failed")
+            failedLaunchResults[result.id] = content;
           return { ...result, content };
         }
         const content = childResultUpdates[result.id];
         return content === undefined ? result : { ...result, content };
       });
     const result = await processProxyResults({
-      session: this.governedSession(binding),
+      session: governed,
       results: nonHandbackResults,
       canonicalize: (name: string, namespace?: string) =>
         this.canonicalize(binding, { name, namespace }),
@@ -421,6 +440,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return "pending";
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
+          const launch = runtimeLaunches.get(withoutTrajectoryStamp(answer.id));
+          if (launch) return launch.kind === "launched" ? "pending" : "failed";
           return answer.isError ? "failed" : "pending";
         }
         if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
@@ -452,14 +473,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding.returnContract = result.returnContract;
     }
     binding.sessionInitialized = true;
+    const waitTool = binding.adapter?.pendingServersTool;
+    // A ruling in the result of the client's wait tool is a denial that tool
+    // carried: the model made another call there, and has to be told so.
+    const carriedDenials = new Set(
+      toolResults.flatMap((answer) =>
+        answer.name === waitTool &&
+        !answer.namespace &&
+        result.toolResultUpdates[answer.id]?.denied &&
+        !binding.request.restoredNoticeCallIds?.has(answer.id)
+          ? [answer.id]
+          : [],
+      ),
+    );
     const toolResultUpdates = {
       ...childResultUpdates,
       ...Object.fromEntries(
         Object.entries(result.toolResultUpdates).map(([id, result]) => [
           id,
-          result.content,
+          carriedDenials.has(id)
+            ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them. The ruling on your call follows.\n\n${result.content}`
+            : result.content,
         ]),
       ),
+      ...failedLaunchResults,
     };
     if (
       binding.adapter &&
@@ -1046,6 +1083,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
 
     const notice = binding.request.tools?.notice;
+    // Resolved once for the batch, by the first denial that has no notice tool.
+    let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
     const annotated: LlmProxyToolCallAnnotation[] = [];
     const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
@@ -1186,6 +1225,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // target — is what the notice and the refusal describe.
       const identity = this.policyIdentity(binding, call);
       if (!notice) {
+        // The client's own wait tool stands in for the notice tool. The call
+        // keeps its id, the client waits for its MCP servers instead of
+        // running it, and the runtime answers that id's result with its
+        // ruling, so the next request can declare the remedy tools. The wait
+        // tool takes no arguments and its output never reaches the model. A
+        // denial the runtime did not record has no ruling to answer with, so
+        // it is refused below.
+        let wait: string | undefined;
+        if (decision.recorded) {
+          pendingServersTool ??= this.pendingServersTool(binding, session);
+          wait = await pendingServersTool;
+        }
+        if (wait && call.name !== wait) {
+          blocked.push({
+            id: call.id,
+            name: call.name,
+            reason: decision.feedback,
+          });
+          released.push({ id: call.id, name: wait, arguments: "{}" });
+          continue;
+        }
         // Refuses the call and cancels admitted calls when the client declares no notice tool.
         await cancelCalls(
           session,
@@ -1354,20 +1414,32 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const childNativeId = binding.child?.lineage?.childNativeId;
     const spawnCallId = await resolveSpawnCallId(binding);
     if (!spawnCallId) throw uncorrelatedChild();
-    const outcome = await endChild({
-      session: this.governedSession(binding),
-      operationId: binding.request.turnEndOperationId.replace(
-        /^turn_end:/,
-        "child_end:",
-      ),
-      output: context.responseText,
-      spawnCallId,
-      ...(childNativeId ? { childNativeId } : {}),
-    });
-    const admitted =
-      outcome.decision === "release" ? context.responseText : outcome.content;
-    if (!outcome.crossed) {
-      return { decision: "replace", responseText: admitted };
+    let admitted = context.responseText;
+    if (context.responseText === "") {
+      // A turn with no text returns nothing. The runtime reads a child end
+      // with no value as the end of the child: after it, the child can call no
+      // tool and can return nothing. The parent can still send this child a
+      // follow-up, so the turn ends as a turn and the child stays open.
+      await endTurn(
+        this.governedSession(binding),
+        binding.request.turnEndOperationId,
+      );
+    } else {
+      const outcome = await endChild({
+        session: this.governedSession(binding),
+        operationId: binding.request.turnEndOperationId.replace(
+          /^turn_end:/,
+          "child_end:",
+        ),
+        output: context.responseText,
+        spawnCallId,
+        ...(childNativeId ? { childNativeId } : {}),
+      });
+      admitted =
+        outcome.decision === "release" ? context.responseText : outcome.content;
+      if (!outcome.crossed) {
+        return { decision: "replace", responseText: admitted };
+      }
     }
     // A teammate's end reaches its lead as an idle notice, not as the result
     // of the call that started it, and it may end many turns: it carries no
@@ -1626,14 +1698,45 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   private async remedyToolsMissingBefore(
     session: OpenAppaSession,
   ): Promise<boolean> {
-    const key: AllowedCacheKey = `${CacheKey.OpenAppaRemedyToolsMissing}-${Buffer.from(
-      `${session.organization_id}:${session.session_id}`,
-    ).toString("base64url")}`;
-    const seen = await cacheManager.get<boolean>(key);
-    if (seen) return true;
-    await cacheManager.set(key, true, TimeInMs.Day);
-    return false;
+    return seenBefore(CacheKey.OpenAppaRemedyToolsMissing, session);
   }
+
+  /**
+   * The client's own wait tool, when this request declares it and the session
+   * has not waited yet for the gateway remedy tools. Records the wait: a
+   * session whose remedy tools are still missing after it is refused.
+   */
+  private async pendingServersTool(
+    binding: AppaPluginBinding,
+    session: OpenAppaSession,
+  ): Promise<string | undefined> {
+    const name = binding.adapter?.pendingServersTool;
+    if (
+      !name ||
+      !binding.request.declaredTools.some(
+        (tool) => tool.name === name && !tool.namespace,
+      )
+    )
+      return undefined;
+    return (await seenBefore(CacheKey.OpenAppaRemedyToolsAwaited, session))
+      ? undefined
+      : name;
+  }
+}
+
+/** Whether `flag` was already set for this session today. Sets it. */
+async function seenBefore(
+  flag:
+    | typeof CacheKey.OpenAppaRemedyToolsMissing
+    | typeof CacheKey.OpenAppaRemedyToolsAwaited,
+  session: OpenAppaSession,
+): Promise<boolean> {
+  const key: AllowedCacheKey = `${flag}-${Buffer.from(
+    `${session.organization_id}:${session.session_id}`,
+  ).toString("base64url")}`;
+  if (await cacheManager.get<boolean>(key)) return true;
+  await cacheManager.set(key, true, TimeInMs.Day);
+  return false;
 }
 
 async function correlatedClaudeTeammateId(
@@ -1736,12 +1839,12 @@ async function resolveRuntimeCalls(params: {
   const result = new Map<string, RuntimeCall>();
   for (const call of params.calls) {
     const [target] = normalizeToolCallsForPolicy([call], params.resolution);
-    const canonical = params.resolution.canonicalize(
-      target.toolCallName,
-      target.isRunToolDispatchTarget ? undefined : call.namespace,
-    );
+    // Already canonical: the call's own resolved name, or the tool `run_tool`
+    // dispatches. It is not a wire spelling, and resolving it as one marks it
+    // foreign behind an attested gateway, so the call would go out unsigned.
     const action =
-      archestraMcpBranding.getToolShortName(canonical) ?? canonical;
+      archestraMcpBranding.getToolShortName(target.toolCallName) ??
+      target.toolCallName;
     if (!runtimeToolActions.has(action) && !isAgentTool(action)) continue;
     const args = argumentRecordOf(target.toolCallArgs);
     if (!args) continue;
@@ -1878,53 +1981,40 @@ async function releasedRuntimeSpawns(params: {
   );
 }
 
-function runtimeLaunchHandle(content: unknown): string {
-  let value: unknown = content;
-  try {
-    if (typeof content === "string") value = JSON.parse(content);
-  } catch {
-    return "The runtime launch returned no verifiable handle.";
+/**
+ * What the model reads as the result of a runtime launch: what the gateway
+ * recorded for the call, in text written here. The result the client sends
+ * back is not read, so its form and its text do not matter.
+ */
+function runtimeLaunchResult(
+  outcome: RuntimeLaunchOutcome | undefined,
+): string {
+  if (!outcome) return "The runtime launch returned no verifiable handle.";
+  if (outcome.kind === "launched") {
+    return JSON.stringify({
+      session_id: outcome.session_id,
+      ...(outcome.state ? { state: outcome.state } : {}),
+      message: "Use get_run to retrieve admitted runtime output.",
+    });
   }
-  if (!isRecord(value))
-    return "The runtime launch returned no verifiable handle.";
-  if (Array.isArray(value.content)) {
-    const text = value.content.find(
-      (part) =>
-        isRecord(part) && part.type === "text" && typeof part.text === "string",
-    );
-    if (isRecord(text)) {
-      try {
-        value = JSON.parse(text.text as string);
-      } catch {
-        return "The runtime launch returned no verifiable handle.";
-      }
-    }
-  }
-  if (!isRecord(value))
-    return "The runtime launch returned no verifiable handle.";
-  const handle: Record<string, string> = {};
-  for (const key of ["session_id", "task_id", "agent_id"]) {
-    if (typeof value[key] === "string" && /^[a-f0-9-]{36}$/i.test(value[key]))
-      handle[key] = value[key];
-  }
-  if (
-    typeof value.state === "string" &&
-    [
-      "submitted",
-      "working",
-      "input-required",
-      "completed",
-      "failed",
-      "canceled",
-    ].includes(value.state)
-  ) {
-    handle.state = value.state;
-  }
-  return JSON.stringify({
-    ...handle,
-    message: "Use get_run to retrieve admitted runtime output.",
-  });
+  const text = RUNTIME_LAUNCH_FAILURE_TEXT[outcome.reason];
+  return outcome.reason === "credentials_needed" && outcome.setup_url
+    ? `${text} Ask the user to add them here, then start the run again: ${outcome.setup_url}`
+    : text;
 }
+
+/** One entry for each reason, so a new reason does not compile without text. */
+const RUNTIME_LAUNCH_FAILURE_TEXT: Record<RuntimeLaunchFailureReason, string> =
+  {
+    agent_not_found: "No runtime was started. The Agent was not found.",
+    credentials_needed:
+      "No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet.",
+    credentials_misconfigured:
+      "No runtime was started. This Agent is missing shared Agent Runtime credentials that an administrator must configure.",
+    refused: "No runtime was started. OpenAPPA refused this launch.",
+    failed:
+      "No runtime was started. An internal error occurred while starting the run.",
+  };
 
 async function approveChildReturnCarriers(params: {
   binding: AppaPluginBinding;
@@ -1956,12 +2046,24 @@ async function approveChildReturnCarriers(params: {
         parentSessionId: params.binding.session.session_id,
       }),
     )
-  ).map((record) => ({
-    ...record,
-    ...(record.spawnCallId
-      ? { spawnCallId: withoutTrajectoryStamp(record.spawnCallId) }
-      : {}),
-  }));
+  )
+    // The runtime lists the newest return first, so the lowest rank is the
+    // newest.
+    .map((record, rank) => ({
+      ...record,
+      rank,
+      ...(record.spawnCallId
+        ? { spawnCallId: withoutTrajectoryStamp(record.spawnCallId) }
+        : {}),
+    }));
+  // A child that answered a follow-up has more than one return, all under one
+  // spawn call.
+  const crossedByChild = new Map<string, Set<string>>();
+  for (const record of available) {
+    const crossed = crossedByChild.get(record.childSessionId) ?? new Set();
+    crossed.add(record.value);
+    crossedByChild.set(record.childSessionId, crossed);
+  }
   // A child that ran while enforcement was off returned what the runtime did
   // not see. OpenAPPA ignores such a return only when the runtime has no
   // crossing at all for that spawn or child: any return of a child that
@@ -1985,6 +2087,9 @@ async function approveChildReturnCarriers(params: {
       (ids.envelopeId !== undefined && reasons.get(ids.envelopeId) === "made"));
   // The returns OpenAPPA ignores, by the result that carries them.
   const ignoredByEnvelope = new Map<string, AppaChildReturnCompletion[]>();
+  // The returns of children that ended with no text, by the result that
+  // carries them.
+  const emptyByEnvelope = new Map<string, AppaChildReturnCompletion[]>();
   // A fork carries its source's subagent results, but the runtime retained
   // them under the source session, so the lookup above finds none of them.
   const unrecorded = params.binding.session.fork_of
@@ -1999,11 +2104,23 @@ async function approveChildReturnCarriers(params: {
   // consumes its own crossing. One genuine return cannot authorize siblings.
   const matched: Array<{
     completion: AppaChildReturnCompletion;
-    record: AppaChildReturnRecord;
+    record: AppaChildReturnRecord & { rank: number };
   }> = [];
   for (const completion of completions) {
     // Display-only echoes never consume a child's crossing.
     if (completion.assistantOrigin) continue;
+    // A child turn that ended with no text returned nothing. No bytes of it
+    // reach the parent, so there is no crossing to find.
+    if (completion.value === "") {
+      if (completion.envelopeId) {
+        const envelopeId = withoutTrajectoryStamp(completion.envelopeId);
+        emptyByEnvelope.set(envelopeId, [
+          ...(emptyByEnvelope.get(envelopeId) ?? []),
+          completion,
+        ]);
+      }
+      continue;
+    }
     const expectedSpawn = completion.spawnCallId
       ? withoutTrajectoryStamp(completion.spawnCallId)
       : completion.envelopeId &&
@@ -2083,7 +2200,11 @@ async function approveChildReturnCarriers(params: {
     const [record] = available.splice(hit, 1);
     matched.push({ completion, record });
   }
-  const arrived: Array<AppaChildReturnRecord & { spawnCallId: string }> = [];
+  // The newest return each child carries into this request, by spawn call.
+  const arrived = new Map<
+    string,
+    AppaChildReturnRecord & { spawnCallId: string; rank: number }
+  >();
   const byEnvelope = new Map<string, AppaChildReturnRecord[]>();
   for (const { completion, record } of matched) {
     const spawnCallId =
@@ -2118,15 +2239,17 @@ async function approveChildReturnCarriers(params: {
       envelope.push(record);
       byEnvelope.set(envelopeId, envelope);
     }
-    arrived.push({
-      ...record,
-      spawnCallId,
-    });
+    const child = JSON.stringify([spawnCallId, record.childSessionId]);
+    const newest = arrived.get(child);
+    if (!newest || record.rank < newest.rank) {
+      arrived.set(child, { ...record, spawnCallId });
+    }
   }
   const unrecordedResult = completionResults.find(
     (result) =>
       (byEnvelope.get(withoutTrajectoryStamp(result.id)) ?? []).length === 0 &&
       !ignoredByEnvelope.has(withoutTrajectoryStamp(result.id)) &&
+      !emptyByEnvelope.has(withoutTrajectoryStamp(result.id)) &&
       !unenforcedReturn({ spawnCallId: withoutTrajectoryStamp(result.id) }),
   );
   if (unrecordedResult) {
@@ -2140,12 +2263,17 @@ async function approveChildReturnCarriers(params: {
   // call cannot stand for a child it never opened. One at a time: the runtime
   // runs one session's dispatches in order anyway, each first leases a pooled
   // connection to find its session, and a failed approval must stop the rest.
-  for (const record of arrived) {
+  // The runtime replays only a child's latest return and keeps one approved
+  // return for each spawn call. So a child that returned more than once is
+  // approved once, with its newest return here, and its older returns stand on
+  // their own crossings.
+  for (const record of arrived.values()) {
     await approveSpawnReturn({
       session: params.binding.session,
       toolCallId: record.spawnCallId,
       childId: record.childSessionId,
       value: record.value,
+      crossedReturns: crossedByChild.get(record.childSessionId),
     });
   }
   // Strips unverified text and metadata beside valid returns.
@@ -2155,22 +2283,24 @@ async function approveChildReturnCarriers(params: {
     const envelopeId = withoutTrajectoryStamp(result.id);
     const verified = byEnvelope.get(envelopeId) ?? [];
     const ignoredHere = ignoredByEnvelope.get(envelopeId) ?? [];
+    const emptyHere = emptyByEnvelope.get(envelopeId) ?? [];
     if (
       verified.length === 0 &&
+      emptyHere.length === 0 &&
       (ignoredHere.length > 0 || unenforcedReturn({ spawnCallId: envelopeId }))
     ) {
       ignored.add(result.id);
       continue;
     }
-    if (verified.length === 0) {
+    if (verified.length === 0 && emptyHere.length === 0) {
       throw childReturnRefusal({ ...unrecorded, callId: envelopeId });
     }
     // A return OpenAPPA ignores stays beside the crossed ones, as it came.
     updates[result.id] =
-      verified.length === 1 &&
+      verified.length + emptyHere.length === 1 &&
       ignoredHere.length === 0 &&
       adapter?.isSpawnTool(result.name, result.namespace)
-        ? verified[0].value
+        ? (verified[0]?.value ?? "")
         : JSON.stringify({
             status: Object.fromEntries([
               ...matched
@@ -2179,6 +2309,11 @@ async function approveChildReturnCarriers(params: {
                   completion.childNativeId ?? record.childNativeId,
                   { completed: record.value },
                 ]),
+              ...emptyHere.flatMap((completion) =>
+                completion.childNativeId
+                  ? [[completion.childNativeId, { completed: "" }]]
+                  : [],
+              ),
               ...ignoredHere.flatMap((completion) =>
                 completion.childNativeId
                   ? [

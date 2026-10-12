@@ -155,6 +155,11 @@ export interface A2AExecuteParams {
   attachments?: A2AAttachment[];
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
+  /**
+   * Someone answers this run's OpenAPPA reviews, so a reviewed remedy call
+   * pauses the run (set by the A2A manager).
+   */
+  openappaReviewPause?: boolean;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
   /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
@@ -364,6 +369,11 @@ export async function executeA2AMessage(
       subagentToolStream,
       repeatTracker,
       appaSubagent: params.appaSubagent,
+      // A delegated run's pause would never reach whoever answers the root.
+      openappaReviewPause:
+        params.openappaReviewPause === true &&
+        !parentDelegationChain &&
+        !params.appaSubagent,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({

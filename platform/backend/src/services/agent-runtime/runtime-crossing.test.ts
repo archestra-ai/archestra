@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import {
   TOOL_GET_RUN_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
   TOOL_STEER_RUN_FULL_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
@@ -748,7 +749,12 @@ test("an oversized protected export reads no bytes and issues no ticket", async 
   );
 });
 
-test("a signed released get_run proof executes once and replay cannot read the runtime again", async ({
+// The gateway lists only some runtime tools, so a connected client reaches the
+// others through `run_tool`, with the proof inside `tool_args`.
+test.for([
+  false,
+  true,
+])("a signed released get_run proof executes once and replay cannot read the runtime again (wrapped=%s)", async (wrapped, {
   makeAgent,
   makeMember,
   makeOrganization,
@@ -815,17 +821,18 @@ test("a signed released get_run proof executes once and replay cannot read the r
       },
     ]);
     const context = { ...seeded.context, openappaRuntimeCall: undefined };
-    const first = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { ...args, runtime_proof: proof },
-      context,
-    );
+    const signed = { ...args, runtime_proof: proof };
+    const dispatch = () =>
+      wrapped
+        ? executeArchestraTool(
+            TOOL_RUN_TOOL_FULL_NAME,
+            { tool_name: TOOL_GET_RUN_FULL_NAME, tool_args: signed },
+            context,
+          )
+        : executeArchestraTool(TOOL_GET_RUN_FULL_NAME, signed, context);
+    const first = await dispatch();
     expect(JSON.stringify(first.content)).toContain("checked answer");
-    const replay = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { ...args, runtime_proof: proof },
-      context,
-    );
+    const replay = await dispatch();
     expect(replay.isError).toBe(true);
     expect(JSON.stringify(replay.content)).toContain("already claimed");
     expect(read).toHaveBeenCalledOnce();

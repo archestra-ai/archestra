@@ -1736,12 +1736,12 @@ async function resolveRuntimeCalls(params: {
   const result = new Map<string, RuntimeCall>();
   for (const call of params.calls) {
     const [target] = normalizeToolCallsForPolicy([call], params.resolution);
-    const canonical = params.resolution.canonicalize(
-      target.toolCallName,
-      target.isRunToolDispatchTarget ? undefined : call.namespace,
-    );
+    // Already canonical: the call's own resolved name, or the tool `run_tool`
+    // dispatches. It is not a wire spelling, and resolving it as one marks it
+    // foreign behind an attested gateway, so the call would go out unsigned.
     const action =
-      archestraMcpBranding.getToolShortName(canonical) ?? canonical;
+      archestraMcpBranding.getToolShortName(target.toolCallName) ??
+      target.toolCallName;
     if (!runtimeToolActions.has(action) && !isAgentTool(action)) continue;
     const args = argumentRecordOf(target.toolCallArgs);
     if (!args) continue;

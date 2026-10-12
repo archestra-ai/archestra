@@ -1,10 +1,15 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, vi } from "vitest";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as service from "@/openappa/service";
+import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { AgentRuntimeSchema } from "@/types/agent-runtime";
+import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
+import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaPluginArchestra } from "./plugin";
 import { APPA_PLUGIN_TRUSTED_CONTEXT, type AppaTrustedContext } from "./types";
 
@@ -28,19 +33,7 @@ describe("protected runtime protocol", () => {
       const org = await makeOrganization();
       const agent = await makeAgent({
         organizationId: org.id,
-        runtime: AgentRuntimeSchema.parse({
-          image: "runtime:test",
-          command: null,
-          inferenceProtocol: "anthropic",
-          backend: "kubernetes",
-          steerMode: "pipe",
-          privileged: false,
-          resources: null,
-          environment: null,
-          credentials: null,
-          ttlHours: null,
-          idleTimeoutMinutes: null,
-        }),
+        runtime: runtimeConfig(),
       });
       const plugin = new AppaPluginArchestra([]);
       const context = request(org.id);
@@ -99,6 +92,114 @@ describe("protected runtime protocol", () => {
         }),
       ).toBeNull();
     });
+  }
+
+  // An external client declares the gateway's tools under its own label, and
+  // reaches a runtime tool the gateway does not list through `run_tool`.
+  for (const client of [
+    {
+      label: "Codex",
+      adapter: () => new AppaCodexAdapter(),
+      headers: { originator: "codex_exec" },
+      spelling: (name: string) => ({ name, namespace: "mcp__my_gateway" }),
+    },
+    {
+      label: "Claude Code",
+      adapter: () => new AppaClaudeCodeAdapter(),
+      headers: { "user-agent": "claude-cli/2.1.0" },
+      spelling: (name: string) => ({ name: `mcp__my_gateway__${name}` }),
+    },
+  ]) {
+    for (const { tool, spawn, wrapped } of [
+      { tool: "start_run", spawn: true, wrapped: true },
+      { tool: "get_run", spawn: false, wrapped: false },
+    ]) {
+      test(`signs ${tool} from ${client.label} behind an attested gateway (wrapped=${wrapped})`, async ({
+        makeOrganization,
+        makeAgent,
+      }) => {
+        const org = await makeOrganization();
+        const agent = await makeAgent({
+          organizationId: org.id,
+          runtime: runtimeConfig(),
+        });
+        const gatewayId = randomUUID();
+        const toolIdentity = await resolveGatewayToolIdentity({
+          organizationId: org.id,
+          declarations: [
+            "archestra__run_tool",
+            "archestra__get_run",
+            "archestra__get_remedy_plans",
+            "archestra__execute_remedy_plan",
+          ].map((name) => ({
+            ...client.spelling(name),
+            marker: attestToolDescription({
+              organizationId: org.id,
+              gatewayId,
+              advertisedName: name,
+              kind: "b",
+              description: undefined,
+            }),
+          })),
+          internalChat: false,
+        });
+        expect(toolIdentity.mode).toBe("attested");
+        const context = request(org.id);
+        context.headers = { ...context.headers, ...client.headers };
+        const trusted = context.resources.get(
+          APPA_PLUGIN_TRUSTED_CONTEXT,
+        ) as AppaTrustedContext;
+        trusted.toolIdentity = toolIdentity;
+        const plugin = new AppaPluginArchestra([client.adapter()]);
+        const evaluate = vi
+          .spyOn(service, "evaluateToolCalls")
+          .mockResolvedValue([{ kind: "allow" }]);
+        await plugin.onSessionInit(context);
+        const args = spawn
+          ? { agent_id: agent.id, message: "Do the work" }
+          : { task_id: "example-run" };
+
+        const released = await plugin.onToolCalls({
+          ...context,
+          toolCalls: [
+            wrapped
+              ? {
+                  id: "runtime-call",
+                  ...client.spelling("archestra__run_tool"),
+                  arguments: {
+                    tool_name: `archestra__${tool}`,
+                    tool_args: args,
+                  },
+                }
+              : {
+                  id: "runtime-call",
+                  ...client.spelling(`archestra__${tool}`),
+                  arguments: args,
+                },
+          ],
+        });
+
+        expect(
+          evaluate.mock.calls[0][2]?.spawnCallIds?.has("runtime-call"),
+        ).toBe(spawn);
+        if (released?.decision !== "allow")
+          throw new Error("Expected a governed released call");
+        const wire = released.toolCalls[0].arguments as Record<string, unknown>;
+        const signed = wrapped
+          ? (wire.tool_args as Record<string, unknown>)
+          : wire;
+        expect(
+          verifyRuntimeToolProof({
+            proof: signed.runtime_proof,
+            arguments: signed,
+            organizationId: org.id,
+            callerId: "user:owner",
+            action: tool,
+            secret,
+          }),
+        ).toMatchObject({ toolCallId: "runtime-call", spawn });
+      });
+    }
   }
 
   test("does not reserve a runtime fork for an in-process delegated agent", async ({
@@ -161,6 +262,22 @@ describe("protected runtime protocol", () => {
     expect(ended).not.toHaveBeenCalled();
   });
 });
+
+function runtimeConfig() {
+  return AgentRuntimeSchema.parse({
+    image: "runtime:test",
+    command: null,
+    inferenceProtocol: "anthropic",
+    backend: "kubernetes",
+    steerMode: "pipe",
+    privileged: false,
+    resources: null,
+    environment: null,
+    credentials: null,
+    ttlHours: null,
+    idleTimeoutMinutes: null,
+  });
+}
 
 function request(organizationId: string, runtime = false) {
   const session = {

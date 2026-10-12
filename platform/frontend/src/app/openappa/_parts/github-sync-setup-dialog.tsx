@@ -430,7 +430,7 @@ export function GithubSyncSetupDialog({
               <ManifestRow
                 index={2}
                 title="Install it on the organization"
-                hint="Approve access to all of its repositories."
+                hint="Approve access to all repositories, so the App can create the policy repository."
                 locked={!createdApp}
                 inlineAction
                 waiting={waiting === "install" || install.isPending}
@@ -702,7 +702,7 @@ function ManifestRow({
   hint: string;
   /**
    * Replaces the hint while this step's last attempt failed. A step with an
-   * inline action (install) also offers to check GitHub again.
+   * inline action (install) also offers to check GitHub again beside it.
    */
   error?: string;
   waiting: boolean;
@@ -757,23 +757,7 @@ function ManifestRow({
         ) : error ? (
           <p className="flex items-start gap-1.5 text-xs text-destructive">
             <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
-            <span>
-              {error}
-              {inlineAction ? (
-                <>
-                  {" "}
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="xs"
-                    className="h-auto p-0 align-baseline text-xs"
-                    onClick={onCheckAgain}
-                  >
-                    Check again
-                  </Button>
-                </>
-              ) : null}
-            </span>
+            <span>{error}</span>
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">{hint}</p>
@@ -783,7 +767,19 @@ function ManifestRow({
         ) : null}
       </div>
       {showAction && inlineAction ? (
-        <div className="shrink-0 self-center">{action}</div>
+        <div className="flex shrink-0 items-center gap-2 self-center">
+          {error ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onCheckAgain}
+            >
+              <span>Check again</span>
+            </Button>
+          ) : null}
+          {action}
+        </div>
       ) : null}
     </li>
   );
@@ -821,8 +817,8 @@ function AccessSummary({ compact = false }: { compact?: boolean }) {
         <ShieldCheck className="mt-px size-3.5 shrink-0" />
         <span>
           The App needs Administration, Contents and Pull requests set to Read
-          &amp; write, on all repositories of the organization it is installed
-          on.
+          &amp; write on all repositories of its organization. GitHub only lets
+          an App create a repository with all-repository access.
         </span>
       </p>
     );
@@ -832,7 +828,8 @@ function AccessSummary({ compact = false }: { compact?: boolean }) {
       <div className="min-w-0 space-y-2">
         <p className="text-xs text-muted-foreground">
           GitHub will ask you to approve this access on all repositories of the
-          organization:
+          organization. GitHub only lets an App create the policy repository
+          with all-repository access.
         </p>
         <div className="flex flex-wrap gap-1.5">
           {["Administration", "Contents", "Pull requests"].map((permission) => (

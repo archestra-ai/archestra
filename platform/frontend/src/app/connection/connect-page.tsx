@@ -50,6 +50,7 @@ import {
 } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -1377,6 +1378,16 @@ function ProfileCard({
             </li>
           )}
         </ul>
+        <div className="mt-3">
+          <InlineNotice variant="neutral">
+            <Info />
+            <span className="font-medium">LLM proxy guardrails</span>
+            <InlineNoticeText>
+              Only Claude Code, Codex, and OpenCode support guardrails out of
+              the box.
+            </InlineNoticeText>
+          </InlineNotice>
+        </div>
       </div>
 
       {/* One line along the bottom: how the agent's requests are handled.

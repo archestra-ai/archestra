@@ -1008,19 +1008,42 @@ describe("APPA feature boundary", () => {
     ).toEqual([{ kind: "allow" }]);
   });
 
-  test("refuses malformed arguments and duplicate IDs before admitting any call", async () => {
+  test("refuses duplicate IDs before admitting any call", async () => {
     const first = { id: "first", name: "read_file", arguments: {} };
-    for (const second of [
-      { id: "second", name: "read_file", arguments: "{" },
-      first,
-    ]) {
-      await expect(
-        evaluateToolCalls(session, [first, second], {
-          canonicalize: (name) => name,
-        }),
-      ).rejects.toMatchObject({ statusCode: 400 });
-    }
+    await expect(
+      evaluateToolCalls(session, [first, first], {
+        canonicalize: (name) => name,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
     expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test("denies only the calls with malformed arguments, before any bypass or dispatch", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        { id: "first", name: "read_file", arguments: {} },
+        { id: "truncated", name: "read_file", arguments: '{"path": "/a' },
+        { id: "control", name: "remedy", arguments: "{" },
+      ],
+      {
+        canonicalize: (name) => name,
+        control: { name: "remedy" },
+      },
+    );
+    expect(decisions.map((decision) => decision.kind)).toEqual([
+      "allow",
+      "deny",
+      "deny",
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(
+        ([raw]) => JSON.parse(raw).operation_id,
+      ),
+    ).toEqual(["call:first"]);
   });
 
   test("fails closed when a withheld admission cannot be settled", async () => {

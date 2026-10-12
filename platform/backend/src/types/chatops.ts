@@ -743,6 +743,13 @@ export interface SlackAgentBotConfig extends SlackDbConfig {
    */
   managed?: boolean;
   /**
+   * The user whose Slack configuration token created or adopted this app.
+   * Slack makes that person the app's only collaborator, so later changes to
+   * the app go through their token. Unset for apps managed with the
+   * organization-wide token saved before tokens were per user.
+   */
+  configTokenUserId?: string;
+  /**
    * The bot's name follows the agent's: renaming the agent renames the bot.
    * Off once someone picks a handle of their own.
    */

@@ -180,7 +180,7 @@ class OpenAppaGithubAppSetup {
     if (installation.repository_selection !== "all")
       throw new ApiError(
         400,
-        `Give ${pending.name} access to All repositories on ${pending.account}, then check again.`,
+        `Give ${pending.name} access to All repositories on ${pending.account}.`,
       );
 
     const definition = await createRuntimeCredentialDefinition({

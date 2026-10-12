@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { GitHubConnectButton } from "@/components/github-connect-button";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -149,6 +150,7 @@ export function GithubSyncSetupDialog({
 
   function installApp() {
     if (!createdApp) return;
+    install.reset();
     openGithubWindow(createdApp.installUrl);
     setWaiting("install");
   }
@@ -203,12 +205,8 @@ export function GithubSyncSetupDialog({
 
   const header = headerFor({ step, mode, hasApps: apps.length > 0 });
   const appReady = !!appId;
-  const error =
-    step === "app"
-      ? (start.error ?? install.error)
-      : step === "repo"
-        ? create.error
-        : null;
+  // App-step errors render inside the step that failed.
+  const error = step === "repo" ? create.error : null;
 
   return (
     <StandardDialog
@@ -356,6 +354,7 @@ export function GithubSyncSetupDialog({
                 title="Create the App on GitHub"
                 hint="Enter the organization that will own the policy repository. GitHub creates the App there with the access below."
                 waiting={waiting === "create"}
+                error={start.error?.message}
                 onCheckAgain={() => {
                   setWaiting(null);
                   pending.refetch();
@@ -418,16 +417,13 @@ export function GithubSyncSetupDialog({
                         }
                       />
                     </InputGroup>
-                    <Button
+                    <GitHubConnectButton
                       type="submit"
-                      disabled={
-                        !ORGANIZATION_PATTERN.test(organization.trim()) ||
-                        start.isPending
-                      }
-                    >
-                      <Github />
-                      <span>Create App on GitHub</span>
-                    </Button>
+                      size="default"
+                      label="Create App on GitHub"
+                      pending={start.isPending}
+                      disabled={!ORGANIZATION_PATTERN.test(organization.trim())}
+                    />
                   </form>
                 }
               />
@@ -438,6 +434,7 @@ export function GithubSyncSetupDialog({
                 locked={!createdApp}
                 inlineAction
                 waiting={waiting === "install" || install.isPending}
+                error={install.error?.message}
                 onCheckAgain={checkInstall}
                 result={
                   installed ? (
@@ -453,15 +450,11 @@ export function GithubSyncSetupDialog({
                   ) : null
                 }
                 action={
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={createdApp ? "default" : "outline"}
+                  <GitHubConnectButton
+                    label="Install on GitHub"
                     disabled={!createdApp}
                     onClick={installApp}
-                  >
-                    <span>Install on GitHub</span>
-                  </Button>
+                  />
                 }
               />
             </ol>
@@ -583,11 +576,7 @@ export function GithubSyncSetupDialog({
       {error ? (
         <InlineNotice variant="error">
           <AlertTriangle aria-hidden />
-          <span className="font-medium">
-            {step === "repo"
-              ? "Couldn't create the repository"
-              : "GitHub App setup didn't finish"}
-          </span>
+          <span className="font-medium">Couldn't create the repository</span>
           <InlineNoticeText className="basis-full pl-5">
             {error.message}
           </InlineNoticeText>
@@ -706,10 +695,16 @@ function ManifestRow({
   result,
   action,
   inlineAction = false,
+  error,
 }: {
   index: number;
   title: string;
   hint: string;
+  /**
+   * Replaces the hint while this step's last attempt failed. A step with an
+   * inline action (install) also offers to check GitHub again.
+   */
+  error?: string;
   waiting: boolean;
   locked?: boolean;
   onCheckAgain: () => void;
@@ -758,6 +753,27 @@ function ManifestRow({
             >
               <span>Done? Check again</span>
             </Button>
+          </p>
+        ) : error ? (
+          <p className="flex items-start gap-1.5 text-xs text-destructive">
+            <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
+            <span>
+              {error}
+              {inlineAction ? (
+                <>
+                  {" "}
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="xs"
+                    className="h-auto p-0 align-baseline text-xs"
+                    onClick={onCheckAgain}
+                  >
+                    Check again
+                  </Button>
+                </>
+              ) : null}
+            </span>
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">{hint}</p>

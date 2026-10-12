@@ -48,7 +48,7 @@ Send four headers on every request to the LLM Proxy and the MCP Gateway. They ti
 Each value is an environment variable that Archestra sets in the container.
 
 - **Maintained images:** an image built on a maintained image sends all four when it runs that image's launcher. Keep the base tag current, because a launcher sends only the headers its version knows.
-- **Every turn:** the binding is new for each turn. Set the header from the variable each time your agent starts. A copy saved from an earlier turn is rejected.
+- **Every turn:** the binding is new for each turn, and Archestra starts your command again for each turn. Set the header from the variable on every start, not once per container. A copy saved from an earlier turn is rejected.
 - **A credential:** send the binding only to the supplied LLM Proxy and MCP Gateway. Never print it, and never pass it to a model provider or a tool.
 
 ## Troubleshooting
@@ -58,5 +58,5 @@ Each of these is an HTTP 400 on a model request while Guardrails are on.
 | Message | Fix |
 | --- | --- |
 | `This run's image did not send the X-Archestra-Runtime-Binding header that Guardrails require.` | Send the run headers, or rebuild the image on a current maintained image. Then start a new run. |
-| `OpenAPPA runtime binding does not match this run` | The binding is from another turn, or it was changed. Set it from the variable when your agent starts. |
+| `OpenAPPA runtime binding does not match this run` | The binding is from an earlier turn, or it was changed. Read the variable every time your command starts. |
 | `OpenAPPA session does not match the authenticated runtime workspace` | Set `X-Appa-Session-ID` to `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID`. |

@@ -1,6 +1,10 @@
 "use client";
 
-import { E2eTestId, parseVaultReference } from "@archestra/shared";
+import {
+  E2eTestId,
+  EnvironmentVariableSchema,
+  parseVaultReference,
+} from "@archestra/shared";
 import { CheckCircle2, Key, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -158,6 +162,11 @@ export function EnvironmentVariableDialog({
     () => existingKeys.includes(trimmedKey) && trimmedKey.length > 0,
     [existingKeys, trimmedKey],
   );
+  const keyError =
+    trimmedKey.length > 0
+      ? EnvironmentVariableSchema.shape.key.safeParse(trimmedKey).error?.issues[0]
+          ?.message
+      : undefined;
 
   const hasStoredSecret =
     mode === "edit" &&
@@ -200,6 +209,7 @@ export function EnvironmentVariableDialog({
   const canSubmit =
     trimmedKey.length > 0 &&
     !duplicate &&
+    !keyError &&
     !credentialIdError &&
     !valueError &&
     (!valueRequired || draft.value.trim().length > 0);
@@ -302,6 +312,7 @@ export function EnvironmentVariableDialog({
               A variable named &quot;{trimmedKey}&quot; already exists.
             </p>
           )}
+          {keyError && <p className="text-xs text-destructive">{keyError}</p>}
         </div>
 
         <div className="space-y-2">

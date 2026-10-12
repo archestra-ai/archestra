@@ -15,6 +15,7 @@ import {
   A2AArtifactModel,
   A2AMessageModel,
   A2APushNotificationConfigModel,
+  A2ATaskApprovalRequestModel,
   A2ATaskModel,
   AgentModel,
   AgentRunModel,
@@ -23,6 +24,10 @@ import {
   UserModel,
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
+import {
+  attachHitlReviews,
+  decideCallerHitlReviews,
+} from "@/openappa/a2a-hitl-review";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import {
   resolveAgentRuntime,
@@ -57,10 +62,10 @@ import {
   A2ATaskManager,
   type A2ATaskWithData,
   getApprovalRequestsMap,
+  toApprovalRequest,
 } from "./a2a-model-manager";
 import {
   type A2AArchestraApprovalRequest,
-  A2AArchestraApprovalRequestSchema,
   type A2AArchestraTaskApprovalDecision,
   type A2AArchestraTaskOps,
   type A2AProtocolCancelTaskRequest,
@@ -147,6 +152,12 @@ interface A2AManagerConfig {
    *   mode.
    */
   taskMode?: "full" | "approval-only";
+  /**
+   * The caller answers OpenAPPA human reviews like any tool approval: a
+   * reviewed remedy call pauses the task, and the caller's
+   * `taskOps.approvalDecisions` becomes the reviewer's ruling.
+   */
+  callerAnswersOpenappaReviews?: boolean;
 }
 
 /**
@@ -232,6 +243,7 @@ export class A2AManager {
     await this.runTaskLifecycle({
       task,
       contextId: task.contextId,
+      organizationId: params.session.organizationId,
       survivesRestart: true,
       executeRun: (runOpts) =>
         resumeAgentRun({
@@ -388,7 +400,7 @@ export class A2AManager {
             task: updatedTask,
             switchedToWorkingState,
             approvalDecisionsWasApplied,
-          } = await this.processTaskOps({ task, taskOps });
+          } = await this.processTaskOps({ task, taskOps, actor });
           task = updatedTask;
           taskWasSwitchedToWorkingState = switchedToWorkingState;
           taskApprovalDecisionsWasApplied = approvalDecisionsWasApplied;
@@ -683,10 +695,14 @@ export class A2AManager {
                   : undefined,
               messages: requestMessages,
               organizationId: actor.organizationId,
-              userId: actor.kind === "user" ? actor.id : "system",
+              userId: executorUserId(actor),
               actorTeamId: actor.kind === "team" ? actor.id : undefined,
               sessionId,
               source: systemParams?.source,
+              // Slack posts a paused review to the requester (see ChatOps).
+              openappaReviewPause:
+                this.config.callerAnswersOpenappaReviews === true ||
+                systemParams?.source === "chatops:slack",
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
               originalUiMessages: contextUiMessages,
               chatOpsBindingId:
@@ -750,6 +766,7 @@ export class A2AManager {
           this.runTaskLifecycle({
             task: runTask,
             contextId: runContextId,
+            organizationId: actor.organizationId,
             executeRun,
             survivesRestart: Boolean(runtime),
           });
@@ -832,6 +849,23 @@ export class A2AManager {
           }
         }
 
+        await this.attachCallerReviews({
+          organizationId: actor.organizationId,
+          taskId: task.id,
+          approvalRequests,
+        });
+        if (this.config.callerAnswersOpenappaReviews) {
+          // The reply shows each review's text, which only the stored rows carry.
+          task = {
+            ...task,
+            approvalRequests: (
+              await A2ATaskApprovalRequestModel.findByTaskId(task.id)
+            )
+              .sort((a, b) => a.approvalId.localeCompare(b.approvalId))
+              .map(toApprovalRequest),
+          };
+        }
+
         // In approval flow user message must be created in the db even in the stateless mode.
         await saveUserMessageInDb();
 
@@ -908,6 +942,7 @@ export class A2AManager {
   private async runTaskLifecycle(params: {
     task: A2ATaskWithData;
     contextId: string;
+    organizationId: string;
     executeRun: (runOpts: {
       abortSignal?: AbortSignal;
       onTextDelta?: (delta: string) => void;
@@ -1039,6 +1074,13 @@ export class A2AManager {
             resolved: request.resolved,
           })),
           eventPayload: interruptEvent,
+        });
+        // Before announcing the pause, so a caller who answers at once
+        // answers a review, not a plain tool approval.
+        await this.attachCallerReviews({
+          organizationId: params.organizationId,
+          taskId,
+          approvalRequests,
         });
         a2aTaskRunService.notify(taskId, interruptEvent);
         // A CAS miss here means a cancellation landed while the run was
@@ -1299,9 +1341,24 @@ export class A2AManager {
     return { resultMessage: protocolMessage, context: updatedContext };
   }
 
+  /** Links paused remedy calls to their OpenAPPA reviews for the caller. */
+  private async attachCallerReviews(params: {
+    organizationId: string;
+    taskId: string;
+    approvalRequests: A2AArchestraApprovalRequest[];
+  }): Promise<void> {
+    if (!this.config.callerAnswersOpenappaReviews) return;
+    await attachHitlReviews({
+      ...params,
+      answerer: { kind: "caller" },
+      now: new Date(),
+    });
+  }
+
   async processTaskOps(params: {
     task: A2ATaskWithData;
     taskOps: A2AArchestraTaskOps;
+    actor: A2AActor;
   }): Promise<{
     task: A2ATaskWithData;
     switchedToWorkingState?: boolean;
@@ -1310,7 +1367,7 @@ export class A2AManager {
     const { taskOps } = params;
     let { task } = params;
 
-    const approvalDecisions = taskOps.approvalDecisions ?? [];
+    let approvalDecisions = taskOps.approvalDecisions ?? [];
     if (approvalDecisions.length > 0) {
       if (this.config.disableApprovalFlow) {
         throw new A2AError(A2AErrorKind.InputApprovalFlowIsDisabled);
@@ -1359,6 +1416,16 @@ export class A2AManager {
         );
       }
 
+      if (this.config.callerAnswersOpenappaReviews) {
+        approvalDecisions = await decideCallerHitlReviews({
+          organizationId: params.actor.organizationId,
+          taskId: task.id,
+          userId: executorUserId(params.actor),
+          approvalDecisions,
+          now: new Date(),
+        });
+      }
+
       // The model applies the decisions, re-derives the message content from
       // its FRESH database state, and resumes the task in the same
       // transaction when the last pending decision lands. Deciding
@@ -1403,13 +1470,9 @@ export class A2AManager {
         ...task.history.slice(0, -1),
         { ...lastMessage, content: result.content },
       ];
-      const refreshedApprovals = z
-        .array(A2AArchestraApprovalRequestSchema)
-        .parse(
-          [...result.approvalRows].sort((a, b) =>
-            a.approvalId.localeCompare(b.approvalId),
-          ),
-        );
+      const refreshedApprovals = [...result.approvalRows]
+        .sort((a, b) => a.approvalId.localeCompare(b.approvalId))
+        .map(toApprovalRequest);
       task = {
         ...task,
         ...result.task,
@@ -1871,6 +1934,11 @@ function buildStatusReasonMessage(params: {
     role: A2AProtocolRole.Agent,
     parts: [{ text: params.reason }],
   };
+}
+
+/** The user id a run executes as: team and organization tokens have none. */
+function executorUserId(actor: A2AActor): string {
+  return actor.kind === "user" ? actor.id : "system";
 }
 
 function extractApprovalRequestsFromUiMessage(

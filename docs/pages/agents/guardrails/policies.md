@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub
 order: 1
 alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -62,6 +62,8 @@ For every field, see the [policy reference](https://www.openappa.com/contracts).
 Use `requires = { attention = ["human-approval"] }` for potentially destructive actions or publishing outside the company, not every tool call. The starting policy includes a reviewer for this mark.
 
 In Slack, the agent pauses and posts the review in the thread with **Approve** and **Decline** buttons. Only the person who sent the message can answer, within 24 hours. After that the action stays blocked. An approval lets the agent continue only when the policy allows it.
+
+Over [A2A](/docs/agents/triggers-and-channels/webhook-a2a#approving-tool-calls), the task pauses and the caller answers.
 
 ## GitHub Sync
 

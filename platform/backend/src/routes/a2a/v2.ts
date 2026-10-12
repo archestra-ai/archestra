@@ -984,7 +984,10 @@ class A2AV2Router {
     // The v2 protocol surface drives the full durable task lifecycle;
     // internal consumers (chatops) construct their own managers in the
     // default approval-only mode.
-    this.manager = new A2AManager({ taskMode: "full" });
+    this.manager = new A2AManager({
+      taskMode: "full",
+      callerAnswersOpenappaReviews: true,
+    });
   }
 
   async request(agentId: string, token: string, request: unknown) {

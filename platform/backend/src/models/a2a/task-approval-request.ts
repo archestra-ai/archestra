@@ -97,17 +97,20 @@ class A2ATaskApprovalRequestModel {
     return req ?? null;
   }
 
-  /** Links a paused `execute_remedy_plan` call to its OpenAPPA review. */
+  /**
+   * Links a paused `execute_remedy_plan` call to its OpenAPPA review. Without
+   * a reviewer, whoever can answer the task's approvals over A2A decides.
+   */
   static async attachOpenappaReview(params: {
     taskId: string;
     approvalId: string;
     offerId: string;
     reviewText: string;
     remedyArguments: Record<string, unknown>;
-    reviewerUserId: string;
-    slackChannelId: string;
-    slackThreadTs: string | undefined;
     expiresAt: Date;
+    reviewerUserId?: string;
+    slackChannelId?: string;
+    slackThreadTs?: string;
   }): Promise<A2ATaskApprovalRequest | null> {
     const table = schema.a2aTaskApprovalRequestsTable;
     const [req] = await db
@@ -116,8 +119,8 @@ class A2ATaskApprovalRequestModel {
         openappaOfferId: params.offerId,
         openappaReviewText: params.reviewText,
         remedyArguments: params.remedyArguments,
-        reviewerUserId: params.reviewerUserId,
-        slackChannelId: params.slackChannelId,
+        reviewerUserId: params.reviewerUserId ?? null,
+        slackChannelId: params.slackChannelId ?? null,
         slackThreadTs: params.slackThreadTs ?? null,
         expiresAt: params.expiresAt,
       })
@@ -138,7 +141,8 @@ class A2ATaskApprovalRequestModel {
    */
   static async recordOpenappaRuling(params: {
     id: string;
-    reviewerUserId: string;
+    /** Null for a review the A2A caller answers. */
+    reviewerUserId: string | null;
     ruling: "approve" | "deny";
     now: Date;
   }): Promise<A2ATaskApprovalRequest | null> {
@@ -149,7 +153,9 @@ class A2ATaskApprovalRequestModel {
       .where(
         and(
           eq(table.id, params.id),
-          eq(table.reviewerUserId, params.reviewerUserId),
+          params.reviewerUserId === null
+            ? isNull(table.reviewerUserId)
+            : eq(table.reviewerUserId, params.reviewerUserId),
           isNotNull(table.openappaOfferId),
           isNull(table.ruling),
           gt(table.expiresAt, params.now),

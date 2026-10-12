@@ -621,7 +621,7 @@ describe("createDirectLLMModel", () => {
     expect(capturedCreateOpenAIOptions.apiKey).toBe("test-key");
   });
 
-  it("keeps azure OpenAI first-party deployments on the strict openai chat model", () => {
+  it("uses native Responses for azure OpenAI first-party deployments", () => {
     const model = createDirectLLMModel({
       provider: "azure",
       apiKey: "test-key",
@@ -629,7 +629,7 @@ describe("createDirectLLMModel", () => {
       baseUrl: "https://my-resource.services.ai.azure.com/openai/v1",
     });
 
-    expect((model as { provider: string }).provider).toBe("openai.chat");
+    expect((model as { provider: string }).provider).toBe("openai.responses");
   });
 
   it("uses the openai-compatible chat model for azure open-model deployments so reasoning_content surfaces", () => {
@@ -692,7 +692,7 @@ describe("createDirectLLMModel", () => {
         modelName: "gpt-4.1",
         baseUrl: "https://my-resource.cognitiveservices.azure.com/openai/v1",
       });
-      expect(url.pathname).toBe("/openai/v1/chat/completions");
+      expect(url.pathname).toBe("/openai/v1/responses");
       expect(url.searchParams.has("api-version")).toBe(false);
     });
 
@@ -706,26 +706,40 @@ describe("createDirectLLMModel", () => {
       expect(url.searchParams.has("api-version")).toBe(false);
     });
 
-    it("routes classic endpoints through the deployment path with api-version", async () => {
-      // Classic resources only serve chat completions under
-      // /openai/deployments/<deployment>; posting to <base>/chat/completions
-      // 404s ("Resource not found").
+    it("routes classic Responses requests through the resource with the Responses api-version", async () => {
       const url = await requestedUrlFor({
         modelName: "gpt-4.1",
         baseUrl: "https://my-resource.openai.azure.com/openai",
       });
-      expect(url.pathname).toBe("/openai/deployments/gpt-4.1/chat/completions");
-      expect(url.searchParams.has("api-version")).toBe(true);
+      expect(url.pathname).toBe("/openai/responses");
+      expect(url.searchParams.get("api-version")).toBe(
+        config.llm.azure.responsesApiVersion,
+      );
     });
 
-    it("keeps deployment-scoped base URLs as-is with api-version", async () => {
+    it("normalizes deployment-scoped base URLs for Responses", async () => {
       const url = await requestedUrlFor({
         modelName: "gpt-4o",
         baseUrl:
           "https://my-resource.openai.azure.com/openai/deployments/gpt-4o",
       });
-      expect(url.pathname).toBe("/openai/deployments/gpt-4o/chat/completions");
-      expect(url.searchParams.has("api-version")).toBe(true);
+      expect(url.pathname).toBe("/openai/responses");
+      expect(url.searchParams.get("api-version")).toBe(
+        config.llm.azure.responsesApiVersion,
+      );
+    });
+
+    it("keeps classic open-model requests deployment-scoped with the chat api-version", async () => {
+      const url = await requestedUrlFor({
+        modelName: "DeepSeek-R1",
+        baseUrl: "https://my-resource.openai.azure.com/openai",
+      });
+      expect(url.pathname).toBe(
+        "/openai/deployments/DeepSeek-R1/chat/completions",
+      );
+      expect(url.searchParams.get("api-version")).toBe(
+        config.llm.azure.apiVersion,
+      );
     });
   });
 
@@ -1365,9 +1379,9 @@ describe("createLLMModel", () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
         [
-          'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":0,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}',
-          'data: {"id":"chatcmpl-test","object":"chat.completion.chunk","created":0,"model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
-          "data: [DONE]",
+          'data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","id":"msg_test","role":"assistant","content":[]}}',
+          'data: {"type":"response.output_text.delta","item_id":"msg_test","output_index":0,"content_index":0,"delta":"ok"}',
+          'data: {"type":"response.completed","response":{"id":"resp_test","created_at":0,"model":"gpt-4o","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}',
           "",
         ].join("\n\n"),
         {

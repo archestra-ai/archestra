@@ -346,8 +346,8 @@ export const SHOTS: Shot[] = [
     asset: "automated_screenshots/platform-agent-skills_import-from-github",
     route: () => "/skills/new",
     prepare: async (page) => {
-      await page.getByText("Custom GitHub URL", { exact: true }).click();
-      await page.getByLabel("Repository URL").fill("acme-corp/agent-skills");
+      await page.getByText("Git repository", { exact: true }).click();
+      await page.getByRole("button", { name: /^GitLab/ }).waitFor();
     },
     target: (page) => page.getByRole("dialog"),
   },

@@ -40,7 +40,7 @@ You need [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:up
 1. Go to **Guardrails** and click **Create my policy**. A chat with the configuration agent opens.
 2. The agent drafts a starting policy from your tools and explains what it allows and blocks.
 3. Approve the policy. Saving the first policy turns enforcement on.
-4. Optionally, click **Set up GitHub sync** in the saved-policy banner to keep the policy in GitHub. See [GitHub sync](/docs/agents/guardrails/policies#github-sync).
+4. Optionally, click **Set up Git sync** in the saved-policy banner to keep the policy in GitHub or GitLab. See [Git sync](/docs/agents/guardrails/policies#git-sync).
 
 The **Enforcement** card on **Overview** now shows **On**.
 
@@ -48,7 +48,7 @@ What to know:
 
 - The starting policy covers only Archestra's own tools. Every other tool runs without restrictions. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled by your organization's default model before each command, so reading a credentials file narrows who can see the result. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
 - Enforcement applies to sessions that start while it is on. Start a new session after you turn it on.
-- **Settings → Guardrails** holds three settings: **Enforce the policy**, which you can switch once a policy exists; **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and **GitHub sync**.
+- **Settings → Guardrails** holds three settings: **Enforce the policy**, which you can switch once a policy exists; **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and **Git sync**.
 
 ## Validations
 

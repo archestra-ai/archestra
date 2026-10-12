@@ -2,7 +2,7 @@
 title: Credentials and Secrets
 description: Save credentials once, reuse them across integrations, and configure encrypted secrets storage
 order: 1
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -18,6 +18,8 @@ A **GitHub App** always belongs to the organization. It holds an API URL, app ID
 [Installation tokens expire after one hour](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app). Archestra renews them for managed runtimes. See [Token Refresh](#token-refresh) for process behavior.
 
 Install the GitHub App on the repositories it needs. Its installation permissions determine the token's access. Individual integrations describe their required permissions.
+
+A **GitLab token** always belongs to the organization. It holds a GitLab URL and a project, group, or personal access token. Skills, plugins, and [Git sync](/docs/agents/guardrails/policies#git-sync) use it for gitlab.com and self-managed GitLab. Add one with **Add a GitLab token** when you pick a GitLab repository. Archestra checks the token before it saves it.
 
 A **GitHub user connection** links your account to an organization-managed App. Authorize once through GitHub. Every harness using that credential acts as your GitHub user. Access is limited to permissions held by both you and the App.
 
@@ -108,7 +110,7 @@ A resource-specific secret supplies only that resource. Use a saved credential w
 
 Conversation setup links check all required credentials after GitHub authorization. Complete any remaining credentials, then send your message again in the original conversation. Connecting credentials does not automatically retry the request.
 
-GitHub skill and plugin imports accept saved secrets as tokens or saved GitHub Apps. GitHub Knowledge connectors select an organization credential. See [Skills](/docs/agents/skills), [Plugins](/docs/agents/plugins), and [Knowledge](/docs/knowledge/connectors/github) for repository setup.
+Skill and plugin imports and policy sync use a GitHub App or a GitLab token. GitHub Knowledge connectors select an organization credential. See [Skills](/docs/agents/skills/importing#private-repositories), [Plugins](/docs/agents/plugins), and [Knowledge](/docs/knowledge/connectors/github) for repository setup.
 
 ## Rotation And Disconnection
 
@@ -134,7 +136,7 @@ Provider failures delay renewal. Tokens keep their original expiry. MCP calls fa
 
 Save a GitHub token as an organization **Custom secret** named **Repository access**. Connect its value once.
 
-Select **Repository access** for a coding Agent's `GITHUB_TOKEN` environment variable. Select it again for a GitHub MCP server's `GITHUB_PERSONAL_ACCESS_TOKEN` variable. Use the same credential for private skill imports or a GitHub Knowledge connector.
+Select **Repository access** for a coding Agent's `GITHUB_TOKEN` environment variable. Select it again for a GitHub MCP server's `GITHUB_PERSONAL_ACCESS_TOKEN` variable. Use the same credential for a GitHub Knowledge connector.
 
 For personal repository access, create a **GitHub user connection** referencing the organization App. Each person authorizes GitHub once. Select that connection for each coding harness and personal MCP installation.
 

@@ -3,7 +3,7 @@ title: Plugins
 beta: true
 description: Client-native extensions for Claude Code, Codex, Copilot CLI, and Cursor
 order: 4
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,18 +25,20 @@ Import popular plugins, such as Anthropic's [official marketplace](https://githu
 
 Archestra stores the files as you write them. It does not convert them between clients.
 
-<span id="importing-a-marketplace"></span>
+<span id="importing-a-marketplace"></span><span id="import-from-github"></span>
 
-## Import From GitHub
+## Import From GitHub or GitLab
 
-1. Go to **Plugins** and click **Add new plugin**.
-2. Pick a popular marketplace, or paste a GitHub marketplace URL.
-3. Select the plugins, preview their files, and import them.
+Import a whole marketplace from a GitHub or GitLab repository, on the cloud or your own host. A repository without a marketplace file works too: Archestra lists its plugin folders, such as `plugins/<name>/` with a `plugin.json`.
+
+1. Go to **Plugins** and click **Add new plugin**. Pick a popular marketplace, or click **Git repository**.
+2. Pick **GitHub** or **GitLab**, then how to sign in, then the repository.
+3. Click **Find plugins**, select the plugins, preview their files, and import them.
 
 What to know:
 
-- **Private repositories** need a GitHub App or a personal access token from [Credentials](/docs/admin/security/credentials).
-- Imported files are read-only here. Edit them in their repository. The **GitHub source** panel sets the ref, the check schedule, and the credential.
+- **Private and self-hosted repositories** need a GitHub App or a GitLab token. They work the same way as for [skills](/docs/agents/skills/importing#private-repositories).
+- Imported files are read-only here. Edit them in their repository. The **Source** section on the plugin's page sets the ref, the check schedule, and the credential.
 - Updates wait for you. A new commit shows **Review update**. Compare the files and click **Approve and apply**. Until then, the current files stay in use.
 
 <span id="reviewing-updates"></span><span id="installing-plugins"></span>

@@ -1785,7 +1785,7 @@ async function assertOnlineSkillCatalogEnabled(
       403,
       "The online skill catalog is disabled for this organization. Skills " +
         "can still be written by hand, but they cannot be discovered or " +
-        "imported from GitHub.",
+        "imported from GitHub or GitLab.",
     );
   }
 }

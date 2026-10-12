@@ -4,7 +4,7 @@ sidebarTitle: Batteries
 description: Cover an MCP server's tools with a ready-made policy package
 order: 2
 alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,7 +30,7 @@ An included battery that cannot run shows a problem instead of **Active**:
 
 What to know:
 
-- Archestra saves the key beside the policy, not in it. So you can bind a key before the battery is included, and while [GitHub sync](/docs/agents/guardrails/policies#github-sync) owns the policy.
+- Archestra saves the key beside the policy, not in it. So you can bind a key before the battery is included, and while [Git sync](/docs/agents/guardrails/policies#git-sync) owns the policy.
 - A `[credentials]` line in the policy wins over a key bound here. Remove the line to manage the key in the dialog.
 
 ## Write Your Own

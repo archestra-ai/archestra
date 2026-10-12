@@ -212,7 +212,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     ];
   }, [byosEnabled, canUpdateTeams, mode, readOnly, team]);
   const title =
-    mode === "create"
+    mode === "create" && !team
       ? "Create Team"
       : readOnly
         ? "External Group Sync"

@@ -714,7 +714,7 @@ const AgentToolsEditorContent = forwardRef<
             ? "Not connected"
             : assignedCount > 0
               ? `${assignedCount}/${totalCount}`
-              : `${totalCount} tools`,
+              : `${totalCount} ${totalCount === 1 ? "tool" : "tools"}`,
         disabled:
           gate.disabled ||
           (catalog.id === ARCHESTRA_MCP_CATALOG_ID && assignedCount > 0),
@@ -948,8 +948,8 @@ function McpServerCard({
           : unavailable
             ? "Not connected"
             : isSelected
-              ? `${assignedCount}/${totalCount} tools`
-              : `${totalCount} tools`}
+              ? `${assignedCount}/${totalCount} ${totalCount === 1 ? "tool" : "tools"}`
+              : `${totalCount} ${totalCount === 1 ? "tool" : "tools"}`}
       </span>
     </UnstyledButton>
   );

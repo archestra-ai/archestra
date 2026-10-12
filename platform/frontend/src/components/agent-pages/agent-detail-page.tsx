@@ -900,7 +900,7 @@ function AgentDetails({
             if (!open) setDeleteRequested(false);
           }}
           title={`Delete ${config.singular}`}
-          description={`Are you sure you want to delete this ${config.singular}? This action cannot be undone.`}
+          description={`Are you sure you want to delete this ${config.singular}? It moves to Deleted, where it can be restored.`}
           isPending={deleteAgent.isPending}
           // `mutate` with callbacks rather than an awaited `mutateAsync`: the
           // query layer rejects on failure (and toasts), and an unhandled

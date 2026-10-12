@@ -164,8 +164,8 @@ export function EnvironmentVariableDialog({
   );
   const keyError =
     trimmedKey.length > 0
-      ? EnvironmentVariableSchema.shape.key.safeParse(trimmedKey).error?.issues[0]
-          ?.message
+      ? EnvironmentVariableSchema.shape.key.safeParse(trimmedKey).error
+          ?.issues[0]?.message
       : undefined;
 
   const hasStoredSecret =

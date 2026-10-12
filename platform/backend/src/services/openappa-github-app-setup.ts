@@ -371,7 +371,7 @@ type Installation = {
 };
 
 function manifest() {
-  const callbackUrl = `${config.frontendBaseUrl}/openappa/github-app/callback`;
+  const callbackUrl = `${config.frontendBaseUrl}/github/app-setup`;
   return {
     // App names are unique across GitHub; the create page lets the admin rename it.
     name: "OpenAPPA Sync",

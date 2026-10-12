@@ -14,7 +14,9 @@
 // for apps with one, Claude Desktop's download, the copy prompt for other
 // agents, or the manual steps themselves.
 
+import { DocsPage } from "@archestra/shared";
 import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
+import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import {
   ArrowDown,
   BookOpen,
@@ -59,6 +61,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConnectedSignal } from "@/lib/connect-signal";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -453,6 +456,7 @@ function AgentTiles({
           icon={<ClientIcon client={c} size={iconSize} />}
           label={c.label}
           marker={markFor(c.id)}
+          guardrailsSupported={GUARDRAILS_NATIVE.has(c.id)}
         />
       ))}
       {showOther && (
@@ -467,6 +471,9 @@ function AgentTiles({
             roomy={row}
             active={!!otherPicked}
             marker={otherPicked ? markFor(otherPicked.id) : undefined}
+            guardrailsSupported={
+              !!otherPicked && GUARDRAILS_NATIVE.has(otherPicked.id)
+            }
             aria-label={
               otherPicked
                 ? `${otherPicked.label}, change agent`
@@ -535,6 +542,7 @@ function Tile({
   label,
   sub,
   marker,
+  guardrailsSupported,
   onClick,
   ...rest
 }: {
@@ -543,6 +551,7 @@ function Tile({
   label: ReactNode;
   /** Pinned to the tile's top-right corner, e.g. the last connected mark. */
   marker?: ReactNode;
+  guardrailsSupported?: boolean;
   /** One small line under the label, shown in full. */
   sub?: string;
   roomy?: boolean;
@@ -553,6 +562,15 @@ function Tile({
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      aria-label={typeof label === "string" ? label : undefined}
+      aria-description={
+        [
+          guardrailsSupported ? "Supports LLM proxy guardrails" : null,
+          marker ? "Last connected" : null,
+        ]
+          .filter(Boolean)
+          .join(". ") || undefined
+      }
       {...rest}
       className={cn(
         "relative flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,color] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
@@ -567,8 +585,29 @@ function Tile({
       {marker && <span className="absolute top-1.5 right-1.5">{marker}</span>}
       {icon}
       {/* Labels wrap to two lines rather than truncate. */}
-      <span className="line-clamp-2 w-full text-center leading-tight break-words">
-        {label}
+      <span className="flex max-w-full items-center justify-center gap-1.5">
+        <span className="line-clamp-2 min-w-0 text-center leading-tight break-words">
+          {label}
+        </span>
+        {guardrailsSupported && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                role="img"
+                aria-label="Supports LLM proxy guardrails"
+                className="shrink-0"
+              >
+                <ShieldCheck className="size-3.5" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-60">
+              <span>
+                Supports LLM proxy guardrails out of the box. Enforcement
+                depends on your organization&apos;s settings.
+              </span>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </span>
       {sub && (
         <span className="-mt-1 w-full text-center text-xs leading-tight font-normal text-muted-foreground">
@@ -1012,7 +1051,7 @@ function ManualSteps({
  * session-identity.ts). Others count as unsupported unless they send OpenAPPA
  * session headers, which the agents on this page don't.
  */
-const GUARDRAILS_NATIVE = new Set(["claude-code", "codex", "opencode"]);
+const GUARDRAILS_NATIVE = new Set(Object.keys(NATIVE_SESSION_CLIENT_LABELS));
 
 /**
  * What the guardrails do for this agent, from the real deployment setting.
@@ -1137,6 +1176,17 @@ function ProfileCard({
   const skillsOn = data.skillsEnabled;
   const pluginsOn = data.partsFor(client).plugins;
   const proxyOn = data.partsFor(client).proxy;
+  const guardrailsDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformAiToolGuardrailsClients,
+  );
+  const sessionHeadersDocsUrl = getFrontendDocsUrl(
+    DocsPage.PlatformAiToolGuardrailsClients,
+    "session-headers",
+  );
+  const guardrailsClientNames = new Intl.ListFormat("en", {
+    style: "long",
+    type: "conjunction",
+  }).format(Object.values(NATIVE_SESSION_CLIENT_LABELS));
 
   // One line under the lists. A future capability is one more entry.
   const status: StatusItem[] = [];
@@ -1188,6 +1238,37 @@ function ProfileCard({
       tip: (
         <InfoTip label="What the guardrails do">
           <TipBody reason={guard.detail} />
+          {!GUARDRAILS_NATIVE.has(client.id) && (
+            <span className="mt-2 block">
+              LLM proxy guardrails support only{" "}
+              {guardrailsDocsUrl ? (
+                <Link
+                  href={guardrailsDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-current"
+                >
+                  {guardrailsClientNames}
+                </Link>
+              ) : (
+                <span>{guardrailsClientNames}</span>
+              )}{" "}
+              out of the box. For other clients,{" "}
+              {sessionHeadersDocsUrl ? (
+                <Link
+                  href={sessionHeadersDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-muted-foreground/50 underline-offset-4 hover:decoration-current"
+                >
+                  add APPA session headers
+                </Link>
+              ) : (
+                <span>add APPA session headers</span>
+              )}
+              .
+            </span>
+          )}
         </InfoTip>
       ),
       state: guard.label,

@@ -184,6 +184,99 @@ afterAll(() => {
 });
 
 describe("ModelsPage", () => {
+  it("lets users set, view, and reset cache prices when no cache price is known", async () => {
+    keyCreated = true;
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
+    // The API schema allows null; the generated client currently omits it.
+    type PricingModel =
+      archestraApiTypes.GetModelsWithApiKeysResponses["200"][number];
+    let currentModel: Omit<PricingModel, "cachePriceSource"> & {
+      cachePriceSource: PricingModel["cachePriceSource"] | null;
+    } = { ...model, cachePriceSource: null };
+    const updates: archestraApiTypes.UpdateModelData["body"][] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-models`, () =>
+        HttpResponse.json([currentModel]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-provider-models/labels/keys`, () =>
+        HttpResponse.json([]),
+      ),
+      http.get(
+        `${API_ORIGIN}/api/resource-permissions/llmModel/${model.id}`,
+        () =>
+          HttpResponse.json({
+            resource: "llmModel",
+            scope: model.id,
+            name: model.modelId,
+            ownerId: null,
+            revision: 1,
+            grants: [],
+            inheritedGrants: [],
+            effectiveActions: ["read", "update", "manage-permissions"],
+            actorSubjects: [],
+          } satisfies archestraApiTypes.GetResourcePermissionsResponses["200"]),
+      ),
+      http.patch(
+        `${API_ORIGIN}/api/llm-models/${model.id}`,
+        async ({ request }) => {
+          const body =
+            (await request.json()) as archestraApiTypes.UpdateModelData["body"];
+          updates.push(body);
+          currentModel = {
+            ...currentModel,
+            ...body,
+            cachePriceSource:
+              body.customPricePerMillionCacheRead !== null ||
+              body.customPricePerMillionCacheWrite !== null
+                ? "custom"
+                : null,
+          };
+          return HttpResponse.json(currentModel);
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: `Edit ${model.modelId}` }),
+    );
+    await user.click(screen.getByRole("button", { name: "Pricing" }));
+    expect(screen.getByLabelText("Cache read")).toHaveValue("");
+    expect(screen.getByLabelText("Cache write")).toHaveValue("");
+    await user.type(screen.getByLabelText("Cache read"), "0.25");
+    await user.type(screen.getByLabelText("Cache write"), "0");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(updates).toEqual([
+        expect.objectContaining({
+          customPricePerMillionCacheRead: "0.25",
+          customPricePerMillionCacheWrite: "0",
+        }),
+      ]),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: `Edit ${model.modelId}` }),
+    );
+    await user.click(screen.getByRole("button", { name: "Pricing" }));
+    expect(screen.getByLabelText("Cache read")).toHaveValue("0.25");
+    expect(screen.getByLabelText("Cache write")).toHaveValue("0");
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(updates).toHaveLength(2));
+    expect(updates[1]).toEqual(
+      expect.objectContaining({
+        customPricePerMillionCacheRead: null,
+        customPricePerMillionCacheWrite: null,
+      }),
+    );
+  });
+
   it("opens model permissions through Edit without a duplicate row action", async () => {
     keyCreated = true;
     vi.mocked(useHasPermissions).mockReturnValue({

@@ -647,24 +647,19 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           }
         }}
         title={
-          <span className="flex items-center gap-2">
-            <span className="capitalize">
-              {viewPermissionsRole?.name ?? ""}
-            </span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge
-                  variant="secondary"
-                  className="cursor-default font-normal"
-                >
-                  Read-only
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>
-                Predefined roles can't be changed. Duplicate it to edit.
-              </TooltipContent>
-            </Tooltip>
-          </span>
+          <span className="capitalize">{viewPermissionsRole?.name ?? ""}</span>
+        }
+        titleAdornment={
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="secondary" className="cursor-default font-normal">
+                Read-only
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              Predefined roles can't be changed. Duplicate it to edit.
+            </TooltipContent>
+          </Tooltip>
         }
         description={
           viewPermissionsRole

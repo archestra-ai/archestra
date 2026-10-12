@@ -418,17 +418,24 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "create_guardrails_repository",
-    title: "Create OpenAPPA GitHub repository",
+    title: "Create OpenAPPA policy repository",
     description:
-      "Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. If repository rules block the initial commit, open a pull request instead. List credentials first and choose a connected organization GitHub App. Ask the user for the GitHub owner and repository name before calling. When source.setupPullRequestNumber is present, return its PR link using source.repo and ask the user to merge it. Sync checks for the merge every minute and keeps the current policy active until then. Future policy edits open pull requests.",
+      "Create a private policy repository from the OpenAPPA configuration template, seed it with the current policy and battery declarations, and start Git sync. On GitHub, pass githubAppConfigId (an organization GitHub App) and the owner account. On GitLab (gitlab.com or self-managed), pass gitlabTokenId and the group path as owner, or an empty owner for the token owner's namespace. List credentials first. Ask the user for the owner and repository name before calling. If branch rules block the initial commit, a pull request (GitLab: merge request) opens instead; when source.setupPullRequestNumber is present, link it and ask the user to merge it. Sync checks for the merge every minute and keeps the current policy active until then. Future policy edits open pull or merge requests.",
     schema: z.strictObject({
-      owner: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/),
+      owner: z
+        .string()
+        .regex(/^([a-zA-Z0-9][a-zA-Z0-9_.-]*(\/[a-zA-Z0-9_.-]+)*)?$/),
       name: z.string().regex(/^[a-zA-Z0-9_.-]+$/),
-      githubAppConfigId: z.string().uuid(),
+      githubAppConfigId: z.string().uuid().optional(),
+      gitlabTokenId: z.string().uuid().optional(),
       interval: z.enum(["15m", "1h", "1d"]).default("1h"),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(context);
+      if (!args.githubAppConfigId === !args.gitlabTokenId)
+        return errorResult(
+          "Pass exactly one of githubAppConfigId or gitlabTokenId",
+        );
       return result(
         await createAppaGithubRepository({
           organizationId,
@@ -440,15 +447,15 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "connect_guardrails_repository",
-    title: "Connect existing OpenAPPA GitHub repository",
+    title: "Connect existing OpenAPPA policy repository",
     description:
-      "Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and choose a connected organization GitHub App installed on the repository owner. Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
+      "Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and pass either an organization GitHub App installed on the repository owner (githubAppConfigId) or a GitLab access token that can read the project (gitlabTokenId). Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
     // `ref` and `path` stay plain strings here and are checked against the
     // source schema in the handler: its `ref` pattern uses a Unicode property
     // escape, which OpenAI refuses in a function schema.
     schema: z.strictObject({
       repo: AppaGithubSourceSchema.shape.repo.describe(
-        "The existing repository, as owner/name.",
+        "The existing repository, as owner/name (GitLab: group/subgroup/project).",
       ),
       path: z
         .string()
@@ -461,13 +468,28 @@ const registry = defineArchestraTools([
         .describe(
           "Branch, tag, or commit to follow. Omit to follow the default branch.",
         ),
-      githubAppConfigId: z.string().uuid(),
+      githubAppConfigId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe("An organization GitHub App, for a GitHub repository."),
+      gitlabTokenId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe("A GitLab access token, for a GitLab project."),
       interval: z.enum(["15m", "1h", "1d"]).default("1h"),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(context);
+      if (!args.githubAppConfigId === !args.gitlabTokenId)
+        return errorResult(
+          "Pass exactly one of githubAppConfigId or gitlabTokenId",
+        );
       const source = AppaGithubSourceSchema.safeParse({
         ...args,
+        githubAppConfigId: args.githubAppConfigId ?? null,
+        gitlabTokenId: args.gitlabTokenId ?? null,
         githubPatId: null,
       });
       if (!source.success)

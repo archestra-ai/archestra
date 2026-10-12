@@ -1265,6 +1265,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListGitCredentialRepositories]: {
     credential: ["read"],
   },
+  [RouteId.ListGitCredentialNamespaces]: {
+    credential: ["read"],
+  },
   [RouteId.ListGithubPats]: {
     credential: ["read"],
   },

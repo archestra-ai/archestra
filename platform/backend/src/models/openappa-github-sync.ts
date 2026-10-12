@@ -27,15 +27,20 @@ class OpenAppaGithubSyncModel {
   }
   static async save(
     organizationId: string,
-    source: AppaGithubSource & { setupPullRequestNumber?: number },
+    source: Omit<AppaGithubSource, "gitlabTokenId"> & {
+      gitlabTokenId?: string | null;
+      setupPullRequestNumber?: number;
+    },
   ) {
     const {
       validationDirectory,
       setupPullRequestNumber = null,
+      gitlabTokenId = null,
       ...policySource
     } = source;
     const values = {
       setupPullRequestNumber,
+      gitlabTokenId,
       ...policySource,
       revision: randomUUID(),
       sourceCommit: null,

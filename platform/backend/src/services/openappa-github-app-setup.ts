@@ -22,6 +22,8 @@ import {
   deleteRuntimeCredentialDefinition,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
+import { resolveOpenAppaGitlabAccess } from "@/services/openappa-github-access";
+import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
 import type {
   AppaGithubRepositoryStatus,
@@ -264,6 +266,8 @@ class OpenAppaGithubAppSetup {
    * created one.
    */
   async repositories(params: { organizationId: string; credentialId: string }) {
+    const gitlab = await gitlabAccess(params);
+    if (gitlab) return openappaGitlab.repositories(gitlab);
     const app = (await this.githubApps(params.organizationId)).find(
       (entry) => entry.id === params.credentialId,
     );
@@ -296,6 +300,15 @@ class OpenAppaGithubAppSetup {
   }): Promise<AppaGithubRepositoryStatus> {
     const { repo, ref } = params;
     const path = params.path ?? "appa.toml";
+    const gitlab = await gitlabAccess(params);
+    if (gitlab)
+      return openappaGitlab.repositoryStatus({
+        access: gitlab,
+        repo,
+        ref,
+        path,
+        validationDirectory: params.validationDirectory ?? VALIDATION_DIRECTORY,
+      });
     const app = (await this.githubApps(params.organizationId)).find(
       (entry) => entry.id === params.credentialId,
     );
@@ -438,6 +451,22 @@ class OpenAppaGithubAppSetup {
 }
 
 export const openappaGithubAppSetup = new OpenAppaGithubAppSetup();
+
+/** Access through a GitLab token, or null when the credential is something else. */
+async function gitlabAccess(params: {
+  organizationId: string;
+  credentialId: string;
+}) {
+  const definition = await RuntimeCredentialDefinitionModel.findById({
+    id: params.credentialId,
+    organizationId: params.organizationId,
+  });
+  if (definition?.kind !== "gitlab_token") return null;
+  return resolveOpenAppaGitlabAccess({
+    organizationId: params.organizationId,
+    gitlabTokenId: definition.id,
+  });
+}
 
 // ===================== Internals =====================
 

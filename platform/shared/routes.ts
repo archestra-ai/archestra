@@ -643,6 +643,7 @@ export const RouteId = {
   ListGitCredentials: "listGitCredentials",
   CreateGitlabToken: "createGitlabToken",
   ListGitCredentialRepositories: "listGitCredentialRepositories",
+  ListGitCredentialNamespaces: "listGitCredentialNamespaces",
   ListGithubPats: "listGithubPats",
   CreateGithubPat: "createGithubPat",
   UpdateGithubPat: "updateGithubPat",

@@ -7,8 +7,19 @@ import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 export interface GitTreeEntry {
   path: string;
   type: "blob" | "tree";
+  /** Git file mode, e.g. 100644; 120000 is a symlink. */
+  mode?: string;
   /** Bytes, when the host reports it (GitHub does, GitLab does not). */
   size?: number;
+}
+
+export interface GitlabProject {
+  id: number;
+  path_with_namespace: string;
+  default_branch?: string | null;
+  visibility?: string;
+  empty_repo?: boolean;
+  web_url?: string;
 }
 
 /** A repository the credential can reach. */
@@ -179,6 +190,143 @@ export class GitHostClient {
     }));
   }
 
+  // === GitLab writes (GitHub writes live with their callers) ===
+
+  /** A GitLab project's details; null when the token can't see it. */
+  async gitlabProject(repo: string): Promise<GitlabProject | null> {
+    const response = await this.request(this.repoApi(repo));
+    if (response.status === 404) return null;
+    if (!response.ok) throw await toError(response, repo);
+    return (await response.json()) as GitlabProject;
+  }
+
+  /** Groups the token can create projects in. */
+  async gitlabNamespaces(): Promise<{ id: number; fullPath: string }[]> {
+    const groups = await this.json<{ id: number; full_path: string }[]>(
+      `${this.host.apiUrl}/groups?min_access_level=30&per_page=100&order_by=path`,
+    );
+    return groups.map((group) => ({ id: group.id, fullPath: group.full_path }));
+  }
+
+  /** A private project in a group (or the token owner's namespace when omitted). */
+  async createGitlabProject(params: {
+    namespaceId?: number;
+    name: string;
+  }): Promise<GitlabProject> {
+    return this.json<GitlabProject>(`${this.host.apiUrl}/projects`, {
+      body: {
+        name: params.name,
+        path: params.name,
+        ...(params.namespaceId ? { namespace_id: params.namespaceId } : {}),
+        visibility: "private",
+        initialize_with_readme: false,
+      },
+    });
+  }
+
+  /**
+   * One commit of file changes. `startSha` pins the parent: GitLab refuses the
+   * commit when `startBranch` moved, so a concurrent push never gets overwritten.
+   */
+  async commitGitlabFiles(params: {
+    repo: string;
+    branch: string;
+    startBranch?: string;
+    startSha?: string;
+    message: string;
+    actions: {
+      action: "create" | "update" | "delete";
+      path: string;
+      content?: string;
+    }[];
+  }): Promise<string> {
+    const commit = await this.json<{ id: string }>(
+      `${this.repoApi(params.repo)}/repository/commits`,
+      {
+        body: {
+          branch: params.branch,
+          ...(params.startBranch && params.startBranch !== params.branch
+            ? { start_branch: params.startBranch }
+            : {}),
+          ...(params.startSha ? { start_sha: params.startSha } : {}),
+          commit_message: params.message,
+          actions: params.actions.map((action) => ({
+            action: action.action,
+            file_path: action.path,
+            ...(action.content === undefined
+              ? {}
+              : { content: action.content }),
+          })),
+        },
+      },
+    );
+    return commit.id;
+  }
+
+  async createGitlabMergeRequest(params: {
+    repo: string;
+    sourceBranch: string;
+    targetBranch: string;
+    title: string;
+    description: string;
+  }): Promise<{ iid: number; webUrl: string }> {
+    const request = await this.json<{ iid: number; web_url: string }>(
+      `${this.repoApi(params.repo)}/merge_requests`,
+      {
+        body: {
+          source_branch: params.sourceBranch,
+          target_branch: params.targetBranch,
+          title: params.title,
+          description: params.description,
+          remove_source_branch: true,
+        },
+      },
+    );
+    return { iid: request.iid, webUrl: request.web_url };
+  }
+
+  async gitlabMergeRequest(
+    repo: string,
+    iid: number,
+  ): Promise<{
+    iid: number;
+    webUrl: string;
+    state: "open" | "merged" | "closed";
+    sourceBranch: string;
+    mergeable: boolean | null;
+  }> {
+    const request = await this.json<{
+      iid: number;
+      web_url: string;
+      state: string;
+      source_branch: string;
+      detailed_merge_status?: string;
+    }>(`${this.repoApi(repo)}/merge_requests/${iid}`);
+    return {
+      iid: request.iid,
+      webUrl: request.web_url,
+      state:
+        request.state === "merged"
+          ? "merged"
+          : request.state === "opened"
+            ? "open"
+            : "closed",
+      sourceBranch: request.source_branch,
+      mergeable:
+        request.detailed_merge_status === undefined
+          ? null
+          : request.detailed_merge_status === "mergeable",
+    };
+  }
+
+  /** The commit a GitLab branch points at. */
+  async gitlabBranchCommit(repo: string, branch: string): Promise<string> {
+    const data = await this.json<{ commit: { id: string } }>(
+      `${this.repoApi(repo)}/repository/branches/${encodeURIComponent(branch)}`,
+    );
+    return data.commit.id;
+  }
+
   // === requests ===
 
   /** The API path of a repository: GitHub `repos/o/r`, GitLab `projects/<url-encoded path>`. */
@@ -236,7 +384,7 @@ export class GitHostClient {
   ): Promise<GitTreeEntry[]> {
     const data = await this.json<{
       truncated?: boolean;
-      tree: { path?: string; type?: string; size?: number }[];
+      tree: { path?: string; type?: string; size?: number; mode?: string }[];
     }>(`${this.repoApi(repo)}/git/trees/${commitSha}?recursive=1`);
     if (data.truncated)
       throw new GitHostError(
@@ -245,7 +393,14 @@ export class GitHostClient {
       );
     return data.tree.flatMap((item) =>
       item.path && (item.type === "blob" || item.type === "tree")
-        ? [{ path: item.path, type: item.type, size: item.size }]
+        ? [
+            {
+              path: item.path,
+              type: item.type,
+              size: item.size,
+              mode: item.mode,
+            },
+          ]
         : [],
     );
   }
@@ -268,10 +423,11 @@ export class GitHostClient {
       const items = (await response.json()) as {
         path: string;
         type: string;
+        mode?: string;
       }[];
       for (const item of items)
         if (item.type === "blob" || item.type === "tree")
-          entries.push({ path: item.path, type: item.type });
+          entries.push({ path: item.path, type: item.type, mode: item.mode });
       url = nextLink(response.headers.get("link"));
     }
     return entries;

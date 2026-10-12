@@ -7,6 +7,7 @@ import {
   createGitlabToken,
   listGitCredentials,
 } from "@/services/git-credentials";
+import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import {
   ApiError,
   CreateGitlabTokenRequestSchema,
@@ -76,6 +77,39 @@ const gitCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(
           await gitClient(access).listRepositories(query.search),
         );
+      } catch (error) {
+        if (error instanceof GitHostError)
+          throw new ApiError(502, error.message);
+        throw error;
+      }
+    },
+  );
+
+  fastify.get(
+    "/api/git-credentials/:id/namespaces",
+    {
+      schema: {
+        operationId: RouteId.ListGitCredentialNamespaces,
+        description:
+          "Where a Git credential can create repositories: the GitHub App's account, or the GitLab groups the token can create projects in. An empty string is the GitLab token owner's own namespace.",
+        tags: ["Git credentials"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(z.array(z.string())),
+      },
+    },
+    async ({ organizationId, params }, reply) => {
+      const access = await resolveGitCredentialAccess({
+        organizationId,
+        credentialId: params.id,
+      });
+      if (access.host.provider === "github") {
+        const accounts = await openappaGithubAppSetup.accounts(organizationId);
+        const account = accounts.find((entry) => entry.id === params.id);
+        return reply.send(account?.account ? [account.account] : []);
+      }
+      try {
+        const groups = await gitClient(access).gitlabNamespaces();
+        return reply.send(["", ...groups.map((group) => group.fullPath)]);
       } catch (error) {
         if (error instanceof GitHostError)
           throw new ApiError(502, error.message);

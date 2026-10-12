@@ -1,6 +1,7 @@
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { openappaGithubSyncTable } from "@/database/schemas/openappa-github-sync";
+import { GitProviderSchema } from "./git-host";
 import { PolicyTestDirectorySchema } from "./openappa-policy-tests";
 
 const AppaSyncIntervalSchema = z.enum(["15m", "1h", "1d"]);
@@ -43,10 +44,10 @@ export const AppaGithubSourceSchema = z
       .string()
       .trim()
       .regex(
-        /^[a-zA-Z0-9][a-zA-Z0-9-]*\/[a-zA-Z0-9_.-]+$/,
-        "Use owner/repository",
+        /^[a-zA-Z0-9][a-zA-Z0-9_.-]*(\/[a-zA-Z0-9_.-]+)+$/,
+        "Use owner/repository, or group/project on GitLab",
       )
-      .max(200),
+      .max(400),
     ref: AppaGithubRefSchema,
     path: AppaPolicyPathSchema,
     interval: AppaSyncIntervalSchema,
@@ -55,24 +56,38 @@ export const AppaGithubSourceSchema = z
       .optional(),
     githubPatId: z.string().uuid().nullable().default(null),
     githubAppConfigId: z.string().uuid().nullable().default(null),
+    /** A GitLab access token in place of a GitHub credential. */
+    gitlabTokenId: z.string().uuid().nullable().default(null),
   })
   .strict()
   .refine(
-    (source) => !(source.githubPatId && source.githubAppConfigId),
-    "Choose only one GitHub credential",
+    (source) =>
+      [
+        source.githubPatId,
+        source.githubAppConfigId,
+        source.gitlabTokenId,
+      ].filter(Boolean).length <= 1,
+    "Choose only one credential",
+  )
+  .refine(
+    (source) => !!source.gitlabTokenId || source.repo.split("/").length === 2,
+    "GitHub repositories are owner/repository",
   );
 export type AppaGithubSource = z.infer<typeof AppaGithubSourceSchema>;
 export const CreateAppaGithubRepositorySchema = z
   .object({
+    /** GitHub account, or GitLab group path ("" for the token owner's namespace). */
     owner: z
       .string()
-      .regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/)
-      .max(39),
+      .regex(/^([a-zA-Z0-9][a-zA-Z0-9_.-]*(\/[a-zA-Z0-9_.-]+)*)?$/)
+      .max(255),
     name: z
       .string()
       .regex(/^[a-zA-Z0-9_.-]+$/)
       .max(100),
-    githubAppConfigId: z.string().uuid(),
+    /** Exactly one of a GitHub App or a GitLab token. */
+    githubAppConfigId: z.string().uuid().optional(),
+    gitlabTokenId: z.string().uuid().optional(),
     interval: AppaSyncIntervalSchema,
     /**
      * Use a repository the admin already has: an unchanged template copy is
@@ -87,7 +102,11 @@ export const CreateAppaGithubRepositorySchema = z
     /** Switch a running sync to this repository; the edit flow sends it. */
     replace: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (body) => !body.githubAppConfigId !== !body.gitlabTokenId,
+    "Choose a GitHub App or a GitLab token",
+  );
 const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
   interval: z.union([AppaSyncIntervalSchema, z.null()]),
   heldReasons: z.array(HeldPullReasonSchema),
@@ -98,8 +117,10 @@ export const AppaGithubSyncStatusSchema = z.object({
   source: AppaGithubSyncSchema.nullable(),
   hasPolicy: z.boolean(),
   validationDirectory: z.string(),
-  /** Web origin of the source's GitHub, e.g. https://github.com, for links. */
+  /** Web origin of the source's host, e.g. https://github.com, for links. */
   githubWebUrl: z.string(),
+  /** Which host the source lives on; links and wording follow it. */
+  provider: GitProviderSchema,
 });
 /** What accepting a held pull published, and what it changed to publish it. */
 export const AcceptedHeldPullSchema = z.object({

@@ -68,6 +68,7 @@ import {
   type UpdateAgent,
 } from "@/types";
 import { isUniqueConstraintError } from "@/utils/db";
+import { escapeLikePattern } from "@/utils/sql-search";
 import { isUuid } from "@/utils/uuid";
 import A2aRemoteAgentModel from "./a2a-remote-agent";
 import AgentActivationSkillRuleModel from "./agent-activation-skill-rule";
@@ -1555,7 +1556,10 @@ class AgentModel {
 
     if (params.filters?.name) {
       externalWhereConditions.push(
-        ilike(schema.a2aRemoteAgentsTable.name, `%${params.filters.name}%`),
+        ilike(
+          schema.a2aRemoteAgentsTable.name,
+          `%${escapeLikePattern(params.filters.name)}%`,
+        ),
       );
     }
     if (
@@ -2081,7 +2085,9 @@ class AgentModel {
       );
     }
     if (filters?.name) {
-      whereConditions.push(ilike(schema.agentsTable.name, `%${filters.name}%`));
+      whereConditions.push(
+        ilike(schema.agentsTable.name, `%${escapeLikePattern(filters.name)}%`),
+      );
     }
     if (filters?.providerApiKeyId === "organization-default") {
       whereConditions.push(
@@ -4372,6 +4378,15 @@ class AgentModel {
         excludedConnectorIds,
       );
 
+      const excludedSubagentIds =
+        await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
+          sourceAgent.id,
+        );
+      await AgentExcludedSubagentModel.replaceForAgent(
+        created.id,
+        excludedSubagentIds,
+      );
+
       const activationSkillRules =
         await AgentActivationSkillRuleModel.findByAgent(sourceAgent.id);
       await AgentActivationSkillRuleModel.addRules({
@@ -4396,6 +4411,9 @@ class AgentModel {
           { accessAllTools: true },
           { skipExclusionPrefill: true },
         );
+      }
+      if (sourceAgent.accessAllSubagents) {
+        await AgentModel.update(created.id, { accessAllSubagents: true });
       }
 
       // Fork last, once the copied assignments and exclusions are in place.

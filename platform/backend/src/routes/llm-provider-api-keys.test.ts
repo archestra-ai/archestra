@@ -1655,6 +1655,31 @@ describe("LLM Provider API Keys Scope Update", () => {
     expect(stored?.userId).toBe(user.id);
   });
 
+  test("trims key names and rejects a blank rename", async () => {
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-provider-api-keys",
+      payload: {
+        name: "  Padded Key  ",
+        provider: "anthropic",
+        apiKey: "sk-ant-padded-name-test",
+      },
+    });
+    expect(createResponse.statusCode).toBe(200);
+    const createdKey = createResponse.json();
+    expect(createdKey.name).toBe("Padded Key");
+
+    const updateResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-provider-api-keys/${createdKey.id}`,
+      payload: { name: "   " },
+    });
+
+    expect(updateResponse.statusCode).toBe(400);
+    const stored = await LlmProviderApiKeyModel.findById(createdKey.id);
+    expect(stored?.name).toBe("Padded Key");
+  });
+
   test("rejects a ChatGPT-subscription credential pasted into a shared key", async () => {
     const createResponse = await app.inject({
       method: "POST",

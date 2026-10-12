@@ -58,7 +58,7 @@ const {
 } = archestraApiSdk;
 
 export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
-  const search = params?.search;
+  const search = params?.search?.trim() || undefined;
   const provider = params?.provider;
   const labels = params?.labels;
   const access = params?.access;
@@ -78,7 +78,7 @@ export function useLlmProviderApiKeys(params?: LlmProviderApiKeysQueryParams) {
       const { data, error } = await getLlmProviderApiKeys({
         query: {
           provider: provider || undefined,
-          search: search || undefined,
+          search,
           labels: labels || undefined,
           access,
           sharedWith,

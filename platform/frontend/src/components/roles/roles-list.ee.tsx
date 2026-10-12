@@ -196,9 +196,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           setPermission({});
           toast.success("Role created successfully");
         },
-        onError: (error: Error) => {
-          toast.error(error.message || "Failed to create role");
-        },
       },
     );
   }, [roleDescription, roleName, permission, createMutation]);
@@ -233,9 +230,6 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           setRoleDescription("");
           setPermission({});
           toast.success("Role updated successfully");
-        },
-        onError: (error: Error) => {
-          toast.error(error.message || "Failed to update role");
         },
       },
     );

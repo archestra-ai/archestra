@@ -180,6 +180,7 @@ import {
   resolveEncryptedChatAccess,
   resolveEncryptedChatCreation,
 } from "./encrypted-chat";
+import { errorMessage } from "./error-message";
 import {
   buildAbortiveTurnError,
   buildIncompleteResponseNotice,
@@ -655,7 +656,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         });
         throw error;
       }
@@ -1101,8 +1102,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // unlike the tool-level stream handler, a NoSuchToolError here
                 // is not a recoverable tool result: it must mark the run failed
                 // and persist, so it falls through to the normal error path.
-                activeRunError =
-                  error instanceof Error ? error.message : String(error);
+                activeRunError = errorMessage(error);
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
                 // user messages are lost on refresh after an error.
@@ -1819,8 +1819,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   // prompt on reload (#4030).
                   generateMessageId: generateId,
                   onError: (error) => {
-                    const incomingErrorMessage =
-                      error instanceof Error ? error.message : String(error);
+                    const incomingErrorMessage = errorMessage(error);
                     if (returnedChatErrorPayloads.has(incomingErrorMessage)) {
                       return incomingErrorMessage;
                     }
@@ -2149,7 +2148,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await activeChatRunService.markTerminal({
           runId: activeRun.id,
           status: "failed",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage(error),
         });
         throw error;
       }

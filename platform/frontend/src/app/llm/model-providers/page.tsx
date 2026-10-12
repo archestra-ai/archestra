@@ -317,7 +317,7 @@ export default function ApiKeysPage() {
       await updateMutation.mutateAsync({
         id: editingApiKey.id,
         data: {
-          name: values.name || undefined,
+          name: values.name.trim() || undefined,
           apiKey:
             !isBedrockSigV4 && apiKeyChanged
               ? (values.apiKey ?? undefined)

@@ -27,6 +27,7 @@ import {
   type TableRowAction,
   TableRowActions,
 } from "@/components/table-row-actions";
+import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -641,7 +642,14 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
           }
         }}
         title={
-          <span className="capitalize">{viewPermissionsRole?.name ?? ""}</span>
+          <span className="flex items-center gap-2">
+            <span className="capitalize">
+              {viewPermissionsRole?.name ?? ""}
+            </span>
+            <Badge variant="secondary" className="font-normal">
+              Read-only
+            </Badge>
+          </span>
         }
         description={
           viewPermissionsRole

@@ -2,7 +2,7 @@
 title: Access Control
 description: Assign roles and share resources with users, teams, and service accounts
 order: 2
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-12
 ---
 
 Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
@@ -77,7 +77,7 @@ What to know:
 Lists of shared resources filter by how you reach each item. These lists have the filters: agents, MCP gateways, Knowledge Bases, connectors, Knowledge Files, apps, plugins, projects, skills, the MCP registry, LLM provider credentials, virtual keys, models, and OAuth clients.
 
 - **Access:** **Mine** for items you own. **Shared with me** for items shared with you, your team, your role, or everyone. **Admin access** for items nobody shared with you, visible through an organization-wide grant.
-- **Shared with:** everyone, a role, a team, a person, or a service account.
+- **Shared with:** everyone, a role, a team, a person, or a service account. Shown while **Admin access** is on.
 - **Owner:** one or more owners.
 
 Models have no owner, so their list has no **Mine** option and no **Owner** filter. On Knowledge Files, the filters narrow documents. Directories always show. The filters combine. The list API takes the same filters as `access`, `sharedWith`, and `owner` query parameters. `sharedWith` takes comma-separated `org`, `role:<id>`, `team:<id>`, `user:<id>`, or `serviceAccount:<id>`. `org` matches only grants to everyone. `owner` takes comma-separated user IDs.

@@ -400,6 +400,56 @@ describe("AnthropicRequestAdapter", () => {
       expect(result.messages[0].role).toBe("user");
     });
 
+    describe("a tool search result", () => {
+      const references = [
+        { type: "tool_reference", tool_name: "mcp__many__probe_tool_0" },
+      ];
+      const history = () =>
+        [
+          { role: "user", content: "use the probe tool" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_0",
+                name: "ToolSearch",
+                input: { query: "select:mcp__many__probe_tool_0" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_0",
+                content: references,
+              },
+            ],
+          },
+        ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+      const sentResult = (update: string) => {
+        const adapter = anthropicAdapterFactory.createRequestAdapter(
+          createMockRequest(history()),
+        );
+        adapter.applyToolResultUpdates({ toolu_0: update });
+        const content = adapter.toProviderRequest().messages[2]
+          .content as Array<{
+          content: unknown;
+        }>;
+        return content[0].content;
+      };
+
+      test("keeps its tool_reference blocks when the approved output is the result as sent", () => {
+        expect(sentResult(JSON.stringify(references))).toEqual(references);
+      });
+
+      test("replaces them with the approved text when the output changed", () => {
+        expect(sentResult("withheld")).toBe("withheld");
+      });
+    });
+
     test("preserves successful tool results in user message with tool_result blocks", () => {
       const messages = [
         { role: "user", content: "List issues" },

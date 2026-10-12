@@ -60,6 +60,8 @@ export const CacheKey = {
   OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
   /** Sessions already told once to resend a request that lacked the gateway remedy tools */
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
+  /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
+  OpenAppaNotLoadedRuling: "openappa-not-loaded-ruling",
   /** Sessions whose client already waited once for the gateway remedy tools to load */
   OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */

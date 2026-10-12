@@ -1746,6 +1746,26 @@ describe("createAgentServer tools/list", () => {
     expect(names).toContain(
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
     );
+    // A client that defers tools to a tool search must still declare
+    // OpenAPPA's session tools from its first request. The policy tools stay
+    // behind the search.
+    const alwaysLoaded = response.tools
+      .filter(
+        (tool) =>
+          (tool as { _meta?: Record<string, unknown> })._meta?.[
+            "anthropic/alwaysLoad"
+          ] === true,
+      )
+      .map((tool) => archestraMcpBranding.getToolShortName(tool.name))
+      .sort();
+    expect(alwaysLoaded).toEqual([
+      "ask_user",
+      "execute_remedy_plan",
+      "get_remedy_plans",
+      "list_peer_messages",
+      "read_peer_message",
+      "yell",
+    ]);
     for (const inboxTool of [
       "list_peer_messages",
       "read_peer_message",

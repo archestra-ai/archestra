@@ -2502,22 +2502,264 @@ describe("APPA request preflight", () => {
     expect(compat.tools?.notice.name).toBe("archestra__get_remedy_plans");
   });
 
-  test("refuses a session that defers its tools to a tool search", () => {
-    // Codex declares a client-run `tool_search` for MCP tools on models that
-    // support it: the APPA tools are then never on the wire.
+  test("governs a Codex session whose tools sit behind a client-run tool_search", () => {
+    // Codex declares only the search; the tools it loads come back as a
+    // `tool_search_output` input item. The search names no tool and returns no
+    // call to run, so it is neither gated nor refused.
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { type: "function", name: "exec_command" },
+          { type: "tool_search", execution: "client", parameters: {} },
+        ],
+        input: [
+          {
+            type: "tool_search_output",
+            tools: [
+              {
+                type: "namespace",
+                name: "mcp__weather",
+                tools: [{ type: "function", name: "get_weather" }],
+              },
+            ],
+          },
+        ],
+      },
+      interactionType: "openai:responses",
+      identity,
+    });
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.declaredTools).toEqual([
+      { name: "exec_command" },
+      { name: "get_weather", namespace: "mcp__weather" },
+    ]);
+  });
+
+  test("governs Claude Code's deferred tools: only a placeholder is declared, and ToolSearch is an ordinary client tool", () => {
+    // Shape of the first request of a Claude Code 2.1.285 session with tool
+    // search on: the deferred tools are named in a system reminder, not in
+    // `tools`.
+    const body = {
+      tools: [
+        { name: "Bash" },
+        { name: "ToolSearch" },
+        { name: "DeferredToolPlaceholder", defer_loading: true },
+      ],
+      messages: [{ role: "user", content: "hi" }],
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.declaredTools).toEqual([
+      { name: "Bash" },
+      { name: "ToolSearch" },
+      { name: "DeferredToolPlaceholder" },
+    ]);
+  });
+
+  test("keeps tool_reference results of a Claude Code ToolSearch in history untouched", () => {
+    // Claude Code 2.1.285 after a search: the loaded tool is declared with
+    // `defer_loading` and the search result holds a `tool_reference` block.
+    const messages = [
+      { role: "user", content: "use the probe tool" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_0",
+            name: "ToolSearch",
+            input: { query: "select:mcp__many__probe_tool_0" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_0",
+            content: [
+              { type: "tool_reference", tool_name: "mcp__many__probe_tool_0" },
+            ],
+          },
+        ],
+      },
+    ];
+    const body = {
+      tools: [
+        { name: "ToolSearch" },
+        { name: "DeferredToolPlaceholder", defer_loading: true },
+        { name: "mcp__many__probe_tool_0", defer_loading: true },
+      ],
+      messages: structuredClone(messages),
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    expect(body.messages).toEqual(messages);
+    expect(prepared.declaredTools).toContainEqual({
+      name: "mcp__many__probe_tool_0",
+    });
+    expect(prepared.restoredNoticeCallIds).toBeUndefined();
+  });
+
+  test.each([
+    "tool_search_tool_bm25_20251119",
+    "tool_search_tool_regex_20251119",
+  ])("treats Anthropic's provider-run %s as hosted and governs the deferred tools it searches", (type) => {
+    // Every deferred tool is declared in `tools`, so every callable tool is
+    // on the wire; the search itself returns no call to the client.
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { type, name: "tool_search" },
+          { name: "deferred", defer_loading: true },
+        ],
+      },
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    expect(prepared.defersTools).toBe(true);
+    expect(prepared.declaredTools).toEqual([{ name: "deferred" }]);
+  });
+
+  test("names the shape it refuses: an unknown tool_search type", () => {
     expect(() =>
       prepareAppaRequest({
         body: {
-          tools: [
-            { type: "function", name: "exec_command" },
-            { type: "tool_search", execution: "client", parameters: {} },
-          ],
-          input: [],
+          tools: [{ type: "tool_search_tool_future_20990101", name: "s" }],
         },
-        interactionType: "openai:responses",
+        interactionType: "anthropic:messages",
         identity,
       }),
-    ).toThrow("defers its tools to a tool search");
+    ).toThrow("cannot classify tool type `tool_search_tool_future_20990101`");
+  });
+
+  test("removes tool_reference blocks that name the notice tool it withholds, keeping other references and a readable result", () => {
+    const search = (references: string[], id: string) => ({
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: id,
+          content: references.map((tool_name) => ({
+            type: "tool_reference",
+            tool_name,
+          })),
+        },
+      ],
+    });
+    const body = {
+      tools: [{ name: NOTICE }, { name: CONTROL }, { name: "ToolSearch" }],
+      messages: [
+        { role: "user", content: "load" },
+        search([NOTICE, "other_tool"], "toolu_a"),
+        search([NOTICE], "toolu_b"),
+      ],
+    };
+    prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    const results = body.messages
+      .slice(1)
+      .map((m) => (m.content as Array<{ content: unknown }>)[0].content);
+    expect(results[0]).toEqual([
+      { type: "tool_reference", tool_name: "other_tool" },
+    ]);
+    expect(results[1]).toEqual([
+      { type: "text", text: "[appa] No tools were loaded." },
+    ]);
+  });
+
+  test("removes references to the withheld notice tool from a provider-run search result too", () => {
+    const body = {
+      tools: [
+        { type: "tool_search_tool_regex_20251119", name: "tool_search" },
+        { name: NOTICE, defer_loading: true },
+        { name: CONTROL, defer_loading: true },
+        { name: "Bash" },
+      ],
+      messages: [
+        { role: "user", content: "find" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_search_tool_result",
+              tool_use_id: "srvtoolu_1",
+              content: {
+                type: "tool_search_tool_search_result",
+                tool_references: [
+                  { type: "tool_reference", tool_name: NOTICE },
+                  { type: "tool_reference", tool_name: CONTROL },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+    prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    const result = (body.messages[1].content as Array<{ content: unknown }>)[0]
+      .content as { tool_references: unknown[] };
+    expect(result.tool_references).toEqual([
+      { type: "tool_reference", tool_name: CONTROL },
+    ]);
+    // The provider also requires one non-deferred tool, and none with both
+    // defer_loading and cache_control: nothing here adds either problem.
+    expect(
+      (body.tools as Array<{ defer_loading?: boolean }>).some(
+        (tool) => tool.defer_loading !== true,
+      ),
+    ).toBe(true);
+  });
+
+  test("an attested session that defers its remedy tools is governed without remedies, not refused", () => {
+    const attested = {
+      ...identity,
+      mode: "attested" as const,
+      gatewayConnected: true,
+    };
+    const prepared = prepareAppaRequest({
+      body: {
+        tools: [
+          { name: "ToolSearch" },
+          { name: "DeferredToolPlaceholder", defer_loading: true },
+        ],
+        messages: [],
+      },
+      interactionType: "anthropic:messages",
+      identity: attested,
+    });
+    expect(prepared.tools).toBeUndefined();
+    expect(prepared.defersTools).toBe(true);
+  });
+
+  test("an attested session without remedy tools and without deferral is still refused", () => {
+    const attested = {
+      ...identity,
+      mode: "attested" as const,
+      gatewayConnected: true,
+    };
+    expect(() =>
+      prepareAppaRequest({
+        body: { tools: [{ name: "Bash" }], messages: [] },
+        interactionType: "anthropic:messages",
+        identity: attested,
+      }),
+    ).toThrow("does not declare");
   });
 
   test.each([
@@ -2577,20 +2819,6 @@ describe("APPA request preflight", () => {
         identity,
       }),
     ).toThrow("cannot classify tool type");
-  });
-
-  test.each([
-    { type: "tool_search_tool_bm25_20251119" },
-    { type: "tool_search_tool_regex_20251119" },
-    { type: "function", name: "deferred", defer_loading: true },
-  ])("refuses deferred client tools: %j", (tool) => {
-    expect(() =>
-      prepareAppaRequest({
-        body: { tools: [tool] },
-        interactionType: "anthropic:messages",
-        identity,
-      }),
-    ).toThrow("defers its tools to a tool search");
   });
 
   test("does not accept a provider-hosted tool as the remedy control", () => {

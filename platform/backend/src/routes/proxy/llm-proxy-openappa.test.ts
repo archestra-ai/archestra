@@ -11780,8 +11780,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expectStillGoverned(otherKeyGoverned);
     });
 
-    test("an unrelated deferred request without the setup URL returns 400", async () => {
-      const response = await postSetup({
+    test("an unrelated deferred request without the setup URL is governed, not refused", async () => {
+      // A tool search defers some tools; the calls the model makes are still
+      // ruled on, and a denial still comes back as a notice.
+      const anthropic = await postSetup({
         family: "anthropic",
         stream: false,
         auth: "passthrough",
@@ -11789,11 +11791,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         knownClient: true,
         deferred: true,
       });
-      expect(response.statusCode, response.body).toBe(400);
-      expect(response.body).toContain("defers its tools to a tool search");
-      expect(providerRequests).toHaveLength(0);
-      expect(events).toEqual([]);
+      expectStillGoverned(anthropic);
 
+      providerRequests.length = 0;
+      events.length = 0;
       const responses = await postSetup({
         family: "openai-responses",
         stream: false,
@@ -11809,9 +11810,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           }),
         },
       });
-      expect(responses.statusCode, responses.body).toBe(400);
-      expect(responses.body).toContain("defers its tools to a tool search");
-      expect(providerRequests).toHaveLength(0);
+      expectStillGoverned(responses);
     });
 
     test("prompt history without a pending browser copy or setup URL does not bypass APPA", async () => {

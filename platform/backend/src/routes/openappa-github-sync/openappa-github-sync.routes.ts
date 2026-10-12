@@ -10,10 +10,12 @@ import {
 } from "@/services/openappa-github-sync";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
+  AppaGithubAppAccountsQuerySchema,
   AppaGithubAppAccountsSchema,
   AppaGithubAppInstallResultSchema,
   AppaGithubAppManifestSchema,
   CompleteAppaGithubAppSchema,
+  InstallAppaGithubAppSchema,
   PendingAppaGithubAppSchema,
   StartAppaGithubAppSchema,
 } from "@/types/openappa-github-app-setup";
@@ -82,7 +84,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.StartAppaGithubApp,
         description:
-          "Start registering the OpenAPPA GitHub App on an organization from a manifest",
+          "Start registering the OpenAPPA GitHub App, from a manifest, on the account that owns the policy repository",
         tags: ["OpenAPPA"],
         body: StartAppaGithubAppSchema,
         response: constructResponseSchema(AppaGithubAppManifestSchema),
@@ -94,7 +96,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         await openappaGithubAppSetup.start({
           organizationId: request.organizationId,
           userId: request.user.id,
-          organization: request.body.organization,
+          owner: request.body.owner,
         }),
       );
     },
@@ -170,8 +172,9 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.InstallAppaGithubApp,
         description:
-          "Store the new GitHub App as an organization credential once it is installed",
+          "Store the new GitHub App as an organization credential once it is installed with access to the policy repository",
         tags: ["OpenAPPA"],
+        body: InstallAppaGithubAppSchema,
         response: constructResponseSchema(AppaGithubAppInstallResultSchema),
       },
     },
@@ -179,6 +182,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       const result = await openappaGithubAppSetup.install({
         organizationId: request.organizationId,
         userId: request.user.id,
+        repo: request.body.repo,
       });
       if (result.status === "waiting") request.auditSkip = true;
       else request.auditBefore = null;
@@ -191,13 +195,19 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetAppaGithubAppAccounts,
         description:
-          "The GitHub account each organization GitHub App is installed on",
+          "The GitHub account each organization GitHub App is installed on, and whether it can reach a repository",
         tags: ["OpenAPPA"],
+        querystring: AppaGithubAppAccountsQuerySchema,
         response: constructResponseSchema(AppaGithubAppAccountsSchema),
       },
     },
     async (request, reply) =>
-      reply.send(await openappaGithubAppSetup.accounts(request.organizationId)),
+      reply.send(
+        await openappaGithubAppSetup.accounts(
+          request.organizationId,
+          request.query.repo,
+        ),
+      ),
   );
   app.patch(
     "/api/openappa/github-sync",

@@ -8264,7 +8264,7 @@ export const createAppaGithubRepository = <ThrowOnError extends boolean = false>
 });
 
 /**
- * Start registering the OpenAPPA GitHub App on an organization from a manifest
+ * Start registering the OpenAPPA GitHub App, from a manifest, on the account that owns the policy repository
  *
  * Authentication:
  *
@@ -8330,7 +8330,7 @@ export const discardAppaGithubApp = <ThrowOnError extends boolean = false>(optio
 export const getPendingAppaGithubApp = <ThrowOnError extends boolean = false>(options?: Options<GetPendingAppaGithubAppData, ThrowOnError>) => (options?.client ?? client).get<GetPendingAppaGithubAppResponses, GetPendingAppaGithubAppErrors, ThrowOnError>({ url: '/api/openappa/github-app/pending', ...options });
 
 /**
- * Store the new GitHub App as an organization credential once it is installed
+ * Store the new GitHub App as an organization credential once it is installed with access to the policy repository
  *
  * Authentication:
  *
@@ -8340,10 +8340,17 @@ export const getPendingAppaGithubApp = <ThrowOnError extends boolean = false>(op
  *
  * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
  */
-export const installAppaGithubApp = <ThrowOnError extends boolean = false>(options?: Options<InstallAppaGithubAppData, ThrowOnError>) => (options?.client ?? client).post<InstallAppaGithubAppResponses, InstallAppaGithubAppErrors, ThrowOnError>({ url: '/api/openappa/github-app/install', ...options });
+export const installAppaGithubApp = <ThrowOnError extends boolean = false>(options: Options<InstallAppaGithubAppData, ThrowOnError>) => (options.client ?? client).post<InstallAppaGithubAppResponses, InstallAppaGithubAppErrors, ThrowOnError>({
+    url: '/api/openappa/github-app/install',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
- * The GitHub account each organization GitHub App is installed on
+ * The GitHub account each organization GitHub App is installed on, and whether it can reach a repository
  *
  * Authentication:
  *

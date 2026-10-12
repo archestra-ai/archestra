@@ -20,11 +20,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import {
   RadioGroup,
@@ -54,10 +49,10 @@ import { onGithubAppSetup } from "./github-app-channel";
 import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
 
 /**
- * Sets up GitHub sync in three steps: a GitHub App (an existing one, or a new
- * one GitHub creates from a manifest so nothing is copied by hand), the
- * repository to create, and the setup pull request when repository rules ask
- * for one.
+ * Sets up GitHub sync with the least access GitHub allows: the admin creates
+ * the policy repository from the template on GitHub, then a GitHub App (an
+ * existing one, or a new one GitHub registers from a manifest) is installed on
+ * just that repository, and Archestra seeds the current policy into it.
  */
 export function GithubSyncSetupDialog({
   onOpenChange,
@@ -80,47 +75,53 @@ export function GithubSyncSetupDialog({
         credential.organizationConfigured &&
         credential.kind === "github_app",
     ) ?? [];
-  const accounts = useAppaGithubAppAccounts(
-    !!canReadCredentials && apps.length > 0,
-  );
   const pending = usePendingAppaGithubApp(!!canCreateCredentials);
   const start = useStartAppaGithubApp();
   const install = useInstallAppaGithubApp();
   const discard = useDiscardAppaGithubApp();
   const create = useCreateAppaGithubRepository();
 
-  const [step, setStep] = useState<Step>("app");
+  const [step, setStep] = useState<Step>("repo");
+  const [owner, setOwner] = useState("");
+  const [name, setName] = useState("openappa-policy");
+  const [openedTemplate, setOpenedTemplate] = useState(false);
+  const [interval, setSyncInterval] = useState<Interval>("1h");
+  const [editingInterval, setEditingInterval] = useState(false);
   const [chosenMode, setMode] = useState<AppMode | null>(null);
   const [pickedId, setPickedId] = useState("");
-  const [organization, setOrganization] = useState("");
   const [waiting, setWaiting] = useState<"create" | "install" | null>(null);
   const [installed, setInstalled] = useState<{
     id: string;
     name: string;
     account: string;
   } | null>(null);
-  const [owner, setOwner] = useState("");
-  const [name, setName] = useState("openappa-policy");
-  const [interval, setSyncInterval] = useState<Interval>("1h");
-  const [editingInterval, setEditingInterval] = useState(false);
   const [pullRequest, setPullRequest] = useState<{
     repo: string;
     number: number;
   } | null>(null);
 
+  const repo = `${owner.trim()}/${name.trim()}`;
+  const repoValid = REPO_PATTERN.test(repo);
+  const accounts = useAppaGithubAppAccounts({
+    enabled: step !== "repo" && !!canReadCredentials && apps.length > 0,
+    repo,
+  });
+  const reaches = (id: string) =>
+    accounts.data?.find((entry) => entry.id === id)?.canAccessRepo === true;
+  const reachable = apps.filter((app) => reaches(app.id));
   const createdApp = pending.data ?? null;
   // An App created earlier still awaits installation: pick up where setup stopped.
   const mode: AppMode =
     chosenMode ?? (createdApp || !apps.length ? "create" : "fork");
-  const accountFor = (id: string) =>
-    accounts.data?.find((entry) => entry.id === id)?.account ?? null;
-  const picked = apps.find((app) => app.id === pickedId);
-  const appId = mode === "pick" ? picked?.id : installed?.id;
-  const repo = `${owner.trim()}/${name.trim()}`;
-  const loading =
-    credentials.isPending || (!!canCreateCredentials && pending.isPending);
+  const appId =
+    mode === "pick" ? (reaches(pickedId) ? pickedId : null) : installed?.id;
 
-  // The callback window reports back once GitHub finishes each step.
+  // Resume a setup whose App exists: its account owns the repository.
+  useEffect(() => {
+    if (createdApp) setOwner((current) => current || createdApp.account);
+  }, [createdApp]);
+
+  // The callback tab reports back once GitHub finishes each step.
   const onSetupStep = useRef<(done: "created" | "installed") => void>(() => {});
   onSetupStep.current = (done) => {
     if (done === "installed") return checkInstall();
@@ -129,19 +130,30 @@ export function GithubSyncSetupDialog({
   };
   useEffect(() => onGithubAppSetup((done) => onSetupStep.current(done)), []);
 
+  function openTemplate() {
+    const url = new URL("https://github.com/new");
+    url.searchParams.set("template_owner", TEMPLATE.owner);
+    url.searchParams.set("template_name", TEMPLATE.name);
+    url.searchParams.set("owner", owner.trim());
+    url.searchParams.set("name", name.trim());
+    url.searchParams.set("visibility", "private");
+    window.open(url, "_blank", "noopener");
+    setOpenedTemplate(true);
+  }
+
   function createApp() {
-    // Open the window inside the click so the browser does not block it.
-    const popup = openGithubWindow("about:blank");
+    // Open the tab inside the click so the browser does not block it.
+    const tab = openGithubWindow("about:blank");
     setWaiting("create");
     start.mutate(
-      { organization: organization.trim() },
+      { owner: owner.trim() },
       {
         onSuccess: (manifest) => {
           if (manifest) postManifest(manifest);
-          else popup?.close();
+          else tab?.close();
         },
         onError: () => {
-          popup?.close();
+          tab?.close();
           setWaiting(null);
         },
       },
@@ -156,32 +168,29 @@ export function GithubSyncSetupDialog({
   }
 
   function checkInstall() {
-    install.mutate(undefined, {
-      onSuccess: (result) => {
-        if (result?.status !== "installed") return;
-        setInstalled(result);
-        setWaiting(null);
+    install.mutate(
+      { repo },
+      {
+        onSuccess: (result) => {
+          if (result?.status !== "installed") return;
+          setInstalled(result);
+          setWaiting(null);
+        },
+        onError: () => setWaiting(null),
       },
-      onError: () => setWaiting(null),
-    });
-  }
-
-  function goToRepo() {
-    setOwner(
-      (mode === "pick" ? accountFor(pickedId) : installed?.account) ?? "",
     );
-    setStep("repo");
   }
 
-  function createRepository() {
+  function connect() {
     if (!appId) return;
-    setStep("create");
+    setStep("connect");
     create.mutate(
       {
         owner: owner.trim(),
         name: name.trim(),
         githubAppConfigId: appId,
         interval,
+        existing: true,
       },
       {
         onSuccess: (data) => {
@@ -190,7 +199,7 @@ export function GithubSyncSetupDialog({
             setPullRequest({ repo: data.source.repo, number });
           else onOpenChange(false);
         },
-        onError: () => setStep("repo"),
+        onError: () => setStep("app"),
       },
     );
   }
@@ -203,10 +212,9 @@ export function GithubSyncSetupDialog({
       />
     );
 
-  const header = headerFor({ step, mode, hasApps: apps.length > 0 });
-  const appReady = !!appId;
-  // App-step errors render inside the step that failed.
-  const error = step === "repo" ? create.error : null;
+  const header = headerFor({ step, mode, repo });
+  const loadingApps =
+    credentials.isPending || (!!canCreateCredentials && pending.isPending);
 
   return (
     <StandardDialog
@@ -218,23 +226,16 @@ export function GithubSyncSetupDialog({
       bodyClassName="space-y-5"
       footer={
         <>
-          {step === "app" && mode !== "fork" && apps.length > 0 ? (
+          {step === "app" ? (
             <Button
               type="button"
               variant="ghost"
               className="mr-auto"
-              onClick={() => setMode("fork")}
-            >
-              <ArrowLeft />
-              <span>Back</span>
-            </Button>
-          ) : null}
-          {step === "repo" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="mr-auto"
-              onClick={() => setStep("app")}
+              onClick={() =>
+                mode !== "fork" && apps.length > 0 && !createdApp
+                  ? setMode("fork")
+                  : setStep("repo")
+              }
             >
               <ArrowLeft />
               <span>Back</span>
@@ -243,23 +244,23 @@ export function GithubSyncSetupDialog({
           <Button
             type="button"
             variant="outline"
-            disabled={step === "create"}
+            disabled={step === "connect"}
             onClick={() => onOpenChange(false)}
           >
             <span>Cancel</span>
           </Button>
-          {step === "app" && mode !== "fork" ? (
-            <Button type="button" disabled={!appReady} onClick={goToRepo}>
-              <span>Continue</span>
-            </Button>
-          ) : null}
           {step === "repo" ? (
             <Button
               type="button"
-              disabled={!REPO_PATTERN.test(repo)}
-              onClick={createRepository}
+              disabled={!repoValid}
+              onClick={() => setStep("app")}
             >
-              <span>Create repository</span>
+              <span>Continue</span>
+            </Button>
+          ) : null}
+          {step === "app" && mode !== "fork" ? (
+            <Button type="button" disabled={!appId} onClick={connect}>
+              <span>Connect repository</span>
             </Button>
           ) : null}
         </>
@@ -267,232 +268,50 @@ export function GithubSyncSetupDialog({
     >
       <Stepper step={step} />
 
-      {step === "app" && loading ? (
-        <div className="flex h-24 items-center justify-center">
-          <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
-        </div>
-      ) : null}
-
-      {step === "app" && !loading && mode === "fork" ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <ForkCard
-            onClick={() => {
-              setMode("pick");
-              if (!pickedId && apps.length === 1) setPickedId(apps[0].id);
-            }}
-            visual={<AppIconStack icons={apps.map((app) => app.icon)} />}
-            title="Use an App I already have"
-            body={
-              apps.length === 1
-                ? "1 GitHub App is connected."
-                : `${apps.length} GitHub Apps are connected.`
-            }
-          />
-          <ForkCard
-            onClick={() => setMode("create")}
-            disabled={!canCreateCredentials}
-            visual={
-              <span className="flex size-9 items-center justify-center rounded-lg border border-dashed">
-                <Plus className="size-4 text-muted-foreground" />
-              </span>
-            }
-            title="Create a new GitHub App"
-            body={
-              canCreateCredentials
-                ? "A few clicks on GitHub. No keys to copy."
-                : "Requires permission to create credentials."
-            }
-          />
-        </div>
-      ) : null}
-
-      {step === "app" && !loading && mode === "pick" ? (
-        <div className="space-y-4">
-          <RadioGroup
-            value={pickedId}
-            onValueChange={setPickedId}
-            className="gap-2"
-            aria-label="GitHub App"
-          >
-            {apps.map((app) => (
-              <Label
-                key={app.id}
-                htmlFor={`github-sync-app-${app.id}`}
-                className={cn(
-                  radioCardClass(),
-                  "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 font-normal",
-                )}
-              >
-                <RadioGroupItem
-                  value={app.id}
-                  id={`github-sync-app-${app.id}`}
-                />
-                <RuntimeCredentialIcon
-                  icon={app.icon ?? "logo:github"}
-                  className="size-4"
-                  size={16}
-                />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                  {app.name}
-                </span>
-                {accountFor(app.id) ? (
-                  <AccountChip account={accountFor(app.id) as string} />
-                ) : null}
-              </Label>
-            ))}
-          </RadioGroup>
-          <AccessSummary compact />
-        </div>
-      ) : null}
-
-      {step === "app" && !loading && mode === "create" ? (
-        canCreateCredentials ? (
-          <div className="space-y-4">
-            <ol className="overflow-hidden rounded-lg border bg-card">
-              <ManifestRow
-                index={1}
-                title="Create the App on GitHub"
-                hint="Enter the organization that will own the policy repository. GitHub creates the App there with the access below."
-                waiting={waiting === "create"}
-                error={start.error?.message}
-                onCheckAgain={() => {
-                  setWaiting(null);
-                  pending.refetch();
-                }}
-                result={
-                  createdApp ? (
-                    <>
-                      <span className="text-sm text-muted-foreground">
-                        Created
-                      </span>
-                      <a
-                        className="truncate text-sm font-medium underline-offset-4 hover:underline"
-                        href={createdApp.htmlUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {createdApp.name}
-                      </a>
-                      {installed ? null : (
-                        <Button
-                          type="button"
-                          variant="link"
-                          size="xs"
-                          className="h-auto px-0 text-muted-foreground"
-                          disabled={discard.isPending}
-                          onClick={() =>
-                            discard.mutate(undefined, {
-                              onSuccess: () => setWaiting(null),
-                            })
-                          }
-                        >
-                          <span>Start over</span>
-                        </Button>
-                      )}
-                    </>
-                  ) : null
-                }
-                action={
-                  <form
-                    className="flex flex-col gap-2 sm:flex-row"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      createApp();
-                    }}
-                  >
-                    <InputGroup className="sm:flex-1">
-                      <InputGroupAddon>
-                        <span>github.com/</span>
-                      </InputGroupAddon>
-                      <InputGroupInput
-                        id="github-sync-organization"
-                        aria-label="GitHub organization"
-                        placeholder="your-organization"
-                        autoComplete="off"
-                        data-1p-ignore
-                        spellCheck={false}
-                        value={organization}
-                        onChange={(event) =>
-                          setOrganization(event.target.value)
-                        }
-                      />
-                    </InputGroup>
-                    <GitHubConnectButton
-                      type="submit"
-                      size="default"
-                      label="Create App on GitHub"
-                      pending={start.isPending}
-                      disabled={!ORGANIZATION_PATTERN.test(organization.trim())}
-                    />
-                  </form>
-                }
-              />
-              <ManifestRow
-                index={2}
-                title="Install it on the organization"
-                hint="Approve access to all repositories, so the App can create the policy repository."
-                locked={!createdApp}
-                inlineAction
-                waiting={waiting === "install" || install.isPending}
-                error={install.error?.message}
-                onCheckAgain={checkInstall}
-                result={
-                  installed ? (
-                    <>
-                      <span className="text-sm text-muted-foreground">
-                        Installed on
-                      </span>
-                      <AccountChip account={installed.account} />
-                      <span className="text-xs text-muted-foreground">
-                        All repositories
-                      </span>
-                    </>
-                  ) : null
-                }
-                action={
-                  <GitHubConnectButton
-                    label="Install on GitHub"
-                    disabled={!createdApp}
-                    onClick={installApp}
-                  />
-                }
-              />
-            </ol>
-            {createdApp ? <AppLogoTip app={createdApp} /> : null}
-            <AccessSummary />
-          </div>
-        ) : (
-          <InlineNotice variant="info">
-            <InlineNoticeText>
-              Ask an administrator who can create credentials to set up the
-              GitHub App.
-            </InlineNoticeText>
-          </InlineNotice>
-        )
-      ) : null}
-
       {step === "repo" ? (
         <div className="space-y-5">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)] items-end gap-x-2 gap-y-2">
-            <Label htmlFor="github-sync-owner">Owner</Label>
-            <span />
-            <Label htmlFor="github-sync-name">Repository name</Label>
-            <Input
-              id="github-sync-owner"
-              value={owner}
-              placeholder="your-org"
-              onChange={(event) => setOwner(event.target.value)}
+          <div className="space-y-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)] items-end gap-x-2 gap-y-2">
+              <Label htmlFor="github-sync-owner">Owner</Label>
+              <span />
+              <Label htmlFor="github-sync-name">Repository name</Label>
+              <Input
+                id="github-sync-owner"
+                value={owner}
+                placeholder="your-org"
+                autoComplete="off"
+                data-1p-ignore
+                spellCheck={false}
+                onChange={(event) => setOwner(event.target.value)}
+              />
+              <span className="pb-2 text-muted-foreground">/</span>
+              <Input
+                id="github-sync-name"
+                value={name}
+                autoComplete="off"
+                data-1p-ignore
+                spellCheck={false}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 rounded-lg border bg-card p-4">
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className="text-sm font-medium">
+                Create it from the OpenAPPA template
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {openedTemplate
+                  ? "Finish on GitHub, keep it private, then continue here."
+                  : "GitHub opens with the template, owner and name filled in. Keep it private."}
+              </p>
+            </div>
+            <GitHubConnectButton
+              label="Create on GitHub"
+              disabled={!repoValid}
+              onClick={openTemplate}
             />
-            <span className="pb-2 text-muted-foreground">/</span>
-            <Input
-              id="github-sync-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-            <p className="col-span-3 text-xs text-muted-foreground">
-              A new private repository on the organization where the App is
-              installed.
-            </p>
           </div>
 
           <div className="flex min-h-8 flex-wrap items-center gap-2 text-sm">
@@ -536,7 +355,7 @@ export function GithubSyncSetupDialog({
 
           <div className="flex flex-wrap items-center gap-x-2 border-t pt-4 text-sm">
             <span className="text-muted-foreground">
-              Already have a policy repository?
+              Already have a repository with a policy in it?
             </span>
             <Button
               type="button"
@@ -545,18 +364,212 @@ export function GithubSyncSetupDialog({
               className="h-auto px-0"
               onClick={onConnectExisting}
             >
-              <span>Use an existing repository instead</span>
+              <span>Connect it instead</span>
             </Button>
           </div>
         </div>
       ) : null}
 
-      {step === "create" ? (
+      {step === "app" && loadingApps ? (
+        <div className="flex h-24 items-center justify-center">
+          <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
+        </div>
+      ) : null}
+
+      {step === "app" && !loadingApps && mode === "fork" ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <ForkCard
+            onClick={() => {
+              setMode("pick");
+              if (!pickedId && reachable.length === 1)
+                setPickedId(reachable[0].id);
+            }}
+            visual={<AppIconStack icons={apps.map((app) => app.icon)} />}
+            title="Use an App I already have"
+            body={
+              accounts.isPending
+                ? "Checking which can reach the repository…"
+                : reachable.length
+                  ? `${reachable.length} of ${apps.length} can reach ${repo}.`
+                  : `None can reach ${repo} yet.`
+            }
+          />
+          <ForkCard
+            onClick={() => setMode("create")}
+            disabled={!canCreateCredentials}
+            visual={
+              <span className="flex size-9 items-center justify-center rounded-lg border border-dashed">
+                <Plus className="size-4 text-muted-foreground" />
+              </span>
+            }
+            title="Create a new GitHub App"
+            body={
+              canCreateCredentials
+                ? "A few clicks on GitHub. No keys to copy."
+                : "Requires permission to create credentials."
+            }
+          />
+        </div>
+      ) : null}
+
+      {step === "app" && !loadingApps && mode === "pick" ? (
+        <div className="space-y-4">
+          <RadioGroup
+            value={pickedId}
+            onValueChange={setPickedId}
+            className="gap-2"
+            aria-label="GitHub App"
+          >
+            {apps.map((app) => {
+              const account = accounts.data?.find(
+                (entry) => entry.id === app.id,
+              );
+              const blocked = !accounts.isPending && !reaches(app.id);
+              return (
+                <Label
+                  key={app.id}
+                  htmlFor={`github-sync-app-${app.id}`}
+                  className={cn(
+                    radioCardClass(),
+                    "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 font-normal",
+                    blocked && "cursor-not-allowed opacity-60",
+                  )}
+                >
+                  <RadioGroupItem
+                    value={app.id}
+                    id={`github-sync-app-${app.id}`}
+                    disabled={blocked}
+                  />
+                  <RuntimeCredentialIcon
+                    icon={app.icon ?? "logo:github"}
+                    className="size-4"
+                    size={16}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {app.name}
+                  </span>
+                  {accounts.isPending ? (
+                    <LoaderCircle className="size-3.5 animate-spin text-muted-foreground" />
+                  ) : blocked ? (
+                    <span className="text-xs text-muted-foreground">
+                      No access to {repo}
+                    </span>
+                  ) : account?.account ? (
+                    <AccountChip account={account.account} />
+                  ) : null}
+                </Label>
+              );
+            })}
+          </RadioGroup>
+          <AccessSummary repo={repo} />
+        </div>
+      ) : null}
+
+      {step === "app" && !loadingApps && mode === "create" ? (
+        canCreateCredentials ? (
+          <div className="space-y-4">
+            <ol className="overflow-hidden rounded-lg border bg-card">
+              <ManifestRow
+                index={1}
+                title="Create the App on GitHub"
+                hint={`GitHub registers it on ${owner.trim()}, with the access below.`}
+                inlineAction
+                waiting={waiting === "create"}
+                error={start.error?.message}
+                onCheckAgain={() => {
+                  setWaiting(null);
+                  pending.refetch();
+                }}
+                result={
+                  createdApp ? (
+                    <>
+                      <span className="text-sm text-muted-foreground">
+                        Created
+                      </span>
+                      <a
+                        className="truncate text-sm font-medium underline-offset-4 hover:underline"
+                        href={createdApp.htmlUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {createdApp.name}
+                      </a>
+                      {installed ? null : (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="xs"
+                          className="h-auto px-0 text-muted-foreground"
+                          disabled={discard.isPending}
+                          onClick={() =>
+                            discard.mutate(undefined, {
+                              onSuccess: () => setWaiting(null),
+                            })
+                          }
+                        >
+                          <span>Start over</span>
+                        </Button>
+                      )}
+                    </>
+                  ) : null
+                }
+                action={
+                  <GitHubConnectButton
+                    label="Create App on GitHub"
+                    pending={start.isPending}
+                    onClick={createApp}
+                  />
+                }
+              />
+              <ManifestRow
+                index={2}
+                title={`Install it on ${repo}`}
+                hint={`On GitHub, choose Only select repositories, then ${name.trim()}.`}
+                locked={!createdApp}
+                inlineAction
+                waiting={waiting === "install" || install.isPending}
+                error={install.error?.message}
+                onCheckAgain={checkInstall}
+                result={
+                  installed ? (
+                    <>
+                      <span className="text-sm text-muted-foreground">
+                        Installed on
+                      </span>
+                      <AccountChip account={repo} />
+                    </>
+                  ) : null
+                }
+                action={
+                  <GitHubConnectButton
+                    label="Install on GitHub"
+                    disabled={!createdApp}
+                    onClick={installApp}
+                  />
+                }
+              />
+            </ol>
+            {createdApp ? (
+              <AppLogoTip settingsUrl={createdApp.settingsUrl} />
+            ) : null}
+            <AccessSummary repo={repo} />
+          </div>
+        ) : (
+          <InlineNotice variant="info">
+            <InlineNoticeText>
+              Ask an administrator who can create credentials to set up the
+              GitHub App.
+            </InlineNoticeText>
+          </InlineNotice>
+        )
+      ) : null}
+
+      {step === "connect" ? (
         <ul
           className="space-y-3 rounded-lg border bg-card p-4"
           aria-live="polite"
         >
-          {CREATE_STEPS.map((label, index) => (
+          {CONNECT_STEPS.map((label, index) => (
             <li key={label} className="flex items-center gap-3 text-sm">
               {index === 0 ? (
                 <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
@@ -573,12 +586,12 @@ export function GithubSyncSetupDialog({
         </ul>
       ) : null}
 
-      {error ? (
+      {step === "app" && create.error ? (
         <InlineNotice variant="error">
           <AlertTriangle aria-hidden />
-          <span className="font-medium">Couldn't create the repository</span>
+          <span className="font-medium">Couldn't connect {repo}</span>
           <InlineNoticeText className="basis-full pl-5">
-            {error.message}
+            {create.error.message}
           </InlineNoticeText>
         </InlineNotice>
       ) : null}
@@ -588,7 +601,7 @@ export function GithubSyncSetupDialog({
 
 // ===================== Internals =====================
 
-type Step = "app" | "repo" | "create";
+type Step = "repo" | "app" | "connect";
 type AppMode = "fork" | "pick" | "create";
 type Interval = "15m" | "1h" | "1d";
 
@@ -786,7 +799,7 @@ function ManifestRow({
 }
 
 // GitHub's manifest cannot set a logo, so the admin uploads it on the App's page.
-function AppLogoTip({ app }: { app: { slug: string; account: string } }) {
+function AppLogoTip({ settingsUrl }: { settingsUrl: string }) {
   return (
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
       <span>Optional: give the App the OpenAPPA logo.</span>
@@ -799,7 +812,7 @@ function AppLogoTip({ app }: { app: { slug: string; account: string } }) {
       </a>
       <a
         className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline"
-        href={`https://github.com/organizations/${app.account}/settings/apps/${app.slug}`}
+        href={settingsUrl}
         target="_blank"
         rel="noreferrer"
       >
@@ -810,29 +823,17 @@ function AppLogoTip({ app }: { app: { slug: string; account: string } }) {
   );
 }
 
-function AccessSummary({ compact = false }: { compact?: boolean }) {
-  if (compact)
-    return (
-      <p className="flex items-start gap-2 text-xs text-muted-foreground">
-        <ShieldCheck className="mt-px size-3.5 shrink-0" />
-        <span>
-          The App needs Administration, Contents and Pull requests set to Read
-          &amp; write on all repositories of its organization. GitHub only lets
-          an App create a repository with all-repository access.
-        </span>
-      </p>
-    );
+function AccessSummary({ repo }: { repo: string }) {
   return (
     <div className="flex items-start gap-3 rounded-lg bg-muted/40 px-4 py-3">
       <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 space-y-2">
         <p className="text-xs text-muted-foreground">
-          GitHub will ask you to approve this access on all repositories of the
-          organization. GitHub only lets an App create the policy repository
-          with all-repository access.
+          The App only needs <span className="font-mono">{repo}</span>, nothing
+          else in the organization:
         </p>
         <div className="flex flex-wrap gap-1.5">
-          {["Administration", "Contents", "Pull requests"].map((permission) => (
+          {["Contents", "Pull requests"].map((permission) => (
             <Badge key={permission} variant="outline" className="bg-background">
               <span>{permission}</span>
               <span className="font-normal text-muted-foreground">
@@ -855,33 +856,31 @@ function AccountChip({ account }: { account: string }) {
   );
 }
 
-function headerFor(params: { step: Step; mode: AppMode; hasApps: boolean }) {
+function headerFor(params: { step: Step; mode: AppMode; repo: string }) {
+  if (params.step === "repo")
+    return {
+      title: "Set up GitHub sync",
+      description:
+        "Your policy will live in a private GitHub repository that you create. Archestra only ever gets access to that repository.",
+    };
   if (params.step === "app") {
     if (params.mode === "fork")
       return {
-        title: "Set up GitHub sync",
-        description:
-          "Your policy will live in a GitHub repository. First, pick the GitHub App that connects to it.",
+        title: "Connect a GitHub App",
+        description: `Archestra reads and proposes policy changes in ${params.repo} through a GitHub App.`,
       };
     if (params.mode === "pick")
       return {
         title: "Choose a GitHub App",
-        description: "It creates the repository and reads changes.",
+        description: `Only Apps installed on ${params.repo} can be used.`,
       };
     return {
-      title: params.hasApps ? "Create a GitHub App" : "Set up GitHub sync",
-      description: params.hasApps
-        ? "GitHub creates the App for you. No IDs or keys to copy."
-        : "Your policy will live in a GitHub repository. First, create the GitHub App that connects to it. No IDs or keys to copy.",
+      title: "Create a GitHub App",
+      description: "GitHub creates the App for you. No IDs or keys to copy.",
     };
   }
-  if (params.step === "repo")
-    return {
-      title: "Name the repository",
-      description: "We create it and copy your current policy into it.",
-    };
   return {
-    title: "Creating repository",
+    title: "Connecting the repository",
     description: "This takes a few seconds.",
   };
 }
@@ -910,16 +909,18 @@ function postManifest(params: { url: string; manifest: string }) {
 const GITHUB_WINDOW = "openappa-github-app";
 
 const STEPS: { id: Step; label: string }[] = [
-  { id: "app", label: "GitHub App" },
   { id: "repo", label: "Repository" },
-  { id: "create", label: "Create" },
+  { id: "app", label: "GitHub App" },
+  { id: "connect", label: "Connect" },
 ];
 
-const CREATE_STEPS = [
-  "Create the private repository",
+const CONNECT_STEPS = [
+  "Check the repository",
   "Copy your current policy",
   "Open the setup pull request if rules require one",
 ];
+
+const TEMPLATE = { owner: "archestra-ai", name: "openappa-config" };
 
 const INTERVALS: Interval[] = ["15m", "1h", "1d"];
 const INTERVAL_LABEL: Record<Interval, string> = {
@@ -930,5 +931,3 @@ const INTERVAL_LABEL: Record<Interval, string> = {
 
 const REPO_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]*\/[a-zA-Z0-9_.-]+$/;
 const APP_LOGO_PATH = "/openappa/github-app-logo.png";
-const ORGANIZATION_PATTERN =
-  /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;

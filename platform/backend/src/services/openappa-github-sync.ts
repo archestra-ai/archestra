@@ -96,6 +96,7 @@ export async function createAppaGithubRepository(params: {
   name: string;
   githubAppConfigId: string;
   interval: AppaGithubSource["interval"];
+  existing?: boolean;
 }) {
   assertEnabled();
   if ((await OpenAppaGithubSyncModel.find(params.organizationId))?.interval)
@@ -126,30 +127,41 @@ export async function createAppaGithubRepository(params: {
     private?: boolean;
   };
   const repo = `${params.owner}/${params.name}`;
-  try {
-    created = await githubJson({
-      url: `https://api.github.com/repos/${TEMPLATE_REPO}/generate`,
+  if (params.existing)
+    created = await recoverPristineTemplateRepository({
+      repo,
       token,
-      method: "POST",
-      body: {
-        owner: params.owner,
-        name: params.name,
-        private: true,
-        include_all_branches: false,
-      },
-      onHttpError: (status) =>
-        new ApiError(
-          status === 422 ? 409 : 502,
-          status === 422
-            ? `GitHub rejected ${repo} (HTTP 422). If this is a new repository from an earlier attempt, retry setup after the App can access it. Otherwise choose a different name.`
-            : status === 404
-              ? `GitHub could not create a repository under ${params.owner} (HTTP 404). Check that the selected App is installed on that exact account with All repositories access and the required permissions.`
-              : `GitHub returned HTTP ${status} while creating ${repo}. Check the App installation and permissions.`,
-        ),
+      error: new ApiError(
+        400,
+        `${repo} must be a private, unchanged copy of the ${TEMPLATE_REPO} template that the App can access.`,
+      ),
     });
-  } catch (error) {
-    if (!(error instanceof ApiError) || error.statusCode !== 409) throw error;
-    created = await recoverPristineTemplateRepository({ repo, token, error });
+  else {
+    try {
+      created = await githubJson({
+        url: `https://api.github.com/repos/${TEMPLATE_REPO}/generate`,
+        token,
+        method: "POST",
+        body: {
+          owner: params.owner,
+          name: params.name,
+          private: true,
+          include_all_branches: false,
+        },
+        onHttpError: (status) =>
+          new ApiError(
+            status === 422 ? 409 : 502,
+            status === 422
+              ? `GitHub rejected ${repo} (HTTP 422). If this is a new repository from an earlier attempt, retry setup after the App can access it. Otherwise choose a different name.`
+              : status === 404
+                ? `GitHub could not create a repository under ${params.owner} (HTTP 404). Check that the selected App is installed on that exact account with All repositories access and the required permissions.`
+                : `GitHub returned HTTP ${status} while creating ${repo}. Check the App installation and permissions.`,
+          ),
+      });
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.statusCode !== 409) throw error;
+      created = await recoverPristineTemplateRepository({ repo, token, error });
+    }
   }
   if (
     created.full_name?.toLowerCase() !== repo.toLowerCase() ||

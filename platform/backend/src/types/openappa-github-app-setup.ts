@@ -7,11 +7,30 @@ const GithubLoginSchema = z
   .max(39)
   .regex(
     /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*$/,
-    "Use the organization's GitHub name",
+    "Use the GitHub account name",
   );
 
+/** A repository as `owner/name`, the way GitHub shows it. */
+const GithubRepositorySchema = z
+  .string()
+  .trim()
+  .max(140)
+  .regex(
+    /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*\/[a-zA-Z0-9_.-]+$/,
+    "Use owner/name",
+  );
+
+/** Registers the App on the account that owns the policy repository. */
 export const StartAppaGithubAppSchema = z.object({
-  organization: GithubLoginSchema,
+  owner: GithubLoginSchema,
+});
+
+export const InstallAppaGithubAppSchema = z.object({
+  repo: GithubRepositorySchema,
+});
+
+export const AppaGithubAppAccountsQuerySchema = z.object({
+  repo: GithubRepositorySchema.optional(),
 });
 
 /** What the browser posts to GitHub to register the App from a manifest. */
@@ -32,6 +51,8 @@ export const PendingAppaGithubAppSchema = z.object({
   account: z.string(),
   htmlUrl: z.string(),
   installUrl: z.string(),
+  /** Where the admin can upload a logo; GitHub's manifest cannot set one. */
+  settingsUrl: z.string(),
 });
 export type PendingAppaGithubApp = z.infer<typeof PendingAppaGithubAppSchema>;
 
@@ -45,7 +66,14 @@ export const AppaGithubAppInstallResultSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
-/** The GitHub account each organization GitHub App is installed on. */
+/**
+ * The GitHub account each organization GitHub App is installed on and, when a
+ * repository was given, whether the App can reach it.
+ */
 export const AppaGithubAppAccountsSchema = z.array(
-  z.object({ id: z.string().uuid(), account: z.string().nullable() }),
+  z.object({
+    id: z.string().uuid(),
+    account: z.string().nullable(),
+    canAccessRepo: z.boolean().nullable(),
+  }),
 );

@@ -6,6 +6,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import {
   fetchAsGithubApp,
   GITHUB_APP_NOT_FOUND,
+  resolveInstallationToken,
 } from "@/integrations/github/app-auth";
 import logger from "@/logging";
 import {
@@ -34,8 +35,9 @@ import { decryptSecretValue, encryptSecretValue } from "@/utils/crypto";
  *    as an organization credential the sync can use.
  */
 class OpenAppaGithubAppSetup {
-  async start(params: Owner & { organization: string }) {
+  async start(params: Owner & { owner: string }) {
     await this.assertAllowed(params);
+    const account = await lookupAccount(params.owner);
     const state = randomBytes(32).toString("base64url");
     const identifier = flowIdentifier(params, "start");
     await VerificationModel.deleteByIdentifier(identifier);
@@ -44,11 +46,14 @@ class OpenAppaGithubAppSetup {
       expiresAt: new Date(Date.now() + START_TTL_MS),
       value: JSON.stringify({
         stateHash: hash(state),
-        organization: params.organization,
+        owner: account.login,
       }),
     });
+    // A personal App can only be registered by that user, while signed in.
     const url = new URL(
-      `https://github.com/organizations/${encodeURIComponent(params.organization)}/settings/apps/new`,
+      account.type === "Organization"
+        ? `https://github.com/organizations/${encodeURIComponent(account.login)}/settings/apps/new`
+        : "https://github.com/settings/apps/new",
     );
     url.searchParams.set("state", state);
     return {
@@ -95,14 +100,10 @@ class OpenAppaGithubAppSetup {
         "GitHub didn't return the new App. Start again; codes expire after an hour.",
       );
     }
-    if (
-      app.data.owner.type !== "Organization" ||
-      app.data.owner.login.toLowerCase() !==
-        flow.data.organization.toLowerCase()
-    )
+    if (app.data.owner.login.toLowerCase() !== flow.data.owner.toLowerCase())
       throw new ApiError(
         400,
-        `The App was created for ${app.data.owner.login}, not the ${flow.data.organization} organization.`,
+        `The App was created for ${app.data.owner.login}, not ${flow.data.owner}. Sign in to GitHub as ${flow.data.owner} and start again.`,
       );
     const pending: StoredPendingApp = {
       appId: String(app.data.id),
@@ -111,6 +112,7 @@ class OpenAppaGithubAppSetup {
       clientId: app.data.client_id,
       account: app.data.owner.login,
       accountId: app.data.owner.id,
+      accountType: app.data.owner.type === "User" ? "User" : "Organization",
       htmlUrl: app.data.html_url,
       secret: encryptSecretValue({
         privateKey: app.data.pem,
@@ -150,7 +152,7 @@ class OpenAppaGithubAppSetup {
     );
   }
 
-  async install(params: Owner) {
+  async install(params: Owner & { repo: string }) {
     await this.assertAllowed(params);
     const pending = await this.loadPending(params);
     if (!pending)
@@ -177,10 +179,18 @@ class OpenAppaGithubAppSetup {
       (entry) => entry.account?.id === pending.accountId,
     );
     if (!installation) return { status: "waiting" as const };
-    if (installation.repository_selection !== "all")
+    // The App only needs the policy repository; anything broader is the admin's choice.
+    if (
+      !(await canAccessRepo({
+        appId: pending.appId,
+        installationId: String(installation.id),
+        privateKey: secret.privateKey,
+        repo: params.repo,
+      }))
+    )
       throw new ApiError(
         400,
-        `Give ${pending.name} access to All repositories on ${pending.account}.`,
+        `Give ${pending.name} access to ${params.repo} on GitHub.`,
       );
 
     const definition = await createRuntimeCredentialDefinition({
@@ -228,7 +238,7 @@ class OpenAppaGithubAppSetup {
   }
 
   /** Where each organization GitHub App is installed, so setup can suggest the repository owner. */
-  async accounts(organizationId: string) {
+  async accounts(organizationId: string, repo?: string) {
     const definitions = (
       await RuntimeCredentialDefinitionModel.list(organizationId)
     ).filter(
@@ -248,7 +258,8 @@ class OpenAppaGithubAppSetup {
               credentialId: definition.key,
               scope: "organization",
             });
-          if (!privateKey) return { id: definition.id, account: null };
+          if (!privateKey)
+            return { id: definition.id, account: null, canAccessRepo: null };
           const installation = await fetchAsGithubApp<Installation>({
             githubUrl: GITHUB_API_URL,
             appId: definition.appId as string,
@@ -258,9 +269,17 @@ class OpenAppaGithubAppSetup {
           return {
             id: definition.id,
             account: installation.account?.login ?? null,
+            canAccessRepo: repo
+              ? await canAccessRepo({
+                  appId: definition.appId as string,
+                  installationId: definition.installationId as string,
+                  privateKey,
+                  repo,
+                })
+              : null,
           };
         } catch {
-          return { id: definition.id, account: null };
+          return { id: definition.id, account: null, canAccessRepo: null };
         }
       }),
     );
@@ -333,7 +352,7 @@ const PENDING_TTL_MS = 60 * 60_000;
 
 const StartFlowSchema = z.object({
   stateHash: z.string(),
-  organization: z.string(),
+  owner: z.string(),
 });
 const ConversionSchema = z.object({
   id: z.number().int().positive(),
@@ -360,6 +379,7 @@ const StoredPendingAppSchema = z.object({
   clientId: z.string(),
   account: z.string(),
   accountId: z.number().int(),
+  accountType: z.enum(["User", "Organization"]),
   htmlUrl: z.string(),
   secret: z.object({ __encrypted: z.string() }),
 });
@@ -381,8 +401,8 @@ function manifest() {
     redirect_url: callbackUrl,
     setup_url: callbackUrl,
     public: false,
+    // Contents and pull requests on the policy repository; it never creates repositories.
     default_permissions: {
-      administration: "write",
       contents: "write",
       pull_requests: "write",
       metadata: "read",
@@ -399,6 +419,10 @@ function toPublic(pending: StoredPendingApp): PendingAppaGithubApp {
     account: pending.account,
     htmlUrl: pending.htmlUrl,
     installUrl: `https://github.com/apps/${encodeURIComponent(pending.slug)}/installations/new/permissions?target_id=${pending.accountId}`,
+    settingsUrl:
+      pending.accountType === "Organization"
+        ? `https://github.com/organizations/${encodeURIComponent(pending.account)}/settings/apps/${encodeURIComponent(pending.slug)}`
+        : `https://github.com/settings/apps/${encodeURIComponent(pending.slug)}`,
   };
 }
 
@@ -415,3 +439,60 @@ function isAppGone(error: unknown) {
     error instanceof ApiError && error.internalCode === GITHUB_APP_NOT_FOUND
   );
 }
+
+/** The GitHub account that will own the App, from GitHub's public profile. */
+async function lookupAccount(login: string) {
+  const response = await fetch(
+    `${GITHUB_API_URL}/users/${encodeURIComponent(login)}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  if (response.status === 404)
+    throw new ApiError(400, `GitHub has no account named ${login}.`);
+  const account = response.ok
+    ? AccountSchema.safeParse(await response.json())
+    : null;
+  if (!account?.success)
+    throw new ApiError(502, `GitHub didn't return the ${login} account.`);
+  return account.data;
+}
+
+async function canAccessRepo(params: {
+  appId: string;
+  installationId: string;
+  privateKey: string;
+  repo: string;
+}) {
+  const token = await resolveInstallationToken({
+    githubUrl: GITHUB_API_URL,
+    appId: params.appId,
+    installationId: params.installationId,
+    privateKey: params.privateKey,
+  });
+  const response = await fetch(`${GITHUB_API_URL}/repos/${params.repo}`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    redirect: "error",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (response.ok) return true;
+  if (response.status === 404) return false;
+  throw new ApiError(
+    502,
+    `GitHub returned HTTP ${response.status} while checking access to ${params.repo}.`,
+  );
+}
+
+const AccountSchema = z.object({
+  login: z.string(),
+  type: z.enum(["User", "Organization"]),
+});

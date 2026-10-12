@@ -127,12 +127,18 @@ export function usePendingAppaGithubApp(enabled: boolean) {
     },
   });
 }
-export function useAppaGithubAppAccounts(enabled: boolean) {
+/** Where each GitHub App is installed, and whether it can reach `repo`. */
+export function useAppaGithubAppAccounts(params: {
+  enabled: boolean;
+  repo?: string;
+}) {
   return useQuery({
-    enabled,
-    queryKey: ["openappa", "github-app", "accounts"],
+    enabled: params.enabled,
+    queryKey: ["openappa", "github-app", "accounts", params.repo ?? null],
     queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getAppaGithubAppAccounts();
+      const { data, error } = await archestraApiSdk.getAppaGithubAppAccounts({
+        query: params.repo ? { repo: params.repo } : undefined,
+      });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
@@ -170,8 +176,12 @@ export function useCompleteAppaGithubApp() {
 export function useInstallAppaGithubApp() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await archestraApiSdk.installAppaGithubApp();
+    mutationFn: async (
+      body: archestraApiTypes.InstallAppaGithubAppData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.installAppaGithubApp({
+        body,
+      });
       if (error) throw toApiError(error);
       return data;
     },

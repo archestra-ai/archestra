@@ -70,6 +70,8 @@ export const CreateAppaGithubRepositorySchema = z
       .max(100),
     githubAppConfigId: z.string().uuid(),
     interval: AppaSyncIntervalSchema,
+    /** Adopt a repository the admin already created from the template on GitHub. */
+    existing: z.boolean().optional(),
   })
   .strict();
 const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {

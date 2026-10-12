@@ -338047,6 +338047,9 @@
                       "1h",
                       "1d"
                     ]
+                  },
+                  "existing": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -338453,7 +338456,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Start registering the OpenAPPA GitHub App on an organization from a manifest\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Start registering the OpenAPPA GitHub App, from a manifest, on the account that owns the policy repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -338461,7 +338464,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "organization": {
+                  "owner": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 39,
@@ -338469,7 +338472,7 @@
                   }
                 },
                 "required": [
-                  "organization"
+                  "owner"
                 ]
               }
             }
@@ -338795,6 +338798,9 @@
                     },
                     "installUrl": {
                       "type": "string"
+                    },
+                    "settingsUrl": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -338802,7 +338808,8 @@
                     "slug",
                     "account",
                     "htmlUrl",
-                    "installUrl"
+                    "installUrl",
+                    "settingsUrl"
                   ],
                   "additionalProperties": false
                 }
@@ -339080,6 +339087,9 @@
                     },
                     "installUrl": {
                       "type": "string"
+                    },
+                    "settingsUrl": {
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -339087,7 +339097,8 @@
                     "slug",
                     "account",
                     "htmlUrl",
-                    "installUrl"
+                    "installUrl",
+                    "settingsUrl"
                   ],
                   "additionalProperties": false
                 }
@@ -339607,7 +339618,27 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Store the new GitHub App as an organization credential once it is installed\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Store the new GitHub App as an organization credential once it is installed with access to the policy repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "repo": {
+                    "type": "string",
+                    "maxLength": 140,
+                    "pattern": "^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*\\/[a-zA-Z0-9_.-]+$"
+                  }
+                },
+                "required": [
+                  "repo"
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Default Response",
@@ -339911,7 +339942,19 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "The GitHub account each organization GitHub App is installed on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "The GitHub account each organization GitHub App is installed on, and whether it can reach a repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 140,
+              "pattern": "^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*\\/[a-zA-Z0-9_.-]+$"
+            },
+            "in": "query",
+            "name": "repo",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -339930,11 +339973,16 @@
                       "account": {
                         "nullable": true,
                         "type": "string"
+                      },
+                      "canAccessRepo": {
+                        "nullable": true,
+                        "type": "boolean"
                       }
                     },
                     "required": [
                       "id",
-                      "account"
+                      "account",
+                      "canAccessRepo"
                     ],
                     "additionalProperties": false
                   }

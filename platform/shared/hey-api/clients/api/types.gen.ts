@@ -89216,6 +89216,7 @@ export type CreateAppaGithubRepositoryData = {
         name: string;
         githubAppConfigId: string;
         interval: '15m' | '1h' | '1d';
+        existing?: boolean;
     };
     path?: never;
     query?: never;
@@ -89323,7 +89324,7 @@ export type CreateAppaGithubRepositoryResponse = CreateAppaGithubRepositoryRespo
 
 export type StartAppaGithubAppData = {
     body: {
-        organization: string;
+        owner: string;
     };
     path?: never;
     query?: never;
@@ -89498,6 +89499,7 @@ export type CompleteAppaGithubAppResponses = {
         account: string;
         htmlUrl: string;
         installUrl: string;
+        settingsUrl: string;
     };
 };
 
@@ -89674,13 +89676,16 @@ export type GetPendingAppaGithubAppResponses = {
         account: string;
         htmlUrl: string;
         installUrl: string;
+        settingsUrl: string;
     } | null;
 };
 
 export type GetPendingAppaGithubAppResponse = GetPendingAppaGithubAppResponses[keyof GetPendingAppaGithubAppResponses];
 
 export type InstallAppaGithubAppData = {
-    body?: never;
+    body: {
+        repo: string;
+    };
     path?: never;
     query?: never;
     url: '/api/openappa/github-app/install';
@@ -89773,7 +89778,9 @@ export type InstallAppaGithubAppResponse = InstallAppaGithubAppResponses[keyof I
 export type GetAppaGithubAppAccountsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        repo?: string;
+    };
     url: '/api/openappa/github-app/accounts';
 };
 
@@ -89852,6 +89859,7 @@ export type GetAppaGithubAppAccountsResponses = {
     200: Array<{
         id: string;
         account: string | null;
+        canAccessRepo: boolean | null;
     }>;
 };
 

@@ -660,9 +660,8 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
                   Read-only
                 </Badge>
               </TooltipTrigger>
-              <TooltipContent className="max-w-64">
-                Predefined roles can't be changed. To edit this one, use
-                Duplicate as custom role in its ⋯ menu.
+              <TooltipContent>
+                Predefined roles can't be changed. Duplicate it to edit.
               </TooltipContent>
             </Tooltip>
           </span>

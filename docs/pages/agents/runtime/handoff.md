@@ -3,7 +3,7 @@ title: Hand Off Work
 description: Hand a task from your coding agent to Agent Runtime, then bring the result back
 order: 2
 alpha: "Agent Runtime is in Alpha and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,6 +30,18 @@ The skill drives these tools on the [MCP Gateway](/docs/mcp/gateway). You can al
 - **Read or write files** without starting a turn: [`read_workspace_file`](/docs/reference/archestra-mcp-server#read_workspace_file) and [`write_workspace_file`](/docs/reference/archestra-mcp-server#write_workspace_file).
 
 Only the person who started a run can steer it or use its files.
+
+## Hand Off With Guardrails On
+
+With [Guardrails](/docs/agents/guardrails) on, a run keeps the restrictions of the session that started it, when Guardrails check that session. They check it when your coding agent is connected as a [Guardrails client](/docs/agents/guardrails/clients): its model requests go through the LLM Proxy.
+
+- **A client Guardrails check:** the run starts under your session's restrictions. Its answer passes the guardrail check before your agent reads it. Another session cannot steer the run or read its files.
+- **Any other client:** the [Unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients) setting decides. When it is **Allowed**, the run starts without your session's restrictions, and Guardrails still check each tool call inside it. When it is **Blocked**, the run does not start.
+
+If a request is refused:
+
+- **"Guardrails do not recognize this client":** unrecognized clients are blocked. [Connect the client](/docs/agents/guardrails/clients#connect-a-client) so that Guardrails check it. Or allow unrecognized clients, which needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+- **"This runtime is bound to a different session":** another session started the run. Continue it from that session.
 
 ## Pass a Credential
 

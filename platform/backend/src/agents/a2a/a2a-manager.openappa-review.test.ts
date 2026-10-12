@@ -1,5 +1,10 @@
 import { vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { RouteCategory } from "@/observability/tracing";
+import {
+  attachHitlReviews,
+  decideChatHitlReview,
+} from "@/openappa/a2a-hitl-review";
 import {
   consumeHitlRuling,
   reviewSessionFromTrajectory,
@@ -136,3 +141,136 @@ for (const approved of [true, false]) {
     expect(resumed.task?.status.state).toBe(A2AProtocolTaskState.Completed);
   });
 }
+
+for (const provider of ["ms-teams", "telegram"] as const) {
+  test(`a ${provider} chat run on the stateful path pauses, and the reviewer's click reaches the resumed remedy call`, async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const reviewer = await makeUser();
+    const agent = await makeAgent({ organizationId: org.id });
+    const actor: A2AActor = {
+      id: reviewer.id,
+      kind: "user",
+      organizationId: org.id,
+    };
+    const chatSessionId = `chatops:${provider}:chat-1`;
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-1",
+      text: REVIEW_TEXT,
+      session_id: chatSessionId,
+    });
+    // The manager ChatOps uses for chats whose history Archestra keeps
+    // (MS Teams 1:1 and group chats, all of Telegram).
+    const manager = new A2AManager({ trustedContextAccess: true });
+    const systemParams = {
+      sessionId: chatSessionId,
+      source: `chatops:${provider}` as const,
+      routeCategory: RouteCategory.CHATOPS,
+    };
+    const messageId = crypto.randomUUID();
+    const paused = pausedOnRemedy(messageId);
+    paused.responseUiMessage.parts[0].input.trajectory.session_id =
+      chatSessionId;
+    executeA2AMessage.mockResolvedValueOnce(paused);
+
+    const first = await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request: {
+        message: {
+          messageId: crypto.randomUUID(),
+          role: A2AProtocolRole.User,
+          parts: [{ text: "Email the CEO." }],
+        },
+      },
+      systemParams,
+    });
+    expect(executeA2AMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ openappaReviewPause: true }),
+    );
+    if (!first.task) throw new Error("expected a paused task");
+    expect(first.task.status.state).toBe(A2AProtocolTaskState.InputRequired);
+
+    // What ChatOps does: post the review, then record the reviewer's click.
+    await attachHitlReviews({
+      organizationId: org.id,
+      taskId: first.task.id,
+      approvalRequests: first.task.metadata?.approvalRequests ?? [],
+      answerer: {
+        kind: "chat",
+        reviewerUserId: reviewer.id,
+        channelId: "chat-1",
+        threadId: undefined,
+      },
+      now: new Date(),
+    });
+    expect(
+      await decideChatHitlReview({
+        organizationId: org.id,
+        taskId: first.task.id,
+        approvalId: "approval-1",
+        clickerUserId: reviewer.id,
+        clickChannelId: "chat-1",
+        approved: false,
+        now: new Date(),
+      }),
+    ).toEqual({ status: "recorded", ruling: "deny" });
+
+    let rulingSeenByRun: string | undefined;
+    executeA2AMessage.mockImplementationOnce(async () => {
+      rulingSeenByRun = await consumeHitlRuling({
+        session: reviewSessionFromTrajectory({
+          organizationId: org.id,
+          trajectory: { session_id: chatSessionId },
+          context: { userId: reviewer.id },
+        }),
+        offerId: "offer-1",
+      });
+      return finished(messageId);
+    });
+    const resumed = await manager.sendMessage({
+      actor,
+      agentId: agent.id,
+      request: buildApprovalDecisionSendMessageRequest({
+        taskId: first.task.id,
+        approvalDecisions: [{ approvalId: "approval-1", approved: true }],
+      }),
+      systemParams,
+    });
+
+    expect(rulingSeenByRun).toBe("deny");
+    expect(resumed.message ?? resumed.task).toBeDefined();
+  });
+}
+
+test("a detached task a chat starts does not pause for a review", async ({
+  makeAgent,
+  makeOrganization,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const agent = await makeAgent({ organizationId: org.id });
+  executeA2AMessage.mockResolvedValueOnce(finished(crypto.randomUUID()));
+
+  await new A2AManager({ taskMode: "full" }).sendMessage({
+    actor: { id: user.id, kind: "user", organizationId: org.id },
+    agentId: agent.id,
+    request: {
+      message: {
+        messageId: crypto.randomUUID(),
+        role: A2AProtocolRole.User,
+        parts: [{ text: "Run in the background." }],
+      },
+    },
+    systemParams: { routeCategory: RouteCategory.CHATOPS },
+    taskRun: { createTask: true, detached: false },
+  });
+
+  expect(executeA2AMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ openappaReviewPause: false }),
+  );
+});

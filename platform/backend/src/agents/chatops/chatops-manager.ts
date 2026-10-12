@@ -32,8 +32,8 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { RouteCategory } from "@/observability/tracing";
 import {
   attachHitlReviews,
-  decideSlackHitlReview,
-  type SlackHitlDecision,
+  type ChatHitlDecision,
+  decideChatHitlReview,
 } from "@/openappa/a2a-hitl-review";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
@@ -2810,22 +2810,18 @@ export class ChatOpsManager {
         },
       });
 
-      // Only Slack chat runs pause for OpenAPPA reviews (see A2AManager).
-      const reviewTexts =
-        provider.providerId === "slack"
-          ? await attachHitlReviews({
-              organizationId: reviewer.organizationId,
-              taskId: task.id,
-              approvalRequests,
-              answerer: {
-                kind: "slack",
-                reviewerUserId: reviewer.userId,
-                channelId: message.channelId,
-                threadTs: message.threadId,
-              },
-              now: new Date(),
-            })
-          : new Map<string, string>();
+      const reviewTexts = await attachHitlReviews({
+        organizationId: reviewer.organizationId,
+        taskId: task.id,
+        approvalRequests,
+        answerer: {
+          kind: "chat",
+          reviewerUserId: reviewer.userId,
+          channelId: message.channelId,
+          threadId: message.threadId,
+        },
+        now: new Date(),
+      });
 
       for (const approvalRequest of approvalRequests) {
         // `run_tool` is a meta wrapper; show the user the underlying tool and
@@ -3113,6 +3109,33 @@ export class ChatOpsManager {
     return owner?.name?.trim() || null;
   }
 
+  /**
+   * Tells only the clicker why a click changed nothing. Slack can show a
+   * message to one person; MS Teams cannot, so the reply goes to the thread.
+   */
+  private async tellApprovalClicker(params: {
+    provider: ChatOpsProvider;
+    decision: ChatOpsApprovalDecision;
+    text: string;
+  }): Promise<void> {
+    const { provider, decision, text } = params;
+    if (provider.providerId === "slack") {
+      await provider.sendEphemeralMessage?.({
+        channelId: decision.channelId,
+        userId: decision.userId,
+        threadId: decision.threadTs,
+        text,
+      });
+      return;
+    }
+    await provider.sendReply({
+      originalMessage: decision.originalMessage,
+      text,
+      conversationReference:
+        decision.originalMessage.metadata?.conversationReference,
+    });
+  }
+
   async handleInteractiveApprovalDecision(
     provider: ChatOpsProvider,
     decision: ChatOpsApprovalDecision,
@@ -3148,27 +3171,23 @@ export class ChatOpsManager {
 
       // An OpenAPPA review is decided by its stored reviewer, in its thread,
       // before it expires, once. The button payload only names the review.
-      const openappaReview =
-        provider.providerId === "slack"
-          ? await decideSlackHitlReview({
-              organizationId: binding.organizationId,
-              taskId: decision.taskId,
-              approvalId: decision.approvalId,
-              clickerUserId: user.id,
-              clickChannelId: decision.channelId,
-              approved: decision.approved,
-              now: new Date(),
-            })
-          : { status: "not_openappa" as const };
+      const openappaReview = await decideChatHitlReview({
+        organizationId: binding.organizationId,
+        taskId: decision.taskId,
+        approvalId: decision.approvalId,
+        clickerUserId: user.id,
+        clickChannelId: decision.channelId,
+        approved: decision.approved,
+        now: new Date(),
+      });
       if (
         openappaReview.status !== "not_openappa" &&
         openappaReview.status !== "recorded"
       ) {
-        await provider.sendEphemeralMessage?.({
-          channelId: decision.channelId,
-          userId: decision.userId,
-          threadId: decision.threadTs,
-          text: slackReviewRefusalText(openappaReview),
+        await this.tellApprovalClicker({
+          provider,
+          decision,
+          text: reviewRefusalText(openappaReview),
         });
         return;
       }
@@ -3225,6 +3244,7 @@ export class ChatOpsManager {
           approved: decision.approved,
           ...(openappaReview.status === "recorded" && {
             decidedByUserId: decision.userId,
+            decidedByName: decision.userName,
           }),
         });
       }
@@ -3397,9 +3417,9 @@ function isTransientProviderError(error: unknown): error is ProviderError {
   );
 }
 
-function slackReviewRefusalText(
+function reviewRefusalText(
   review: Exclude<
-    SlackHitlDecision,
+    ChatHitlDecision,
     { status: "not_openappa" } | { status: "recorded" }
   >,
 ): string {

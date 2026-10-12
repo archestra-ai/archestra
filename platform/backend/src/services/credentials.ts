@@ -4,7 +4,11 @@ import {
   RuntimeCredentialDefinitionModel,
 } from "@/models";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
-import { ApiError, type RuntimeCredentialConnectionScope } from "@/types";
+import {
+  ApiError,
+  type RuntimeCredentialConnectionScope,
+  type RuntimeCredentialDefinition,
+} from "@/types";
 
 /** Resolve a reusable credential for its explicit owner at the point of use. */
 export async function resolveCredentialValue(params: {
@@ -29,6 +33,114 @@ export async function resolveCredential(params: {
     organizationId: params.organizationId,
     key: params.credentialId,
   });
+  return resolveDefinedCredential(params, definition);
+}
+
+/** A definition snapshot belongs only to one launch or preflight operation. */
+export class CredentialResolutionBatch {
+  private constructor(
+    private readonly organizationId: string,
+    private readonly definitions: Map<string, RuntimeCredentialDefinition>,
+  ) {}
+
+  static async create(params: {
+    organizationId: string;
+    credentialIds: string[];
+  }): Promise<CredentialResolutionBatch> {
+    return new CredentialResolutionBatch(
+      params.organizationId,
+      await RuntimeCredentialDefinitionModel.findByKeys({
+        organizationId: params.organizationId,
+        keys: params.credentialIds,
+      }),
+    );
+  }
+
+  resolve(params: Parameters<typeof resolveCredential>[0]) {
+    if (params.organizationId !== this.organizationId)
+      throw new ApiError(400, "Credential is no longer available");
+    return resolveDefinedCredential(
+      params,
+      this.definitions.get(params.credentialId) ?? null,
+    );
+  }
+}
+
+/** Personal secrets may only enter a personally owned MCP process. */
+export async function resolveMcpCredentialValues(params: {
+  organizationId: string;
+  userId: string | null;
+  installationScope: string;
+  environment: readonly {
+    key: string;
+    type: string;
+    credentialId?: string;
+    credentialScope?: "personal" | "organization";
+    promptOnInstallation: boolean;
+    required?: boolean;
+  }[];
+}): Promise<Record<string, string>> {
+  return (await resolveMcpCredentials(params)).values;
+}
+
+export async function resolveMcpCredentials(
+  params: Parameters<typeof resolveMcpCredentialValues>[0],
+): Promise<{ values: Record<string, string>; expiresAt: number | null }> {
+  const batch = await CredentialResolutionBatch.create({
+    organizationId: params.organizationId,
+    credentialIds: params.environment.flatMap((binding) =>
+      binding.credentialId ? [binding.credentialId] : [],
+    ),
+  });
+  const values: Record<string, string> = {};
+  let expiresAt: number | null = null;
+  for (const binding of params.environment) {
+    if (!binding.credentialId) continue;
+    if (binding.type !== "secret")
+      throw new ApiError(
+        400,
+        "Saved credentials must use the secret environment variable type",
+      );
+    const scope = binding.credentialScope;
+    if (!scope)
+      throw new ApiError(
+        400,
+        "Saved credentials require an explicit ownership scope",
+      );
+    if (
+      scope === "personal" &&
+      (params.installationScope !== "personal" || !params.userId)
+    ) {
+      throw new ApiError(
+        400,
+        "A personal credential requires a personal MCP installation",
+      );
+    }
+    const credential = await batch.resolve({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      scope,
+      credentialId: binding.credentialId,
+      minimumValidityMs: 50 * 60_000,
+    });
+    const value = credential?.value;
+    if (credential?.expiresAt)
+      expiresAt = Math.min(expiresAt ?? Infinity, credential.expiresAt);
+    if (value) values[binding.key] = value;
+    else if (binding.required)
+      throw new ApiError(
+        400,
+        `Connect the credential for ${binding.key} in Settings → Credentials before installing this server`,
+      );
+  }
+  return { values, expiresAt };
+}
+
+// === internals ===
+async function resolveDefinedCredential(
+  params: Parameters<typeof resolveCredential>[0],
+  definition: RuntimeCredentialDefinition | null,
+): Promise<{ value: string; expiresAt: number | null } | null> {
   if (!definition) throw new ApiError(400, "Credential is no longer available");
   if (
     params.scope === "personal"
@@ -65,68 +177,4 @@ export async function resolveCredential(params: {
     minimumValidityMs: params.minimumValidityMs,
   });
   return { value: token.token, expiresAt: token.expiresAt };
-}
-
-/** Personal secrets may only enter a personally owned MCP process. */
-export async function resolveMcpCredentialValues(params: {
-  organizationId: string;
-  userId: string | null;
-  installationScope: string;
-  environment: readonly {
-    key: string;
-    type: string;
-    credentialId?: string;
-    credentialScope?: "personal" | "organization";
-    promptOnInstallation: boolean;
-    required?: boolean;
-  }[];
-}): Promise<Record<string, string>> {
-  return (await resolveMcpCredentials(params)).values;
-}
-
-export async function resolveMcpCredentials(
-  params: Parameters<typeof resolveMcpCredentialValues>[0],
-): Promise<{ values: Record<string, string>; expiresAt: number | null }> {
-  const values: Record<string, string> = {};
-  let expiresAt: number | null = null;
-  for (const binding of params.environment) {
-    if (!binding.credentialId) continue;
-    if (binding.type !== "secret")
-      throw new ApiError(
-        400,
-        "Saved credentials must use the secret environment variable type",
-      );
-    const scope = binding.credentialScope;
-    if (!scope)
-      throw new ApiError(
-        400,
-        "Saved credentials require an explicit ownership scope",
-      );
-    if (
-      scope === "personal" &&
-      (params.installationScope !== "personal" || !params.userId)
-    ) {
-      throw new ApiError(
-        400,
-        "A personal credential requires a personal MCP installation",
-      );
-    }
-    const credential = await resolveCredential({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      scope,
-      credentialId: binding.credentialId,
-      minimumValidityMs: 50 * 60_000,
-    });
-    const value = credential?.value;
-    if (credential?.expiresAt)
-      expiresAt = Math.min(expiresAt ?? Infinity, credential.expiresAt);
-    if (value) values[binding.key] = value;
-    else if (binding.required)
-      throw new ApiError(
-        400,
-        `Connect the credential for ${binding.key} in Settings → Credentials before installing this server`,
-      );
-  }
-  return { values, expiresAt };
 }

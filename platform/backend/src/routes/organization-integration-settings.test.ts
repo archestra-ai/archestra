@@ -105,7 +105,11 @@ describe("PATCH /api/organization/integration-settings", () => {
   });
 
   test("persists popular agent choices, preserves omitted choices, and restores defaults", async () => {
-    const overrides = { codex: { hidden: true }, hermes: { hidden: true } };
+    const overrides = {
+      codex: { position: 0 },
+      "claude-code": { position: 1 },
+      hermes: { hidden: true },
+    };
     const response = await patch({ popularAgentOverrides: overrides });
     expect(response.statusCode).toBe(200);
     expect(response.json().popularAgentOverrides).toEqual(overrides);
@@ -144,6 +148,9 @@ describe("PATCH /api/organization/integration-settings", () => {
   test.each([
     { unknown: { hidden: true } },
     { codex: { hidden: "true" } },
+    { codex: { position: -1 } },
+    { codex: { position: 0.5 } },
+    { codex: { position: "0" } },
     { codex: { displayName: "Custom name" } },
   ])("rejects invalid popular agent configuration %j", async (popularAgentOverrides) => {
     expect((await patch({ popularAgentOverrides })).statusCode).toBe(400);

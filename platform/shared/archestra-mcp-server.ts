@@ -1086,10 +1086,40 @@ const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
 const PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
   new Set(PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES);
 
+/**
+ * Agent Runtime handoff tools, additionally exempt from the pre-fill on a
+ * personal MCP gateway. The personal gateway is what a user's own client
+ * (Claude Code, Cursor, Codex) connects to, and handing a session over to the
+ * runtime is a core flow there — excluding these by default leaves a fresh
+ * install unable to start or retrieve a handoff. Custom All-tools agents keep
+ * the stricter default.
+ */
+const PERSONAL_GATEWAY_PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_START_RUN_SHORT_NAME,
+  TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_CANCEL_RUN_SHORT_NAME,
+  TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+const PERSONAL_GATEWAY_PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(PERSONAL_GATEWAY_PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAMES);
+
 export function isPrefillExemptArchestraToolShortName(
   shortName: string,
+  options?: { isPersonalGateway?: boolean },
 ): boolean {
-  return PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+  return (
+    PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName) ||
+    (options?.isPersonalGateway === true &&
+      PERSONAL_GATEWAY_PREFILL_EXEMPT_ARCHESTRA_TOOL_SHORT_NAME_SET.has(
+        shortName,
+      ))
+  );
 }
 
 /**

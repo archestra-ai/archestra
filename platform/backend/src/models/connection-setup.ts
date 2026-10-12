@@ -68,6 +68,14 @@ class ConnectionSetupModel {
     return { setup: setup as ConnectionSetup, rawToken };
   }
 
+  static async findById(id: string): Promise<ConnectionSetup | null> {
+    const [setup] = await db
+      .select()
+      .from(schema.connectionSetupsTable)
+      .where(eq(schema.connectionSetupsTable.id, id));
+    return setup ?? null;
+  }
+
   /** Transfers an owned, unused render ticket to a browser-approved installer. */
   static async bindClientConnection(params: {
     setupId: string;

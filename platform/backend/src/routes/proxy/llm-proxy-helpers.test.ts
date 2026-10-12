@@ -1381,6 +1381,20 @@ describe("handleError", () => {
     expect(thrown.retryAfterSeconds).toBe(7);
   });
 
+  test("preserves the internal failure cause without putting it in the client message", () => {
+    const { reply } = makeReply(false);
+    const cause = new Error("native storage operation failed");
+    const error = new ApiError(503, "Policy service temporarily unavailable");
+    error.cause = cause;
+
+    const thrown = throwErrorFor(error, reply);
+
+    expect(thrown.message).toBe(error.message);
+    expect(thrown.message).not.toContain(cause.message);
+    expect(thrown.cause).toBe(error);
+    expect((thrown.cause as Error).cause).toBe(cause);
+  });
+
   test("drops a Retry-After value that is neither seconds nor a date", () => {
     const { reply, headers } = makeReply(false);
     const error = Object.assign(new Error("rate limited"), {

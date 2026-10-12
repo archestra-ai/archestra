@@ -19,7 +19,9 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { RuntimeCredentialDefinitionModel } from "@/models";
-import { resourceAccessSelection } from "@/models/resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  resourceAccessSelection,
+} from "@/models/resource-permission-subject";
 import {
   canAccessKnowledgeBase,
   findAccessibleKnowledgeBase,
@@ -876,6 +878,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseConnectorListItemSchema),
@@ -891,6 +896,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           connectorType,
           status,
+          access: relations,
+          sharedWith,
+          owner,
         },
         organizationId,
         user,
@@ -959,6 +967,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
             status,
+            access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+              userId: user.id,
+              organizationId,
+              relations,
+              sharedWith,
+              ownerIds: owner,
+            }),
           });
         data = result.data;
         total = result.total;
@@ -1668,6 +1683,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         organizationId,
         userId: user.id,
+        action: "update",
       });
 
       if (body.environmentId !== undefined) {
@@ -2017,6 +2033,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               id,
               organizationId,
               userId: user.id,
+              action: "update",
             }).catch(() => null);
             if (connector) found.set(id, connector);
           }
@@ -3525,6 +3542,7 @@ async function findConnectorOrThrow(params: {
   id: string;
   organizationId: string;
   userId: string;
+  action?: "read" | "update";
 }) {
   const connector = await KnowledgeBaseConnectorModel.findById(params.id);
   if (!connector || connector.organizationId !== params.organizationId) {
@@ -3535,9 +3553,17 @@ async function findConnectorOrThrow(params: {
       userId: params.userId,
       organizationId: params.organizationId,
     });
-  if (
-    !knowledgeSourceAccessControlService.canAccessConnector(access, connector)
-  ) {
+  const permitted =
+    params.action === "update"
+      ? knowledgeSourceAccessControlService.canUpdateConnector(
+          access,
+          connector,
+        )
+      : knowledgeSourceAccessControlService.canAccessConnector(
+          access,
+          connector,
+        );
+  if (!permitted) {
     throw new ApiError(404, "Connector not found");
   }
   return connector;

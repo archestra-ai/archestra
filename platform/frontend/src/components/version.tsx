@@ -2,7 +2,8 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, type ReactNode, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import config from "@/lib/config/config";
 import { useHealth } from "@/lib/config/health.query";
 import { useLatestGitHubRelease } from "@/lib/github/github-release.query";
@@ -15,6 +16,16 @@ import { hasNewerVersion } from "@/lib/utils/version";
 interface VersionProps {
   inline?: boolean;
 }
+
+/**
+ * Set on `<body>` while a sticky wizard footer is on screen. The footer holds
+ * an element carrying {@link VERSION_SLOT_ATTRIBUTE}, and the page's version
+ * line renders there instead, so it stays with the footer rather than
+ * scrolling away underneath it.
+ */
+export const VERSION_IN_FOOTER_CLASS = "version-in-footer";
+export const VERSION_SLOT_ATTRIBUTE = "data-version-slot";
+export const VERSION_SLOT_GENERATION_ATTRIBUTE = "data-version-slot-generation";
 
 export const Version = memo(function Version({ inline = false }: VersionProps) {
   const { data } = useHealth();
@@ -35,6 +46,7 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
     deferMs: 5000,
   });
   const [shouldHide, setShouldHide] = useState(false);
+  const [footerSlot, setFooterSlot] = useState<Element | null>(null);
 
   const hasNewVersion = useMemo(() => {
     if (!version || !latestRelease?.tag_name) return false;
@@ -55,6 +67,11 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
     // Check if the hide-version class is present on body
     const checkHideClass = () => {
       setShouldHide(document.body.classList.contains("hide-version"));
+      setFooterSlot(
+        document.body.classList.contains(VERSION_IN_FOOTER_CLASS)
+          ? document.querySelector(`[${VERSION_SLOT_ATTRIBUTE}]`)
+          : null,
+      );
     };
 
     // Initial check
@@ -64,7 +81,7 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
     const observer = new MutationObserver(checkHideClass);
     observer.observe(document.body, {
       attributes: true,
-      attributeFilter: ["class"],
+      attributeFilter: ["class", VERSION_SLOT_GENERATION_ATTRIBUTE],
     });
 
     return () => observer.disconnect();
@@ -73,30 +90,34 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   if (!inline && shouldHide) {
     return null;
   }
+  // In a footer slot it sits under the footer's buttons, which already pad.
+  const place = (node: ReactNode) =>
+    !inline && footerSlot ? createPortal(node, footerSlot) : node;
 
   if (!footerString) {
     // Keep the footer's slot open while /health resolves. As a block footer it
     // sits under content that centres in the remaining space, so appearing
     // late would shift that content — including the auth surface's loading
     // indicator — up by half this height.
-    return inline ? null : (
+    return inline || footerSlot ? null : (
       <div aria-hidden="true" className="py-4 text-xs">
         &nbsp;
       </div>
     );
   }
 
-  const className = inline
-    ? "text-xs text-muted-foreground"
-    : "text-xs text-muted-foreground text-center py-4";
+  const className =
+    inline || footerSlot
+      ? "text-xs text-muted-foreground"
+      : "text-xs text-muted-foreground text-center py-4";
 
   // Custom footer text: show text with version, no upgrade link
   if (footerText) {
-    return <div className={className}>{footerString}</div>;
+    return place(<div className={className}>{footerString}</div>);
   }
 
   // Default: show version with optional upgrade link
-  return (
+  return place(
     <div className={className}>
       {footerString}
       {!hideReleaseLink && hasNewVersion && latestRelease && (
@@ -112,6 +133,6 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
           </Link>
         </>
       )}
-    </div>
+    </div>,
   );
 });

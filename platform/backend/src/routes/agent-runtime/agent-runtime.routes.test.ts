@@ -23,6 +23,8 @@ import {
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
+import { resolveAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import {
@@ -1048,6 +1050,39 @@ describe("Agent Runtime routes", () => {
     });
   });
 
+  test("requires organization settings access to use a shared credential", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const configured = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/runtime/credentials/SHARED_TOKEN`,
+      payload: { value: "shared-value" },
+    });
+    expect(configured.statusCode).toBe(200);
+
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    user = member;
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/runtime/preflight`,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain("shared-value");
+    const runtime = resolveAgentRuntime(agent);
+    assert(runtime);
+    await expect(
+      resolveAgentRuntimeCredentials({
+        runtime,
+        organizationId,
+        userId: member.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
   test("preflight flags an existing Gemini model on the maintained Codex runtime", async ({
     makeAgent,
     makeLlmProviderApiKey,
@@ -1091,7 +1126,7 @@ describe("Agent Runtime routes", () => {
     });
   });
 
-  test("lets a reader manage only their own personal credential", async ({
+  test("lets a reader manage their personal credential but not use a shared one", async ({
     makeMember,
     makeUser,
   }) => {
@@ -1116,7 +1151,7 @@ describe("Agent Runtime routes", () => {
       method: "GET",
       url: `/api/agents/${agent.id}/runtime/preflight`,
     });
-    expect(preflight.json().configured).toEqual(["PERSONAL_TOKEN"]);
+    expect(preflight.statusCode).toBe(403);
   });
 
   test("reuses a typed personal connection across Agents without copying its value", async ({

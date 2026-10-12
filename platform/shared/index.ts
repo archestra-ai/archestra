@@ -67,6 +67,7 @@ export * from "./routes";
 export * from "./rum.ee";
 export * from "./seeded-app-render";
 export * from "./slack";
+export * from "./slack-manifest";
 export * from "./sso-template-helpers";
 export * from "./statistics";
 export * from "./subscription-credentials";

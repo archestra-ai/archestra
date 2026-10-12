@@ -103,8 +103,9 @@ export interface SetupScriptContext {
   mcp: SetupScriptMcpSection | null;
   proxy: SetupScriptProxySection | null;
   skills: SetupScriptSkillsSection | null;
-  /** Copied locally by setup, never fetched from the platform at launch. */
+  /** Initial local copy; wrappers refresh it before launching an agent. */
   runtimeHandoffInstructions?: string | null;
+  managedInstructionsSource?: { url: string; token: string } | null;
 }
 
 /** One script language's renderer for an agent. */
@@ -131,6 +132,8 @@ export interface AgentEnding {
   launch?: string[] | null;
   /** Anything else the person still has to do or should know. */
   notes?: string[];
+  /** Read-only Node script that prints local optional settings before next steps. */
+  optionalInstructions?: string;
 }
 
 export interface SetupEndingPart {
@@ -155,6 +158,8 @@ export interface SetupEnding {
   /** `text` is `command` quoted for the person's shell. */
   launch: { command: string[]; text: string } | null;
   notes: string[];
+  /** Read-only Node script; credentials are read locally, never embedded here. */
+  optionalInstructions?: string;
 }
 
 /**

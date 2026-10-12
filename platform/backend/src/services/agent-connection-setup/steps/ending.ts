@@ -74,6 +74,9 @@ export function buildEnding(
       ? { command: agent.launch, text: quote(agent.launch) }
       : null,
     notes: agent.notes ?? [],
+    ...(agent.optionalInstructions
+      ? { optionalInstructions: agent.optionalInstructions }
+      : {}),
   };
 }
 
@@ -96,7 +99,7 @@ function quoteCommand(ctx: SetupScriptContext, command: string[]): string {
  * The ending as plain text, for a script run on its own. The Node installer
  * prints the same sections, and asks before running the sign-in.
  */
-export function renderEndingText(ending: SetupEnding): string {
+export function renderEndingSummary(ending: SetupEnding): string {
   const lines = [`${ending.label} is connected to ${ending.appName}.`];
   if (ending.parts.length > 0) {
     const width = Math.max(...ending.parts.map((part) => part.name.length));
@@ -114,6 +117,11 @@ export function renderEndingText(ending: SetupEnding): string {
       ...ending.notes.map((note) => `  - ${note}`),
     );
   }
+  return lines.join("\n");
+}
+
+export function renderEndingNextSteps(ending: SetupEnding): string {
+  const lines: string[] = [];
   if (ending.signIn) {
     lines.push(
       "",

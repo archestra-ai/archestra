@@ -40,6 +40,8 @@ export interface ArchestraContext {
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   userId?: string;
   /** The ID of the current internal agent (for agent delegation tool lookup) */
   agentId?: string;

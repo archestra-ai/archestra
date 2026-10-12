@@ -603,6 +603,8 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route.
    */
   [RouteId.GetConnectionHealth]: {},
+  // Installation credential and live access are checked by the refresh handler.
+  [RouteId.GetConnectionInstructions]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
@@ -1478,6 +1480,33 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     organizationSettings: ["update"],
   },
+  [RouteId.ListSlackAgentBots]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.UpdateSlackAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.DeleteSlackAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.UpdateSlackAppConfigToken]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.CreateSlackAgentBotApp]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.MigrateSlackApps]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ConvertSlackAppToAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ListSlackAgentBotChannels]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.JoinSlackAgentBotChannel]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.UpdateTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
   },
@@ -1848,6 +1877,8 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
+  // Bundles the signed-in user's own startup reads; each part is self-scoped.
+  [RouteId.GetBootstrap]: {},
 
   // Site Notification Routes
   // Every signed-in user sees the active banner.

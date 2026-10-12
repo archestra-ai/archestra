@@ -99,6 +99,7 @@ async function deliver(params: {
     await chatOpsManager.notifyBindingThread({
       bindingId: params.target.bindingId,
       threadId: params.target.threadId,
+      pinnedAgentId: params.target.pinnedAgentId,
       agentName: params.agentName,
       text: params.text,
     });

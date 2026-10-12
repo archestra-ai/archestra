@@ -267,6 +267,23 @@ describe("access box", () => {
       expect(checkbox.textContent).not.toMatch(/\d/);
     expect(screen.queryByText(/\d+ of \d+/)).not.toBeInTheDocument();
   });
+
+  it("drops Mine and the Owner box for objects nobody authors", async () => {
+    renderFilter({ resource: "llmModel", noun: "models", owned: false });
+    expect(accessTrigger()).toHaveTextContent("Shared with me");
+    expect(accessTrigger()).not.toHaveTextContent("Mine");
+    expect(
+      screen.queryByRole("button", { name: "Filter by owner" }),
+    ).not.toBeInTheDocument();
+    expect(sharedWithTrigger()).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(accessTrigger());
+    expect(
+      screen.queryByRole("checkbox", { name: /^Mine/ }),
+    ).not.toBeInTheDocument();
+    // The one option left cannot be turned off.
+    expect(option(/^Shared with me/)).toHaveAttribute("aria-disabled", "true");
+  });
 });
 
 describe("Shared with box", () => {

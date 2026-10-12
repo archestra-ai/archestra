@@ -91,6 +91,15 @@ function classify(error: unknown): {
       statusCode: 503,
       detail: "the policy runtime has no free database connection.",
     };
+  if (
+    message ===
+    "OpenAPPA session has interrupted processing; operator recovery is required"
+  )
+    return {
+      statusCode: 409,
+      detail:
+        "this session has an unfinished guardrails operation and requires administrator recovery. Retrying cannot recover it. Start a new conversation for new work.",
+    };
   // Every later request of the subagent fails the same way: no fork exists
   // for it to open, whatever the retry.
   if (message.includes(UNFORKED_CHILD) || message === UNSTARTED_PARENT)

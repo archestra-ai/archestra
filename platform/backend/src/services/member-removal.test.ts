@@ -11,7 +11,7 @@ import { describe, expect, test } from "@/test";
 import { removeMemberTarget } from "./member-removal";
 
 describe("removeMemberTarget", () => {
-  test("removes private agents for a departing member while retaining shared and other-organization agents", async ({
+  test("removes private agents and MCP gateways for a departing member while retaining shared and other-organization agents", async ({
     makeAccount,
     makeAgent,
     makeMember,
@@ -45,6 +45,18 @@ describe("removeMemberTarget", () => {
       agentType: "agent",
       access: "personal",
     });
+    const privateGateway = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "mcp_gateway",
+      access: "personal",
+    });
+    const sharedGateway = await makeAgent({
+      organizationId: organization.id,
+      authorId: owner.id,
+      agentType: "mcp_gateway",
+      access: { users: [recipient.id] },
+    });
 
     const member = await MemberModel.getByUserId(owner.id, organization.id);
     await expect(
@@ -66,6 +78,12 @@ describe("removeMemberTarget", () => {
     ).not.toBeNull();
     expect(rows.find((row) => row.id === sharedAgent.id)?.deletedAt).toBeNull();
     expect(rows.find((row) => row.id === otherAgent.id)?.deletedAt).toBeNull();
+    expect(
+      rows.find((row) => row.id === privateGateway.id)?.deletedAt,
+    ).not.toBeNull();
+    expect(
+      rows.find((row) => row.id === sharedGateway.id)?.deletedAt,
+    ).toBeNull();
   });
 
   test("withdraws only this organization's pending invitation and retains a user with another membership", async ({

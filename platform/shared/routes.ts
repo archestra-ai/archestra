@@ -99,6 +99,7 @@ export const RouteId = {
 
   // Config Routes
   GetConfig: "getConfig",
+  GetBootstrap: "getBootstrap",
   GetPublicConfig: "getPublicConfig",
 
   // RUM Routes
@@ -719,6 +720,15 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  ListSlackAgentBots: "listSlackAgentBots",
+  UpdateSlackAgentBot: "updateSlackAgentBot",
+  DeleteSlackAgentBot: "deleteSlackAgentBot",
+  UpdateSlackAppConfigToken: "updateSlackAppConfigToken",
+  CreateSlackAgentBotApp: "createSlackAgentBotApp",
+  MigrateSlackApps: "migrateSlackApps",
+  ConvertSlackAppToAgentBot: "convertSlackAppToAgentBot",
+  ListSlackAgentBotChannels: "listSlackAgentBotChannels",
+  JoinSlackAgentBotChannel: "joinSlackAgentBotChannel",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
   UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
@@ -945,6 +955,7 @@ export const RouteId = {
   GetConnectionSetupScript: "getConnectionSetupScript",
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
+  GetConnectionInstructions: "getConnectionInstructions",
   GetConnectionHealth: "getConnectionHealth",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",

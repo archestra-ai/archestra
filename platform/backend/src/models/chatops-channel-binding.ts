@@ -522,6 +522,32 @@ class ChatOpsChannelBindingModel {
   }
 
   /**
+   * How many of a provider's channels and DMs each agent is assigned to, most
+   * used first. Unassigned bindings are left out.
+   */
+  static async countByAgent(params: {
+    organizationId: string;
+    provider: ChatOpsProviderType;
+  }): Promise<{ agentId: string; bindings: number }[]> {
+    const table = schema.chatopsChannelBindingsTable;
+    const rows = await db
+      .select({ agentId: table.agentId, bindings: count() })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.provider, params.provider),
+          isNotNull(table.agentId),
+        ),
+      )
+      .groupBy(table.agentId)
+      .orderBy(desc(count()));
+    return rows.flatMap((row) =>
+      row.agentId ? [{ agentId: row.agentId, bindings: row.bindings }] : [],
+    );
+  }
+
+  /**
    * Update a channel binding
    */
   static async update(

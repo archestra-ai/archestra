@@ -92,7 +92,7 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
   "copilot-cli": [
     "MCP server entry (copilot mcp add)",
     "~/.copilot/settings.json (skills marketplace)",
-    "COPILOT_PROVIDER_* exports in your shell profile",
+    "Provider and model settings in ~/.copilot/providers.json and settings.json",
     "Startup check in your shell profile",
   ],
   opencode: [

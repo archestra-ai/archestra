@@ -3687,8 +3687,36 @@
     {
       "idx": 526,
       "version": "7",
-      "when": 1791584556997,
-      "tag": "0526_brave_lifeguard",
+      "when": 1791731977475,
+      "tag": "0526_rename-appadvisor",
+      "breakpoints": true
+    },
+    {
+      "idx": 527,
+      "version": "7",
+      "when": 1791742269490,
+      "tag": "0527_enable-personal-gateway-handoff-tools",
+      "breakpoints": true
+    },
+    {
+      "idx": 528,
+      "version": "7",
+      "when": 1791755944641,
+      "tag": "0528_cleanup-orphaned-personal-gateways",
+      "breakpoints": true
+    },
+    {
+      "idx": 529,
+      "version": "7",
+      "when": 1791804549189,
+      "tag": "0529_cleanup-orphaned-personal-agents",
+      "breakpoints": true
+    },
+    {
+      "idx": 530,
+      "version": "7",
+      "when": 1791807031535,
+      "tag": "0530_brave_lifeguard",
       "breakpoints": true
     }
   ]

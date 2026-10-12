@@ -16,6 +16,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -34,6 +35,8 @@ global.ResizeObserver = class ResizeObserver {
 } as typeof ResizeObserver;
 
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/auth/auth.query");
+vi.mock("sonner");
 vi.mock("@/lib/hooks/use-app-name");
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
@@ -42,6 +45,10 @@ afterAll(() => server.close());
 
 describe("AgentRuntimeFields", () => {
   beforeEach(() => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
     archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
     server.use(
       http.get("http://localhost:9000/api/credentials", () =>
@@ -174,7 +181,9 @@ describe("AgentRuntimeFields", () => {
     });
     await user.type(screen.getByLabelText("Maximum duration"), "12");
     await user.type(screen.getByLabelText("Memory limit"), "8Gi");
-    await user.click(screen.getByRole("button", { name: "Add variable" }));
+    await user.click(
+      screen.getByRole("button", { name: /^(Add variable|Add)$/ }),
+    );
     const variableDialog = screen.getByRole("dialog");
     await user.type(within(variableDialog).getByLabelText("Key"), "WORK_MODE");
     await user.type(within(variableDialog).getByLabelText("Value"), "runtime");
@@ -214,7 +223,9 @@ describe("AgentRuntimeFields", () => {
       screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Add variable" }));
+    await user.click(
+      screen.getByRole("button", { name: /^(Add variable|Add)$/ }),
+    );
     let dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByLabelText("Type"));
     await user.click(screen.getByRole("option", { name: "Secret" }));
@@ -236,9 +247,9 @@ describe("AgentRuntimeFields", () => {
     expect(screen.getByText("GitHub connection")).toBeVisible();
     expect(
       Array.from(
-        screen
-          .getByRole("button", { name: /GITHUB_TOKEN/ })
-          .querySelectorAll("svg path"),
+        (
+          screen.getByText("GITHUB_TOKEN").closest("li") as HTMLElement
+        ).querySelectorAll("svg path"),
         (path) => path.getAttribute("d"),
       ),
     ).toContain(siGithub.path);
@@ -246,7 +257,7 @@ describe("AgentRuntimeFields", () => {
       "href",
       "/settings/credentials",
     );
-    await user.click(screen.getByRole("button", { name: /GITHUB_TOKEN/ }));
+    await user.click(screen.getByRole("button", { name: "Edit GITHUB_TOKEN" }));
     expect(
       within(screen.getByRole("dialog")).getByLabelText("Secret source"),
     ).toHaveTextContent("Repository access");
@@ -256,7 +267,9 @@ describe("AgentRuntimeFields", () => {
       }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Add variable" }));
+    await user.click(
+      screen.getByRole("button", { name: /^(Add variable|Add)$/ }),
+    );
     dialog = screen.getByRole("dialog");
     await user.click(within(dialog).getByLabelText("Type"));
     await user.click(screen.getByRole("option", { name: "Secret" }));
@@ -269,7 +282,7 @@ describe("AgentRuntimeFields", () => {
       within(dialog).getByRole("button", { name: "Add variable" }),
     );
 
-    expect(screen.getByText("Organization credential")).toBeVisible();
+    expect(screen.getByText("Organization credential · set")).toBeVisible();
     const saved = JSON.parse(
       screen.getByTestId("config").textContent ?? "null",
     );
@@ -324,6 +337,85 @@ describe("AgentRuntimeFields", () => {
     expect(
       JSON.parse(screen.getByTestId("config").textContent ?? "{}"),
     ).toMatchObject({ allowAgentSuppliedCredentialValues: false });
+  });
+
+  it("creates a credential from the variable dialog and comes back with it selected", async () => {
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime" ? true : undefined,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as ReturnType<typeof useHasPermissions>);
+    const created = {
+      id: "cred-npm",
+      key: "npm-token",
+      name: "NPM_TOKEN",
+      kind: "secret",
+      description: "Install private packages",
+      icon: null,
+      builtIn: false,
+      allowPersonal: false,
+      allowOrganization: true,
+      personalConfigured: false,
+      organizationConfigured: false,
+    };
+    let saved = false;
+    server.use(
+      http.get("http://localhost:9000/api/credentials", () =>
+        HttpResponse.json(saved ? [created] : []),
+      ),
+      http.post("http://localhost:9000/api/credentials", async () => {
+        saved = true;
+        return HttpResponse.json(created);
+      }),
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await user.click(
+      screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /^(Add variable|Add)$/ }),
+    );
+    const variableDialog = screen.getByRole("dialog");
+    fireEvent.change(within(variableDialog).getByLabelText("Key"), {
+      target: { value: "NPM_TOKEN" },
+    });
+    await user.click(within(variableDialog).getByLabelText("Type"));
+    await user.click(screen.getByRole("option", { name: "Secret" }));
+    await user.click(within(variableDialog).getByLabelText("Secret source"));
+    await user.click(
+      await screen.findByRole("option", {
+        name: /Create credential "NPM_TOKEN"/,
+      }),
+    );
+
+    const credentialDialog = await screen.findByRole("dialog", {
+      name: "Add credential",
+    });
+    // Prefilled from the variable it was opened for.
+    expect(within(credentialDialog).getByLabelText("Name")).toHaveValue(
+      "NPM_TOKEN",
+    );
+    await user.click(
+      within(credentialDialog).getByRole("button", { name: "Add" }),
+    );
+
+    expect(
+      await within(screen.getByRole("dialog")).findByText("NPM_TOKEN", {
+        selector: "[id='env-var-credential-binding'] *",
+      }),
+    ).toBeVisible();
   });
 });
 

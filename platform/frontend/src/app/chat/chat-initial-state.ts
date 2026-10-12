@@ -8,6 +8,8 @@ import type { SupportedProvider } from "@/lib/llm-provider-api-keys.query";
 
 type AgentInfo = {
   id: string;
+  builtIn?: boolean | null;
+  scope?: string;
   modelId?: string | null;
   llmApiKeyId?: string | null;
 };
@@ -63,7 +65,7 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
   memberDefaultAgentId?: string | null;
   canUseSavedAgent: boolean;
 }): InitialAgentSelection<TAgent> | null {
-  const { agents } = params;
+  const agents = params.agents.filter((agent) => !agent.builtIn);
   if (agents.length === 0) {
     return null;
   }
@@ -103,7 +105,10 @@ export function resolveInitialAgentSelection<TAgent extends AgentInfo>(params: {
     }
   }
 
-  return { agent: agents[0], fromProjectDefault: false };
+  return {
+    agent: agents.find((agent) => agent.scope === "personal") ?? agents[0],
+    fromProjectDefault: false,
+  };
 }
 
 export function resolveInitialAgentState(params: {

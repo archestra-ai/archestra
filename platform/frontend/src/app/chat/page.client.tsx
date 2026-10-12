@@ -1829,7 +1829,10 @@ export function ChatPageContent({
   const activeAgentId = conversationAgentId ?? initialAgentId;
   const promptAgentId = conversation?.agent?.id ?? activeAgentId;
   const newChatAgentId =
-    activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
+    activeAgentId ??
+    initialAgentId ??
+    internalAgents.find((agent) => !agent.builtIn)?.id ??
+    null;
 
   // Get current agent info
   const currentProfileId = conversationAgentId;

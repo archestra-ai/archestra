@@ -411,6 +411,17 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ) {
           throw new ApiError(400, "Agent is not an MCP gateway");
         }
+        // One member's personal gateway is no default for everyone. A value
+        // saved before this rule may be resubmitted unchanged.
+        if (agent.isPersonalGateway) {
+          const current = await OrganizationModel.getById(organizationId);
+          if (current?.connectionDefaultMcpGatewayId !== agent.id) {
+            throw new ApiError(
+              400,
+              "A personal MCP gateway cannot be the default",
+            );
+          }
+        }
       }
 
       if (body.connectionDefaultProviderKeys) {
@@ -461,7 +472,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateIntegrationSettings,
         description:
-          "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or popular agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.",
+          "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or coding agent templates, order coding agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.",
         tags: ["Organization"],
         body: UpdateIntegrationSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),

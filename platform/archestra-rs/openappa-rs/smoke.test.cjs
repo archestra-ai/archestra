@@ -1350,6 +1350,16 @@ builtin = "hitl"
     });
   });
 
+  await t.test('disabled reporting does not leave a session with an unfinished operation', async () => {
+    const session = scope();
+    await assert.rejects(
+      () => hook(session, { event: 'yell', operation_id: 'report:disabled', arguments: { message: 'test report', with_trajectory: false } }),
+      /reporting is disabled/,
+    );
+    const next = await call(session, 'after-report', 'read_plain');
+    assert.equal(next.decision, 'allow_call');
+  });
+
   await t.test('a failed receipt completion leaves a durable pending recovery fence', async () => {
     const session = scope();
     const callId = `fault-${randomUUID()}`;

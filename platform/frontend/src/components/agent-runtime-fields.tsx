@@ -10,7 +10,11 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import { DeploymentEnvironmentVariablesEditor } from "@/components/deployment-environment-variables-editor";
-import type { EnvVarDraft } from "@/components/environment-variable-dialog";
+import type {
+  CredentialBindingOption,
+  EnvVarDraft,
+} from "@/components/environment-variable-dialog";
+import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -38,9 +42,13 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
+import {
+  type RuntimeCredentialDefinition,
+  useRuntimeCredentials,
+} from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 
 export type AgentRuntimeConfig = {
@@ -239,30 +247,71 @@ export function AgentRuntimeEnvironmentFields({
   hideLabel = false,
   hideDescription = false,
 }: RuntimeSectionProps & { hideLabel?: boolean; hideDescription?: boolean }) {
+  const appName = useAppName();
   const config = value;
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...config, ...patch });
   const runtimeEnabled = useFeature("agentRuntime");
   const runtimeCredentials = useRuntimeCredentials(runtimeEnabled === true);
+  const { data: canCreateCredential } = useHasPermissions({
+    credential: ["create"],
+  });
+  // A credential being created from the variable dialog's source picker: the
+  // prefill it opens with, and how to hand the result back to that dialog.
+  const [creating, setCreating] = useState<{
+    key: string;
+    description: string;
+    resolve: (option: CredentialBindingOption | null) => void;
+  } | null>(null);
   return (
     <div className="space-y-4">
+      {creating && (
+        <RuntimeCredentialDefinitionDialog
+          definition={null}
+          initialKind="secret"
+          initialValues={{
+            name: creating.key,
+            description: creating.description,
+            icon: null,
+          }}
+          backLabel="Back to the variable"
+          onClose={() => {
+            creating.resolve(null);
+            setCreating(null);
+          }}
+          onCreated={async (id) => {
+            const { data } = await runtimeCredentials.refetch();
+            const created = data?.find((definition) => definition.id === id);
+            creating.resolve(
+              created ? toCredentialBindingOption(created) : null,
+            );
+            setCreating(null);
+          }}
+        />
+      )}
       <DeploymentEnvironmentVariablesEditor
+        onCreateCredential={
+          canCreateCredential
+            ? (prefill) =>
+                new Promise((resolve) => setCreating({ ...prefill, resolve }))
+            : undefined
+        }
         hideHeading={hideLabel}
         value={toEnvironmentDrafts(config)}
         onChange={(drafts) => update(fromEnvironmentDrafts(config, drafts))}
         description={
           hideDescription ? null : (
             <>
-              Add plain configuration or declare static secrets for this Agent.
-              Secret values are provided after saving. Manage reusable
-              organization or per-user credentials on the{" "}
+              What the agent logs in with inside its container, and the settings
+              it reads. Without a token it can use your tools through {appName}{" "}
+              but can&apos;t push to a repo. Reusable credentials live on the{" "}
               <Link
                 href="/settings/credentials"
                 className="font-medium text-foreground underline underline-offset-4"
               >
                 Credentials
               </Link>{" "}
-              page, then select them as a secret source.
+              page.
             </>
           )
         }
@@ -279,34 +328,39 @@ export function AgentRuntimeEnvironmentFields({
         allowRequiredStaticSecret
         normalizeKey={uppercase}
         credentialBindingOptions={(runtimeCredentials.data ?? []).map(
-          (definition) => ({
-            id: definition.key,
-            label: definition.name,
-            icon:
-              definition.icon ??
-              (definition.kind === "github_app_user" ||
-              definition.kind === "github_app"
-                ? "logo:github"
-                : null),
-            sourceLabel:
-              definition.kind === "github_app_user"
-                ? "GitHub connection"
-                : definition.kind === "github_app"
-                  ? "GitHub App connection"
-                  : undefined,
-            defaultKey: defaultCredentialEnvironmentKey(definition.key),
-            description: definition.description,
-            allowedScopes: [
-              ...(definition.allowPersonal ? (["installation"] as const) : []),
-              ...(definition.allowOrganization ? (["static"] as const) : []),
-            ],
-          }),
+          toCredentialBindingOption,
         )}
       />
 
       <RuntimeClientCredentialsField value={config} onChange={onChange} />
     </div>
   );
+}
+
+function toCredentialBindingOption(
+  definition: RuntimeCredentialDefinition,
+): CredentialBindingOption {
+  return {
+    id: definition.key,
+    label: definition.name,
+    icon:
+      definition.icon ??
+      (definition.kind === "github_app_user" || definition.kind === "github_app"
+        ? "logo:github"
+        : null),
+    sourceLabel:
+      definition.kind === "github_app_user"
+        ? "GitHub connection"
+        : definition.kind === "github_app"
+          ? "GitHub App connection"
+          : undefined,
+    defaultKey: defaultCredentialEnvironmentKey(definition.key),
+    description: definition.description,
+    allowedScopes: [
+      ...(definition.allowPersonal ? (["installation"] as const) : []),
+      ...(definition.allowOrganization ? (["static"] as const) : []),
+    ],
+  };
 }
 
 function RuntimeClientCredentialsField({
@@ -316,7 +370,7 @@ function RuntimeClientCredentialsField({
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...value, ...patch });
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-3 border-t pt-4">
       <Switch
         id="agent-runtime-allow-client-credentials"
         className="mt-0.5 shrink-0"
@@ -330,9 +384,10 @@ function RuntimeClientCredentialsField({
           Accept credentials from a connected client
         </Label>
         <FieldDescription>
-          A client can store a credential for its own runs with{" "}
-          <code>{TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}</code>. The model sees the
-          value and the client keeps it in its chat history.
+          During a handoff your laptop agent can pass its own token with{" "}
+          <code>{TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}</code>. It serves only
+          that person&apos;s runs, but the model sees the value and the client
+          keeps it in its chat history.
         </FieldDescription>
       </div>
     </div>

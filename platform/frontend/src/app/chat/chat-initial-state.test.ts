@@ -61,6 +61,39 @@ describe("resolveInitialAgentState", () => {
 });
 
 describe("resolveInitialAgentSelection", () => {
+  test("a fresh chat prefers the personal assistant over the built-in and organization agents", () => {
+    const personal = { id: "personal", scope: "personal", builtIn: false };
+    expect(
+      resolveInitialAgentSelection({
+        agents: [
+          { id: "builtin", builtIn: true },
+          { id: "org", scope: "org" },
+          personal,
+        ],
+        canUseSavedAgent: true,
+      }),
+    ).toEqual({ agent: personal, fromProjectDefault: false });
+  });
+
+  test("stale built-in defaults and saved picks cannot select a system agent", () => {
+    const personal = { id: "personal", builtIn: false };
+    expect(
+      resolveInitialAgentSelection({
+        agents: [{ id: "builtin", builtIn: true }, personal],
+        projectDefaultAgentId: "builtin",
+        memberDefaultAgentId: "builtin",
+        organizationDefaultAgentId: "builtin",
+        savedAgentId: "builtin",
+        canUseSavedAgent: true,
+      }),
+    ).toEqual({ agent: personal, fromProjectDefault: false });
+    expect(
+      resolveInitialAgentSelection({
+        agents: [{ id: "builtin", builtIn: true }],
+        canUseSavedAgent: true,
+      }),
+    ).toBeNull();
+  });
   const agents = [
     { id: "first-agent" },
     { id: "member-default" },

@@ -73,6 +73,26 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 z.boolean(),
               )
               .optional(),
+            ids: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Only these agents (comma-separated IDs), such as the viewer's automatic pins.",
+              ),
+            excludeIds: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Leave these agents out (comma-separated IDs), such as the ones the list already shows as automatic pins.",
+              ),
             access: ResourceAccessQuerySchema,
             sharedWith: ResourceSharedWithQuerySchema,
             owner: ResourceOwnerQuerySchema,
@@ -104,7 +124,14 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           })
           .merge(PaginationQuerySchema)
           .merge(
-            createSortingQuerySchema(["name", "createdAt", "team"] as const),
+            createSortingQuerySchema([
+              "name",
+              "createdAt",
+              "team",
+              "toolsCount",
+              "subagentsCount",
+              "lastUsedAt",
+            ] as const),
           ),
         response: constructResponseSchema(AgentCatalogResponseSchema),
       },
@@ -124,6 +151,8 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         teamIds: query.teamIds,
         authorIds: isAgentAdmin ? query.authorIds : undefined,
         excludeAuthorIds: isAgentAdmin ? query.excludeAuthorIds : undefined,
+        ids: query.ids,
+        excludeIds: query.excludeIds,
         excludeOtherPersonalAgents: isAgentAdmin
           ? query.excludeOtherPersonalAgents
           : undefined,

@@ -5,6 +5,8 @@ import {
   COPILOT_PROVIDER_ENV_KEYS,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared";
+import { COPILOT_PROVIDER_CONFIG_NODE } from "../../payloads/copilot-provider-config";
+import { psq, sh } from "../../steps/quoting";
 import type { StartupGuardClient, StartupGuardContext } from "../startup-guard";
 import { jsonMemberGoneVerify, windowsJsonMemberGoneVerify } from "./verify";
 
@@ -89,41 +91,37 @@ export const COPILOT_GUARD_CLIENT: StartupGuardClient = {
     }),
     renderProxyDisconnect: copilotWindowsProxyDisconnect,
     proxyDisconnectNote: () =>
-      "Removed the COPILOT_PROVIDER_* environment variables (User scope and this session). Open a new terminal for the change to fully take effect.",
+      "Removed the managed provider and model from providers.json and the saved COPILOT_PROVIDER_* environment variables. Open a new terminal for the change to fully take effect.",
   },
 };
 
-/**
- * Copilot CLI's proxy disconnect: Copilot is configured through
- * `COPILOT_PROVIDER_*` environment exports (connect prints them for the user to
- * paste into a shell profile), so the reverse is best-effort — strip any
- * `export COPILOT_PROVIDER_{TYPE,BASE_URL,API_KEY,HEADERS}=…` lines from the
- * common shell profiles, leaving the user's own `COPILOT_MODEL` choice
- * untouched.
- */
-function copilotProxyDisconnect(_ctx: StartupGuardContext): string {
+/** Remove our native registry entries and exports left by earlier setups. */
+function copilotProxyDisconnect(ctx: StartupGuardContext): string {
   return `disconnect_proxy() {
-  for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+  if ! command -v node >/dev/null 2>&1; then
+    printf '%s\\n' 'Node.js is required to remove the saved Copilot provider settings.' >&2
+    return 1
+  fi
+  ARCHESTRA_COPILOT_ACTION=remove ARCHESTRA_COPILOT_CONFIG=${sh(JSON.stringify({ url: ctx.proxy?.url }))} node <<'ARCHESTRA_COPILOT_REMOVE' || return 1
+${COPILOT_PROVIDER_CONFIG_NODE}
+ARCHESTRA_COPILOT_REMOVE
+  archestra_copilot_exports=${sh(`^[[:space:]]*(export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=|set[[:space:]]+-gx[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)[[:space:]]|export[[:space:]]+COPILOT_MODEL=['"]?archestra/|set[[:space:]]+-gx[[:space:]]+COPILOT_MODEL[[:space:]]+['"]?archestra/)`)}
+  for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bash_login" "\${ZDOTDIR:-$HOME}/.zshrc" "\${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish" "\${XDG_CONFIG_HOME:-$HOME/.config}"/fish/conf.d/*.fish; do
     [ -f "$profile" ] || continue
-    grep -Eq '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=' "$profile" 2>/dev/null || continue
-    grep -Ev '^[[:space:]]*export[[:space:]]+COPILOT_PROVIDER_(TYPE|BASE_URL|API_KEY|HEADERS)=' "$profile" > "$profile.archestra-tmp" 2>/dev/null && mv "$profile.archestra-tmp" "$profile"
+    grep -Eq "$archestra_copilot_exports" "$profile" || continue
+    awk -v pattern="$archestra_copilot_exports" '$0 !~ pattern { print }' "$profile" > "$profile.archestra-tmp" && cat "$profile.archestra-tmp" > "$profile" && rm "$profile.archestra-tmp" || return 1
   done
 }
 
 proxy_disconnect_notes() {
   line_reset
-  printf '%s  Removed any COPILOT_PROVIDER_* export lines from your shell profiles — open a new terminal so the change takes effect.%s\\n' "$C_DIM" "$C_RESET"
+  printf '%s  Removed the managed provider and model from providers.json and any COPILOT_PROVIDER_* export lines — open a new terminal so the change takes effect.%s\\n' "$C_DIM" "$C_RESET"
   return 0
 }`;
 }
 
-/**
- * Copilot CLI's proxy disconnect on Windows: connect applies the
- * `COPILOT_PROVIDER_*` env vars (current session + User scope), so the
- * reverse clears those three from both, leaving the user's own
- * `COPILOT_MODEL` choice untouched.
- */
-function copilotWindowsProxyDisconnect(_ctx: StartupGuardContext): string {
+/** Remove native settings and the environment settings left by older setup. */
+function copilotWindowsProxyDisconnect(ctx: StartupGuardContext): string {
   const names = [
     COPILOT_PROVIDER_ENV_KEYS.type,
     COPILOT_PROVIDER_ENV_KEYS.baseUrl,
@@ -133,6 +131,21 @@ function copilotWindowsProxyDisconnect(_ctx: StartupGuardContext): string {
     .map((n) => `'${n}'`)
     .join(", ");
   return `function Disconnect-ArchProxy {
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js is required to remove the saved Copilot provider settings.' }
+  $env:ARCHESTRA_COPILOT_ACTION = 'remove'
+  $env:ARCHESTRA_COPILOT_CONFIG = ${psq(JSON.stringify({ url: ctx.proxy?.url }))}
+  try {
+    [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${psq(Buffer.from(COPILOT_PROVIDER_CONFIG_NODE).toString("base64"))})) | node
+    if ($LASTEXITCODE -ne 0) { throw 'Could not remove Copilot provider settings.' }
+  } finally {
+    Remove-Item Env:ARCHESTRA_COPILOT_ACTION, Env:ARCHESTRA_COPILOT_CONFIG -ErrorAction SilentlyContinue
+  }
+  foreach ($scope in @('Process', 'User')) {
+    $model = [Environment]::GetEnvironmentVariable('COPILOT_MODEL', $scope)
+    if ($model -and $model.StartsWith('archestra/', [StringComparison]::Ordinal)) {
+      [Environment]::SetEnvironmentVariable('COPILOT_MODEL', $null, $scope)
+    }
+  }
   foreach ($n in @(${names})) {
     try { [Environment]::SetEnvironmentVariable($n, $null, 'User') } catch { }
     try { Remove-Item -Path ('Env:' + $n) -ErrorAction SilentlyContinue } catch { }

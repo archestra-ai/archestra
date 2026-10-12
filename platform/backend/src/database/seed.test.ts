@@ -164,7 +164,7 @@ describe("syncBuiltInAgents", () => {
     ]);
     await AgentToolModel.createManyIfNotExists(agent?.id ?? "", extraTools);
     await AgentModel.update(agent?.id ?? "", {
-      name: "Changed name",
+      name: "OpenAPPA Configuration Agent",
       systemPrompt: "Changed prompt",
     });
     await syncBuiltInAgents();

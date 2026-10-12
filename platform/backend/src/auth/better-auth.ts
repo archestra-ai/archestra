@@ -1564,10 +1564,11 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
           expiresAt: invitation.expiresAt,
         };
 
-        // Delete placeholder user (cascades to member, invitation, user tokens)
-        await db
-          .delete(schema.usersTable)
-          .where(eq(schema.usersTable.id, existingUser.id));
+        // Delete placeholder user (cascades to member, invitation, user tokens).
+        // Through the model, not a raw delete: membership seeded the
+        // placeholder a personal MCP gateway, and `agents.author_id` is
+        // `set null`, so a raw delete would leave that gateway ownerless.
+        await UserModel.delete(existingUser.id);
 
         // Re-create invitation as "pending" for better-auth's normal sign-up flow
         await db.insert(schema.invitationsTable).values({

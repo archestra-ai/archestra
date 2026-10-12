@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PageBackLink } from "@/components/page-back-link";
 import { PageHeaderBanner } from "@/components/page-header-banner";
 import { PageLayout } from "@/components/page-layout";
 
@@ -330,6 +331,45 @@ describe("PageLayout header", () => {
     expect(textColumn).toContainElement(description);
     expect(textColumn).not.toContainElement(icon as HTMLElement);
     expect(icon).toHaveAttribute("aria-hidden");
+  });
+
+  it("draws the back link as an arrow on the title's row, still named for where it goes", () => {
+    render(
+      <PageLayout
+        title="Support Bot"
+        backLink={<PageBackLink href="/agents">Agents</PageBackLink>}
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    const link = screen.getByRole("link", { name: "Agents" });
+    expect(link).toHaveAttribute("href", "/agents");
+    // The visible control is only the arrow, so sighted users get the
+    // destination from the tooltip.
+    expect(link).toHaveAttribute("title", "Agents");
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.parentElement).toContainElement(link);
+  });
+
+  it("leads the record's icon with the back link rather than splitting icon and title", () => {
+    render(
+      <PageLayout
+        icon={<svg role="img" aria-label="server icon" />}
+        title="filesystem"
+        backLink={
+          <PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>
+        }
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    const link = screen.getByRole("link", { name: "MCP Registry" });
+    const icon = document.querySelector("[data-page-icon]") as HTMLElement;
+    expect(link.compareDocumentPosition(icon)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("puts the status pill beside the heading, never inside its name", () => {

@@ -7,6 +7,7 @@ import {
   type TextPart,
   type TextUIPart,
   type UIMessage,
+  type UIMessageChunk,
 } from "ai";
 import { z } from "zod";
 import logger from "@/logging";
@@ -261,6 +262,12 @@ export class A2AManager {
      * response returned here is unchanged and remains authoritative.
      */
     onTextDelta?: (delta: string) => void;
+    /**
+     * Approval-only mode: forwarded to the executor so the caller sees every
+     * UI message chunk (text and tool-call progress) as the run produces it.
+     * Chatops streams these into the chat. Full-mode tasked runs ignore it.
+     */
+    onUiMessageChunk?: (chunk: UIMessageChunk) => Promise<void>;
     /**
      * Cancellation signal forwarded into the agent run (approval-only mode:
      * chatops aborts a muted thread's in-flight model requests). Full-mode
@@ -626,6 +633,7 @@ export class A2AManager {
       const executeRun = (runOpts: {
         abortSignal?: AbortSignal;
         onTextDelta?: (delta: string) => void;
+        onUiMessageChunk?: (chunk: UIMessageChunk) => Promise<void>;
         /** Present only under the task lifecycle; a plain send has no task. */
         taskId?: string;
       }) =>
@@ -689,7 +697,12 @@ export class A2AManager {
                 systemParams?.completionTarget?.type === "chatops"
                   ? systemParams.completionTarget.threadId
                   : undefined,
+              chatOpsPinnedAgentId:
+                systemParams?.completionTarget?.type === "chatops"
+                  ? systemParams.completionTarget.pinnedAgentId
+                  : undefined,
               onTextDelta: runOpts.onTextDelta,
+              onUiMessageChunk: runOpts.onUiMessageChunk,
               abortSignal: runOpts.abortSignal,
             });
           },
@@ -765,6 +778,7 @@ export class A2AManager {
       const result = await executeRun({
         abortSignal,
         onTextDelta: params.onTextDelta,
+        onUiMessageChunk: params.onUiMessageChunk,
       });
 
       const approvalRequests = extractApprovalRequestsFromUiMessage(

@@ -241,6 +241,10 @@ function finishSetup(ending, platform) {
     console.log('\n' + ending.parts.map(part => '  ' + paint('1', part.name.padEnd(width)) + '   ' + part.detail).join('\n'));
   }
   if (ending.notes.length) console.log('\nGood to know:\n' + ending.notes.map(note => '  - ' + note).join('\n'));
+  if (ending.optionalInstructions) {
+    const child = spawnSync(process.execPath, ['-e', ending.optionalInstructions], { stdio: 'inherit' });
+    if (child.error || child.status !== 0) console.log('Could not print optional environment variables. Your saved provider configuration is unchanged.');
+  }
   const terminal = openTerminal();
   try {
     if (ending.signIn) {

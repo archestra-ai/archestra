@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/collapsible";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -982,21 +983,16 @@ export function ConnectCommandPanel({
       <div className="grid gap-1.5">
         <EditorField label="Model">
           {modelOptions.length > 1 ? (
-            <Select
-              value={effectiveModel ?? undefined}
+            <SearchableSelect
+              value={effectiveModel ?? ""}
               onValueChange={setModelChoice}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {modelOptions.map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              items={modelOptions.map((id) => ({ value: id, label: id }))}
+              ariaLabel="Model"
+              placeholder="Select model"
+              searchPlaceholder="Search models..."
+              emptyMessage="No models found."
+              className="w-full"
+            />
           ) : (
             <Input
               value={effectiveModel ?? ""}

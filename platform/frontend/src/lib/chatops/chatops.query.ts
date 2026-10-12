@@ -103,6 +103,35 @@ export function useApplyChatOpsBindingPlan() {
   });
 }
 
+/** Change one channel's agent, instructions, or answer-all setting. */
+export function useUpdateChatOpsBinding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: NonNullable<archestraApiTypes.UpdateChatOpsBindingData["body"]>;
+    }) => {
+      const { data, error } = await archestraApiSdk.updateChatOpsBinding({
+        path: { id },
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data) return;
+      toast.success("Channel saved");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
 export function useDeleteChatOpsBinding() {
   const queryClient = useQueryClient();
   return useMutation({

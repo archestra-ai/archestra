@@ -232,6 +232,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/auth/organization/get-active-member-role", {
     role: sessionSeed.user.role,
   }),
+  // Unavailable by default, so the shell falls back to the individual reads
+  // below and per-test overrides of those endpoints keep taking effect.
+  ...paths("/api/bootstrap").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
   // An object's own permissions: none beyond the admin's, who may edit them.
@@ -339,6 +344,15 @@ export const handlers: HttpHandler[] = [
   // editor still renders its provider setup links and an empty assignment
   // table.
   ...getJson("/api/chatops/status", { providers: [] }),
+  // The record's Slack bot section: no bots, Slack not connected. The agent
+  // edit page mounts it on every step, so it is read whichever step opens.
+  ...getJson("/api/chatops/config/slack/agents", {
+    bots: [],
+    canCreateApps: false,
+    oneClickInstall: false,
+    unassignedApp: null,
+    workspaceName: null,
+  }),
   ...getJson("/api/chatops/bindings", {
     data: [],
     pagination: {

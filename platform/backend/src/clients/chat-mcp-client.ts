@@ -840,6 +840,7 @@ export async function getChatMcpTools({
   actorTeamId,
   chatOpsBindingId,
   chatOpsThreadId,
+  chatOpsPinnedAgentId,
   enabledToolIds,
   conversationId,
   isolationKey,
@@ -871,6 +872,8 @@ export async function getChatMcpTools({
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   enabledToolIds?: string[];
   /**
    * Id of a persisted `conversations` row — tools may persist it as a foreign
@@ -1091,6 +1094,7 @@ export async function getChatMcpTools({
       openedAppId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsPinnedAgentId,
       sessionId,
       delegationChain,
       scheduleTriggerRunId,

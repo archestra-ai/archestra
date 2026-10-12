@@ -1574,7 +1574,15 @@ class InternalMcpCatalogModel {
 
     // Fetch raw secret records e.g. vault paths, not resolved to actual value)
     const unresolvedSecretPromises = Array.from(secretIds).map((id) =>
-      SecretModel.findById(id).then((secret) => [id, secret] as const),
+      SecretModel.findById(id)
+        .then((secret) => [id, secret] as const)
+        .catch((error): readonly [string, null] => {
+          logger.error(
+            { err: error, secretId: id },
+            "[InternalMcpCatalog] failed to read secret during catalog expansion; continuing without it",
+          );
+          return [id, null] as const;
+        }),
     );
     const unresolvedSecretEntries = await Promise.all(unresolvedSecretPromises);
     const unresolvedSecretMap = new Map(
@@ -1586,7 +1594,9 @@ class InternalMcpCatalogModel {
 
     // For non-BYOS secrets, resolve them using secretManager
     const nonByosSecretIds = Array.from(secretIds).filter(
-      (id) => !unresolvedSecretMap.get(id)?.isByosVault,
+      (id) =>
+        unresolvedSecretMap.has(id) &&
+        !unresolvedSecretMap.get(id)?.isByosVault,
     );
     const resolvedSecretPromises = nonByosSecretIds.map((id) =>
       secretManager()
@@ -2124,6 +2134,10 @@ class InternalMcpCatalogModel {
       hasOauthConfig: row.oauthConfig !== null,
       hasClientSecret: Boolean(row.clientSecretId),
       hasLocalConfigSecret: Boolean(row.localConfigSecretId),
+      credentialReferences: {
+        oauth: row.clientSecretId,
+        local: row.localConfigSecretId,
+      },
       hasDeploymentSpecYaml: Boolean(row.deploymentSpecYaml),
       deploymentSpecYamlHash: row.deploymentSpecYaml
         ? createHash("sha256").update(row.deploymentSpecYaml).digest("hex")

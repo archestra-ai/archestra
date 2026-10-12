@@ -26,6 +26,7 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { InlineNotice } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -273,7 +274,12 @@ export function ConnectionSettingsForm() {
 
   const currentDefaultUrl = resolveDefaultBaseUrl(envBaseUrls, baseUrlMeta);
 
-  const gatewayItems = mcpGateways ?? [];
+  // One member's personal gateway is no default for everyone; the sentinel
+  // already offers each user their own. A saved one stays listed until
+  // replaced, so the selector can still name it.
+  const gatewayItems = (mcpGateways ?? []).filter(
+    (gateway) => !gateway.isPersonalGateway || gateway.id === gatewayId,
+  );
 
   const providerKeysByProvider = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string }[]>();
@@ -296,33 +302,49 @@ export function ConnectionSettingsForm() {
           <>
             <SettingsSectionStack>
               <SettingsBlock
-                title="Suggest runtime handoff"
-                description="Let your coding agent suggest moving work to Agent Runtime."
+                title="Managed instructions"
+                description="When users connect an agent through the Connect page, these managed instructions are appended to its system prompt."
                 control={
                   <Switch
                     checked={runtimeHandoffEnabled}
                     onCheckedChange={setRuntimeHandoffEnabled}
                     disabled={locked}
-                    aria-label="Suggest runtime handoff"
+                    aria-label="Enable managed instructions"
                   />
                 }
               >
-                <Textarea
-                  aria-label="Runtime handoff instructions"
-                  value={runtimeHandoffInstructions}
-                  onChange={(event) =>
-                    setRuntimeHandoffInstructions(event.target.value)
-                  }
-                  rows={8}
-                  maxLength={20000}
-                  disabled={locked || !runtimeHandoffEnabled}
-                />
-                {runtimeHandoffEnabled &&
-                  !runtimeHandoffInstructions.trim() && (
-                    <p role="alert" className="mt-2 text-sm text-destructive">
-                      Enter instructions.
-                    </p>
-                  )}
+                <div className="space-y-2">
+                  <Label htmlFor="managed-instructions">
+                    Instructions for connected agents
+                  </Label>
+                  <Textarea
+                    id="managed-instructions"
+                    value={runtimeHandoffInstructions}
+                    onChange={(event) =>
+                      setRuntimeHandoffInstructions(event.target.value)
+                    }
+                    rows={2}
+                    maxLength={20000}
+                    disabled={locked || !runtimeHandoffEnabled}
+                    className="font-mono text-xs leading-relaxed"
+                  />
+                  <div className="flex justify-between gap-4 text-xs text-muted-foreground">
+                    <span>
+                      Supported agents receive updates on next launch; other
+                      clients need setup or manual copying.
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {runtimeHandoffInstructions.length.toLocaleString()} /
+                      20,000
+                    </span>
+                  </div>
+                  {runtimeHandoffEnabled &&
+                    !runtimeHandoffInstructions.trim() && (
+                      <InlineNotice variant="error">
+                        Enter instructions.
+                      </InlineNotice>
+                    )}
+                </div>
               </SettingsBlock>
 
               <SettingRow
@@ -571,7 +593,7 @@ export function ConnectionSettingsForm() {
 
               <SettingSection
                 title="Available agents"
-                description="Add the agents you want to offer on Connect, then drag their pills or use left/right arrow keys to reorder. Generic client is always shown last."
+                description="Choose which agents are available on Connect, and in what order."
               >
                 <AvailableAgentsList
                   clients={clientsInOrder}

@@ -71,6 +71,36 @@ describe("PATCH /api/organization/connection-settings", () => {
     expect(body.connectionShownClientIds).toEqual(["claude-code"]);
   });
 
+  test("refuses a personal gateway as the new default but keeps one already saved", async ({
+    makeAgent,
+  }) => {
+    const personal = await makeAgent({
+      organizationId,
+      authorId: adminUser.id,
+      agentType: "mcp_gateway",
+      isPersonalGateway: true,
+    });
+    const refused = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: { connectionDefaultMcpGatewayId: personal.id },
+    });
+    expect(refused.statusCode).toBe(400);
+
+    await OrganizationModel.patch(organizationId, {
+      connectionDefaultMcpGatewayId: personal.id,
+    });
+    const unchanged = await app.inject({
+      method: "PATCH",
+      url: "/api/organization/connection-settings",
+      payload: {
+        connectionDefaultMcpGatewayId: personal.id,
+        connectionShownClientIds: ["cursor"],
+      },
+    });
+    expect(unchanged.statusCode, unchanged.body).toBe(200);
+  });
+
   test("persists order independently of visibility, retains it on unrelated saves, and clears it", async () => {
     const order = ["codex", "cursor", "claude-code"];
     const save = await app.inject({

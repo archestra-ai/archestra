@@ -191,7 +191,7 @@ function ValidationFileEditor({ path }: { path: string }) {
   }
   return (
     <div className="space-y-4">
-      <PageBackLink href={listHref}>
+      <PageBackLink href={listHref} labelled>
         <span>Back to validation</span>
       </PageBackLink>
       <ValidationNotices sourceChanged={sourceChanged} />

@@ -10,6 +10,7 @@ import {
   utimes,
   writeFile,
 } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -899,6 +900,17 @@ for (const shell of ["bash", "zsh"]) {
     test(`${shell} ${client.binary} adds handoff without replacing user instructions`, async () => {
       const home = await mkdtemp(path.join(tmpdir(), "handoff client "));
       const instructions = 'Offer remote work.\n"quoted" $HOME 雪';
+      let liveInstructions: string | null = instructions;
+      const server = createServer((_request, response) => {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ instructions: liveInstructions }));
+      });
+      await new Promise<void>((resolve) =>
+        server.listen(0, "127.0.0.1", resolve),
+      );
+      const address = server.address();
+      if (!address || typeof address === "string")
+        throw new Error("No address");
       const ctx: StartupGuardContext = {
         appName: "Test Platform",
         healthUrl: null,
@@ -919,6 +931,10 @@ for (const shell of ["bash", "zsh"]) {
           ref: "gateway",
         },
         runtimeHandoffInstructions: instructions,
+        managedInstructionsSource: {
+          url: `http://127.0.0.1:${address.port}/instructions`,
+          token: "installation-credential",
+        },
       };
       const env = {
         ...process.env,
@@ -1100,6 +1116,50 @@ if (process.argv[2] === 'app-server') {
             await readFile(path.join(directory, "AGENTS.md"), "utf8"),
           ).toBe(instructions);
         }
+
+        for (const next of [
+          "Updated managed guidance",
+          null,
+          "Re-enabled managed guidance",
+        ]) {
+          liveInstructions = next;
+          const refreshed = await launch(args);
+          if (client.clientId === "codex") {
+            expect(refreshed.args).toEqual(
+              next
+                ? [
+                    "-c",
+                    `developer_instructions=${JSON.stringify(`Keep existing rules.\nUse tests.\n\n${next}`)}`,
+                    ...args,
+                  ]
+                : args,
+            );
+          } else if (next) {
+            expect(
+              await readFile(
+                path.join(
+                  home,
+                  `${client.scriptRelpath}.instructions/AGENTS.md`,
+                ),
+                "utf8",
+              ),
+            ).toBe(next);
+          } else {
+            expect(refreshed.dirs).toBe(env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS);
+            await expect(
+              readFile(
+                path.join(
+                  home,
+                  `${client.scriptRelpath}.instructions/AGENTS.md`,
+                ),
+              ),
+            ).rejects.toMatchObject({ code: "ENOENT" });
+          }
+          expect(
+            await readFile(path.join(env.CODEX_HOME, "AGENTS.md"), "utf8"),
+          ).toBe("User guidance stays intact.");
+        }
+        liveInstructions = instructions;
         const management = await launch(["mcp", "list"]);
         expect(management.args).toEqual(["mcp", "list"]);
         expect(management.dirs).toBe(env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS);
@@ -1119,6 +1179,7 @@ if (process.argv[2] === 'app-server') {
         if (client.clientId === "codex")
           expect(disconnected.directArgs).toEqual(result.directArgs);
         expect(disconnected.dirs).toBe(env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS);
+        liveInstructions = null;
         await install({ ...ctx, runtimeHandoffInstructions: null });
         const disabled = await launch(args);
         expect(disabled.args).toEqual(args);
@@ -1142,6 +1203,7 @@ if (process.argv[2] === 'app-server') {
           ).rejects.toMatchObject({ code: "ENOENT" });
         }
       } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
         await rm(home, { recursive: true, force: true });
       }
     });

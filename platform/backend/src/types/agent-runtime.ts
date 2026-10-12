@@ -71,6 +71,11 @@ export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
     type: z.literal("chatops"),
     bindingId: z.string().uuid(),
     threadId: z.string().min(1),
+    /**
+     * The conversation was with a Slack bot pinned to this agent, so that bot
+     * (not the main Slack app) posts the result.
+     */
+    pinnedAgentId: z.string().uuid().optional(),
   }),
   z.object({
     type: z.literal("email"),

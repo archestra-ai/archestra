@@ -11,6 +11,9 @@ hint = "Ask the person running this session to approve this exact call."
 
 [policy.authority.permits]
 attention = ["human-approval"]
+
+[externals.authorities.hitl]
+builtin = "hitl"
 $old$;
   new_block constant text := $new$# Review one exact call for any attention mark, trust or audience gap.
 [[policy.authority]]
@@ -21,6 +24,9 @@ hint = "Ask the person running this session to approve this exact call."
 trust_below = "trusted"
 audience_missing = ["public"]
 attention = ["*"]
+
+[externals.authorities.hitl]
+builtin = "hitl"
 $new$;
   candidate record;
   latest record;

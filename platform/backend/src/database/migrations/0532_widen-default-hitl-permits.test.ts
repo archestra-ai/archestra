@@ -19,6 +19,9 @@ hint = "Ask the person running this session to approve this exact call."
 
 [policy.authority.permits]
 attention = ["human-approval"]
+
+[externals.authorities.hitl]
+builtin = "hitl"
 `;
 const NEW = `# Review one exact call for any attention mark, trust or audience gap.
 [[policy.authority]]
@@ -29,6 +32,9 @@ hint = "Ask the person running this session to approve this exact call."
 trust_below = "trusted"
 audience_missing = ["public"]
 attention = ["*"]
+
+[externals.authorities.hitl]
+builtin = "hitl"
 `;
 
 test("widens the default reviewer only in unsynced policies whose latest revision keeps the block unedited", async ({
@@ -61,6 +67,12 @@ test("widens the default reviewer only in unsynced policies whose latest revisio
   const unsyncedSource = await seed([legacy]);
   await sync(unsyncedSource, null);
   const edited = await seed([legacy.replace('"human-approval"', '"review"')]);
+  const extraPermit = await seed([
+    legacy.replace(
+      'attention = ["human-approval"]\n',
+      'attention = ["human-approval"]\ntrust_below = "trusted"\n',
+    ),
+  ]);
   const withoutReviewer = await seed([legacy.replace(OLD, "")]);
   const twice = await seed([`${legacy}\n${OLD}`]);
   const customizedLater = await seed([
@@ -88,6 +100,7 @@ test("widens the default reviewer only in unsynced policies whose latest revisio
   }
   for (const organizationId of [
     edited,
+    extraPermit,
     withoutReviewer,
     twice,
     customizedLater,

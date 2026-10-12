@@ -54,9 +54,10 @@ export function mintChildReturnMarker(params: {
  * verified against the child returns the runtime durably crossed, so one
  * genuine return cannot cover a sibling return.
  *
- * A return this cannot read is refused. With `onRefusal`, the refusal goes
- * there instead, that return stays as the client sent it, and the rest of the
- * body is still stripped.
+ * A return this cannot read is withheld with a 409. With `onRefusal`, that
+ * refusal goes there instead, the return stays as the client sent it, and the
+ * rest of the body is still stripped. A malformed marker or envelope is a 400
+ * and is thrown in both cases.
  */
 export function collectAndStripChildReturns(
   body: unknown,
@@ -748,12 +749,13 @@ function encodeCrockford35(value: bigint): string {
   return `${code.slice(0, 3)}-${code.slice(3)}`;
 }
 
-/** Takes a refusal in place of a throw. */
+/** Takes a withheld return's refusal in place of a throw. */
 type RefusalSink = (refusal: ApiError) => void;
 
 /**
- * Reads one return. With a sink, a refusal goes to the sink and `unchanged`
- * comes back. Without a sink the refusal is thrown.
+ * Reads one return. With a sink, the 409 of a withheld return goes to the
+ * sink and `unchanged` comes back. Every other error is thrown, and so is
+ * the 409 when there is no sink.
  */
 function readOrReport<T>(
   onRefusal: RefusalSink | undefined,
@@ -763,7 +765,8 @@ function readOrReport<T>(
   try {
     return read();
   } catch (error) {
-    if (!onRefusal || !(error instanceof ApiError)) throw error;
+    if (!onRefusal || !(error instanceof ApiError) || error.statusCode !== 409)
+      throw error;
     onRefusal(error);
     return unchanged;
   }

@@ -839,6 +839,11 @@ describe("OpenAPPA child-return markers", () => {
     expect(() => collectAndStripChildReturns(body)).toThrow(
       "OpenAPPA received a malformed child-return marker",
     );
+    // Only a withheld return waits for the caller. A malformed marker is
+    // rejected whether or not the caller takes refusals.
+    expect(() =>
+      collectAndStripChildReturns(body, { onRefusal: () => {} }),
+    ).toThrow("OpenAPPA received a malformed child-return marker");
   });
 
   test("reports a return the body walk cannot read and leaves it as the client sent it", () => {

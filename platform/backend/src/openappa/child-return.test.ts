@@ -175,9 +175,65 @@ describe("OpenAPPA child-return markers", () => {
         },
       ],
     };
+    const sent = structuredClone(body);
     expect(() =>
       collectAndStripChildReturns(body, { codexMailboxReturns: true }),
     ).toThrow(/OpenAPPA withheld/);
+
+    // A caller that does not know yet whether OpenAPPA governs the request
+    // takes the refusal instead, and the message stays as the client sent it.
+    const refusals: string[] = [];
+    collectAndStripChildReturns(body, {
+      codexMailboxReturns: true,
+      onRefusal: (refusal) => refusals.push(refusal.message),
+    });
+    expect(refusals).toEqual([expect.stringMatching(/^OpenAPPA withheld/)]);
+    expect(body).toEqual(sent);
+  });
+
+  test("still collects a mailbox return next to messages it cannot read", () => {
+    const header =
+      "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n";
+    const mail = (text: string, id?: string) => ({
+      type: "agent_message",
+      ...(id ? { id } : {}),
+      author: "/root/worker",
+      recipient: "/root",
+      content: [{ type: "input_text", text }],
+    });
+    // The kinds a Codex agent sends besides a task and its final answer.
+    const message = mail(
+      "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\nHalfway there",
+    );
+    const post = mail(
+      "Message Type: CHANNEL_POST\nSender: /root/worker\nChannel: build\nMessage ID: m-1\nThread ID: t-1\nPayload:\nPosted",
+    );
+    const body = {
+      input: [
+        structuredClone(message),
+        mail(header + carrier(requiredMarker(RETURN)), "mail-1"),
+        structuredClone(post),
+      ],
+    };
+    const refusals: string[] = [];
+
+    const collected = collectAndStripChildReturns(body, {
+      codexMailboxReturns: true,
+      onRefusal: (refusal) => refusals.push(refusal.message),
+    });
+
+    expect(refusals).toEqual([
+      "OpenAPPA withheld an unsupported Codex mailbox message",
+      "OpenAPPA withheld an unsupported Codex mailbox message",
+    ]);
+    expect(collected.completions).toEqual([
+      { value: RETURN.value, envelopeId: "mail-1", assistantOrigin: false },
+    ]);
+    expect(body.input).toEqual([
+      message,
+      mail(header + RETURN.value, "mail-1"),
+      post,
+    ]);
   });
 
   test("leaves task ciphertext, unrelated clients and quoted mailbox data untouched", () => {

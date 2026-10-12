@@ -2670,7 +2670,11 @@ describe("rendering runtime text for this client", () => {
       .spyOn(appaService, "evaluateToolCalls")
       .mockImplementation(async () => [
         { kind: "allow" as const },
-        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+        {
+          kind: "deny" as const,
+          feedback: "[appa] Refused: no plan.",
+          recorded: true as const,
+        },
       ]);
     const cancelCalls = vi
       .spyOn(appaService, "cancelCalls")
@@ -2733,7 +2737,11 @@ describe("rendering runtime text for this client", () => {
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
       .mockImplementation(async () => [
-        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+        {
+          kind: "deny" as const,
+          feedback: "[appa] Refused: no plan.",
+          recorded: true as const,
+        },
       ]);
     const cancelCalls = vi
       .spyOn(appaService, "cancelCalls")
@@ -2748,6 +2756,58 @@ describe("rendering runtime text for this client", () => {
       ).toMatchObject({
         decision: "refuse",
         refusal: { reason: "openappa_no_notice_tool", blockedToolId: "wait" },
+      });
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("refuses a denial the runtime did not record instead of sending the wait call", async () => {
+    // The runtime answers a wait call's result with the ruling it recorded for
+    // that id. A denial made before dispatch, such as malformed arguments, has
+    // no such record, so only the refusal text can deliver its ruling. The
+    // session keeps its one wait for a later denial.
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "unrecorded-denial" });
+    context.headers = { "user-agent": "claude-cli/2.1.289 (external, cli)" };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "Read" }, { name: "WaitForMcpServers" }],
+    };
+    const unrecorded = {
+      kind: "deny" as const,
+      feedback: "The tool call arguments are not valid JSON.",
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValueOnce([unrecorded])
+      .mockResolvedValueOnce([{ ...unrecorded, recorded: true as const }]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    const send = () =>
+      plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "denied", name: "Read", arguments: '{"b":' }],
+      });
+    try {
+      await plugin.onSessionInit(context);
+      const first = (await send()) as {
+        decision: string;
+        refusal: { contentMessage: string };
+      };
+      expect(first.decision).toBe("refuse");
+      expect(first.refusal.contentMessage).toContain(
+        "The tool call arguments are not valid JSON.",
+      );
+      expect(await send()).toMatchObject({
+        decision: "allow",
+        toolCalls: [{ id: "denied", name: "WaitForMcpServers" }],
       });
     } finally {
       cancelCalls.mockRestore();

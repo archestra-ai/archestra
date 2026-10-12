@@ -1207,9 +1207,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // keeps its id, the client waits for its MCP servers instead of
         // running it, and the runtime answers that id's result with its
         // ruling, so the next request can declare the remedy tools. The wait
-        // tool takes no arguments and its output never reaches the model.
-        pendingServersTool ??= this.pendingServersTool(binding, session);
-        const wait = await pendingServersTool;
+        // tool takes no arguments and its output never reaches the model. A
+        // denial the runtime did not record has no ruling to answer with, so
+        // it is refused below.
+        let wait: string | undefined;
+        if (decision.recorded) {
+          pendingServersTool ??= this.pendingServersTool(binding, session);
+          wait = await pendingServersTool;
+        }
         if (wait && call.name !== wait) {
           blocked.push({
             id: call.id,

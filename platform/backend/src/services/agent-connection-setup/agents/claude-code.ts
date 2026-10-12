@@ -50,14 +50,6 @@ const [
   AWS_BEARER_TOKEN_KEY,
 ] = CLAUDE_CODE_PROXY_ENV_KEYS.bedrock;
 
-/**
- * Claude Code's post-install OAuth step, shared by the bash and PowerShell
- * renderers. Registering the gateway is not enough: it authorizes each user
- * individually, so its tools unlock only after a one-time browser sign-in.
- * The running session never picks the server up — only a new one reads the
- * updated config — so the step must send the user to a NEW session; naming
- * `/mcp` alone strands them in a session where the gateway does not exist.
- */
 /** @public — asserted by the setup script unit tests, which knip --production ignores. */
 export const CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING =
   "Skipped the Claude Code allow rules for gateway tools. The gateway name or tool prefix cannot be used in an exact permission rule. MCP setup continues without pre-approving those calls.";
@@ -1056,6 +1048,14 @@ ${pluginInstalls}`);
   return withStartupGuardPowerShell(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
 }
 
+/**
+ * Claude Code's post-install OAuth step, shared by the bash and PowerShell
+ * renderers. Registering the gateway is not enough: it authorizes each user
+ * individually, so its tools unlock only after a one-time browser sign-in.
+ * The running session never picks the server up — only a new one reads the
+ * updated config — so the step must send the user to a NEW session; naming
+ * `/mcp` alone strands them in a session where the gateway does not exist.
+ */
 function claudeCodeEnding(ctx: SetupScriptContext): AgentEnding {
   const plugins = ctx.skills?.pluginNames?.length ?? 0;
   return {

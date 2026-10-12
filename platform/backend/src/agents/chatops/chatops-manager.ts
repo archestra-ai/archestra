@@ -31,10 +31,10 @@ import {
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { RouteCategory } from "@/observability/tracing";
 import {
-  attachSlackHitlReviews,
+  attachHitlReviews,
   decideSlackHitlReview,
   type SlackHitlDecision,
-} from "@/openappa/slack-hitl-review";
+} from "@/openappa/a2a-hitl-review";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
@@ -2810,16 +2810,19 @@ export class ChatOpsManager {
         },
       });
 
-      // Only Slack runs pause for OpenAPPA reviews (see a2a-executor).
+      // Only Slack chat runs pause for OpenAPPA reviews (see A2AManager).
       const reviewTexts =
         provider.providerId === "slack"
-          ? await attachSlackHitlReviews({
+          ? await attachHitlReviews({
               organizationId: reviewer.organizationId,
               taskId: task.id,
-              reviewerUserId: reviewer.userId,
-              slackChannelId: message.channelId,
-              slackThreadTs: message.threadId,
               approvalRequests,
+              answerer: {
+                kind: "slack",
+                reviewerUserId: reviewer.userId,
+                channelId: message.channelId,
+                threadTs: message.threadId,
+              },
               now: new Date(),
             })
           : new Map<string, string>();

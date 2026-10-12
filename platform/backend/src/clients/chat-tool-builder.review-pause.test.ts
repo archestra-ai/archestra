@@ -8,7 +8,7 @@ import { ToolCallRepeatTracker } from "./tool-call-repeat-tracker";
 
 const remedyTool = archestraMcpBranding.getToolName("execute_remedy_plan");
 
-function build(toolName: string, openappaSlackReview: boolean) {
+function build(toolName: string, openappaReviewPause: boolean) {
   return buildMcpGatewayTool({
     mcpTool: { name: toolName, inputSchema: { type: "object" } },
     ctx: {
@@ -17,13 +17,13 @@ function build(toolName: string, openappaSlackReview: boolean) {
       agentId: "agent-1",
       agentName: "Agent",
       repeatTracker: new ToolCallRepeatTracker(),
-      openappaSlackReview,
+      openappaReviewPause,
     } as ChatToolContext,
   });
 }
 
-describe("Slack OpenAPPA review gate", () => {
-  test("a reviewed remedy call in a Slack run pauses for approval instead of running", async () => {
+describe("OpenAPPA review pause gate", () => {
+  test("a reviewed remedy call pauses for approval instead of running", async () => {
     vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
       offer_id: "offer-1",
       text: "Approve this call?",
@@ -68,7 +68,7 @@ describe("Slack OpenAPPA review gate", () => {
     );
   });
 
-  test("only Slack runs, and only the remedy tool, get the gate", () => {
+  test("only runs with an answerer, and only the remedy tool, get the gate", () => {
     expect(build(remedyTool, false).needsApproval).toBeUndefined();
     expect(
       build(archestraMcpBranding.getToolName("whoami"), true).needsApproval,

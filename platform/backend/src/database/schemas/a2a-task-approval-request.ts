@@ -30,7 +30,10 @@ const a2aTaskApprovalRequestTable = pgTable(
     openappaReviewText: text("openappa_review_text"),
     /** The exact `execute_remedy_plan` arguments, proxy stamps included. */
     remedyArguments: jsonb("remedy_arguments").$type<Record<string, unknown>>(),
-    /** The only user who may decide; their decision sets ruling + decidedAt. */
+    /**
+     * The only user who may decide, in Slack. Null when the A2A caller
+     * answers the task's approvals.
+     */
     reviewerUserId: text("reviewer_user_id").references(() => usersTable.id, {
       onDelete: "cascade",
     }),

@@ -1,7 +1,13 @@
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
-import { A2AProtocolTaskState } from "@/agents/a2a/a2a-protocol";
+import { A2AErrorKind } from "@/agents/a2a/a2a-base";
+import {
+  type A2AArchestraApprovalRequest,
+  A2AProtocolTaskState,
+} from "@/agents/a2a/a2a-protocol";
 import { a2aTaskRunService } from "@/agents/a2a/a2a-task-run-service";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import db, { schema } from "@/database";
 import {
   A2AContextModel,
   A2ATaskApprovalRequestModel,
@@ -9,14 +15,15 @@ import {
 } from "@/models";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
+import {
+  A2A_HITL_REVIEW_TTL_MS,
+  attachHitlReviews,
+  decideCallerHitlReviews,
+  decideSlackHitlReview,
+  remedyCallNeedsHumanReview,
+} from "./a2a-hitl-review";
 import { consumeHitlRuling, reviewSessionFromTrajectory } from "./hitl-review";
 import * as openappaService from "./service";
-import {
-  attachSlackHitlReviews,
-  decideSlackHitlReview,
-  remedyCallNeedsSlackReview,
-  SLACK_HITL_REVIEW_TTL_MS,
-} from "./slack-hitl-review";
 
 setupTestCacheManager();
 
@@ -83,13 +90,16 @@ async function pausedReview(params: {
     taskId: task.id,
     approvalRequests,
   });
-  const reviewTexts = await attachSlackHitlReviews({
+  const reviewTexts = await attachHitlReviews({
     organizationId: params.organizationId,
     taskId: task.id,
-    reviewerUserId: params.reviewerUserId,
-    slackChannelId: "C123",
-    slackThreadTs: "1700000000.000100",
     approvalRequests,
+    answerer: {
+      kind: "slack",
+      reviewerUserId: params.reviewerUserId,
+      channelId: "C123",
+      threadTs: "1700000000.000100",
+    },
     now: params.now ?? NOW,
   });
   return { task, reviewTexts };
@@ -102,20 +112,20 @@ test("the gate pauses only a remedy call whose offer carries a review", async ({
   stubReview("offer-1");
 
   expect(
-    await remedyCallNeedsSlackReview({
+    await remedyCallNeedsHumanReview({
       organizationId: org.id,
       input: remedyInput("offer-1"),
     }),
   ).toBe(true);
   expect(
-    await remedyCallNeedsSlackReview({
+    await remedyCallNeedsHumanReview({
       organizationId: org.id,
       input: remedyInput("offer-without-review"),
     }),
   ).toBe(false);
   // Without the proxy stamp there is no session to find the offer in.
   expect(
-    await remedyCallNeedsSlackReview({
+    await remedyCallNeedsHumanReview({
       organizationId: org.id,
       input: { offer_id: "offer-1" },
     }),
@@ -147,7 +157,7 @@ test("a paused remedy call is linked to its offer, reviewer, thread and expiry",
     reviewerUserId: reviewer.id,
     slackChannelId: "C123",
     slackThreadTs: "1700000000.000100",
-    expiresAt: new Date(NOW.getTime() + SLACK_HITL_REVIEW_TTL_MS),
+    expiresAt: new Date(NOW.getTime() + A2A_HITL_REVIEW_TTL_MS),
     ruling: null,
   });
   expect(other?.openappaOfferId).toBeNull();
@@ -270,7 +280,7 @@ test("another user, another channel, or a late click records nothing", async ({
   });
   expect(
     await click({
-      now: new Date(NOW.getTime() + SLACK_HITL_REVIEW_TTL_MS + 1),
+      now: new Date(NOW.getTime() + A2A_HITL_REVIEW_TTL_MS + 1),
     }),
   ).toEqual({ status: "expired" });
 
@@ -330,7 +340,7 @@ test("the reaper cancels a task whose review expired and leaves a live one pause
     organizationId: org.id,
     reviewerUserId: reviewer.id,
     offerId: "offer-1",
-    now: new Date(Date.now() - SLACK_HITL_REVIEW_TTL_MS - 1000),
+    now: new Date(Date.now() - A2A_HITL_REVIEW_TTL_MS - 1000),
   });
   const { task: live } = await pausedReview({
     organizationId: org.id,
@@ -350,4 +360,147 @@ test("the reaper cancels a task whose review expired and leaves a live one pause
   expect((await A2ATaskModel.findById(live.id))?.state).toBe(
     A2AProtocolTaskState.InputRequired,
   );
+});
+
+async function callerPausedReview(params: {
+  organizationId: string;
+  now: Date;
+}) {
+  const context = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: crypto.randomUUID(),
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    state: A2AProtocolTaskState.InputRequired,
+  });
+  const approvalRequests: A2AArchestraApprovalRequest[] = [
+    "approval-1",
+    "approval-3",
+  ].map((approvalId) => ({
+    approvalId,
+    toolCallId: `call-${approvalId}`,
+    toolName: archestraMcpBranding.getToolName("execute_remedy_plan"),
+    toolInput: remedyInput("offer-1"),
+    approved: false,
+    resolved: false,
+  }));
+  approvalRequests.push({
+    approvalId: "approval-2",
+    toolCallId: "call-2",
+    toolName: "github__create_issue",
+    toolInput: { title: "x" },
+    approved: false,
+    resolved: false,
+  });
+  await A2ATaskApprovalRequestModel.bulkCreate({
+    taskId: task.id,
+    approvalRequests,
+  });
+  await attachHitlReviews({
+    organizationId: params.organizationId,
+    taskId: task.id,
+    approvalRequests,
+    answerer: { kind: "caller" },
+    now: params.now,
+  });
+  return task;
+}
+
+test("the caller's decision answers the review; a plain approval passes through", async ({
+  makeOrganization,
+}) => {
+  const org = await makeOrganization();
+  stubReview("offer-1");
+  const task = await callerPausedReview({ organizationId: org.id, now: NOW });
+
+  const decisions = await decideCallerHitlReviews({
+    organizationId: org.id,
+    taskId: task.id,
+    userId: "system",
+    approvalDecisions: [
+      { approvalId: "approval-1", approved: false },
+      { approvalId: "approval-2", approved: false },
+    ],
+    now: NOW,
+  });
+
+  // The remedy call runs either way so OpenAPPA sees the deny; the plain
+  // tool approval keeps the caller's answer.
+  expect(decisions).toEqual([
+    { approvalId: "approval-1", approved: true },
+    { approvalId: "approval-2", approved: false },
+  ]);
+  const session = reviewSessionFromTrajectory({
+    organizationId: org.id,
+    trajectory: { session_id: SESSION_ID },
+    context: { userId: "system" },
+  });
+  expect(await consumeHitlRuling({ session, offerId: "offer-1" })).toBe("deny");
+  await expect(
+    decideCallerHitlReviews({
+      organizationId: org.id,
+      taskId: task.id,
+      userId: "system",
+      approvalDecisions: [{ approvalId: "approval-1", approved: true }],
+      now: NOW,
+    }),
+  ).rejects.toMatchObject({ kind: A2AErrorKind.ApprovalIdAlreadyResolved });
+});
+
+test("an expired review refuses the whole batch and records nothing", async ({
+  makeOrganization,
+}) => {
+  const org = await makeOrganization();
+  stubReview("offer-1");
+  const task = await callerPausedReview({ organizationId: org.id, now: NOW });
+  const rows = await A2ATaskApprovalRequestModel.findByTaskId(task.id);
+  const late = rows.find((row) => row.approvalId === "approval-3");
+  if (!late) throw new Error("missing row");
+  await db
+    .update(schema.a2aTaskApprovalRequestsTable)
+    .set({ expiresAt: new Date(NOW.getTime() - 1) })
+    .where(eq(schema.a2aTaskApprovalRequestsTable.id, late.id));
+
+  await expect(
+    decideCallerHitlReviews({
+      organizationId: org.id,
+      taskId: task.id,
+      userId: "system",
+      approvalDecisions: [
+        { approvalId: "approval-1", approved: true },
+        { approvalId: "approval-3", approved: true },
+      ],
+      now: NOW,
+    }),
+  ).rejects.toMatchObject({ kind: A2AErrorKind.UnsupportedOperation });
+  expect(
+    (await A2ATaskApprovalRequestModel.findByTaskId(task.id)).map(
+      (row) => row.ruling,
+    ),
+  ).toEqual([null, null, null]);
+});
+
+test("a review owned by a Slack reviewer cannot be answered over A2A", async ({
+  makeOrganization,
+  makeUser,
+}) => {
+  const org = await makeOrganization();
+  const reviewer = await makeUser();
+  stubReview("offer-1");
+  const { task } = await pausedReview({
+    organizationId: org.id,
+    reviewerUserId: reviewer.id,
+    offerId: "offer-1",
+  });
+
+  await expect(
+    decideCallerHitlReviews({
+      organizationId: org.id,
+      taskId: task.id,
+      userId: reviewer.id,
+      approvalDecisions: [{ approvalId: "approval-1", approved: true }],
+      now: NOW,
+    }),
+  ).rejects.toMatchObject({ kind: A2AErrorKind.UnsupportedOperation });
 });

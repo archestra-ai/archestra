@@ -8,8 +8,8 @@ import {
   A2ATaskModel,
   ChatOpsChannelBindingModel,
 } from "@/models";
+import { attachHitlReviews } from "@/openappa/a2a-hitl-review";
 import * as openappaService from "@/openappa/service";
-import { attachSlackHitlReviews } from "@/openappa/slack-hitl-review";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import type { ChatOpsApprovalDecision, ChatOpsProvider } from "@/types";
@@ -100,13 +100,16 @@ async function setup({
     text: "Approve this call?",
     session_id: SESSION_ID,
   });
-  await attachSlackHitlReviews({
+  await attachHitlReviews({
     organizationId: org.id,
     taskId: task.id,
-    reviewerUserId: reviewer.id,
-    slackChannelId: CHANNEL,
-    slackThreadTs: THREAD,
     approvalRequests,
+    answerer: {
+      kind: "slack",
+      reviewerUserId: reviewer.id,
+      channelId: CHANNEL,
+      threadTs: THREAD,
+    },
     now: new Date(),
   });
   const decision = (

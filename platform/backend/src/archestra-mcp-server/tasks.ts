@@ -1380,7 +1380,9 @@ async function runtimeCrossingForStart(
   if (gate.kind === "refused") return gate.reason;
   // An unrecognized client has no session to bind: its run starts unbound,
   // like one started from the run page.
-  if (gate.kind !== "proof") return undefined;
+  if (gate.kind === "inactive" || gate.kind === "unrecognized") {
+    return undefined;
+  }
   if (!gate.crossing.spawn) {
     return "This start was not classified as a protected spawn. No runtime was started.";
   }
@@ -1401,7 +1403,7 @@ async function parentCrossing(params: {
       workspaceId,
     });
   }
-  if (gate.kind !== "proof") return undefined;
+  if (gate.kind === "inactive") return undefined;
   if (!workspaceId) {
     return "This runtime session could not be verified. The request was refused.";
   }
@@ -1441,7 +1443,7 @@ async function protectedFileAccess(params: {
       ? { kind: "error", result: errorResult(refusal) }
       : { kind: "open" };
   }
-  if (gate.kind !== "proof") return { kind: "open" };
+  if (gate.kind === "inactive") return { kind: "open" };
   const relation = await classifyRuntimeCaller({
     crossing: gate.crossing,
     organizationId: params.actor.organizationId,

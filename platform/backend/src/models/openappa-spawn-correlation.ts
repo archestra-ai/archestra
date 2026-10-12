@@ -7,6 +7,7 @@ import {
 
 const operations = schema.openappaOperationsTable;
 const sessions = schema.openappaSessionsTable;
+const RUNTIME_LAUNCH_PREFIX = "runtime-launch:";
 
 export type AllowedSpawnAlias = {
   spawnCallId: string;
@@ -323,8 +324,6 @@ function parseJson(value: string): Record<string, unknown> | undefined {
     return undefined;
   }
 }
-
-const RUNTIME_LAUNCH_PREFIX = "runtime-launch:";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

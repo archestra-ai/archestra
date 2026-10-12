@@ -452,12 +452,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding.returnContract = result.returnContract;
     }
     binding.sessionInitialized = true;
+    const waitTool = binding.adapter?.pendingServersTool;
+    // A ruling in the result of the client's wait tool is a denial that tool
+    // carried: the model made another call there, and has to be told so.
+    const carriedDenials = new Set(
+      toolResults.flatMap((answer) =>
+        answer.name === waitTool &&
+        !answer.namespace &&
+        result.toolResultUpdates[answer.id]?.denied &&
+        !binding.request.restoredNoticeCallIds?.has(answer.id)
+          ? [answer.id]
+          : [],
+      ),
+    );
     const toolResultUpdates = {
       ...childResultUpdates,
       ...Object.fromEntries(
         Object.entries(result.toolResultUpdates).map(([id, result]) => [
           id,
-          result.content,
+          carriedDenials.has(id)
+            ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them. The ruling on your call follows.\n\n${result.content}`
+            : result.content,
         ]),
       ),
     };
@@ -1046,6 +1061,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
 
     const notice = binding.request.tools?.notice;
+    // Resolved once for the batch, by the first denial that has no notice tool.
+    let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
     const annotated: LlmProxyToolCallAnnotation[] = [];
     const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
@@ -1186,6 +1203,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // target — is what the notice and the refusal describe.
       const identity = this.policyIdentity(binding, call);
       if (!notice) {
+        // The client's own wait tool stands in for the notice tool. The call
+        // keeps its id, the client waits for its MCP servers instead of
+        // running it, and the runtime answers that id's result with its
+        // ruling, so the next request can declare the remedy tools. The wait
+        // tool takes no arguments and its output never reaches the model. A
+        // denial the runtime did not record has no ruling to answer with, so
+        // it is refused below.
+        let wait: string | undefined;
+        if (decision.recorded) {
+          pendingServersTool ??= this.pendingServersTool(binding, session);
+          wait = await pendingServersTool;
+        }
+        if (wait && call.name !== wait) {
+          blocked.push({
+            id: call.id,
+            name: call.name,
+            reason: decision.feedback,
+          });
+          released.push({ id: call.id, name: wait, arguments: "{}" });
+          continue;
+        }
         // Refuses the call and cancels admitted calls when the client declares no notice tool.
         await cancelCalls(
           session,
@@ -1638,14 +1676,45 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   private async remedyToolsMissingBefore(
     session: OpenAppaSession,
   ): Promise<boolean> {
-    const key: AllowedCacheKey = `${CacheKey.OpenAppaRemedyToolsMissing}-${Buffer.from(
-      `${session.organization_id}:${session.session_id}`,
-    ).toString("base64url")}`;
-    const seen = await cacheManager.get<boolean>(key);
-    if (seen) return true;
-    await cacheManager.set(key, true, TimeInMs.Day);
-    return false;
+    return seenBefore(CacheKey.OpenAppaRemedyToolsMissing, session);
   }
+
+  /**
+   * The client's own wait tool, when this request declares it and the session
+   * has not waited yet for the gateway remedy tools. Records the wait: a
+   * session whose remedy tools are still missing after it is refused.
+   */
+  private async pendingServersTool(
+    binding: AppaPluginBinding,
+    session: OpenAppaSession,
+  ): Promise<string | undefined> {
+    const name = binding.adapter?.pendingServersTool;
+    if (
+      !name ||
+      !binding.request.declaredTools.some(
+        (tool) => tool.name === name && !tool.namespace,
+      )
+    )
+      return undefined;
+    return (await seenBefore(CacheKey.OpenAppaRemedyToolsAwaited, session))
+      ? undefined
+      : name;
+  }
+}
+
+/** Whether `flag` was already set for this session today. Sets it. */
+async function seenBefore(
+  flag:
+    | typeof CacheKey.OpenAppaRemedyToolsMissing
+    | typeof CacheKey.OpenAppaRemedyToolsAwaited,
+  session: OpenAppaSession,
+): Promise<boolean> {
+  const key: AllowedCacheKey = `${flag}-${Buffer.from(
+    `${session.organization_id}:${session.session_id}`,
+  ).toString("base64url")}`;
+  if (await cacheManager.get<boolean>(key)) return true;
+  await cacheManager.set(key, true, TimeInMs.Day);
+  return false;
 }
 
 async function correlatedClaudeTeammateId(

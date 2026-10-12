@@ -191,6 +191,8 @@ type ProcessedToolResult = {
   outputSource: OutputSource;
   reason?: RuntimeReason;
   code?: string;
+  /** The runtime denied this call, so `content` is its ruling, not an output. */
+  denied?: true;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -754,6 +756,7 @@ async function approveToolResult(params: {
     outputSource,
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
+    ...(decision.decision === "deny_call" ? { denied: true as const } : {}),
   };
 }
 // SPDX-SnippetEnd
@@ -927,6 +930,11 @@ type AppaCallDecision =
       feedback: string;
       offers?: string[];
       review?: Array<{ offer_id: string; text: string }>;
+      /**
+       * The runtime recorded this denial under the call's id, so it answers
+       * that id's result with the ruling.
+       */
+      recorded?: true;
     };
 
 // SPDX-SnippetBegin
@@ -1109,6 +1117,9 @@ export async function evaluateToolCalls(
               ? decision.review
               : undefined
             : undefined,
+        ...(decision.decision === "deny_call"
+          ? { recorded: true as const }
+          : {}),
       };
     }),
   );

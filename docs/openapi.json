@@ -241523,7 +241523,8 @@
                   },
                   "name": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 255
                   },
                   "version": {
                     "nullable": true,
@@ -241602,7 +241603,8 @@
                   },
                   "serverUrl": {
                     "nullable": true,
-                    "type": "string"
+                    "type": "string",
+                    "format": "uri"
                   },
                   "docsUrl": {
                     "nullable": true,
@@ -241640,7 +241642,8 @@
                           "properties": {
                             "key": {
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "pattern": "^[-._a-zA-Z][-._a-zA-Z0-9]*$"
                             },
                             "type": {
                               "type": "string",
@@ -241730,10 +241733,13 @@
                         ]
                       },
                       "httpPort": {
-                        "type": "number"
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 65535
                       },
                       "httpPath": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^\\/.*"
                       },
                       "nodePort": {
                         "type": "number"
@@ -244804,7 +244810,8 @@
                 "properties": {
                   "name": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 255
                   },
                   "version": {
                     "nullable": true,
@@ -244880,7 +244887,8 @@
                   },
                   "serverUrl": {
                     "nullable": true,
-                    "type": "string"
+                    "type": "string",
+                    "format": "uri"
                   },
                   "docsUrl": {
                     "nullable": true,
@@ -244918,7 +244926,8 @@
                           "properties": {
                             "key": {
                               "type": "string",
-                              "minLength": 1
+                              "minLength": 1,
+                              "pattern": "^[-._a-zA-Z][-._a-zA-Z0-9]*$"
                             },
                             "type": {
                               "type": "string",
@@ -245008,10 +245017,13 @@
                         ]
                       },
                       "httpPort": {
-                        "type": "number"
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 65535
                       },
                       "httpPath": {
-                        "type": "string"
+                        "type": "string",
+                        "pattern": "^\\/.*"
                       },
                       "nodePort": {
                         "type": "number"

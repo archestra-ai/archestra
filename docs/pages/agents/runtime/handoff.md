@@ -51,3 +51,4 @@ What to know:
 
 - The value passes through your agent's model and transcript. A secret that must never reach a model belongs in the agent's **Environment variables** instead.
 - To refuse transfers, turn off **Accept credentials from a connected client** on the agent.
+- Claude Code's auto mode can block the transfer before it reaches Archestra. [Connect](/docs/integrations/claude-code#gateway-tool-permissions) adds the allow rule that prevents this. If you added the gateway another way, add the rule in `/permissions`.

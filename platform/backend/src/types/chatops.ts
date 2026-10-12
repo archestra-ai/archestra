@@ -213,8 +213,10 @@ export interface UpdateApprovalRequestOptions {
   messageKey: string;
   toolName: string;
   approved: boolean;
-  /** Provider user id of the reviewer, shown as who decided. */
+  /** Provider user id of the reviewer, shown as who decided (Slack). */
   decidedByUserId?: string;
+  /** Display name of the reviewer, shown as who decided (Telegram). */
+  decidedByName?: string;
 }
 
 /**

@@ -47,6 +47,7 @@ import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
+  buildAzureResponsesBaseUrl,
   createAzureFetchWithApiVersion,
   isAzureOpenAiFirstPartyModelName,
   normalizeAzureApiKey,
@@ -907,6 +908,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       if (!baseURL) {
         throw new ApiError(400, "Azure AI Foundry base URL is required.");
       }
+      const useResponses = isAzureOpenAiFirstPartyModelName(modelName);
 
       // The AI SDK client can't set Azure's api-version as a default query
       // param, so we wrap fetch and inject it on every request — except for
@@ -917,7 +919,9 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       // the real target.
       const fetchWithVersion = shouldUseAzureOpenAiApiVersion(baseURL)
         ? createAzureFetchWithApiVersion({
-            apiVersion: config.llm.azure.apiVersion,
+            apiVersion: useResponses
+              ? config.llm.azure.responsesApiVersion
+              : config.llm.azure.apiVersion,
             fetch: providedFetch,
           })
         : providedFetch;
@@ -931,35 +935,58 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
         ? { ...headers, "api-key": normalizedApiKey }
         : headers;
 
-      // On the direct path baseURL is the key's own Azure endpoint. Classic
-      // (non-v1) endpoints serve chat completions only under
-      // `/openai/deployments/<deployment>` — posting to `<base>/chat/completions`
-      // 404s — so route through the deployment-scoped URL, the same treatment
-      // the embedding client applies. V1 endpoints pass through unchanged. On
-      // the proxy path baseURL is the local proxy and the adapter builds the
-      // target URL itself.
+      // Classic Responses endpoints are resource-scoped; Chat Completions
+      // endpoints are deployment-scoped. V1 URLs pass through unchanged.
+      // On the proxy path the adapter builds the upstream URL itself.
       const targetBaseURL = direct
-        ? (buildAzureDeploymentBaseUrl({
-            baseUrl: baseURL,
-            deploymentName: modelName,
-          }) ?? baseURL)
+        ? useResponses
+          ? (buildAzureResponsesBaseUrl(baseURL) ?? baseURL)
+          : (buildAzureDeploymentBaseUrl({
+              baseUrl: baseURL,
+              deploymentName: modelName,
+            }) ?? baseURL)
         : baseURL;
 
-      // OpenAI first-party deployments stay on strict @ai-sdk/openai: its name
-      // heuristic converts max_tokens → max_completion_tokens for reasoning
-      // models (which reject max_tokens), and those models never stream
-      // reasoning text over chat completions anyway. Foundry-hosted open models
+      // Azure Chat Completions can reject function tools with reasoning on OpenAI
+      // deployments. Use native Responses, as the model router does, and resend
+      // conversation contents instead of server-stored item references.
+      // Foundry-hosted open models
       // (DeepSeek-R1, gpt-oss, ...) stream thinking in a `reasoning_content`
       // delta field the strict parser drops, so — like the Ollama entry — they
       // go through @ai-sdk/openai-compatible, which parses it into native
       // reasoning parts.
-      if (isAzureOpenAiFirstPartyModelName(modelName)) {
-        return createOpenAI({
-          apiKey: sdkApiKey,
-          baseURL: targetBaseURL,
-          headers: requestHeaders,
-          fetch: fetchWithVersion,
-        }).chat(modelName);
+      if (useResponses) {
+        return wrapLanguageModel({
+          model: createOpenAI({
+            apiKey: sdkApiKey,
+            baseURL: targetBaseURL,
+            headers: requestHeaders,
+            fetch: fetchWithVersion,
+          }).responses(modelName),
+          middleware: {
+            specificationVersion: "v3",
+            transformParams: async ({ params }) => ({
+              ...params,
+              providerOptions: {
+                ...params.providerOptions,
+                openai: {
+                  ...params.providerOptions?.openai,
+                  store: false,
+                  // Request replayable reasoning even for newer model names
+                  // that the SDK's reasoning-family heuristic does not know.
+                  include: [
+                    ...new Set([
+                      ...(Array.isArray(params.providerOptions?.openai?.include)
+                        ? params.providerOptions.openai.include
+                        : []),
+                      "reasoning.encrypted_content",
+                    ]),
+                  ],
+                },
+              },
+            }),
+          },
+        });
       }
 
       return createOpenAICompatible({

@@ -124,6 +124,10 @@ import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-nam
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
+import type {
+  RuntimeLaunchFailureReason,
+  RuntimeLaunchOutcome,
+} from "@/types/openappa-runtime-launch";
 import { claudeCodeNativeChildIds } from "./adapters/claude-code";
 import {
   appendPeerMessageMarker,
@@ -330,9 +334,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       results,
     });
     Object.assign(childResultUpdates, childReturns.updates);
+    const governed = this.governedSession(binding);
     await admitRelayReports({
       binding,
-      session: this.governedSession(binding),
+      session: governed,
       results,
       updates: childResultUpdates,
     });
@@ -340,7 +345,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // A root that declared nothing has nothing to submit. A bound child still
     // starts, so its return contract is delivered before inference.
     if (
-      !this.governedSession(binding).parent_id &&
+      !governed.parent_id &&
       !binding.request.tools &&
       toolResults.length === 0 &&
       binding.request.declaredTools.length === 0
@@ -371,19 +376,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // child return that OpenAPPA ignores never reaches the runtime.
     await withholdUnrecordedPeerReads({
       binding,
-      session: this.governedSession(binding),
+      session: governed,
       results,
       updates: childResultUpdates,
     });
     const runtimeSpawns = await releasedRuntimeSpawns({
       binding,
-      session: this.governedSession(binding),
+      session: governed,
       toolResults,
     });
     const subagentReturns = await admitSubagentReturns({
-      session: this.governedSession(binding),
+      session: governed,
       spawnIds: runtimeSpawns,
     });
+    const runtimeLaunches = await OpenAppaSpawnCorrelationModel.runtimeLaunches(
+      {
+        organizationId: governed.organization_id,
+        callerId: governed.caller_id,
+        sessionId: governed.session_id,
+        toolCallIds: [...runtimeSpawns],
+      },
+    );
+    // The runtime withholds the output of a spawn that failed. What the gateway
+    // recorded about the launch is not that output, so it is restored after.
+    const failedLaunchResults: Record<string, string> = {};
     const nonHandbackResults = results
       .filter(
         (result) =>
@@ -403,15 +419,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return { ...result, content: subagentReturn };
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(result.id))) {
-          const content = runtimeLaunchHandle(result.content);
+          const launch = runtimeLaunches.get(withoutTrajectoryStamp(result.id));
+          const content = runtimeLaunchResult(launch);
           childResultUpdates[result.id] = content;
+          if (launch?.kind === "failed")
+            failedLaunchResults[result.id] = content;
           return { ...result, content };
         }
         const content = childResultUpdates[result.id];
         return content === undefined ? result : { ...result, content };
       });
     const result = await processProxyResults({
-      session: this.governedSession(binding),
+      session: governed,
       results: nonHandbackResults,
       canonicalize: (name: string, namespace?: string) =>
         this.canonicalize(binding, { name, namespace }),
@@ -422,6 +441,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return "pending";
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
+          const launch = runtimeLaunches.get(withoutTrajectoryStamp(answer.id));
+          if (launch) return launch.kind === "launched" ? "pending" : "failed";
           return answer.isError ? "failed" : "pending";
         }
         if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
@@ -493,6 +514,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : result.content,
         ]),
       ),
+      ...failedLaunchResults,
     };
     if (
       binding.adapter &&
@@ -1902,12 +1924,12 @@ async function resolveRuntimeCalls(params: {
   const result = new Map<string, RuntimeCall>();
   for (const call of params.calls) {
     const [target] = normalizeToolCallsForPolicy([call], params.resolution);
-    const canonical = params.resolution.canonicalize(
-      target.toolCallName,
-      target.isRunToolDispatchTarget ? undefined : call.namespace,
-    );
+    // Already canonical: the call's own resolved name, or the tool `run_tool`
+    // dispatches. It is not a wire spelling, and resolving it as one marks it
+    // foreign behind an attested gateway, so the call would go out unsigned.
     const action =
-      archestraMcpBranding.getToolShortName(canonical) ?? canonical;
+      archestraMcpBranding.getToolShortName(target.toolCallName) ??
+      target.toolCallName;
     if (!runtimeToolActions.has(action) && !isAgentTool(action)) continue;
     const args = argumentRecordOf(target.toolCallArgs);
     if (!args) continue;
@@ -2044,53 +2066,40 @@ async function releasedRuntimeSpawns(params: {
   );
 }
 
-function runtimeLaunchHandle(content: unknown): string {
-  let value: unknown = content;
-  try {
-    if (typeof content === "string") value = JSON.parse(content);
-  } catch {
-    return "The runtime launch returned no verifiable handle.";
+/**
+ * What the model reads as the result of a runtime launch: what the gateway
+ * recorded for the call, in text written here. The result the client sends
+ * back is not read, so its form and its text do not matter.
+ */
+function runtimeLaunchResult(
+  outcome: RuntimeLaunchOutcome | undefined,
+): string {
+  if (!outcome) return "The runtime launch returned no verifiable handle.";
+  if (outcome.kind === "launched") {
+    return JSON.stringify({
+      session_id: outcome.session_id,
+      ...(outcome.state ? { state: outcome.state } : {}),
+      message: "Use get_run to retrieve admitted runtime output.",
+    });
   }
-  if (!isRecord(value))
-    return "The runtime launch returned no verifiable handle.";
-  if (Array.isArray(value.content)) {
-    const text = value.content.find(
-      (part) =>
-        isRecord(part) && part.type === "text" && typeof part.text === "string",
-    );
-    if (isRecord(text)) {
-      try {
-        value = JSON.parse(text.text as string);
-      } catch {
-        return "The runtime launch returned no verifiable handle.";
-      }
-    }
-  }
-  if (!isRecord(value))
-    return "The runtime launch returned no verifiable handle.";
-  const handle: Record<string, string> = {};
-  for (const key of ["session_id", "task_id", "agent_id"]) {
-    if (typeof value[key] === "string" && /^[a-f0-9-]{36}$/i.test(value[key]))
-      handle[key] = value[key];
-  }
-  if (
-    typeof value.state === "string" &&
-    [
-      "submitted",
-      "working",
-      "input-required",
-      "completed",
-      "failed",
-      "canceled",
-    ].includes(value.state)
-  ) {
-    handle.state = value.state;
-  }
-  return JSON.stringify({
-    ...handle,
-    message: "Use get_run to retrieve admitted runtime output.",
-  });
+  const text = RUNTIME_LAUNCH_FAILURE_TEXT[outcome.reason];
+  return outcome.reason === "credentials_needed" && outcome.setup_url
+    ? `${text} Ask the user to add them here, then start the run again: ${outcome.setup_url}`
+    : text;
 }
+
+/** One entry for each reason, so a new reason does not compile without text. */
+const RUNTIME_LAUNCH_FAILURE_TEXT: Record<RuntimeLaunchFailureReason, string> =
+  {
+    agent_not_found: "No runtime was started. The Agent was not found.",
+    credentials_needed:
+      "No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet.",
+    credentials_misconfigured:
+      "No runtime was started. This Agent is missing shared Agent Runtime credentials that an administrator must configure.",
+    refused: "No runtime was started. OpenAPPA refused this launch.",
+    failed:
+      "No runtime was started. An internal error occurred while starting the run.",
+  };
 
 async function approveChildReturnCarriers(params: {
   binding: AppaPluginBinding;

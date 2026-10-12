@@ -55,6 +55,7 @@ import {
 } from "./constants";
 import {
   errorMessage,
+  formatApprovalReviewText,
   formatApprovalToolArgs,
   stripDuplicateAgentFooter,
 } from "./utils";
@@ -602,17 +603,25 @@ class MSTeamsProvider implements ChatOpsProvider {
       },
     });
 
-    const argsText = formatApprovalToolArgs(options.toolArgs);
+    const argsText = options.reviewText
+      ? formatApprovalReviewText(options.reviewText)
+      : formatApprovalToolArgs(options.toolArgs);
     const approvalCard = {
       type: "AdaptiveCard",
       $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
       version: "1.4",
       body: [
-        {
-          type: "TextBlock",
-          text: `\`${options.toolName}\``,
-          wrap: true,
-        },
+        // An OpenAPPA review's text names the reviewed call itself; the tool
+        // here is only the remedy that carries it.
+        ...(options.reviewText
+          ? []
+          : [
+              {
+                type: "TextBlock",
+                text: `\`${options.toolName}\``,
+                wrap: true,
+              },
+            ]),
         ...(argsText
           ? [
               {
@@ -1168,7 +1177,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         type: ActivityTypes.Message,
         text: `${payload.toolName || "Approval"}: ${
           payload.approved ? "Approved" : "Declined"
-        }`,
+        }${context.activity.from?.name ? ` by ${context.activity.from.name}` : ""}`,
         attachments: [],
       });
     };

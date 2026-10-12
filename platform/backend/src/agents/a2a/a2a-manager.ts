@@ -699,10 +699,12 @@ export class A2AManager {
               actorTeamId: actor.kind === "team" ? actor.id : undefined,
               sessionId,
               source: systemParams?.source,
-              // Slack posts a paused review to the requester (see ChatOps).
+              // A chat posts a paused review to the requester (see ChatOps).
+              // Detached tasks a chat starts report back without a form.
               openappaReviewPause:
                 this.config.callerAnswersOpenappaReviews === true ||
-                systemParams?.source === "chatops:slack",
+                (!fullTaskMode &&
+                  systemParams?.routeCategory === RouteCategory.CHATOPS),
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
               originalUiMessages: contextUiMessages,
               chatOpsBindingId:

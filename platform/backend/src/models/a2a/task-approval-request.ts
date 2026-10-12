@@ -109,8 +109,8 @@ class A2ATaskApprovalRequestModel {
     remedyArguments: Record<string, unknown>;
     expiresAt: Date;
     reviewerUserId?: string;
-    slackChannelId?: string;
-    slackThreadTs?: string;
+    chatChannelId?: string;
+    chatThreadId?: string;
   }): Promise<A2ATaskApprovalRequest | null> {
     const table = schema.a2aTaskApprovalRequestsTable;
     const [req] = await db
@@ -120,8 +120,8 @@ class A2ATaskApprovalRequestModel {
         openappaReviewText: params.reviewText,
         remedyArguments: params.remedyArguments,
         reviewerUserId: params.reviewerUserId ?? null,
-        slackChannelId: params.slackChannelId ?? null,
-        slackThreadTs: params.slackThreadTs ?? null,
+        chatChannelId: params.chatChannelId ?? null,
+        chatThreadId: params.chatThreadId ?? null,
         expiresAt: params.expiresAt,
       })
       .where(

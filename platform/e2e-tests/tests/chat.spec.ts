@@ -526,8 +526,11 @@ async function fetchConversationTranscript(page: Page, conversationId: string) {
   }, conversationId);
 }
 
+// The space keeps the random suffix out of one 20+ char token: joined with a
+// hyphen, ~2.5% of ids trip the composer's high-entropy secret scan and the
+// "Possible sensitive data detected" dialog swallows the send.
 function makeTestMessageId(prefix: string): string {
-  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix} ${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function extractConversationId(url: string): string | null {

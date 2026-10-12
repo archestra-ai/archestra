@@ -791,7 +791,6 @@ function ManifestRow({
 
 // GitHub's manifest cannot set a logo, so the admin uploads it on the App's page.
 function AppLogoTip({ app }: { app: { slug: string; account: string } }) {
-  const [copied, setCopied] = useState(false);
   return (
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
       <span>Optional: give the App the OpenAPPA logo.</span>
@@ -802,20 +801,6 @@ function AppLogoTip({ app }: { app: { slug: string; account: string } }) {
       >
         Download logo
       </a>
-      <Button
-        type="button"
-        variant="link"
-        size="xs"
-        className="h-auto px-0 text-foreground"
-        onClick={() => {
-          navigator.clipboard
-            .writeText(APP_BADGE_COLOR)
-            .then(() => setCopied(true))
-            .catch(() => {});
-        }}
-      >
-        {copied ? "Copied" : `Copy badge color ${APP_BADGE_COLOR}`}
-      </Button>
       <a
         className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline"
         href={`https://github.com/organizations/${app.account}/settings/apps/${app.slug}`}
@@ -948,6 +933,5 @@ const INTERVAL_LABEL: Record<Interval, string> = {
 
 const REPO_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]*\/[a-zA-Z0-9_.-]+$/;
 const APP_LOGO_PATH = "/openappa/github-app-logo.png";
-const APP_BADGE_COLOR = "#161413";
 const ORGANIZATION_PATTERN =
   /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;

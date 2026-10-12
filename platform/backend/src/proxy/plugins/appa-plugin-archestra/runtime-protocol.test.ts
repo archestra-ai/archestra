@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
+import db, { schema } from "@/database";
+import { openappaActor } from "@/openappa/actor";
 import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as service from "@/openappa/service";
 import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
@@ -202,6 +204,88 @@ describe("protected runtime protocol", () => {
     }
   }
 
+  // After the launch, the client reports the gateway's result in its own
+  // form. The model must get the run's id from each of them, and only the id.
+  test.for([
+    {
+      form: "Codex's framed text",
+      content: (launched: Record<string, unknown>) =>
+        `Wall time: 0.1793 seconds\nOutput:\n${JSON.stringify(launched)}`,
+    },
+    {
+      form: "text parts",
+      content: (launched: Record<string, unknown>) => [
+        { type: "text", text: JSON.stringify(launched, null, 2) },
+      ],
+    },
+    {
+      form: "an MCP result",
+      content: (launched: Record<string, unknown>) => ({
+        content: [{ type: "text", text: JSON.stringify(launched) }],
+      }),
+    },
+  ])("gives the model the run's handle from a launch result reported as $form", async ({
+    content,
+  }, { makeOrganization }) => {
+    const org = await makeOrganization();
+    const { plugin, context } = await releasedLaunch(org.id);
+    const sessionId = randomUUID();
+
+    const outcome = await plugin.onToolResults({
+      ...context,
+      toolResults: [
+        {
+          id: "runtime-call",
+          name: "archestra__run_tool",
+          content: content({
+            run: { task_id: sessionId, state: "submitted" },
+            session_id: sessionId,
+            run_url: `http://localhost:3000/chat/runs/${sessionId}`,
+            runtime: "dedicated",
+          }),
+          isError: false,
+        },
+      ],
+    });
+
+    expect(
+      JSON.parse(String(outcome?.toolResultUpdates["runtime-call"])),
+    ).toEqual({
+      session_id: sessionId,
+      message: "Use get_run to retrieve admitted runtime output.",
+    });
+  });
+
+  test("reports no handle for a failed launch, and none of its text", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const { plugin, context } = await releasedLaunch(org.id);
+
+    const outcome = await plugin.onToolResults({
+      ...context,
+      toolResults: [
+        {
+          id: "runtime-call",
+          name: "archestra__run_tool",
+          // The form Codex reports a failed MCP call in.
+          content: [
+            { type: "input_text", text: "Wall time: 0.0924 seconds\nOutput:" },
+            {
+              type: "input_text",
+              text: `Error: run ${randomUUID()} could not start.`,
+            },
+          ],
+          isError: true,
+        },
+      ],
+    });
+
+    expect(outcome?.toolResultUpdates["runtime-call"]).toBe(
+      "The runtime launch returned no verifiable handle.",
+    );
+  });
+
   test("does not reserve a runtime fork for an in-process delegated agent", async ({
     makeOrganization,
     makeAgent,
@@ -262,6 +346,46 @@ describe("protected runtime protocol", () => {
     expect(ended).not.toHaveBeenCalled();
   });
 });
+
+/** A session whose `start_run` call, sent through `run_tool`, was released. */
+async function releasedLaunch(organizationId: string) {
+  const context = request(organizationId);
+  const { session } = context.resources.get(
+    APPA_PLUGIN_TRUSTED_CONTEXT,
+  ) as AppaTrustedContext;
+  await db.insert(schema.openappaSessionsTable).values({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    actor: openappaActor(session.session_id),
+    root: openappaActor(session.session_id),
+    parentId: null,
+    startDecision: { decision: "ack" },
+  });
+  await db.insert(schema.openappaOperationsTable).values({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    operationId: "call:runtime-call",
+    root: openappaActor(session.session_id),
+    status: "complete",
+    input: {
+      semantic: {
+        event: "tool_call",
+        tool: "archestra__start_run",
+        spawn: true,
+      },
+    },
+    decision: { decision: "allow_call" },
+  });
+  vi.spyOn(service, "loadChildReturns").mockResolvedValue([]);
+  vi.spyOn(service, "processProxyResults").mockResolvedValue({
+    toolResultUpdates: {},
+  });
+  const plugin = new AppaPluginArchestra([]);
+  await plugin.onSessionInit(context);
+  return { plugin, context };
+}
 
 function runtimeConfig() {
   return AgentRuntimeSchema.parse({

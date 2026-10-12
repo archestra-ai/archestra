@@ -1878,48 +1878,32 @@ async function releasedRuntimeSpawns(params: {
   );
 }
 
+/** Only ids and a known state leave a launch result; its text does not. */
 function runtimeLaunchHandle(content: unknown): string {
-  let value: unknown = content;
-  try {
-    if (typeof content === "string") value = JSON.parse(content);
-  } catch {
-    return "The runtime launch returned no verifiable handle.";
-  }
-  if (!isRecord(value))
-    return "The runtime launch returned no verifiable handle.";
-  if (Array.isArray(value.content)) {
-    const text = value.content.find(
-      (part) =>
-        isRecord(part) && part.type === "text" && typeof part.text === "string",
-    );
-    if (isRecord(text)) {
-      try {
-        value = JSON.parse(text.text as string);
-      } catch {
-        return "The runtime launch returned no verifiable handle.";
-      }
+  const handle = findInToolResult(content, 0, (record) => {
+    const found: Record<string, string> = {};
+    for (const key of ["session_id", "task_id", "agent_id"]) {
+      const id = record[key];
+      if (typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id))
+        found[key] = id;
     }
-  }
-  if (!isRecord(value))
-    return "The runtime launch returned no verifiable handle.";
-  const handle: Record<string, string> = {};
-  for (const key of ["session_id", "task_id", "agent_id"]) {
-    if (typeof value[key] === "string" && /^[a-f0-9-]{36}$/i.test(value[key]))
-      handle[key] = value[key];
-  }
-  if (
-    typeof value.state === "string" &&
-    [
-      "submitted",
-      "working",
-      "input-required",
-      "completed",
-      "failed",
-      "canceled",
-    ].includes(value.state)
-  ) {
-    handle.state = value.state;
-  }
+    if (Object.keys(found).length === 0) return null;
+    if (
+      typeof record.state === "string" &&
+      [
+        "submitted",
+        "working",
+        "input-required",
+        "completed",
+        "failed",
+        "canceled",
+      ].includes(record.state)
+    ) {
+      found.state = record.state;
+    }
+    return found;
+  });
+  if (!handle) return "The runtime launch returned no verifiable handle.";
   return JSON.stringify({
     ...handle,
     message: "Use get_run to retrieve admitted runtime output.",
@@ -4658,49 +4642,74 @@ function reviewResultStatus(
   value: unknown,
   depth: number,
 ): { offerId: string; outcome: HitlReviewOutcome } | null {
-  if (depth > 4 || value === null || value === undefined) return null;
+  return findInToolResult(value, depth, (record) =>
+    (record.outcome === "review_required" ||
+      record.outcome === "review_unanswered" ||
+      record.outcome === "review_cancelled" ||
+      record.outcome === "review_unavailable" ||
+      record.outcome === "review_invalid") &&
+    typeof record.offer_id === "string" &&
+    record.offer_id.length > 0
+      ? { offerId: record.offer_id, outcome: record.outcome }
+      : null,
+  );
+}
+
+/**
+ * Finds what `pick` accepts in a tool result, in the forms clients report
+ * one: the record itself, its JSON text, an MCP result, or text parts. Codex
+ * frames text as `Wall time: 0.1 seconds\nOutput:\n<text>`, so text that is
+ * not JSON is read line by line.
+ */
+function findInToolResult<T>(
+  value: unknown,
+  depth: number,
+  pick: (record: Record<string, unknown>) => T | null,
+): T | null {
+  if (depth > TOOL_RESULT_MAX_DEPTH || value === null || value === undefined)
+    return null;
   if (typeof value === "string") {
+    let parsed: unknown;
     try {
-      return reviewResultStatus(JSON.parse(value), depth + 1);
+      parsed = JSON.parse(value);
     } catch {
       for (const line of value.split(/\r?\n/)) {
         const candidate = line.trim();
         if (!candidate.startsWith("{") && !candidate.startsWith("[")) continue;
         try {
-          const status = reviewResultStatus(JSON.parse(candidate), depth + 1);
-          if (status) return status;
+          const found = findInToolResult(
+            JSON.parse(candidate),
+            depth + 1,
+            pick,
+          );
+          if (found) return found;
         } catch {
           // Continue past non-JSON log lines and bounded metadata.
         }
       }
       return null;
     }
+    return findInToolResult(parsed, depth + 1, pick);
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      const status = reviewResultStatus(item, depth + 1);
-      if (status) return status;
+      const found = findInToolResult(item, depth + 1, pick);
+      if (found) return found;
     }
     return null;
   }
   if (!isRecord(value)) return null;
-  if (
-    (value.outcome === "review_required" ||
-      value.outcome === "review_unanswered" ||
-      value.outcome === "review_cancelled" ||
-      value.outcome === "review_unavailable" ||
-      value.outcome === "review_invalid") &&
-    typeof value.offer_id === "string" &&
-    value.offer_id.length > 0
-  ) {
-    return { offerId: value.offer_id, outcome: value.outcome };
-  }
+  const picked = pick(value);
+  if (picked) return picked;
   for (const nested of [value.structuredContent, value.content, value.text]) {
-    const status = reviewResultStatus(nested, depth + 1);
-    if (status) return status;
+    const found = findInToolResult(nested, depth + 1, pick);
+    if (found) return found;
   }
   return null;
 }
+
+/** Deep enough for the JSON text of an MCP result whose text part is JSON. */
+const TOOL_RESULT_MAX_DEPTH = 5;
 
 function hitlQuestionGuidance(offerIds: readonly string[]): string {
   return [

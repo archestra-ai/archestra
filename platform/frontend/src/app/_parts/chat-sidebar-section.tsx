@@ -220,8 +220,9 @@ export function ChatSidebarSection({
   const pinProjectMutation = usePinProject();
   const pinnedProjects = (projectsData ?? []).filter((p) => p.pinnedAt);
   // Pinned apps join the sidebar's Pinned section exactly like pinned projects.
-  // useApps skips the request for roles without app:read.
-  const { data: appsData } = useApps({ limit: 100, offset: 0 });
+  // useApps skips the request for roles without app:read. Only pinned apps
+  // are asked for: the full list is far larger and the sidebar shows none of it.
+  const { data: appsData } = useApps({ limit: 100, offset: 0, pinned: true });
   const pinAppMutation = usePinApp();
   const openAppMutation = useOpenAppInChat();
   const openExternalAppMutation = useOpenExternalAppInChat();

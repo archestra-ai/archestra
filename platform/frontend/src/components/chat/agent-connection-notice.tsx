@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAgentCredentialReadiness } from "@/lib/agent.query";
 import {
+  type AgentConnectionGate,
   indexReadinessByAgent,
   listServerNames,
   resolveAgentConnectionGate,
@@ -23,13 +24,30 @@ import { McpInstallDialogs } from "./mcp-install-dialogs";
  */
 export function AgentConnectionNotice({ agentId }: { agentId: string }) {
   const { data: readiness } = useAgentCredentialReadiness();
-  const orchestrator = useMcpInstallOrchestrator();
   const entry = indexReadinessByAgent(readiness).get(agentId);
   const gate = resolveAgentConnectionGate(entry);
 
   if (gate.kind === "ok") return null;
+  return (
+    <MissingConnectionNotice
+      gate={gate}
+      missing={entry?.missingConnections ?? []}
+    />
+  );
+}
 
-  const missing = entry?.missingConnections ?? [];
+/**
+ * Split out so the install orchestrator, and the registry catalog and server
+ * list it loads, only mount when there is something to connect.
+ */
+function MissingConnectionNotice({
+  gate,
+  missing,
+}: {
+  gate: Exclude<AgentConnectionGate, { kind: "ok" }>;
+  missing: { catalogId: string }[];
+}) {
+  const orchestrator = useMcpInstallOrchestrator();
   const servers = listServerNames(gate.serverNames);
 
   return (

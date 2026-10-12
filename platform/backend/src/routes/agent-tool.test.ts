@@ -1517,6 +1517,46 @@ describe("GET /api/agents/:agentId/tools", () => {
     );
   });
 
+  test("returns only one catalog's tools when catalogId is given", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+    });
+    const wanted = await makeInternalMcpCatalog({ organizationId });
+    const other = await makeInternalMcpCatalog({ organizationId });
+    const wantedTool = await makeTool({
+      name: "wanted-tool",
+      catalogId: wanted.id,
+    });
+    const otherTool = await makeTool({
+      name: "other-tool",
+      catalogId: other.id,
+    });
+    await makeAgentTool(agent.id, wantedTool.id);
+    await makeAgentTool(agent.id, otherTool.id);
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools?catalogId=${wanted.id}`,
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().map((tool: { id: string }) => tool.id)).toEqual([
+      wantedTool.id,
+    ]);
+
+    const all = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools`,
+    });
+    expect(all.json()).toHaveLength(2);
+  });
+
   test("allows a team member to read tools for a team-scoped MCP gateway in their team", async ({
     makeAgent,
     makeAgentTool,

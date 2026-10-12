@@ -23725,7 +23725,12 @@ export type GetAgentToolsData = {
     path: {
         agentId: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Only return tools from this catalog item, e.g. to check whether one server's tools are assigned without loading every tool's schema
+         */
+        catalogId?: string;
+    };
     url: '/api/agents/{agentId}/tools';
 };
 
@@ -25960,6 +25965,10 @@ export type GetAppsData = {
          * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
          */
         owner?: Array<string>;
+        /**
+         * Only return apps the current user has pinned.
+         */
+        pinned?: boolean;
     };
     url: '/api/apps';
 };

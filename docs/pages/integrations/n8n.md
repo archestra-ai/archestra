@@ -21,8 +21,22 @@ The client must reach Archestra's API. The examples use `http://localhost:9000/v
 2. Add an **OpenAI Chat Model** to the agent's model input.
 3. Create or edit the model's OpenAI credential. Set **API Key** to your Archestra virtual key and **Base URL** to `http://localhost:9000/v1/openai`.
 4. Select a model served by your provider and save the workflow.
+5. If Guardrails are active, add the [session header](#configure-guardrails).
 
 Keep the Archestra virtual key in n8n's credential store, rather than in workflow expressions. The provider key stays in Archestra. See [n8n's OpenAI credentials](https://docs.n8n.io/integrations/builtin/credentials/openai).
+
+## Configure Guardrails
+
+Send the session header so Guardrails track the workflow.
+
+1. Open the OpenAI credential used by your **OpenAI Chat Model** node.
+2. Turn on **Add Custom Header**.
+3. Set **Header Name** to `X-Appa-Session-ID`.
+4. Set **Header Value** to a session identifier, such as a UUID.
+
+For workflows that use an **HTTP Request** node, add `X-Appa-Session-ID` to the request headers.
+
+For subagents or child workflows, also send `X-Appa-Parent-ID` with the parent workflow's session ID.
 
 ## Connect Tools
 

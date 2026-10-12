@@ -24,6 +24,16 @@ The client must reach Archestra's API. The examples use `http://localhost:9000/v
 
 These controls are described in [Open WebUI's OpenAI-compatible connection guide](https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/).
 
+## Configure Guardrails
+
+Send the session header so Guardrails track conversations from Open WebUI.
+
+1. Go to **Settings → Admin → Connections** in Open WebUI.
+2. Edit your OpenAI API connection.
+3. Under **Headers**, add `X-Appa-Session-ID` with a session identifier as the value.
+
+For child sessions or pipelines, also send `X-Appa-Parent-ID` with the parent session ID.
+
 ## Connect Tools
 
 Create an [MCP Gateway](/docs/mcp/gateway) in Archestra and assign its tools. Copy the connection URL and a gateway token.

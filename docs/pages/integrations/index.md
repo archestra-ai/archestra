@@ -17,4 +17,4 @@ Choose the guide for your client:
 - **Manual model connections:** follow [n8n](/docs/integrations/n8n), [Open WebUI](/docs/integrations/openwebui), or the SDK and framework guides below.
 - **Hosted tools:** connect a [Microsoft Foundry](/docs/integrations/foundry) agent to an MCP Gateway. Foundry continues to host the model.
 
-An LLM virtual key authenticates model requests. A gateway token authenticates MCP calls. They are separate credentials; use each with its matching endpoint.
+An LLM virtual key authenticates model requests. A gateway token authenticates MCP calls. They are separate credentials; use each with its matching endpoint. When Guardrails are active, clients without built-in recognition also send `X-Appa-Session-ID`; see [Guardrail Clients](/docs/agents/guardrails/clients).

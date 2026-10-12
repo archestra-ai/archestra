@@ -43,6 +43,36 @@ console.log(result.text);
 
 The explicit `.chat()` selects Chat Completions. Archestra also supports the OpenAI Responses API. See the [AI SDK OpenAI provider](https://ai-sdk.dev/providers/ai-sdk-providers/openai) for model factory options. Keep this code on your server so the credential is not included in browser bundles.
 
+## Configure Guardrails
+
+Add the session header to `createOpenAI`:
+
+```typescript
+import { randomUUID } from "node:crypto";
+import { createOpenAI } from "@ai-sdk/openai";
+
+const openai = createOpenAI({
+  baseURL: "http://localhost:9000/v1/openai",
+  apiKey: process.env.OPENAI_API_KEY,
+  headers: {
+    "X-Appa-Session-ID": randomUUID(),
+  },
+});
+```
+
+For subagents or child workflows, also include `X-Appa-Parent-ID`:
+
+```typescript
+const childOpenai = createOpenAI({
+  baseURL: "http://localhost:9000/v1/openai",
+  apiKey: process.env.OPENAI_API_KEY,
+  headers: {
+    "X-Appa-Session-ID": randomUUID(),
+    "X-Appa-Parent-ID": parentSessionId,
+  },
+});
+```
+
 ## Verify the Connection
 
 Send `Reply with connection verified.` and check that the client returns a response. Open **Logs → LLM Proxy** in Archestra and find the request by its model and timestamp. Open the request to check its status and virtual key.

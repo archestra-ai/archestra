@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { type ResourcePermissionGrant, urlSlugify } from "@archestra/shared";
+import {
+  type GitProvider,
+  type ResourcePermissionGrant,
+  urlSlugify,
+} from "@archestra/shared";
 import {
   and,
   asc,
@@ -387,6 +391,11 @@ class PluginModel {
       syncRef?: string | null;
       githubAppConfigId?: string | null;
       githubPatId?: string | null;
+      gitlabTokenId?: string | null;
+      /** Git host; null or omitted means GitHub. */
+      sourceProvider?: GitProvider | null;
+      /** Web address of a self-hosted source; null means the provider's cloud. */
+      sourceOrigin?: string | null;
     };
   }): Promise<PluginWithFiles | null> {
     const created = await withDbTransaction(async (tx) => {
@@ -425,6 +434,9 @@ class PluginModel {
               githubSyncRef: params.source?.syncRef,
               githubAppConfigId: params.source?.githubAppConfigId,
               githubPatId: params.source?.githubPatId,
+              gitlabTokenId: params.source?.gitlabTokenId,
+              sourceProvider: params.source?.sourceProvider,
+              sourceOrigin: params.source?.sourceOrigin,
               lastSyncedAt: params.source?.syncInterval ? now : null,
               sourceId: params.sourceId,
               approvedContentHash: contentHash,
@@ -542,7 +554,9 @@ class PluginModel {
       const githubAuthenticationChanged = githubAuthentication
         ? githubAuthentication.githubAppConfigId !==
             existing.githubAppConfigId ||
-          githubAuthentication.githubPatId !== existing.githubPatId
+          githubAuthentication.githubPatId !== existing.githubPatId ||
+          (githubAuthentication.gitlabTokenId ?? null) !==
+            existing.gitlabTokenId
         : false;
       const clearGithubCandidate =
         githubTrackingChanged || githubSource?.syncInterval === null;
@@ -556,6 +570,7 @@ class PluginModel {
               ? {
                   githubAppConfigId: githubAuthentication.githubAppConfigId,
                   githubPatId: githubAuthentication.githubPatId,
+                  gitlabTokenId: githubAuthentication.gitlabTokenId ?? null,
                 }
               : {}),
             ...(githubTrackingChanged || githubAuthenticationChanged
@@ -641,6 +656,7 @@ class PluginModel {
         githubSyncInterval: null,
         githubAppConfigId: null,
         githubPatId: null,
+        gitlabTokenId: null,
         pendingSourceSha: null,
         pendingContentHash: null,
         pendingDetectedAt: null,

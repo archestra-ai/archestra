@@ -4,13 +4,15 @@ import { LRUCacheManager } from "@/in-memory-lru-cache";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 
 /** A file or folder in a repository tree. */
-export interface GitTreeEntry {
+interface GitTreeEntry {
   path: string;
   type: "blob" | "tree";
   /** Git file mode, e.g. 100644; 120000 is a symlink. */
   mode?: string;
   /** Bytes, when the host reports it (GitHub does, GitLab does not). */
   size?: number;
+  /** Git file mode, e.g. `100644`, `100755`, or `120000` for a symlink. */
+  mode?: string;
 }
 
 export interface GitlabProject {
@@ -23,7 +25,7 @@ export interface GitlabProject {
 }
 
 /** A repository the credential can reach. */
-export interface GitRepositorySummary {
+interface GitRepositorySummary {
   path: string;
   private: boolean;
   defaultBranch: string | null;

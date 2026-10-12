@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
+  type GitProvider,
+  gitHostFromUrl,
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
   parseLabelsParam,
   ResourceAccessQuerySchema,
@@ -11,6 +13,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
+import type { GitAccess } from "@/git-hosts/git-access";
 import {
   PluginLabelModel,
   PluginModel,
@@ -20,7 +23,7 @@ import {
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import {
   importPluginFromGithub,
-  normalizeGithubPluginRepoUrl,
+  normalizePluginRepoUrl,
   PluginImportError,
 } from "@/plugins/github-import";
 import {
@@ -31,12 +34,17 @@ import {
   GithubMarketplaceChangedError,
   prepareGithubMarketplaceImports,
 } from "@/plugins/github-marketplace-import";
+import {
+  assertPluginSourceHost,
+  hasSinglePluginGitAuth,
+  type PluginGitAuth,
+  pluginSourceGitHost,
+  resolvePluginImportAccess,
+  resolvePluginSourceAccess,
+  storedCredentialId,
+} from "@/plugins/plugin-source-access";
 import { transferResourceOwnership } from "@/services/resource-ownership";
 import { ResourcePermissions } from "@/services/resource-permissions";
-import {
-  resolveGithubAppInstallationToken,
-  resolveGithubPatToken,
-} from "@/skills/github-app-token";
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
@@ -44,6 +52,7 @@ import {
   CreatePluginSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  type Plugin,
   PluginGithubSyncIntervalSchema,
   PluginListItemSchema,
   PluginPlatformSchema,
@@ -51,20 +60,39 @@ import {
   UpdatePluginSchema,
   UuidIdSchema,
 } from "@/types";
+import { GitProviderSchema } from "@/types/git-host";
 import { isUniqueConstraintError } from "@/utils/db";
 import { registerEntityLabelRoutes } from "../entity-labels";
 
 const PluginParamsSchema = z.object({ id: UuidIdSchema });
 
-const githubAuthShape = {
+/**
+ * How a request reads a plugin repository on GitHub or GitLab. Authentication
+ * is optional (public cloud repositories) and at most one method may be
+ * supplied: a stored GitHub App (`githubAppConfigId`, any GitHub host), a
+ * stored GitLab token (`gitlabTokenId`, any GitLab host), a legacy stored
+ * GitHub PAT (`githubPatId`), or a transient github.com token (`githubToken`,
+ * never stored). A credential decides the host, so self-hosted GitHub and
+ * GitLab need one.
+ */
+const gitAuthShape = {
+  provider: GitProviderSchema.optional().describe(
+    "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+  ),
   githubToken: z.string().min(1).optional(),
   githubAppConfigId: z.string().uuid().optional(),
   githubPatId: z.string().uuid().optional(),
+  gitlabTokenId: z.string().uuid().optional(),
 };
 
-const GithubAuthSchema = z.object(githubAuthShape).refine(hasSingleGithubAuth, {
-  message: "Choose only one GitHub authentication method",
-});
+const singleGitAuthError = {
+  message:
+    "Provide at most one of githubToken, githubPatId, githubAppConfigId, or gitlabTokenId",
+};
+
+const GitAuthSchema = z
+  .object(gitAuthShape)
+  .refine(hasSinglePluginGitAuth, singleGitAuthError);
 
 const GithubCommitShaSchema = z
   .string()
@@ -76,14 +104,14 @@ const GithubPluginSourceSchema = z
     ref: z.string().trim().min(1).nullable().optional(),
     subdir: z.string().trim().default(""),
     exclude: z.array(z.string().trim().min(1)).max(50).default([]),
-    ...githubAuthShape,
+    ...gitAuthShape,
   })
-  .refine(hasSingleGithubAuth, {
-    message: "Choose only one GitHub authentication method",
-  });
+  .refine(hasSinglePluginGitAuth, singleGitAuthError);
 
 const GithubPluginPreviewSchema = z.object({
   repo: z.string(),
+  sourceProvider: GitProviderSchema,
+  sourceOrigin: z.string().nullable(),
   requestedRef: z.string().nullable(),
   commitSha: z.string(),
   subdir: z.string(),
@@ -130,16 +158,18 @@ const GithubMarketplaceDiscoverySchema = z.object({
   reason: z.string().nullable(),
 });
 
+const marketplaceRepositoryShape = {
+  repoUrl: z.string().trim().min(1),
+  ref: z.string().trim().min(1).nullable().optional(),
+  ...gitAuthShape,
+};
+
 const GithubMarketplaceSourceSchema = z
   .object({
-    repoUrl: z.string().trim().min(1),
-    ref: z.string().trim().min(1).nullable().optional(),
+    ...marketplaceRepositoryShape,
     marketplacePath: MarketplacePathSchema.optional(),
-    ...githubAuthShape,
   })
-  .refine(hasSingleGithubAuth, {
-    message: "Choose only one GitHub authentication method",
-  });
+  .refine(hasSinglePluginGitAuth, singleGitAuthError);
 
 const MarketplaceImportSelectionSchema = z.object({
   name: z.string().min(1),
@@ -154,9 +184,12 @@ const MarketplaceImportSelectionSchema = z.object({
   exclude: z.array(z.string().trim().min(1)).max(50).default([]),
 });
 
-const GithubMarketplaceImportSchema = GithubMarketplaceSourceSchema.and(
-  z.object({
-    marketplacePath: MarketplacePathSchema,
+const GithubMarketplaceImportSchema = z
+  .object({
+    ...marketplaceRepositoryShape,
+    marketplacePath: MarketplacePathSchema.nullable().describe(
+      "The reviewed manifest path, or null to import plugin folders discovered in a repository without a marketplace manifest",
+    ),
     approvedCommitSha: GithubCommitShaSchema,
     trackingRef: z.string().trim().min(1).nullable(),
     selected: z
@@ -170,8 +203,8 @@ const GithubMarketplaceImportSchema = GithubMarketplaceSourceSchema.and(
     syncInterval: z
       .union([PluginGithubSyncIntervalSchema, z.null()])
       .default("1d"),
-  }),
-);
+  })
+  .refine(hasSinglePluginGitAuth, singleGitAuthError);
 
 const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.post(
@@ -279,7 +312,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const { organizationId, user, body } = request;
       await requirePluginAdmin({ organizationId, userId: user.id });
-      const githubToken = await resolveGithubToken({
+      const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
         userId: user.id,
@@ -289,7 +322,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           repoUrl: body.repoUrl,
           ref: body.ref,
           marketplacePath: body.marketplacePath,
-          githubToken,
+          access,
         }),
       );
       reply.header("Cache-Control", "no-store");
@@ -334,7 +367,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
       // SPDX-SnippetEnd
-      const githubToken = await resolveGithubToken({
+      const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
         userId: user.id,
@@ -351,7 +384,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             approvedCommitSha: body.approvedCommitSha,
             trackingRef: body.trackingRef,
             selections: body.selected,
-            githubToken,
+            access,
           }),
         );
       } catch (error) {
@@ -362,7 +395,11 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       const created = [];
       const failed = [...preparedBatch.failed];
-      for (const { selection, imported } of preparedBatch.prepared) {
+      for (const {
+        selection,
+        imported,
+        manifestPath,
+      } of preparedBatch.prepared) {
         try {
           const plugin = await PluginModel.create({
             organizationId,
@@ -386,12 +423,11 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
               subdir: imported.subdir,
               exclude: selection.exclude,
               marketplaceRepo: preparedBatch.marketplace.repoUrl,
-              marketplacePath: preparedBatch.marketplace.path,
+              marketplacePath: manifestPath,
               marketplacePluginName: selection.name,
               syncInterval: body.syncInterval,
               syncRef: selection.sourceRef,
-              githubAppConfigId: body.githubAppConfigId,
-              githubPatId: body.githubPatId,
+              ...pluginSourceRecord({ imported, auth: body, access }),
             },
           });
           if (!plugin) throw new Error("Plugin identity already exists");
@@ -429,7 +465,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, user, body }, reply) => {
       await requirePluginAdmin({ organizationId, userId: user.id });
-      const githubToken = await resolveGithubToken({
+      const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
         userId: user.id,
@@ -441,7 +477,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           trackingRef: body.ref,
           subdir: body.subdir,
           exclude: body.exclude,
-          githubToken,
+          access,
         }),
       );
       return reply.send(imported);
@@ -472,7 +508,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ organizationId, user, body }, reply) => {
       await requirePluginAdmin({ organizationId, userId: user.id });
-      const githubToken = await resolveGithubToken({
+      const access = await resolvePluginImportAccess({
         ...body,
         organizationId,
         userId: user.id,
@@ -484,7 +520,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           trackingRef: body.trackingRef ?? body.ref,
           subdir: body.subdir,
           exclude: body.exclude,
-          githubToken,
+          access,
         }),
       );
       assertApprovedCommit(imported.commitSha, body.approvedCommitSha);
@@ -526,6 +562,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           sha: imported.commitSha,
           subdir: imported.subdir,
           exclude: body.exclude,
+          ...pluginSourceRecord({ imported, auth: body, access }),
         },
       });
       if (!plugin) {
@@ -544,24 +581,19 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Preview the latest tracked GitHub commit without changing approved bytes",
         tags: ["Plugins"],
         params: PluginParamsSchema,
-        body: GithubAuthSchema.optional(),
+        body: GitAuthSchema.optional(),
         response: constructResponseSchema(GithubPluginPreviewSchema),
       },
     },
     async (request, reply) => {
       const { organizationId, user, params, body } = request;
       await requirePluginAdmin({ organizationId, userId: user.id });
-      const githubToken = await resolveGithubToken({
-        ...(body ?? {}),
-        organizationId,
-        userId: user.id,
-      });
       const { syncState: observed, imported } =
         await importExistingGithubPlugin({
           id: params.id,
           organizationId,
           userId: user.id,
-          githubToken,
+          auth: body ?? {},
         });
       if (imported.commitSha !== observed.sourceSha) {
         const written = await PluginModel.markGithubSyncResult({
@@ -591,7 +623,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "Re-fetch and explicitly approve the latest tracked GitHub commit",
         tags: ["Plugins"],
         params: PluginParamsSchema,
-        body: GithubAuthSchema.and(
+        body: GitAuthSchema.and(
           z.object({ approvedCommitSha: GithubCommitShaSchema }),
         ),
         response: constructResponseSchema(PluginWithFilesSchema),
@@ -612,17 +644,12 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "The approved commit must match the current pending update candidate",
         );
       }
-      const githubToken = await resolveGithubToken({
-        ...body,
-        organizationId,
-        userId: user.id,
-      });
       const { imported } = await importExistingGithubPlugin({
         id: params.id,
         organizationId,
         userId: user.id,
         approvedCommitSha: body.approvedCommitSha,
-        githubToken,
+        auth: body,
       });
       const plugin = await PluginModel.applyGithubUpdate({
         id: params.id,
@@ -663,7 +690,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (!existing) throw new ApiError(404, "Plugin not found");
       if (body.interval !== null && existing.sourceKind !== "github") {
-        throw new ApiError(400, "Only GitHub-sourced plugins can be synced");
+        throw new ApiError(400, "Only Git-sourced plugins can be synced");
       }
       await PluginModel.setGithubSync({
         id: existing.id,
@@ -698,7 +725,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       if (!plugin) throw new ApiError(404, "Plugin not found");
       if (plugin.sourceKind !== "github" || !plugin.sourceRepo) {
-        throw new ApiError(400, "Plugin is not connected to a GitHub source");
+        throw new ApiError(400, "Plugin is not connected to a Git source");
       }
       const active = await TaskModel.findActivePayloadValues(
         "plugin_github_sync",
@@ -828,14 +855,21 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       const githubSource = body.githubSource;
-      if (githubSource?.authentication) {
-        await resolveGithubToken({
-          githubAppConfigId:
-            githubSource.authentication.githubAppConfigId ?? undefined,
-          githubPatId: githubSource.authentication.githubPatId ?? undefined,
+      const authentication = githubSource?.authentication;
+      if (
+        authentication &&
+        (authentication.githubAppConfigId ||
+          authentication.githubPatId ||
+          authentication.gitlabTokenId)
+      ) {
+        const access = await resolvePluginImportAccess({
+          githubAppConfigId: authentication.githubAppConfigId ?? undefined,
+          githubPatId: authentication.githubPatId ?? undefined,
+          gitlabTokenId: authentication.gitlabTokenId ?? undefined,
           organizationId,
           userId: user.id,
         });
+        assertPluginSourceHost({ plugin: existing, access });
       }
       const input = githubSource
         ? {
@@ -843,7 +877,11 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             githubSource: {
               ...githubSource,
               repoUrl: await runGithubImport(async () =>
-                normalizeGithubPluginRepoUrl(githubSource.repoUrl),
+                normalizePluginRepoUrl({
+                  repoUrl: githubSource.repoUrl,
+                  // parsing only needs the source's host, never its token
+                  access: { host: pluginSourceGitHost(existing) },
+                }),
               ),
             },
           }
@@ -891,35 +929,34 @@ export default pluginRoutes;
 
 // === Internal helpers ===
 
-async function resolveGithubToken(params: {
-  githubToken?: string;
-  githubAppConfigId?: string;
-  githubPatId?: string;
-  organizationId: string;
-  userId: string;
-}): Promise<string | undefined> {
-  if (!params.githubAppConfigId && !params.githubPatId) {
-    return params.githubToken;
-  }
-  const allowed = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "credential",
-    "read",
-  );
-  if (!allowed) {
-    throw new ApiError(403, "You do not have access to GitHub credentials");
-  }
-  if (params.githubPatId) {
-    return resolveGithubPatToken({
-      githubPatId: params.githubPatId,
-      organizationId: params.organizationId,
-    });
-  }
-  return resolveGithubAppInstallationToken({
-    githubAppConfigId: params.githubAppConfigId as string,
-    organizationId: params.organizationId,
+/**
+ * Where an imported plugin's source lives and the stored credential that keeps
+ * reading it. A credential is only recorded for its own host: a github.com
+ * source advertised by a marketplace elsewhere is read publicly.
+ */
+function pluginSourceRecord(params: {
+  imported: { sourceProvider: GitProvider; sourceOrigin: string | null };
+  auth: PluginGitAuth;
+  access: GitAccess | undefined;
+}) {
+  const accessHost =
+    params.access?.host ?? gitHostFromUrl({ provider: "github" });
+  const sourceHost = gitHostFromUrl({
+    provider: params.imported.sourceProvider,
+    url: params.imported.sourceOrigin,
   });
+  const sameHost =
+    accessHost.provider === sourceHost.provider &&
+    accessHost.webUrl === sourceHost.webUrl;
+  return {
+    sourceProvider: params.imported.sourceProvider,
+    sourceOrigin: params.imported.sourceOrigin,
+    githubAppConfigId: sameHost
+      ? (params.auth.githubAppConfigId ?? null)
+      : null,
+    githubPatId: sameHost ? (params.auth.githubPatId ?? null) : null,
+    gitlabTokenId: sameHost ? (params.auth.gitlabTokenId ?? null) : null,
+  };
 }
 
 async function requirePluginAdmin(params: {
@@ -968,7 +1005,8 @@ async function importExistingGithubPlugin(params: {
   organizationId: string;
   userId: string;
   approvedCommitSha?: string;
-  githubToken?: string;
+  /** Request-supplied authentication; empty uses the source's stored credential. */
+  auth: PluginGitAuth;
 }) {
   const [plugin, syncState] = await Promise.all([
     PluginModel.findById(params),
@@ -982,32 +1020,13 @@ async function importExistingGithubPlugin(params: {
     throw new ApiError(404, "Plugin not found");
   }
   if (plugin.sourceKind !== "github" || !plugin.sourceRepo) {
-    throw new ApiError(409, "Plugin is not linked to a GitHub source");
+    throw new ApiError(409, "Plugin is not linked to a Git source");
   }
-  if (!params.githubToken && (plugin.githubPatId || plugin.githubAppConfigId)) {
-    const allowed = await userHasPermission(
-      params.userId,
-      params.organizationId,
-      "credential",
-      "read",
-    );
-    if (!allowed) {
-      throw new ApiError(403, "You do not have access to GitHub credentials");
-    }
-  }
-  const githubToken =
-    params.githubToken ??
-    (plugin.githubPatId
-      ? await resolveGithubPatToken({
-          githubPatId: plugin.githubPatId,
-          organizationId: plugin.organizationId,
-        })
-      : plugin.githubAppConfigId
-        ? await resolveGithubAppInstallationToken({
-            githubAppConfigId: plugin.githubAppConfigId,
-            organizationId: plugin.organizationId,
-          })
-        : undefined);
+  const access = await resolveExistingPluginAccess({
+    plugin: syncState,
+    auth: params.auth,
+    userId: params.userId,
+  });
   const imported = await runGithubImport(() =>
     importPluginFromGithub({
       repoUrl: plugin.sourceRepo as string,
@@ -1018,7 +1037,7 @@ async function importExistingGithubPlugin(params: {
         plugin.sourceRef,
       subdir: plugin.sourceSubdir ?? "",
       exclude: plugin.sourceExclude,
-      githubToken,
+      access,
     }),
   );
   if (params.approvedCommitSha) {
@@ -1027,23 +1046,50 @@ async function importExistingGithubPlugin(params: {
   return { plugin, syncState, imported };
 }
 
-function hasSingleGithubAuth(value: {
-  githubToken?: string;
-  githubAppConfigId?: string;
-  githubPatId?: string;
-}): boolean {
-  return (
-    [value.githubToken, value.githubAppConfigId, value.githubPatId].filter(
-      Boolean,
-    ).length <= 1
-  );
+/**
+ * Request-supplied authentication for the plugin's own host, or else the
+ * source's stored credential (which needs `credential:read`).
+ */
+async function resolveExistingPluginAccess(params: {
+  plugin: Plugin;
+  auth: PluginGitAuth;
+  userId: string;
+}): Promise<GitAccess | undefined> {
+  const { plugin, auth } = params;
+  if (
+    auth.githubToken ||
+    auth.githubAppConfigId ||
+    auth.githubPatId ||
+    auth.gitlabTokenId
+  ) {
+    const access = await resolvePluginImportAccess({
+      ...auth,
+      provider: plugin.sourceProvider ?? "github",
+      organizationId: plugin.organizationId,
+      userId: params.userId,
+    });
+    assertPluginSourceHost({ plugin, access });
+    return access;
+  }
+  if (storedCredentialId(plugin)) {
+    const allowed = await userHasPermission(
+      params.userId,
+      plugin.organizationId,
+      "credential",
+      "read",
+    );
+    if (!allowed) {
+      throw new ApiError(403, "You do not have access to Git credentials");
+    }
+  }
+  return resolvePluginSourceAccess(plugin);
 }
 
 function assertApprovedCommit(actual: string, approved: string): void {
   if (actual.toLowerCase() !== approved.toLowerCase()) {
     throw new ApiError(
       409,
-      "GitHub resolved a different commit than the one reviewed; preview again",
+      "The repository resolved a different commit than the one reviewed; preview again",
     );
   }
 }

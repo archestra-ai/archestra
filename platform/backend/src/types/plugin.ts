@@ -115,12 +115,16 @@ export const UpdatePluginSchema = z
           .object({
             githubAppConfigId: z.string().uuid().nullable(),
             githubPatId: z.string().uuid().nullable(),
+            gitlabTokenId: z.string().uuid().nullable().optional(),
           })
           .refine(
             (value) =>
-              [value.githubAppConfigId, value.githubPatId].filter(Boolean)
-                .length <= 1,
-            { message: "Choose only one GitHub authentication method" },
+              [
+                value.githubAppConfigId,
+                value.githubPatId,
+                value.gitlabTokenId,
+              ].filter(Boolean).length <= 1,
+            { message: "Choose only one Git authentication method" },
           )
           .optional(),
       })
@@ -173,6 +177,7 @@ export const PluginWithFilesSchema = PluginWithVisibilitySchema.extend({
 export const PluginListItemSchema = PluginWithVisibilitySchema.omit({
   githubAppConfigId: true,
   githubPatId: true,
+  gitlabTokenId: true,
   lastSyncError: true,
 }).extend({
   teams: z.array(PluginTeamSchema),

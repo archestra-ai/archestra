@@ -1312,12 +1312,20 @@ export async function returnRuntimeValue(params: {
     : { kind: "held", reason: outcome.content };
 }
 
-/** Verifies that a parent carrier contains bytes admitted through ChildEnd. */
+/**
+ * Verifies that a parent carrier contains bytes admitted through ChildEnd.
+ *
+ * The runtime keeps one approved return for each spawn call. A child that
+ * answers a follow-up returns again under the same call, and the runtime then
+ * answers with the return it approved first. `crossedReturns` names every
+ * return of this child that crossed, so that answer is accepted too.
+ */
 export async function approveSpawnReturn(params: {
   session: OpenAppaSession;
   toolCallId: string;
   childId: string;
   value: string;
+  crossedReturns?: ReadonlySet<string>;
 }): Promise<void> {
   const decision = await dispatch(params.session, {
     event: "tool_result",
@@ -1353,7 +1361,7 @@ export async function approveSpawnReturn(params: {
     );
   }
   const approved = extractApprovedOutput(decision, params.value);
-  if (approved !== params.value) {
+  if (approved !== params.value && !params.crossedReturns?.has(approved)) {
     throw openappaFailure(
       new Error("OpenAPPA changed an already crossed child return"),
     );

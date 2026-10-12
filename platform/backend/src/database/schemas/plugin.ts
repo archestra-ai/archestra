@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { GitProvider } from "@/types/git-host";
 import type {
   ClientType,
   PluginGithubSyncInterval,
@@ -68,6 +69,14 @@ const pluginsTable = softDeletablePgTable(
       {
         onDelete: "restrict",
       },
+    ),
+    /** Git host of an imported plugin; null means GitHub. */
+    sourceProvider: text("source_provider").$type<GitProvider>(),
+    /** Web address of a self-hosted source; null means the provider's cloud. */
+    sourceOrigin: text("source_origin"),
+    gitlabTokenId: uuid("gitlab_token_id").references(
+      () => runtimeCredentialDefinitionsTable.id,
+      { onDelete: "restrict" },
     ),
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" }),
     lastSyncError: text("last_sync_error"),

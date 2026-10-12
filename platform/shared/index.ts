@@ -21,6 +21,7 @@ export * from "./e2e-test-ids";
 export * from "./encrypted-chat-content";
 export * from "./environment-defaults";
 export * from "./gemini-models";
+export * from "./git-hosts";
 export * from "./github";
 export * from "./handlebars-expressions";
 export { client as archestraApiClient } from "./hey-api/clients/api/client.gen";

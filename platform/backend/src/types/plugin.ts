@@ -6,6 +6,7 @@ import {
 import { createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { GitProviderSchema } from "./git-host";
 import { LabelWithDetailsSchema } from "./label";
 import {
   isSafePluginPath,
@@ -52,6 +53,7 @@ export const SelectPluginSchema = createSelectSchema(schema.pluginsTable, {
   clientType: ClientTypeSchema,
   supportedPlatforms: z.array(PluginPlatformSchema).min(1),
   sourceKind: PluginSourceKindSchema,
+  sourceProvider: z.union([GitProviderSchema, z.null()]),
   scope: ResourceVisibilityScopeSchema,
   githubSyncInterval: z.union([PluginGithubSyncIntervalSchema, z.null()]),
 });

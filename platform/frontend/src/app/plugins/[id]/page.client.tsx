@@ -2,7 +2,6 @@
 
 import { GIT_PROVIDER_LABELS } from "@archestra/shared";
 import {
-  Github,
   Info,
   Loader2,
   MoreHorizontal,
@@ -22,6 +21,7 @@ import {
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -331,7 +331,10 @@ function PluginDetailView({
           </Badge>
           {isGithubPlugin && (
             <Badge variant="secondary" className="gap-1 font-normal">
-              <Github className="h-3 w-3" />
+              <GitProviderLogo
+                provider={plugin.sourceProvider ?? "github"}
+                size={12}
+              />
               <span>
                 {plugin.githubSyncInterval
                   ? `Checked against ${GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"]}`

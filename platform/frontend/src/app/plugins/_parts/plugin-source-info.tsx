@@ -1,6 +1,6 @@
 import { GIT_PROVIDER_LABELS } from "@archestra/shared";
-import { Github, Pencil } from "lucide-react";
-import { AgentIcon } from "@/components/agent-icon";
+import { Pencil } from "lucide-react";
+import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -55,12 +55,13 @@ export function PluginSourceInfo({
           }
           onClick={(event) => event.stopPropagation()}
         >
-          {!isGithub ? (
-            <Pencil className="size-3.5" />
-          ) : plugin.sourceProvider === "gitlab" ? (
-            <AgentIcon icon="logo:gitlab" size={14} />
+          {isGithub ? (
+            <GitProviderLogo
+              provider={plugin.sourceProvider ?? "github"}
+              size={14}
+            />
           ) : (
-            <Github className="size-3.5" />
+            <Pencil className="size-3.5" />
           )}
         </Button>
       </TooltipTrigger>

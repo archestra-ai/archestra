@@ -1,12 +1,12 @@
 "use client";
 
 import { GIT_PROVIDER_LABELS } from "@archestra/shared";
-import { Github, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
-import { AgentIcon } from "@/components/agent-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DiffEditor } from "@/components/diff-editor";
 import { Editor } from "@/components/editor";
+import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -555,11 +555,7 @@ function VersionPreview({
             className="ml-auto flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-4 hover:text-primary"
             title={`Open this version's source on ${GIT_PROVIDER_LABELS[sourceProvider ?? "github"]} (${detail.sourceCommit})`}
           >
-            {sourceProvider === "gitlab" ? (
-              <AgentIcon icon="logo:gitlab" size={12} />
-            ) : (
-              <Github className="size-3 shrink-0" />
-            )}
+            <GitProviderLogo provider={sourceProvider ?? "github"} size={12} />
             <span>
               Open version in {GIT_PROVIDER_LABELS[sourceProvider ?? "github"]}
             </span>

@@ -108,7 +108,7 @@ const SandboxTargetSchema = z
       .boolean()
       .optional()
       .describe(
-        "Set true for a brand-new isolated sandbox; its id is returned.",
+        "Set true for a brand-new empty sandbox, without the conversation's attachments or earlier work; its id is returned.",
       ),
     id: z
       .string()
@@ -118,7 +118,8 @@ const SandboxTargetSchema = z
   .optional()
   .describe(
     "Which sandbox to use. Omit (or leave empty) for the conversation's default " +
-      'sandbox (created on first use). Pass `{ "fresh": true }` for a new isolated ' +
+      "sandbox (created on first use), which holds the conversation's attachments. " +
+      'Pass `{ "fresh": true }` for a new empty ' +
       'sandbox, or `{ "id": "<uuid>" }` to target a specific one.',
   );
 

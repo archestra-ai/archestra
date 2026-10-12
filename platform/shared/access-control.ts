@@ -1669,6 +1669,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.CompleteAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.GetPendingAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.DiscardAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.InstallAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.GetAppaGithubAppAccounts]: { credential: ["read"] },
   [RouteId.UpdateAppaGithubSync]: { organizationSettings: ["update"] },

@@ -115,6 +115,8 @@ export async function resolveInstallationCredential(
   return { token: body.token, expiresAt };
 }
 
+export const GITHUB_APP_NOT_FOUND = "github_app_not_found";
+
 /**
  * Call an App-level GitHub endpoint (`/app/...`) authenticated as the App
  * itself rather than one of its installations, e.g. to find where it is installed.
@@ -145,8 +147,8 @@ export async function fetchAsGithubApp<T>(
       signal: AbortSignal.timeout(INSTALLATION_TOKEN_REQUEST_TIMEOUT_MS),
     },
   );
-  if (!response.ok)
-    throw new ApiError(
+  if (!response.ok) {
+    const error = new ApiError(
       502,
       [
         `GitHub returned HTTP ${response.status} for the App`,
@@ -155,6 +157,11 @@ export async function fetchAsGithubApp<T>(
         .filter(Boolean)
         .join(": "),
     );
+    // GitHub answers 401 or 404 once the App itself has been deleted.
+    if (response.status === 401 || response.status === 404)
+      error.internalCode = GITHUB_APP_NOT_FOUND;
+    throw error;
+  }
   return (await response.json()) as T;
 }
 

@@ -180,6 +180,20 @@ export function useInstallAppaGithubApp() {
       client.setQueryData(pendingAppaGithubAppQueryKey, null);
       client.invalidateQueries({ queryKey: runtimeCredentialsQueryKey });
     },
+    // The App may have been deleted on GitHub, which also clears it here.
+    onError: () =>
+      client.invalidateQueries({ queryKey: pendingAppaGithubAppQueryKey }),
+  });
+}
+
+export function useDiscardAppaGithubApp() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { error } = await archestraApiSdk.discardAppaGithubApp();
+      if (error) throw toApiError(error);
+    },
+    onSuccess: () => client.setQueryData(pendingAppaGithubAppQueryKey, null),
   });
 }
 

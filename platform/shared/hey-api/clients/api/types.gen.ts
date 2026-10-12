@@ -89503,6 +89503,92 @@ export type CompleteAppaGithubAppResponses = {
 
 export type CompleteAppaGithubAppResponse = CompleteAppaGithubAppResponses[keyof CompleteAppaGithubAppResponses];
 
+export type DiscardAppaGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/pending';
+};
+
+export type DiscardAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DiscardAppaGithubAppError = DiscardAppaGithubAppErrors[keyof DiscardAppaGithubAppErrors];
+
+export type DiscardAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DiscardAppaGithubAppResponse = DiscardAppaGithubAppResponses[keyof DiscardAppaGithubAppResponses];
+
 export type GetPendingAppaGithubAppData = {
     body?: never;
     path?: never;

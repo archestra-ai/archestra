@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
+  ExternalLink,
   Github,
   LoaderCircle,
   Plus,
@@ -41,6 +42,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAppaGithubAppAccounts,
   useCreateAppaGithubRepository,
+  useDiscardAppaGithubApp,
   useInstallAppaGithubApp,
   usePendingAppaGithubApp,
   useStartAppaGithubApp,
@@ -83,6 +85,7 @@ export function GithubSyncSetupDialog({
   const pending = usePendingAppaGithubApp(!!canCreateCredentials);
   const start = useStartAppaGithubApp();
   const install = useInstallAppaGithubApp();
+  const discard = useDiscardAppaGithubApp();
   const create = useCreateAppaGithubRepository();
 
   const [step, setStep] = useState<Step>("app");
@@ -371,6 +374,22 @@ export function GithubSyncSetupDialog({
                       >
                         {createdApp.name}
                       </a>
+                      {installed ? null : (
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="xs"
+                          className="h-auto px-0 text-muted-foreground"
+                          disabled={discard.isPending}
+                          onClick={() =>
+                            discard.mutate(undefined, {
+                              onSuccess: () => setWaiting(null),
+                            })
+                          }
+                        >
+                          <span>Start over</span>
+                        </Button>
+                      )}
                     </>
                   ) : null
                 }
@@ -417,6 +436,7 @@ export function GithubSyncSetupDialog({
                 title="Install it on the organization"
                 hint="Approve access to all of its repositories."
                 locked={!createdApp}
+                inlineAction
                 waiting={waiting === "install" || install.isPending}
                 onCheckAgain={checkInstall}
                 result={
@@ -445,6 +465,7 @@ export function GithubSyncSetupDialog({
                 }
               />
             </ol>
+            {createdApp ? <AppLogoTip app={createdApp} /> : null}
             <AccessSummary />
           </div>
         ) : (
@@ -684,6 +705,7 @@ function ManifestRow({
   onCheckAgain,
   result,
   action,
+  inlineAction = false,
 }: {
   index: number;
   title: string;
@@ -693,12 +715,15 @@ function ManifestRow({
   onCheckAgain: () => void;
   result: React.ReactNode;
   action: React.ReactNode;
+  /** Short actions sit beside the text; wide ones (a form) go underneath. */
+  inlineAction?: boolean;
 }) {
   const done = !!result;
+  const showAction = !(done || waiting || locked);
   return (
     <li
       className={cn(
-        "flex flex-wrap items-start gap-3 border-b p-4 last:border-b-0 transition-opacity",
+        "flex items-start gap-3 border-b p-4 last:border-b-0 transition-opacity",
         locked && "opacity-60",
       )}
     >
@@ -737,11 +762,54 @@ function ManifestRow({
         ) : (
           <p className="text-xs text-muted-foreground">{hint}</p>
         )}
-        {done || waiting || locked ? null : (
+        {showAction && !inlineAction ? (
           <div className="pt-2">{action}</div>
-        )}
+        ) : null}
       </div>
+      {showAction && inlineAction ? (
+        <div className="shrink-0 self-center">{action}</div>
+      ) : null}
     </li>
+  );
+}
+
+// GitHub's manifest cannot set a logo, so the admin uploads it on the App's page.
+function AppLogoTip({ app }: { app: { slug: string; account: string } }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <span>Optional: give the App the OpenAPPA logo.</span>
+      <a
+        className="font-medium text-foreground underline-offset-4 hover:underline"
+        href={APP_LOGO_PATH}
+        download="openappa-github-app-logo.png"
+      >
+        Download logo
+      </a>
+      <Button
+        type="button"
+        variant="link"
+        size="xs"
+        className="h-auto px-0 text-foreground"
+        onClick={() => {
+          navigator.clipboard
+            .writeText(APP_BADGE_COLOR)
+            .then(() => setCopied(true))
+            .catch(() => {});
+        }}
+      >
+        {copied ? "Copied" : `Copy badge color ${APP_BADGE_COLOR}`}
+      </Button>
+      <a
+        className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline"
+        href={`https://github.com/organizations/${app.account}/settings/apps/${app.slug}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Open App settings
+        <ExternalLink className="size-3" />
+      </a>
+    </p>
   );
 }
 
@@ -863,5 +931,7 @@ const INTERVAL_LABEL: Record<Interval, string> = {
 };
 
 const REPO_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]*\/[a-zA-Z0-9_.-]+$/;
+const APP_LOGO_PATH = "/openappa/github-app-logo.png";
+const APP_BADGE_COLOR = "#161413";
 const ORGANIZATION_PATTERN =
   /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;

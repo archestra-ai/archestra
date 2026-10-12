@@ -3,7 +3,10 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
-import { fetchAsGithubApp } from "@/integrations/github/app-auth";
+import {
+  fetchAsGithubApp,
+  GITHUB_APP_NOT_FOUND,
+} from "@/integrations/github/app-auth";
 import logger from "@/logging";
 import {
   RuntimeCredentialConnectionModel,
@@ -50,7 +53,7 @@ class OpenAppaGithubAppSetup {
     url.searchParams.set("state", state);
     return {
       url: url.toString(),
-      manifest: JSON.stringify(manifest(params.organization)),
+      manifest: JSON.stringify(manifest()),
     };
   }
 
@@ -127,7 +130,24 @@ class OpenAppaGithubAppSetup {
   /** The App created earlier in this setup, while it still awaits installation. */
   async pending(params: Owner): Promise<PendingAppaGithubApp | null> {
     const pending = await this.loadPending(params);
-    return pending ? toPublic(pending) : null;
+    if (!pending) return null;
+    // Someone may have deleted the App on GitHub before installing it.
+    try {
+      await this.fetchAsPending(pending, "/app");
+    } catch (error) {
+      if (isAppGone(error)) {
+        await this.discard(params);
+        return null;
+      }
+    }
+    return toPublic(pending);
+  }
+
+  /** Forgets the App created in this setup, so the next attempt starts over. */
+  async discard(params: Owner) {
+    await VerificationModel.deleteByIdentifier(
+      flowIdentifier(params, "pending"),
+    );
   }
 
   async install(params: Owner) {
@@ -139,12 +159,20 @@ class OpenAppaGithubAppSetup {
         "GitHub App setup expired. Create the App again.",
       );
     const secret = SecretSchema.parse(decryptSecretValue(pending.secret));
-    const installations = await fetchAsGithubApp<Installation[]>({
-      githubUrl: GITHUB_API_URL,
-      appId: pending.appId,
-      privateKey: secret.privateKey,
-      path: "/app/installations",
-    });
+    let installations: Installation[];
+    try {
+      installations = await this.fetchAsPending<Installation[]>(
+        pending,
+        "/app/installations",
+      );
+    } catch (error) {
+      if (!isAppGone(error)) throw error;
+      await this.discard(params);
+      throw new ApiError(
+        410,
+        `${pending.name} no longer exists on GitHub. Create the App again.`,
+      );
+    }
     const installation = installations.find(
       (entry) => entry.account?.id === pending.accountId,
     );
@@ -260,6 +288,16 @@ class OpenAppaGithubAppSetup {
       throw new ApiError(403, "You do not have access to create credentials");
   }
 
+  private fetchAsPending<T>(pending: StoredPendingApp, path: `/app${string}`) {
+    const secret = SecretSchema.parse(decryptSecretValue(pending.secret));
+    return fetchAsGithubApp<T>({
+      githubUrl: GITHUB_API_URL,
+      appId: pending.appId,
+      privateKey: secret.privateKey,
+      path,
+    });
+  }
+
   private async loadPending(owner: Owner) {
     const record = await VerificationModel.getByIdentifier(
       flowIdentifier(owner, "pending"),
@@ -332,11 +370,13 @@ type Installation = {
   repository_selection: "all" | "selected";
 };
 
-function manifest(organization: string) {
+function manifest() {
   const callbackUrl = `${config.frontendBaseUrl}/openappa/github-app/callback`;
   return {
-    // GitHub App names are global; the organization keeps the default unique.
-    name: `OpenAPPA ${organization}`.slice(0, 34),
+    // App names are unique across GitHub; the create page lets the admin rename it.
+    name: "OpenAPPA Sync",
+    description:
+      "Keeps an Archestra deployment's OpenAPPA guardrails policy in sync with a GitHub repository. Archestra reads the policy from the repository, opens pull requests for policy changes made in Archestra, and creates the policy repository during setup.",
     url: config.frontendBaseUrl,
     redirect_url: callbackUrl,
     setup_url: callbackUrl,
@@ -368,4 +408,10 @@ function hash(value: string) {
 
 function flowIdentifier(owner: Owner, step: "start" | "pending") {
   return `openappa-github-app:${step}:${JSON.stringify([owner.organizationId, owner.userId])}`;
+}
+
+function isAppGone(error: unknown) {
+  return (
+    error instanceof ApiError && error.internalCode === GITHUB_APP_NOT_FOUND
+  );
 }

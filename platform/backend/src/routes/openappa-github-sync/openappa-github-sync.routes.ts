@@ -8,7 +8,7 @@ import {
   getAppaGithubSync,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
-import { constructResponseSchema } from "@/types";
+import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
   AppaGithubAppAccountsSchema,
   AppaGithubAppInstallResultSchema,
@@ -142,6 +142,27 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           userId: request.user.id,
         }),
       ),
+  );
+  app.delete(
+    "/api/openappa/github-app/pending",
+    {
+      schema: {
+        operationId: RouteId.DiscardAppaGithubApp,
+        description:
+          "Forget the GitHub App created during setup so setup can start over",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(DeleteObjectResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      // Only a short-lived setup record is dropped; nothing durable changes.
+      request.auditSkip = true;
+      await openappaGithubAppSetup.discard({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      return reply.send({ success: true });
+    },
   );
   app.post(
     "/api/openappa/github-app/install",

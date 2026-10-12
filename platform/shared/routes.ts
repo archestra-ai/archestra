@@ -841,6 +841,7 @@ export const RouteId = {
   StartAppaGithubApp: "startAppaGithubApp",
   CompleteAppaGithubApp: "completeAppaGithubApp",
   GetPendingAppaGithubApp: "getPendingAppaGithubApp",
+  DiscardAppaGithubApp: "discardAppaGithubApp",
   InstallAppaGithubApp: "installAppaGithubApp",
   GetAppaGithubAppAccounts: "getAppaGithubAppAccounts",
   UpdateAppaGithubSync: "updateAppaGithubSync",

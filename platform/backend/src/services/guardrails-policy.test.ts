@@ -17,7 +17,7 @@ describe("initialPolicy", () => {
     archestraMcpBranding.syncFromOrganization(null);
   });
 
-  test("human review covers only human-approval, without overriding trust, audience, or other marks", async () => {
+  test("human review covers trust and audience gaps and every attention mark but blocked", async () => {
     const document = parse(initialPolicy());
     const policy = document.policy as ReturnType<typeof parse>;
     const externals = document.externals as ReturnType<typeof parse>;
@@ -67,7 +67,7 @@ describe("initialPolicy", () => {
           files: [
             ...["trusted", "public", "custom_review"].map((tool) => ({
               path: `${tool}.appa`,
-              content: `mcp/test/read {}\nexpect allow\nmcp/test/${tool} {}\nexpect deny\n`,
+              content: `mcp/test/read {}\nexpect allow\nmcp/test/${tool} {}\nexpect authority hitl\n`,
             })),
             {
               path: "human-approval.appa",

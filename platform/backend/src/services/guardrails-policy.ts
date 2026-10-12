@@ -380,13 +380,15 @@ delta = {}
 name = "*"
 annotator = "noop"
 
-# Review one exact call that explicitly requires human approval.
+# Review one exact call for any attention mark, trust or audience gap.
 [[policy.authority]]
 name = "hitl"
 hint = "Ask the person running this session to approve this exact call."
 
 [policy.authority.permits]
-attention = ["human-approval"]
+trust_below = "trusted"
+audience_missing = ["public"]
+attention = ["*"]
 
 [externals.authorities.hitl]
 builtin = "hitl"

@@ -2161,7 +2161,7 @@ async function approveChildReturnCarriers(params: {
       envelope.push(record);
       byEnvelope.set(envelopeId, envelope);
     }
-    const child = `${spawnCallId}\u0000${record.childSessionId}`;
+    const child = JSON.stringify([spawnCallId, record.childSessionId]);
     const newest = arrived.get(child);
     if (!newest || record.rank < newest.rank) {
       arrived.set(child, { ...record, spawnCallId });

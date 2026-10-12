@@ -10302,9 +10302,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             .join(""),
         );
       };
-      const mailboxReturn = (id: string, value: string) => ({
+      const mailboxReturn = (id: string | undefined, value: string) => ({
         type: "agent_message",
-        id,
+        ...(id ? { id } : {}),
         author: "/root/worker",
         recipient: "/root",
         content: [
@@ -10400,6 +10400,23 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 }),
           ]),
         });
+        if (mailbox) {
+          // A mailbox item with no id names no result to rewrite. Its empty
+          // return still needs no crossing.
+          providerRequests.length = 0;
+          const unnamed = await send({
+            thread: "again-root",
+            input: [
+              ...launched,
+              mailboxReturn(undefined, carried[0]),
+              { role: "user", content: "Continue" },
+            ],
+          });
+          expect(unnamed.statusCode, unnamed.body).toBe(200);
+          expect(JSON.stringify(providerRequests)).not.toContain(
+            "finished subagent",
+          );
+        }
       }
       if (answers.length > 1) {
         await childTurn(answers[1]);

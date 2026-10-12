@@ -49,17 +49,14 @@ export function OpenAppaPolicyChange({
   // Previewing the unsaved starter changes no line; show the policy itself.
   const unchanged = change.before === change.after;
   const pullUrl =
-    change.delivery === "pull_request" &&
-    change.url?.startsWith("https://github.com/")
-      ? change.url
-      : null;
+    change.delivery === "pull_request" ? changeRequestUrl(change.url) : null;
   return (
     <div className="space-y-3 p-3">
       {pullUrl && (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" asChild>
             <a href={pullUrl} target="_blank" rel="noreferrer">
-              <span>Review pull request</span>
+              <span>Review {changeRequestNoun(pullUrl)}</span>
               <ArrowUpRight className="size-3.5" />
             </a>
           </Button>
@@ -111,22 +108,22 @@ export function OpenAppaPolicyChange({
 /** A published result stays visible even when tool details are collapsed. */
 export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
   const change = parsePolicyChange(output);
-  if (
-    change?.stage !== "preview" &&
-    change?.delivery === "pull_request" &&
-    change.url?.startsWith("https://github.com/")
-  ) {
+  const url =
+    change?.stage !== "preview" && change?.delivery === "pull_request"
+      ? changeRequestUrl(change.url)
+      : null;
+  if (change && url) {
     return (
       <div className="mt-4 w-full max-w-2xl">
         <InlineNotice variant="success">
           <GitPullRequest />
-          <span className="font-medium">{`Opened PR #${change.number}`}</span>
+          <span className="font-medium">{`Opened ${changeRequestShort(url)} #${change.number}`}</span>
           <InlineNoticeText>
             Review and merge it to apply this policy change.
           </InlineNoticeText>
           <Button variant="outline" size="xs" className="ml-auto" asChild>
-            <a href={change.url} target="_blank" rel="noreferrer">
-              Review pull request
+            <a href={url} target="_blank" rel="noreferrer">
+              <span>Review {changeRequestNoun(url)}</span>
             </a>
           </Button>
         </InlineNotice>
@@ -172,7 +169,7 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
 }
 
 /**
- * In a locally saved revision's banner: GitHub sync is set up in the guardrails
+ * In a locally saved revision's banner: Git sync is set up in the guardrails
  * settings, opened in a new tab so the chat stays put and the operator sees
  * what setup leaves to do (such as merging its pull request).
  */
@@ -185,14 +182,14 @@ function GithubSyncTip() {
   return (
     // Its own line in the banner, under the title: past the icon and its gap.
     <p className="basis-full pl-[22px] opacity-80">
-      Tip: keep the policy in GitHub, so changes go through pull requests.{" "}
+      Tip: keep the policy in GitHub or GitLab, so every change gets reviewed.{" "}
       <a
         href="/settings/guardrails?setup=github-sync"
         target="_blank"
         rel="noreferrer"
         className="inline-flex items-center gap-0.5 font-medium underline underline-offset-4"
       >
-        Set up GitHub sync
+        <span>Set up Git sync</span>
         <ArrowUpRight className="size-3" aria-hidden />
       </a>
     </p>
@@ -206,11 +203,9 @@ export function OpenAppaValidationCompletion({ output }: { output: unknown }) {
   if (!counts) return null;
   const pullUrl =
     change.delivery === "pull_request" &&
-    typeof change.url === "string" &&
-    change.url.startsWith("https://github.com/") &&
     Number.isSafeInteger(change.number) &&
     (change.number as number) > 0
-      ? change.url
+      ? changeRequestUrl(change.url)
       : null;
   if (
     !pullUrl &&
@@ -233,7 +228,7 @@ export function OpenAppaValidationCompletion({ output }: { output: unknown }) {
         )}
         <span className="font-medium">
           {pullUrl
-            ? `Opened PR #${change.number}`
+            ? `Opened ${changeRequestShort(pullUrl)} #${change.number}`
             : change.policyChanged === true
               ? "Saved policy and validations"
               : "Saved validations"}
@@ -246,7 +241,7 @@ export function OpenAppaValidationCompletion({ output }: { output: unknown }) {
         <Button variant="outline" size="xs" className="ml-auto" asChild>
           {pullUrl ? (
             <a href={pullUrl} target="_blank" rel="noreferrer">
-              <span>Review pull request</span>
+              <span>Review {changeRequestNoun(pullUrl)}</span>
             </a>
           ) : (
             <Link href="/openappa/validation">
@@ -396,4 +391,29 @@ function policyDiff(before: string, after: string, path: string): string {
     }
   }
   return lines.join("\n");
+}
+
+/**
+ * A GitHub pull request or GitLab merge request link, on any host: an https
+ * URL whose path ends in `/pull/<n>` or `/-/merge_requests/<n>`.
+ */
+function changeRequestUrl(url: unknown): string | null {
+  if (typeof url !== "string") return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" &&
+      /\/(?:pull|-\/merge_requests)\/\d+\/?$/.test(parsed.pathname)
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function changeRequestNoun(url: string) {
+  return url.includes("/-/merge_requests/") ? "merge request" : "pull request";
+}
+
+function changeRequestShort(url: string) {
+  return url.includes("/-/merge_requests/") ? "MR" : "PR";
 }

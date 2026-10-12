@@ -1,7 +1,13 @@
 "use client";
 
 import { POPULAR_PLUGIN_MARKETPLACES } from "@archestra/shared";
-import { ArrowLeft, ArrowRight, FileText, Github } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  FileText,
+  GitBranch,
+  Github,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -38,7 +44,7 @@ const CREATE_STEPS: Array<{ id: CreateStep; title: string }> = [
 ];
 
 const STEP_DESCRIPTIONS: Record<CreateStep, string> = {
-  source: "Import from GitHub, or start blank.",
+  source: "Import from GitHub or GitLab, or start blank.",
   // The whole plugin is on one page, so the sentence names the whole of it —
   // and the plugin's own page says the same thing over the same form.
   configure:
@@ -191,9 +197,9 @@ function NewPluginWizard() {
             <div className="mx-auto max-w-3xl space-y-8">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <CatalogSourceCard
-                  icon={<Github className="size-5" />}
-                  title="Custom GitHub URL"
-                  description="Paste a GitHub marketplace URL."
+                  icon={<GitBranch className="size-5" />}
+                  title="Git repository"
+                  description="GitHub or GitLab, public or private."
                   onClick={openImport}
                 />
                 <CatalogSourceCard

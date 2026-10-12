@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { appaGitHost } from "./appa-git-host";
 
 type AppaGithubSyncStatus = NonNullable<
   ReturnType<typeof useAppaGithubSync>["data"]
@@ -20,15 +21,16 @@ export function GithubManagedPolicyNotice({
   validationDirectory?: string;
 } = {}) {
   const { data } = useAppaGithubSync();
+  const git = appaGitHost(data);
   const source = data?.source;
   const failed = Boolean(source?.lastSyncError);
   const validations = validationDirectory !== undefined;
   const href =
     validations && source?.repo
-      ? `${data?.githubWebUrl}/${source.repo}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
+      ? `${data?.githubWebUrl}/${source.repo}${gitPathSeparator(data)}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
       : githubPolicyFileUrl(data, "blob");
 
-  // Setup isn't finished until its pull request merges: ask for that instead.
+  // Setup isn't finished until its pull (merge) request merges: ask for that.
   if (!failed && source?.repo && source.setupPullRequestNumber)
     return (
       <InlineNotice variant="info">
@@ -38,13 +40,15 @@ export function GithubManagedPolicyNotice({
           Your current policy stays active until it merges.
         </InlineNoticeText>
         <a
-          href={`${data?.githubWebUrl}/${source.repo}/pull/${source.setupPullRequestNumber}`}
+          href={git
+            .urls(source.repo)
+            .changeRequest(source.setupPullRequestNumber)}
           target="_blank"
           rel="noreferrer"
           data-slot="inline-notice-action"
           className="ml-auto inline-flex shrink-0 items-center gap-0.5 font-medium underline-offset-4 hover:underline"
         >
-          <span>Review and merge PR</span>
+          <span>Review and merge {git.changeRequestShort}</span>
           <ExternalLink className="size-3" aria-hidden />
         </a>
       </InlineNotice>
@@ -54,7 +58,7 @@ export function GithubManagedPolicyNotice({
     <InlineNotice variant={failed ? "error" : "neutral"}>
       {failed ? <AlertTriangle /> : <LockKeyhole />}
       <span className="font-medium">
-        {failed ? "GitHub sync failed" : "Managed in GitHub"}
+        {failed ? `${git.label} sync failed` : `Managed in ${git.label}`}
       </span>
       <InlineNoticeText>
         The{" "}
@@ -100,7 +104,7 @@ export function GithubManagedPolicyNotice({
   );
 }
 
-/** The synced policy file on GitHub, to read (`blob`) or to change (`edit`). */
+/** The synced policy file on GitHub or GitLab, to read (`blob`) or to change (`edit`). */
 export function githubPolicyFileUrl(
   sync: AppaGithubSyncStatus | null | undefined,
   view: "blob" | "edit",
@@ -108,5 +112,12 @@ export function githubPolicyFileUrl(
   const source = sync?.source;
   if (!sync || !source?.repo || !source.path) return null;
   const path = source.path.split("/").map(encodeURIComponent).join("/");
-  return `${sync.githubWebUrl}/${source.repo}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
+  return `${sync.githubWebUrl}/${source.repo}${gitPathSeparator(sync)}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
+}
+
+/** GitLab puts `/-` before a project's tree, blob, and edit pages. */
+function gitPathSeparator(
+  sync: Pick<AppaGithubSyncStatus, "provider"> | null | undefined,
+) {
+  return sync?.provider === "gitlab" ? "/-" : "";
 }

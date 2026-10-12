@@ -1460,6 +1460,7 @@ function listedSkillSource(item: ListedSkill): {
   const repo = parseRepoFromSourceRef(
     item.skill.sourceRef,
     item.skill.sourceOrigin,
+    item.skill.sourceProvider,
   );
   return repo
     ? { label: repo, isRepo: true }

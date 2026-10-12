@@ -272,7 +272,11 @@ export function RuntimeCredentialDefinitionDialog({
                       {field.value && (
                         <RuntimeCredentialIcon
                           icon={
-                            field.value === "github_app" ? "logo:github" : null
+                            field.value === "github_app"
+                              ? "logo:github"
+                              : field.value === "gitlab_token"
+                                ? "logo:gitlab"
+                                : null
                           }
                           className="size-4 text-muted-foreground"
                         />
@@ -314,6 +318,19 @@ export function RuntimeCredentialDefinitionDialog({
                   >
                     GitHub user connection
                   </SelectItem>
+                  {field.value === "gitlab_token" ? (
+                    <SelectItem
+                      value="gitlab_token"
+                      icon={
+                        <RuntimeCredentialIcon
+                          icon="logo:gitlab"
+                          className="size-4"
+                        />
+                      }
+                    >
+                      GitLab token
+                    </SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
               {!definition &&
@@ -467,7 +484,8 @@ const DefinitionFormSchema = z
     description: z.string().max(1_000),
     icon: z.string().nullable(),
     scope: z.enum(["personal", "organization"]),
-    kind: z.enum(["secret", "github_app", "github_app_user"]),
+    // A GitLab token is added from a Git setup; here it is only renamed.
+    kind: z.enum(["secret", "github_app", "github_app_user", "gitlab_token"]),
     githubUrl: z.string(),
     appId: z.string(),
     installationId: z.string(),

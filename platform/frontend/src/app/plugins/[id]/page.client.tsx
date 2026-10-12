@@ -1,5 +1,6 @@
 "use client";
 
+import { GIT_PROVIDER_LABELS } from "@archestra/shared";
 import {
   Github,
   Info,
@@ -44,8 +45,7 @@ import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
-import { useGithubAppConfigs } from "@/lib/github-app-config.query";
-import { useCreateGithubPat } from "@/lib/github-pat.query";
+import { useGitCredentials } from "@/lib/git-credentials.query";
 import {
   type PluginDetail,
   useDeletePlugin,
@@ -61,6 +61,7 @@ import {
   isPluginDraftDirty,
   type PluginDraft,
   pluginDraftFromPlugin,
+  pluginGitAuthentication,
 } from "../_parts/plugin-draft";
 import { PluginForm } from "../_parts/plugin-form";
 import { PluginGithubUpdatesDialog } from "../_parts/plugin-github-updates-dialog";
@@ -172,8 +173,12 @@ function PluginDetailView({
   const { data: canUpdate } = useHasPermissions({ plugin: ["update"] }, "*");
   const isReadOnly = canUpdate === false;
   const updatePlugin = useUpdatePlugin(plugin.id);
-  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
-  const createGithubPat = useCreateGithubPat();
+  const { data: canReadCredentials } = useHasPermissions({
+    credential: ["read"],
+  });
+  const { data: gitCredentials = [] } = useGitCredentials(
+    canReadCredentials === true,
+  );
 
   const isGithubPlugin = plugin.sourceKind === "github";
   const actionModel = getPluginActionModel({
@@ -216,53 +221,15 @@ function PluginDetailView({
     setDraft((prev) => ({ ...prev, ...patch }));
   const discardChanges = () => setDraft(base);
 
-  const isComplete = isPluginDraftComplete({
-    draft,
-    isGithubPlugin,
-    seedAuthMethod: base.githubAuthMethod,
-  });
+  const isComplete = isPluginDraftComplete({ draft, isGithubPlugin });
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
-    let submitted = { ...draft, labels: finalLabels };
+    const submitted = { ...draft, labels: finalLabels };
     setIsSaving(true);
-    let githubPatId =
-      submitted.githubAuthMethod === "pat" ? plugin.githubPatId : null;
-    if (
-      isGithubPlugin &&
-      submitted.githubAuthMethod === "pat" &&
-      submitted.githubToken.trim()
-    ) {
-      const created = await createGithubPat
-        .mutateAsync({
-          name: `${plugin.displayName} token`,
-          token: submitted.githubToken.trim(),
-        })
-        .catch(() => null);
-      if (!created) {
-        setIsSaving(false);
-        return;
-      }
-      githubPatId = created.id;
-      // The typed token is exchanged for a saved credential, so it is dropped
-      // from the draft rather than kept around in component state.
-      submitted = { ...submitted, githubToken: "" };
-      setDraft(submitted);
-    }
-    const githubAppConfigId =
-      submitted.githubAuthMethod === "github_app"
-        ? submitted.githubAppConfigId || null
-        : null;
-    const baseGithubPatId =
-      base.githubAuthMethod === "pat" ? plugin.githubPatId : null;
-    const baseGithubAppConfigId =
-      base.githubAuthMethod === "github_app"
-        ? base.githubAppConfigId || null
-        : null;
     const githubAuthenticationChanged =
-      githubPatId !== baseGithubPatId ||
-      githubAppConfigId !== baseGithubAppConfigId;
+      submitted.gitCredential !== base.gitCredential;
     const saved = await updatePlugin
       .mutateAsync({
         ...(isGithubPlugin
@@ -273,7 +240,9 @@ function PluginDetailView({
                 syncInterval: submitted.githubSyncInterval,
                 ...(githubAuthenticationChanged
                   ? {
-                      authentication: { githubAppConfigId, githubPatId },
+                      authentication: pluginGitAuthentication(
+                        submitted.gitCredential,
+                      ),
                     }
                   : {}),
               },
@@ -320,19 +289,26 @@ function PluginDetailView({
   );
   useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
 
-  // A GitHub App configuration the reader cannot list still has to show as the
-  // plugin's current one rather than as an empty select.
-  const githubAppConfigOptions =
-    plugin.githubAppConfigId &&
-    !githubAppConfigs.some((config) => config.id === plugin.githubAppConfigId)
-      ? [
-          {
-            id: plugin.githubAppConfigId,
-            name: "Current GitHub App configuration",
-          },
-          ...githubAppConfigs,
-        ]
-      : githubAppConfigs;
+  // The credentials the source can be read with: those on its host's
+  // provider, plus the one it uses now even when this reader can't list it
+  // (a legacy saved GitHub token stays selectable, but is no longer offered).
+  const gitProvider = plugin.sourceProvider ?? "github";
+  const gitCredentialOptions = gitCredentials
+    .filter((credential) => credential.provider === gitProvider)
+    .map((credential) => ({
+      value: `${credential.kind}:${credential.id}`,
+      label: credential.name,
+    }));
+  if (
+    seed.gitCredential &&
+    !gitCredentialOptions.some((option) => option.value === seed.gitCredential)
+  )
+    gitCredentialOptions.unshift({
+      value: seed.gitCredential,
+      label: seed.gitCredential.startsWith("pat:")
+        ? "Saved GitHub token"
+        : "Current credential",
+    });
 
   const [deleteRequested, setDeleteRequested] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
@@ -356,9 +332,11 @@ function PluginDetailView({
           {isGithubPlugin && (
             <Badge variant="secondary" className="gap-1 font-normal">
               <Github className="h-3 w-3" />
-              {plugin.githubSyncInterval
-                ? "Checked against GitHub"
-                : "Imported from GitHub"}
+              <span>
+                {plugin.githubSyncInterval
+                  ? `Checked against ${GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"]}`
+                  : `Imported from ${GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"]}`}
+              </span>
             </Badge>
           )}
           {!plugin.enabled && (
@@ -518,7 +496,10 @@ function PluginDetailView({
           pluginSlug={plugin.pluginSlug}
           pluginId={plugin.id}
           isGithubPlugin={isGithubPlugin}
-          githubAppConfigs={githubAppConfigOptions}
+          gitSource={{
+            provider: gitProvider,
+            credentials: gitCredentialOptions,
+          }}
           activeSection={activeSection}
         />
 

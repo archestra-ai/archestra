@@ -6,8 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/plugins/plugin.query");
-vi.mock("@/lib/github-app-config.query");
-vi.mock("@/lib/github-pat.query");
+vi.mock("@/lib/git-credentials.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/components/editor");
@@ -30,8 +29,7 @@ vi.mock("@/components/resource-access-section", () => ({
 import { useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useGithubAppConfigs } from "@/lib/github-app-config.query";
-import { useGithubPats } from "@/lib/github-pat.query";
+import { useGitCredentials } from "@/lib/git-credentials.query";
 import { useAppearanceSettings } from "@/lib/organization.query";
 import {
   type PluginDetail,
@@ -84,6 +82,8 @@ const BASE_PLUGIN = {
   githubSyncRef: null,
   githubPatId: null,
   githubAppConfigId: null,
+  gitlabTokenId: null,
+  sourceProvider: null,
   lastSyncedAt: null,
   lastSyncError: null,
   pendingSourceSha: null,
@@ -138,12 +138,9 @@ beforeEach(() => {
   vi.mocked(useAppearanceSettings).mockReturnValue({
     data: undefined,
   } as unknown as ReturnType<typeof useAppearanceSettings>);
-  vi.mocked(useGithubAppConfigs).mockReturnValue({
+  vi.mocked(useGitCredentials).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useGithubAppConfigs>);
-  vi.mocked(useGithubPats).mockReturnValue({
-    data: [],
-  } as unknown as ReturnType<typeof useGithubPats>);
+  } as unknown as ReturnType<typeof useGitCredentials>);
   const mutationStub = {
     mutateAsync: vi.fn(),
     mutate: vi.fn(),
@@ -251,7 +248,7 @@ describe("PluginDetailPage", () => {
       screen.getByRole("textbox", { name: "File contents" }),
     ).toHaveAttribute("readonly");
     // The source that owns those bytes is editable, directly under them.
-    expect(screen.getByText("GitHub source")).toBeVisible();
+    expect(screen.getByText("Source")).toBeVisible();
     expect(screen.getByLabelText("Repository URL")).toHaveValue("acme/hooks");
 
     // A field that silently refuses keystrokes reads as broken, so the reason
@@ -259,7 +256,7 @@ describe("PluginDetailPage", () => {
     await user.hover(screen.getByLabelText("Display name"));
     // Radix renders the reason twice — once visibly, once for screen readers.
     expect(
-      (await screen.findAllByText(/synced from GitHub/i))[0],
+      (await screen.findAllByText(/synced from the repository/i))[0],
     ).toBeVisible();
   });
 

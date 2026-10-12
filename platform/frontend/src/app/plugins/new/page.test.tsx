@@ -20,8 +20,6 @@ import {
 vi.mock("next/navigation");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/plugins/plugin.query");
-vi.mock("@/lib/github-app-config.query");
-vi.mock("@/lib/github-pat.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/components/editor");
@@ -34,8 +32,6 @@ vi.mock("../_parts/plugin-platforms", () => ({
 import { useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { useGithubAppConfigs } from "@/lib/github-app-config.query";
-import { useCreateGithubPat, useGithubPats } from "@/lib/github-pat.query";
 import { useAppearanceSettings } from "@/lib/organization.query";
 import {
   useCreatePlugin,
@@ -70,6 +66,10 @@ const discoverMock = vi.fn();
 const importMock = vi.fn();
 
 const permissionServer = setupServer(
+  // No saved GitHub Apps or GitLab tokens: public access is the default.
+  http.get("http://localhost:9000/api/git-credentials", () =>
+    HttpResponse.json([]),
+  ),
   http.get(
     "http://localhost:9000/api/resource-permissions/plugin/creation-subjects",
     () =>
@@ -121,16 +121,6 @@ beforeEach(() => {
   vi.mocked(useAppearanceSettings).mockReturnValue({
     data: undefined,
   } as unknown as ReturnType<typeof useAppearanceSettings>);
-  vi.mocked(useGithubAppConfigs).mockReturnValue({
-    data: [],
-  } as unknown as ReturnType<typeof useGithubAppConfigs>);
-  vi.mocked(useGithubPats).mockReturnValue({
-    data: [],
-  } as unknown as ReturnType<typeof useGithubPats>);
-  vi.mocked(useCreateGithubPat).mockReturnValue({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  } as unknown as ReturnType<typeof useCreateGithubPat>);
   vi.mocked(useCreatePlugin).mockReturnValue({
     mutateAsync: vi.fn(),
     isPending: false,
@@ -170,11 +160,11 @@ beforeEach(() => {
 });
 
 describe("NewPluginPage", () => {
-  it("offers a custom marketplace URL and a blank template on the source step", () => {
+  it("offers a Git repository and a blank template on the source step", () => {
     renderPage();
 
     expect(
-      screen.getByRole("button", { name: /Custom GitHub URL/ }),
+      screen.getByRole("button", { name: /Git repository/ }),
     ).toBeVisible();
     expect(
       screen.getByRole("button", { name: /Blank template/ }),
@@ -222,19 +212,90 @@ describe("NewPluginPage", () => {
     ).toBeVisible();
   });
 
-  it("opens the import dialog with the skills-style form", async () => {
+  it("reads a public GitHub repository without sending a credential", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: /Custom GitHub URL/ }));
+    await user.click(screen.getByRole("button", { name: /Git repository/ }));
+    expect(screen.getByText("Import plugins")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^GitHub/ }));
 
-    expect(screen.getByText("Import plugins from GitHub")).toBeInTheDocument();
-    expect(screen.getByLabelText("Repository URL")).toBeVisible();
-    expect(screen.getByLabelText("Keep in sync")).toBeVisible();
+    // Without saved Apps, public access is picked for you.
     expect(
-      screen.getByRole("button", { name: /Authentication & ref/ }),
+      await screen.findByRole("radio", { name: /Public repository/ }),
+    ).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.type(
+      screen.getByPlaceholderText("github.com/owner/repo"),
+      "acme/plugins",
+    );
+    await user.click(screen.getByRole("button", { name: "Find plugins" }));
+
+    expect(discoverMock).toHaveBeenCalledWith({
+      repoUrl: "https://github.com/acme/plugins",
+      provider: "github",
+    });
+  });
+
+  it("imports the plugin folders of a repository without a marketplace file", async () => {
+    discoverMock.mockResolvedValue({
+      data: {
+        repoUrl: "https://github.com/acme/plugins",
+        ref: "main",
+        commitSha: "a".repeat(40),
+        marketplacePath: null,
+        reason: null,
+        entries: [
+          {
+            marketplacePath: null,
+            name: "folder-plugin",
+            description: "A plugin folder",
+            version: null,
+            clientType: "claude-code",
+            sourceRepoUrl: "https://github.com/acme/plugins",
+            sourceRef: "main",
+            sourceSubdir: "plugins/folder-plugin",
+            sourceCommitSha: "a".repeat(40),
+            fileCount: 1,
+            supported: true,
+            reason: null,
+          },
+        ],
+      },
+      errorMessage: null,
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: /Git repository/ }));
+    await user.click(screen.getByRole("button", { name: /^GitHub/ }));
+    await screen.findByRole("radio", { name: /Public repository/ });
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.type(
+      screen.getByPlaceholderText("github.com/owner/repo"),
+      "acme/plugins",
+    );
+    await user.click(screen.getByRole("button", { name: "Find plugins" }));
+    expect(
+      await screen.findByText(
+        "No marketplace file. These are its plugin folders.",
+      ),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Discover" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /^Import/ }));
+
+    expect(importMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repoUrl: "https://github.com/acme/plugins",
+        provider: "github",
+        marketplacePath: null,
+        selected: [
+          expect.objectContaining({
+            name: "folder-plugin",
+            sourceSubdir: "plugins/folder-plugin",
+          }),
+        ],
+      }),
+    );
   });
 
   it("auto-discovers when a popular marketplace is picked", async () => {
@@ -248,7 +309,8 @@ describe("NewPluginPage", () => {
     );
 
     expect(discoverMock).toHaveBeenCalledWith({
-      repoUrl: "anthropics/claude-plugins-official",
+      repoUrl: "https://github.com/anthropics/claude-plugins-official",
+      provider: "github",
     });
   });
 

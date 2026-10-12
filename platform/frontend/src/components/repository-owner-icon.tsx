@@ -1,4 +1,6 @@
+import type { GitProvider } from "@archestra/shared";
 import { Github } from "lucide-react";
+import { AgentIcon } from "@/components/agent-icon";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getRepositoryDisplay } from "@/lib/github/repository-display";
 import { cn } from "@/lib/utils/tailwind";
@@ -6,9 +8,11 @@ import { cn } from "@/lib/utils/tailwind";
 export function RepositoryOwnerIcon({
   repo,
   className,
+  provider = "github",
 }: {
   repo: string;
   className?: string;
+  provider?: GitProvider | null;
 }) {
   const { owner, avatarUrl } = getRepositoryDisplay(repo);
   return (
@@ -18,7 +22,11 @@ export function RepositoryOwnerIcon({
         alt={`${owner} GitHub avatar`}
       />
       <AvatarFallback>
-        <Github className="size-3" aria-hidden />
+        {provider === "gitlab" ? (
+          <AgentIcon icon="logo:gitlab" size={12} />
+        ) : (
+          <Github className="size-3" aria-hidden />
+        )}
       </AvatarFallback>
     </Avatar>
   );

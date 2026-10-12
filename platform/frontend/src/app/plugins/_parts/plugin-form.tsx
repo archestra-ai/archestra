@@ -1,11 +1,11 @@
 "use client";
 
+import { DEFAULT_GIT_WEB_URLS, type GitProvider } from "@archestra/shared";
 import type { Ref } from "react";
 import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import { GithubAuthConfigFields } from "@/components/github-auth-config-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import {
   SettingsSection,
@@ -14,7 +14,6 @@ import {
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SecretInput } from "@/components/ui/secret-input";
 import {
   Select,
   SelectContent,
@@ -25,8 +24,7 @@ import {
 import { PluginContentFields } from "./plugin-content-fields";
 import type { PluginDraft } from "./plugin-draft";
 
-const SYNCED_FROM_GITHUB =
-  "These values are synced from GitHub. Change sync settings below.";
+const SYNCED_FROM_GIT = "Synced from the repository. Change the source below.";
 
 const GITHUB_SYNC_OPTIONS = [
   { value: "off", label: "Manual checks" },
@@ -49,7 +47,7 @@ export function PluginForm({
   readOnly = false,
   pluginSlug,
   isGithubPlugin = false,
-  githubAppConfigs,
+  gitSource,
   isCreate = false,
   pluginId,
   activeSection,
@@ -66,7 +64,8 @@ export function PluginForm({
    * the source that owns it becomes editable in its place.
    */
   isGithubPlugin?: boolean;
-  githubAppConfigs?: { id: string; name: string }[];
+  /** The source's host and the credentials it can be read with. */
+  gitSource?: GitSourceOptions;
   /** Client type is part of a plugin's identity, so it is set once, at create. */
   isCreate?: boolean;
   /**
@@ -103,7 +102,7 @@ export function PluginForm({
               files={draft.files}
               onFilesChange={(files) => onChange({ files })}
               readOnly={readOnly || isGithubPlugin}
-              readOnlyReason={isGithubPlugin ? SYNCED_FROM_GITHUB : undefined}
+              readOnlyReason={isGithubPlugin ? SYNCED_FROM_GIT : undefined}
             />
           </SettingsSection>
 
@@ -112,13 +111,13 @@ export function PluginForm({
           so they read best straight after the question. */}
           {isGithubPlugin && (
             <SettingsSection
-              title="GitHub source"
-              description="Where these files are pulled from, and how they stay up to date."
+              title="Source"
+              description="Where these files come from, and how often to check."
             >
-              <GithubSourceFields
+              <GitSourceFields
                 draft={draft}
                 onChange={onChange}
-                githubAppConfigs={githubAppConfigs ?? []}
+                source={gitSource ?? { provider: "github", credentials: [] }}
               />
             </SettingsSection>
           )}
@@ -148,39 +147,85 @@ export function PluginForm({
   );
 }
 
-/** Where a GitHub-sourced plugin's files come from, and how often it looks. */
-function GithubSourceFields({
+export interface GitSourceOptions {
+  provider: GitProvider;
+  /** `value` is the draft's `gitCredential` encoding. */
+  credentials: { value: string; label: string }[];
+}
+
+/** Where a Git-sourced plugin's files come from, and how often it looks. */
+function GitSourceFields({
   draft,
   onChange,
-  githubAppConfigs,
+  source,
 }: {
   draft: PluginDraft;
   onChange: (patch: Partial<PluginDraft>) => void;
-  githubAppConfigs: { id: string; name: string }[];
+  source: GitSourceOptions;
 }) {
+  const host = new URL(DEFAULT_GIT_WEB_URLS[source.provider]).host;
   return (
     <div className="space-y-5">
       <div className="space-y-2">
         <Label htmlFor="plugin-github-repo-url">Repository URL</Label>
-        <FieldDescription>
-          The GitHub repository checked for plugin updates.
-        </FieldDescription>
         <Input
           id="plugin-github-repo-url"
           value={draft.githubRepoUrl}
           onChange={(event) => onChange({ githubRepoUrl: event.target.value })}
-          placeholder="github.com/owner/repo"
+          placeholder={
+            source.provider === "gitlab"
+              ? `${host}/group/project`
+              : `${host}/owner/repo`
+          }
           autoComplete="off"
           data-1p-ignore
           data-lpignore="true"
         />
       </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="plugin-git-credential">Access</Label>
+          <Select
+            value={draft.gitCredential || PUBLIC_ACCESS}
+            onValueChange={(value) =>
+              onChange({
+                gitCredential: value === PUBLIC_ACCESS ? "" : value,
+              })
+            }
+          >
+            <SelectTrigger id="plugin-git-credential" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {source.credentials.map((credential) => (
+                <SelectItem key={credential.value} value={credential.value}>
+                  {credential.label}
+                </SelectItem>
+              ))}
+              <SelectItem value={PUBLIC_ACCESS}>
+                {source.provider === "gitlab"
+                  ? "Public project"
+                  : "Public repository"}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="plugin-github-sync-ref">Branch</Label>
+          <Input
+            id="plugin-github-sync-ref"
+            value={draft.githubSyncRef}
+            onChange={(event) =>
+              onChange({ githubSyncRef: event.target.value })
+            }
+            placeholder="Default branch"
+            autoComplete="off"
+          />
+        </div>
+      </div>
       <div className="space-y-2">
         <Label htmlFor="plugin-github-sync-interval">Keep in sync</Label>
-        <FieldDescription>
-          New commits become review candidates and never replace approved plugin
-          bytes automatically.
-        </FieldDescription>
+        <FieldDescription>New commits wait for your review.</FieldDescription>
         <Select
           value={draft.githubSyncInterval ?? "off"}
           onValueChange={(value) =>
@@ -202,61 +247,8 @@ function GithubSourceFields({
           </SelectContent>
         </Select>
       </div>
-      <GithubAuthConfigFields
-        authMethod={draft.githubAuthMethod}
-        onAuthMethodChange={(githubAuthMethod) =>
-          onChange({
-            githubAuthMethod,
-            ...(githubAuthMethod === "pat" ? { githubAppConfigId: "" } : {}),
-          })
-        }
-        githubAppConfigId={draft.githubAppConfigId}
-        onGithubAppConfigIdChange={(githubAppConfigId) =>
-          onChange({ githubAppConfigId })
-        }
-        githubAppConfigs={githubAppConfigs}
-        patFields={
-          <div className="space-y-2">
-            <Label htmlFor="plugin-github-token">Personal access token</Label>
-            <FieldDescription>
-              <span>Leave empty to keep existing credentials unchanged.</span>{" "}
-              <span>
-                Fine-grained or classic — see{" "}
-                <a
-                  href="https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-medium text-primary underline-offset-4 hover:underline"
-                >
-                  managing your personal access tokens
-                </a>
-                .
-              </span>
-            </FieldDescription>
-            <SecretInput
-              id="plugin-github-token"
-              value={draft.githubToken}
-              onChange={(event) =>
-                onChange({ githubToken: event.target.value })
-              }
-              placeholder="ghp_…"
-            />
-          </div>
-        }
-      />
-      <div className="space-y-2">
-        <Label htmlFor="plugin-github-sync-ref">Ref</Label>
-        <FieldDescription>
-          Leave empty to track the repository&apos;s default branch.
-        </FieldDescription>
-        <Input
-          id="plugin-github-sync-ref"
-          value={draft.githubSyncRef}
-          onChange={(event) => onChange({ githubSyncRef: event.target.value })}
-          placeholder="Default branch"
-          autoComplete="off"
-        />
-      </div>
     </div>
   );
 }
+
+const PUBLIC_ACCESS = "public";

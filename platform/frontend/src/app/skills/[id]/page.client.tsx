@@ -462,7 +462,10 @@ function SkillDetailView({
               isSynced ? (
                 <GithubSyncPanel skill={skill} sourceRepo={githubSourceRepo} />
               ) : isGithubSkill ? (
-                <GithubSnapshotNotice repo={githubSourceRepo} />
+                <GithubSnapshotNotice
+                  repo={githubSourceRepo}
+                  provider={skill.sourceProvider}
+                />
               ) : null
             }
           />

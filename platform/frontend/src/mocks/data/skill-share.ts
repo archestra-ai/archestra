@@ -36,6 +36,8 @@ function makeOrgSkill(id: string, name: string): OrgSkill {
     githubSyncRef: null,
     githubAppConfigId: null,
     githubPatId: null,
+    gitlabTokenId: null,
+    sourceProvider: "github",
     lastSyncedAt: null,
     lastSyncError: null,
     usageCount: 0,

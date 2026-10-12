@@ -52,6 +52,7 @@ const source = {
   path: "appa.toml",
   interval: "1h" as const,
   githubPatId: null,
+  gitlabTokenId: null,
   githubAppConfigId: null,
   revision: "revision",
   sourceCommit: "a".repeat(40),
@@ -80,6 +81,7 @@ beforeEach(() => {
     enabled: true,
     hasPolicy: true,
     githubWebUrl: "https://github.com",
+    provider: "github",
     source,
   };
   server.use(http.get(url, () => HttpResponse.json(state)));
@@ -277,8 +279,9 @@ test("links an existing repository whose policy lives elsewhere through Advanced
   );
   show();
   fireEvent.click(
-    await screen.findByRole("button", { name: "Create GitHub repository" }),
+    await screen.findByRole("button", { name: "Set up Git sync" }),
   );
+  fireEvent.click(screen.getByRole("button", { name: /^GitHub/ }));
   fireEvent.change(screen.getByLabelText("Organization"), {
     target: { value: "example" },
   });
@@ -344,8 +347,9 @@ test("starts fresh from the template, connects it through a chosen App and finis
   );
   show();
   fireEvent.click(
-    await screen.findByRole("button", { name: "Create GitHub repository" }),
+    await screen.findByRole("button", { name: "Set up Git sync" }),
   );
+  fireEvent.click(screen.getByRole("button", { name: /^GitHub/ }));
   fireEvent.change(screen.getByLabelText("Organization"), {
     target: { value: "example" },
   });
@@ -463,8 +467,76 @@ test("editing an App-backed source keeps its repository and only warns about mis
     interval: "1h",
     validationDirectory: "traces",
     githubPatId: null,
+    gitlabTokenId: null,
     githubAppConfigId: appId,
   });
+});
+
+test("creates a private GitLab project in a group with the saved token", async () => {
+  const tokenId = "33333333-3333-4333-8333-333333333333";
+  let created: unknown = null;
+  state = { ...state, hasPolicy: false, source: null };
+  serveApps([]);
+  server.use(
+    http.get("http://localhost:9000/api/git-credentials", () =>
+      HttpResponse.json([
+        {
+          id: tokenId,
+          name: "Policy token",
+          provider: "gitlab",
+          kind: "gitlab_token",
+          webUrl: "https://gitlab.example.com",
+          createdAt: "2026-10-01T00:00:00Z",
+        },
+      ]),
+    ),
+    http.get(
+      `http://localhost:9000/api/git-credentials/${tokenId}/namespaces`,
+      () => HttpResponse.json(["", "platform", "platform/agents"]),
+    ),
+    http.post(`${url}/repository`, async ({ request }) => {
+      created = await request.json();
+      state = {
+        ...state,
+        provider: "gitlab",
+        githubWebUrl: "https://gitlab.example.com",
+        source: {
+          ...source,
+          repo: "platform/openappa-policy",
+          gitlabTokenId: tokenId,
+          sourceCommit: null,
+          lastSyncedAt: null,
+        },
+      };
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Set up Git sync" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /^GitLab/ }));
+  expect(
+    await screen.findByRole("radio", { name: /Policy token/ }),
+  ).toBeChecked();
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  // The first group the token reaches is picked; the project gets a default name.
+  await waitFor(() =>
+    expect(screen.getByLabelText("Group")).toHaveTextContent("platform"),
+  );
+  expect(screen.getByLabelText("Project name")).toHaveValue("openappa-policy");
+  fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+
+  await waitFor(() =>
+    expect(created).toEqual({
+      owner: "platform",
+      name: "openappa-policy",
+      gitlabTokenId: tokenId,
+      interval: "1h",
+      existing: false,
+    }),
+  );
+  expect(await screen.findByText("GitLab sync")).toBeVisible();
 });
 
 test("a link with ?setup=github-sync opens setup once and drops the parameter", async () => {
@@ -473,7 +545,7 @@ test("a link with ?setup=github-sync opens setup once and drops the parameter", 
   serveApps([]);
   show();
   expect(
-    await screen.findByRole("heading", { name: "Set up GitHub sync" }),
+    await screen.findByRole("heading", { name: "Set up Git sync" }),
   ).toBeVisible();
   expect(navigation.replace).toHaveBeenCalledWith("/settings/guardrails", {
     scroll: false,

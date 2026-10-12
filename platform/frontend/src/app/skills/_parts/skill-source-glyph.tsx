@@ -15,6 +15,7 @@ export function SkillSourceGlyph({
   skill: {
     sourceRef: string | null;
     sourceOrigin?: string | null;
+    sourceProvider?: "github" | "gitlab" | null;
     sourceType: string;
   };
   appIconLogo: string;
@@ -25,9 +26,19 @@ export function SkillSourceGlyph({
   if (skill.sourceType === "built_in") {
     return <img src={appIconLogo} alt="" className="size-6 object-contain" />;
   }
-  const repo = parseRepoFromSourceRef(skill.sourceRef, skill.sourceOrigin);
+  const repo = parseRepoFromSourceRef(
+    skill.sourceRef,
+    skill.sourceOrigin,
+    skill.sourceProvider,
+  );
   if (repo) {
-    return <RepositoryOwnerIcon repo={repo} className="size-6" />;
+    return (
+      <RepositoryOwnerIcon
+        repo={repo}
+        provider={skill.sourceProvider}
+        className="size-6"
+      />
+    );
   }
   return <BookOpen className="size-4 text-muted-foreground" />;
 }

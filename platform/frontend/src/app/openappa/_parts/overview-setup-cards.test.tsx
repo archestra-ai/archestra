@@ -52,6 +52,7 @@ const source = {
   path: "appa.toml",
   interval: "1h" as const,
   githubPatId: null,
+  gitlabTokenId: null,
   githubAppConfigId: null,
   revision: "revision",
   sourceCommit: "a".repeat(40),
@@ -104,6 +105,7 @@ beforeEach(() => {
     enabled: true,
     hasPolicy: false,
     githubWebUrl: "https://github.com",
+    provider: "github",
     source: null,
   };
   server.use(
@@ -278,6 +280,7 @@ test("shows the initial merge link on Overview while sync waits for setup", asyn
   sync = {
     ...sync,
     githubWebUrl: "https://github.example.com",
+    provider: "github",
     source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
   };
   show();

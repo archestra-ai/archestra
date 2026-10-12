@@ -25,7 +25,10 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
-import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import {
+  RuntimeCredentialIcon,
+  runtimeCredentialIconOf,
+} from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -34,6 +37,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { useFeature } from "@/lib/config/config.query";
+import { useGitCredentials } from "@/lib/git-credentials.query";
 import {
   type RuntimeCredentialDefinition,
   useDeleteRuntimeCredential,
@@ -48,6 +52,20 @@ const MANAGE_CREDENTIALS_PERMISSION: Permissions = {
 
 export function RuntimeCredentialsSection() {
   const definitions = useRuntimeCredentials();
+  // GitLab tokens name their host here: the definition list does not carry it.
+  const gitCredentials = useGitCredentials(
+    definitions.data?.some((entry) => entry.kind === "gitlab_token") ?? false,
+  );
+  const gitHosts = useMemo(
+    () =>
+      new Map(
+        (gitCredentials.data ?? []).map((entry) => [
+          entry.id,
+          new URL(entry.webUrl).host,
+        ]),
+      ),
+    [gitCredentials.data],
+  );
   const byosEnabled = useFeature("byosEnabled");
   const [definitionDialog, setDefinitionDialog] = useState<
     RuntimeCredentialDefinition | "new" | null
@@ -121,13 +139,7 @@ export function RuntimeCredentialsSection() {
             builtIn={definition.builtIn}
             icon={
               <RuntimeCredentialIcon
-                icon={
-                  definition.icon ??
-                  (definition.kind === "github_app" ||
-                  definition.kind === "github_app_user"
-                    ? "logo:github"
-                    : null)
-                }
+                icon={runtimeCredentialIconOf(definition)}
               />
             }
             extraBadges={
@@ -148,7 +160,24 @@ export function RuntimeCredentialsSection() {
         accessorKey: "kind",
         header: "Type",
         size: 140,
-        cell: ({ row }) => CREDENTIAL_KIND_LABELS[row.original.kind],
+        cell: ({ row }) => {
+          const host =
+            row.original.kind === "gitlab_token"
+              ? gitHosts.get(row.original.id)
+              : undefined;
+          return (
+            <span className="block min-w-0">
+              <span className="block">
+                {CREDENTIAL_KIND_LABELS[row.original.kind]}
+              </span>
+              {host ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {host}
+                </span>
+              ) : null}
+            </span>
+          );
+        },
       },
       {
         id: "scope",
@@ -172,7 +201,7 @@ export function RuntimeCredentialsSection() {
         ),
       },
     ],
-    [],
+    [gitHosts],
   );
 
   return (
@@ -210,7 +239,13 @@ export function RuntimeCredentialsSection() {
                   content: (
                     <span className="flex items-center gap-2">
                       <RuntimeCredentialIcon
-                        icon={value === "secret" ? null : "logo:github"}
+                        icon={
+                          value === "secret"
+                            ? null
+                            : value === "gitlab_token"
+                              ? "logo:gitlab"
+                              : "logo:github"
+                        }
                         className="size-4"
                       />
                       <span>{label}</span>
@@ -486,4 +521,5 @@ const CREDENTIAL_KIND_LABELS: Record<
   secret: "Custom secret",
   github_app: "GitHub App",
   github_app_user: "GitHub user connection",
+  gitlab_token: "GitLab token",
 };

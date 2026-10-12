@@ -331,6 +331,7 @@ function VersionHistory({
               onSelectFile={setActiveFilePath}
               sourceRef={skill?.sourceRef ?? null}
               sourceOrigin={skill?.sourceOrigin ?? null}
+              sourceProvider={skill?.sourceProvider ?? null}
             />
           )}
         </section>
@@ -405,6 +406,7 @@ function VersionPreview({
   onSelectFile,
   sourceRef,
   sourceOrigin,
+  sourceProvider,
 }: {
   version: number;
   isHead: boolean;
@@ -425,6 +427,7 @@ function VersionPreview({
   /** The skill's provenance string, paired with a version's commit to link out. */
   sourceRef: string | null;
   sourceOrigin: string | null;
+  sourceProvider: "github" | "gitlab" | null;
 }) {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
@@ -523,6 +526,7 @@ function VersionPreview({
   const sourceUrl = githubSourceUrlAtCommit({
     sourceRef,
     sourceOrigin,
+    provider: sourceProvider,
     commit: detail.sourceCommit,
   });
 

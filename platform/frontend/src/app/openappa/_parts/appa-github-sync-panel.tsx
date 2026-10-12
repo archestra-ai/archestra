@@ -5,13 +5,13 @@ import {
   AlertTriangle,
   ExternalLink,
   GitBranch,
-  Github,
   RefreshCw,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -48,6 +48,7 @@ import {
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
+import { appaGitHost } from "./appa-git-host";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 
 type Source = NonNullable<
@@ -92,6 +93,8 @@ export function AppaGithubSyncPanel() {
     );
   const { source, enabled, hasPolicy, validationDirectory, githubWebUrl } =
     query.data;
+  const git = appaGitHost(query.data);
+  const urls = source?.repo ? git.urls(source.repo) : null;
   const lastChecked = source?.lastSyncedAt
     ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
     : source?.interval
@@ -103,7 +106,7 @@ export function AppaGithubSyncPanel() {
     : source?.lastSyncError
       ? "Sync failed"
       : connected && source?.setupPullRequestNumber
-        ? "Waiting for setup PR"
+        ? `Waiting for setup ${git.changeRequestShort}`
         : connected
           ? "Connected"
           : hasPolicy
@@ -114,7 +117,7 @@ export function AppaGithubSyncPanel() {
       <SettingsBlock
         title={
           <span className="inline-flex items-center gap-2">
-            GitHub sync
+            <span>{source?.repo ? `${git.label} sync` : "Git sync"}</span>
             {/* No badge until sync is set up: there is no state to report. */}
             {status && (
               <Badge
@@ -127,14 +130,14 @@ export function AppaGithubSyncPanel() {
         }
         description={
           connected
-            ? "Your policy syncs both ways: changes merged in GitHub apply here, and changes made here open a pull request."
-            : "Store your policy in GitHub and review changes in pull requests."
+            ? `Your policy syncs both ways: changes merged in ${git.label} apply here, and changes made here open a ${git.changeRequest}.`
+            : "Keep your policy in GitHub or GitLab and review every change."
         }
         control={
           enabled && !source?.repo && canManage ? (
             <Button size="sm" onClick={() => setCreating(true)}>
-              <Github className="size-4" />
-              <span>Create GitHub repository</span>
+              <GitBranch className="size-4" />
+              <span>Set up Git sync</span>
             </Button>
           ) : undefined
         }
@@ -152,12 +155,16 @@ export function AppaGithubSyncPanel() {
                 <div className="flex flex-wrap items-center gap-4 px-4 py-3">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                      <Github className="size-5 text-muted-foreground" />
+                      <GitProviderLogo
+                        provider={git.provider}
+                        size={20}
+                        className="text-muted-foreground"
+                      />
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
                       <a
                         className="inline-flex max-w-full items-center gap-2 text-sm leading-5 font-medium hover:underline underline-offset-4"
-                        href={`${githubWebUrl}/${source.repo}/blob/${encodeURIComponent(source.ref ?? "HEAD")}/${source.path.split("/").map(encodeURIComponent).join("/")}`}
+                        href={`${githubWebUrl}/${source.repo}${git.provider === "gitlab" ? "/-" : ""}/blob/${encodeURIComponent(source.ref ?? "HEAD")}/${source.path.split("/").map(encodeURIComponent).join("/")}`}
                         target="_blank"
                         rel="noreferrer"
                       >
@@ -178,7 +185,7 @@ export function AppaGithubSyncPanel() {
                             <TooltipTrigger asChild>
                               <a
                                 className="font-mono underline underline-offset-4"
-                                href={`${githubWebUrl}/${source.repo}/commit/${source.sourceCommit}`}
+                                href={urls?.commit(source.sourceCommit)}
                                 target="_blank"
                                 rel="noreferrer"
                               >
@@ -241,13 +248,15 @@ export function AppaGithubSyncPanel() {
                         Your current policy stays active until it merges.
                       </InlineNoticeText>
                       <a
-                        href={`${githubWebUrl}/${source.repo}/pull/${source.setupPullRequestNumber}`}
+                        href={urls?.changeRequest(
+                          source.setupPullRequestNumber,
+                        )}
                         target="_blank"
                         rel="noreferrer"
                         data-slot="inline-notice-action"
                         className="ml-auto inline-flex shrink-0 items-center gap-0.5 font-medium underline-offset-4 hover:underline"
                       >
-                        <span>Review and merge PR</span>
+                        <span>Review and merge {git.changeRequestShort}</span>
                         <ExternalLink className="size-3" aria-hidden />
                       </a>
                     </InlineNotice>
@@ -270,7 +279,7 @@ export function AppaGithubSyncPanel() {
                       ? connected
                         ? "Conversations already running keep the policy they started with."
                         : "Automatic updates are stopped. Your last synced policy stays active."
-                      : "The current policy stays active until a valid GitHub policy is accepted."}
+                      : `The current policy stays active until a valid ${git.label} policy is accepted.`}
                   </p>
                   {canManage && (
                     <div className="flex items-center gap-2">
@@ -279,7 +288,9 @@ export function AppaGithubSyncPanel() {
                         size="xs"
                         onClick={() => setEditing(true)}
                       >
-                        {connected ? "Edit source" : "Reconnect GitHub"}
+                        <span>
+                          {connected ? "Edit source" : `Reconnect ${git.label}`}
+                        </span>
                       </Button>
                       {connected && (
                         <Button
@@ -299,19 +310,24 @@ export function AppaGithubSyncPanel() {
         )}
       </SettingsBlock>
       {editing &&
-        // App-backed sources edit in the setup flow, filled in; a PAT or a
-        // public source keeps the plain form, which the flow does not offer.
-        (source?.githubAppConfigId && source.repo && source.path ? (
+        // App- and GitLab-token-backed sources edit in the setup flow, filled
+        // in; a PAT or a public source keeps the plain form, which the flow
+        // does not offer.
+        ((source?.githubAppConfigId || source?.gitlabTokenId) &&
+        source.repo &&
+        source.path ? (
           <GithubSyncSetupDialog
             onOpenChange={setEditing}
             editing={{
+              provider: source.gitlabTokenId ? "gitlab" : "github",
+              credentialId: (source.gitlabTokenId ??
+                source.githubAppConfigId) as string,
               repo: source.repo,
               ref: source.ref,
               path: source.path,
               interval: source.interval ?? "1h",
               validationDirectory,
-              githubAppConfigId: source.githubAppConfigId,
-              githubWebUrl,
+              webUrl: githubWebUrl,
             }}
           />
         ) : (
@@ -322,7 +338,7 @@ export function AppaGithubSyncPanel() {
         open={disconnecting}
         onOpenChange={setDisconnecting}
         title="Stop APPA policy sync?"
-        description="The last accepted policy stays active. Automatic GitHub updates stop until you reconnect."
+        description="The last accepted policy stays active. Automatic updates stop until you reconnect."
         confirmLabel="Stop syncing"
         pendingLabel="Stopping…"
         isPending={update.isPending}

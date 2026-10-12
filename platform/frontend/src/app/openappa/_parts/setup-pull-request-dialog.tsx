@@ -4,11 +4,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   ExternalLink,
-  Github,
   GitPullRequestArrow,
   LoaderCircle,
 } from "lucide-react";
 import { useEffect } from "react";
+import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,12 +19,13 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
+import { appaGitHost } from "./appa-git-host";
 import { setupPullRequestOutcome } from "./setup-pull-request";
 
 /**
- * Waits with the operator on the initial policy pull request. The status
- * query polls the row and sync checks the pull request every minute; coming
- * back to this tab (from merging on GitHub) checks at once.
+ * Waits with the operator on the initial policy pull (or merge) request. The
+ * status query polls the row and sync checks the request every minute; coming
+ * back to this tab (from merging on GitHub or GitLab) checks at once.
  */
 export function OpenAppaSetupPullRequestDialog({
   pullRequest,
@@ -38,8 +39,9 @@ export function OpenAppaSetupPullRequestDialog({
   const source = query.data?.source ?? null;
   const outcome = setupPullRequestOutcome(source, pullRequest.number);
   const checking = update.isPending && update.variables?.action === "sync";
-  const web = query.data?.githubWebUrl ?? "https://github.com";
-  const pullUrl = `${web}/${pullRequest.repo}/pull/${pullRequest.number}`;
+  const git = appaGitHost(query.data);
+  const urls = git.urls(pullRequest.repo);
+  const pullUrl = urls.changeRequest(pullRequest.number);
   const merged = outcome === "merged";
   const pending = outcome === "pending";
   const { mutate, isPending } = update;
@@ -56,11 +58,11 @@ export function OpenAppaSetupPullRequestDialog({
     <StandardDialog
       open
       onOpenChange={onOpenChange}
-      title={merged ? "Setup finished" : "Finish GitHub sync"}
+      title={merged ? "Setup finished" : `Finish ${git.label} sync`}
       description={
         merged
-          ? "Your policy now comes from GitHub."
-          : "Repository rules need a pull request. Your current policy stays active until it merges."
+          ? `Your policy now comes from ${git.label}.`
+          : `Your rules need a ${git.changeRequest}. The current policy stays active until it merges.`
       }
       size="medium"
       bodyClassName="space-y-4"
@@ -70,14 +72,16 @@ export function OpenAppaSetupPullRequestDialog({
           variant={merged ? "default" : "outline"}
           onClick={() => onOpenChange(false)}
         >
-          {merged ? "Done" : "Close"}
+          <span>{merged ? "Done" : "Close"}</span>
         </Button>
       }
     >
       {pending && (
         <InlineNotice variant="info">
           <GitPullRequestArrow aria-hidden />
-          <span className="font-medium">Merge the setup PR</span>
+          <span className="font-medium">
+            Merge the setup {git.changeRequestShort}
+          </span>
           <InlineNoticeText>Setup finishes once it merges.</InlineNoticeText>
           <Button
             asChild
@@ -96,12 +100,15 @@ export function OpenAppaSetupPullRequestDialog({
       <div className="divide-y rounded-lg border bg-card">
         <div className="flex items-center gap-3 p-4">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
-            <Github className="size-4 text-muted-foreground" />
+            <GitProviderLogo
+              provider={git.provider}
+              className="text-muted-foreground"
+            />
           </div>
           <div className="min-w-0 flex-1">
             <a
               className="block truncate text-sm font-medium hover:underline underline-offset-4"
-              href={`${web}/${pullRequest.repo}`}
+              href={urls.repo}
               target="_blank"
               rel="noreferrer"
             >
@@ -162,8 +169,8 @@ export function OpenAppaSetupPullRequestDialog({
       {outcome === "gone" ? (
         <InlineNotice variant="info">
           <InlineNoticeText>
-            GitHub sync was stopped or re-pointed while this was open. Reconnect
-            it from the GitHub sync card.
+            Sync was stopped or re-pointed while this was open. Reconnect it
+            from the Git sync card.
           </InlineNoticeText>
         </InlineNotice>
       ) : source?.lastSyncError ? (

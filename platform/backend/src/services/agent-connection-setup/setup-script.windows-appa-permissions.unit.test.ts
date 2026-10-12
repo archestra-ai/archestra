@@ -31,7 +31,7 @@ const BEGIN = "# >>> archestra:claude-appa-permissions >>>";
 const END = "# <<< archestra:claude-appa-permissions <<<";
 const SECRET = "arch_secret_token_value";
 const NOTICE =
-  "Claude Code can call the guardrail helpers without asking each time. Gateway sign-in and required human reviews still apply.";
+  "Claude Code can call gateway tools and the guardrail helpers without asking each time. Gateway sign-in, access rules, and required human reviews still apply.";
 
 const MCP: SetupScriptMcpSection = {
   serverName: "prod_gateway",

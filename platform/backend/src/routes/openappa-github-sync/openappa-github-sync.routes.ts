@@ -1,5 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
+import { openappaGithubAppSetup } from "@/services/openappa-github-app-setup";
 import {
   acceptHeldAppaGithubPull,
   configureAppaGithubSync,
@@ -8,6 +9,14 @@ import {
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import { constructResponseSchema } from "@/types";
+import {
+  AppaGithubAppAccountsSchema,
+  AppaGithubAppInstallResultSchema,
+  AppaGithubAppManifestSchema,
+  CompleteAppaGithubAppSchema,
+  PendingAppaGithubAppSchema,
+  StartAppaGithubAppSchema,
+} from "@/types/openappa-github-app-setup";
 import {
   AcceptedHeldPullSchema,
   AppaGithubSourceSchema,
@@ -66,6 +75,108 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           ...request.body,
         }),
       ),
+  );
+  app.post(
+    "/api/openappa/github-app/manifest",
+    {
+      schema: {
+        operationId: RouteId.StartAppaGithubApp,
+        description:
+          "Start registering the OpenAPPA GitHub App on an organization from a manifest",
+        tags: ["OpenAPPA"],
+        body: StartAppaGithubAppSchema,
+        response: constructResponseSchema(AppaGithubAppManifestSchema),
+      },
+    },
+    async (request, reply) => {
+      request.auditSkip = true;
+      return reply.send(
+        await openappaGithubAppSetup.start({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          organization: request.body.organization,
+        }),
+      );
+    },
+  );
+  app.post(
+    "/api/openappa/github-app/manifest/complete",
+    {
+      schema: {
+        operationId: RouteId.CompleteAppaGithubApp,
+        description:
+          "Exchange GitHub's one-time code for the new App; it is stored once installed",
+        tags: ["OpenAPPA"],
+        body: CompleteAppaGithubAppSchema,
+        response: constructResponseSchema(PendingAppaGithubAppSchema),
+      },
+    },
+    async (request, reply) => {
+      request.auditSkip = true;
+      return reply.send(
+        await openappaGithubAppSetup.complete({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          ...request.body,
+        }),
+      );
+    },
+  );
+  app.get(
+    "/api/openappa/github-app/pending",
+    {
+      schema: {
+        operationId: RouteId.GetPendingAppaGithubApp,
+        description:
+          "The GitHub App created during setup that is not installed yet",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(
+          PendingAppaGithubAppSchema.nullable(),
+        ),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await openappaGithubAppSetup.pending({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        }),
+      ),
+  );
+  app.post(
+    "/api/openappa/github-app/install",
+    {
+      schema: {
+        operationId: RouteId.InstallAppaGithubApp,
+        description:
+          "Store the new GitHub App as an organization credential once it is installed",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(AppaGithubAppInstallResultSchema),
+      },
+    },
+    async (request, reply) => {
+      const result = await openappaGithubAppSetup.install({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      if (result.status === "waiting") request.auditSkip = true;
+      else request.auditBefore = null;
+      return reply.send(result);
+    },
+  );
+  app.get(
+    "/api/openappa/github-app/accounts",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubAppAccounts,
+        description:
+          "The GitHub account each organization GitHub App is installed on",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(AppaGithubAppAccountsSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(await openappaGithubAppSetup.accounts(request.organizationId)),
   );
   app.patch(
     "/api/openappa/github-sync",

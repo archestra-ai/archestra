@@ -115,6 +115,49 @@ export async function resolveInstallationCredential(
   return { token: body.token, expiresAt };
 }
 
+/**
+ * Call an App-level GitHub endpoint (`/app/...`) authenticated as the App
+ * itself rather than one of its installations, e.g. to find where it is installed.
+ */
+export async function fetchAsGithubApp<T>(
+  params: {
+    githubUrl: string;
+    appId: string;
+    privateKey: string;
+    path: `/app${string}`;
+  },
+  fetchImpl: typeof fetch = globalThis.fetch,
+): Promise<T> {
+  const { privateKey } = parseGitHubAppSecrets(params.privateKey);
+  const jwt = await signAppJwt({
+    appId: params.appId,
+    signingKey: parseSigningKey(privateKey),
+  });
+  const response = await fetchImpl(
+    `${params.githubUrl.replace(/\/+$/, "")}${params.path}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${jwt}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(INSTALLATION_TOKEN_REQUEST_TIMEOUT_MS),
+    },
+  );
+  if (!response.ok)
+    throw new ApiError(
+      502,
+      [
+        `GitHub returned HTTP ${response.status} for the App`,
+        await readGithubErrorResponse(response),
+      ]
+        .filter(Boolean)
+        .join(": "),
+    );
+  return (await response.json()) as T;
+}
+
 // ===== Internal helpers =====
 
 const GITHUB_APP_INSTALLATION_TOKEN_TTL_MS = 55 * TimeInMs.Minute;

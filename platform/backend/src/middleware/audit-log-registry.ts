@@ -814,6 +814,22 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
   },
+  // Creating and installing the App only touch GitHub and a short-lived setup
+  // record; the stored credential is audited when installation completes.
+  "/api/openappa/github-app/manifest": {
+    resourceType: "credential",
+    action: "credential.created",
+  },
+  "/api/openappa/github-app/manifest/complete": {
+    resourceType: "credential",
+    action: "credential.created",
+  },
+  "/api/openappa/github-app/install": {
+    resourceType: "credential",
+    action: "credential.created",
+    fetchById: (id, orgId) =>
+      RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
+  },
   // A POST walk-up is discarded, so the accept action registers its own path.
   "/api/openappa/github-sync/accept-held": {
     resourceType: "organization",

@@ -7,11 +7,8 @@ import {
   ExternalLink,
   GitBranch,
   Github,
-  GitPullRequestArrow,
-  LoaderCircle,
   RefreshCw,
 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -24,10 +21,7 @@ import {
   SettingsBlock,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
-import {
-  StandardDialog,
-  StandardFormDialog,
-} from "@/components/standard-dialog";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
@@ -47,13 +41,12 @@ import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github
 import {
   useAppaGithubSync,
   useConfigureAppaGithubSync,
-  useCreateAppaGithubRepository,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { setupPullRequestOutcome } from "./setup-pull-request";
+import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -84,25 +77,31 @@ export function AppaGithubSyncPanel() {
     );
   const { source, enabled, hasPolicy, validationDirectory } = query.data;
   const connected = !!source?.interval;
+  const status = !enabled
+    ? "Disabled"
+    : source?.lastSyncError
+      ? "Sync failed"
+      : connected && source?.setupPullRequestNumber
+        ? "Waiting for setup PR"
+        : connected
+          ? "Connected"
+          : hasPolicy
+            ? "Sync stopped"
+            : null;
   return (
     <SettingsSectionStack className="max-w-4xl">
       <SettingsBlock
         title={
           <span className="inline-flex items-center gap-2">
             GitHub sync
-            <Badge variant={source?.lastSyncError ? "destructive" : "outline"}>
-              {!enabled
-                ? "Disabled"
-                : source?.lastSyncError
-                  ? "Sync failed"
-                  : connected && source?.setupPullRequestNumber
-                    ? "Awaiting initial merge"
-                    : connected
-                      ? "Connected"
-                      : hasPolicy
-                        ? "Sync stopped"
-                        : "Managed locally"}
-            </Badge>
+            {/* No badge until sync is set up: there is no state to report. */}
+            {status && (
+              <Badge
+                variant={source?.lastSyncError ? "destructive" : "outline"}
+              >
+                {status}
+              </Badge>
+            )}
           </span>
         }
         description={
@@ -317,7 +316,7 @@ export function AppaGithubSyncPanel() {
         />
       )}
       {creating && (
-        <OpenAppaCreateRepositoryDialog
+        <GithubSyncSetupDialog
           onOpenChange={setCreating}
           onConnectExisting={() => {
             setCreating(false);
@@ -339,387 +338,6 @@ export function AppaGithubSyncPanel() {
         }}
       />
     </SettingsSectionStack>
-  );
-}
-
-export function OpenAppaCreateRepositoryDialog({
-  onOpenChange,
-  onConnectExisting,
-}: {
-  onOpenChange: (open: boolean) => void;
-  onConnectExisting: () => void;
-}) {
-  const mutation = useCreateAppaGithubRepository();
-  const [credentialStep, setCredentialStep] = useState<
-    "repository" | "define" | "connect"
-  >("repository");
-  // The initial policy pull request repository rules asked for. The dialog
-  // stays open on it until the merge is imported, so the operator never has
-  // to find the pull request again.
-  const [pullRequest, setPullRequest] = useState<{
-    repo: string;
-    number: number;
-  } | null>(null);
-  const [newCredentialId, setNewCredentialId] = useState<string | null>(null);
-  const { data: canReadCredentials } = useHasPermissions({
-    credential: ["read"],
-  });
-  const credentials = useRuntimeCredentials(!!canReadCredentials);
-  const apps =
-    credentials.data?.filter(
-      (credential) =>
-        credential.allowOrganization &&
-        credential.organizationConfigured &&
-        credential.kind === "github_app",
-    ) ?? [];
-  const newCredential = credentials.data?.find(
-    (credential) => credential.id === newCredentialId,
-  );
-  const form = useForm({
-    defaultValues: {
-      repo: "",
-      githubAppConfigId: "",
-      interval: "1h" as "15m" | "1h" | "1d",
-    },
-  });
-  if (pullRequest)
-    return (
-      <OpenAppaSetupPullRequestDialog
-        pullRequest={pullRequest}
-        onOpenChange={onOpenChange}
-      />
-    );
-  return (
-    <>
-      <StandardFormDialog
-        open={credentialStep === "repository"}
-        onOpenChange={onOpenChange}
-        isDirty={form.formState.isDirty}
-        title="Create OpenAPPA repository"
-        description="Copy the OpenAPPA template into a private GitHub repository with your current policy. If repository rules require a pull request, review and merge it to finish setup."
-        size="medium"
-        onSubmit={form.handleSubmit((values) => {
-          const [owner, name] = values.repo.trim().split("/");
-          mutation.mutate(
-            {
-              owner,
-              name,
-              githubAppConfigId: values.githubAppConfigId,
-              interval: values.interval,
-            },
-            {
-              onSuccess: (data) => {
-                const number = data?.source?.setupPullRequestNumber;
-                if (number && data.source?.repo)
-                  setPullRequest({ repo: data.source.repo, number });
-                else onOpenChange(false);
-              },
-            },
-          );
-        })}
-        footer={
-          <>
-            <Button type="button" variant="ghost" onClick={onConnectExisting}>
-              <span>Connect existing repository</span>
-            </Button>
-            <DialogCancelButton disabled={mutation.isPending} />
-            <Button
-              type="submit"
-              disabled={
-                mutation.isPending ||
-                !apps.some((app) => app.id === form.watch("githubAppConfigId"))
-              }
-            >
-              <span>
-                {mutation.isPending ? "Creating…" : "Create and sync"}
-              </span>
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <OpenAppaGithubAppRequirements />
-          <div className="space-y-2">
-            <Label htmlFor="new-appa-repo">Repository</Label>
-            <p className="text-xs text-muted-foreground">
-              Use the account where the App is installed and a new repository
-              name, or retry one created by an earlier attempt.
-            </p>
-            <Input
-              id="new-appa-repo"
-              placeholder="organization/openappa-policy"
-              {...form.register("repo", {
-                required: true,
-                pattern: /^[a-zA-Z0-9][a-zA-Z0-9-]*\/[a-zA-Z0-9_.-]+$/,
-              })}
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <Label htmlFor="new-appa-app">Connected GitHub App</Label>
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                className="h-auto shrink-0 px-0 py-0 text-xs"
-                onClick={() => setCredentialStep("define")}
-              >
-                <span>Set up a new App</span>
-              </Button>
-            </div>
-            <Select
-              value={form.watch("githubAppConfigId")}
-              onValueChange={(value) =>
-                form.setValue("githubAppConfigId", value, { shouldDirty: true })
-              }
-            >
-              <SelectTrigger id="new-appa-app" className="w-full">
-                <RuntimeCredentialIcon
-                  icon={
-                    apps.find(
-                      (app) => app.id === form.watch("githubAppConfigId"),
-                    )?.icon ?? "logo:github"
-                  }
-                  className="size-4"
-                  size={16}
-                />
-                <span className="min-w-0 flex-1 text-left">
-                  <SelectValue placeholder="Select an existing App" />
-                </span>
-              </SelectTrigger>
-              <SelectContent
-                position="popper"
-                className="w-[var(--radix-select-trigger-width)]"
-              >
-                {apps.map((app) => (
-                  <SelectItem
-                    key={app.id}
-                    value={app.id}
-                    icon={
-                      <RuntimeCredentialIcon
-                        icon={app.icon ?? "logo:github"}
-                        className="size-4"
-                        size={16}
-                      />
-                    }
-                  >
-                    {app.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!apps.length && (
-              <InlineNotice variant="info">
-                <InlineNoticeText>
-                  Set up and connect an organization GitHub App before creating
-                  a repository.
-                </InlineNoticeText>
-              </InlineNotice>
-            )}
-          </div>
-          {mutation.error && (
-            <InlineNotice variant="error">
-              <AlertTriangle aria-hidden />
-              <span className="font-medium">Couldn&apos;t finish setup</span>
-              <InlineNoticeText className="basis-full pl-5">
-                {mutation.error.message}
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
-        </div>
-      </StandardFormDialog>
-      {credentialStep === "define" && (
-        <RuntimeCredentialDefinitionDialog
-          definition={null}
-          initialKind="github_app"
-          initialScope="organization"
-          initialValues={OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES}
-          setupNotice={<OpenAppaGithubAppRequirements />}
-          hideProvidedBy
-          backLabel="Back to repository"
-          size="medium"
-          onClose={() => setCredentialStep("repository")}
-          onCreated={(id) => {
-            setNewCredentialId(id);
-            form.setValue("githubAppConfigId", id, { shouldDirty: true });
-            setCredentialStep("connect");
-          }}
-        />
-      )}
-      {credentialStep === "connect" && newCredential && (
-        <RuntimeCredentialConnectionDialog
-          definition={newCredential}
-          scope="organization"
-          onClose={() => setCredentialStep("repository")}
-        />
-      )}
-    </>
-  );
-}
-
-/**
- * Waits with the operator on the initial policy pull request. The status
- * query polls the row; sync checks the pull request every minute and imports
- * the policy once it merges, and "Check if merged" runs that check at once.
- */
-function OpenAppaSetupPullRequestDialog({
-  pullRequest,
-  onOpenChange,
-}: {
-  pullRequest: { repo: string; number: number };
-  onOpenChange: (open: boolean) => void;
-}) {
-  const query = useAppaGithubSync();
-  const update = useUpdateAppaGithubSync();
-  const source = query.data?.source ?? null;
-  const outcome = setupPullRequestOutcome(source, pullRequest.number);
-  const checking = update.isPending && update.variables?.action === "sync";
-  const pullUrl = `https://github.com/${pullRequest.repo}/pull/${pullRequest.number}`;
-  const merged = outcome === "merged";
-  return (
-    <StandardDialog
-      open
-      onOpenChange={onOpenChange}
-      title={merged ? "Setup finished" : "Finish setup in GitHub"}
-      description={
-        merged
-          ? "The initial policy pull request merged. Your policy now comes from GitHub, and every change is a reviewed pull request."
-          : "Repository rules require a pull request. We opened one with your current policy. Merge it to finish setup. Your current policy stays active until it merges."
-      }
-      size="medium"
-      bodyClassName="space-y-4"
-      footer={
-        <>
-          <Button variant="ghost" asChild>
-            <Link href="/settings/openappa">Sync settings</Link>
-          </Button>
-          <Button
-            type="button"
-            variant={merged ? "default" : "outline"}
-            onClick={() => onOpenChange(false)}
-          >
-            {merged ? "Done" : "Close"}
-          </Button>
-        </>
-      }
-    >
-      <div className="divide-y rounded-lg border bg-card">
-        <div className="flex items-center gap-3 p-4">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
-            <Github className="size-4 text-muted-foreground" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <a
-              className="block truncate text-sm font-medium hover:underline underline-offset-4"
-              href={`https://github.com/${pullRequest.repo}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {pullRequest.repo}
-            </a>
-            <p className="text-xs text-muted-foreground">
-              Created from the OpenAPPA template
-            </p>
-          </div>
-          {merged && (
-            <Badge variant="outline">
-              <CheckCircle2 className="text-emerald-600 dark:text-emerald-400" />
-              <span>Connected</span>
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-3 p-4">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
-            <GitPullRequestArrow className="size-4 text-muted-foreground" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <a
-              className="block truncate text-sm font-medium hover:underline underline-offset-4"
-              href={pullUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Initial policy{" "}
-              <span className="font-normal text-muted-foreground">
-                #{pullRequest.number}
-              </span>
-            </a>
-            <p className="text-xs text-muted-foreground" aria-live="polite">
-              {merged && source?.sourceCommit
-                ? `Merged. Policy synced from ${source.sourceCommit.slice(0, 7)}.`
-                : source?.lastSyncedAt
-                  ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
-                  : "Not checked yet"}
-            </p>
-          </div>
-          <Badge variant={source?.lastSyncError ? "destructive" : "outline"}>
-            {merged ? (
-              <CheckCircle2 className="text-emerald-600 dark:text-emerald-400" />
-            ) : source?.lastSyncError ? (
-              <AlertTriangle />
-            ) : (
-              <LoaderCircle className="animate-spin text-muted-foreground" />
-            )}
-            <span>
-              {merged
-                ? "Merged"
-                : checking
-                  ? "Checking…"
-                  : source?.lastSyncError
-                    ? "Needs attention"
-                    : "Awaiting merge"}
-            </span>
-          </Badge>
-        </div>
-      </div>
-      {outcome === "gone" ? (
-        <InlineNotice variant="info">
-          <InlineNoticeText>
-            GitHub sync was stopped or re-pointed while this was open. Reconnect
-            it from the GitHub sync card.
-          </InlineNoticeText>
-        </InlineNotice>
-      ) : source?.lastSyncError ? (
-        <InlineNotice variant="error">
-          <AlertTriangle className="size-4 shrink-0" />
-          <span className="font-medium">Could not finish setup</span>
-          <InlineNoticeText>{source.lastSyncError}</InlineNoticeText>
-        </InlineNotice>
-      ) : null}
-      {outcome === "pending" && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild>
-            <a href={pullUrl} target="_blank" rel="noreferrer">
-              <span>
-                {source?.lastSyncError
-                  ? "Open PR on GitHub"
-                  : "Review and merge PR"}
-              </span>
-              <ExternalLink className="size-3.5" />
-            </a>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={update.isPending}
-            onClick={() => update.mutate({ action: "sync" })}
-          >
-            <RefreshCw className={cn("size-3.5", checking && "animate-spin")} />
-            <span>{checking ? "Checking…" : "Check if merged"}</span>
-          </Button>
-          <p className="basis-full text-xs text-muted-foreground">
-            We keep checking for the merge. You can close this and come back
-            from the GitHub sync card.
-          </p>
-        </div>
-      )}
-      {merged && (
-        <p className="text-xs text-muted-foreground">
-          Updates apply to new conversations. Active conversations keep their
-          current policy.
-        </p>
-      )}
-    </StandardDialog>
   );
 }
 

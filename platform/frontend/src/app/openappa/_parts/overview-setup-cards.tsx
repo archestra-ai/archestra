@@ -56,11 +56,9 @@ import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
-import {
-  OpenAppaCreateRepositoryDialog,
-  OpenAppaSourceForm,
-} from "./appa-github-sync-panel";
+import { OpenAppaSourceForm } from "./appa-github-sync-panel";
 import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
+import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
@@ -346,7 +344,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
         />
       )}
       {creating && (
-        <OpenAppaCreateRepositoryDialog
+        <GithubSyncSetupDialog
           onOpenChange={setCreating}
           onConnectExisting={() => {
             setCreating(false);

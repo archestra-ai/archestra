@@ -6,6 +6,7 @@ import {
   appaGithubSyncQueryKey,
   invalidatePolicyViews,
 } from "@/lib/openappa-policy-views";
+import { runtimeCredentialsQueryKey } from "@/lib/runtime-credentials.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export function useAppaGithubSync() {
@@ -113,3 +114,73 @@ export function useUpdateAppaGithubSync() {
     },
   });
 }
+
+/** The App created on GitHub during setup that still needs installing. */
+export function usePendingAppaGithubApp(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: pendingAppaGithubAppQueryKey,
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getPendingAppaGithubApp();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+export function useAppaGithubAppAccounts(enabled: boolean) {
+  return useQuery({
+    enabled,
+    queryKey: ["openappa", "github-app", "accounts"],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getAppaGithubAppAccounts();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+  });
+}
+export function useStartAppaGithubApp() {
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.StartAppaGithubAppData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.startAppaGithubApp({
+        body,
+      });
+      if (error) throw toApiError(error);
+      return data;
+    },
+  });
+}
+export function useCompleteAppaGithubApp() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CompleteAppaGithubAppData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.completeAppaGithubApp({
+        body,
+      });
+      if (error) throw toApiError(error);
+      return data;
+    },
+    onSuccess: (data) =>
+      client.setQueryData(pendingAppaGithubAppQueryKey, data ?? null),
+  });
+}
+export function useInstallAppaGithubApp() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.installAppaGithubApp();
+      if (error) throw toApiError(error);
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.status !== "installed") return;
+      client.setQueryData(pendingAppaGithubAppQueryKey, null);
+      client.invalidateQueries({ queryKey: runtimeCredentialsQueryKey });
+    },
+  });
+}
+
+const pendingAppaGithubAppQueryKey = ["openappa", "github-app", "pending"];

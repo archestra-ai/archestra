@@ -89321,6 +89321,456 @@ export type CreateAppaGithubRepositoryResponses = {
 
 export type CreateAppaGithubRepositoryResponse = CreateAppaGithubRepositoryResponses[keyof CreateAppaGithubRepositoryResponses];
 
+export type StartAppaGithubAppData = {
+    body: {
+        organization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/manifest';
+};
+
+export type StartAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartAppaGithubAppError = StartAppaGithubAppErrors[keyof StartAppaGithubAppErrors];
+
+export type StartAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        url: string;
+        manifest: string;
+    };
+};
+
+export type StartAppaGithubAppResponse = StartAppaGithubAppResponses[keyof StartAppaGithubAppResponses];
+
+export type CompleteAppaGithubAppData = {
+    body: {
+        code: string;
+        state: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/manifest/complete';
+};
+
+export type CompleteAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteAppaGithubAppError = CompleteAppaGithubAppErrors[keyof CompleteAppaGithubAppErrors];
+
+export type CompleteAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        account: string;
+        htmlUrl: string;
+        installUrl: string;
+    };
+};
+
+export type CompleteAppaGithubAppResponse = CompleteAppaGithubAppResponses[keyof CompleteAppaGithubAppResponses];
+
+export type GetPendingAppaGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/pending';
+};
+
+export type GetPendingAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPendingAppaGithubAppError = GetPendingAppaGithubAppErrors[keyof GetPendingAppaGithubAppErrors];
+
+export type GetPendingAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        account: string;
+        htmlUrl: string;
+        installUrl: string;
+    } | null;
+};
+
+export type GetPendingAppaGithubAppResponse = GetPendingAppaGithubAppResponses[keyof GetPendingAppaGithubAppResponses];
+
+export type InstallAppaGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/install';
+};
+
+export type InstallAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type InstallAppaGithubAppError = InstallAppaGithubAppErrors[keyof InstallAppaGithubAppErrors];
+
+export type InstallAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'waiting';
+    } | {
+        status: 'installed';
+        id: string;
+        name: string;
+        account: string;
+    };
+};
+
+export type InstallAppaGithubAppResponse = InstallAppaGithubAppResponses[keyof InstallAppaGithubAppResponses];
+
+export type GetAppaGithubAppAccountsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/accounts';
+};
+
+export type GetAppaGithubAppAccountsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubAppAccountsError = GetAppaGithubAppAccountsErrors[keyof GetAppaGithubAppAccountsErrors];
+
+export type GetAppaGithubAppAccountsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        account: string | null;
+    }>;
+};
+
+export type GetAppaGithubAppAccountsResponse = GetAppaGithubAppAccountsResponses[keyof GetAppaGithubAppAccountsResponses];
+
 export type AcceptHeldAppaGithubPullData = {
     body?: never;
     path?: never;

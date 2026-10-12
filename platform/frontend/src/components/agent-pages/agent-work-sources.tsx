@@ -223,6 +223,12 @@ function AgentChannelsCard({
     slackPerAgent &&
     !slackBot &&
     assigned.some((binding) => binding.provider === "slack" && !binding.isDm);
+  // Every input that picks the buttons, so they appear once, not one by one
+  // ("Add Slack channel" turning into "Add Slack bot").
+  const loading =
+    bindings.isPending ||
+    providerStatus.isPending ||
+    (slackOffered && slackBots.isPending);
   const manageHref = agentEditHref(agentId, "messaging");
   const addBotHref = `/settings/messaging-channels/slack?addBot=${encodeURIComponent(agentId)}`;
   const reachable = listed.length > 0 || !!slackBot;
@@ -233,7 +239,7 @@ function AgentChannelsCard({
       title="In your channels"
       action={
         <span className="flex flex-wrap gap-2">
-          {!reachable && !bindings.isPending ? (
+          {loading ? null : !reachable ? (
             <EmptyChannelActions
               connectedApps={connectedApps}
               slackPerAgent={slackPerAgent}
@@ -255,7 +261,7 @@ function AgentChannelsCard({
               </Button>
             )
           )}
-          {reachable && (listed.length > 0 || !slackPerAgent) && (
+          {!loading && reachable && (listed.length > 0 || !slackPerAgent) && (
             <Button size="sm" variant="outline" asChild>
               <Link href={manageHref}>
                 {listed.length ? "Manage channels" : "Add a channel"}
@@ -265,7 +271,7 @@ function AgentChannelsCard({
         </span>
       }
     >
-      {bindings.isPending ? (
+      {loading ? (
         <span>Loading channels…</span>
       ) : reachable ? (
         <span className="flex flex-col gap-1.5">

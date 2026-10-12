@@ -3856,6 +3856,32 @@ describe("SlackProvider.handleSlashCommand — signup welcome", () => {
   });
 });
 
+describe("SlackProvider bot handle", () => {
+  test("is the display name people @mention, not Slack's shortened username", async () => {
+    const provider = createProvider();
+    Object.assign(provider, {
+      client: {
+        users: {
+          info: vi.fn().mockResolvedValue({
+            user: {
+              name: "archestrastagingmyass",
+              profile: { display_name: "archestra_staging_my_assistant" },
+            },
+          }),
+        },
+      },
+    });
+
+    const handle = await (
+      provider as unknown as {
+        fetchUserHandle: (userId: string) => Promise<string | null>;
+      }
+    ).fetchUserHandle("U1");
+
+    expect(handle).toBe("archestra_staging_my_assistant");
+  });
+});
+
 describe("plainSlackText", () => {
   test("drops Slack's link and channel markup and unescapes text", () => {
     expect(

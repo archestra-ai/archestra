@@ -2459,7 +2459,9 @@ class SlackProvider implements ChatOpsProvider {
     if (!this.client) return null;
     try {
       const result = await this.client.users.info({ user: userId });
-      return result.user?.name || null;
+      // Slack derives a bot's username from its name, cut to 21 characters
+      // without separators; people see and @mention the display name.
+      return result.user?.profile?.display_name || result.user?.name || null;
     } catch (error) {
       logger.debug(
         { error: errorMessage(error), userId },

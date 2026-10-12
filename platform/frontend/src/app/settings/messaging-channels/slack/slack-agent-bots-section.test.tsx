@@ -187,6 +187,26 @@ describe("SlackAgentBotsSection", () => {
     ).toHaveAttribute("href", "https://api.slack.com/apps/A_a1/collaborators");
   });
 
+  it("after a one-click install that still needs a token, finishes setup and adds the team in one dialog", () => {
+    setup({
+      bots: [
+        bot("a1", "Marketing", {
+          needsAppLevelToken: true,
+          createdBy: { id: "me", name: "Me" },
+        }),
+      ],
+      searchParams: "slackBotInstalled=a1",
+    });
+
+    expect(
+      screen.getByRole("dialog", { name: "Finish Marketing's Slack bot" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("App-Level Token")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Collaborators page/ }),
+    ).toHaveAttribute("href", "https://api.slack.com/apps/A_a1/collaborators");
+  });
+
   it("after a one-click install, asks the creator to give their team access", () => {
     setup({
       bots: [bot("a1", "Marketing", { createdBy: { id: "me", name: "Me" } })],

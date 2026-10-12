@@ -9346,6 +9346,163 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
     });
 
+    // The proxy reads the Codex mailbox at its entry, before it knows whether
+    // OpenAPPA governs the request. A message the reader does not support is
+    // a reason to refuse a governed request only: with enforcement off, a
+    // Codex session that sent one inter-agent message got 409 on every turn.
+    test.for([
+      { state: "enforcement is off", governed: false },
+      { state: "OpenAPPA is disabled", governed: false },
+      {
+        state: "the session started while enforcement was off",
+        governed: false,
+      },
+      { state: "OpenAPPA governs the session", governed: true },
+    ])("refuses a Codex mailbox message it cannot read only in a governed session: $state", async ({
+      state,
+      governed,
+    }) => {
+      await ModelModel.upsert({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      await app.register(openAiProxyRoutes);
+      const answer = {
+        id: "msg_mailbox",
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: "Noted", annotations: [] }],
+      };
+      const response = (status: string, output: unknown[]) => ({
+        id: "resp_mailbox",
+        object: "response",
+        status,
+        model: "gpt-5.5",
+        output,
+      });
+      vi.spyOn(
+        openAiResponsesAdapterFactory,
+        "createClient",
+      ).mockImplementation(
+        () =>
+          ({
+            responses: {
+              create: async (params: unknown) => {
+                providerRequests.push(structuredClone(params));
+                return {
+                  async *[Symbol.asyncIterator]() {
+                    yield {
+                      type: "response.created",
+                      sequence_number: 0,
+                      response: response("in_progress", []),
+                    };
+                    yield {
+                      type: "response.output_item.done",
+                      output_index: 0,
+                      sequence_number: 1,
+                      item: answer,
+                    };
+                    yield {
+                      type: "response.completed",
+                      sequence_number: 2,
+                      response: {
+                        ...response("completed", [answer]),
+                        usage: {
+                          input_tokens: 10,
+                          output_tokens: 5,
+                          total_tokens: 15,
+                        },
+                      },
+                    };
+                  },
+                };
+              },
+            },
+          }) as never,
+      );
+      const send = (input: unknown[]) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/responses`,
+          remoteAddress: "127.0.0.1",
+          headers: {
+            authorization: "Bearer test-key",
+            "content-type": "application/json",
+            "user-agent": "codex_cli_rs/0.159.2",
+            "x-archestra-user-id": userId,
+            "x-codex-turn-metadata": JSON.stringify({
+              thread_id: "mailbox-root",
+            }),
+          },
+          payload: {
+            model: "gpt-5.5",
+            stream: true,
+            prompt_cache_key: "mailbox-root",
+            input,
+          },
+        });
+      const mail = (text: string, payload?: string) => ({
+        type: "agent_message",
+        author: "/root/worker",
+        recipient: "/root",
+        content: [
+          { type: "input_text", text },
+          ...(payload
+            ? [{ type: "encrypted_content", encrypted_content: payload }]
+            : []),
+        ],
+      });
+      // The kinds a Codex agent sends besides a task and its final answer.
+      // Codex 0.162 sends the text of a message between agents as an
+      // encrypted part.
+      const mailbox = [
+        mail(
+          "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n",
+          "gAAAA_opaque_message",
+        ),
+        mail(
+          "Message Type: CHANNEL_POST\nSender: /root/worker\nChannel: build\nMessage ID: m-1\nThread ID: t-1\nPayload:\nPosted",
+        ),
+      ];
+      const opened = [{ role: "user", content: "Coordinate the workers" }];
+
+      if (state === "OpenAPPA is disabled") config.openappa.enabled = false;
+      if (state === "enforcement is off")
+        await GuardrailsDeploymentModel.setEnabled(false);
+      if (state === "the session started while enforcement was off") {
+        await GuardrailsDeploymentModel.setEnabled(false);
+        const first = await send(opened);
+        expect(first.statusCode, first.body).toBe(200);
+        await GuardrailsDeploymentModel.setEnabled(true);
+      }
+      if (governed) {
+        const first = await send(opened);
+        expect(first.statusCode, first.body).toBe(200);
+      }
+      providerRequests.length = 0;
+
+      const turn = await send([...opened, ...mailbox]);
+
+      if (governed) {
+        expect(turn.statusCode, turn.body).toBe(409);
+        expect(turn.json().error.message).toBe(
+          "OpenAPPA withheld an unsupported Codex mailbox message",
+        );
+        expect(providerRequests).toHaveLength(0);
+        return;
+      }
+      expect(turn.statusCode, turn.body).toBe(200);
+      expect(providerRequests).toHaveLength(1);
+      expect(providerRequests[0]).toMatchObject({
+        input: expect.arrayContaining(mailbox),
+      });
+    });
+
     test.for([
       false,
       true,

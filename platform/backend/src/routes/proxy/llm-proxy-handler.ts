@@ -662,6 +662,11 @@ export async function handleLLMProxy<
   // Removes receipts and delegation markers before forwarding requests.
   // Markers must not reach providers or logs, even when OpenAPPA is off.
   // When active, OpenAPPA resolves extracted markers into lineage evidence.
+  // A child return the proxy cannot read is withheld from a governed parent
+  // only, and the proxy does not know yet whether OpenAPPA governs this
+  // request. Until it does, the first refusal waits here and that return stays
+  // as the client sent it.
+  let childReturnRefusal: ApiError | undefined;
   const requestWireFamily = appaWireFamily(provider.interactionType);
   let strippedReceiptCodes: string[] = [];
   let delegationMarkers: AppaDelegationMarker[] | undefined;
@@ -699,6 +704,9 @@ export async function handleLLMProxy<
     childReturns = collectAndStripChildReturns(body, {
       openCodeBackgroundReturns: nativeClient === "opencode",
       codexMailboxReturns: nativeClient === "codex",
+      onRefusal: (refusal) => {
+        childReturnRefusal ??= refusal;
+      },
     });
   }
   // Restores original provider call IDs before request processing, logging,
@@ -1948,6 +1956,9 @@ export async function handleLLMProxy<
         openappaSession = undefined;
       }
       if (openappaSession) {
+        // OpenAPPA governs this request, so a child return the proxy could not
+        // read at its entry is refused now.
+        if (childReturnRefusal) throw childReturnRefusal;
         // A Chat session is a conversation, and the request must name the
         // user whose conversation it is: without one there is nothing to
         // check the binding against, so the request is refused rather than

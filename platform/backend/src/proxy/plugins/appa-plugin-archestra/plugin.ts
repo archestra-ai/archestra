@@ -1968,17 +1968,18 @@ async function approveChildReturnCarriers(params: {
         parentSessionId: params.binding.session.session_id,
       }),
     )
-  ).map((record) => ({
-    ...record,
-    ...(record.spawnCallId
-      ? { spawnCallId: withoutTrajectoryStamp(record.spawnCallId) }
-      : {}),
-  }));
-  // The runtime lists the newest return first. A child that answered a
-  // follow-up has more than one return, all under one spawn call.
-  const newestFirst = new Map(
-    available.map((record, index) => [record, index]),
-  );
+  )
+    // The runtime lists the newest return first, so the lowest rank is the
+    // newest.
+    .map((record, rank) => ({
+      ...record,
+      rank,
+      ...(record.spawnCallId
+        ? { spawnCallId: withoutTrajectoryStamp(record.spawnCallId) }
+        : {}),
+    }));
+  // A child that answered a follow-up has more than one return, all under one
+  // spawn call.
   const crossedByChild = new Map<string, Set<string>>();
   for (const record of available) {
     const crossed = crossedByChild.get(record.childSessionId) ?? new Set();
@@ -2025,7 +2026,7 @@ async function approveChildReturnCarriers(params: {
   // consumes its own crossing. One genuine return cannot authorize siblings.
   const matched: Array<{
     completion: AppaChildReturnCompletion;
-    record: AppaChildReturnRecord;
+    record: AppaChildReturnRecord & { rank: number };
   }> = [];
   for (const completion of completions) {
     // Display-only echoes never consume a child's crossing.
@@ -2161,10 +2162,9 @@ async function approveChildReturnCarriers(params: {
       byEnvelope.set(envelopeId, envelope);
     }
     const child = `${spawnCallId}\u0000${record.childSessionId}`;
-    const rank = newestFirst.get(record) ?? 0;
     const newest = arrived.get(child);
-    if (!newest || rank < newest.rank) {
-      arrived.set(child, { ...record, spawnCallId, rank });
+    if (!newest || record.rank < newest.rank) {
+      arrived.set(child, { ...record, spawnCallId });
     }
   }
   const unrecordedResult = completionResults.find(

@@ -30,8 +30,25 @@ n8n AI workflows can route model inference through the LLM Proxy and execute too
 2. Connect an **OpenAI Chat Model** node to the agent's model input.
 3. Configure the OpenAI credential: set **Base URL** to `http://localhost:9000/v1/openai` and **API Key** to your Archestra virtual key.
 4. Select a model supported by your provider and save the workflow.
+5. If Guardrails are active, add the [session header](#configure-guardrails).
 
 Store virtual keys in n8n's credential manager rather than inline workflow expressions.
+
+### Configure Guardrails
+
+<span id="configure-guardrails"></span>
+<span id="n8n-guardrails"></span>
+
+Send the session header so Guardrails track the workflow.
+
+1. Open the OpenAI credential used by your **OpenAI Chat Model** node.
+2. Turn on **Add Custom Header**.
+3. Set **Header Name** to `X-Appa-Session-ID`.
+4. Set **Header Value** to a session identifier, such as a UUID.
+
+For workflows that use an **HTTP Request** node, add `X-Appa-Session-ID` to the request headers.
+
+For subagents or child workflows, also send `X-Appa-Parent-ID` with the parent workflow's session ID.
 
 ### Connect Tools
 
@@ -58,6 +75,18 @@ Open WebUI connects to Archestra via its OpenAI-compatible model provider and re
 2. Add a new connection under **OpenAI API**.
 3. Set the API URL to `http://localhost:9000/v1/openai` and enter your Archestra virtual key as the API key.
 4. Verify the connection, save it, and select your model in a new conversation.
+
+### Configure Guardrails
+
+<span id="openwebui-guardrails"></span>
+
+Send the session header so Guardrails track conversations from Open WebUI.
+
+1. Go to **Settings → Admin → Connections** in Open WebUI.
+2. Edit your OpenAI API connection.
+3. Under **Headers**, add `X-Appa-Session-ID` with a session identifier as the value.
+
+For child sessions or pipelines, also send `X-Appa-Parent-ID` with the parent session ID.
 
 ### Connect Tools
 

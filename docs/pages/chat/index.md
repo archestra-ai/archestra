@@ -15,7 +15,7 @@ Start a conversation to delegate tasks to an agent, attach reference files, and 
 
 Choose an agent and prompt it to analyze data, run commands, or generate code.
 
-1. Select **New chat** in the sidebar, or press `Alt+N`. Starting conversations requires [`chat:create`](/docs/reference/permissions#chat:create).
+1. Select **New chat** in the sidebar, or press `Option+N` (or `Alt+N` on Windows/Linux). Starting conversations requires [`chat:create`](/docs/reference/permissions#chat:create).
 2. Choose an agent from the **Agent** menu.
 3. Enter your prompt in the composer and press `Enter` to send. Press `Escape` to halt an active completion.
 
@@ -59,7 +59,7 @@ Open **Chat actions** in the conversation header and choose **Share** to grant a
 
 Protect sensitive discussions with end-to-end encryption where only the originating browser holds the decryption key.
 
-Select the lock icon in the composer, or press `Alt+I`, before sending your first message. Your browser generates a unique AES key client-side and retains it locally. Archestra encrypts conversation messages, attachments, logs, and error outputs with that key before saving them to the database.
+Select the lock icon in the composer, or press `Option+I` (or `Alt+I` on Windows/Linux), before sending your first message. Your browser generates a unique AES key client-side and retains it locally. Archestra encrypts conversation messages, attachments, logs, and error outputs with that key before saving them to the database.
 
 Encrypted conversations open only on the browser and device that created them. Sharing, chat forking, project assignment, compaction, and saving files to knowledge are disabled for encrypted conversations.
 

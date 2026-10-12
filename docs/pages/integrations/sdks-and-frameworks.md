@@ -48,6 +48,36 @@ console.log(result.text);
 
 The explicit `.chat()` selects Chat Completions. Keep this code in your server environment so virtual keys are not leaked into client-side browser bundles.
 
+### Configure Guardrails
+
+Add the session header to `createOpenAI`:
+
+```typescript
+import { randomUUID } from "node:crypto";
+import { createOpenAI } from "@ai-sdk/openai";
+
+const openai = createOpenAI({
+  baseURL: "http://localhost:9000/v1/openai",
+  apiKey: process.env.OPENAI_API_KEY,
+  headers: {
+    "X-Appa-Session-ID": randomUUID(),
+  },
+});
+```
+
+For subagents or child workflows, also include `X-Appa-Parent-ID`:
+
+```typescript
+const childOpenai = createOpenAI({
+  baseURL: "http://localhost:9000/v1/openai",
+  apiKey: process.env.OPENAI_API_KEY,
+  headers: {
+    "X-Appa-Session-ID": randomUUID(),
+    "X-Appa-Parent-ID": parentSessionId,
+  },
+});
+```
+
 ## Pydantic AI
 
 <span id="pydantic"></span>
@@ -83,6 +113,40 @@ print(result.output)
 
 `OpenAIChatModel` selects Chat Completions. For Responses, use `OpenAIResponsesModel` with the same provider.
 
+### Configure Guardrails
+
+Pass an `AsyncOpenAI` client with the session header to `OpenAIProvider`:
+
+```python
+import os
+import uuid
+from openai import AsyncOpenAI
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+
+client = AsyncOpenAI(
+    base_url="http://localhost:9000/v1/openai",
+    api_key=os.environ["OPENAI_API_KEY"],
+    default_headers={"X-Appa-Session-ID": str(uuid.uuid4())},
+)
+model = OpenAIChatModel("gpt-4o", provider=OpenAIProvider(openai_client=client))
+agent = Agent(model)
+```
+
+For subagents, also pass `X-Appa-Parent-ID` with the parent agent's session ID:
+
+```python
+client = AsyncOpenAI(
+    base_url="http://localhost:9000/v1/openai",
+    api_key=os.environ["OPENAI_API_KEY"],
+    default_headers={
+        "X-Appa-Session-ID": str(uuid.uuid4()),
+        "X-Appa-Parent-ID": parent_session_id,
+    },
+)
+```
+
 ## Mastra
 
 <span id="mastra"></span>
@@ -116,6 +180,48 @@ console.log(result.text);
 ```
 
 Use the base URL rather than `/chat/completions`. The `openai/` prefix selects the provider, followed by the upstream model name.
+
+### Configure Guardrails
+
+Add the session header to the model configuration:
+
+```typescript
+import { randomUUID } from "node:crypto";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "connection-check",
+  name: "Connection Check",
+  instructions: "Answer the user's request.",
+  model: {
+    id: "openai/gpt-4o",
+    url: "http://localhost:9000/v1/openai",
+    apiKey: process.env.OPENAI_API_KEY,
+    headers: {
+      "X-Appa-Session-ID": randomUUID(),
+    },
+  },
+});
+```
+
+For subagents, also pass `X-Appa-Parent-ID` with the parent session ID:
+
+```typescript
+const subagent = new Agent({
+  id: "subagent",
+  name: "Subagent",
+  instructions: "Handle delegated tasks.",
+  model: {
+    id: "openai/gpt-4o",
+    url: "http://localhost:9000/v1/openai",
+    apiKey: process.env.OPENAI_API_KEY,
+    headers: {
+      "X-Appa-Session-ID": randomUUID(),
+      "X-Appa-Parent-ID": parentSessionId,
+    },
+  },
+});
+```
 
 ## Verify the Connection
 

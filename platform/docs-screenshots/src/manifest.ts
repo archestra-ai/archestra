@@ -91,10 +91,247 @@ export const SHOTS: Shot[] = [
   {
     asset: "automated_screenshots/chat_composer",
     route: () => "/chat",
+    beforeNavigate: async (page) => {
+      await page.route("**/api/llm-models/available*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            {
+              id: "claude-3-5-sonnet-20241022",
+              dbId: "m0000000-0000-4000-8000-000000000001",
+              displayName: "Claude 3.5 Sonnet",
+              provider: "anthropic",
+              isBest: true,
+              isFree: false,
+            },
+          ]),
+        });
+      });
+      await page.route(
+        "**/api/llm-provider-api-keys/available*",
+        async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify([
+              {
+                id: "k0000000-0000-4000-8000-000000000001",
+                name: "Anthropic Production",
+                provider: "anthropic",
+                scope: "org",
+                isPrimary: true,
+                isSystem: false,
+              },
+            ]),
+          });
+        },
+      );
+    },
+    prepare: async (page) => {
+      await page.getByText("Claude 3.5 Sonnet").first().waitFor();
+    },
   },
   {
     asset: "automated_screenshots/chat-apps_gallery",
-    route: () => "/apps",
+    route: () => "/chat/c0000000-0000-4000-8000-000000000099",
+    viewport: { width: 1440, height: 900 },
+    beforeNavigate: async (page) => {
+      const convId = "c0000000-0000-4000-8000-000000000099";
+      const appId = "7b8e1a20-0000-4000-8000-000000000099";
+
+      await page.addInitScript(({ id }) => {
+        window.localStorage.setItem(`archestra-chat-right-panel-open-${id}`, "true");
+        window.localStorage.setItem(`archestra-chat-right-panel-tab-${id}`, "apps");
+        window.localStorage.setItem("archestra-right-panel-width", "560");
+      }, { id: convId });
+
+      await page.route("**/api/llm-models/available*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([
+            {
+              id: "claude-3-5-sonnet-20241022",
+              dbId: "m0000000-0000-4000-8000-000000000001",
+              displayName: "Claude 3.5 Sonnet",
+              provider: "anthropic",
+              isBest: true,
+              isFree: false,
+            },
+          ]),
+        });
+      });
+      await page.route(
+        "**/api/llm-provider-api-keys/available*",
+        async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify([
+              {
+                id: "k0000000-0000-4000-8000-000000000001",
+                name: "Anthropic Production",
+                provider: "anthropic",
+                scope: "org",
+                isPrimary: true,
+                isSystem: false,
+              },
+            ]),
+          });
+        },
+      );
+
+      await page.route(`**/api/chat/conversations/${convId}*`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: convId,
+            userId: "u0000000-0000-4000-8000-000000000001",
+            organizationId: "o0000000-0000-4000-8000-000000000001",
+            title: "Incident INC-4091 Command Center",
+            selectedModel: "m0000000-0000-4000-8000-000000000001",
+            selectedProvider: "anthropic",
+            modelId: "claude-3-5-sonnet-20241022",
+            thinkingEffort: "medium",
+            hasCustomToolSelection: false,
+            hooksDebugEnabled: false,
+            todoList: null,
+            artifact: null,
+            projectId: null,
+            origin: "user",
+            titleIsPlaceholder: false,
+            encryptedChat: false,
+            pinnedAt: null,
+            lastMessageAt: "2026-10-12T12:00:00.000Z",
+            createdAt: "2026-10-12T12:00:00.000Z",
+            updatedAt: "2026-10-12T12:00:00.000Z",
+            deletedAt: null,
+            chatErrors: [],
+            compactions: [],
+            messages: [
+              {
+                id: "msg-user-1",
+                role: "user",
+                parts: [
+                  {
+                    type: "text",
+                    text: "Deploy the Incident Command Center for INC-4091 to coordinate remediation.",
+                  },
+                ],
+              },
+              {
+                id: "msg-assistant-1",
+                role: "assistant",
+                parts: [
+                  {
+                    type: "text",
+                    text: "I've launched the Incident Command Center for INC-4091. Real-time telemetry, blast radius metrics, and remediation controls are ready in the right panel.",
+                  },
+                  {
+                    type: "dynamic-tool",
+                    toolName: "archestra__render_app",
+                    toolCallId: "call_render_app_1",
+                    state: "output-available",
+                    input: { app_id: appId },
+                    output: {
+                      content: "Rendered Incident Command Center",
+                      structuredContent: {
+                        id: appId,
+                        name: "Incident Command Center",
+                        latestVersion: 1,
+                      },
+                    },
+                  },
+                ],
+                metadata: { createdAt: "2026-10-12T12:00:00.000Z" },
+              },
+            ],
+          }),
+        });
+      });
+
+      await page.route(`**/api/apps/${appId}*`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            id: appId,
+            organizationId: "o0000000-0000-4000-8000-000000000001",
+            authorId: null,
+            name: "Incident Command Center",
+            slug: "incident-command-center",
+            description:
+              "Real-time incident telemetry, blast radius assessment, and mitigation controls.",
+            templateId: null,
+            mcpServerId: null,
+            spec: {
+              summary: "Incident Command Center",
+              features: ["Telemetry", "Blast Radius", "Remediation"],
+              tools: [],
+            },
+            latestVersion: 1,
+            enabled: true,
+            openInFullscreen: false,
+            locked: false,
+            createdByServiceAccountId: null,
+            createdAt: "2026-10-12T12:00:00.000Z",
+            updatedAt: "2026-10-12T12:00:00.000Z",
+            deletedAt: null,
+            scope: "org",
+            environmentId: null,
+            icon: "🚨",
+            labels: [],
+          }),
+        });
+      });
+
+      await page.route(`**/api/apps/${appId}/tools*`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([]),
+        });
+      });
+
+      await page.route(`**/api/mcp/app/${appId}*`, async (route) => {
+        const body = route.request().postDataJSON?.();
+        if (body?.method === "resources/read") {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: body.id,
+              result: {
+                contents: [
+                  {
+                    uri: `ui://archestra-app/${appId}`,
+                    mimeType: "text/html",
+                    text: INCIDENT_COMMAND_CENTER_HTML,
+                  },
+                ],
+              },
+            }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: body?.id ?? 1,
+            result: {},
+          }),
+        });
+      });
+    },
+    prepare: async (page) => {
+      await page.locator("iframe").first().waitFor();
+      await page.waitForTimeout(1000);
+    },
   },
   {
     asset: "automated_screenshots/platform-projects_project-overview",
@@ -382,3 +619,296 @@ async function showGuardrailsEnforced(page: Page) {
   await page.getByText("Policy coverage", { exact: true }).waitFor();
   await page.waitForLoadState("networkidle");
 }
+
+const INCIDENT_COMMAND_CENTER_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Incident Command Center</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: light-dark(#ffffff, #09090b);
+      --card-bg: light-dark(#f8fafc, #141417);
+      --card-border: light-dark(#e2e8f0, #27272a);
+      --text: light-dark(#0f172a, #f8fafc);
+      --text-muted: light-dark(#64748b, #a1a1aa);
+      --red: #ef4444;
+      --red-bg: light-dark(#fef2f2, #2d1214);
+      --red-border: light-dark(#fecaca, #4c1d24);
+      --yellow: #f59e0b;
+      --yellow-bg: light-dark(#fffbeb, #2e230d);
+      --yellow-border: light-dark(#fde68a, #523e13);
+      --green: #10b981;
+      --green-bg: light-dark(#f0fdf4, #0d2818);
+      --green-border: light-dark(#bbf7d0, #144626);
+      --blue: #3b82f6;
+      --blue-bg: light-dark(#eff6ff, #0f2744);
+      --blue-border: light-dark(#bfdbfe, #1d4575);
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+      line-height: 1.5;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .badge-sev1 {
+      background: var(--red-bg);
+      color: var(--red);
+      border: 1px solid var(--red-border);
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .title {
+      font-size: 17px;
+      font-weight: 700;
+    }
+    .live-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--red);
+      font-weight: 600;
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--red);
+      border-radius: 50%;
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .metric-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .metric-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+    .metric-value {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .metric-sub {
+      font-size: 11px;
+      margin-top: 2px;
+      font-weight: 500;
+    }
+    .val-red { color: var(--red); }
+    .val-yellow { color: var(--yellow); }
+    .val-green { color: var(--green); }
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    .blast-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .blast-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+    .blast-name {
+      font-weight: 600;
+    }
+    .blast-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .status-down {
+      background: var(--red-bg);
+      color: var(--red);
+      border: 1px solid var(--red-border);
+    }
+    .status-degraded {
+      background: var(--yellow-bg);
+      color: var(--yellow);
+      border: 1px solid var(--yellow-border);
+    }
+    .status-healthy {
+      background: var(--green-bg);
+      color: var(--green);
+      border: 1px solid var(--green-border);
+    }
+    .remediation-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .remediation-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13px;
+      padding: 10px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--card-border);
+    }
+    .step-icon {
+      font-size: 16px;
+      line-height: 1;
+      margin-top: 2px;
+    }
+    .step-details {
+      flex: 1;
+    }
+    .step-title {
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .step-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .action-btn {
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      align-self: center;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: var(--red);
+      color: #ffffff;
+    }
+    .btn-secondary {
+      background: var(--card-border);
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <span class="badge-sev1">SEV-1 Critical</span>
+      <h1 class="title">INC-4091: Gateway Outage</h1>
+    </div>
+    <div class="live-indicator">
+      <span class="pulse-dot"></span>
+      LIVE MONITORING
+    </div>
+  </div>
+
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-label">Error Rate</div>
+      <div class="metric-value val-red">48.2%</div>
+      <div class="metric-sub val-red">↑ +46.8% vs normal</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">p99 Latency</div>
+      <div class="metric-value val-yellow">3,840ms</div>
+      <div class="metric-sub val-yellow">↑ +3,200ms degradation</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Impacted Tenants</div>
+      <div class="metric-value val-red">1,420</div>
+      <div class="metric-sub text-muted">Across 3 clusters</div>
+    </div>
+  </div>
+
+  <div class="section-title">Blast Radius &amp; Dependency Health</div>
+  <div class="card">
+    <div class="blast-list">
+      <div class="blast-item">
+        <span class="blast-name">edge-proxy-us-east</span>
+        <span class="blast-status status-down">● Degrading (HTTP 502)</span>
+      </div>
+      <div class="blast-item">
+        <span class="blast-name">auth-token-vault</span>
+        <span class="blast-status status-degraded">● Connection Pool Starvation</span>
+      </div>
+      <div class="blast-item">
+        <span class="blast-name">payment-worker-pool</span>
+        <span class="blast-status status-healthy">● Healthy (Queued 0)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Automated Remediation Actions</div>
+  <div class="remediation-panel">
+    <div class="remediation-step">
+      <div class="step-icon">⚡</div>
+      <div class="step-details">
+        <div class="step-title">Drain traffic from us-east cluster</div>
+        <div class="step-desc">Reroutes incoming traffic to us-central with zero dropped sockets.</div>
+      </div>
+      <button class="action-btn btn-primary">Execute Failover</button>
+    </div>
+    <div class="remediation-step">
+      <div class="step-icon">🔄</div>
+      <div class="step-details">
+        <div class="step-title">Restart connection pool pods</div>
+        <div class="step-desc">Performs rolling restart of 8 auth-vault connection pool replicas.</div>
+      </div>
+      <button class="action-btn btn-secondary">Restart Pods</button>
+    </div>
+  </div>
+</body>
+</html>`;
+

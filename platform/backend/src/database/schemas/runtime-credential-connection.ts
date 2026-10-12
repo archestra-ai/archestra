@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   index,
   jsonb,
@@ -9,7 +10,10 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { RuntimeCredentialConnectionScope } from "@/types/runtime-credential-connection";
+import type {
+  GitHubUserId,
+  RuntimeCredentialConnectionScope,
+} from "@/types/runtime-credential-connection";
 import secretsTable from "./secret";
 import usersTable from "./user";
 
@@ -35,6 +39,8 @@ const runtimeCredentialConnectionsTable = pgTable(
       .notNull()
       .references(() => secretsTable.id, { onDelete: "cascade" }),
     secretKey: text("secret_key").notNull().default("value"),
+    /** GitHub account id verified at sign-in; set only on GitHub App user connections. */
+    githubId: bigint("github_id", { mode: "number" }).$type<GitHubUserId>(),
     /** Non-secret native account expiry and model discovery. */
     metadata: jsonb("metadata")
       .$type<Record<string, unknown>>()

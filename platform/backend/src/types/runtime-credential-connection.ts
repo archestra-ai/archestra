@@ -18,3 +18,11 @@ export const SelectRuntimeCredentialConnectionSchema = createSelectSchema(
 export type RuntimeCredentialConnection = z.infer<
   typeof SelectRuntimeCredentialConnectionSchema
 >;
+
+/** Numeric GitHub account id, stable across login renames. */
+export const GitHubUserIdSchema = z
+  .number()
+  .int()
+  .positive()
+  .brand<"GitHubUserId">();
+export type GitHubUserId = z.infer<typeof GitHubUserIdSchema>;

@@ -27,8 +27,11 @@ import { errorMessage } from "./utils";
  * admin does not copy a manifest by hand.
  *
  * Two Slack rules shape the flow:
- * - Creating an app needs an app configuration token. An admin pastes it once;
- *   it expires every 12 hours and is renewed here with its refresh token.
+ * - Creating an app needs an app configuration token. Each admin pastes their
+ *   own once; it expires every 12 hours and is renewed here with its refresh
+ *   token. Slack makes the token's owner the app's only collaborator, and
+ *   offers no API to add others, so the admin adds their team on the app's
+ *   Slack page.
  * - Installing an app needs a person to approve it, through an OAuth redirect
  *   that Slack only accepts over HTTPS. With an HTTPS public URL (a real domain
  *   or ngrok) the install is one click and the bot token arrives on its own;
@@ -42,19 +45,21 @@ class SlackAppFactory {
   /** Apps whose manifest already asks for every required scope. */
   private readonly manifestsWithScopes = new Set<string>();
 
-  /** Validate and store an app configuration token pair. */
+  /** Validate and store a user's app configuration token pair. */
   async saveConfigToken(params: {
+    userId: string;
     accessToken: string;
     refreshToken: string;
   }): Promise<void> {
     // Rotating right away proves the refresh token works and yields a token
     // with a known expiry; the pasted access token's age is unknown.
-    await this.rotate(params.refreshToken);
+    await this.rotate(params.refreshToken, params.userId);
     logger.info("[SlackAppFactory] Saved a Slack app configuration token");
   }
 
-  async hasConfigToken(): Promise<boolean> {
-    return (await ChatOpsConfigModel.getSlackAppConfigToken()) !== null;
+  /** Whether this user saved a configuration token of their own. */
+  async hasConfigToken(userId: string): Promise<boolean> {
+    return (await ChatOpsConfigModel.getSlackAppConfigToken(userId)) !== null;
   }
 
   /** Whether an app can be installed with one click (OAuth over HTTPS). */
@@ -71,12 +76,14 @@ class SlackAppFactory {
     appName: string;
     connectionMode: ChatOpsConnectionMode;
     organizationId: string;
+    /** Whose configuration token creates the app. */
+    userId: string;
   }): Promise<{
     appId: string;
     installUrl: string;
     installMode: "oauth" | "manual";
   }> {
-    const token = await this.getAccessToken();
+    const token = await this.getAccessToken(params.userId);
     const base = this.publicBaseUrl();
     const webhookBase = `${base}/api/webhooks/chatops/slack/agents/${params.agentId}`;
     const oauth = this.canInstallWithOAuth();
@@ -121,6 +128,7 @@ class SlackAppFactory {
       clientId: credentials.client_id,
       clientSecret: credentials.client_secret,
       managed: true,
+      configTokenUserId: params.userId,
       handleFollowsAgent,
       ...(agent && { syncedAgentName: agent.name }),
     });
@@ -200,7 +208,7 @@ class SlackAppFactory {
   async deleteCreatedApp(bot: SlackAgentBotConfig): Promise<void> {
     if (!(bot.managed || bot.clientId) || !bot.appId) return;
     try {
-      const token = await this.getAccessToken();
+      const token = await this.getAccessToken(bot.configTokenUserId);
       await new WebClient().apps.manifest.delete({ token, app_id: bot.appId });
     } catch (error) {
       logger.warn(
@@ -217,9 +225,12 @@ class SlackAppFactory {
    * events and scopes. From then on Archestra manages them like apps it
    * created. Each app is patched, not replaced, so its name, icon, and URLs
    * stay. Slack cannot switch an app back from the agent experience.
+   * Uses the given user's token, so only apps they collaborate on succeed.
    */
-  async migrateExistingApps(): Promise<SlackAppMigrationResult[]> {
-    const token = await this.getAccessToken();
+  async migrateExistingApps(
+    userId: string,
+  ): Promise<SlackAppMigrationResult[]> {
+    const token = await this.getAccessToken(userId);
     const main = await ChatOpsConfigModel.getSlackConfig();
     const bots = await ChatOpsConfigModel.getSlackAgentBots();
     const targets: { appId: string; bot?: SlackAgentBotConfig }[] = [
@@ -253,6 +264,7 @@ class SlackAppFactory {
           await ChatOpsConfigModel.saveSlackAgentBot({
             ...target.bot,
             managed: true,
+            configTokenUserId: target.bot.configTokenUserId ?? userId,
           });
         }
         results.push({
@@ -291,8 +303,8 @@ class SlackAppFactory {
     const key = `${bot.appId}:${SLACK_REQUIRED_BOT_SCOPES.join(",")}`;
     if (this.manifestsWithScopes.has(key)) return;
     try {
-      if (!(await this.hasConfigToken())) return;
-      const token = await this.getAccessToken();
+      if (!(await this.hasTokenFor(bot))) return;
+      const token = await this.getAccessToken(bot.configTokenUserId);
       const client = new WebClient();
       const exported = await client.apps.manifest.export({
         token,
@@ -338,8 +350,10 @@ class SlackAppFactory {
     appId: string;
     agentId: string;
     connectionMode: ChatOpsConnectionMode;
+    /** Whose configuration token updates the app. */
+    userId: string;
   }): Promise<{ reinstallUrl?: string }> {
-    const token = await this.getAccessToken();
+    const token = await this.getAccessToken(params.userId);
     const client = new WebClient();
     const exported = await client.apps.manifest.export({
       token,
@@ -398,7 +412,7 @@ class SlackAppFactory {
         (candidate) => candidate.agentId === agentId,
       );
       if (!bot?.appId || !(bot.managed || bot.clientId)) return;
-      if (!(await this.hasConfigToken())) return;
+      if (!(await this.hasTokenFor(bot))) return;
       const agent = await AgentModel.findById(agentId);
       if (!agent) return;
 
@@ -415,7 +429,7 @@ class SlackAppFactory {
       const updateIcon = Boolean(icon) && iconHash !== bot.syncedIconHash;
       if (!renameTo && !updateIcon) return;
 
-      const token = await this.getAccessToken();
+      const token = await this.getAccessToken(bot.configTokenUserId);
       const errors: string[] = [];
       let syncedAgentName = bot.syncedAgentName;
       let syncedIconHash = bot.syncedIconHash;
@@ -464,9 +478,12 @@ class SlackAppFactory {
   // Private Methods
   // ===========================================================================
 
-  /** A live configuration token, renewed when it is close to expiring. */
-  private async getAccessToken(): Promise<string> {
-    const saved = await ChatOpsConfigModel.getSlackAppConfigToken();
+  /**
+   * A live configuration token, renewed when it is close to expiring: the
+   * user's own, or without a user the organization-wide one.
+   */
+  private async getAccessToken(userId?: string): Promise<string> {
+    const saved = await ChatOpsConfigModel.getSlackAppConfigToken(userId);
     if (!saved) {
       throw new Error(
         `Add a Slack app configuration token so ${archestraMcpBranding.appName} can create Slack apps.`,
@@ -475,7 +492,16 @@ class SlackAppFactory {
     if (saved.expiresAt - Date.now() > ROTATE_BEFORE_EXPIRY_MS) {
       return saved.accessToken;
     }
-    return (await this.rotate(saved.refreshToken)).accessToken;
+    return (await this.rotate(saved.refreshToken, userId)).accessToken;
+  }
+
+  /** Whether the token that manages this bot's app is still saved. */
+  private async hasTokenFor(bot: SlackAgentBotConfig): Promise<boolean> {
+    return (
+      (await ChatOpsConfigModel.getSlackAppConfigToken(
+        bot.configTokenUserId,
+      )) !== null
+    );
   }
 
   /** Set the app's name and its bot's name, which is also its @handle. */
@@ -544,7 +570,10 @@ class SlackAppFactory {
     }
   }
 
-  private async rotate(refreshToken: string): Promise<SlackAppConfigToken> {
+  private async rotate(
+    refreshToken: string,
+    userId?: string,
+  ): Promise<SlackAppConfigToken> {
     const rotated = await new WebClient().tooling.tokens.rotate({
       refresh_token: refreshToken,
     });
@@ -559,7 +588,7 @@ class SlackAppFactory {
         ? rotated.exp * 1000
         : Date.now() + CONFIG_TOKEN_LIFETIME_MS,
     };
-    await ChatOpsConfigModel.saveSlackAppConfigToken(token);
+    await ChatOpsConfigModel.saveSlackAppConfigToken(token, userId);
     return token;
   }
 

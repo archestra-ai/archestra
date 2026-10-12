@@ -1969,7 +1969,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(
           z.object({
             bots: z.array(SlackAgentBotSummarySchema),
-            /** A configuration token is saved, so Archestra can create apps. */
+            /** This user saved their configuration token, so Archestra can create apps for them. */
             canCreateApps: z.boolean(),
             /** The public URL is HTTPS, so a created app installs in one click. */
             oneClickInstall: z.boolean(),
@@ -2000,6 +2000,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const bots = await ChatOpsConfigModel.getSlackAgentBots();
       const main = await ChatOpsConfigModel.getSlackConfig();
+      const creatorNames = await UserModel.getNamesByIds([
+        ...new Set(bots.flatMap((bot) => bot.configTokenUserId ?? [])),
+      ]);
       const summaries = await Promise.all(
         bots.map(async (bot) => {
           const agent = await AgentModel.findById(bot.agentId);
@@ -2034,6 +2037,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             needsAppLevelToken:
               bot.connectionMode === "socket" && !bot.appLevelToken,
             createdByArchestra: Boolean(bot.managed || bot.clientId),
+            createdBy: bot.configTokenUserId
+              ? {
+                  id: bot.configTokenUserId,
+                  name: creatorNames.get(bot.configTokenUserId) ?? null,
+                }
+              : null,
             /** Why Slack refused the last name or icon update. */
             identitySyncError: bot.identitySyncError ?? null,
           };
@@ -2041,7 +2050,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
       return reply.send({
         bots: summaries.filter((bot) => bot !== null),
-        canCreateApps: await slackAppFactory.hasConfigToken(),
+        canCreateApps: await slackAppFactory.hasConfigToken(request.user.id),
         oneClickInstall: slackAppFactory.canInstallWithOAuth(),
         workspaceName:
           bots
@@ -2120,13 +2129,15 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const connectionMode =
         main.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE;
-      const canUpdateSlack = await slackAppFactory.hasConfigToken();
+      const canUpdateSlack = await slackAppFactory.hasConfigToken(
+        request.user.id,
+      );
       // A webhook app keeps posting to the old URL until Slack is told about
       // its new one, which takes the configuration token.
       if (connectionMode === "webhook" && !canUpdateSlack) {
         throw new ApiError(
           400,
-          `Add a Slack app configuration token first, so ${archestraMcpBranding.appName} can point this webhook app at the agent.`,
+          `Add your Slack app configuration token first, so ${archestraMcpBranding.appName} can point this webhook app at the agent.`,
         );
       }
 
@@ -2137,6 +2148,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             appId: main.appId,
             agentId,
             connectionMode,
+            userId: request.user.id,
           }));
         } catch (error) {
           throw new ApiError(
@@ -2152,6 +2164,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         connectionMode,
         enabled: true,
         managed: canUpdateSlack,
+        ...(canUpdateSlack && { configTokenUserId: request.user.id }),
       });
       await ChatOpsConfigModel.saveSlackConfig({
         enabled: false,
@@ -2261,7 +2274,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSlackAppConfigToken,
         description:
-          "Save a Slack app configuration token used to create Slack apps automatically",
+          "Save your Slack app configuration token, used to create and update Slack apps for you",
         tags: ["ChatOps"],
         body: z.object({
           accessToken: z.string().min(1).max(512),
@@ -2282,7 +2295,10 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         channel: "slack",
       });
       try {
-        await slackAppFactory.saveConfigToken(request.body);
+        await slackAppFactory.saveConfigToken({
+          ...request.body,
+          userId: request.user.id,
+        });
       } catch (error) {
         throw new ApiError(
           400,
@@ -2290,7 +2306,9 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
       // Existing apps become managed like the ones Archestra creates.
-      const migrated = await slackAppFactory.migrateExistingApps();
+      const migrated = await slackAppFactory.migrateExistingApps(
+        request.user.id,
+      );
       return reply.send({ success: true, migrated });
     },
   );
@@ -2319,7 +2337,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       try {
         return reply.send({
-          migrated: await slackAppFactory.migrateExistingApps(),
+          migrated: await slackAppFactory.migrateExistingApps(request.user.id),
         });
       } catch (error) {
         throw new ApiError(400, errorMessage(error));
@@ -2380,6 +2398,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             appName: request.body.appName,
             connectionMode: request.body.connectionMode,
             organizationId: request.organizationId,
+            userId: request.user.id,
           }),
         );
       } catch (error) {
@@ -2965,6 +2984,13 @@ const SlackAgentBotSummarySchema = z.object({
   /** Socket Mode without the app-level token Slack has no API to create. */
   needsAppLevelToken: z.boolean(),
   createdByArchestra: z.boolean(),
+  /**
+   * Whose Slack token created the app. Slack makes them its only collaborator
+   * until they add others on the app's Slack page.
+   */
+  createdBy: z
+    .object({ id: z.string(), name: z.string().nullable() })
+    .nullable(),
   agentId: z.string(),
   agentName: z.string(),
   enabled: z.boolean(),

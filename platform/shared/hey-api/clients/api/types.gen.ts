@@ -39623,6 +39623,10 @@ export type ListSlackAgentBotsResponses = {
             installed: boolean;
             needsAppLevelToken: boolean;
             createdByArchestra: boolean;
+            createdBy: {
+                id: string;
+                name: string | null;
+            } | null;
             agentId: string;
             agentName: string;
             enabled: boolean;

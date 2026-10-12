@@ -873,6 +873,54 @@ describe("anthropicAdapterFactory.executeStream", () => {
     ]);
   });
 
+  test("attributes interleaved tool input deltas to their own blocks", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    const start = (index: number, id: string) => ({
+      type: "content_block_start",
+      index,
+      content_block: { type: "tool_use", id, name: "get_weather", input: {} },
+    });
+    const delta = (index: number, partial_json: string) => ({
+      type: "content_block_delta",
+      index,
+      delta: { type: "input_json_delta", partial_json },
+    });
+    for (const chunk of [
+      {
+        type: "message_start",
+        message: {
+          id: "msg_interleaved",
+          type: "message",
+          role: "assistant",
+          model: "claude-3-5-sonnet-20241022",
+          content: [],
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      },
+      start(0, "toolu_a"),
+      delta(0, '{"city":'),
+      start(1, "toolu_b"),
+      delta(1, '{"city":"Oslo"}'),
+      delta(0, '"SF"}'),
+      { type: "content_block_stop", index: 1 },
+      { type: "content_block_stop", index: 0 },
+    ]) {
+      adapter.processChunk(chunk as never);
+    }
+
+    expect(
+      adapter.state.toolCalls.map((call) => [
+        call.id,
+        JSON.parse(call.arguments),
+      ]),
+    ).toEqual([
+      ["toolu_a", { city: "SF" }],
+      ["toolu_b", { city: "Oslo" }],
+    ]);
+  });
+
   test("parses tool input from well-formed incremental deltas", async () => {
     const body =
       sseEvent("message_start", {

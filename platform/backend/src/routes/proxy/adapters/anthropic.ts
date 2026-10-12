@@ -389,6 +389,18 @@ class AnthropicRequestAdapter
             contentBlock.type === "tool_result" &&
             Object.hasOwn(updates, contentBlock.tool_use_id)
           ) {
+            // A tool search answers with `tool_reference` blocks, which the
+            // provider reads to load the referenced tools. When the approved
+            // output is those blocks as sent, the blocks stay; a changed
+            // output replaces them with its text.
+            if (
+              isUnchangedToolReferenceResult(
+                contentBlock.content,
+                updates[contentBlock.tool_use_id],
+              )
+            ) {
+              return contentBlock;
+            }
             appliedCount++;
             logger.debug(
               { toolUseId: contentBlock.tool_use_id },
@@ -1810,4 +1822,20 @@ function replaceToolUseIds<T>(
     ) as T;
   }
   return value;
+}
+
+function isUnchangedToolReferenceResult(
+  content: unknown,
+  approved: string,
+): boolean {
+  return (
+    Array.isArray(content) &&
+    content.some(
+      (block) =>
+        typeof block === "object" &&
+        block !== null &&
+        (block as { type?: unknown }).type === "tool_reference",
+    ) &&
+    approved === JSON.stringify(content)
+  );
 }

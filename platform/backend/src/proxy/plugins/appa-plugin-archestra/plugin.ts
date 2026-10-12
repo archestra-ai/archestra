@@ -12,6 +12,7 @@ import {
   TimeInMs,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
@@ -442,6 +443,23 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = text;
       },
     });
+    for (const answer of toolResults) {
+      // Read, not consumed: the client sends this result on every later
+      // request, and the model must read the same text each time.
+      const ruling = await cacheManager.get<string>(
+        notLoadedRulingKey({
+          session: this.governedSession(binding),
+          callId: answer.id,
+        }),
+      );
+      if (ruling !== undefined && ruling !== null) {
+        result.toolResultUpdates[answer.id] = {
+          content: ruling,
+          outputSource: "runtime",
+          denied: true,
+        };
+      }
+    }
     binding.requiresRemedyContinuation = await hasRemedyOfferResult({
       binding,
       results: toolResults,
@@ -984,8 +1002,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           }
         : {}),
     };
+    // A session that defers tools can name one it never loaded, and the client
+    // may still run it. Its declaration, and with it the attestation that
+    // gives a gateway tool its identity, is not on this request, so a rule on
+    // that tool might not match the name it arrives under. Such a call is
+    // refused with the way to load it, never ruled on under a weaker name.
+    const notLoaded = new Map<string, string>();
+    if (binding.request.defersTools) {
+      for (const call of calls) {
+        if (handbackIds.has(call.id) || isDeclaredCall(binding, call)) continue;
+        notLoaded.set(call.id, notLoadedFeedback({ binding, call }));
+      }
+    }
     const relayCandidates = calls.filter(
       (call) =>
+        !notLoaded.has(call.id) &&
         !handbackIds.has(call.id) &&
         !blockedTranscriptCalls.has(call.id) &&
         !reusedNames.has(call.id) &&
@@ -1015,6 +1046,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const peerInbox = new Map<string, RelayOutcome>();
     for (const call of calls) {
       if (
+        notLoaded.has(call.id) ||
         handbackIds.has(call.id) ||
         blockedTranscriptCalls.has(call.id) ||
         reusedNames.has(call.id) ||
@@ -1027,6 +1059,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     const rest = calls.filter(
       (call) =>
+        !notLoaded.has(call.id) &&
         !handbackIds.has(call.id) &&
         !blockedTranscriptCalls.has(call.id) &&
         !reusedNames.has(call.id) &&
@@ -1041,6 +1074,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    for (const [id, feedback] of notLoaded) {
+      decisionById.set(id, { kind: "deny", feedback });
+      // The runtime holds no record of this call, so the result the client
+      // sends back for it is answered from here.
+      await cacheManager.set(
+        notLoadedRulingKey({ session, callId: id }),
+        feedback,
+        TimeInMs.Day,
+      );
+    }
     for (const id of blockedTranscriptCalls) {
       decisionById.set(id, {
         kind: "deny",
@@ -1237,20 +1280,28 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // resend normally carries the tools; only a repeat within the same
         // session is a client that cannot receive remedies.
         const transient =
+          !binding.request.defersTools &&
           binding.request.declaredTools.length > 0 &&
           !(await this.remedyToolsMissingBefore(session));
-        if (!transient) {
+        // A client that defers tools has not failed to receive remedies: it
+        // has not loaded the tools yet.
+        if (!transient && !binding.request.defersTools) {
           await recordOpenAppaClientFailure({
             session,
             toolCallId: call.id,
             ruling: decision.feedback,
           });
         }
-        const contentMessage = transient
-          ? `${decision.feedback}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
-          : binding.request.declaredTools.length === 0
-            ? `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`
-            : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
+        // A call that only needs loading gets that one instruction.
+        const contentMessage = notLoaded.has(call.id)
+          ? decision.feedback
+          : transient
+            ? `${decision.feedback}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
+            : binding.request.defersTools
+              ? `${decision.feedback}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
+              : binding.request.declaredTools.length === 0
+                ? `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`
+                : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
         return {
           decision: "refuse",
           refusal: {
@@ -1700,6 +1751,40 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ? undefined
       : name;
   }
+}
+
+function notLoadedRulingKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaNotLoadedRuling}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  ).toString("base64url")}`;
+}
+
+/** Whether the request declares the tool this call names, as the client spells it. */
+function isDeclaredCall(
+  binding: AppaPluginBinding,
+  call: { name: string; namespace?: string },
+): boolean {
+  return binding.request.declaredTools.some(
+    (tool) =>
+      tool.name === call.name &&
+      (tool.namespace ?? undefined) === (call.namespace ?? undefined),
+  );
+}
+
+function notLoadedFeedback(params: {
+  binding: AppaPluginBinding;
+  call: { name: string; namespace?: string };
+}): string {
+  const { call } = params;
+  const held = params.binding.request.heldTools?.some(
+    (tool) => tool.name === call.name && tool.namespace === call.namespace,
+  );
+  return held
+    ? `[appa] ${call.name} cannot be used until ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} are both loaded. Search for the one that is missing with your tool search, then call it again.`
+    : `[appa] ${call.name} is not loaded in this session. Search for it with your tool search, then call it again.`;
 }
 
 /** Whether `flag` was already set for this session today. Sets it. */

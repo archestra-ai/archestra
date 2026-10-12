@@ -284,7 +284,7 @@ describe("Enterprise GitHub App skill import", () => {
       sourceCommit: secondCommit,
       latestVersion: 2,
     });
-    expect(afterMismatch?.lastSyncError).toMatch(/host does not match/);
+    expect(afterMismatch?.lastSyncError).toMatch(/credential is for/);
     expect(repositoryRequests).toEqual([]);
 
     await GithubAppConfigModel.delete(appConfig.id);

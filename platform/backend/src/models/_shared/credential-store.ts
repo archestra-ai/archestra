@@ -50,6 +50,7 @@ export async function createSharedCredential(data: {
   kind: RuntimeCredentialDefinition["kind"];
   secretId?: string | null;
   githubUrl?: string | null;
+  gitlabUrl?: string | null;
   appId?: string | null;
   installationId?: string | null;
   createdAt?: Date;

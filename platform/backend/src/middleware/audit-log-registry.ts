@@ -683,6 +683,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
 
   // Stored GitHub personal access tokens
+  "/api/git-credentials/gitlab": {
+    resourceType: "credential",
+    fetchById: (id, orgId) =>
+      RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
+  },
   "/api/github-pats": {
     resourceType: "credential",
     fetchById: (id, orgId) => GithubPatModel.findByIdForAudit(id, orgId),

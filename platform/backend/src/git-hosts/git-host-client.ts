@@ -39,14 +39,18 @@ export class GitHostClient {
     private readonly token?: string,
   ) {}
 
+  /** Identifies the token for cache keys without ever exposing it. */
+  cacheFingerprint(): string {
+    return this.token ? cacheKey([this.token]).slice(0, 16) : "public";
+  }
+
   /** The commit a branch, tag, or SHA points at; null `ref` means the default branch. */
   async resolveCommit(repo: string, ref: string | null): Promise<string> {
     if (this.host.provider === "github") {
-      const sha = await this.text(
+      const commit = await this.json<{ sha: string }>(
         `${this.repoApi(repo)}/commits/${encodeURIComponent(ref ?? "HEAD")}`,
-        { accept: "application/vnd.github.sha" },
       );
-      return sha.trim();
+      return commit.sha;
     }
     const target = ref ?? (await this.defaultBranch(repo));
     const commit = await this.json<{ id: string }>(
@@ -225,12 +229,6 @@ export class GitHostClient {
   }
 
   // === internals ===
-
-  private async text(url: string, init?: RequestOptions): Promise<string> {
-    const response = await this.request(url, init);
-    if (!response.ok) throw await toError(response, url);
-    return response.text();
-  }
 
   private async listGithubTree(
     repo: string,

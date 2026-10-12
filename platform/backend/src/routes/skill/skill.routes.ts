@@ -2,6 +2,8 @@ import {
   CreatedByNullableSchema,
   calculatePaginationMeta,
   createPaginatedResponseSchema,
+  type GitProvider,
+  gitHostFromUrl,
   MAX_BULK_IDS,
   PaginationQuerySchema,
   parseLabelsParam,
@@ -22,6 +24,10 @@ import {
   type SkillPermissionChecker,
 } from "@/auth/skill-permissions";
 import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
+import {
+  type GitAccess,
+  resolveGitCredentialAccess,
+} from "@/git-hosts/git-access";
 import logger from "@/logging";
 import {
   AgentActivationSkillRuleModel,
@@ -55,16 +61,11 @@ import {
   findBuiltInSkillBySourceRef,
 } from "@/skills/built-in-skills";
 import {
-  resolveGithubPatToken,
-  resolveGithubSkillAppCredentials,
-} from "@/skills/github-app-token";
-import {
   discoverSkills,
   importSkills,
   MAX_FILES_PER_SKILL,
   SkillImportError,
 } from "@/skills/github-import";
-import type { GithubSkillSource } from "@/skills/github-source";
 import {
   normalizeAllowedTools,
   parseSkillManifest,
@@ -98,6 +99,7 @@ import {
   SkillWithFilesSchema,
   UuidIdSchema,
 } from "@/types";
+import { GitProviderSchema } from "@/types/git-host";
 import {
   isForeignKeyConstraintError,
   isUniqueConstraintError,
@@ -105,28 +107,38 @@ import {
 import { registerEntityLabelRoutes } from "../entity-labels";
 
 /**
- * Shared fields identifying a GitHub skill source. Authentication is optional
- * and at most one method may be supplied: a transient one-time PAT
- * (`githubToken`, never stored), a stored PAT (`githubPatId`, managed at
- * /settings/credentials), or a stored GitHub App config (`githubAppConfigId`).
+ * Shared fields identifying a skill repository on GitHub or GitLab.
+ * Authentication is optional (public cloud repositories) and at most one
+ * method may be supplied: a stored GitHub App (`githubAppConfigId`), a stored
+ * GitLab token (`gitlabTokenId`), a legacy stored GitHub PAT (`githubPatId`),
+ * or a transient GitHub PAT (`githubToken`, never stored). A credential
+ * decides the host, so self-hosted GitHub and GitLab need one.
  */
 const githubSkillSourceShape = {
   repoUrl: z.string().min(1),
   path: z.string().optional(),
+  provider: GitProviderSchema.optional().describe(
+    "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+  ),
   githubToken: z.string().optional(),
   githubAppConfigId: z.string().uuid().optional(),
   githubPatId: z.string().uuid().optional(),
+  gitlabTokenId: z.string().uuid().optional(),
 };
 
 function hasSingleGithubAuth(source: {
   githubToken?: string;
   githubAppConfigId?: string;
   githubPatId?: string;
+  gitlabTokenId?: string;
 }): boolean {
   return (
-    [source.githubToken, source.githubAppConfigId, source.githubPatId].filter(
-      Boolean,
-    ).length <= 1
+    [
+      source.githubToken,
+      source.githubAppConfigId,
+      source.githubPatId,
+      source.gitlabTokenId,
+    ].filter(Boolean).length <= 1
   );
 }
 
@@ -135,7 +147,7 @@ const USAGE_STATISTICS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 const singleGithubAuthError = {
   message:
-    "Provide at most one of githubToken, githubPatId, or githubAppConfigId",
+    "Provide at most one of githubToken, githubPatId, githubAppConfigId, or gitlabTokenId",
   path: ["githubAppConfigId"],
 };
 
@@ -1480,6 +1492,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
         githubPatId: body.githubPatId,
+        gitlabTokenId: body.gitlabTokenId,
+        provider: body.provider,
         organizationId,
         userId: user.id,
       });
@@ -1559,6 +1573,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
         githubPatId: body.githubPatId,
+        gitlabTokenId: body.gitlabTokenId,
+        provider: body.provider,
         organizationId,
         userId: user.id,
       });
@@ -1662,6 +1678,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
         githubPatId: body.githubPatId,
+        gitlabTokenId: body.gitlabTokenId,
+        provider: body.provider,
         organizationId,
         userId: user.id,
       });
@@ -1695,6 +1713,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               githubSyncRef: item.requestedRef,
               githubAppConfigId: body.githubAppConfigId ?? null,
               githubPatId: body.githubPatId ?? null,
+              gitlabTokenId: body.gitlabTokenId ?? null,
+              sourceProvider: item.sourceProvider,
             },
             files: item.files,
             initialPermissionGrants: body.initialGrants ?? [],
@@ -1797,48 +1817,52 @@ async function assertSkillEnvironmentsAssignable(params: {
 }
 
 /**
- * Keep the configured GitHub host with App credentials through every import
- * request. PAT and anonymous imports retain their github.com destination.
+ * The host and token an import reads with. A stored credential carries its
+ * own host (self-hosted GitHub and GitLab); otherwise the provider's cloud,
+ * with a transient token when one is given.
  */
 async function resolveGithubImportCredentials(params: {
   githubToken?: string;
   githubAppConfigId?: string;
   githubPatId?: string;
+  gitlabTokenId?: string;
+  provider?: GitProvider;
   organizationId: string;
   userId: string;
-}): Promise<{ githubToken?: string; githubSource?: GithubSkillSource }> {
-  const {
-    githubToken,
-    githubAppConfigId,
-    githubPatId,
-    organizationId,
-    userId,
-  } = params;
-  if (!githubAppConfigId && !githubPatId) {
-    return { githubToken };
+}): Promise<{ access?: GitAccess }> {
+  const credentialId =
+    params.githubAppConfigId ?? params.githubPatId ?? params.gitlabTokenId;
+  if (!credentialId) {
+    if (params.githubToken)
+      return {
+        access: {
+          host: gitHostFromUrl({ provider: "github" }),
+          token: params.githubToken,
+        },
+      };
+    return params.provider === "gitlab"
+      ? { access: { host: gitHostFromUrl({ provider: "gitlab" }) } }
+      : {};
   }
 
-  // using a stored credential requires read access to GitHub credentials
+  // using a stored credential requires read access to credentials
   const allowed = await userHasPermission(
-    userId,
-    organizationId,
+    params.userId,
+    params.organizationId,
     "credential",
     "read",
   );
   if (!allowed) {
-    throw new ApiError(403, "You do not have access to GitHub credentials");
+    throw new ApiError(403, "You do not have access to Git credentials");
   }
-
-  if (githubPatId) {
-    return {
-      githubToken: await resolveGithubPatToken({ githubPatId, organizationId }),
-    };
-  }
-  return resolveGithubSkillAppCredentials({
-    // hasSingleGithubAuth guarantees exactly one stored-credential id here
-    githubAppConfigId: githubAppConfigId as string,
-    organizationId,
+  const access = await resolveGitCredentialAccess({
+    organizationId: params.organizationId,
+    credentialId,
   });
+  const expected = params.gitlabTokenId ? "gitlab" : "github";
+  if (access.host.provider !== expected)
+    throw new ApiError(400, "That credential is for a different Git provider");
+  return { access };
 }
 
 /**

@@ -43,6 +43,8 @@ export * from "./environment";
 export * from "./environment-default-user-limit";
 export * from "./external-mcp-skill";
 export * from "./file";
+export * from "./git-credential";
+export * from "./git-host";
 export * from "./github-app-config";
 export * from "./github-pat";
 export * from "./hook";

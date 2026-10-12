@@ -640,6 +640,9 @@ export const RouteId = {
   DeleteGithubAppConfig: "deleteGithubAppConfig",
 
   // Stored GitHub personal access tokens
+  ListGitCredentials: "listGitCredentials",
+  CreateGitlabToken: "createGitlabToken",
+  ListGitCredentialRepositories: "listGitCredentialRepositories",
   ListGithubPats: "listGithubPats",
   CreateGithubPat: "createGithubPat",
   UpdateGithubPat: "updateGithubPat",

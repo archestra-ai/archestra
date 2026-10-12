@@ -1,9 +1,10 @@
 import config from "@/config";
 import logger from "@/logging";
-import { A2ATaskModel } from "@/models";
+import { A2ATaskApprovalRequestModel, A2ATaskModel } from "@/models";
 import {
   A2AProtocolRole,
   type A2AProtocolStreamResponse,
+  A2AProtocolTaskState,
 } from "./a2a-protocol";
 import { a2aPushNotificationService } from "./a2a-push-notification-service";
 import { a2aTaskEventNotifier } from "./a2a-task-event-notifier";
@@ -24,6 +25,8 @@ const ORPHANED_TASK_REASON =
   "The server executing this task stopped before the run completed.";
 const SHUTDOWN_TASK_REASON =
   "The server shut down before the task's run completed.";
+const EXPIRED_OPENAPPA_REVIEW_REASON =
+  "No one answered the OpenAPPA review in time, so the action stays blocked.";
 
 /**
  * Process-local lifecycle mechanics for A2A task runs (the durable state
@@ -200,7 +203,11 @@ class A2ATaskRunService {
         ids,
         statusReason: SHUTDOWN_TASK_REASON,
         buildEventPayload: (task) =>
-          buildFailedEventPayload(task, SHUTDOWN_TASK_REASON),
+          buildStatusEventPayload(
+            task,
+            A2AProtocolTaskState.Failed,
+            SHUTDOWN_TASK_REASON,
+          ),
       });
       if (failed > 0) {
         logger.info({ failed }, "Failed in-flight A2A task runs on shutdown");
@@ -245,7 +252,11 @@ class A2ATaskRunService {
         staleMs: STALE_RUN_MS,
         statusReason: ORPHANED_TASK_REASON,
         buildEventPayload: (task) =>
-          buildFailedEventPayload(task, ORPHANED_TASK_REASON),
+          buildStatusEventPayload(
+            task,
+            A2AProtocolTaskState.Failed,
+            ORPHANED_TASK_REASON,
+          ),
       });
       if (reaped > 0) {
         logger.info({ reaped }, "Reaped stale A2A task runs");
@@ -256,9 +267,43 @@ class A2ATaskRunService {
         TERMINAL_EVENT_RETENTION_MS,
       );
 
+      await this.cancelExpiredOpenappaReviews();
       await this.sweepExpiredTasks();
     } catch (error) {
       logger.warn({ error }, "Failed to reap stale A2A task runs");
+    }
+  }
+
+  /**
+   * Nothing resumes a task whose OpenAPPA review expired undecided, so cancel
+   * it. The blocked action stays blocked; a later click reports the expiry.
+   */
+  private async cancelExpiredOpenappaReviews(): Promise<void> {
+    const taskIds =
+      await A2ATaskApprovalRequestModel.findTaskIdsWithExpiredOpenappaReviews(
+        new Date(),
+      );
+    for (const taskId of taskIds) {
+      const task = await A2ATaskModel.findById(taskId);
+      if (!task) continue;
+      await A2ATaskModel.transitionStateWithEvent({
+        id: task.id,
+        to: A2AProtocolTaskState.Canceled,
+        allowedFrom: [A2AProtocolTaskState.InputRequired],
+        statusReason: EXPIRED_OPENAPPA_REVIEW_REASON,
+        clearApprovals: true,
+        eventPayload: buildStatusEventPayload(
+          task,
+          A2AProtocolTaskState.Canceled,
+          EXPIRED_OPENAPPA_REVIEW_REASON,
+        ),
+      });
+    }
+    if (taskIds.length > 0) {
+      logger.info(
+        { count: taskIds.length },
+        "Canceled A2A tasks whose OpenAPPA review expired",
+      );
     }
   }
 
@@ -311,11 +356,14 @@ class A2ATaskRunService {
 export const a2aTaskRunService = new A2ATaskRunService();
 
 /**
- * Terminal FAILED event carrying its reason as the status message, so
- * stream followers see the same diagnostics GetTask serves.
+ * Terminal event carrying its reason as the status message, so stream
+ * followers see the same diagnostics GetTask serves.
  */
-function buildFailedEventPayload(
+function buildStatusEventPayload(
   task: { id: string; contextId: string },
+  state:
+    | typeof A2AProtocolTaskState.Failed
+    | typeof A2AProtocolTaskState.Canceled,
   reason: string,
 ): A2AProtocolStreamResponse {
   return {
@@ -323,7 +371,7 @@ function buildFailedEventPayload(
       taskId: task.id,
       contextId: task.contextId,
       status: {
-        state: "TASK_STATE_FAILED",
+        state,
         message: {
           messageId: `${task.id}-status`,
           contextId: task.contextId,

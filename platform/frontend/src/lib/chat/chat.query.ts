@@ -1055,8 +1055,29 @@ export function useHasPlaywrightMcpTools(
   agentId: string | undefined,
   options?: { enabled?: boolean },
 ) {
-  const toolsQuery = useProfileToolsWithIds(agentId, {
-    enabled: options?.enabled,
+  // Only the Playwright catalog's tools: the full list carries every tool's
+  // schema and can run to megabytes for a well-equipped agent.
+  const toolsQuery = useQuery({
+    queryKey: [
+      "agents",
+      agentId,
+      "tools",
+      "catalog",
+      PLAYWRIGHT_MCP_CATALOG_ID,
+    ],
+    queryFn: () =>
+      callApi(
+        () =>
+          getAgentTools({
+            path: { agentId: agentId as string },
+            query: { catalogId: PLAYWRIGHT_MCP_CATALOG_ID },
+          }),
+        [],
+      ),
+    enabled: !!agentId && (options?.enabled ?? true),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
   const queryClient = useQueryClient();
 

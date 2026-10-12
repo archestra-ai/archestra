@@ -89,15 +89,24 @@ class ChatOpsConfigModel {
     );
   }
 
-  async getSlackAppConfigToken(): Promise<SlackAppConfigToken | null> {
+  /**
+   * A user's Slack app configuration token. Without a user, the
+   * organization-wide token saved before tokens were per user.
+   */
+  async getSlackAppConfigToken(
+    userId?: string,
+  ): Promise<SlackAppConfigToken | null> {
     return this.getConfig<SlackAppConfigToken>(
-      SLACK_APP_CONFIG_TOKEN_SECRET_NAME,
+      appConfigTokenSecretName(userId),
     );
   }
 
-  async saveSlackAppConfigToken(value: SlackAppConfigToken): Promise<void> {
+  async saveSlackAppConfigToken(
+    value: SlackAppConfigToken,
+    userId?: string,
+  ): Promise<void> {
     await this.saveConfig(
-      SLACK_APP_CONFIG_TOKEN_SECRET_NAME,
+      appConfigTokenSecretName(userId),
       value as unknown as SecretValue,
     );
   }
@@ -219,3 +228,9 @@ class ChatOpsConfigModel {
 }
 
 export default new ChatOpsConfigModel();
+
+function appConfigTokenSecretName(userId?: string): string {
+  return userId
+    ? `${SLACK_APP_CONFIG_TOKEN_SECRET_NAME}:${userId}`
+    : SLACK_APP_CONFIG_TOKEN_SECRET_NAME;
+}

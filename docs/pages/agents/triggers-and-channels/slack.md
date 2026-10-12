@@ -16,10 +16,11 @@ Each agent gets its own Slack bot, and people @mention it by name: `@archestra_m
 You paste one token pair from Slack once, and Archestra creates a Slack app for every agent you add. You need a Slack workspace where you can install apps.
 
 1. Go to **Settings → Messaging Channels → Slack** and click **Connect Slack**.
-2. On [api.slack.com/apps](https://api.slack.com/apps), click **Generate Token** under **Your App Configuration Tokens**, and paste both tokens. Archestra renews them itself.
+2. On [api.slack.com/apps](https://api.slack.com/apps), click **Generate Token** under **Your App Configuration Tokens**, and paste both tokens. Archestra renews them itself. Each person who adds bots pastes their own.
 3. Click **Add Slack bot**, pick the agent, and keep or change its Slack name.
 4. Approve the install in Slack. In Socket Mode, also paste the app-level token Slack shows; Slack has no API to create it.
-5. Edit the bot to add it to channels. It joins public channels itself; for a private one, type `/invite @archestra_marketing` there.
+5. Add your team as collaborators on the app's Slack page. Slack makes only the person whose token created an app its collaborator, and has no API to add others.
+6. Edit the bot to add it to channels. It joins public channels itself; for a private one, type `/invite @archestra_marketing` there.
 
 What to know:
 

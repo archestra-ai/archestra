@@ -117,6 +117,7 @@ describe("Slack agent bots", () => {
           handle: null,
           identitySyncError: null,
           createdByArchestra: false,
+          createdBy: null,
         },
       ],
       canCreateApps: false,
@@ -125,6 +126,43 @@ describe("Slack agent bots", () => {
       workspaceName: null,
     });
     expect(list.body).not.toContain("xoxb-marketing");
+  });
+
+  test("names who created a bot, and only the viewer's own token lets them create apps", async ({
+    makeInternalAgent,
+    makeAdmin,
+  }) => {
+    const agent = await makeInternalAgent({ organizationId });
+    const creator = await makeAdmin({ name: "Dana Creator" });
+    await ChatOpsConfigModel.saveSlackAgentBot({
+      agentId: agent.id,
+      enabled: false,
+      botToken: "",
+      signingSecret: "s",
+      appId: "A_CREATED",
+      managed: true,
+      configTokenUserId: creator.id,
+    });
+    await ChatOpsConfigModel.saveSlackAppConfigToken(
+      {
+        accessToken: "xoxe.xoxp-creator",
+        refreshToken: "xoxe-creator",
+        expiresAt: Date.now() + 3_600_000,
+      },
+      creator.id,
+    );
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/chatops/config/slack/agents",
+    });
+
+    expect(list.json().bots[0].createdBy).toEqual({
+      id: creator.id,
+      name: "Dana Creator",
+    });
+    // The creator's token is theirs: this viewer still adds their own.
+    expect(list.json().canCreateApps).toBe(false);
   });
 
   test("refuses a Slack app that is already connected", async ({

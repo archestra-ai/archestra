@@ -200,6 +200,11 @@ export interface AddApprovalRequestFormOptions {
    * the approval prompt. Undefined/empty when there is nothing to show.
    */
   toolArgs?: Record<string, unknown>;
+  /**
+   * OpenAPPA's review text for a paused `execute_remedy_plan` call. Shown in
+   * place of the tool and its arguments, which only name the remedy.
+   */
+  reviewText?: string;
   originalMessage: IncomingChatMessage;
 }
 
@@ -208,6 +213,8 @@ export interface UpdateApprovalRequestOptions {
   messageKey: string;
   toolName: string;
   approved: boolean;
+  /** Provider user id of the reviewer, shown as who decided. */
+  decidedByUserId?: string;
 }
 
 /**
@@ -742,6 +749,13 @@ export interface SlackAgentBotConfig extends SlackDbConfig {
    * an app is deleted from Slack when its bot is removed.
    */
   managed?: boolean;
+  /**
+   * The user whose Slack configuration token created or adopted this app.
+   * Slack makes that person the app's only collaborator, so later changes to
+   * the app go through their token. Unset for apps managed with the
+   * organization-wide token saved before tokens were per user.
+   */
+  configTokenUserId?: string;
   /**
    * The bot's name follows the agent's: renaming the agent renames the bot.
    * Off once someone picks a handle of their own.

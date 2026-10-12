@@ -861,6 +861,7 @@ export async function getChatMcpTools({
   modelAcceptsImageToolResults,
   appaSubagent,
   parentLlm,
+  openappaReviewPause,
 }: {
   agentName: string;
   agentId: string;
@@ -951,6 +952,12 @@ export async function getChatMcpTools({
   appaSubagent?: SubagentBinding;
   /** The model and key this run is on, which a fork starts from. */
   parentLlm?: ModelSelection;
+  /**
+   * Someone answers OpenAPPA reviews for this run (a Slack reviewer or the
+   * A2A caller): a reviewed `execute_remedy_plan` call pauses the run for
+   * approval. Never cached: other runs on the same scope may have no one.
+   */
+  openappaReviewPause?: boolean;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -960,7 +967,8 @@ export async function getChatMcpTools({
     delegationChain,
     parentLlm,
   );
-  const shouldUseToolCache = !abortSignal && !appaSubagent;
+  const shouldUseToolCache =
+    !abortSignal && !appaSubagent && !openappaReviewPause;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -1109,6 +1117,7 @@ export async function getChatMcpTools({
       suppressContentLogging,
       encryptedChatAudit,
       modelAcceptsImageToolResults: modelAcceptsImageToolResults ?? true,
+      openappaReviewPause,
       teams,
       userTeams,
       // One tracker per run: the caller's instance when it owns a stop policy,

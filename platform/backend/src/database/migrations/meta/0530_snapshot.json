@@ -1,5 +1,5 @@
 {
-  "id": "23729463-db75-455b-95d8-2df1d187281a",
+  "id": "8b423996-929d-49d9-8f6b-f5f95d0b9630",
   "prevId": "0bbf337f-4243-4c72-a991-426968962e33",
   "version": "7",
   "dialect": "postgresql",
@@ -4391,18 +4391,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "fast_model_id": {
-          "name": "fast_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "smart_model_id": {
-          "name": "smart_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "identity_provider_id": {
           "name": "identity_provider_id",
           "type": "text",
@@ -4733,32 +4721,6 @@
           "tableTo": "models",
           "columnsFrom": [
             "model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_fast_model_id_models_id_fk": {
-          "name": "agents_fast_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "fast_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agents_smart_model_id_models_id_fk": {
-          "name": "agents_smart_model_id_models_id_fk",
-          "tableFrom": "agents",
-          "tableTo": "models",
-          "columnsFrom": [
-            "smart_model_id"
           ],
           "columnsTo": [
             "id"
@@ -18283,18 +18245,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "default_fast_model_id": {
-          "name": "default_fast_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "default_smart_model_id": {
-          "name": "default_smart_model_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "default_user_limit_value": {
           "name": "default_user_limit_value",
           "type": "integer",
@@ -18629,32 +18579,6 @@
           "tableTo": "models",
           "columnsFrom": [
             "default_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "organization_default_fast_model_id_models_id_fk": {
-          "name": "organization_default_fast_model_id_models_id_fk",
-          "tableFrom": "organization",
-          "tableTo": "models",
-          "columnsFrom": [
-            "default_fast_model_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "organization_default_smart_model_id_models_id_fk": {
-          "name": "organization_default_smart_model_id_models_id_fk",
-          "tableFrom": "organization",
-          "tableTo": "models",
-          "columnsFrom": [
-            "default_smart_model_id"
           ],
           "columnsTo": [
             "id"
@@ -26701,6 +26625,49 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.openappa_dispatch_leases": {
+      "name": "openappa_dispatch_leases",
+      "schema": "",
+      "columns": {
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "owner": {
+          "name": "owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_seq": {
+          "name": "event_seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempt": {
+          "name": "attempt",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "openappa_dispatch_leases_attempt": {
+          "name": "openappa_dispatch_leases_attempt",
+          "value": "\"openappa_dispatch_leases\".\"attempt\" >= 1"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.openappa_embedded_peer_messages": {

@@ -930,6 +930,12 @@ describe("getOtelExporterOtlpLogEndpoint", () => {
       expect(result).toBe("http://otel-collector:4318/v1/logs");
     });
 
+    test("replaces a traces path with the logs path", () => {
+      expect(
+        getOtelExporterOtlpLogEndpoint("http://otel-collector:4318/v1/traces/"),
+      ).toBe("http://otel-collector:4318/v1/logs");
+    });
+
     test("should handle /v1 with trailing slash", () => {
       const result = getOtelExporterOtlpLogEndpoint(
         "http://otel-collector:4318/v1/",

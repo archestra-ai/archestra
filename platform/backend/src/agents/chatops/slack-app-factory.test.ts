@@ -33,6 +33,7 @@ vi.mock("@slack/web-api", () => ({
 }));
 
 const AGENT_ID = "22222222-2222-4222-8222-222222222222";
+const USER_ID = "user-1";
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -61,10 +62,11 @@ beforeEach(() => {
   slack.remove.mockResolvedValue({ ok: true });
 });
 
-async function saveToken() {
+async function saveToken(userId = USER_ID, refreshToken = "xoxe-1") {
   await slackAppFactory.saveConfigToken({
+    userId,
     accessToken: "xoxe.xoxp-pasted",
-    refreshToken: "xoxe-1",
+    refreshToken,
   });
 }
 
@@ -72,26 +74,37 @@ describe("SlackAppFactory", () => {
   test("saving a token renews it at once, keeping the new refresh token", async () => {
     await saveToken();
 
-    const saved = await ChatOpsConfigModel.getSlackAppConfigToken();
+    const saved = await ChatOpsConfigModel.getSlackAppConfigToken(USER_ID);
     expect(saved).toMatchObject({
       accessToken: "xoxe.xoxp-from-xoxe-1",
       refreshToken: "xoxe-1-next",
     });
-    expect(await slackAppFactory.hasConfigToken()).toBe(true);
+    expect(await slackAppFactory.hasConfigToken(USER_ID)).toBe(true);
+  });
+
+  test("each person's token is their own", async () => {
+    await saveToken();
+
+    expect(await slackAppFactory.hasConfigToken("user-2")).toBe(false);
+    expect(await ChatOpsConfigModel.getSlackAppConfigToken()).toBeNull();
   });
 
   test("a token close to expiry is renewed before creating an app", async () => {
-    await ChatOpsConfigModel.saveSlackAppConfigToken({
-      accessToken: "xoxe.xoxp-old",
-      refreshToken: "xoxe-old",
-      expiresAt: Date.now() + TimeInMs.Minute,
-    });
+    await ChatOpsConfigModel.saveSlackAppConfigToken(
+      {
+        accessToken: "xoxe.xoxp-old",
+        refreshToken: "xoxe-old",
+        expiresAt: Date.now() + TimeInMs.Minute,
+      },
+      USER_ID,
+    );
 
     await slackAppFactory.createAgentApp({
       agentId: AGENT_ID,
       appName: "archestra_marketing",
       connectionMode: "socket",
       organizationId: "org-1",
+      userId: USER_ID,
     });
 
     expect(slack.rotate).toHaveBeenCalledWith({ refresh_token: "xoxe-old" });
@@ -108,6 +121,7 @@ describe("SlackAppFactory", () => {
       appName: "archestra_marketing",
       connectionMode: "socket",
       organizationId: "org-1",
+      userId: USER_ID,
     });
 
     const { manifest } = slack.create.mock.calls[0][0];
@@ -125,6 +139,8 @@ describe("SlackAppFactory", () => {
         signingSecret: "signing-secret",
         clientId: "client-1",
         clientSecret: "client-secret",
+        // Slack makes this person the app's collaborator.
+        configTokenUserId: USER_ID,
       }),
     ]);
     // Without an HTTPS URL Slack cannot redirect back, so the admin installs
@@ -147,6 +163,7 @@ describe("SlackAppFactory", () => {
       appName: "archestra_marketing",
       connectionMode: "webhook",
       organizationId: "org-1",
+      userId: USER_ID,
     });
 
     const callbackUrl =
@@ -192,13 +209,21 @@ describe("SlackAppFactory", () => {
     expect(slack.access).not.toHaveBeenCalled();
   });
 
-  test("creating an app needs a configuration token", async () => {
+  test("creating an app needs the person's own configuration token", async () => {
+    // A token saved for the whole organization does not create apps.
+    await ChatOpsConfigModel.saveSlackAppConfigToken({
+      accessToken: "xoxe.xoxp-org",
+      refreshToken: "xoxe-org",
+      expiresAt: Date.now() + TimeInMs.Hour,
+    });
+
     await expect(
       slackAppFactory.createAgentApp({
         agentId: AGENT_ID,
         appName: "archestra_marketing",
         connectionMode: "socket",
         organizationId: "org-1",
+        userId: USER_ID,
       }),
     ).rejects.toThrow("configuration token");
     expect(slack.create).not.toHaveBeenCalled();
@@ -224,10 +249,33 @@ describe("SlackAppFactory", () => {
       appId: "A_NEW",
       clientId: "client-1",
       clientSecret: "client-secret",
+      configTokenUserId: USER_ID,
     });
     expect(slack.remove).toHaveBeenCalledWith(
       expect.objectContaining({ app_id: "A_NEW" }),
     );
+  });
+
+  test("an app created before tokens were per person uses the organization's token", async () => {
+    await ChatOpsConfigModel.saveSlackAppConfigToken({
+      accessToken: "xoxe.xoxp-org",
+      refreshToken: "xoxe-org",
+      expiresAt: Date.now() + TimeInMs.Hour,
+    });
+
+    await slackAppFactory.deleteCreatedApp({
+      agentId: AGENT_ID,
+      enabled: true,
+      botToken: "xoxb",
+      signingSecret: "s",
+      appId: "A_OLD",
+      managed: true,
+    });
+
+    expect(slack.remove).toHaveBeenCalledWith({
+      token: "xoxe.xoxp-org",
+      app_id: "A_OLD",
+    });
   });
 
   test("migrates the main app and a hand-made agent bot to the agent experience", async () => {
@@ -259,7 +307,7 @@ describe("SlackAppFactory", () => {
       permissions_updated: app_id === "A_MAIN",
     }));
 
-    const results = await slackAppFactory.migrateExistingApps();
+    const results = await slackAppFactory.migrateExistingApps(USER_ID);
 
     expect(results).toEqual([
       {
@@ -277,14 +325,20 @@ describe("SlackAppFactory", () => {
     expect(updatedManifest.settings.event_subscriptions.bot_events).toContain(
       "agent_session_stopped",
     );
-    // The hand-made bot is now managed: removing it deletes it from Slack.
+    // The hand-made bot is now managed, with this person's token: removing
+    // it deletes it from Slack.
     expect(await ChatOpsConfigModel.getSlackAgentBots()).toEqual([
-      expect.objectContaining({ appId: "A_HANDMADE", managed: true }),
+      expect.objectContaining({
+        appId: "A_HANDMADE",
+        managed: true,
+        configTokenUserId: USER_ID,
+      }),
     ]);
   });
 
-  test("adds a newly required scope to a managed app's manifest once", async () => {
+  test("adds a newly required scope to a managed app's manifest once, with its creator's token", async () => {
     await saveToken();
+    await saveToken("user-2", "xoxe-2");
     const bot = {
       agentId: AGENT_ID,
       enabled: true,
@@ -292,6 +346,7 @@ describe("SlackAppFactory", () => {
       signingSecret: "s",
       appId: "A_SCOPES",
       managed: true,
+      configTokenUserId: "user-2",
     };
     slack.exportManifest.mockResolvedValue({
       ok: true,
@@ -306,6 +361,7 @@ describe("SlackAppFactory", () => {
     await slackAppFactory.ensureManifestScopes(bot);
 
     expect(slack.update).toHaveBeenCalledTimes(1);
+    expect(slack.update.mock.calls[0][0].token).toBe("xoxe.xoxp-from-xoxe-2");
     expect(
       slack.update.mock.calls[0][0].manifest.oauth_config.scopes.bot,
     ).toContain("files:write");
@@ -346,7 +402,7 @@ describe("SlackAppFactory", () => {
     });
     slack.update.mockResolvedValue({ ok: true });
 
-    const results = await slackAppFactory.migrateExistingApps();
+    const results = await slackAppFactory.migrateExistingApps(USER_ID);
 
     expect(results).toEqual([
       { appId: "A_NOT_MINE", ok: false, error: "no_permission" },

@@ -685,6 +685,7 @@ describe("APPA feature boundary", () => {
         kind: "deny",
         feedback: "[appa] a call is already outstanding",
         offers: [],
+        recorded: true,
       },
     ]);
     expect(
@@ -991,7 +992,12 @@ describe("APPA feature boundary", () => {
     } else {
       expect(await check).toEqual([
         { kind: "allow" },
-        { kind: "deny", feedback: "Policy denied", offers: [] },
+        {
+          kind: "deny",
+          feedback: "Policy denied",
+          offers: [],
+          recorded: true,
+        },
         { kind: "allow" },
       ]);
       expect([...open]).toEqual(["unrelated", "first", "third"]);
@@ -1008,19 +1014,45 @@ describe("APPA feature boundary", () => {
     ).toEqual([{ kind: "allow" }]);
   });
 
-  test("refuses malformed arguments and duplicate IDs before admitting any call", async () => {
+  test("refuses duplicate IDs before admitting any call", async () => {
     const first = { id: "first", name: "read_file", arguments: {} };
-    for (const second of [
-      { id: "second", name: "read_file", arguments: "{" },
-      first,
-    ]) {
-      await expect(
-        evaluateToolCalls(session, [first, second], {
-          canonicalize: (name) => name,
-        }),
-      ).rejects.toMatchObject({ statusCode: 400 });
-    }
+    await expect(
+      evaluateToolCalls(session, [first, first], {
+        canonicalize: (name) => name,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
     expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test("denies only the calls with malformed arguments, before any bypass or dispatch", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        { id: "first", name: "read_file", arguments: {} },
+        { id: "truncated", name: "read_file", arguments: '{"path": "/a' },
+        { id: "control", name: "remedy", arguments: "{" },
+      ],
+      {
+        canonicalize: (name) => name,
+        control: { name: "remedy" },
+      },
+    );
+    expect(decisions.map((decision) => decision.kind)).toEqual([
+      "allow",
+      "deny",
+      "deny",
+    ]);
+    // The runtime never saw these calls, so it holds no ruling for their ids.
+    expect(decisions[1]).not.toHaveProperty("recorded");
+    expect(decisions[2]).not.toHaveProperty("recorded");
+    expect(
+      native.dispatchHook.mock.calls.map(
+        ([raw]) => JSON.parse(raw).operation_id,
+      ),
+    ).toEqual(["call:first"]);
   });
 
   test("fails closed when a withheld admission cannot be settled", async () => {
@@ -1355,7 +1387,7 @@ describe("APPA feature boundary", () => {
 
     expect(decisions).toEqual([
       { kind: "control" },
-      { kind: "deny", feedback: "Not declared", offers: [] },
+      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1397,7 +1429,7 @@ describe("APPA feature boundary", () => {
     );
     expect(decisions).toEqual([
       { kind: "allow" },
-      { kind: "deny", feedback: "Not declared", offers: [] },
+      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1440,7 +1472,7 @@ describe("APPA feature boundary", () => {
     );
 
     expect(decisions).toEqual([
-      { kind: "deny", feedback: "Not declared", offers: [] },
+      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -2040,7 +2072,12 @@ describe("APPA feature boundary", () => {
       { canonicalize: (name) => name },
     );
     expect(denied).toEqual([
-      { kind: "deny", feedback: "Parent policy denied", offers: [] },
+      {
+        kind: "deny",
+        feedback: "Parent policy denied",
+        offers: [],
+        recorded: true,
+      },
     ]);
   });
 
@@ -2554,6 +2591,7 @@ describe("APPA feature boundary", () => {
       content:
         "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool did not run.",
       outputSource: "runtime",
+      denied: true,
     });
   });
   test("handles block decision falling back to reason or feedback when approved_output is absent", async () => {

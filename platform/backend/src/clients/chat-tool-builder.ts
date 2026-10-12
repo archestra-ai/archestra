@@ -16,6 +16,7 @@ import {
   platformExecutedAs,
   stripReservedPlatformMeta,
   TOOL_ASK_USER_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -62,6 +63,7 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { remedyCallNeedsHumanReview } from "@/openappa/a2a-hitl-review";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
@@ -159,6 +161,8 @@ export interface ChatToolContext {
   modelAcceptsImageToolResults: boolean;
   /** The model and key this run is on, which a fork starts from. Rebound per run. */
   parentLlm?: ModelSelection;
+  /** A reviewed remedy call pauses the run until someone answers. */
+  openappaReviewPause?: boolean;
 }
 
 /**
@@ -185,6 +189,19 @@ export function buildMcpGatewayTool(params: {
   return {
     description: mcpTool.description || `Tool: ${mcpTool.name}`,
     inputSchema: jsonSchema(normalizedSchema),
+    // Pausing for approval moves the A2A task to input-required; the
+    // answerer's ruling then reaches the tool when the run resumes.
+    ...(ctx.openappaReviewPause &&
+    archestraMcpBranding.getToolShortName(mcpTool.name) ===
+      TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
+      ? {
+          needsApproval: (input: unknown) =>
+            remedyCallNeedsHumanReview({
+              organizationId: ctx.organizationId,
+              input,
+            }),
+        }
+      : {}),
     execute: async (args: unknown, options) => {
       const toolArguments = isRecord(args) ? args : undefined;
       return executeWithToolSpan({

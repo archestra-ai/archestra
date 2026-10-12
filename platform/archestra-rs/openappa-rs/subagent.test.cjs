@@ -172,3 +172,81 @@ test('a child returning as spoken may not read untrusted data', { skip: !databas
   assert.equal(read.decision, 'deny_call');
   assert.deepEqual(read.offers ?? [], [], 'no remedy lets its free text carry untrusted data to the parent');
 });
+
+// A child that answers a follow-up returns again under the same spawn call.
+// The LLM proxy approves such a child once, with its newest return, and it
+// accepts the return the spawn call kept. It also ends a turn that has no text
+// as a turn, not as a child end. The tests below are the reasons.
+
+/** A child that returns as spoken, with each of its turns ended. */
+async function returningChild(turns) {
+  const run = family();
+  await startSpawn(run);
+  await run.hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
+  const childEnd = (output) =>
+    run.hook(run.child, { event: 'child_end', operation_id: `turn:${randomUUID()}`, spawn_call_id: 's1', output });
+  const end = async (output) => {
+    assert.equal((await childEnd(output)).decision, 'ack', 'each turn crosses its own return');
+  };
+  for (const output of turns) await end(output);
+  const turnEnd = () => run.hook(run.child, { event: 'turn_end', operation_id: `turn:${randomUUID()}` });
+  const call = () => run.hook(run.child, run.call(randomUUID(), 'publish'));
+  const approve = (output) =>
+    run.hook(run.parent, {
+      event: 'tool_result',
+      tool_call_id: 's1',
+      spawned_id: run.child.session_id,
+      output,
+      outcome: 'success',
+    });
+  const crossed = async () =>
+    (await native.loadChildReturns(run.organization, run.parent.session_id, { childSessionId: run.child.session_id })).map(
+      (record) => record.value,
+    );
+  return { childEnd, end, turnEnd, call, approve, crossed };
+}
+
+test('a child end with no value ends the child', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const child = await returningChild([]);
+  await child.end(undefined);
+
+  assert.equal((await child.call()).decision, 'deny_call', 'the ended child can call no tool');
+  assert.equal((await child.childEnd('answer to a follow-up')).decision, 'block', 'and it can return nothing');
+  assert.deepEqual(await child.crossed(), []);
+});
+
+test('a child whose turn ended as a turn can still work and return', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const child = await returningChild([]);
+  assert.equal((await child.turnEnd()).decision, 'ack');
+
+  assert.equal((await child.call()).decision, 'allow_call');
+  await child.end('answer to a follow-up');
+  assert.deepEqual(await child.crossed(), ['answer to a follow-up']);
+  assert.equal((await child.approve('answer to a follow-up')).decision, 'ack');
+});
+
+test('a spawn result is replayed only for the latest return of its child', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const child = await returningChild(['first answer', 'second answer']);
+  assert.deepEqual(await child.crossed(), ['second answer', 'first answer'], 'the newest return is first');
+
+  const older = await child.approve('first answer');
+  assert.equal(older.decision, 'block', 'an older return is not replayed');
+  assert.notEqual(older.approved_output, 'first answer');
+});
+
+test('a spawn call keeps the first return that the runtime approved for it', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const child = await returningChild(['first answer']);
+  const first = await child.approve('first answer');
+  assert.equal(first.decision, 'ack');
+  assert.equal(first.approved_output, 'first answer');
+
+  await child.end('second answer');
+  assert.deepEqual(await child.crossed(), ['second answer', 'first answer']);
+  const second = await child.approve('second answer');
+  assert.equal(second.decision, 'ack');
+  assert.equal(second.approved_output, 'first answer', 'the later result gets the kept return');
+});

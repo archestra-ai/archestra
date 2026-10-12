@@ -42,6 +42,7 @@ import {
   crossRuntimeOutput,
   guardRuntimeCrossing,
   type RuntimeCrossing,
+  refuseUnrecognizedCaller,
   SPAWN_TARGET_MISMATCH,
 } from "@/services/agent-runtime/runtime-crossing";
 import {
@@ -976,7 +977,11 @@ const registry = defineArchestraTools([
         const workspace = await AgentWorkspaceModel.findByWorkloadName(
           session.workloadName,
         );
-        const crossing = await parentCrossing(context, workspace?.id);
+        const crossing = await parentCrossing({
+          context,
+          organizationId: actor.organizationId,
+          workspaceId: workspace?.id,
+        });
         if (typeof crossing === "string") return errorResult(crossing);
         if (crossing && workspace) {
           await admitRuntimeSteer({
@@ -1373,20 +1378,32 @@ async function runtimeCrossingForStart(
   }
   const gate = await guardRuntimeCrossing(context);
   if (gate.kind === "refused") return gate.reason;
-  if (gate.kind === "inactive") return undefined;
+  // An unrecognized client has no session to bind: its run starts unbound,
+  // like one started from the run page.
+  if (gate.kind === "inactive" || gate.kind === "unrecognized") {
+    return undefined;
+  }
   if (!gate.crossing.spawn) {
     return "This start was not classified as a protected spawn. No runtime was started.";
   }
   return gate.crossing;
 }
 
-async function parentCrossing(
-  context: Parameters<typeof guardRuntimeCrossing>[0],
-  workspaceId: string | undefined,
-): Promise<RuntimeCrossing | undefined | string> {
-  const gate = await guardRuntimeCrossing(context);
+async function parentCrossing(params: {
+  context: Parameters<typeof guardRuntimeCrossing>[0];
+  organizationId: string;
+  workspaceId: string | undefined;
+}): Promise<RuntimeCrossing | undefined | string> {
+  const { workspaceId } = params;
+  const gate = await guardRuntimeCrossing(params.context);
   if (gate.kind === "refused") return gate.reason;
-  if (gate.kind !== "proof") return undefined;
+  if (gate.kind === "unrecognized") {
+    return refuseUnrecognizedCaller({
+      organizationId: params.organizationId,
+      workspaceId,
+    });
+  }
+  if (gate.kind === "inactive") return undefined;
   if (!workspaceId) {
     return "This runtime session could not be verified. The request was refused.";
   }
@@ -1417,7 +1434,16 @@ async function protectedFileAccess(params: {
   if (gate.kind === "refused") {
     return { kind: "error", result: errorResult(gate.reason) };
   }
-  if (gate.kind !== "proof") return { kind: "open" };
+  if (gate.kind === "unrecognized") {
+    const refusal = await refuseUnrecognizedCaller({
+      organizationId: params.actor.organizationId,
+      workspaceId: workspace.id,
+    });
+    return refusal
+      ? { kind: "error", result: errorResult(refusal) }
+      : { kind: "open" };
+  }
+  if (gate.kind === "inactive") return { kind: "open" };
   const relation = await classifyRuntimeCaller({
     crossing: gate.crossing,
     organizationId: params.actor.organizationId,
@@ -1455,6 +1481,13 @@ async function governedRunOutput(params: {
   const gate = await guardRuntimeCrossing(params.context);
   if (gate.kind === "inactive") return undefined;
   if (gate.kind === "refused") return errorResult(gate.reason);
+  if (gate.kind === "unrecognized") {
+    const refusal = await refuseUnrecognizedCaller({
+      organizationId: params.actor.organizationId,
+      workspaceId: workspace.id,
+    });
+    return refusal ? errorResult(refusal) : undefined;
+  }
   const crossed = await crossRuntimeOutput({
     crossing: gate.crossing,
     organizationId: params.actor.organizationId,

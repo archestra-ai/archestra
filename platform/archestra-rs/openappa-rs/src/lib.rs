@@ -6,6 +6,7 @@ mod batteries;
 mod consults;
 mod declarations;
 mod deployments;
+mod lease;
 #[allow(dead_code)]
 mod peer;
 mod policy;
@@ -318,6 +319,21 @@ struct RecordedCall {
 
 fn error(message: impl ToString) -> napi::Error {
     napi::Error::from_reason(message.to_string())
+}
+
+/// The lease attempt a dispatch works under, or why its family is closed to it.
+fn admitted(admission: lease::Admission) -> napi::Result<i32> {
+    match admission {
+        lease::Admission::Clear { attempt } => Ok(attempt),
+        lease::Admission::Interrupted => Err(error(
+            "OpenAPPA session has interrupted processing; operator recovery is required",
+        )),
+    }
+}
+
+/// The host retries: the dispatch that took the family over answers it.
+fn lease_lost() -> napi::Error {
+    error("OpenAPPA lost its lease on this operation; retry the request")
 }
 
 /// The upstream pin and host replay boundary version stored with each run.
@@ -1854,15 +1870,9 @@ impl State {
         let _lock = SessionLock::acquire(pg, root.clone())?;
         // Check every member of the family: continuing a parent while a child's
         // result is interrupted could otherwise bypass inherited restrictions.
-        let interrupted = self
-            .store
-            .has_pending_receipts(&TrajectoryId::new(root.as_str()))
-            .map_err(error)?;
-        if interrupted {
-            return Err(error(
-                "OpenAPPA session has interrupted processing; operator recovery is required",
-            ));
-        }
+        // Holding the lock, this dispatch knows no other one is still working
+        // on a receipt it finds pending.
+        let attempt = admitted(lease::admit(pg, &root).map_err(error)?)?;
 
         let actor = expected_actor(&root, &input.session_id, input.parent_id.as_deref());
         let lookup = key.clone();
@@ -1951,6 +1961,38 @@ impl State {
             }).map_err(error)?;
         }
 
+        // A remedy completes two receipts one after the other, and the event
+        // log cannot show whether a stopped one completed the first. It works
+        // without a lease, so what it leaves pending is never run again.
+        if input.event == HookEventKind::Remedy {
+            lease::forgo(pg, &root).map_err(error)?;
+            return self.handle_event(pg, input, root, key, actor).await;
+        }
+        // Taken after the session's own start events, so the lease records
+        // where the log ends before this dispatch claims anything.
+        let lease = lease::DispatchLease::take(pg, &root, attempt).map_err(error)?;
+        let work = self.handle_event(pg, input, root, key, actor);
+        match lease.hold(pg, work).await {
+            lease::Guarded::Finished(result) => {
+                // A lease that cannot be settled stays for the next dispatch,
+                // which decides from the event log.
+                let _ = lease.settle(pg, result.is_ok());
+                result
+            }
+            lease::Guarded::Lost => Err(lease_lost()),
+        }
+    }
+
+    /// The part of a dispatch that claims and completes receipts. It runs under
+    /// the family's lock and lease.
+    async fn handle_event(
+        &self,
+        pg: &LeasedPostgres,
+        input: Input,
+        root: String,
+        key: SessionKey,
+        actor: Actor,
+    ) -> napi::Result<Value> {
         if input.event == HookEventKind::SessionStart {
             return pg
                 .with_client(move |client| {

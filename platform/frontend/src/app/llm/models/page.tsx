@@ -277,7 +277,8 @@ export default function ModelsPage() {
 
   const refreshModelsButton = (
     <div className="flex items-center gap-2">
-      <Button
+      <PermissionButton
+        permissions={{ llmModel: ["update"] }}
         variant="outline"
         size="sm"
         onClick={handleRefresh}
@@ -287,7 +288,7 @@ export default function ModelsPage() {
           className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
         />
         {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
-      </Button>
+      </PermissionButton>
       <ResourceListActions resource="llmModel" />
     </div>
   );

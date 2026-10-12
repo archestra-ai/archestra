@@ -834,6 +834,38 @@ describe("agent routes", () => {
       expect(agent.name).toBe(updatedName);
     });
 
+    test("keeps the last value when a label key repeats", async ({
+      makeAgent,
+    }) => {
+      const created = await makeAgent({
+        name: `Labels ${crypto.randomUUID().slice(0, 8)}`,
+        organizationId,
+        access: "personal",
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/agents/${created.id}`,
+        payload: {
+          labels: [
+            { key: "env", value: "dev" },
+            { key: "env", value: "prod" },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        response
+          .json()
+          .labels.map(({ key, value }: { key: string; value: string }) => ({
+            key,
+            value,
+          })),
+      ).toEqual([{ key: "env", value: "prod" }]);
+    });
+
     test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot be promoted to a built-in", async ({
       makeAgent,
     }) => {
@@ -1490,6 +1522,28 @@ describe("agent routes", () => {
       expect(Array.isArray(result.data)).toBe(true);
       expect(result.data.length).toBeGreaterThan(0);
       expect(result.data[0].name).toContain(suffix);
+    });
+
+    test("matches name search wildcards literally", async ({ makeAgent }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      for (const name of [`${suffix}_a`, `${suffix}Xa`, `${suffix}%b`]) {
+        await makeAgent({ name, organizationId, authorId: user.id });
+      }
+
+      const cases: Array<[query: string, expected: string[]]> = [
+        [`${suffix}_a`, [`${suffix}_a`]],
+        [`${suffix}%`, [`${suffix}%b`]],
+      ];
+      for (const [query, expected] of cases) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents?limit=10&offset=0&name=${encodeURIComponent(query)}`,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(
+          response.json().data.map((agent: { name: string }) => agent.name),
+        ).toEqual(expected);
+      }
     });
 
     test("should return personal agent first in paginated list", async ({

@@ -3384,7 +3384,15 @@ export function ChatPageContent({
                                 )
                             )?.name ?? conversation?.agent?.name
                           }
-                          selectedModel={conversationModelId ?? initialModel}
+                          selectedModel={
+                            chatModels.find(
+                              (m) =>
+                                m.dbId ===
+                                (conversationModelId ?? initialModel),
+                            )?.id ??
+                            conversationModelId ??
+                            initialModel
+                          }
                           modelSource={
                             conversationModelSource ?? initialModelSource
                           }

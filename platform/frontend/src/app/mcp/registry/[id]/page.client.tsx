@@ -96,6 +96,7 @@ import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
 import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
+import type { McpCatalogFormValues } from "../_parts/mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
 import {
@@ -813,11 +814,7 @@ function useMcpServerOverviewFacts(item: CatalogItem): MaybeOverviewFact[] {
 
   facts.push({
     label: "Authentication",
-    value: (
-      <span>
-        {AUTH_METHOD_LABEL[values.authMethod] ?? AUTH_METHOD_LABEL.none}
-      </span>
-    ),
+    value: <span>{AUTH_METHOD_LABEL[values.authMethod]}</span>,
   });
 
   facts.push(createdByFact(item.createdBy));
@@ -986,9 +983,10 @@ function CodeLine({ children }: { children: ReactNode }) {
 }
 
 /** Authentication method names from the wizard, without its helper prose. */
-const AUTH_METHOD_LABEL: Record<string, string> = {
+const AUTH_METHOD_LABEL: Record<McpCatalogFormValues["authMethod"], string> = {
   none: "None",
-  bearer: "Token header",
+  bearer: "Access token header (legacy)",
+  auth_header: "Token header",
   oauth: "OAuth 2.1",
   oauth_client_credentials: "OAuth client credentials",
   enterprise_managed: "Identity provider exchange",

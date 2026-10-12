@@ -350,6 +350,10 @@ describe("ModelsPage", () => {
   });
 
   it("reports partial refresh failures and updates the persistent reconnect state", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+      isPending: false,
+    } as unknown as ReturnType<typeof useHasPermissions>);
     keyCreated = true;
     let rejected = false;
     server.use(

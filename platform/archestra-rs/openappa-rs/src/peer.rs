@@ -17,8 +17,8 @@ use serde::Deserialize;
 use serde_json::{Value, json, value::RawValue};
 
 use super::{
-    DispatchPolicy, SessionKey, SessionLock, State, canonical_tool, error, initialized,
-    postgres_store, read_completed_operation, recorded_call, required, session_actor,
+    DispatchPolicy, SessionKey, SessionLock, State, admitted, canonical_tool, error, initialized,
+    lease, postgres_store, read_completed_operation, recorded_call, required, session_actor,
 };
 
 const BODY_LIMIT: usize = 64 * 1024;
@@ -96,16 +96,17 @@ async fn execute(
     // The family shares a log and operation journal. An interrupted receipt can
     // leave its projection incomplete, so non-recovery operations fail closed
     // across the root; ordinary open tool dispatches are not pending receipts.
-    if kind != PeerKind::Read
-        && leased
-            .state
-            .store
-            .has_pending_receipts(&TrajectoryId::new(root.as_str()))
-            .map_err(error)?
-    {
-        return Err(error(
-            "OpenAPPA session has interrupted processing; operator recovery is required",
-        ));
+    match lease::admit(pg, &root).map_err(error)? {
+        // Peer messages are kept outside the event log, so the log cannot show
+        // how far a stopped peer operation got. It works without a lease: a
+        // receipt it leaves pending is never released for a second run.
+        lease::Admission::Clear { .. } => lease::forgo(pg, &root).map_err(error)?,
+        // A read still runs in a closed family, and leaves the lease of the
+        // stopped work as it found it.
+        lease::Admission::Interrupted if kind == PeerKind::Read => {}
+        closed => {
+            admitted(closed)?;
+        }
     }
     let actor = acting_actor(pg, &input, &root)?;
     match kind {

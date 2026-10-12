@@ -1,5 +1,68 @@
 # Changelog
 
+## [1.4.0-rc.37](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.36...platform-v1.4.0-rc.37) (2026-10-12)
+
+
+### Features
+
+* **agents:** agent overview and edit pages, warmer default theme ([#8679](https://github.com/archestra-ai/archestra/issues/8679)) ([3ed53d4](https://github.com/archestra-ai/archestra/commit/3ed53d42a1e1110e222933e5cd759275c35a7aaf))
+* configure coding agent availability and order ([#8670](https://github.com/archestra-ai/archestra/issues/8670)) ([df802e7](https://github.com/archestra-ai/archestra/commit/df802e7147fd2f83004510e2cab88bbb361767ad))
+* **openappa:** answer OpenAPPA human reviews from MS Teams and Telegram ([#8722](https://github.com/archestra-ai/archestra/issues/8722)) ([c2ffe78](https://github.com/archestra-ai/archestra/commit/c2ffe78e94454f3c933aa9dfc1f745a0855cb7e3))
+* **openappa:** answer OpenAPPA human reviews from Slack ([#8711](https://github.com/archestra-ai/archestra/issues/8711)) ([736434d](https://github.com/archestra-ai/archestra/commit/736434d390b9f9d584084686f4dc3a0bfc78360c))
+* **openappa:** let the A2A caller answer OpenAPPA human reviews ([#8715](https://github.com/archestra-ai/archestra/issues/8715)) ([70806c1](https://github.com/archestra-ai/archestra/commit/70806c16454a94d8a359f36d0a6adbdf7494317b))
+* **slack:** channels belong to agent bots ([#8678](https://github.com/archestra-ai/archestra/issues/8678)) ([963ec44](https://github.com/archestra-ai/archestra/commit/963ec447d5d3872a85b349ccb45145a463578f57))
+* **slack:** each person adds bots with their own config token, then shares the app with their team ([#8705](https://github.com/archestra-ai/archestra/issues/8705)) ([2f891c7](https://github.com/archestra-ai/archestra/commit/2f891c7320f81f2e7fb9338c71a29b33b32e225f))
+* **slack:** search a bot's channels, and show descriptions as plain text ([#8690](https://github.com/archestra-ai/archestra/issues/8690)) ([e9345e0](https://github.com/archestra-ai/archestra/commit/e9345e0e0503ea6293611af3955d519cddc6d08b))
+* **slack:** show which bot replies to all, and read channel descriptions ([#8689](https://github.com/archestra-ai/archestra/issues/8689)) ([26d293c](https://github.com/archestra-ai/archestra/commit/26d293c59fac28776f94b4176e6039ea71183d01))
+* **ui:** drop columns that do not fit instead of scrolling tables sideways ([#8695](https://github.com/archestra-ai/archestra/issues/8695)) ([38ea620](https://github.com/archestra-ai/archestra/commit/38ea620d03ca6e1a8edee677c3f9c7f35a6a13b3))
+* **ui:** lead the chats sidebar with New chat and Search buttons ([#8698](https://github.com/archestra-ai/archestra/issues/8698)) ([53a72b0](https://github.com/archestra-ai/archestra/commit/53a72b0c2dac920c09149eed04f821cf14b11d5b))
+* **ui:** pin important agents, gateways, projects and apps above their lists ([#8688](https://github.com/archestra-ai/archestra/issues/8688)) ([5af677a](https://github.com/archestra-ai/archestra/commit/5af677a90b485feddc4065702259f11c067d86db))
+
+
+### Bug Fixes
+
+* **agent-runtime:** authorize shared credential resolution ([#8681](https://github.com/archestra-ai/archestra/issues/8681)) ([f2a3ecb](https://github.com/archestra-ai/archestra/commit/f2a3ecbec82ce739f31ec03151bacbf2913ca8a0))
+* **agents:** offer the connected chat apps on an unreachable agent ([#8686](https://github.com/archestra-ai/archestra/issues/8686)) ([17aa20e](https://github.com/archestra-ai/archestra/commit/17aa20e09705000049461b23e443d54bc1059c36))
+* aggregate session user activity before joining names ([#8677](https://github.com/archestra-ai/archestra/issues/8677)) ([97c2d2c](https://github.com/archestra-ai/archestra/commit/97c2d2c164c29e85b5f000fa85c554727eb20fff))
+* allow custom cache pricing without existing cache prices ([#8713](https://github.com/archestra-ai/archestra/issues/8713)) ([7547738](https://github.com/archestra-ai/archestra/commit/7547738b8dc39cb3ab9cff691480d0ff7fec3a98))
+* cache only requested conversation reconstruction targets ([#8683](https://github.com/archestra-ai/archestra/issues/8683)) ([3e72e5d](https://github.com/archestra-ai/archestra/commit/3e72e5df9f7fdf0cad4be4891c6cef13afc6bb61))
+* **chat:** default to personal assistant and rename APPAdvisor ([#8684](https://github.com/archestra-ai/archestra/issues/8684)) ([a080201](https://github.com/archestra-ai/archestra/commit/a080201f29a37cda5968a1a4e06fa39445722f36))
+* **chatops:** re-resolve channels bound to a deleted or non-internal agent ([#8708](https://github.com/archestra-ai/archestra/issues/8708)) ([7af27f3](https://github.com/archestra-ai/archestra/commit/7af27f3a4cf29bbe3cce3e7e38e8e856a5ea15cb))
+* **chat:** use native Azure Responses for OpenAI deployments ([#8718](https://github.com/archestra-ai/archestra/issues/8718)) ([3b7687d](https://github.com/archestra-ai/archestra/commit/3b7687de2c4176581e3c49cf6626701a4052e8d7))
+* clean up orphaned personal MCP gateways and keep them to their owner ([#8694](https://github.com/archestra-ai/archestra/issues/8694)) ([ae6ef76](https://github.com/archestra-ai/archestra/commit/ae6ef7680b13f1a57e3f0878045e7ed7b797c53d))
+* **frontend:** clarify client guardrails support ([#8712](https://github.com/archestra-ai/archestra/issues/8712)) ([44b7339](https://github.com/archestra-ai/archestra/commit/44b7339a0f1657576d6c748d5758924aded3229a))
+* **frontend:** raise the sidebar New chat button in dark mode ([#8702](https://github.com/archestra-ai/archestra/issues/8702)) ([cfb4f19](https://github.com/archestra-ai/archestra/commit/cfb4f1930f568ee42c69a3f86a04ad2a3ca5fdab))
+* **frontend:** soften cosmic night light-mode borders ([#8700](https://github.com/archestra-ai/archestra/issues/8700)) ([8fe02af](https://github.com/archestra-ai/archestra/commit/8fe02afeaaa15e29f7c92c5243f224eafbfe1ba0))
+* **frontend:** stop saving an empty channel plan when an agent is edited ([#8697](https://github.com/archestra-ai/archestra/issues/8697)) ([2000a8c](https://github.com/archestra-ai/archestra/commit/2000a8cc248fb059156dfc910d808afbaeb388ff))
+* handle disconnected requests and trim session preview reads ([#8673](https://github.com/archestra-ai/archestra/issues/8673)) ([0c68e51](https://github.com/archestra-ai/archestra/commit/0c68e5180be39d11609e38b2c35360f951459cb5))
+* **mcp-gateway:** keep runtime handoff tools enabled on personal gateways ([#8687](https://github.com/archestra-ai/archestra/issues/8687)) ([488f482](https://github.com/archestra-ai/archestra/commit/488f4829226365624e0c3fc6d3fd2bda64a731ec))
+* **observability:** derive the OTLP logs URL from a traces endpoint ([#8709](https://github.com/archestra-ai/archestra/issues/8709)) ([6ee2bd8](https://github.com/archestra-ai/archestra/commit/6ee2bd864ccef96ef05a4cce503ea208a00128d1))
+* **openappa:** deny malformed tool arguments per call instead of failing the batch ([#8707](https://github.com/archestra-ai/archestra/issues/8707)) ([6dc5ba6](https://github.com/archestra-ai/archestra/commit/6dc5ba66021fe5a294812b20805c8731b4afdd29))
+* **openappa:** have Claude Code wait for the gateway instead of refusing a first-request denial ([#8716](https://github.com/archestra-ai/archestra/issues/8716)) ([656489e](https://github.com/archestra-ai/archestra/commit/656489ed060c0e9cc9197781b47a3d0c72bd2e46))
+* **openappa:** keep a followed client's Agent Runtime launch bound to its session ([#8720](https://github.com/archestra-ai/archestra/issues/8720)) ([32a6ec6](https://github.com/archestra-ai/archestra/commit/32a6ec686afc60b5fb20a9ba1c2d07e3b9147f7e))
+* **openappa:** keep a parent session working after its subagent returns twice or returns no text ([#8714](https://github.com/archestra-ai/archestra/issues/8714)) ([7770700](https://github.com/archestra-ai/archestra/commit/7770700148c35ce5fa3b07cefca326312a044f40))
+* **openappa:** let unrecognized clients hand work off to Agent Runtime ([#8717](https://github.com/archestra-ai/archestra/issues/8717)) ([b74a1f9](https://github.com/archestra-ai/archestra/commit/b74a1f94e59e1e82aa391dbff93cecf28ad927cb))
+* **openappa:** name a missing runtime binding and document the run headers ([#8706](https://github.com/archestra-ai/archestra/issues/8706)) ([6579596](https://github.com/archestra-ai/archestra/commit/65795963a59abd67a14d49ef8473aee8e4a6d806))
+* **openappa:** recover a session whose backend stopped mid-dispatch ([#8710](https://github.com/archestra-ai/archestra/issues/8710)) ([958d24f](https://github.com/archestra-ai/archestra/commit/958d24f54df926d7ddb6345da3bea4def5063564))
+* **openappa:** refuse an unreadable child return only in a governed session ([#8704](https://github.com/archestra-ai/archestra/issues/8704)) ([d33a0b1](https://github.com/archestra-ai/archestra/commit/d33a0b10504182f804557922d56d4d203151d655))
+* preserve historical logs and classify token exchange rejections ([#8685](https://github.com/archestra-ai/archestra/issues/8685)) ([1d4858f](https://github.com/archestra-ai/archestra/commit/1d4858f4e2d670d8d98ebb0ca1ca705556703604))
+* reduce database query fan-out in policy, credentials and session reads ([#8676](https://github.com/archestra-ai/archestra/issues/8676)) ([8b4f45d](https://github.com/archestra-ai/archestra/commit/8b4f45d09fdf199b373a0f563c4b53cd0c8d33d5))
+* reduce session query work and recover runtime failures ([#8692](https://github.com/archestra-ai/archestra/issues/8692)) ([ee01ca9](https://github.com/archestra-ai/archestra/commit/ee01ca9601a33fb21677f4d9c0c23dc5f1876e1f))
+* remove personal agents and MCP gateways orphaned by deleted owners ([#8701](https://github.com/archestra-ai/archestra/issues/8701)) ([feb1072](https://github.com/archestra-ai/archestra/commit/feb107262506d96e27bed8e063261055204ad36a))
+* route Codex desktop work sessions to subscription backend ([#8682](https://github.com/archestra-ai/archestra/issues/8682)) ([67d630a](https://github.com/archestra-ai/archestra/commit/67d630aadb4d6aeff65d6f3170ade8983316f0f6))
+* **slack:** add newly required scopes to managed apps' manifests ([#8680](https://github.com/archestra-ai/archestra/issues/8680)) ([60b1b96](https://github.com/archestra-ai/archestra/commit/60b1b969a925aef8a99df2117ded47d373c9552a))
+* **slack:** steady agent page buttons, standard agent picker and table, display-name handles, finish setup after install ([#8719](https://github.com/archestra-ai/archestra/issues/8719)) ([7024996](https://github.com/archestra-ai/archestra/commit/702499619db3519798ecf81398cc21652bce999d))
+* tighten connector updates and Anthropic WIF routing ([#8693](https://github.com/archestra-ai/archestra/issues/8693)) ([6accf4e](https://github.com/archestra-ai/archestra/commit/6accf4eac26088d63243a907c51476611e8f3d0b))
+* **ui:** balance the agents table and stop cutting name-cell chips ([#8691](https://github.com/archestra-ai/archestra/issues/8691)) ([69cbfcb](https://github.com/archestra-ai/archestra/commit/69cbfcb213e248cb19e96d2910095ac5962a7871))
+* **ui:** show a pinned tile's full status and shorten its last-used time ([#8699](https://github.com/archestra-ai/archestra/issues/8699)) ([abe64a5](https://github.com/archestra-ai/archestra/commit/abe64a5d10e9d2118672dcbe26ef5a31f3b47724))
+
+
+### Performance Improvements
+
+* avoid full-history session sorts and repeated batch membership reads ([#8669](https://github.com/archestra-ai/archestra/issues/8669)) ([59274df](https://github.com/archestra-ai/archestra/commit/59274df7024476601758431f2af9070f9b923ca5))
+* **chat:** stop loading tool schemas, the registry and every app on chat load ([#8703](https://github.com/archestra-ai/archestra/issues/8703)) ([407b700](https://github.com/archestra-ai/archestra/commit/407b70015f9b54a295bb82002db874ade268307f))
+* **frontend:** load shell permissions, organization and config in one bootstrap call ([#8696](https://github.com/archestra-ai/archestra/issues/8696)) ([c1dfcce](https://github.com/archestra-ai/archestra/commit/c1dfcce62bd0dbe538ad1944d3dc4fb74033d4cb))
+
 ## [1.4.0-rc.36](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.35...platform-v1.4.0-rc.36) (2026-10-10)
 
 

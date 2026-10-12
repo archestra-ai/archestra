@@ -920,7 +920,28 @@ export class ChatOpsManager {
     }
 
     // Verify the agent exists and is an internal agent
-    const agent = await AgentModel.findById(binding.agentId);
+    let agent = await AgentModel.findById(binding.agentId);
+
+    // The bound agent was deleted or turned into a gateway/proxy: treat the
+    // channel as unassigned so the user gets a reply or the picker, not silence.
+    if ((!agent || agent.agentType !== "agent") && !provider.pinnedAgentId) {
+      logger.warn(
+        { agentId: binding.agentId, bindingId: binding.id },
+        "[ChatOps] Bound agent is not an internal agent, re-resolving",
+      );
+      const agentId = await this.resolveOrPromptChannelAgent({
+        provider,
+        message,
+        binding,
+        isDm: binding.isDm,
+      });
+      if (!agentId) {
+        return { success: true };
+      }
+      binding.agentId = agentId;
+      agent = await AgentModel.findById(agentId);
+    }
+
     if (!agent || agent.agentType !== "agent") {
       logger.warn(
         { agentId: binding.agentId, bindingId: binding.id },

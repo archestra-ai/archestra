@@ -260,6 +260,16 @@ describe("protected runtime protocol", () => {
       // The record decides, whatever the client says about the call.
       isError: false,
     };
+    // The runtime withholds the output of a spawn that failed.
+    processed.mockResolvedValue({
+      toolResultUpdates: {
+        "runtime-call": {
+          content:
+            "[appa] Tool output withheld: the spawn did not take: no prepared fork to open this child",
+          outputSource: "runtime",
+        },
+      },
+    });
 
     const outcome = await plugin.onToolResults({
       ...context,

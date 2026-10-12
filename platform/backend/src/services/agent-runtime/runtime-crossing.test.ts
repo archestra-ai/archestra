@@ -251,51 +251,6 @@ describe("runtime crossing", () => {
     expect(backend.continueRun).not.toHaveBeenCalled();
   });
 
-  // The proxy tells the model what the gateway recorded for the call, so the
-  // record must exist before the client gets the result.
-  test("records the run that a released launch started", async ({
-    makeAgent,
-    makeMember,
-    makeOrganization,
-    makeUser,
-  }) => {
-    const actor = await makeUser();
-    const org = await makeOrganization();
-    await makeMember(actor.id, org.id, { role: "member" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      authorId: actor.id,
-      runtime: runtimeConfig(),
-    });
-    await releasedSpawn(org.id);
-    vi.spyOn(backend, "assertReady").mockResolvedValue();
-    vi.spyOn(openappa, "startRuntimeChild").mockResolvedValue({
-      contract: "CONTRACT",
-    });
-
-    const result = await startDelegatedTask({
-      agentId: agent.id,
-      message: "Do the work",
-      context: {
-        agent: { id: agent.id, name: agent.name },
-        userId: actor.id,
-        organizationId: org.id,
-        openappaRuntimeCall: {
-          session: proofSession(org.id),
-          toolCallId: "call-1",
-          spawn: true,
-        },
-      },
-    });
-
-    expect(result.isError).not.toBe(true);
-    const started = result.structuredContent as { session_id: string };
-    expect(await recordedLaunch(org.id)).toMatchObject({
-      kind: "launched",
-      session_id: started.session_id,
-    });
-  });
-
   afterEach(async () => {
     await drainBackgroundWork();
     config.agentRuntime.platformBaseUrl = originalBaseUrl;
@@ -486,6 +441,58 @@ describe("model-facing runtime tools", () => {
     expect(await recordedLaunch(org.id)).toEqual({
       kind: "failed",
       reason: "refused",
+    });
+  });
+
+  // The proxy tells the model what the gateway recorded for the call, so the
+  // record must exist before the client gets the result.
+  test("records the run that a released launch started", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const actor = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(actor.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: actor.id,
+      runtime: runtimeConfig(),
+    });
+    await releasedSpawn(org.id);
+    // The launch itself is not under test, and a real one would outlive it.
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: actor.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    vi.spyOn(startTask, "startDetachedAgentTask").mockResolvedValue(task);
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: actor.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "launched",
+      session_id: task.id,
+      state: "submitted",
     });
   });
 

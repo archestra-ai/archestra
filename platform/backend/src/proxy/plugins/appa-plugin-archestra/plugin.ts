@@ -393,6 +393,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         toolCallIds: [...runtimeSpawns],
       },
     );
+    // The runtime withholds the output of a spawn that failed. What the gateway
+    // recorded about the launch is not that output, so it is restored after.
+    const failedLaunchResults: Record<string, string> = {};
     const nonHandbackResults = results
       .filter(
         (result) =>
@@ -412,10 +415,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           return { ...result, content: subagentReturn };
         }
         if (runtimeSpawns.has(withoutTrajectoryStamp(result.id))) {
-          const content = runtimeLaunchResult(
-            runtimeLaunches.get(withoutTrajectoryStamp(result.id)),
-          );
+          const launch = runtimeLaunches.get(withoutTrajectoryStamp(result.id));
+          const content = runtimeLaunchResult(launch);
           childResultUpdates[result.id] = content;
+          if (launch?.kind === "failed")
+            failedLaunchResults[result.id] = content;
           return { ...result, content };
         }
         const content = childResultUpdates[result.id];
@@ -489,6 +493,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : result.content,
         ]),
       ),
+      ...failedLaunchResults,
     };
     if (
       binding.adapter &&

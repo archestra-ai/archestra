@@ -94,12 +94,9 @@ export function useUpdateAppaGithubSync() {
     onSettled: () => invalidatePolicyViews(client),
     onSuccess: (data, body, context) => {
       if (body.action === "sync" && data?.source?.lastSyncError) return;
-      if (body.action === "sync" && data?.source?.setupPullRequestNumber) {
-        toast.info(
-          "Not merged yet. The initial policy pull request is still open.",
-        );
+      // Still waiting on the setup PR: the dialog and panel already say so.
+      if (body.action === "sync" && data?.source?.setupPullRequestNumber)
         return;
-      }
       if (body.action === "sync" && context.awaitingMerge) {
         toast.success("Initial policy merged. Policy synced from GitHub.");
         return;
@@ -128,25 +125,42 @@ export function usePendingAppaGithubApp(enabled: boolean) {
   });
 }
 /** Where each GitHub App is installed, and whether it can reach `repo`. */
-export function useAppaGithubAppAccounts(params: {
-  enabled: boolean;
-  repo?: string;
-}) {
+export function useAppaGithubAppAccounts(enabled: boolean) {
   return useQuery({
-    enabled: params.enabled,
-    queryKey: ["openappa", "github-app", "accounts", params.repo ?? null],
+    enabled,
+    queryKey: ["openappa", "github-app", "accounts"],
     queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getAppaGithubAppAccounts({
-        query: params.repo ? { repo: params.repo } : undefined,
-      });
+      const { data, error } = await archestraApiSdk.getAppaGithubAppAccounts();
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
   });
 }
+
+/** Repositories a GitHub App can reach, so setup offers a list instead of a name. */
+export function useAppaGithubAppRepositories(credentialId: string | null) {
+  return useQuery({
+    enabled: !!credentialId,
+    queryKey: ["openappa", "github-app", "repositories", credentialId],
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getAppaGithubAppRepositories({
+          query: { credentialId: credentialId as string },
+        });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? { repositories: [], manageUrl: null };
+    },
+  });
+}
+
 /** Whether the policy repository already exists, as the organization's Apps see it. */
 export function useAppaGithubRepositoryStatus(
-  query: { repo: string; ref?: string; path?: string } | null,
+  query: {
+    credentialId: string;
+    repo: string;
+    ref?: string;
+    path?: string;
+  } | null,
 ) {
   return useQuery({
     enabled: !!query,
@@ -193,12 +207,8 @@ export function useCompleteAppaGithubApp() {
 export function useInstallAppaGithubApp() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (
-      body: archestraApiTypes.InstallAppaGithubAppData["body"],
-    ) => {
-      const { data, error } = await archestraApiSdk.installAppaGithubApp({
-        body,
-      });
+    mutationFn: async () => {
+      const { data, error } = await archestraApiSdk.installAppaGithubApp();
       if (error) throw toApiError(error);
       return data;
     },

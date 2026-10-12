@@ -82,6 +82,10 @@ export const CreateAppaGithubRepositorySchema = z
     /** Where an existing repository keeps its policy; defaults to appa.toml on the default branch. */
     ref: AppaGithubRefSchema.optional(),
     path: AppaPolicyPathSchema.optional(),
+    /** Where validations live; defaults to the template's traces/. */
+    validationDirectory: PolicyTestDirectorySchema.optional(),
+    /** Switch a running sync to this repository; the edit flow sends it. */
+    replace: z.boolean().optional(),
   })
   .strict();
 const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
@@ -94,6 +98,8 @@ export const AppaGithubSyncStatusSchema = z.object({
   source: AppaGithubSyncSchema.nullable(),
   hasPolicy: z.boolean(),
   validationDirectory: z.string(),
+  /** Web origin of the source's GitHub, e.g. https://github.com, for links. */
+  githubWebUrl: z.string(),
 });
 /** What accepting a held pull published, and what it changed to publish it. */
 export const AcceptedHeldPullSchema = z.object({

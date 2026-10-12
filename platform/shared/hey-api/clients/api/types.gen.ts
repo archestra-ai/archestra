@@ -88978,6 +88978,7 @@ export type GetAppaGithubSyncResponses = {
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
+        githubWebUrl: string;
     };
 };
 
@@ -89091,6 +89092,7 @@ export type UpdateAppaGithubSyncResponses = {
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
+        githubWebUrl: string;
     };
 };
 
@@ -89205,6 +89207,7 @@ export type ConfigureAppaGithubSyncResponses = {
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
+        githubWebUrl: string;
     };
 };
 
@@ -89219,6 +89222,8 @@ export type CreateAppaGithubRepositoryData = {
         existing?: boolean;
         ref?: string | null;
         path?: string;
+        validationDirectory?: string;
+        replace?: boolean;
     };
     path?: never;
     query?: never;
@@ -89319,6 +89324,7 @@ export type CreateAppaGithubRepositoryResponses = {
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
+        githubWebUrl: string;
     };
 };
 
@@ -89326,6 +89332,7 @@ export type CreateAppaGithubRepositoryResponse = CreateAppaGithubRepositoryRespo
 
 export type StartAppaGithubAppData = {
     body: {
+        githubUrl: string;
         owner: string;
     };
     path?: never;
@@ -89499,6 +89506,8 @@ export type CompleteAppaGithubAppResponses = {
         name: string;
         slug: string;
         account: string;
+        appId: string;
+        accountUrl: string;
         htmlUrl: string;
         installUrl: string;
         settingsUrl: string;
@@ -89676,6 +89685,8 @@ export type GetPendingAppaGithubAppResponses = {
         name: string;
         slug: string;
         account: string;
+        appId: string;
+        accountUrl: string;
         htmlUrl: string;
         installUrl: string;
         settingsUrl: string;
@@ -89685,9 +89696,7 @@ export type GetPendingAppaGithubAppResponses = {
 export type GetPendingAppaGithubAppResponse = GetPendingAppaGithubAppResponses[keyof GetPendingAppaGithubAppResponses];
 
 export type InstallAppaGithubAppData = {
-    body: {
-        repo: string;
-    };
+    body?: never;
     path?: never;
     query?: never;
     url: '/api/openappa/github-app/install';
@@ -89781,9 +89790,11 @@ export type GetAppaGithubRepositoryStatusData = {
     body?: never;
     path?: never;
     query: {
+        credentialId: string;
         repo: string;
         ref?: string;
         path?: string;
+        validationDirectory?: string;
     };
     url: '/api/openappa/github-app/repository';
 };
@@ -89861,7 +89872,8 @@ export type GetAppaGithubRepositoryStatusResponses = {
      * Default Response
      */
     200: {
-        status: 'template' | 'policy' | 'other' | 'unknown';
+        status: 'template' | 'empty' | 'policy' | 'other' | 'unreachable' | 'app_error';
+        validations: boolean | null;
     };
 };
 
@@ -89870,9 +89882,7 @@ export type GetAppaGithubRepositoryStatusResponse = GetAppaGithubRepositoryStatu
 export type GetAppaGithubAppAccountsData = {
     body?: never;
     path?: never;
-    query?: {
-        repo?: string;
-    };
+    query?: never;
     url: '/api/openappa/github-app/accounts';
 };
 
@@ -89951,11 +89961,104 @@ export type GetAppaGithubAppAccountsResponses = {
     200: Array<{
         id: string;
         account: string | null;
-        canAccessRepo: boolean | null;
     }>;
 };
 
 export type GetAppaGithubAppAccountsResponse = GetAppaGithubAppAccountsResponses[keyof GetAppaGithubAppAccountsResponses];
+
+export type GetAppaGithubAppRepositoriesData = {
+    body?: never;
+    path?: never;
+    query: {
+        credentialId: string;
+    };
+    url: '/api/openappa/github-app/repositories';
+};
+
+export type GetAppaGithubAppRepositoriesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubAppRepositoriesError = GetAppaGithubAppRepositoriesErrors[keyof GetAppaGithubAppRepositoriesErrors];
+
+export type GetAppaGithubAppRepositoriesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        repositories: Array<{
+            fullName: string;
+            private: boolean;
+            description: string | null;
+            template: boolean;
+        }>;
+        manageUrl: string | null;
+    };
+};
+
+export type GetAppaGithubAppRepositoriesResponse = GetAppaGithubAppRepositoriesResponses[keyof GetAppaGithubAppRepositoriesResponses];
 
 export type AcceptHeldAppaGithubPullData = {
     body?: never;
@@ -90064,6 +90167,7 @@ export type AcceptHeldAppaGithubPullResponses = {
             } | null;
             hasPolicy: boolean;
             validationDirectory: string;
+            githubWebUrl: string;
         };
     };
 };

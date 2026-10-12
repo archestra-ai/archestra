@@ -10,14 +10,14 @@ import {
 } from "@/services/openappa-github-sync";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
 import {
-  AppaGithubAppAccountsQuerySchema,
   AppaGithubAppAccountsSchema,
   AppaGithubAppInstallResultSchema,
   AppaGithubAppManifestSchema,
+  AppaGithubAppRepositoriesQuerySchema,
+  AppaGithubAppRepositoriesSchema,
   AppaGithubRepositoryQuerySchema,
   AppaGithubRepositoryStatusSchema,
   CompleteAppaGithubAppSchema,
-  InstallAppaGithubAppSchema,
   PendingAppaGithubAppSchema,
   StartAppaGithubAppSchema,
 } from "@/types/openappa-github-app-setup";
@@ -98,7 +98,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         await openappaGithubAppSetup.start({
           organizationId: request.organizationId,
           userId: request.user.id,
-          owner: request.body.owner,
+          ...request.body,
         }),
       );
     },
@@ -174,9 +174,8 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.InstallAppaGithubApp,
         description:
-          "Store the new GitHub App as an organization credential once it is installed with access to the policy repository",
+          "Store the new GitHub App as an organization credential once it is installed",
         tags: ["OpenAPPA"],
-        body: InstallAppaGithubAppSchema,
         response: constructResponseSchema(AppaGithubAppInstallResultSchema),
       },
     },
@@ -184,7 +183,6 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       const result = await openappaGithubAppSetup.install({
         organizationId: request.organizationId,
         userId: request.user.id,
-        repo: request.body.repo,
       });
       if (result.status === "waiting") request.auditSkip = true;
       else request.auditBefore = null;
@@ -217,18 +215,32 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetAppaGithubAppAccounts,
         description:
-          "The GitHub account each organization GitHub App is installed on, and whether it can reach a repository",
+          "The GitHub account each organization GitHub App is installed on",
         tags: ["OpenAPPA"],
-        querystring: AppaGithubAppAccountsQuerySchema,
         response: constructResponseSchema(AppaGithubAppAccountsSchema),
       },
     },
     async (request, reply) =>
+      reply.send(await openappaGithubAppSetup.accounts(request.organizationId)),
+  );
+  app.get(
+    "/api/openappa/github-app/repositories",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubAppRepositories,
+        description:
+          "The repositories an organization GitHub App can reach, recent template copies first",
+        tags: ["OpenAPPA"],
+        querystring: AppaGithubAppRepositoriesQuerySchema,
+        response: constructResponseSchema(AppaGithubAppRepositoriesSchema),
+      },
+    },
+    async (request, reply) =>
       reply.send(
-        await openappaGithubAppSetup.accounts(
-          request.organizationId,
-          request.query.repo,
-        ),
+        await openappaGithubAppSetup.repositories({
+          organizationId: request.organizationId,
+          credentialId: request.query.credentialId,
+        }),
       ),
   );
   app.patch(

@@ -3,13 +3,13 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import {
   AlertTriangle,
-  CheckCircle2,
   ExternalLink,
   GitBranch,
   Github,
   RefreshCw,
 } from "lucide-react";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
@@ -17,10 +17,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
-import {
-  SettingsBlock,
-  SettingsSectionStack,
-} from "@/components/settings/settings-block";
+import { SettingsBlock } from "@/components/settings/settings-block";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -35,6 +32,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
@@ -66,6 +68,19 @@ export function AppaGithubSyncPanel() {
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  // The guardrails agent links here with ?setup=github-sync rather than setting
+  // sync up in chat. Open setup once, when it can start, and drop the
+  // parameter so a reload doesn't reopen it.
+  const router = useRouter();
+  const pathname = usePathname();
+  const setupRequested = useSearchParams().get("setup") === "github-sync";
+  const canStartSetup =
+    !!query.data?.enabled && !query.data.source?.repo && canManage === true;
+  useEffect(() => {
+    if (!setupRequested || !query.data || canManage === undefined) return;
+    if (canStartSetup) setCreating(true);
+    router.replace(pathname, { scroll: false });
+  }, [setupRequested, canStartSetup, canManage, query.data, router, pathname]);
   if (query.isPending) return <Skeleton className="mb-6 h-32 w-full" />;
   if (query.isError || !query.data)
     return (
@@ -75,7 +90,13 @@ export function AppaGithubSyncPanel() {
         className="mb-6 h-auto"
       />
     );
-  const { source, enabled, hasPolicy, validationDirectory } = query.data;
+  const { source, enabled, hasPolicy, validationDirectory, githubWebUrl } =
+    query.data;
+  const lastChecked = source?.lastSyncedAt
+    ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
+    : source?.interval
+      ? "Waiting for the first sync"
+      : "Automatic updates stopped";
   const connected = !!source?.interval;
   const status = !enabled
     ? "Disabled"
@@ -89,7 +110,7 @@ export function AppaGithubSyncPanel() {
             ? "Sync stopped"
             : null;
   return (
-    <SettingsSectionStack className="max-w-4xl">
+    <>
       <SettingsBlock
         title={
           <span className="inline-flex items-center gap-2">
@@ -106,7 +127,7 @@ export function AppaGithubSyncPanel() {
         }
         description={
           connected
-            ? "Policy changes are reviewed in GitHub. Merged updates sync automatically."
+            ? "Your policy syncs both ways: changes merged in GitHub apply here, and changes made here open a pull request."
             : "Store your policy in GitHub and review changes in pull requests."
         }
         control={
@@ -128,112 +149,83 @@ export function AppaGithubSyncPanel() {
             ) : // A row can exist for its declaration flags alone, with no source on it.
             source?.repo && source.path ? (
               <div className="overflow-hidden rounded-lg border bg-card">
-                <div className="flex flex-wrap items-center gap-4 p-4">
-                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                <div className="flex flex-wrap items-center gap-4 px-4 py-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
                     <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
                       <Github className="size-5 text-muted-foreground" />
                     </div>
                     <div className="min-w-0 flex-1 space-y-1">
                       <a
-                        className="inline-flex max-w-full items-center gap-2 text-sm font-medium hover:underline underline-offset-4"
-                        href={`https://github.com/${source.repo}/blob/${encodeURIComponent(source.ref ?? "HEAD")}/${source.path.split("/").map(encodeURIComponent).join("/")}`}
+                        className="inline-flex max-w-full items-center gap-2 text-sm leading-5 font-medium hover:underline underline-offset-4"
+                        href={`${githubWebUrl}/${source.repo}/blob/${encodeURIComponent(source.ref ?? "HEAD")}/${source.path.split("/").map(encodeURIComponent).join("/")}`}
                         target="_blank"
                         rel="noreferrer"
                       >
                         <span className="truncate">{source.repo}</span>
                         <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
                       </a>
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                      <div
+                        className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground"
+                        aria-live="polite"
+                      >
                         <span className="inline-flex items-center gap-1">
                           <GitBranch className="size-3.5" />
                           {source.ref ?? "Default branch"}
                         </span>
                         <span className="font-mono">{source.path}</span>
-                        <span>
-                          {validationDirectory
-                            ? `Validations: ${validationDirectory}`
-                            : "Validations disabled"}
-                        </span>
-                      </div>
-                      <div
-                        className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground"
-                        aria-live="polite"
-                      >
-                        <p className="flex items-center gap-1.5">
-                          {!source.lastSyncError && (
-                            <CheckCircle2 className="size-3.5" />
-                          )}
-                          <span>
-                            {source.lastSyncedAt
-                              ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
-                              : connected
-                                ? "Waiting for the first sync"
-                                : "Automatic updates stopped"}
-                          </span>
-                        </p>
-                        {source.sourceCommit && (
-                          <a
-                            className="font-mono underline underline-offset-4"
-                            href={`https://github.com/${source.repo}/commit/${source.sourceCommit}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            {source.sourceCommit.slice(0, 7)}
-                          </a>
+                        {source.sourceCommit ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <a
+                                className="font-mono underline underline-offset-4"
+                                href={`${githubWebUrl}/${source.repo}/commit/${source.sourceCommit}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {source.sourceCommit.slice(0, 7)}
+                              </a>
+                            </TooltipTrigger>
+                            <TooltipContent>{lastChecked}</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span>{lastChecked}</span>
                         )}
                       </div>
                     </div>
                   </div>
                   {connected && (
                     <div className="ml-auto flex items-center gap-2">
-                      <Select
-                        value={source.interval ?? "1h"}
-                        disabled={!canManage || update.isPending}
-                        onValueChange={(interval) =>
-                          update.mutate({
-                            action: "schedule",
-                            interval: interval as "15m" | "1h" | "1d",
-                          })
-                        }
-                      >
-                        <SelectTrigger
-                          id="appa-sync-frequency"
-                          aria-label="APPA sync frequency"
-                          size="sm"
-                          className="w-36 py-1 text-xs data-[size=sm]:h-7"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent position="popper">
-                          {Object.entries(intervals).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>
-                              {label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                       {canManage && (
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          disabled={update.isPending}
-                          onClick={() => update.mutate({ action: "sync" })}
-                        >
-                          <RefreshCw
-                            className={cn(
-                              "size-3.5",
-                              update.isPending &&
-                                update.variables?.action === "sync" &&
-                                "animate-spin",
-                            )}
-                          />
-                          <span>
-                            {update.isPending &&
-                            update.variables?.action === "sync"
-                              ? "Syncing…"
-                              : "Sync now"}
-                          </span>
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              disabled={update.isPending}
+                              onClick={() => update.mutate({ action: "sync" })}
+                            >
+                              <RefreshCw
+                                className={cn(
+                                  "size-3.5",
+                                  update.isPending &&
+                                    update.variables?.action === "sync" &&
+                                    "animate-spin",
+                                )}
+                              />
+                              <span>
+                                {update.isPending &&
+                                update.variables?.action === "sync"
+                                  ? "Syncing…"
+                                  : "Sync now"}
+                              </span>
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {source.interval
+                              ? `Checks ${intervals[source.interval].toLowerCase()}. ${lastChecked}.`
+                              : `${lastChecked}.`}
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </div>
                   )}
@@ -241,25 +233,23 @@ export function AppaGithubSyncPanel() {
                 {connected && source.setupPullRequestNumber && (
                   <div className="px-4 pb-4">
                     <InlineNotice variant="info">
-                      <GitBranch className="size-4 shrink-0" />
+                      <GitBranch aria-hidden />
                       <span className="font-medium">
                         Merge your initial policy
                       </span>
-                      <InlineNoticeText>
-                        Your current policy stays active until this pull request
-                        merges. Sync keeps checking for the merge, or use Sync
-                        now.
+                      <InlineNoticeText className="flex-1">
+                        Your current policy stays active until it merges.
                       </InlineNoticeText>
-                      <Button variant="outline" size="xs" asChild>
-                        <a
-                          href={`https://github.com/${source.repo}/pull/${source.setupPullRequestNumber}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <span>Review and merge PR</span>
-                          <ExternalLink className="size-3.5" />
-                        </a>
-                      </Button>
+                      <a
+                        href={`${githubWebUrl}/${source.repo}/pull/${source.setupPullRequestNumber}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        data-slot="inline-notice-action"
+                        className="ml-auto inline-flex shrink-0 items-center gap-0.5 font-medium underline-offset-4 hover:underline"
+                      >
+                        <span>Review and merge PR</span>
+                        <ExternalLink className="size-3" aria-hidden />
+                      </a>
                     </InlineNotice>
                   </div>
                 )}
@@ -278,7 +268,7 @@ export function AppaGithubSyncPanel() {
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     {hasPolicy
                       ? connected
-                        ? "Updates apply to new conversations. Active conversations keep their current policy."
+                        ? "Conversations already running keep the policy they started with."
                         : "Automatic updates are stopped. Your last synced policy stays active."
                       : "The current policy stays active until a valid GitHub policy is accepted."}
                   </p>
@@ -308,9 +298,25 @@ export function AppaGithubSyncPanel() {
           </div>
         )}
       </SettingsBlock>
-      {editing && (
-        <OpenAppaSourceForm source={source} onOpenChange={setEditing} />
-      )}
+      {editing &&
+        // App-backed sources edit in the setup flow, filled in; a PAT or a
+        // public source keeps the plain form, which the flow does not offer.
+        (source?.githubAppConfigId && source.repo && source.path ? (
+          <GithubSyncSetupDialog
+            onOpenChange={setEditing}
+            editing={{
+              repo: source.repo,
+              ref: source.ref,
+              path: source.path,
+              interval: source.interval ?? "1h",
+              validationDirectory,
+              githubAppConfigId: source.githubAppConfigId,
+              githubWebUrl,
+            }}
+          />
+        ) : (
+          <OpenAppaSourceForm source={source} onOpenChange={setEditing} />
+        ))}
       {creating && <GithubSyncSetupDialog onOpenChange={setCreating} />}
       <DeleteConfirmDialog
         open={disconnecting}
@@ -325,7 +331,7 @@ export function AppaGithubSyncPanel() {
           setDisconnecting(false);
         }}
       />
-    </SettingsSectionStack>
+    </>
   );
 }
 

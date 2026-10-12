@@ -7,9 +7,8 @@ import {
   Github,
   GitPullRequestArrow,
   LoaderCircle,
-  RefreshCw,
 } from "lucide-react";
-import Link from "next/link";
+import { useEffect } from "react";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,8 +23,8 @@ import { setupPullRequestOutcome } from "./setup-pull-request";
 
 /**
  * Waits with the operator on the initial policy pull request. The status
- * query polls the row; sync checks the pull request every minute and imports
- * the policy once it merges, and "Check if merged" runs that check at once.
+ * query polls the row and sync checks the pull request every minute; coming
+ * back to this tab (from merging on GitHub) checks at once.
  */
 export function OpenAppaSetupPullRequestDialog({
   pullRequest,
@@ -39,35 +38,61 @@ export function OpenAppaSetupPullRequestDialog({
   const source = query.data?.source ?? null;
   const outcome = setupPullRequestOutcome(source, pullRequest.number);
   const checking = update.isPending && update.variables?.action === "sync";
-  const pullUrl = `https://github.com/${pullRequest.repo}/pull/${pullRequest.number}`;
+  const web = query.data?.githubWebUrl ?? "https://github.com";
+  const pullUrl = `${web}/${pullRequest.repo}/pull/${pullRequest.number}`;
   const merged = outcome === "merged";
+  const pending = outcome === "pending";
+  const { mutate, isPending } = update;
+  useEffect(() => {
+    if (!pending) return;
+    const check = () => {
+      if (document.visibilityState === "visible" && !isPending)
+        mutate({ action: "sync" });
+    };
+    window.addEventListener("focus", check);
+    return () => window.removeEventListener("focus", check);
+  }, [pending, isPending, mutate]);
   return (
     <StandardDialog
       open
       onOpenChange={onOpenChange}
-      title={merged ? "Setup finished" : "Finish setup in GitHub"}
+      title={merged ? "Setup finished" : "Finish GitHub sync"}
       description={
         merged
-          ? "The initial policy pull request merged. Your policy now comes from GitHub, and every change is a reviewed pull request."
-          : "Repository rules require a pull request. We opened one with your current policy. Merge it to finish setup. Your current policy stays active until it merges."
+          ? "Your policy now comes from GitHub."
+          : "Repository rules need a pull request. Your current policy stays active until it merges."
       }
       size="medium"
       bodyClassName="space-y-4"
       footer={
-        <>
-          <Button variant="ghost" asChild>
-            <Link href="/settings/openappa">Sync settings</Link>
-          </Button>
-          <Button
-            type="button"
-            variant={merged ? "default" : "outline"}
-            onClick={() => onOpenChange(false)}
-          >
-            {merged ? "Done" : "Close"}
-          </Button>
-        </>
+        <Button
+          type="button"
+          variant={merged ? "default" : "outline"}
+          onClick={() => onOpenChange(false)}
+        >
+          {merged ? "Done" : "Close"}
+        </Button>
       }
     >
+      {pending && (
+        <InlineNotice variant="info">
+          <GitPullRequestArrow aria-hidden />
+          <span className="font-medium">Merge the setup PR</span>
+          <InlineNoticeText>Setup finishes once it merges.</InlineNoticeText>
+          <Button
+            asChild
+            size="xs"
+            variant="outline"
+            className="ml-auto"
+            data-slot="inline-notice-action"
+          >
+            <a href={pullUrl} target="_blank" rel="noreferrer">
+              <span>Review and merge</span>
+              <ExternalLink className="size-3" aria-hidden />
+            </a>
+          </Button>
+        </InlineNotice>
+      )}
       <div className="divide-y rounded-lg border bg-card">
         <div className="flex items-center gap-3 p-4">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -76,7 +101,7 @@ export function OpenAppaSetupPullRequestDialog({
           <div className="min-w-0 flex-1">
             <a
               className="block truncate text-sm font-medium hover:underline underline-offset-4"
-              href={`https://github.com/${pullRequest.repo}`}
+              href={`${web}/${pullRequest.repo}`}
               target="_blank"
               rel="noreferrer"
             >
@@ -86,12 +111,6 @@ export function OpenAppaSetupPullRequestDialog({
               Created from the OpenAPPA template
             </p>
           </div>
-          {merged && (
-            <Badge variant="outline">
-              <CheckCircle2 className="text-emerald-600 dark:text-emerald-400" />
-              <span>Connected</span>
-            </Badge>
-          )}
         </div>
         <div className="flex items-center gap-3 p-4">
           <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -109,32 +128,35 @@ export function OpenAppaSetupPullRequestDialog({
                 #{pullRequest.number}
               </span>
             </a>
-            <p className="text-xs text-muted-foreground" aria-live="polite">
-              {merged && source?.sourceCommit
-                ? `Merged. Policy synced from ${source.sourceCommit.slice(0, 7)}.`
-                : source?.lastSyncedAt
-                  ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
-                  : "Not checked yet"}
+            <p
+              className="flex items-center gap-1 text-xs text-muted-foreground"
+              aria-live="polite"
+            >
+              {merged ? (
+                <span>Merged and synced</span>
+              ) : pending && !source?.lastSyncError ? (
+                <>
+                  <LoaderCircle
+                    className={cn("size-3", checking && "animate-spin")}
+                    aria-hidden
+                  />
+                  <span>
+                    {checking
+                      ? "Checking…"
+                      : source?.lastSyncedAt
+                        ? `Waiting for merge · checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}`
+                        : "Waiting for merge"}
+                  </span>
+                </>
+              ) : null}
             </p>
           </div>
-          <Badge variant={source?.lastSyncError ? "destructive" : "outline"}>
-            {merged ? (
+          {merged ? (
+            <Badge variant="outline">
               <CheckCircle2 className="text-emerald-600 dark:text-emerald-400" />
-            ) : source?.lastSyncError ? (
-              <AlertTriangle />
-            ) : (
-              <LoaderCircle className="animate-spin text-muted-foreground" />
-            )}
-            <span>
-              {merged
-                ? "Merged"
-                : checking
-                  ? "Checking…"
-                  : source?.lastSyncError
-                    ? "Needs attention"
-                    : "Awaiting merge"}
-            </span>
-          </Badge>
+              <span>Merged</span>
+            </Badge>
+          ) : null}
         </div>
       </div>
       {outcome === "gone" ? (
@@ -146,44 +168,11 @@ export function OpenAppaSetupPullRequestDialog({
         </InlineNotice>
       ) : source?.lastSyncError ? (
         <InlineNotice variant="error">
-          <AlertTriangle className="size-4 shrink-0" />
+          <AlertTriangle aria-hidden />
           <span className="font-medium">Could not finish setup</span>
           <InlineNoticeText>{source.lastSyncError}</InlineNoticeText>
         </InlineNotice>
       ) : null}
-      {outcome === "pending" && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild>
-            <a href={pullUrl} target="_blank" rel="noreferrer">
-              <span>
-                {source?.lastSyncError
-                  ? "Open PR on GitHub"
-                  : "Review and merge PR"}
-              </span>
-              <ExternalLink className="size-3.5" />
-            </a>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={update.isPending}
-            onClick={() => update.mutate({ action: "sync" })}
-          >
-            <RefreshCw className={cn("size-3.5", checking && "animate-spin")} />
-            <span>{checking ? "Checking…" : "Check if merged"}</span>
-          </Button>
-          <p className="basis-full text-xs text-muted-foreground">
-            We keep checking for the merge. You can close this and come back
-            from the GitHub sync card.
-          </p>
-        </div>
-      )}
-      {merged && (
-        <p className="text-xs text-muted-foreground">
-          Updates apply to new conversations. Active conversations keep their
-          current policy.
-        </p>
-      )}
     </StandardDialog>
   );
 }

@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { getGithubApiBaseUrl, getGithubWebOrigin } from "@archestra/shared";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
@@ -10,6 +11,7 @@ import {
 } from "@/integrations/github/app-auth";
 import logger from "@/logging";
 import {
+  OrganizationModel,
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
   VerificationModel,
@@ -38,9 +40,10 @@ import { decryptSecretValue, encryptSecretValue } from "@/utils/crypto";
  *    as an organization credential the sync can use.
  */
 class OpenAppaGithubAppSetup {
-  async start(params: Owner & { owner: string }) {
+  async start(params: Owner & { githubUrl: string; owner: string }) {
     await this.assertAllowed(params);
-    const account = await lookupAccount(params.owner);
+    const { web, api } = parseGithubUrl(params.githubUrl);
+    const account = await lookupAccount({ api, login: params.owner });
     const state = randomBytes(32).toString("base64url");
     const identifier = flowIdentifier(params, "start");
     await VerificationModel.deleteByIdentifier(identifier);
@@ -50,18 +53,26 @@ class OpenAppaGithubAppSetup {
       value: JSON.stringify({
         stateHash: hash(state),
         owner: account.login,
+        web,
+        api,
       }),
     });
     // A personal App can only be registered by that user, while signed in.
     const url = new URL(
       account.type === "Organization"
-        ? `https://github.com/organizations/${encodeURIComponent(account.login)}/settings/apps/new`
-        : "https://github.com/settings/apps/new",
+        ? `${web}/organizations/${encodeURIComponent(account.login)}/settings/apps/new`
+        : `${web}/settings/apps/new`,
     );
     url.searchParams.set("state", state);
     return {
       url: url.toString(),
-      manifest: JSON.stringify(manifest()),
+      manifest: JSON.stringify(
+        manifest({
+          appName: await OrganizationModel.getAppName(),
+          // Off github.com there is no template; setup writes the workflow itself.
+          seedsWorkflow: api !== GITHUB_API_URL,
+        }),
+      ),
     };
   }
 
@@ -79,7 +90,7 @@ class OpenAppaGithubAppSetup {
         "GitHub App setup expired or was started elsewhere. Start again.",
       );
     const response = await fetch(
-      `https://api.github.com/app-manifests/${encodeURIComponent(params.code)}/conversions`,
+      `${flow.data.api}/app-manifests/${encodeURIComponent(params.code)}/conversions`,
       {
         method: "POST",
         headers: {
@@ -117,6 +128,8 @@ class OpenAppaGithubAppSetup {
       accountId: app.data.owner.id,
       accountType: app.data.owner.type === "User" ? "User" : "Organization",
       htmlUrl: app.data.html_url,
+      web: flow.data.web,
+      api: flow.data.api,
       secret: encryptSecretValue({
         privateKey: app.data.pem,
         clientSecret: app.data.client_secret,
@@ -155,7 +168,7 @@ class OpenAppaGithubAppSetup {
     );
   }
 
-  async install(params: Owner & { repo: string }) {
+  async install(params: Owner) {
     await this.assertAllowed(params);
     const pending = await this.loadPending(params);
     if (!pending)
@@ -182,20 +195,6 @@ class OpenAppaGithubAppSetup {
       (entry) => entry.account?.id === pending.accountId,
     );
     if (!installation) return { status: "waiting" as const };
-    // The App only needs the policy repository; anything broader is the admin's choice.
-    if (
-      !(await canAccessRepo({
-        appId: pending.appId,
-        installationId: String(installation.id),
-        privateKey: secret.privateKey,
-        repo: params.repo,
-      }))
-    )
-      throw new ApiError(
-        400,
-        `Give ${pending.name} access to ${params.repo} on GitHub.`,
-      );
-
     const definition = await createRuntimeCredentialDefinition({
       organizationId: params.organizationId,
       userId: params.userId,
@@ -207,7 +206,7 @@ class OpenAppaGithubAppSetup {
         icon: "logo:openappa",
         allowPersonal: false,
         allowOrganization: true,
-        githubUrl: GITHUB_API_URL,
+        githubUrl: pending.api,
         appId: pending.appId,
         installationId: String(installation.id),
         githubClientId: pending.clientId,
@@ -240,52 +239,46 @@ class OpenAppaGithubAppSetup {
     };
   }
 
-  /** Where each organization GitHub App is installed, so setup can suggest the repository owner. */
-  async accounts(organizationId: string, repo?: string) {
-    const definitions = (
-      await RuntimeCredentialDefinitionModel.list(organizationId)
-    ).filter(
-      (definition) =>
-        definition.kind === "github_app" &&
-        definition.allowOrganization &&
-        definition.githubUrl === GITHUB_API_URL &&
-        definition.appId &&
-        definition.installationId,
-    );
+  /** The GitHub account each organization GitHub App is installed on. */
+  async accounts(organizationId: string) {
     return Promise.all(
-      definitions.map(async (definition) => {
+      (await this.githubApps(organizationId)).map(async (app) => {
         try {
-          const privateKey =
-            await RuntimeCredentialConnectionModel.resolveValue({
-              organizationId,
-              credentialId: definition.key,
-              scope: "organization",
-            });
-          if (!privateKey)
-            return { id: definition.id, account: null, canAccessRepo: null };
           const installation = await fetchAsGithubApp<Installation>({
-            githubUrl: GITHUB_API_URL,
-            appId: definition.appId as string,
-            privateKey,
-            path: `/app/installations/${encodeURIComponent(definition.installationId as string)}`,
+            githubUrl: app.api,
+            appId: app.appId,
+            privateKey: app.privateKey,
+            path: `/app/installations/${encodeURIComponent(app.installationId)}`,
           });
-          return {
-            id: definition.id,
-            account: installation.account?.login ?? null,
-            canAccessRepo: repo
-              ? await canAccessRepo({
-                  appId: definition.appId as string,
-                  installationId: definition.installationId as string,
-                  privateKey,
-                  repo,
-                })
-              : null,
-          };
+          return { id: app.id, account: installation.account?.login ?? null };
         } catch {
-          return { id: definition.id, account: null, canAccessRepo: null };
+          return { id: app.id, account: null };
         }
       }),
     );
+  }
+
+  /**
+   * The repositories a GitHub App can reach, so setup offers a list instead of
+   * asking for a name. Recent template copies come first: a fresh setup just
+   * created one.
+   */
+  async repositories(params: { organizationId: string; credentialId: string }) {
+    const app = (await this.githubApps(params.organizationId)).find(
+      (entry) => entry.id === params.credentialId,
+    );
+    if (!app) throw new ApiError(404, "GitHub App not found");
+    const [repositories, installation] = await Promise.all([
+      listRepositories(app),
+      fetchAsGithubApp<Installation>({
+        githubUrl: app.api,
+        appId: app.appId,
+        privateKey: app.privateKey,
+        path: `/app/installations/${encodeURIComponent(app.installationId)}`,
+      }).catch(() => null),
+    ]);
+    // GitHub's page for changing which repositories the App can reach.
+    return { repositories, manageUrl: installation?.html_url ?? null };
   }
 
   /**
@@ -295,78 +288,99 @@ class OpenAppaGithubAppSetup {
    */
   async repository(params: {
     organizationId: string;
+    credentialId: string;
     repo: string;
     ref?: string;
     path?: string;
+    validationDirectory?: string;
   }): Promise<AppaGithubRepositoryStatus> {
-    const { organizationId, repo } = params;
+    const { repo, ref } = params;
     const path = params.path ?? "appa.toml";
-    const tokens: (string | null)[] = [null];
-    for (const definition of await RuntimeCredentialDefinitionModel.list(
-      organizationId,
-    )) {
-      if (
-        definition.kind !== "github_app" ||
-        !definition.allowOrganization ||
-        definition.githubUrl !== GITHUB_API_URL ||
-        !definition.appId ||
-        !definition.installationId
-      )
-        continue;
-      const privateKey = await RuntimeCredentialConnectionModel.resolveValue({
-        organizationId,
-        credentialId: definition.key,
-        scope: "organization",
-      }).catch(() => null);
-      if (!privateKey) continue;
-      tokens.push(
-        await resolveInstallationToken({
-          githubUrl: GITHUB_API_URL,
-          appId: definition.appId,
-          installationId: definition.installationId,
-          privateKey,
-        }).catch(() => null),
-      );
-    }
-    for (const [index, token] of tokens.entries()) {
-      if (index > 0 && !token) continue;
-      const response = await fetch(`${GITHUB_API_URL}/repos/${repo}`, {
+    const app = (await this.githubApps(params.organizationId)).find(
+      (entry) => entry.id === params.credentialId,
+    );
+    if (!app) throw new ApiError(404, "GitHub App not found");
+    const token = await resolveInstallationToken({
+      githubUrl: app.api,
+      ...app,
+    }).catch(() => null);
+    if (!token) return { status: "app_error", validations: null };
+    const get = (url: string, method: "GET" | "HEAD" = "GET") =>
+      fetch(url, {
+        method,
         headers: {
           Accept: "application/vnd.github+json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
           "X-GitHub-Api-Version": "2022-11-28",
         },
         redirect: "error",
         signal: AbortSignal.timeout(15_000),
       }).catch(() => null);
-      if (!response) continue;
-      if (!response.ok) continue;
-      const found = RepositorySchema.safeParse(await response.json());
-      if (!found.success) continue;
-      if (
-        !params.ref &&
-        path === "appa.toml" &&
-        found.data.private &&
-        found.data.template_repository?.full_name.toLowerCase() ===
-          TEMPLATE_REPO
-      )
-        return { status: "template" };
-      const policy = await fetch(
-        `${GITHUB_API_URL}/repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}${params.ref ? `?ref=${encodeURIComponent(params.ref)}` : ""}`,
-        {
-          method: "HEAD",
-          headers: {
-            Accept: "application/vnd.github+json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            "X-GitHub-Api-Version": "2022-11-28",
-          },
-          redirect: "error",
-          signal: AbortSignal.timeout(15_000),
+    const response = await get(`${app.api}/repos/${repo}`);
+    if (!response?.ok) return { status: "unreachable", validations: null };
+    const found = RepositorySchema.safeParse(await response.json());
+    if (!found.success) return { status: "unreachable", validations: null };
+    // An empty repository gets the template's files written into it; GitHub
+    // answers 409 for the commits of a repository without any.
+    const commits = await get(`${app.api}/repos/${repo}/commits?per_page=1`);
+    if (commits?.status === 409) return { status: "empty", validations: null };
+    const directory = params.validationDirectory ?? VALIDATION_DIRECTORY;
+    if (
+      !ref &&
+      path === "appa.toml" &&
+      directory === VALIDATION_DIRECTORY &&
+      found.data.private &&
+      found.data.template_repository?.full_name.toLowerCase() === TEMPLATE_REPO
+    )
+      return { status: "template", validations: null };
+    const contents = (entry: string) =>
+      get(
+        `${app.api}/repos/${repo}/contents/${entry.split("/").map(encodeURIComponent).join("/")}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`,
+        "HEAD",
+      );
+    const [policy, validations] = await Promise.all([
+      contents(path),
+      contents(directory),
+    ]);
+    return {
+      status: policy?.ok ? "policy" : "other",
+      validations: !!validations?.ok,
+    };
+  }
+
+  private async githubApps(organizationId: string) {
+    const apps = await Promise.all(
+      (await RuntimeCredentialDefinitionModel.list(organizationId)).map(
+        async (definition) => {
+          if (
+            definition.kind !== "github_app" ||
+            !definition.allowOrganization ||
+            !definition.appId ||
+            !definition.installationId
+          )
+            return null;
+          const privateKey =
+            await RuntimeCredentialConnectionModel.resolveValue({
+              organizationId,
+              credentialId: definition.key,
+              scope: "organization",
+            }).catch(() => null);
+          return privateKey
+            ? {
+                id: definition.id,
+                api: (definition.githubUrl ?? GITHUB_API_URL).replace(
+                  /\/+$/,
+                  "",
+                ),
+                appId: definition.appId,
+                installationId: definition.installationId,
+                privateKey,
+              }
+            : null;
         },
-      ).catch(() => null);
-      return { status: policy?.ok ? "policy" : "other" };
-    }
-    return { status: "unknown" };
+      ),
+    );
+    return apps.filter((app) => app !== null);
   }
 
   private async assertAllowed(owner: Owner) {
@@ -394,7 +408,7 @@ class OpenAppaGithubAppSetup {
   private fetchAsPending<T>(pending: StoredPendingApp, path: `/app${string}`) {
     const secret = SecretSchema.parse(decryptSecretValue(pending.secret));
     return fetchAsGithubApp<T>({
-      githubUrl: GITHUB_API_URL,
+      githubUrl: pending.api,
       appId: pending.appId,
       privateKey: secret.privateKey,
       path,
@@ -437,6 +451,8 @@ const PENDING_TTL_MS = 60 * 60_000;
 const StartFlowSchema = z.object({
   stateHash: z.string(),
   owner: z.string(),
+  web: z.string(),
+  api: z.string(),
 });
 const ConversionSchema = z.object({
   id: z.number().int().positive(),
@@ -465,22 +481,26 @@ const StoredPendingAppSchema = z.object({
   accountId: z.number().int(),
   accountType: z.enum(["User", "Organization"]),
   htmlUrl: z.string(),
+  web: z.string(),
+  api: z.string(),
   secret: z.object({ __encrypted: z.string() }),
 });
 type StoredPendingApp = z.infer<typeof StoredPendingAppSchema>;
 type Installation = {
   id: number;
+  html_url?: string;
   account: { login: string; id: number } | null;
   repository_selection: "all" | "selected";
 };
 
-function manifest() {
+function manifest(params: { appName: string; seedsWorkflow: boolean }) {
+  const { appName } = params;
   const callbackUrl = `${config.frontendBaseUrl}/github/app-setup`;
   return {
     // App names are unique across GitHub; the create page lets the admin rename it.
     name: "OpenAPPA Sync",
-    description:
-      "Keeps an Archestra deployment's OpenAPPA guardrails policy in sync with a GitHub repository. Archestra reads the policy from the repository, opens pull requests for policy changes made in Archestra, and creates the policy repository during setup.",
+    // The deployment's own name, so white-labeled deployments don't show Archestra on GitHub.
+    description: `Keeps the ${appName} OpenAPPA guardrails policy in sync with one GitHub repository. ${appName} reads the policy from it and opens pull requests for policy changes made in ${appName}.`,
     url: config.frontendBaseUrl,
     redirect_url: callbackUrl,
     setup_url: callbackUrl,
@@ -490,6 +510,7 @@ function manifest() {
       contents: "write",
       pull_requests: "write",
       metadata: "read",
+      ...(params.seedsWorkflow ? { workflows: "write" } : {}),
     },
     default_events: [],
     // No webhook: sync polls GitHub, and GitHub rejects hook URLs it cannot reach.
@@ -501,13 +522,30 @@ function toPublic(pending: StoredPendingApp): PendingAppaGithubApp {
     name: pending.name,
     slug: pending.slug,
     account: pending.account,
+    appId: pending.appId,
+    accountUrl: `${pending.web}/${pending.account}`,
     htmlUrl: pending.htmlUrl,
-    installUrl: `https://github.com/apps/${encodeURIComponent(pending.slug)}/installations/new/permissions?target_id=${pending.accountId}`,
+    // GitHub's own App page: /apps/<slug> on github.com, /github-apps/<slug> on Enterprise Server.
+    installUrl: installUrl(pending),
     settingsUrl:
       pending.accountType === "Organization"
-        ? `https://github.com/organizations/${encodeURIComponent(pending.account)}/settings/apps/${encodeURIComponent(pending.slug)}`
-        : `https://github.com/settings/apps/${encodeURIComponent(pending.slug)}`,
+        ? `${pending.web}/organizations/${encodeURIComponent(pending.account)}/settings/apps/${encodeURIComponent(pending.slug)}`
+        : `${pending.web}/settings/apps/${encodeURIComponent(pending.slug)}`,
   };
+}
+
+/**
+ * Opens the install page on the owning account. GitHub can pre-tick
+ * repositories only by numeric ID (`suggested_target_id` + `repository_ids[]`),
+ * and a private repository's ID stays hidden until the App is installed, so
+ * the admin picks "Only select repositories" there.
+ */
+function installUrl(pending: StoredPendingApp) {
+  const url = new URL(
+    `${pending.htmlUrl.replace(/\/+$/, "")}/installations/new/permissions`,
+  );
+  url.searchParams.set("target_id", String(pending.accountId));
+  return url.toString();
 }
 
 function hash(value: string) {
@@ -524,10 +562,31 @@ function isAppGone(error: unknown) {
   );
 }
 
+/** A GitHub address becomes its web and API bases; any path is ignored. */
+function parseGithubUrl(value: string) {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ApiError(
+      400,
+      "Use your GitHub's address, such as https://github.com.",
+    );
+  }
+  if (!["https:", "http:"].includes(url.protocol))
+    throw new ApiError(
+      400,
+      "Use your GitHub's address, such as https://github.com.",
+    );
+  const api = getGithubApiBaseUrl(url.origin);
+  return { web: getGithubWebOrigin(api), api };
+}
+
 /** The GitHub account that will own the App, from GitHub's public profile. */
-async function lookupAccount(login: string) {
+async function lookupAccount(params: { api: string; login: string }) {
+  const { login } = params;
   const response = await fetch(
-    `${GITHUB_API_URL}/users/${encodeURIComponent(login)}`,
+    `${params.api}/users/${encodeURIComponent(login)}`,
     {
       headers: {
         Accept: "application/vnd.github+json",
@@ -537,6 +596,9 @@ async function lookupAccount(login: string) {
       signal: AbortSignal.timeout(15_000),
     },
   );
+  // Private Enterprise Server instances need a sign-in to read profiles.
+  if (response.status === 401 || response.status === 403)
+    return { login, type: "Organization" as const };
   if (response.status === 404)
     throw new ApiError(400, `GitHub has no account named ${login}.`);
   const account = response.ok
@@ -547,36 +609,90 @@ async function lookupAccount(login: string) {
   return account.data;
 }
 
-async function canAccessRepo(params: {
+async function listRepositories(params: {
+  api: string;
   appId: string;
   installationId: string;
   privateKey: string;
-  repo: string;
 }) {
   const token = await resolveInstallationToken({
-    githubUrl: GITHUB_API_URL,
-    appId: params.appId,
-    installationId: params.installationId,
-    privateKey: params.privateKey,
+    githubUrl: params.api,
+    ...params,
   });
-  const response = await fetch(`${GITHUB_API_URL}/repos/${params.repo}`, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (response.ok) return true;
-  if (response.status === 404) return false;
-  throw new ApiError(
-    502,
-    `GitHub returned HTTP ${response.status} while checking access to ${params.repo}.`,
+  const headers = {
+    Accept: "application/vnd.github+json",
+    Authorization: `Bearer ${token}`,
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+  const repositories: InstallationRepository[] = [];
+  for (let page = 1; page <= REPOSITORY_PAGES; page++) {
+    const response = await fetch(
+      `${params.api}/installation/repositories?per_page=100&page=${page}`,
+      { headers, redirect: "error", signal: AbortSignal.timeout(15_000) },
+    );
+    if (!response.ok)
+      throw new ApiError(
+        502,
+        `GitHub returned HTTP ${response.status} while listing the App's repositories.`,
+      );
+    const listed = InstallationRepositoriesSchema.parse(await response.json());
+    repositories.push(...listed.repositories);
+    if (listed.repositories.length < 100) break;
+  }
+  repositories.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  // Listing omits the template; look it up for the newest private ones only.
+  const templates = new Set(
+    (
+      await Promise.all(
+        repositories
+          .filter((entry) => entry.private)
+          .slice(0, 10)
+          .map(async (entry) => {
+            const found = await fetch(
+              `${params.api}/repos/${entry.full_name}`,
+              {
+                headers,
+                redirect: "error",
+                signal: AbortSignal.timeout(15_000),
+              },
+            ).catch(() => null);
+            if (!found?.ok) return null;
+            const detail = RepositorySchema.safeParse(await found.json());
+            return detail.success &&
+              detail.data.template_repository?.full_name.toLowerCase() ===
+                TEMPLATE_REPO
+              ? entry.full_name
+              : null;
+          }),
+      )
+    ).filter((name) => name !== null),
   );
+  return repositories
+    .map((entry) => ({
+      fullName: entry.full_name,
+      private: entry.private,
+      description: entry.description ?? null,
+      template: templates.has(entry.full_name),
+    }))
+    .sort((a, b) => Number(b.template) - Number(a.template));
 }
 
+const REPOSITORY_PAGES = 5;
+
+const InstallationRepositorySchema = z.object({
+  full_name: z.string(),
+  private: z.boolean(),
+  description: z.string().nullable().optional(),
+  created_at: z.string(),
+});
+type InstallationRepository = z.infer<typeof InstallationRepositorySchema>;
+const InstallationRepositoriesSchema = z.object({
+  repositories: z.array(InstallationRepositorySchema),
+});
+
 const TEMPLATE_REPO = "archestra-ai/openappa-config";
+/** Where the template keeps validations. */
+const VALIDATION_DIRECTORY = "traces";
 const RepositorySchema = z.object({
   private: z.boolean(),
   template_repository: z.object({ full_name: z.string() }).nullish(),

@@ -143,27 +143,63 @@ describe("APPA GitHub sync", () => {
       directory: "checks",
       files: [],
     });
+  });
+  test("a validation folder not created yet is kept, so validations run once it exists", async () => {
+    let listed = 0;
     server.use(
       http.get(
         "https://api.github.com/repos/example/policies/contents/missing",
-        () => new HttpResponse(null, { status: 404 }),
+        ({ request }) => {
+          listed++;
+          expect(new URL(request.url).searchParams.get("ref")).toBe(commit);
+          return new HttpResponse(null, { status: 404 });
+        },
       ),
     );
-    const previous = await OpenAppaGithubSyncModel.find(organizationId);
-    expect(
-      (
-        await configure({
-          ...source,
-          path: "new/appa.toml",
-          validationDirectory: "missing",
-        })
-      ).statusCode,
-    ).toBe(404);
-    expect(await OpenAppaGithubSyncModel.find(organizationId)).toEqual(
-      previous,
-    );
+    const response = await configure({
+      ...source,
+      validationDirectory: "missing",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(listed).toBe(1);
+    expect(response.json().validationDirectory).toBe("missing");
     expect(await OpenAppaPolicyTestsModel.find(organizationId)).toMatchObject({
-      directory: "checks",
+      directory: "missing",
+      files: [],
+    });
+  });
+  test("a GitHub refusal other than a missing folder still rejects the source", async () => {
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/policies/contents/checks",
+        () => new HttpResponse(null, { status: 403 }),
+      ),
+    );
+    const response = await configure({
+      ...source,
+      validationDirectory: "checks",
+    });
+    expect(response.statusCode).toBe(400);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
+  });
+  test("editing the repository that awaits its setup pull request keeps waiting on it; another repository does not", async () => {
+    await OpenAppaGithubSyncModel.save(organizationId, {
+      ...source,
+      setupPullRequestNumber: 7,
+    });
+    // Same repository, new schedule: the template's policy must not be pulled before the merge.
+    const same = await configure({ ...source, interval: "1d" });
+    expect(same.statusCode, same.body).toBe(200);
+    expect(same.json().source).toMatchObject({
+      repo: source.repo,
+      interval: "1d",
+      setupPullRequestNumber: 7,
+    });
+    const other = await configure({ ...source, repo: "example/other" });
+    expect(other.statusCode, other.body).toBe(200);
+    expect(other.json().source).toMatchObject({
+      repo: "example/other",
+      setupPullRequestNumber: null,
     });
   });
   test("an empty validation folder disables Git tests without fetching a folder or disabling policy sync", async () => {
@@ -700,6 +736,114 @@ describe("APPA GitHub sync", () => {
       (await guardrailsPolicyService.get(organizationId)).content,
     );
     expect(response.json().source.repo).toBe("example/new-policy");
+  });
+
+  test("replace switches a running sync to an existing repository with its own validation folder, audited", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const installationId = randomUUID();
+    const secret = await secretManager().createSecret(
+      { apiToken: privateKey },
+      "test-replace-app",
+    );
+    const githubApp = await GithubAppConfigModel.create({
+      organizationId,
+      name: "Policy App",
+      githubUrl: "https://api.github.com",
+      appId: "123",
+      installationId,
+      secretId: secret.id,
+    });
+    await OpenAppaGithubSyncModel.save(organizationId, source);
+    let validationListings = 0;
+    server.use(
+      http.post(
+        `https://api.github.com/app/installations/${installationId}/access_tokens`,
+        () =>
+          HttpResponse.json({
+            token: "test-installation-token",
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/commits/HEAD",
+        () => HttpResponse.json({ sha: commit }),
+      ),
+      http.get(
+        "https://api.github.com/repos/example/other-policy/contents/appa.toml",
+        () => HttpResponse.text(policy),
+      ),
+      // The folder does not exist yet; its validations run once it does.
+      http.get(
+        "https://api.github.com/repos/example/other-policy/contents/checks",
+        () => {
+          validationListings++;
+          return new HttpResponse(null, { status: 404 });
+        },
+      ),
+    );
+    const payload = {
+      owner: "example",
+      name: "other-policy",
+      githubAppConfigId: githubApp.id,
+      interval: "1h",
+      existing: true,
+      validationDirectory: "checks",
+    };
+    const refused = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload,
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      repo: source.repo,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/openappa/github-sync/repository",
+      payload: { ...payload, replace: true },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(validationListings).toBeGreaterThan(0);
+    expect(response.json()).toMatchObject({
+      validationDirectory: "checks",
+      source: {
+        repo: "example/other-policy",
+        path: "appa.toml",
+        interval: "1h",
+        sourceCommit: commit,
+        lastSyncError: null,
+      },
+    });
+    expect(await OpenAppaPolicyTestsModel.find(organizationId)).toMatchObject({
+      directory: "checks",
+    });
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      policy,
+    );
+    await vi.waitFor(async () => {
+      const records = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.organizationId, organizationId),
+            eq(schema.auditLogsTable.action, "organization.updated"),
+          ),
+        );
+      const switched = records.find(
+        (record) =>
+          (record.after as { repo?: string } | null)?.repo ===
+          "example/other-policy",
+      );
+      expect(switched?.before).toMatchObject({ repo: source.repo });
+      expect(switched?.after).not.toHaveProperty("content");
+    });
   });
 
   test("an invalid upstream policy preserves the last accepted bytes and commit", async () => {

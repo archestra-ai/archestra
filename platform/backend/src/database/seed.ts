@@ -60,6 +60,7 @@ import {
   builtInSkillSourceRef,
   builtInSkillVersion,
   getEnabledBuiltInSkills,
+  stripBuiltInBodyFrontmatter,
 } from "@/skills/built-in-skills";
 import type { BuiltInAgentConfig, Organization } from "@/types";
 import {
@@ -325,6 +326,13 @@ export async function syncBuiltInSkillsForOrganization(
     // Only auto-upgrade copies that still match the revision we last wrote; a
     // diverged copy was edited by the user and is reset explicitly instead.
     if (liveVersion !== existing.sourceCommit) {
+      const content = stripBuiltInBodyFrontmatter(existing.content);
+      if (content !== existing.content) {
+        await SkillModel.updateWithFiles({
+          id: existing.id,
+          skill: { content },
+        });
+      }
       logger.info(
         {
           builtInSkillId: builtInSkill.builtInSkillId,

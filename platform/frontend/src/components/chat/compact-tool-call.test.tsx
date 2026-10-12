@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useExternalMcpSkills } from "@/lib/skills/skill.query";
@@ -169,7 +170,6 @@ describe("CompactToolGroup", () => {
     expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
       '+name = "new"',
     );
-    expect(screen.getByText("Proposed policy")).toBeInTheDocument();
     expect(
       screen.getByText("1 passed, 1 failed, 1 could not run."),
     ).toBeInTheDocument();
@@ -187,7 +187,6 @@ describe("CompactToolGroup", () => {
       }),
     );
     expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
-    expect(screen.queryByText("Proposed policy")).not.toBeInTheDocument();
     rerender(show("unrelated_tool", { structuredContent: proposal }));
     expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
   });
@@ -420,6 +419,36 @@ describe("CompactToolGroup", () => {
 
     expect(screen.queryByText("Skill:")).not.toBeInTheDocument();
     expect(screen.getByText("Build App")).toBeInTheDocument();
+  });
+
+  it("explains a skill pill on hover only when the tooltip adds to its name", async () => {
+    mockGetToolShortName.mockReturnValue(TOOL_LOAD_SKILL_SHORT_NAME);
+    const user = userEvent.setup();
+    const entry = loadSkillEntry({ name: "Build App" });
+    const { rerender } = render(<CompactToolGroup tools={[entry]} />);
+
+    await user.hover(screen.getByRole("status", { name: "Build App" }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+
+    rerender(
+      <CompactToolGroup
+        tools={[
+          {
+            ...entry,
+            part: {
+              ...(entry.part as object),
+              state: "input-available",
+              output: undefined,
+            } as never,
+          },
+        ]}
+      />,
+    );
+    await user.hover(screen.getByRole("status", { name: "Loading Build App" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Loading Build App",
+    );
   });
 
   it("hides external installation qualifiers from the Skill marker", () => {

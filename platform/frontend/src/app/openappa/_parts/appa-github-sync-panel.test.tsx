@@ -1,6 +1,12 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { toast } from "sonner";
@@ -21,6 +27,21 @@ import {
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
+const navigation = vi.hoisted(() => ({
+  search: new URLSearchParams(),
+  replace: (() => {}) as (href: string, options?: object) => void,
+}));
+vi.mock("next/navigation", () => {
+  const router = {
+    replace: (href: string, options?: object) =>
+      navigation.replace(href, options),
+  };
+  return {
+    usePathname: () => "/settings/guardrails",
+    useRouter: () => router,
+    useSearchParams: () => navigation.search,
+  };
+});
 const url = "http://localhost:9000/api/openappa/github-sync";
 const server = setupServer();
 let state: archestraApiTypes.GetAppaGithubSyncResponses["200"];
@@ -49,15 +70,24 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);
+  navigation.search = new URLSearchParams();
+  // Replacing the URL drops its query, as the router would.
+  navigation.replace = vi.fn(() => {
+    navigation.search = new URLSearchParams();
+  });
   state = {
     validationDirectory: "traces",
     enabled: true,
     hasPolicy: true,
+    githubWebUrl: "https://github.com",
     source,
   };
   server.use(http.get(url, () => HttpResponse.json(state)));
 });
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  vi.restoreAllMocks();
+});
 afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
@@ -144,8 +174,8 @@ test("read-only users see status without mutation controls", async () => {
     screen.queryByRole("button", { name: "Edit source" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.getByRole("combobox", { name: "APPA sync frequency" }),
-  ).toBeDisabled();
+    screen.queryByRole("button", { name: "Stop syncing" }),
+  ).not.toBeInTheDocument();
 });
 
 test("a load failure stays an error until the user retries", async () => {
@@ -160,43 +190,66 @@ test("a load failure stays an error until the user retries", async () => {
   expect(await screen.findByText("Connected")).toBeVisible();
 });
 
-test("links an existing repository whose policy lives elsewhere through Advanced", async () => {
-  state = {
-    validationDirectory: "",
-    enabled: true,
-    hasPolicy: false,
-    source: null,
-  };
-  const appId = "11111111-1111-4111-8111-111111111111";
-  const github = "http://localhost:9000/api/openappa/github-app";
+const appId = "11111111-1111-4111-8111-111111111111";
+const otherId = "22222222-2222-4222-8222-222222222222";
+const githubApp = "http://localhost:9000/api/openappa/github-app";
+/** The organization's GitHub Apps, as saved credentials. */
+function serveApps(apps: [string, string][]) {
   server.use(
     http.get("http://localhost:9000/api/credentials", () =>
-      HttpResponse.json([
-        {
-          id: appId,
-          name: "Policy App",
+      HttpResponse.json(
+        apps.map(([id, name]) => ({
+          id,
+          name,
           kind: "github_app",
           allowOrganization: true,
           organizationConfigured: true,
-        },
-      ]),
+        })),
+      ),
     ),
-    http.get(`${github}/pending`, () => HttpResponse.json(null)),
-    http.get(`${github}/repository`, ({ request }) => {
+    http.get(`${githubApp}/pending`, () => HttpResponse.json(null)),
+    http.get(`${githubApp}/accounts`, () =>
+      HttpResponse.json(apps.map(([id]) => ({ id, account: "example" }))),
+    ),
+  );
+}
+/** What each App can reach; only the chosen App's list is asked for. */
+function serveRepositories(byApp: Record<string, string[]>) {
+  server.use(
+    http.get(`${githubApp}/repositories`, ({ request }) => {
+      const id = new URL(request.url).searchParams.get("credentialId") ?? "";
+      return HttpResponse.json({
+        repositories: (byApp[id] ?? []).map((fullName) => ({
+          fullName,
+          private: true,
+          description: null,
+          template: fullName.endsWith("/openappa-policy"),
+        })),
+        manageUrl:
+          "https://github.com/organizations/example/settings/installations/1",
+      });
+    }),
+  );
+}
+
+test("links an existing repository whose policy lives elsewhere through Advanced", async () => {
+  state = { ...state, hasPolicy: false, source: null };
+  serveApps([[appId, "Policy App"]]);
+  serveRepositories({ [appId]: ["example/other", "example/policies"] });
+  server.use(
+    http.get(`${githubApp}/repository`, ({ request }) => {
       const query = new URL(request.url).searchParams;
+      expect(query.get("credentialId")).toBe(appId);
       return HttpResponse.json({
         status:
+          query.get("repo") === "example/policies" &&
           query.get("ref") === "prod" &&
           query.get("path") === "policy/appa.toml"
             ? "policy"
             : "other",
+        validations: true,
       });
     }),
-    http.get(`${github}/accounts`, () =>
-      HttpResponse.json([
-        { id: appId, account: "example", canAccessRepo: true },
-      ]),
-    ),
     http.post(`${url}/repository`, async ({ request }) => {
       expect(await request.json()).toEqual({
         owner: "example",
@@ -204,17 +257,17 @@ test("links an existing repository whose policy lives elsewhere through Advanced
         githubAppConfigId: appId,
         interval: "1h",
         existing: true,
+        replace: false,
         ref: "prod",
         path: "policy/appa.toml",
       });
       state = {
-        validationDirectory: "",
-        enabled: true,
-        hasPolicy: false,
+        ...state,
         source: {
           ...source,
           ref: "prod",
           path: "policy/appa.toml",
+          githubAppConfigId: appId,
           sourceCommit: null,
           lastSyncedAt: null,
         },
@@ -226,16 +279,21 @@ test("links an existing repository whose policy lives elsewhere through Advanced
   fireEvent.click(
     await screen.findByRole("button", { name: "Create GitHub repository" }),
   );
-  fireEvent.change(screen.getByLabelText("Owner"), {
+  fireEvent.change(screen.getByLabelText("Organization"), {
     target: { value: "example" },
   });
-  fireEvent.change(screen.getByLabelText("Repository name"), {
-    target: { value: "policies" },
-  });
+  fireEvent.click(screen.getByText("Use an existing repository"));
+  // With a single App there is nothing to pick: it goes straight to its repositories.
+  fireEvent.click(await screen.findByText("Use an App I already have"));
+  fireEvent.click(await screen.findByRole("combobox", { name: "Repository" }));
+  fireEvent.click(screen.getByRole("option", { name: /example\/policies/ }));
   expect(
-    await screen.findByText(/has no appa.toml/, {}, { timeout: 3000 }),
+    await screen.findByText(/No appa.toml/, {}, { timeout: 3000 }),
   ).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+  expect(
+    screen.getByRole("button", { name: "Connect repository" }),
+  ).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
   fireEvent.change(screen.getByLabelText("Branch"), {
     target: { value: "prod" },
   });
@@ -243,58 +301,24 @@ test("links an existing repository whose policy lives elsewhere through Advanced
     target: { value: "policy/appa.toml" },
   });
   expect(
-    await screen.findByText(
-      /already has policy\/appa.toml/,
-      {},
-      { timeout: 3000 },
-    ),
+    await screen.findByText(/Found policy\/appa.toml/, {}, { timeout: 3000 }),
   ).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  fireEvent.click(
-    await screen.findByText("1 of 1 can reach example/policies."),
-  );
   fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
   expect(await screen.findByText("Waiting for the first sync")).toBeVisible();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
-test("connects a template copy through an App that can reach it and waits on the initial merge in the dialog", async () => {
-  state = {
-    validationDirectory: "traces",
-    enabled: true,
-    hasPolicy: true,
-    source: null,
-  };
-  const appId = "11111111-1111-4111-8111-111111111111";
-  const otherId = "22222222-2222-4222-8222-222222222222";
-  const github = "http://localhost:9000/api/openappa/github-app";
+test("starts fresh from the template, connects it through a chosen App and finishes once the setup PR merges", async () => {
+  const open = vi.spyOn(window, "open").mockReturnValue(null);
+  state = { ...state, source: null };
+  serveApps([
+    [appId, "Policy App"],
+    [otherId, "Other App"],
+  ]);
+  serveRepositories({ [appId]: ["example/openappa-policy"] });
   server.use(
-    http.get("http://localhost:9000/api/credentials", () =>
-      HttpResponse.json(
-        [
-          [appId, "Policy App"],
-          [otherId, "Other App"],
-        ].map(([id, name]) => ({
-          id,
-          name,
-          kind: "github_app",
-          allowOrganization: true,
-          organizationConfigured: true,
-        })),
-      ),
-    ),
-    http.get(`${github}/pending`, () => HttpResponse.json(null)),
-    http.get(`${github}/repository`, ({ request }) => {
-      expect(new URL(request.url).searchParams.get("repo")).toBe(
-        "example/openappa-policy",
-      );
-      return HttpResponse.json({ status: "template" });
-    }),
-    http.get(`${github}/accounts`, () =>
-      HttpResponse.json([
-        { id: appId, account: "example", canAccessRepo: true },
-        { id: otherId, account: "elsewhere", canAccessRepo: false },
-      ]),
+    http.get(`${githubApp}/repository`, () =>
+      HttpResponse.json({ status: "template", validations: null }),
     ),
     http.post(`${url}/repository`, async ({ request }) => {
       expect(await request.json()).toEqual({
@@ -303,14 +327,14 @@ test("connects a template copy through an App that can reach it and waits on the
         githubAppConfigId: appId,
         interval: "1h",
         existing: true,
+        replace: false,
       });
       state = {
-        validationDirectory: "traces",
-        enabled: true,
-        hasPolicy: true,
+        ...state,
         source: {
           ...source,
           repo: "example/openappa-policy",
+          githubAppConfigId: appId,
           sourceCommit: null,
           setupPullRequestNumber: 7,
         },
@@ -322,38 +346,55 @@ test("connects a template copy through an App that can reach it and waits on the
   fireEvent.click(
     await screen.findByRole("button", { name: "Create GitHub repository" }),
   );
-  fireEvent.change(screen.getByLabelText("Owner"), {
+  fireEvent.change(screen.getByLabelText("Organization"), {
     target: { value: "example" },
   });
-  // The template copy already exists, so nothing is created on GitHub.
-  expect(
-    await screen.findByText(
-      /private copy of the OpenAPPA template/,
-      {},
-      { timeout: 3000 },
-    ),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "Create on GitHub" }),
-  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("Start fresh"));
+  fireEvent.click(screen.getByRole("button", { name: /Create on GitHub/ }));
+  const created = new URL(String(open.mock.calls[0][0]));
+  expect(created.origin + created.pathname).toBe("https://github.com/new");
+  expect(Object.fromEntries(created.searchParams)).toEqual({
+    template_owner: "archestra-ai",
+    template_name: "openappa-config",
+    owner: "example",
+    name: "openappa-policy",
+    visibility: "private",
+  });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  fireEvent.click(
-    await screen.findByText("1 of 2 can reach example/openappa-policy."),
-  );
-  // An App without access to the repository cannot be chosen.
-  expect(screen.getByRole("radio", { name: /Other App/ })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
+  fireEvent.click(await screen.findByText("Use an App I already have"));
+  fireEvent.click(await screen.findByRole("radio", { name: /Policy App/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  // The new template copy is picked without a search.
   expect(
-    await screen.findByRole("link", { name: /example\/openappa-policy/ }),
+    await screen.findByText("OpenAPPA template", {}, { timeout: 3000 }),
   ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
+  // Repository rules require a pull request: the dialog waits on it.
+  expect(await screen.findByText("Finish GitHub sync")).toBeVisible();
+  expect(screen.getByText("Merge the setup PR")).toBeVisible();
   expect(
-    await screen.findByRole("link", { name: "Review and merge PR" }),
+    within(screen.getByRole("dialog")).getByRole("link", {
+      name: "Review and merge",
+    }),
   ).toHaveAttribute(
     "href",
     "https://github.com/example/openappa-policy/pull/7",
   );
-  // The dialog stays open on the pull request instead of closing.
-  expect(screen.getByText("Finish setup in GitHub")).toBeVisible();
+  // Not merged yet: the check stays quiet, since the dialog already says so.
+  let checks = 0;
+  server.use(
+    http.patch(url, () => {
+      checks += 1;
+      return HttpResponse.json(state);
+    }),
+  );
+  fireEvent.focus(window);
+  await waitFor(() => expect(checks).toBe(1));
+  await waitFor(() =>
+    expect(screen.queryByText("Checking…")).not.toBeInTheDocument(),
+  );
+  expect(toast.info).not.toHaveBeenCalled();
+  expect(screen.getByText("Finish GitHub sync")).toBeVisible();
   server.use(
     http.patch(url, async ({ request }) => {
       expect(await request.json()).toEqual({ action: "sync" });
@@ -362,6 +403,7 @@ test("connects a template copy through an App that can reach it and waits on the
         source: {
           ...source,
           repo: "example/openappa-policy",
+          githubAppConfigId: appId,
           sourceCommit: "b".repeat(40),
           setupPullRequestNumber: null,
         },
@@ -369,12 +411,10 @@ test("connects a template copy through an App that can reach it and waits on the
       return HttpResponse.json(state);
     }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Check if merged" }));
+  // Coming back from merging on GitHub checks at once.
+  fireEvent.focus(window);
   expect(await screen.findByText("Setup finished")).toBeVisible();
   expect(screen.getByText("Merged")).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "Check if merged" }),
-  ).not.toBeInTheDocument();
   expect(toast.success).toHaveBeenCalledWith(
     "Initial policy merged. Policy synced from GitHub.",
   );
@@ -384,43 +424,93 @@ test("connects a template copy through an App that can reach it and waits on the
   );
 });
 
-test("blocks a repository name that exists without a policy", async () => {
+test("editing an App-backed source keeps its repository and only warns about missing validations", async () => {
   state = {
-    validationDirectory: "",
-    enabled: true,
-    hasPolicy: true,
-    source: null,
+    ...state,
+    source: { ...source, githubAppConfigId: appId },
   };
-  const github = "http://localhost:9000/api/openappa/github-app";
+  serveApps([[appId, "Policy App"]]);
+  serveRepositories({ [appId]: ["example/policies"] });
+  let saved: unknown;
   server.use(
-    http.get("http://localhost:9000/api/credentials", () =>
-      HttpResponse.json([]),
+    http.get(`${githubApp}/repository`, () =>
+      HttpResponse.json({ status: "policy", validations: false }),
     ),
-    http.get(`${github}/pending`, () => HttpResponse.json(null)),
-    http.get(`${github}/repository`, () =>
-      HttpResponse.json({ status: "other" }),
-    ),
+    http.put(url, async ({ request }) => {
+      saved = await request.json();
+      return HttpResponse.json(state);
+    }),
   );
   show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Create GitHub repository" }),
-  );
-  fireEvent.change(screen.getByLabelText("Owner"), {
-    target: { value: "example" },
-  });
+  fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
+  expect(await screen.findByText("Edit GitHub sync")).toBeVisible();
   expect(
-    await screen.findByText(/has no appa.toml/, {}, { timeout: 3000 }),
+    await screen.findByText("No traces/ folder", {}, { timeout: 3000 }),
   ).toBeVisible();
-  expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+  // The repository already syncing is kept, not announced as a new find.
+  expect(
+    within(screen.getByRole("dialog")).queryByText(/appa\.toml/),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Branch")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(saved).toEqual({
+    repo: "example/policies",
+    ref: "main",
+    path: "appa.toml",
+    interval: "1h",
+    validationDirectory: "traces",
+    githubPatId: null,
+    githubAppConfigId: appId,
+  });
+});
+
+test("a link with ?setup=github-sync opens setup once and drops the parameter", async () => {
+  navigation.search = new URLSearchParams("setup=github-sync");
+  state = { ...state, source: null };
+  serveApps([]);
+  show();
+  expect(
+    await screen.findByRole("heading", { name: "Set up GitHub sync" }),
+  ).toBeVisible();
+  expect(navigation.replace).toHaveBeenCalledWith("/settings/guardrails", {
+    scroll: false,
+  });
+});
+
+test.each([
+  ["sync already has a repository", () => {}],
+  [
+    "the user cannot manage sync",
+    () => {
+      state = { ...state, source: null };
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions) =>
+          ({
+            data:
+              permissions.organizationSettings?.every(
+                (action) => action === "read",
+              ) ?? false,
+          }) as ReturnType<typeof useHasPermissions>,
+      );
+    },
+  ],
+])("?setup=github-sync is dropped without opening setup when %s", async (_name, arrange) => {
+  navigation.search = new URLSearchParams("setup=github-sync");
+  arrange();
+  show();
+  await waitFor(() =>
+    expect(navigation.replace).toHaveBeenCalledWith("/settings/guardrails", {
+      scroll: false,
+    }),
+  );
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
 test("asks before discarding a GitHub source draft", async () => {
-  state = {
-    validationDirectory: "",
-    enabled: true,
-    hasPolicy: false,
-    source: null,
-  };
+  state = { ...state, hasPolicy: false, source: null };
   server.use(
     http.get("http://localhost:9000/api/credentials", () =>
       HttpResponse.json([]),

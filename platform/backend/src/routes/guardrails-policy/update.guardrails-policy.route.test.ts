@@ -19,6 +19,7 @@ import AuditLogModel from "@/models/audit-log";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -413,6 +414,36 @@ describe("guardrails policy authoring", () => {
       revision: 1,
       effective: { error: null },
       enforcement: { enabled: false, active: false },
+    });
+  });
+
+  test("the policy read links to GitHub sync setup only while no sync delivers the policy", async () => {
+    const context = { organizationId: orgId, userId, agent };
+    const read = async () =>
+      (
+        await executeArchestraTool(
+          "archestra__get_guardrails_policy",
+          {},
+          context,
+        )
+      ).structuredContent?.delivery;
+    expect(await read()).toEqual({
+      mode: "revision",
+      githubSyncSetupUrl: `${config.frontendBaseUrl}/settings/guardrails?setup=github-sync`,
+    });
+    await OpenAppaGithubSyncModel.save(orgId, {
+      repo: "example/policies",
+      ref: null,
+      path: "appa.toml",
+      interval: "1h",
+      githubPatId: null,
+      githubAppConfigId: null,
+    });
+    expect(await read()).toEqual({
+      mode: "pull_request",
+      repo: "example/policies",
+      path: "appa.toml",
+      githubAppReady: false,
     });
   });
 

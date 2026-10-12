@@ -3,7 +3,7 @@ title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
 alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -12,7 +12,7 @@ Guardrails check every tool call an agent makes against your organization's poli
 
 > **Platform + AI Security** — see [Pricing Model](/docs/get-started/pricing-model#platform--ai-security). OpenAPPA itself is MIT-licensed; its integration here is the licensed part. Once the instance has 30 or more users, the integration turns off until [`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED) is set.
 
-![The Guardrails Overview tab with the enforcement, GitHub sync, and yells cards above the policy coverage charts](/docs/automated_screenshots/platform-ai-tool-guardrails_overview.webp)
+![The Guardrails Overview tab with the enforcement, validations, and yells cards above the policy coverage charts](/docs/automated_screenshots/platform-ai-tool-guardrails_overview.webp)
 
 <a id="the-lethal-trifecta"></a>
 
@@ -40,7 +40,7 @@ You need [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:up
 1. Go to **Guardrails** and click **Create my policy**. A chat with the configuration agent opens.
 2. The agent drafts a starting policy from your tools and explains what it allows and blocks.
 3. Approve the policy. Saving the first policy turns enforcement on.
-4. Optionally, accept the agent's offer to connect a GitHub repository for [GitHub sync](/docs/agents/guardrails/policies#github-sync).
+4. Optionally, click **Set up GitHub sync** in the saved-policy banner to keep the policy in GitHub. See [GitHub sync](/docs/agents/guardrails/policies#github-sync).
 
 The **Enforcement** card on **Overview** now shows **On**.
 
@@ -48,6 +48,7 @@ What to know:
 
 - The starting policy covers only Archestra's own tools. Every other tool runs without restrictions. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled by your organization's default model before each command, so reading a credentials file narrows who can see the result. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
 - Enforcement applies to sessions that start while it is on. Start a new session after you turn it on.
+- **Settings → Guardrails** holds three settings: **Enforce the policy**, which you can switch once a policy exists; **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and **GitHub sync**.
 
 ## Validations
 

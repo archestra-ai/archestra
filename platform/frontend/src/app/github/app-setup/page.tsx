@@ -8,6 +8,7 @@ import { AuthCallbackLayout } from "@/components/auth-callback-layout";
 import { LoadingState } from "@/components/loading";
 import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { Button } from "@/components/ui/button";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useCompleteAppaGithubApp } from "@/lib/openappa-github-sync.query";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils/tailwind";
  * only stays up when the browser refuses to close the tab or setup failed.
  */
 export default function OpenAppaGithubAppSetupReturn() {
+  const appName = useAppName();
   const started = useRef(false);
   const complete = useCompleteAppaGithubApp();
   const [step, setStep] = useState<"created" | "installed" | "invalid" | null>(
@@ -53,7 +55,7 @@ export default function OpenAppaGithubAppSetupReturn() {
   const copy = pending
     ? {
         title: "Connecting the GitHub App",
-        body: "Saving its keys to Archestra. This takes a few seconds.",
+        body: `Saving its keys to ${appName}. This takes a few seconds.`,
       }
     : failed
       ? {
@@ -65,11 +67,11 @@ export default function OpenAppaGithubAppSetupReturn() {
       : step === "created"
         ? {
             title: "GitHub App created",
-            body: "Head back to Archestra to install it on your organization.",
+            body: `Head back to ${appName} to install it on your organization.`,
           }
         : {
             title: "GitHub App installed",
-            body: "Head back to Archestra to choose the policy repository.",
+            body: `Head back to ${appName} to choose the policy repository.`,
           };
 
   return (
@@ -107,13 +109,15 @@ export default function OpenAppaGithubAppSetupReturn() {
             <LoadingState variant="inline" label="Saving the GitHub App" />
           ) : failed ? (
             <Button asChild>
-              <Link href="/settings/openappa">Start again in Archestra</Link>
+              <Link href="/settings/guardrails">Start again in {appName}</Link>
             </Button>
           ) : (
             <>
               <Button onClick={() => window.close()}>Close this tab</Button>
               <Button variant="ghost" asChild>
-                <Link href="/settings/openappa">Open GitHub sync settings</Link>
+                <Link href="/settings/guardrails">
+                  Open GitHub sync settings
+                </Link>
               </Button>
             </>
           )}

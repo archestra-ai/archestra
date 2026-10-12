@@ -311,6 +311,7 @@ async function runClaudeAppaPermissionsMerge(params: {
 
 describe("Claude Code APPA permission installation", () => {
   const rules = [
+    "run_tool",
     "get_remedy_plans",
     "execute_remedy_plan",
     "list_peer_messages",
@@ -349,6 +350,23 @@ describe("Claude Code APPA permission installation", () => {
     ).toBe(true);
   });
 
+  test("pre-approves the gateway tool runner and leaves a hand-added rule to the user", async () => {
+    const runTool = "mcp__prod_gateway__archestra__run_tool";
+    const fresh = await runClaudeAppaPermissionsMerge({ existing: {} });
+    expect(fresh.settings.permissions.allow).toContain(runTool);
+    expect(fresh.ownership.prod_gateway).toContain(runTool);
+
+    const handAdded = await runClaudeAppaPermissionsMerge({
+      existing: { permissions: { allow: [runTool] } },
+    });
+    expect(
+      handAdded.settings.permissions.allow.filter(
+        (rule: string) => rule === runTool,
+      ),
+    ).toHaveLength(1);
+    expect(handAdded.ownership.prod_gateway).not.toContain(runTool);
+  });
+
   test("migrates owned legacy rules and branded prefixes without removing user or other-gateway rules", async () => {
     const old = "mcp__my_gateway__archestra__get_remedy_plans";
     const userRule = "mcp__my_gateway__archestra__ask_user";
@@ -367,6 +385,7 @@ describe("Claude Code APPA permission installation", () => {
       contexts: [branded],
     });
     const desired = [
+      "run_tool",
       "get_remedy_plans",
       "execute_remedy_plan",
       "list_peer_messages",
@@ -451,7 +470,7 @@ describe("Claude Code APPA permission installation", () => {
     expect(script).toContain("claude mcp add");
     expect(script).toContain("team_(eu)");
     expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
-    expect(script).not.toContain("call the guardrail helpers");
+    expect(script).not.toContain("without asking each time");
     expect(script).not.toContain("python3 is required");
     expect(script).not.toContain("mcp__team_(eu)__");
     expect(() =>
@@ -466,7 +485,7 @@ describe("Claude Code APPA permission installation", () => {
     });
     expect(script).toContain("claude mcp add");
     expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
-    expect(script).not.toContain("call the guardrail helpers");
+    expect(script).not.toContain("without asking each time");
     expect(script).not.toContain("mcp__prod_gateway__");
     expect(script).not.toContain("*get_remedy_plans");
     expect(() =>
@@ -476,6 +495,7 @@ describe("Claude Code APPA permission installation", () => {
 
   test("a failed settings write after the ledger is recovered on retry", async () => {
     const rules = [
+      "run_tool",
       "get_remedy_plans",
       "execute_remedy_plan",
       "list_peer_messages",

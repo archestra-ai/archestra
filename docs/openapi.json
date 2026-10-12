@@ -142546,6 +142546,24 @@
                           "createdByArchestra": {
                             "type": "boolean"
                           },
+                          "createdBy": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "nullable": true,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
                           "agentId": {
                             "type": "string"
                           },
@@ -142585,6 +142603,7 @@
                           "installed",
                           "needsAppLevelToken",
                           "createdByArchestra",
+                          "createdBy",
                           "agentId",
                           "agentName",
                           "enabled",
@@ -143799,7 +143818,7 @@
         "tags": [
           "ChatOps"
         ],
-        "description": "Save a Slack app configuration token used to create Slack apps automatically\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Save your Slack app configuration token, used to create and update Slack apps for you\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {

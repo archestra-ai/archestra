@@ -3406,7 +3406,7 @@ export const updateSlackAgentBot = <ThrowOnError extends boolean = false>(option
 });
 
 /**
- * Save a Slack app configuration token used to create Slack apps automatically
+ * Save your Slack app configuration token, used to create and update Slack apps for you
  *
  * Authentication:
  *

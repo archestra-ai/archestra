@@ -4152,7 +4152,11 @@ class AgentModel {
     );
   }
 
-  /** Soft-delete an author's private chat agents when their membership ends. */
+  /**
+   * Soft-delete an author's private chat agents and MCP gateways when their
+   * membership ends. Left behind, `agents.author_id` is `set null` and the row
+   * shows as "Owner unavailable" with no one to use it.
+   */
   static async deletePersonalAgentsForUser(params: {
     userId: string;
     organizationId?: string;
@@ -4164,20 +4168,40 @@ class AgentModel {
       table,
       and(
         eq(table.authorId, params.userId),
-        eq(table.agentType, "agent"),
         params.organizationId
           ? eq(table.organizationId, params.organizationId)
           : undefined,
-        // SPDX-SnippetBegin
-        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-        ResourcePermissionPolicyModel.reachesOnlyOwner({
-          organizationId: table.organizationId,
-          resource: "agent",
-          scopeColumn: table.id,
-          ownerColumn: table.authorId,
-        }),
-        // SPDX-SnippetEnd
+        or(
+          and(
+            eq(table.agentType, "agent"),
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            ResourcePermissionPolicyModel.reachesOnlyOwner({
+              organizationId: table.organizationId,
+              resource: "agent",
+              scopeColumn: table.id,
+              ownerColumn: table.authorId,
+            }),
+            // SPDX-SnippetEnd
+          ),
+          and(
+            eq(table.agentType, "mcp_gateway"),
+            // The auto-created personal gateway has its own lifecycle:
+            // deletePersonalMcpGatewaysForUser.
+            eq(table.isPersonalGateway, false),
+            // SPDX-SnippetBegin
+            // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+            // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+            ResourcePermissionPolicyModel.reachesOnlyOwner({
+              organizationId: table.organizationId,
+              resource: "mcpGateway",
+              scopeColumn: table.id,
+              ownerColumn: table.authorId,
+            }),
+            // SPDX-SnippetEnd
+          ),
+        ),
       ),
     );
   }

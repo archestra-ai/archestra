@@ -666,10 +666,7 @@ function RepositoryCard({
               <span>Checking whether it already exists…</span>
             </>
           ) : openedTemplate ? (
-            <span>
-              Finish on GitHub and keep it private, then continue. If GitHub
-              says it already exists, just continue.
-            </span>
+            <span>Once GitHub has created it, continue here.</span>
           ) : (
             <span>
               GitHub opens with the template, owner and name filled in.

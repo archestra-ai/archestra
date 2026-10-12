@@ -92,6 +92,7 @@ export const DocsPage = {
   PlatformQuickstart: "get-started",
   PlatformResetUserPassword: "admin/identity/account-security",
   PlatformSecretsManagement: "admin/security/credentials",
+  PlatformSecurityContentEncryption: "admin/security/content-encryption",
   PlatformSlack: "agents/triggers-and-channels/slack",
   PlatformSsoRoleMapping: "admin/identity/sso",
   PlatformSsoTeamSync: "admin/identity/sso",

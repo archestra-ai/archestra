@@ -676,7 +676,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               on the deployment.
             </p>
             <ExternalDocsLink
-              href={getDocsUrl(DocsPage.PlatformChat, "key-escrow")}
+              href={getDocsUrl(
+                DocsPage.PlatformSecurityContentEncryption,
+                "key-escrow",
+              )}
               className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
             >
               Learn how to enable it

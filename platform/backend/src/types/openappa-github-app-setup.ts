@@ -31,14 +31,22 @@ export const InstallAppaGithubAppSchema = z.object({
 
 export const AppaGithubRepositoryQuerySchema = z.object({
   repo: GithubRepositorySchema,
+  ref: z.string().trim().min(1).max(200).optional(),
+  path: z
+    .string()
+    .trim()
+    .max(500)
+    .regex(/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.toml$/)
+    .optional(),
 });
 
 /**
- * `template`: a private, unchanged-looking copy of the template, ready to use.
- * `other`: exists with other content or visibility. `unknown`: no App can see it.
+ * `template`: a private copy of the template, seeded with the current policy.
+ * `policy`: already holds an appa.toml, which becomes the policy source.
+ * `other`: exists without one. `unknown`: no App can see it.
  */
 export const AppaGithubRepositoryStatusSchema = z.object({
-  status: z.enum(["template", "other", "unknown"]),
+  status: z.enum(["template", "policy", "other", "unknown"]),
 });
 export type AppaGithubRepositoryStatus = z.infer<
   typeof AppaGithubRepositoryStatusSchema

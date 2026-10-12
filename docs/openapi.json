@@ -338050,6 +338050,19 @@
                   },
                   "existing": {
                     "type": "boolean"
+                  },
+                  "ref": {
+                    "default": null,
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": "^[^\\p{Cc}\\s~^:?*[\\\\]+$"
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
                   }
                 },
                 "required": [
@@ -339953,6 +339966,26 @@
             "in": "query",
             "name": "repo",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "ref",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 500,
+              "pattern": "^[a-zA-Z0-9_.-]+(?:\\/[a-zA-Z0-9_.-]+)*\\.toml$"
+            },
+            "in": "query",
+            "name": "path",
+            "required": false
           }
         ],
         "responses": {
@@ -339967,6 +340000,7 @@
                       "type": "string",
                       "enum": [
                         "template",
+                        "policy",
                         "other",
                         "unknown"
                       ]

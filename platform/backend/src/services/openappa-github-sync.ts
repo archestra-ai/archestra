@@ -97,6 +97,8 @@ export async function createAppaGithubRepository(params: {
   githubAppConfigId: string;
   interval: AppaGithubSource["interval"];
   existing?: boolean;
+  ref?: string | null;
+  path?: string;
 }) {
   assertEnabled();
   if ((await OpenAppaGithubSyncModel.find(params.organizationId))?.interval)
@@ -127,16 +129,42 @@ export async function createAppaGithubRepository(params: {
     private?: boolean;
   };
   const repo = `${params.owner}/${params.name}`;
-  if (params.existing)
-    created = await recoverPristineTemplateRepository({
-      repo,
-      token,
-      error: new ApiError(
-        400,
-        `${repo} must be a private, unchanged copy of the ${TEMPLATE_REPO} template that the App can access.`,
-      ),
-    });
-  else {
+  if (params.existing) {
+    const notTemplate = new ApiError(400, "Not a template copy");
+    // A policy kept elsewhere than appa.toml on the default branch is never a fresh template copy.
+    const custom =
+      !!params.ref || (!!params.path && params.path !== "appa.toml");
+    try {
+      if (custom) throw notTemplate;
+      created = await recoverPristineTemplateRepository({
+        repo,
+        token,
+        error: notTemplate,
+      });
+    } catch (error) {
+      if (error !== notTemplate) throw error;
+      // A repository that already holds a policy becomes the policy source.
+      return connectAppaGithubRepository({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        source: {
+          repo,
+          ref: params.ref ?? null,
+          path: params.path ?? "appa.toml",
+          interval: params.interval,
+          githubPatId: null,
+          githubAppConfigId: params.githubAppConfigId,
+          validationDirectory: (await githubDirectoryExists({
+            repo,
+            token,
+            path: VALIDATION_DIRECTORY,
+          }))
+            ? VALIDATION_DIRECTORY
+            : "",
+        },
+      });
+    }
+  } else {
     try {
       created = await githubJson({
         url: `https://api.github.com/repos/${TEMPLATE_REPO}/generate`,
@@ -280,7 +308,8 @@ export async function createAppaGithubRepository(params: {
     interval: params.interval,
     githubPatId: null,
     githubAppConfigId: params.githubAppConfigId,
-    validationDirectory: "",
+    // The template ships this folder, so validations work without a setup step.
+    validationDirectory: VALIDATION_DIRECTORY,
     setupPullRequestNumber,
   });
   await syncAppaGithubPolicy(params.organizationId);
@@ -803,6 +832,29 @@ async function recoverPristineTemplateRepository(params: {
 }
 
 const TEMPLATE_REPO = "archestra-ai/openappa-config";
+/** Where the template keeps policy validations; also the default elsewhere. */
+const VALIDATION_DIRECTORY = "traces";
+
+async function githubDirectoryExists(params: {
+  repo: string;
+  token: string;
+  path: string;
+}) {
+  const response = await fetch(
+    `https://api.github.com/repos/${params.repo}/contents/${params.path}`,
+    {
+      method: "HEAD",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${params.token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    },
+  ).catch(() => null);
+  return !!response?.ok;
+}
 
 /** Read direct .appa files at the supplied pinned commit; no ref drift or writeback. */
 export async function loadAppaGithubPolicyTests(params: {

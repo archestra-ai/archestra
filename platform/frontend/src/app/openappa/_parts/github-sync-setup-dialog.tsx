@@ -4,11 +4,11 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
+  ChevronRight,
   ExternalLink,
   Github,
   LoaderCircle,
   Plus,
-  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import type * as React from "react";
@@ -18,6 +18,11 @@ import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,13 +31,6 @@ import {
   RadioGroupItem,
   radioCardClass,
 } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -58,10 +56,8 @@ import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
  */
 export function GithubSyncSetupDialog({
   onOpenChange,
-  onConnectExisting,
 }: {
   onOpenChange: (open: boolean) => void;
-  onConnectExisting: () => void;
 }) {
   const { data: canReadCredentials } = useHasPermissions({
     credential: ["read"],
@@ -87,8 +83,9 @@ export function GithubSyncSetupDialog({
   const [owner, setOwner] = useState("");
   const [name, setName] = useState("openappa-policy");
   const [openedTemplate, setOpenedTemplate] = useState(false);
-  const [interval, setSyncInterval] = useState<Interval>("1h");
-  const [editingInterval, setEditingInterval] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
+  const [ref, setRef] = useState("");
+  const [path, setPath] = useState("appa.toml");
   const [chosenMode, setMode] = useState<AppMode | null>(null);
   const [pickedId, setPickedId] = useState("");
   const [waiting, setWaiting] = useState<"create" | "install" | null>(null);
@@ -103,14 +100,21 @@ export function GithubSyncSetupDialog({
   } | null>(null);
 
   const repo = `${owner.trim()}/${name.trim()}`;
-  const repoValid = REPO_PATTERN.test(repo);
+  const location = {
+    ref: ref.trim() || undefined,
+    path: path.trim() && path.trim() !== "appa.toml" ? path.trim() : undefined,
+  };
+  const repoValid =
+    REPO_PATTERN.test(repo) &&
+    (!location.path || POLICY_PATH.test(location.path));
   // Look the name up once typing pauses, so an existing repository isn't recreated.
-  const checkedRepo = useDebouncedValue(repoValid ? repo : null, 400);
+  const lookupKey = repoValid ? JSON.stringify([repo, location]) : null;
+  const checked = useDebouncedValue(lookupKey, 400);
   const repoLookup = useAppaGithubRepositoryStatus(
-    step === "repo" ? checkedRepo : null,
+    step === "repo" && checked ? { repo, ...location } : null,
   );
   const repoStatus: RepositoryStatus =
-    checkedRepo !== repo || repoLookup.isPending
+    checked !== lookupKey || repoLookup.isPending
       ? "checking"
       : (repoLookup.data?.status ?? "unknown");
   const accounts = useAppaGithubAppAccounts({
@@ -200,8 +204,10 @@ export function GithubSyncSetupDialog({
         owner: owner.trim(),
         name: name.trim(),
         githubAppConfigId: appId,
-        interval,
+        // Changeable after setup; nobody needs to decide it up front.
+        interval: "1h",
         existing: true,
+        ...location,
       },
       {
         onSuccess: (data) => {
@@ -309,64 +315,48 @@ export function GithubSyncSetupDialog({
 
           <RepositoryCard
             repo={repo}
+            path={location.path ?? "appa.toml"}
             status={repoValid ? repoStatus : "invalid"}
             openedTemplate={openedTemplate}
             onCreate={openTemplate}
           />
 
-          <div className="flex min-h-8 flex-wrap items-center gap-2 text-sm">
-            <RefreshCw className="size-3.5 text-muted-foreground" />
-            {editingInterval ? (
-              <>
-                <span className="text-muted-foreground">Check GitHub</span>
-                <Select
-                  value={interval}
-                  onValueChange={(value) => setSyncInterval(value as Interval)}
-                >
-                  <SelectTrigger size="sm" aria-label="Sync interval">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {INTERVALS.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {INTERVAL_LABEL[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </>
-            ) : (
-              <>
-                <span className="text-muted-foreground">
-                  Checks GitHub for changes {INTERVAL_LABEL[interval]}.
-                </span>
-                <Button
-                  type="button"
-                  variant="link"
-                  size="xs"
-                  className="h-auto px-0"
-                  onClick={() => setEditingInterval(true)}
-                >
-                  <span>Change</span>
-                </Button>
-              </>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-x-2 border-t pt-4 text-sm">
-            <span className="text-muted-foreground">
-              Already have a repository with a policy in it?
-            </span>
-            <Button
-              type="button"
-              variant="link"
-              size="xs"
-              className="h-auto px-0"
-              onClick={onConnectExisting}
-            >
-              <span>Connect it instead</span>
-            </Button>
-          </div>
+          <Collapsible open={advanced} onOpenChange={setAdvanced}>
+            <CollapsibleTrigger className="group flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+              <ChevronRight className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
+              <span>Advanced</span>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="github-sync-ref">Branch</Label>
+                  <Input
+                    id="github-sync-ref"
+                    value={ref}
+                    placeholder="Default branch"
+                    autoComplete="off"
+                    data-1p-ignore
+                    spellCheck={false}
+                    onChange={(event) => setRef(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="github-sync-path">Policy file</Label>
+                  <Input
+                    id="github-sync-path"
+                    value={path}
+                    autoComplete="off"
+                    data-1p-ignore
+                    spellCheck={false}
+                    onChange={(event) => setPath(event.target.value)}
+                  />
+                </div>
+              </div>
+              <p className="pt-2 text-xs text-muted-foreground">
+                For a repository that already keeps its policy somewhere else.
+              </p>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       ) : null}
 
@@ -603,38 +593,40 @@ export function GithubSyncSetupDialog({
 
 type Step = "repo" | "app" | "connect";
 type AppMode = "fork" | "pick" | "create";
-type Interval = "15m" | "1h" | "1d";
 type RepositoryStatus =
   | "invalid"
   | "checking"
   | "template"
+  | "policy"
   | "other"
   | "unknown";
 
 /** Points the admin at GitHub to create the repository, unless it already exists. */
 function RepositoryCard({
   repo,
+  path,
   status,
   openedTemplate,
   onCreate,
 }: {
   repo: string;
+  path: string;
   status: RepositoryStatus;
   openedTemplate: boolean;
   onCreate: () => void;
 }) {
-  if (status === "template" || status === "other")
+  if (status === "template" || status === "policy" || status === "other")
     return (
       <div
         className={cn(
           "flex items-start gap-3 rounded-lg border p-4",
-          status === "template"
+          status !== "other"
             ? "bg-card"
             : "border-amber-500/30 bg-amber-50/60 dark:bg-amber-950/20",
         )}
         aria-live="polite"
       >
-        {status === "template" ? (
+        {status !== "other" ? (
           <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
             <Check className="size-3" strokeWidth={3} />
           </span>
@@ -647,8 +639,10 @@ function RepositoryCard({
           </p>
           <p className="text-xs text-muted-foreground">
             {status === "template"
-              ? "It's a private copy of the OpenAPPA template, so setup will use it. Nothing to create."
-              : "It isn't a private copy of the OpenAPPA template. Choose another name, or connect it instead if it already holds your policy."}
+              ? "It's a private copy of the OpenAPPA template. Setup copies your current policy into it."
+              : status === "policy"
+                ? `It already has ${path}. Setup makes it your policy, in place of the current one.`
+                : `It has no ${path}. Choose another name, or set where the policy lives under Advanced.`}
           </p>
         </div>
       </div>
@@ -667,11 +661,7 @@ function RepositoryCard({
             </>
           ) : openedTemplate ? (
             <span>Once GitHub has created it, continue here.</span>
-          ) : (
-            <span>
-              GitHub opens with the template, owner and name filled in.
-            </span>
-          )}
+          ) : null}
         </p>
       </div>
       <GitHubConnectButton
@@ -994,18 +984,12 @@ const STEPS: { id: Step; label: string }[] = [
 
 const CONNECT_STEPS = [
   "Check the repository",
-  "Copy your current policy",
-  "Open the setup pull request if rules require one",
+  "Sync the policy",
+  "Open a setup pull request if rules require one",
 ];
 
 const TEMPLATE = { owner: "archestra-ai", name: "openappa-config" };
-
-const INTERVALS: Interval[] = ["15m", "1h", "1d"];
-const INTERVAL_LABEL: Record<Interval, string> = {
-  "15m": "every 15 minutes",
-  "1h": "every hour",
-  "1d": "once a day",
-};
+const POLICY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*\.toml$/;
 
 const REPO_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9-]*\/[a-zA-Z0-9_.-]+$/;
 const APP_LOGO_PATH = "/openappa/github-app-logo.png";

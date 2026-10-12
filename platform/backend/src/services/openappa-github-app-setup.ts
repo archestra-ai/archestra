@@ -293,10 +293,14 @@ class OpenAppaGithubAppSetup {
    * only see a private repository through a GitHub App installed on it, so a
    * repository no App can reach reads as unknown rather than missing.
    */
-  async repository(
-    organizationId: string,
-    repo: string,
-  ): Promise<AppaGithubRepositoryStatus> {
+  async repository(params: {
+    organizationId: string;
+    repo: string;
+    ref?: string;
+    path?: string;
+  }): Promise<AppaGithubRepositoryStatus> {
+    const { organizationId, repo } = params;
+    const path = params.path ?? "appa.toml";
     const tokens: (string | null)[] = [null];
     for (const definition of await RuntimeCredentialDefinitionModel.list(
       organizationId,
@@ -339,14 +343,28 @@ class OpenAppaGithubAppSetup {
       if (!response.ok) continue;
       const found = RepositorySchema.safeParse(await response.json());
       if (!found.success) continue;
-      return {
-        status:
-          found.data.private &&
-          found.data.template_repository?.full_name.toLowerCase() ===
-            TEMPLATE_REPO
-            ? "template"
-            : "other",
-      };
+      if (
+        !params.ref &&
+        path === "appa.toml" &&
+        found.data.private &&
+        found.data.template_repository?.full_name.toLowerCase() ===
+          TEMPLATE_REPO
+      )
+        return { status: "template" };
+      const policy = await fetch(
+        `${GITHUB_API_URL}/repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}${params.ref ? `?ref=${encodeURIComponent(params.ref)}` : ""}`,
+        {
+          method: "HEAD",
+          headers: {
+            Accept: "application/vnd.github+json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+          redirect: "error",
+          signal: AbortSignal.timeout(15_000),
+        },
+      ).catch(() => null);
+      return { status: policy?.ok ? "policy" : "other" };
     }
     return { status: "unknown" };
   }

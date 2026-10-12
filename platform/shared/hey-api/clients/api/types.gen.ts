@@ -89217,6 +89217,8 @@ export type CreateAppaGithubRepositoryData = {
         githubAppConfigId: string;
         interval: '15m' | '1h' | '1d';
         existing?: boolean;
+        ref?: string | null;
+        path?: string;
     };
     path?: never;
     query?: never;
@@ -89780,6 +89782,8 @@ export type GetAppaGithubRepositoryStatusData = {
     path?: never;
     query: {
         repo: string;
+        ref?: string;
+        path?: string;
     };
     url: '/api/openappa/github-app/repository';
 };
@@ -89857,7 +89861,7 @@ export type GetAppaGithubRepositoryStatusResponses = {
      * Default Response
      */
     200: {
-        status: 'template' | 'other' | 'unknown';
+        status: 'template' | 'policy' | 'other' | 'unknown';
     };
 };
 

@@ -137,6 +137,9 @@ beforeEach(() => {
     ),
     http.get(`${api}/openappa/github-sync`, () => HttpResponse.json(sync)),
     http.get(`${api}/credentials`, () => HttpResponse.json([])),
+    http.get(`${api}/openappa/github-app/pending`, () =>
+      HttpResponse.json(null),
+    ),
     http.get(`${api}/openappa/yells/summary`, () =>
       HttpResponse.json({ unresolved: 0 }),
     ),
@@ -296,7 +299,7 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
   fireEvent.click(connect);
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(
-    screen.getByRole("heading", { name: "Create OpenAPPA repository" }),
+    screen.getByRole("heading", { name: "Set up GitHub sync" }),
   ).toBeInTheDocument();
 });
 

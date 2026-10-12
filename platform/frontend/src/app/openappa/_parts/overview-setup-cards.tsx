@@ -56,7 +56,6 @@ import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
-import { OpenAppaSourceForm } from "./appa-github-sync-panel";
 import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { OpenAppaChatButton } from "./openappa-chat-button";
@@ -225,7 +224,6 @@ function GithubSyncCard({ next }: { next: boolean }) {
     organizationSettings: ["update"],
   });
   const appName = useAppName();
-  const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const source = sync.data?.source ?? null;
   const connected = Boolean(source?.interval);
@@ -336,22 +334,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
           )
         }
       />
-      {editing && (
-        <OpenAppaSourceForm
-          source={source}
-          validationDirectory={sync.data?.validationDirectory}
-          onOpenChange={setEditing}
-        />
-      )}
-      {creating && (
-        <GithubSyncSetupDialog
-          onOpenChange={setCreating}
-          onConnectExisting={() => {
-            setCreating(false);
-            setEditing(true);
-          }}
-        />
-      )}
+      {creating && <GithubSyncSetupDialog onOpenChange={setCreating} />}
     </>
   );
 }

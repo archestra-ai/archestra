@@ -309,21 +309,9 @@ export function AppaGithubSyncPanel() {
         )}
       </SettingsBlock>
       {editing && (
-        <OpenAppaSourceForm
-          source={source}
-          validationDirectory={validationDirectory}
-          onOpenChange={setEditing}
-        />
+        <OpenAppaSourceForm source={source} onOpenChange={setEditing} />
       )}
-      {creating && (
-        <GithubSyncSetupDialog
-          onOpenChange={setCreating}
-          onConnectExisting={() => {
-            setCreating(false);
-            setEditing(true);
-          }}
-        />
-      )}
+      {creating && <GithubSyncSetupDialog onOpenChange={setCreating} />}
       <DeleteConfirmDialog
         open={disconnecting}
         onOpenChange={setDisconnecting}
@@ -343,11 +331,9 @@ export function AppaGithubSyncPanel() {
 
 export function OpenAppaSourceForm({
   source,
-  validationDirectory = "",
   onOpenChange,
 }: {
   source: Source | null;
-  validationDirectory?: string;
   onOpenChange: (open: boolean) => void;
 }) {
   const mutation = useConfigureAppaGithubSync();
@@ -374,8 +360,6 @@ export function OpenAppaSourceForm({
       repo: source?.repo ?? "",
       ref: source?.ref ?? "",
       path: source?.path ?? "appa.toml",
-      validationDirectory,
-      interval: source?.interval ?? "1h",
       credential: source?.githubPatId
         ? `pat:${source.githubPatId}`
         : source?.githubAppConfigId
@@ -391,8 +375,9 @@ export function OpenAppaSourceForm({
         repo: values.repo.trim(),
         ref: values.ref.trim() || null,
         path: values.path.trim(),
-        validationDirectory: values.validationDirectory.trim(),
-        interval: values.interval,
+        // Validations stay in the source's folder (traces by default), and the
+        // sync interval is changed on the panel, so neither is asked here.
+        interval: source?.interval ?? "1h",
         githubPatId: values.credential.startsWith("pat:")
           ? values.credential.slice(4)
           : null,
@@ -537,57 +522,6 @@ export function OpenAppaSourceForm({
             </InlineNotice>
           )}
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <Label htmlFor="appa-validation-directory">
-              Validation directory (optional)
-            </Label>
-            {form
-              .watch("repo")
-              .match(/^[a-zA-Z0-9][a-zA-Z0-9-]*\/[a-zA-Z0-9_.-]+$/) && (
-              <Button type="button" variant="link" size="sm" asChild>
-                <a
-                  href={`https://github.com/${form.watch("repo")}/tree/${encodeURIComponent(form.watch("ref").trim() || "HEAD")}/${form.watch("validationDirectory").trim().split("/").map(encodeURIComponent).join("/")}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <ExternalLink />
-                  <span>Open in GitHub</span>
-                </a>
-              </Button>
-            )}
-          </div>
-          <Input
-            id="appa-validation-directory"
-            placeholder="e.g. traces"
-            {...form.register("validationDirectory", {
-              validate: (value) =>
-                !value.trim() ||
-                (/^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/.test(value.trim()) &&
-                  value.trim().length <= 240 &&
-                  !value
-                    .trim()
-                    .split("/")
-                    .some((part) => part === "." || part === "..")) ||
-                "Use a repository-relative directory, such as traces.",
-            })}
-            aria-invalid={!!form.formState.errors.validationDirectory}
-            aria-describedby="appa-validation-directory-help"
-          />
-          <p
-            id="appa-validation-directory-help"
-            className="text-xs text-muted-foreground"
-          >
-            Leave empty to disable validations. On save, we check that the
-            folder exists in the selected branch. Only .appa files directly
-            inside it are loaded.
-          </p>
-          {form.formState.errors.validationDirectory && (
-            <p role="alert" className="text-sm text-destructive">
-              {form.formState.errors.validationDirectory.message}
-            </p>
-          )}
-        </div>
         {mutation.error && (
           <InlineNotice variant="error">
             <AlertTriangle />
@@ -595,28 +529,6 @@ export function OpenAppaSourceForm({
             <InlineNoticeText>{mutation.error.message}</InlineNoticeText>
           </InlineNotice>
         )}
-        <div className="space-y-2">
-          <Label htmlFor="appa-frequency">Sync frequency</Label>
-          <Select
-            value={form.watch("interval")}
-            onValueChange={(value) =>
-              form.setValue("interval", value as "15m" | "1h" | "1d", {
-                shouldDirty: true,
-              })
-            }
-          >
-            <SelectTrigger id="appa-frequency" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(intervals).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
       </StandardFormDialog>
       {credentialStep === "define" && (
         <RuntimeCredentialDefinitionDialog

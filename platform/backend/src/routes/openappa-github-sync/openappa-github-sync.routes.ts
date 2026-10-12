@@ -205,10 +205,10 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request, reply) =>
       reply.send(
-        await openappaGithubAppSetup.repository(
-          request.organizationId,
-          request.query.repo,
-        ),
+        await openappaGithubAppSetup.repository({
+          organizationId: request.organizationId,
+          ...request.query,
+        }),
       ),
   );
   app.get(

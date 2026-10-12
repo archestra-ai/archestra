@@ -9423,16 +9423,24 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             input,
           },
         });
-      const mail = (text: string) => ({
+      const mail = (text: string, payload?: string) => ({
         type: "agent_message",
         author: "/root/worker",
         recipient: "/root",
-        content: [{ type: "input_text", text }],
+        content: [
+          { type: "input_text", text },
+          ...(payload
+            ? [{ type: "encrypted_content", encrypted_content: payload }]
+            : []),
+        ],
       });
       // The kinds a Codex agent sends besides a task and its final answer.
+      // Codex 0.162 sends the text of a message between agents as an
+      // encrypted part.
       const mailbox = [
         mail(
-          "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\nHalfway there",
+          "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n",
+          "gAAAA_opaque_message",
         ),
         mail(
           "Message Type: CHANNEL_POST\nSender: /root/worker\nChannel: build\nMessage ID: m-1\nThread ID: t-1\nPayload:\nPosted",

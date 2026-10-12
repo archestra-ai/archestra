@@ -194,16 +194,24 @@ describe("OpenAPPA child-return markers", () => {
   test("still collects a mailbox return next to messages it cannot read", () => {
     const header =
       "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n";
-    const mail = (text: string, id?: string) => ({
+    const mail = (text: string, id?: string, payload?: string) => ({
       type: "agent_message",
       ...(id ? { id } : {}),
       author: "/root/worker",
       recipient: "/root",
-      content: [{ type: "input_text", text }],
+      content: [
+        { type: "input_text", text },
+        ...(payload
+          ? [{ type: "encrypted_content", encrypted_content: payload }]
+          : []),
+      ],
     });
-    // The kinds a Codex agent sends besides a task and its final answer.
+    // The kinds a Codex agent sends besides a task and its final answer. Codex
+    // 0.162 sends the text of a message between agents as an encrypted part.
     const message = mail(
-      "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\nHalfway there",
+      "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n",
+      undefined,
+      "gAAAA_opaque_message",
     );
     const post = mail(
       "Message Type: CHANNEL_POST\nSender: /root/worker\nChannel: build\nMessage ID: m-1\nThread ID: t-1\nPayload:\nPosted",

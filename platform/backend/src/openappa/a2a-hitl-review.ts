@@ -58,7 +58,7 @@ type HitlReviewAnswerer =
   | { kind: "caller" };
 
 /** What a chat surface shows for one OpenAPPA review. */
-export type HitlReviewDisplay = {
+type HitlReviewDisplay = {
   text: string;
   /** The reviewed call's tool, as OpenAPPA proposed it for ruling. */
   tool?: string;

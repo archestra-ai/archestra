@@ -1991,7 +1991,7 @@ const APPROVAL_ARG_VALUE_MAX_LENGTH = 500;
  * arguments behind a "Show arguments" toggle. With only an OpenAPPA review
  * text (no structured tool), the text is shown in place of tool and arguments.
  */
-export function buildApprovalRequestCard(
+function buildApprovalRequestCard(
   options: Pick<
     AddApprovalRequestFormOptions,
     | "approvalId"
@@ -2115,7 +2115,11 @@ export function buildApprovalRequestCard(
   return approvalCardEnvelope(body, `Approval required: ${options.toolName}`);
 }
 
-/** The card that replaces the prompt once someone approves or denies it. */
+/**
+ * The card that replaces the prompt once someone approves or denies it.
+ *
+ * @internal exported for tests
+ */
 export function buildApprovalDecisionCard(params: {
   toolLabel?: string;
   approved: boolean;

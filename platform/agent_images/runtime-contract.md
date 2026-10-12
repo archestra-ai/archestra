@@ -185,6 +185,8 @@ Guardrails failures:
 | --- | --- | --- |
 | HTTP 500, `x-should-retry: false` | The organization's guardrails policy is invalid. The message ends with a trace reference. | Do not retry. An administrator must fix the policy. |
 | HTTP 503, `Retry-After: 5` | The policy runtime or its database is unavailable. | Retry after the delay. |
+| HTTP 400, the message names `X-Archestra-Runtime-Binding` | A model request carried no binding header while Guardrails v2 was on. | Send the header on every request. Rebuild an image derived from a maintained image on a current tag. Then start a new run. |
+| HTTP 400, `OpenAPPA runtime binding does not match this run` | The binding is malformed, expired, or issued for another workspace or turn. | Read `ARCHESTRA_AGENT_RUNTIME_BINDING` each time the client starts. Do not reuse a saved copy. |
 
 A blocked tool call is not an HTTP error. The proxy and gateway report it inside the normal response.
 

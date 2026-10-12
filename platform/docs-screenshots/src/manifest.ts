@@ -570,13 +570,6 @@ export const SHOTS: Shot[] = [
     prepare: showGuardrailsEnforced,
   },
   {
-    asset: "automated_screenshots/platform-ai-tool-guardrails_client_coverage",
-    route: () => "/openappa",
-    prepare: showGuardrailsEnforced,
-    target: (page) =>
-      page.locator('[data-slot="card"]').filter({ hasText: "Client coverage" }),
-  },
-  {
     asset: "automated_screenshots/platform-openappa_batteries",
     route: () => "/openappa/batteries",
   },

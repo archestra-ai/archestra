@@ -88978,6 +88978,7 @@ export type GetAppaGithubSyncResponses = {
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
+        githubWebUrl: string;
     };
 };
 
@@ -89091,6 +89092,7 @@ export type UpdateAppaGithubSyncResponses = {
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
+        githubWebUrl: string;
     };
 };
 
@@ -89205,6 +89207,7 @@ export type ConfigureAppaGithubSyncResponses = {
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
+        githubWebUrl: string;
     };
 };
 
@@ -89216,6 +89219,11 @@ export type CreateAppaGithubRepositoryData = {
         name: string;
         githubAppConfigId: string;
         interval: '15m' | '1h' | '1d';
+        existing?: boolean;
+        ref?: string | null;
+        path?: string;
+        validationDirectory?: string;
+        replace?: boolean;
     };
     path?: never;
     query?: never;
@@ -89316,10 +89324,741 @@ export type CreateAppaGithubRepositoryResponses = {
         } | null;
         hasPolicy: boolean;
         validationDirectory: string;
+        githubWebUrl: string;
     };
 };
 
 export type CreateAppaGithubRepositoryResponse = CreateAppaGithubRepositoryResponses[keyof CreateAppaGithubRepositoryResponses];
+
+export type StartAppaGithubAppData = {
+    body: {
+        githubUrl: string;
+        owner: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/manifest';
+};
+
+export type StartAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type StartAppaGithubAppError = StartAppaGithubAppErrors[keyof StartAppaGithubAppErrors];
+
+export type StartAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        url: string;
+        manifest: string;
+    };
+};
+
+export type StartAppaGithubAppResponse = StartAppaGithubAppResponses[keyof StartAppaGithubAppResponses];
+
+export type CompleteAppaGithubAppData = {
+    body: {
+        code: string;
+        state: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/manifest/complete';
+};
+
+export type CompleteAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CompleteAppaGithubAppError = CompleteAppaGithubAppErrors[keyof CompleteAppaGithubAppErrors];
+
+export type CompleteAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        account: string;
+        appId: string;
+        accountUrl: string;
+        htmlUrl: string;
+        installUrl: string;
+        settingsUrl: string;
+    };
+};
+
+export type CompleteAppaGithubAppResponse = CompleteAppaGithubAppResponses[keyof CompleteAppaGithubAppResponses];
+
+export type DiscardAppaGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/pending';
+};
+
+export type DiscardAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DiscardAppaGithubAppError = DiscardAppaGithubAppErrors[keyof DiscardAppaGithubAppErrors];
+
+export type DiscardAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DiscardAppaGithubAppResponse = DiscardAppaGithubAppResponses[keyof DiscardAppaGithubAppResponses];
+
+export type GetPendingAppaGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/pending';
+};
+
+export type GetPendingAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetPendingAppaGithubAppError = GetPendingAppaGithubAppErrors[keyof GetPendingAppaGithubAppErrors];
+
+export type GetPendingAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        name: string;
+        slug: string;
+        account: string;
+        appId: string;
+        accountUrl: string;
+        htmlUrl: string;
+        installUrl: string;
+        settingsUrl: string;
+    } | null;
+};
+
+export type GetPendingAppaGithubAppResponse = GetPendingAppaGithubAppResponses[keyof GetPendingAppaGithubAppResponses];
+
+export type InstallAppaGithubAppData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/install';
+};
+
+export type InstallAppaGithubAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type InstallAppaGithubAppError = InstallAppaGithubAppErrors[keyof InstallAppaGithubAppErrors];
+
+export type InstallAppaGithubAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'waiting';
+    } | {
+        status: 'installed';
+        id: string;
+        name: string;
+        account: string;
+    };
+};
+
+export type InstallAppaGithubAppResponse = InstallAppaGithubAppResponses[keyof InstallAppaGithubAppResponses];
+
+export type GetAppaGithubRepositoryStatusData = {
+    body?: never;
+    path?: never;
+    query: {
+        credentialId: string;
+        repo: string;
+        ref?: string;
+        path?: string;
+        validationDirectory?: string;
+    };
+    url: '/api/openappa/github-app/repository';
+};
+
+export type GetAppaGithubRepositoryStatusErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubRepositoryStatusError = GetAppaGithubRepositoryStatusErrors[keyof GetAppaGithubRepositoryStatusErrors];
+
+export type GetAppaGithubRepositoryStatusResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'template' | 'empty' | 'policy' | 'other' | 'unreachable' | 'app_error';
+        validations: boolean | null;
+    };
+};
+
+export type GetAppaGithubRepositoryStatusResponse = GetAppaGithubRepositoryStatusResponses[keyof GetAppaGithubRepositoryStatusResponses];
+
+export type GetAppaGithubAppAccountsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-app/accounts';
+};
+
+export type GetAppaGithubAppAccountsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubAppAccountsError = GetAppaGithubAppAccountsErrors[keyof GetAppaGithubAppAccountsErrors];
+
+export type GetAppaGithubAppAccountsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        account: string | null;
+    }>;
+};
+
+export type GetAppaGithubAppAccountsResponse = GetAppaGithubAppAccountsResponses[keyof GetAppaGithubAppAccountsResponses];
+
+export type GetAppaGithubAppRepositoriesData = {
+    body?: never;
+    path?: never;
+    query: {
+        credentialId: string;
+    };
+    url: '/api/openappa/github-app/repositories';
+};
+
+export type GetAppaGithubAppRepositoriesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppaGithubAppRepositoriesError = GetAppaGithubAppRepositoriesErrors[keyof GetAppaGithubAppRepositoriesErrors];
+
+export type GetAppaGithubAppRepositoriesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        repositories: Array<{
+            fullName: string;
+            private: boolean;
+            description: string | null;
+            template: boolean;
+        }>;
+        manageUrl: string | null;
+    };
+};
+
+export type GetAppaGithubAppRepositoriesResponse = GetAppaGithubAppRepositoriesResponses[keyof GetAppaGithubAppRepositoriesResponses];
 
 export type AcceptHeldAppaGithubPullData = {
     body?: never;
@@ -89428,6 +90167,7 @@ export type AcceptHeldAppaGithubPullResponses = {
             } | null;
             hasPolicy: boolean;
             validationDirectory: string;
+            githubWebUrl: string;
         };
     };
 };

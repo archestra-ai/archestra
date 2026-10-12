@@ -29,6 +29,7 @@
     "knip:dev": "knip",
     "knip:production": "knip --production",
     "type-check": "tsc --noEmit",
+    "update:openappa-template": "node scripts/update-openappa-template.mjs",
     "check:migrations": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-drizzle-migration-journal.ts && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/lint-drizzle-migrations.ts",
     "check:sandbox-base": "tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-sandbox-base-sync.ts",
     "check:test-imports": "dependency-cruiser --config .dependency-cruiser.mjs 'src/**/*.unit.test.ts' src/plugins/github-import.ts src/plugins/github-tree.ts src/plugins/plugin-tree-files.ts --output-type err && tsx --tsconfig standalone-scripts.tsconfig.json src/standalone-scripts/check-test-fixture-imports.ts",

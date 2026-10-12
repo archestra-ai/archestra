@@ -10,7 +10,6 @@ import {
   HOOK_RUN_PART_TYPE,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
-  OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   parseArchestraAppResourceUri,
   parseFullToolName,
   type ResourceVisibilityScope,
@@ -292,11 +291,6 @@ export function ChatMessages({
         // A question renders as its own answer summary, not a circle.
         TOOL_ASK_USER_FULL_NAME,
         getToolName(TOOL_ASK_USER_SHORT_NAME),
-        // A policy change shows its diff before the user is asked to approve.
-        ...OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES.flatMap((shortName) => [
-          getArchestraToolFullName(shortName),
-          getToolName(shortName),
-        ]),
         // Owned-app management tools render the app inline; compact grouping
         // would swallow their parts before MessageTool sees them.
         ...APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES.flatMap((shortName) => [
@@ -1129,9 +1123,8 @@ export function ChatMessages({
                               className="w-full"
                               isStreaming={isStreamingThisReasoning}
                               // Nothing has rendered below the run yet, so more
-                              // thinking may still join it — hold it open until
-                              // something does, rather than collapsing between
-                              // the tool calls it spans.
+                              // thinking may still join it — keep reading
+                              // "Thinking…" until something does.
                               keepOpen={
                                 status === "streaming" &&
                                 isLastMessage &&

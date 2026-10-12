@@ -19,10 +19,6 @@ import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
 import { CoverageCharts } from "./coverage-charts";
 
 vi.mock("sonner");
-// Its own tests cover it; here it only takes its place in the column.
-vi.mock("./overview-setup-cards", () => ({
-  UnrecognizedClientsCard: () => <div>Client coverage</div>,
-}));
 
 const origin = "http://localhost:9000";
 vi.mock("@/lib/clients/auth/auth-client");
@@ -223,7 +219,6 @@ test("counts batteries by status, names them on hover, links each to its filter,
   expect(
     chatPrompt(batteries.getByRole("link", { name: "Configure with chat" })),
   ).toBe(resolveOpenAppaLaunchPrompt("configureBatteries"));
-  expect(screen.getByText("Client coverage")).toBeVisible();
 });
 
 test("offers no chat while every included battery is enforced and none fits", async () => {

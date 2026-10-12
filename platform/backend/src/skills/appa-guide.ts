@@ -33,13 +33,8 @@ export const APPA_GUIDE_SKILL: BuiltInSkill = {
     "Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview policy and lightweight validation changes, and publish locally or through a GitHub pull request.",
   feature: "appa",
   // white-label-ok: applyBuiltInSkillBranding rebrands the built-in skill body at reconcile
-  content: `---
-name: appa-guide
-description: Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview policy and lightweight validation changes, and publish locally or through a GitHub pull request.
-argument-hint: "init|adjust|validate|explain|review|investigate|github-sync"
----
-
-Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client hosts. Request: $ARGUMENTS
+  // The body only: the frontmatter is built from name and description.
+  content: `Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client hosts.
 
 You run inside Archestra chat or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). This skill has these parts:
 
@@ -100,15 +95,14 @@ These rules replace the shared rules on ending a turn with the proposal: in Arch
 - Preview before you propose, with the revision you read: \`edits\` for a saved policy, naming only the text you replace (to insert rules, replace a nearby line with the new rules plus that same line); \`content\` only for a first policy or a full rewrite. Fix errors and preview again, and explain warnings. Check that \`diff\` shows only the lines you meant to change. A valid preview does not prove that a battery governs tools or a helper works.
 - If a saved policy would not change, say that no update is needed, without approval language. An unsaved local revision-0 starter is the exception: even with an empty diff it still needs approval and publication. Do not manufacture an edit.
 - Preview only a change the operator asked for or picked. Explain and review requests preview nothing. Previewing saves nothing: "show me first" or "don't save yet" still means preview, explain, and ask.
-- When approval is needed, end the same turn with one \`archestra__ask_user\` question: "Apply this policy?" ("Open this pull request?" when approval opens a GitHub PR), unless the workflow names its own question, with options "Approve", "Show TOML", and "Change something". Without \`archestra__ask_user\`, use the client's own question tool with the same options; with neither, end with **Approve, or tell me what to change.** Never end a turn on a preview without the question, also when the operator asked to see the change first. If an optional refinement of a valid preview of the requested change fails while the policy is unchanged since that preview, propose that last valid preview and ask; do not end the turn waiting for a better one. Write the proposal as message text before the question, including any **Effect on agents**; option descriptions are not the proposal.
+- When approval is needed, end the same turn with one \`archestra__ask_user\` question: "Apply this policy?" ("Open this pull request?" when approval opens a GitHub PR), unless the workflow names its own question, with options "Approve" and "Not now" and \`"allowText": true\`, so the operator can type a change instead. The preview card already shows the proposed TOML, so do not offer to show it. Without \`archestra__ask_user\`, use the client's own question tool with the same options; with neither, end with **Approve, or tell me what to change.** Never end a turn on a preview without the question, also when the operator asked to see the change first. If an optional refinement of a valid preview of the requested change fails while the policy is unchanged since that preview, propose that last valid preview and ask; do not end the turn waiting for a better one. Write the proposal as message text before the question, including any **Effect on agents**; option descriptions are not the proposal.
   - **Approve**: continue in the same response with **Publish**.
-  - **Show TOML** is inspection, not approval. For \`edits\`, show the preview's \`diff\` in a fenced diff block and say every other line stays as it is; for a first policy or a full rewrite, show the complete proposed root TOML you previewed in a fenced toml block, with no omissions or invented edits. Then ask again with Approve and Change something.
-  - **Change something**: ask in one sentence what to change, then wait.
-  - Declined, dismissed, or unanswered: stop without saving and wait for the next message.
+  - **A typed answer** is a change request: apply it, preview again, and ask again. If it asks to see the TOML instead, show the preview's \`diff\` in a fenced diff block for \`edits\`, or the complete proposed root TOML for a first policy or full rewrite, with no omissions or invented edits, then ask again.
+  - **Not now**, dismissed, or unanswered: stop without saving and wait for the next message.
 - Ask for approval only before an action you can perform. When the operator must act elsewhere, give the steps or link instead.
 - Call \`archestra__execute_remedy_plan\` with the offered \`offer_id\` without asking first; it requests the review itself, or returns one to ask with \`archestra__ask_user\`. This replaces the shared rule against calling the runtime's remedy tool before approval.
 - Ask independent questions in the same step, one \`archestra__ask_user\` call per question with a short \`header\`; Archestra chat shows them as one card. Ask later only a question whose options depend on an earlier answer.
-- A question that ends your turn with a choice between known options, such as approval, a new or existing repository, or which servers to cover, goes on \`archestra__ask_user\` with those options, not in prose; without it, use the client's question tool, and with neither, end with a line that lists the options. Only these stay in text: the one-sentence question that ends **Explain** or follows **Change something**, the numbered changes that end **Review**, and a one-sentence next step that a workflow offers.
+- A question that ends your turn with a choice between known options, such as approval, a new or existing repository, or which servers to cover, goes on \`archestra__ask_user\` with those options, not in prose; without it, use the client's question tool, and with neither, end with a line that lists the options. Only these stay in text: the one-sentence question that ends **Explain**, the numbered changes that end **Review**, and a one-sentence next step that a workflow offers.
 
 ### Publish
 

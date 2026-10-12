@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { GithubManagedPolicyNotice } from "../../_parts/github-managed-policy-notice";
@@ -40,6 +41,11 @@ export function ValidationNotices({
     loadError,
   } = useValidation();
   const sourceChanged = collectionChanged || editorSourceChanged;
+  // Until the setup PR merges, sync has no accepted commit to read validations
+  // from; the merge notice above says what to do, so skip the error.
+  const sync = useAppaGithubSync();
+  const awaitingSetupMerge =
+    github && !!sync.data?.source?.setupPullRequestNumber;
   if (
     !github &&
     !collection.error &&
@@ -65,7 +71,7 @@ export function ValidationNotices({
           validationDirectory={collection.activeDirectory}
         />
       )}
-      {collection.error && (
+      {collection.error && !awaitingSetupMerge && (
         <InlineNotice variant="error">
           <TriangleAlert />
           <span className="font-medium">Validation unavailable</span>

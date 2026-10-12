@@ -12,6 +12,31 @@ export const HeldPullReasonSchema = z.enum([
   "changes_credentials",
 ]);
 export type HeldPullReason = z.infer<typeof HeldPullReasonSchema>;
+const AppaGithubRefSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[^\p{Cc}\s~^:?*[\\]+$/u, "Use a branch, tag, or commit")
+  .nullable()
+  .default(null);
+
+const AppaPolicyPathSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(500)
+  .refine(
+    (path) =>
+      path.endsWith(".toml") &&
+      !path.includes("\\") &&
+      !/\p{Cc}/u.test(path) &&
+      path
+        .split("/")
+        .every((part) => part !== "" && part !== "." && part !== ".."),
+    "Use a repository-relative .toml file path",
+  );
+
 export const AppaGithubSourceSchema = z
   .object({
     repo: z
@@ -22,29 +47,8 @@ export const AppaGithubSourceSchema = z
         "Use owner/repository",
       )
       .max(200),
-    ref: z
-      .string()
-      .trim()
-      .min(1)
-      .max(200)
-      .regex(/^[^\p{Cc}\s~^:?*[\\]+$/u, "Use a branch, tag, or commit")
-      .nullable()
-      .default(null),
-    path: z
-      .string()
-      .trim()
-      .min(1)
-      .max(500)
-      .refine(
-        (path) =>
-          path.endsWith(".toml") &&
-          !path.includes("\\") &&
-          !/\p{Cc}/u.test(path) &&
-          path
-            .split("/")
-            .every((part) => part !== "" && part !== "." && part !== ".."),
-        "Use a repository-relative .toml file path",
-      ),
+    ref: AppaGithubRefSchema,
+    path: AppaPolicyPathSchema,
     interval: AppaSyncIntervalSchema,
     validationDirectory: z
       .union([z.literal(""), PolicyTestDirectorySchema])
@@ -70,6 +74,18 @@ export const CreateAppaGithubRepositorySchema = z
       .max(100),
     githubAppConfigId: z.string().uuid(),
     interval: AppaSyncIntervalSchema,
+    /**
+     * Use a repository the admin already has: an unchanged template copy is
+     * seeded with the current policy; one holding appa.toml becomes the source.
+     */
+    existing: z.boolean().optional(),
+    /** Where an existing repository keeps its policy; defaults to appa.toml on the default branch. */
+    ref: AppaGithubRefSchema.optional(),
+    path: AppaPolicyPathSchema.optional(),
+    /** Where validations live; defaults to the template's traces/. */
+    validationDirectory: PolicyTestDirectorySchema.optional(),
+    /** Switch a running sync to this repository; the edit flow sends it. */
+    replace: z.boolean().optional(),
   })
   .strict();
 const AppaGithubSyncSchema = createSelectSchema(openappaGithubSyncTable, {
@@ -82,6 +98,8 @@ export const AppaGithubSyncStatusSchema = z.object({
   source: AppaGithubSyncSchema.nullable(),
   hasPolicy: z.boolean(),
   validationDirectory: z.string(),
+  /** Web origin of the source's GitHub, e.g. https://github.com, for links. */
+  githubWebUrl: z.string(),
 });
 /** What accepting a held pull published, and what it changed to publish it. */
 export const AcceptedHeldPullSchema = z.object({

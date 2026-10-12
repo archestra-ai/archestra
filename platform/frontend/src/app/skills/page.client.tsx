@@ -1470,7 +1470,7 @@ function listedSkillSource(item: ListedSkill): {
   return repo
     ? { label: repositoryLabel(repo), isRepo: true }
     : {
-        label: item.skill.sourceType === "github" ? "GitHub" : "Manual",
+        label: item.skill.sourceType === "github" ? "Git" : "Manual",
         isRepo: false,
       };
 }

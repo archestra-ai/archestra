@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, GIT_PROVIDER_LABELS } from "@archestra/shared";
 import { History, Info, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -312,7 +312,8 @@ function SkillDetailView({
           </Badge>
           {isGithubSkill && (
             <Badge variant="secondary" className="font-normal">
-              {isSynced ? "Synced from GitHub" : "Imported from GitHub"}
+              {isSynced ? "Synced from" : "Imported from"}{" "}
+              {GIT_PROVIDER_LABELS[skill.sourceProvider ?? "github"]}
             </Badge>
           )}
           {skill.sourceType === "built_in" && (

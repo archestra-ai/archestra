@@ -290,7 +290,7 @@ describe("PluginDetailPage", () => {
     await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(screen.getByRole("menuitem", { name: "Review update" }));
     expect(
-      screen.getByRole("dialog", { name: "GitHub updates" }),
+      screen.getByRole("dialog", { name: "Source updates" }),
     ).toBeVisible();
     expect(
       screen.getByRole("combobox", { name: "Check cadence" }),

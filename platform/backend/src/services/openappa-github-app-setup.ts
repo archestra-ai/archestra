@@ -348,7 +348,7 @@ function manifest(organization: string) {
       metadata: "read",
     },
     default_events: [],
-    hook_attributes: { url: config.frontendBaseUrl, active: false },
+    // No webhook: sync polls GitHub, and GitHub rejects hook URLs it cannot reach.
   };
 }
 

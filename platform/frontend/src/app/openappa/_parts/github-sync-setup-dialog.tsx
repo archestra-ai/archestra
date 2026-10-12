@@ -18,6 +18,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import {
   RadioGroup,
@@ -346,7 +351,7 @@ export function GithubSyncSetupDialog({
               <ManifestRow
                 index={1}
                 title="Create the App on GitHub"
-                hint="GitHub creates the App with the access below and hands its keys straight back."
+                hint="Enter the organization that will own the policy repository. GitHub creates the App there with the access below."
                 waiting={waiting === "create"}
                 onCheckAgain={() => {
                   setWaiting(null);
@@ -371,29 +376,31 @@ export function GithubSyncSetupDialog({
                 }
                 action={
                   <form
-                    className="flex flex-wrap items-center gap-2"
+                    className="flex flex-col gap-2 sm:flex-row"
                     onSubmit={(event) => {
                       event.preventDefault();
                       createApp();
                     }}
                   >
-                    <Label
-                      htmlFor="github-sync-organization"
-                      className="sr-only"
-                    >
-                      GitHub organization
-                    </Label>
-                    <Input
-                      id="github-sync-organization"
-                      className="h-8 w-44"
-                      placeholder="GitHub organization"
-                      autoComplete="off"
-                      value={organization}
-                      onChange={(event) => setOrganization(event.target.value)}
-                    />
+                    <InputGroup className="sm:flex-1">
+                      <InputGroupAddon>
+                        <span>github.com/</span>
+                      </InputGroupAddon>
+                      <InputGroupInput
+                        id="github-sync-organization"
+                        aria-label="GitHub organization"
+                        placeholder="your-organization"
+                        autoComplete="off"
+                        data-1p-ignore
+                        spellCheck={false}
+                        value={organization}
+                        onChange={(event) =>
+                          setOrganization(event.target.value)
+                        }
+                      />
+                    </InputGroup>
                     <Button
                       type="submit"
-                      size="sm"
                       disabled={
                         !ORGANIZATION_PATTERN.test(organization.trim()) ||
                         start.isPending
@@ -716,7 +723,7 @@ function ManifestRow({
             aria-live="polite"
           >
             <LoaderCircle className="size-3.5 animate-spin" />
-            <span>Finish in the GitHub window that opened.</span>
+            <span>Finish in the GitHub tab that opened.</span>
             <Button
               type="button"
               variant="link"
@@ -730,10 +737,10 @@ function ManifestRow({
         ) : (
           <p className="text-xs text-muted-foreground">{hint}</p>
         )}
+        {done || waiting || locked ? null : (
+          <div className="pt-2">{action}</div>
+        )}
       </div>
-      {done || waiting || locked ? null : (
-        <div className="shrink-0">{action}</div>
-      )}
     </li>
   );
 }
@@ -814,7 +821,8 @@ function headerFor(params: { step: Step; mode: AppMode; hasApps: boolean }) {
 }
 
 function openGithubWindow(url: string) {
-  return window.open(url, GITHUB_WINDOW, "popup=yes,width=1020,height=780");
+  // A named tab, so the manifest post and the install land in the same one.
+  return window.open(url, GITHUB_WINDOW);
 }
 
 /** GitHub only accepts a manifest as a form post, so post one into the window. */

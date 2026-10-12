@@ -82,8 +82,8 @@ export default function OpenAppaGithubAppCallback() {
               ? "This takes a few seconds."
               : failed
                 ? (complete.error?.message ??
-                  "GitHub didn't send what setup needs. Start again from the setup window.")
-                : "Return to the setup window to continue. You can close this one."}
+                  "GitHub didn't send what setup needs. Start again from the Archestra tab.")
+                : "Return to the Archestra tab to continue. You can close this one."}
           </CardDescription>
         </CardHeader>
         {!pending && (

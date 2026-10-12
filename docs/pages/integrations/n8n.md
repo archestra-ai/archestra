@@ -27,16 +27,16 @@ Keep the Archestra virtual key in n8n's credential store, rather than in workflo
 
 ## Configure Guardrails
 
-Send the session header so Guardrails track the workflow and evaluate tool calls.
+Send the session header so Guardrails track the workflow.
 
 1. Open the OpenAI credential used by your **OpenAI Chat Model** node.
 2. Turn on **Add Custom Header**.
 3. Set **Header Name** to `X-Appa-Session-ID`.
 4. Set **Header Value** to a session identifier, such as a UUID.
 
-If unrecognized clients are set to **Blocked** on **Guardrails → Overview**, requests without this header fail with HTTP `400`. The proxy tells the user to add an `X-Appa-Session-ID` header.
+For workflows that use an **HTTP Request** node, add `X-Appa-Session-ID` to the request headers.
 
-Workflows that call the LLM Proxy with an **HTTP Request** node send `X-Appa-Session-ID` in the request headers next to `Authorization: Bearer <virtual-key>`. See [Guardrail Clients](/docs/agents/guardrails/clients) for session details and subagent headers.
+For subagents or child workflows, also send `X-Appa-Parent-ID` with the parent workflow's session ID.
 
 ## Connect Tools
 

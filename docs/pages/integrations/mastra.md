@@ -45,6 +45,48 @@ console.log(result.text);
 
 Use the base URL, not `/chat/completions`. The `openai/` prefix selects the provider; the upstream model name is `gpt-4o`. Custom URLs use Chat Completions by default. See [Mastra's model configuration](https://mastra.ai/models#use-local-models-with-mastra).
 
+## Configure Guardrails
+
+Add the session header to the model configuration:
+
+```typescript
+import { randomUUID } from "node:crypto";
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "connection-check",
+  name: "Connection Check",
+  instructions: "Answer the user's request.",
+  model: {
+    id: "openai/gpt-4o",
+    url: "http://localhost:9000/v1/openai",
+    apiKey: process.env.OPENAI_API_KEY,
+    headers: {
+      "X-Appa-Session-ID": randomUUID(),
+    },
+  },
+});
+```
+
+For subagents, also pass `X-Appa-Parent-ID` with the parent session ID:
+
+```typescript
+const subagent = new Agent({
+  id: "subagent",
+  name: "Subagent",
+  instructions: "Handle delegated tasks.",
+  model: {
+    id: "openai/gpt-4o",
+    url: "http://localhost:9000/v1/openai",
+    apiKey: process.env.OPENAI_API_KEY,
+    headers: {
+      "X-Appa-Session-ID": randomUUID(),
+      "X-Appa-Parent-ID": parentSessionId,
+    },
+  },
+});
+```
+
 ## Verify the Connection
 
 Send `Reply with connection verified.` and check that the client returns a response. Open **Logs → LLM Proxy** in Archestra and find the request by its model and timestamp. Open the request to check its status and virtual key.

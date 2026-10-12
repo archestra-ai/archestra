@@ -559,7 +559,7 @@ function GuardrailsDocsLink({
     <ExternalDocsLink
       href={href}
       showIcon={false}
-      className="text-primary underline-offset-2 hover:underline"
+      className="text-primary underline underline-offset-2 hover:text-primary/80"
     >
       {children}
     </ExternalDocsLink>

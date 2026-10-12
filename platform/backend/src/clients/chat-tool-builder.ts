@@ -15,6 +15,7 @@ import {
   platformExecutedAs,
   stripReservedPlatformMeta,
   TOOL_ASK_USER_SHORT_NAME,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
@@ -61,6 +62,7 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import { remedyCallNeedsSlackReview } from "@/openappa/slack-hitl-review";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
@@ -156,6 +158,8 @@ export interface ChatToolContext {
   repeatTracker: ToolCallRepeatTracker;
   /** Keep rich UI media, but send it to the model only when its row allows it. */
   modelAcceptsImageToolResults: boolean;
+  /** A Slack reviewer answers OpenAPPA reviews for this run. */
+  openappaSlackReview?: boolean;
 }
 
 /**
@@ -182,6 +186,19 @@ export function buildMcpGatewayTool(params: {
   return {
     description: mcpTool.description || `Tool: ${mcpTool.name}`,
     inputSchema: jsonSchema(normalizedSchema),
+    // Pausing for approval moves the A2A task to input-required; the Slack
+    // reviewer's ruling then reaches the tool when the run resumes.
+    ...(ctx.openappaSlackReview &&
+    archestraMcpBranding.getToolShortName(mcpTool.name) ===
+      TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
+      ? {
+          needsApproval: (input: unknown) =>
+            remedyCallNeedsSlackReview({
+              organizationId: ctx.organizationId,
+              input,
+            }),
+        }
+      : {}),
     execute: async (args: unknown, options) => {
       const toolArguments = isRecord(args) ? args : undefined;
       return executeWithToolSpan({

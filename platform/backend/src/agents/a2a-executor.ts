@@ -364,6 +364,13 @@ export async function executeA2AMessage(
       subagentToolStream,
       repeatTracker,
       appaSubagent: params.appaSubagent,
+      // A root Slack run can pause for an OpenAPPA review: the approval-only
+      // A2A flow posts Approve/Decline and resumes with the reviewer's ruling.
+      // A delegated run's pause would never reach Slack.
+      openappaSlackReview:
+        source === "chatops:slack" &&
+        !parentDelegationChain &&
+        !params.appaSubagent,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({

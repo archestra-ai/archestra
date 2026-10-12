@@ -192,9 +192,6 @@ export function EditModelDialog({
   });
   const fallbackPricing = getFallbackPricing(model);
   const _teamScopeUnavailable = !canReadTeams || assignableTeams.length === 0;
-  // The model's provider supports prompt caching when the backend resolved a
-  // cache price for it (synced, custom, or multiplier-derived).
-  const supportsCachePricing = model.cachePriceSource !== null;
   const nonNegativePriceRule = {
     validate: (v: string) => {
       if (!v) return true;
@@ -521,57 +518,55 @@ export function EditModelDialog({
               accurate cost tracking.
             </p>
           )}
-          {supportsCachePricing && (
-            <div className="space-y-2 pt-2">
-              <div className="flex min-h-7 items-center">
-                <span className="text-sm font-medium">
-                  Cache Pricing ($/M tokens)
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <FormField
-                  control={form.control}
-                  name="customPricePerMillionCacheRead"
-                  rules={nonNegativePriceRule}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cache read</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={fallbackPricing.cacheRead}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="customPricePerMillionCacheWrite"
-                  rules={nonNegativePriceRule}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cache write</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder={fallbackPricing.cacheWrite}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              {model.cachePriceSource === "derived_multiplier" && (
-                <p className="text-xs text-muted-foreground">
-                  Cache prices are estimated from the input price. Set a custom
-                  cache price to override.
-                </p>
-              )}
+          <div className="space-y-2 pt-2">
+            <div className="flex min-h-7 items-center">
+              <span className="text-sm font-medium">
+                Cache Pricing ($/M tokens)
+              </span>
             </div>
-          )}
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="customPricePerMillionCacheRead"
+                rules={nonNegativePriceRule}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cache read</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={fallbackPricing.cacheRead}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="customPricePerMillionCacheWrite"
+                rules={nonNegativePriceRule}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cache write</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={fallbackPricing.cacheWrite}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            {model.cachePriceSource === "derived_multiplier" && (
+              <p className="text-xs text-muted-foreground">
+                Cache prices are estimated from the input price. Set a custom
+                cache price to override.
+              </p>
+            )}
+          </div>
         </div>
       </DialogSection>
 

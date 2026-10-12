@@ -37,6 +37,7 @@ import { drainBackgroundWork } from "@/utils/background-work";
 import { runTaskInAgentRuntime } from "./pod-run";
 import { crossRuntimeFile, crossRuntimeOutput } from "./runtime-crossing";
 import { runtimeOpenAppaSession } from "./runtime-identity";
+import * as startTask from "./start-task";
 import { workspaceTransferTickets } from "./workspace-transfers";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
@@ -309,43 +310,142 @@ describe("model-facing runtime tools", () => {
     await GuardrailsDeploymentModel.setEnabled(true);
   });
 
-  test("no proof refuses a runtime start", async ({
+  test("no proof starts an unbound run when unrecognized clients are allowed", async ({
     makeAgent,
     makeMember,
     makeOrganization,
     makeUser,
     seedAndAssignArchestraTools,
   }) => {
-    const actor = await makeUser();
-    const org = await makeOrganization();
-    await makeMember(actor.id, org.id, { role: "member" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      authorId: actor.id,
-      runtime: runtimeConfig(),
+    const started = await startWithoutProof({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
     });
-    await seedAndAssignArchestraTools(agent.id);
-    const launch = vi.spyOn(backend, "launch");
 
-    const result = await executeArchestraTool(
-      TOOL_START_RUN_FULL_NAME,
-      { agent_id: agent.id, message: "Do the work" },
-      {
-        agent: { id: agent.id, name: agent.name },
-        agentId: agent.id,
-        userId: actor.id,
-        organizationId: org.id,
-      },
+    expect(started.result.isError).not.toBe(true);
+    expect(started.result.structuredContent).toMatchObject({
+      runtime: "dedicated",
+      session_id: started.task.id,
+    });
+    expect(started.starts).toHaveLength(1);
+    expect(started.starts[0].systemParams).not.toHaveProperty(
+      "runtimeCrossing",
+    );
+  });
+
+  test("no proof starts nothing when unrecognized clients are blocked", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+
+    const started = await startWithoutProof({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+
+    expect(started.result.isError).toBe(true);
+    expect(JSON.stringify(started.result.content)).toContain(
+      "ask an administrator to allow unrecognized clients",
+    );
+    expect(started.starts).toHaveLength(0);
+  });
+
+  test("no proof reads and steers a run that has no parent", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+      parentId: null,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "RAW ARTIFACT" }],
+    });
+    const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+    const context = { ...seeded.context, openappaRuntimeCall: undefined };
+
+    const read = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: seeded.task.id },
+      context,
+    );
+    const steered = await executeArchestraTool(
+      TOOL_STEER_RUN_FULL_NAME,
+      { task_id: seeded.task.id, message: "Carry on" },
+      context,
     );
 
-    expect(result.isError).toBe(true);
-    expect(result.content).toEqual([
-      {
-        type: "text",
-        text: "Error: This runtime crossing has no verified source. The request was not sent.",
-      },
-    ]);
-    expect(launch).not.toHaveBeenCalled();
+    expect(read.isError).not.toBe(true);
+    expect(read.structuredContent).toMatchObject({ output: "RAW ARTIFACT" });
+    expect(steered.isError).not.toBe(true);
+    expect(steer).toHaveBeenCalledOnce();
+  });
+
+  test("no proof does not read, steer or write a run bound to a parent", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "RAW ARTIFACT" }],
+    });
+    const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+    const write = vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile");
+    const context = { ...seeded.context, openappaRuntimeCall: undefined };
+
+    const read = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: seeded.task.id },
+      context,
+    );
+    const steered = await executeArchestraTool(
+      TOOL_STEER_RUN_FULL_NAME,
+      { task_id: seeded.task.id, message: "SECRET STEER" },
+      context,
+    );
+    const written = await executeArchestraTool(
+      TOOL_WRITE_WORKSPACE_FILE_FULL_NAME,
+      { task_id: seeded.task.id, path: "note.txt", content: "SECRET FILE" },
+      context,
+    );
+
+    for (const result of [read, steered, written]) {
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain("bound to a different session");
+    }
+    expect(JSON.stringify(read)).not.toContain("RAW ARTIFACT");
+    expect(steer).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
   });
 
   test("a classified spawn that resolves in-process is refused", async ({
@@ -1171,6 +1271,8 @@ async function seededRun(params: {
   makeOrganization: () => Promise<{ id: string }>;
   makeUser: () => Promise<{ id: string }>;
   seedAndAssignArchestraTools: (agentId: string) => Promise<unknown>;
+  /** The session the run is bound to; null leaves it without a parent. */
+  parentId?: string | null;
 }) {
   // This fixture fakes execution I/O; availability must not depend on a host kubeconfig.
   vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
@@ -1225,15 +1327,18 @@ async function seededRun(params: {
     actorKind: "user",
     actorId: actor.id,
   });
-  await db.insert(schema.openappaSessionsTable).values({
-    actor: openappaActor(child.session_id),
-    root: openappaActor(PARENT),
-    organizationId: org.id,
-    callerId: child.caller_id,
-    sessionId: child.session_id,
-    parentId: PARENT,
-    startDecision: { decision: "ack" },
-  });
+  const parentId = params.parentId === undefined ? PARENT : params.parentId;
+  if (parentId) {
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor(child.session_id),
+      root: openappaActor(parentId),
+      organizationId: org.id,
+      callerId: child.caller_id,
+      sessionId: child.session_id,
+      parentId,
+      startDecision: { decision: "ack" },
+    });
+  }
   return {
     task,
     child,
@@ -1250,4 +1355,54 @@ async function seededRun(params: {
       },
     },
   };
+}
+
+/** Calls start_run with no proof; the launch seam is replaced, not the gate. */
+async function startWithoutProof(params: {
+  makeAgent: (overrides: Record<string, unknown>) => Promise<Agent>;
+  makeMember: (
+    userId: string,
+    organizationId: string,
+    role: { role: "member" },
+  ) => Promise<unknown>;
+  makeOrganization: () => Promise<{ id: string }>;
+  makeUser: () => Promise<{ id: string }>;
+  seedAndAssignArchestraTools: (agentId: string) => Promise<unknown>;
+}) {
+  const actor = await params.makeUser();
+  const org = await params.makeOrganization();
+  await params.makeMember(actor.id, org.id, { role: "member" });
+  const agent = await params.makeAgent({
+    organizationId: org.id,
+    authorId: actor.id,
+    runtime: runtimeConfig(),
+  });
+  await params.seedAndAssignArchestraTools(agent.id);
+  const contextRow = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: actor.id,
+  });
+  const task = await A2ATaskModel.createForRun({
+    contextId: contextRow.id,
+    agentId: agent.id,
+  });
+  const start = vi
+    .spyOn(startTask, "startDetachedAgentTask")
+    .mockResolvedValue(task);
+  try {
+    const result = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: agent.id, message: "Do the work" },
+      {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        userId: actor.id,
+        organizationId: org.id,
+      },
+    );
+    return { result, task, starts: start.mock.calls.map(([call]) => call) };
+  } finally {
+    // The shared setup clears calls but keeps implementations.
+    start.mockRestore();
+  }
 }

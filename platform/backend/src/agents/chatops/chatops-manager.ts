@@ -30,6 +30,11 @@ import {
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { RouteCategory } from "@/observability/tracing";
+import {
+  attachHitlReviews,
+  decideSlackHitlReview,
+  type SlackHitlDecision,
+} from "@/openappa/a2a-hitl-review";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
@@ -920,7 +925,28 @@ export class ChatOpsManager {
     }
 
     // Verify the agent exists and is an internal agent
-    const agent = await AgentModel.findById(binding.agentId);
+    let agent = await AgentModel.findById(binding.agentId);
+
+    // The bound agent was deleted or turned into a gateway/proxy: treat the
+    // channel as unassigned so the user gets a reply or the picker, not silence.
+    if ((!agent || agent.agentType !== "agent") && !provider.pinnedAgentId) {
+      logger.warn(
+        { agentId: binding.agentId, bindingId: binding.id },
+        "[ChatOps] Bound agent is not an internal agent, re-resolving",
+      );
+      const agentId = await this.resolveOrPromptChannelAgent({
+        provider,
+        message,
+        binding,
+        isDm: binding.isDm,
+      });
+      if (!agentId) {
+        return { success: true };
+      }
+      binding.agentId = agentId;
+      agent = await AgentModel.findById(agentId);
+    }
+
     if (!agent || agent.agentType !== "agent") {
       logger.warn(
         { agentId: binding.agentId, bindingId: binding.id },
@@ -2084,6 +2110,7 @@ export class ChatOpsManager {
         result,
         session,
         replyStream: replyStream.current,
+        reviewer: { userId, organizationId: binding.organizationId },
       });
     } catch (error) {
       // A mute that aborted the run mid-flight (e.g. during the retry leg above)
@@ -2569,6 +2596,8 @@ export class ChatOpsManager {
     session?: ChatSessionReplyInfo;
     /** The run's streamed reply, finished here instead of posting anew. */
     replyStream?: ChatOpsReplyStream | null;
+    /** The user who answers this run's OpenAPPA reviews. */
+    reviewer: ChatOpsReviewer;
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
@@ -2579,6 +2608,7 @@ export class ChatOpsManager {
       result,
       session,
       replyStream,
+      reviewer,
     } = params;
 
     const approvalRequests =
@@ -2593,6 +2623,7 @@ export class ChatOpsManager {
         currentApprovalId,
         result,
         replyStream,
+        reviewer,
       });
     }
 
@@ -2718,6 +2749,7 @@ export class ChatOpsManager {
     currentApprovalId?: string; // if replying from an approval flow
     result: A2AProtocolSendMessageResponse;
     replyStream?: ChatOpsReplyStream | null;
+    reviewer: ChatOpsReviewer;
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
@@ -2728,6 +2760,7 @@ export class ChatOpsManager {
       currentApprovalId,
       result,
       replyStream,
+      reviewer,
     } = params;
     const { task } = result;
     if (!task) {
@@ -2777,6 +2810,23 @@ export class ChatOpsManager {
         },
       });
 
+      // Only Slack chat runs pause for OpenAPPA reviews (see A2AManager).
+      const reviewTexts =
+        provider.providerId === "slack"
+          ? await attachHitlReviews({
+              organizationId: reviewer.organizationId,
+              taskId: task.id,
+              approvalRequests,
+              answerer: {
+                kind: "slack",
+                reviewerUserId: reviewer.userId,
+                channelId: message.channelId,
+                threadTs: message.threadId,
+              },
+              now: new Date(),
+            })
+          : new Map<string, string>();
+
       for (const approvalRequest of approvalRequests) {
         // `run_tool` is a meta wrapper; show the user the underlying tool and
         // its arguments rather than the opaque wrapper name.
@@ -2791,6 +2841,7 @@ export class ChatOpsManager {
           threadId: message.threadId,
           toolName,
           toolArgs: toolInput,
+          reviewText: reviewTexts.get(approvalRequest.approvalId),
           originalMessage: message,
         });
       }
@@ -3081,14 +3132,6 @@ export class ChatOpsManager {
         return;
       }
 
-      if (
-        email?.toLowerCase() !==
-        decision.originalMessage.senderEmail?.toLowerCase()
-      ) {
-        // Only initial requester can approve/decline
-        return;
-      }
-
       const binding = await ChatOpsChannelBindingModel.findByChannel({
         provider: provider.providerId,
         channelId: decision.channelId,
@@ -3100,6 +3143,42 @@ export class ChatOpsManager {
           { channelId: decision.channelId, workspaceId: decision.workspaceId },
           "[ChatOps] No channel binding found for approval decision",
         );
+        return;
+      }
+
+      // An OpenAPPA review is decided by its stored reviewer, in its thread,
+      // before it expires, once. The button payload only names the review.
+      const openappaReview =
+        provider.providerId === "slack"
+          ? await decideSlackHitlReview({
+              organizationId: binding.organizationId,
+              taskId: decision.taskId,
+              approvalId: decision.approvalId,
+              clickerUserId: user.id,
+              clickChannelId: decision.channelId,
+              approved: decision.approved,
+              now: new Date(),
+            })
+          : { status: "not_openappa" as const };
+      if (
+        openappaReview.status !== "not_openappa" &&
+        openappaReview.status !== "recorded"
+      ) {
+        await provider.sendEphemeralMessage?.({
+          channelId: decision.channelId,
+          userId: decision.userId,
+          threadId: decision.threadTs,
+          text: slackReviewRefusalText(openappaReview),
+        });
+        return;
+      }
+
+      if (
+        openappaReview.status === "not_openappa" &&
+        email?.toLowerCase() !==
+          decision.originalMessage.senderEmail?.toLowerCase()
+      ) {
+        // Only initial requester can approve/decline
         return;
       }
       const agentId = provider.pinnedAgentId ?? binding.agentId;
@@ -3144,6 +3223,9 @@ export class ChatOpsManager {
           messageKey: decision.messageTs,
           toolName: decision.toolName,
           approved: decision.approved,
+          ...(openappaReview.status === "recorded" && {
+            decidedByUserId: decision.userId,
+          }),
         });
       }
 
@@ -3169,7 +3251,11 @@ export class ChatOpsManager {
           approvalDecisions: [
             {
               approvalId: decision.approvalId,
-              approved: decision.approved,
+              // For an OpenAPPA review the reviewer has answered either way:
+              // `execute_remedy_plan` runs with the recorded ruling, so a
+              // decline also reaches OpenAPPA, which closes the offer.
+              approved:
+                openappaReview.status === "recorded" || decision.approved,
             },
           ],
         }),
@@ -3193,6 +3279,7 @@ export class ChatOpsManager {
         sendReply: true,
         currentApprovalId: decision.approvalId,
         result,
+        reviewer: { userId: user.id, organizationId: binding.organizationId },
       });
       await provider
         .clearTypingStatus?.(
@@ -3308,6 +3395,32 @@ function isTransientProviderError(error: unknown): error is ProviderError {
     error.chatErrorResponse.isRetryable &&
     CHATOPS_AUTO_RETRYABLE_CODES.has(error.chatErrorResponse.code)
   );
+}
+
+function slackReviewRefusalText(
+  review: Exclude<
+    SlackHitlDecision,
+    { status: "not_openappa" } | { status: "recorded" }
+  >,
+): string {
+  switch (review.status) {
+    case "forbidden":
+      return review.reviewerUserId
+        ? "Only the person who asked for this action can approve or decline it."
+        : "This review has no reviewer, so no one can decide it.";
+    case "already_decided":
+      return `This review was already ${review.ruling === "approve" ? "approved" : "declined"}.`;
+    case "expired":
+      return "This review expired, so the action stays blocked.";
+    case "closed":
+      return "This review is closed.";
+  }
+}
+
+/** The user who started the run, and so answers its OpenAPPA reviews. */
+interface ChatOpsReviewer {
+  userId: string;
+  organizationId: string;
 }
 
 /** What the reply of a server-side-session turn says about the session. */

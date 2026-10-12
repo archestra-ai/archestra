@@ -5322,6 +5322,88 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(starts[0].parent_id).toBeUndefined();
   });
 
+  test("has Claude Code wait for the gateway when its first request has no remedy tools, then delivers the ruling", async () => {
+    // Claude Code sends its first request while the gateway is still
+    // connecting: no remedy tools yet, but its own WaitForMcpServers. The
+    // denied call goes back as that wait, so the turn continues. The next
+    // request declares the remedy tools and reads the runtime's ruling where
+    // the wait's output was.
+    block = true;
+    options.nonStreamingToolUse = {
+      name: "Read",
+      input: { file_path: "/tmp/notes" },
+    };
+    const localTools = ["Read", "WaitForMcpServers"].map((name) => ({
+      name,
+      description: name,
+      input_schema: { type: "object", properties: {} },
+    }));
+    const send = (body: Record<string, unknown>) =>
+      app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.289 (external, cli)",
+          "x-claude-code-session-id": "6f0e7f0e-3a53-4f0c-9d0e-6c1f5b2a9d11",
+        },
+        payload: body,
+      });
+    const prompt = { role: "user", content: "Read my notes" };
+
+    const first = await send({
+      ...payload(false, [prompt]),
+      tools: localTools,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const wait = first
+      .json()
+      .content.find((part: { type: string }) => part.type === "tool_use");
+    expect(wait).toMatchObject({ name: "WaitForMcpServers", input: {} });
+    expect(first.body).not.toContain("Send your message again");
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ event: "cancel_call" }),
+    );
+
+    options.nonStreamingToolUse = {
+      id: "toolu_test_retry",
+      name: "Read",
+      input: { file_path: "/tmp/notes" },
+    };
+    const second = await send({
+      ...payload(false, [
+        prompt,
+        { role: "assistant", content: [wait] },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: wait.id,
+              content:
+                "ready: true Connected (their tools are now available — call them directly): archestra",
+            },
+          ],
+        },
+      ]),
+      tools: [...localTools, ...payload().tools.slice(1)],
+    });
+    expect(second.statusCode, second.body).toBe(200);
+    const forwarded = JSON.stringify(providerRequests.at(-1));
+    // The model never called the wait tool, so the ruling says whose it is.
+    expect(forwarded).toContain(
+      "OpenAPPA sent this WaitForMcpServers call in place of the tool call you made. Your call did not run.",
+    );
+    expect(forwarded).toContain("[appa] NATIVE REFUSAL");
+    expect(forwarded).not.toContain("ready: true");
+    expect(
+      second
+        .json()
+        .content.find((part: { type: string }) => part.type === "tool_use"),
+    ).toMatchObject({ name: "archestra__get_remedy_plans" });
+  });
+
   // Claude Code's agent teams and subagents trade messages through
   // SendMessage. The client delivers each message as an envelope in its
   // recipient's next turn.
@@ -9105,6 +9187,83 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       }
     });
 
+    test("a Claude Code subagent that returns no text does not stop its parent", async () => {
+      config.openappa.offerSigningSecret = secret;
+      const session = "7b3f2e9c-3b4d-4c5e-8f7a-9b0c1d2e3f4b";
+      native.loadChildReturns.mockImplementation(async () => []);
+      const body = payload(false, [
+        { role: "user", content: "Lint" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_empty",
+              name: "Agent",
+              input: { description: "lint", prompt: spawnPrompt },
+            },
+          ],
+        },
+        {
+          role: "user",
+          // The child's turn ended with the marker the proxy appends to a
+          // return, and with no text before it.
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_empty",
+              content: [
+                {
+                  type: "text",
+                  text: `\n\n${mintChildReturnMarker({
+                    organizationId: agent.organizationId,
+                    callerId: `user:${userId}`,
+                    parentId: `user:${userId}|${session}`,
+                    childId: `user:${userId}|${session}:c0`,
+                    childNativeId: "c0",
+                    spawnCallId: "toolu_empty",
+                    value: "",
+                  })}`,
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+      body.tools.push({
+        name: "Agent",
+        description: "Launch a subagent",
+        input_schema: { type: "object", properties: {} },
+      });
+      events.length = 0;
+      providerRequests.length = 0;
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.285 (external, cli)",
+          "x-claude-code-session-id": session,
+        },
+        payload: body,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      // No return crossed, so the parent gets an empty result and the runtime
+      // has nothing to approve.
+      expect(providerRequests.at(-1)).toMatchObject({
+        messages: expect.arrayContaining([
+          {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "toolu_empty", content: "" },
+            ],
+          },
+        ]),
+      });
+      expect(events.filter((event) => event.spawned_id)).toEqual([]);
+    });
+
     test("a Codex spawn_agent keeps its namespace on the re-emitted stream, and its grandchild binds under the root", async ({
       makeAgent,
     }) => {
@@ -9541,76 +9700,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         status: "completed",
       };
       let providerTurn = 0;
-      const responseStream = (output: Record<string, unknown>[]) => ({
-        async *[Symbol.asyncIterator]() {
-          yield {
-            type: "response.created",
-            sequence_number: 0,
-            response: {
-              id: `resp_${providerTurn}`,
-              object: "response",
-              status: "in_progress",
-              model: "gpt-5.5",
-              output: [],
-            },
-          };
-          for (const [index, item] of output.entries()) {
-            yield {
-              type: "response.output_item.added",
-              output_index: index,
-              sequence_number: index * 3 + 1,
-              item:
-                item.type === "function_call"
-                  ? { ...item, arguments: "", status: "in_progress" }
-                  : { ...item, content: [], status: "in_progress" },
-            };
-            if (item.type === "function_call") {
-              yield {
-                type: "response.function_call_arguments.delta",
-                item_id: item.id,
-                output_index: index,
-                sequence_number: index * 3 + 2,
-                delta: item.arguments,
-              };
-            } else {
-              const text = String(
-                (item.content as { text?: string }[] | undefined)?.[0]?.text ??
-                  "",
-              );
-              yield {
-                type: "response.output_text.delta",
-                item_id: item.id,
-                output_index: index,
-                content_index: 0,
-                sequence_number: index * 3 + 2,
-                delta: text,
-              };
-            }
-            yield {
-              type: "response.output_item.done",
-              output_index: index,
-              sequence_number: index * 3 + 3,
-              item,
-            };
-          }
-          yield {
-            type: "response.completed",
-            sequence_number: output.length * 3 + 4,
-            response: {
-              id: `resp_${providerTurn}`,
-              object: "response",
-              status: "completed",
-              model: "gpt-5.5",
-              output,
-              usage: {
-                input_tokens: 10,
-                output_tokens: 5,
-                total_tokens: 15,
-              },
-            },
-          };
-        },
-      });
+      const responseStream = (output: Record<string, unknown>[]) =>
+        codexResponseStream(`resp_${providerTurn}`, output);
       vi.spyOn(
         openAiResponsesAdapterFactory,
         "createClient",
@@ -10015,6 +10106,443 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(JSON.stringify(providerRequests)).not.toContain(
         "finished subagent",
       );
+    });
+
+    test.for([
+      { name: "ends a turn with no text", mailbox: true, answers: [""] },
+      {
+        name: "ends a turn with no text, read through wait_agent",
+        mailbox: false,
+        answers: [""],
+      },
+      {
+        name: "answers a follow-up",
+        mailbox: true,
+        answers: ["FIRST-ANSWER-4127", "SECOND-ANSWER-9053"],
+      },
+      {
+        name: "answers a follow-up before the parent reads its first answer",
+        mailbox: true,
+        answers: ["FIRST-ANSWER-4127", "SECOND-ANSWER-9053"],
+        readTogether: true,
+      },
+      {
+        name: "answers a follow-up after a turn with no text",
+        mailbox: true,
+        answers: ["", "ANSWER-AFTER-NO-TEXT-6230"],
+      },
+    ])("a Codex child that $name does not stop its parent", async ({
+      mailbox,
+      answers,
+      readTogether,
+    }, { makeAgent }) => {
+      const namespace = mailbox ? "collaboration" : "multi_agent_v1";
+      const unrecorded = "UNRECORDED-RETURN-7719";
+      const childSession = `user:${userId}|again-root:again-child`;
+      config.openappa.offerSigningSecret = secret;
+      await ModelModel.upsert({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      await makeAgent({
+        organizationId: agent.organizationId,
+        name: "Namespace Gateway",
+        agentType: "mcp_gateway",
+      });
+      await app.register(openAiProxyRoutes);
+      const message = (text: string) => ({
+        id: "msg_again",
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text, annotations: [] }],
+      });
+      // What the provider answers to the next request.
+      let answer: Record<string, unknown>[] = [
+        {
+          type: "function_call",
+          id: "fc_spawn_again",
+          call_id: "call_spawn_again",
+          name: "spawn_agent",
+          namespace,
+          arguments: JSON.stringify({
+            message: mailbox ? "gAAAA_opaque_task_fixture==" : spawnPrompt,
+            task_name: "worker",
+          }),
+          status: "completed",
+        },
+      ];
+      let providerTurn = 0;
+      vi.spyOn(
+        openAiResponsesAdapterFactory,
+        "createClient",
+      ).mockImplementation(
+        () =>
+          ({
+            responses: {
+              create: async (params: unknown) => {
+                providerTurn += 1;
+                providerRequests.push(structuredClone(params));
+                return codexResponseStream(`resp_${providerTurn}`, answer);
+              },
+            },
+          }) as never,
+      );
+      // The mock does what the runtime does. It lists the newest return of a
+      // child first. It replays only the latest return of a child, and it
+      // withholds any other. It keeps the first answer it gave for a spawn
+      // call, and it gives that answer for each later result of that call.
+      const crossed: Awaited<ReturnType<typeof native.loadChildReturns>> = [];
+      const receipts = new Map<string, string>();
+      const defaultDispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event === "child_end") {
+          events.push(event);
+          if (typeof event.output === "string") {
+            crossed.unshift({
+              childSessionId: event.session_id,
+              spawnCallId: event.spawn_call_id,
+              childNativeId: event.child_native_id,
+              value: event.output,
+            });
+          }
+          return JSON.stringify({ decision: "ack" });
+        }
+        if (event.event === "tool_result" && event.spawned_id) {
+          events.push(event);
+          const withheld =
+            "[appa] Tool output withheld: the subagent ended outside the return check";
+          const receipt =
+            receipts.get(event.tool_call_id) ??
+            JSON.stringify(
+              event.output === crossed[0]?.value
+                ? { decision: "ack", approved_output: event.output }
+                : {
+                    decision: "block",
+                    feedback: withheld,
+                    approved_output: withheld,
+                  },
+            );
+          receipts.set(event.tool_call_id, receipt);
+          return receipt;
+        }
+        if (
+          event.event === "tool_result" &&
+          event.tool_call_id === "call_wait_again"
+        ) {
+          return JSON.stringify({ decision: "ack" });
+        }
+        if (event.event === "turn_end" && event.session_id === childSession) {
+          events.push(event);
+        }
+        if (!defaultDispatch) throw new Error("missing native mock");
+        return defaultDispatch(raw);
+      });
+      native.loadChildReturns.mockImplementation(
+        async (_orgId: string, parentSessionId: string) =>
+          parentSessionId === `user:${userId}|again-root` ? [...crossed] : [],
+      );
+      const tools = [
+        {
+          type: "namespace",
+          name: "mcp__namespace_gateway",
+          tools: [
+            {
+              type: "function",
+              name: "archestra__execute_remedy_plan",
+              parameters: { type: "object", properties: {} },
+            },
+            {
+              type: "function",
+              name: "archestra__get_remedy_plans",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+        {
+          type: "namespace",
+          name: namespace,
+          tools: [
+            {
+              type: "function",
+              name: "spawn_agent",
+              parameters: { type: "object", properties: {} },
+            },
+            {
+              type: "function",
+              name: "wait_agent",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+      ];
+      const send = (params: {
+        thread: string;
+        parent?: string;
+        input: unknown[];
+      }) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/responses`,
+          remoteAddress: "127.0.0.1",
+          headers: {
+            authorization: "Bearer test-key",
+            "content-type": "application/json",
+            "user-agent": mailbox
+              ? "codex_cli_rs/0.159.2"
+              : "codex_cli_rs/0.154.0",
+            "x-archestra-user-id": userId,
+            "x-codex-turn-metadata": JSON.stringify({
+              thread_id: params.thread,
+              ...(params.parent ? { parent_thread_id: params.parent } : {}),
+            }),
+          },
+          payload: {
+            model: "gpt-5.5",
+            stream: true,
+            prompt_cache_key: params.thread,
+            input: params.input,
+            tools,
+          },
+        });
+      const completedOutput = (body: string): Record<string, unknown>[] =>
+        body
+          .split("\n")
+          .filter(
+            (line) => line.startsWith("data: ") && !line.includes("[DONE]"),
+          )
+          .map((line) => JSON.parse(line.slice(6)))
+          .findLast((frame) => frame.type === "response.completed").response
+          .output;
+
+      const root = await send({
+        thread: "again-root",
+        input: [{ role: "user", content: "Delegate the report" }],
+      });
+      expect(root.statusCode, root.body).toBe(200);
+      const releasedSpawn = completedOutput(root.body).find(
+        (item) => item.type === "function_call",
+      ) as { call_id: string; arguments: string };
+      const task = mailbox
+        ? {
+            type: "agent_message",
+            author: "/root",
+            recipient: "/root/worker",
+            content: [
+              {
+                type: "input_text",
+                text: "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\n",
+              },
+              {
+                type: "encrypted_content",
+                encrypted_content: JSON.parse(releasedSpawn.arguments).message,
+              },
+            ],
+          }
+        : {
+            role: "user",
+            content: JSON.parse(releasedSpawn.arguments).message,
+          };
+      const launched = [
+        releasedSpawn,
+        {
+          type: "function_call_output",
+          call_id: releasedSpawn.call_id,
+          output: JSON.stringify(
+            mailbox
+              ? { task_name: "/root/worker" }
+              : { agent_id: "again-child" },
+          ),
+        },
+      ];
+      // What the client carries to the parent for each child turn.
+      const carried: string[] = [];
+      const childTurn = async (text: string) => {
+        answer = [message(text)];
+        const child = await send({
+          thread: "again-child",
+          parent: "again-root",
+          input: [
+            task,
+            ...carried.flatMap((carrier) => [
+              { role: "assistant", content: carrier },
+              { role: "user", content: "One more question" },
+            ]),
+          ],
+        });
+        expect(child.statusCode, child.body).toBe(200);
+        carried.push(
+          completedOutput(child.body)
+            .filter((item) => item.type === "message")
+            .flatMap((item) => item.content as { text?: string }[])
+            .map((part) => part.text ?? "")
+            .join(""),
+        );
+      };
+      const mailboxReturn = (id: string | undefined, value: string) => ({
+        type: "agent_message",
+        ...(id ? { id } : {}),
+        author: "/root/worker",
+        recipient: "/root",
+        content: [
+          {
+            type: "input_text",
+            text: `Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n${value}`,
+          },
+        ],
+      });
+      const waited = (value: string) => [
+        {
+          type: "function_call",
+          id: "fc_wait_again",
+          call_id: "call_wait_again",
+          name: "wait_agent",
+          namespace,
+          arguments: JSON.stringify({ ids: ["again-child"] }),
+          status: "completed",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_wait_again",
+          output: JSON.stringify({
+            status: { "again-child": { completed: value } },
+          }),
+        },
+      ];
+      const returned = (values: string[]) =>
+        mailbox
+          ? values.map((value, index) => mailboxReturn(`amsg_${index}`, value))
+          : waited(values[0]);
+      // The client sends its history again with each request, so each parent
+      // turn is sent twice.
+      const parentTurns = async (values: string[]) => {
+        answer = [message("Parent complete")];
+        const statuses: number[] = [];
+        for (const prompt of ["Continue", "Continue again"]) {
+          providerRequests.length = 0;
+          const parent = await send({
+            thread: "again-root",
+            input: [
+              ...launched,
+              ...returned(values),
+              { role: "user", content: prompt },
+            ],
+          });
+          statuses.push(parent.statusCode);
+        }
+        return statuses;
+      };
+
+      events.length = 0;
+      await childTurn(answers[0]);
+      if (!readTogether) {
+        expect(await parentTurns([carried[0]])).toEqual([200, 200]);
+      }
+      if (answers[0] === "") {
+        // A turn with no text ends as a turn. A child end with no value would
+        // end the child: the runtime then denies its tool calls and blocks its
+        // answer to a follow-up.
+        expect(events.filter((event) => event.event === "child_end")).toEqual(
+          [],
+        );
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            event: "turn_end",
+            session_id: childSession,
+          }),
+        );
+        expect(crossed).toEqual([]);
+        expect(carried[0]).toContain("finished subagent");
+        expect(JSON.stringify(providerRequests)).not.toContain(
+          "finished subagent",
+        );
+        expect(providerRequests.at(-1)).toMatchObject({
+          input: expect.arrayContaining([
+            mailbox
+              ? expect.objectContaining({
+                  type: "agent_message",
+                  content: [
+                    {
+                      type: "input_text",
+                      text: "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n",
+                    },
+                  ],
+                })
+              : expect.objectContaining({
+                  type: "function_call_output",
+                  call_id: "call_wait_again",
+                  output: JSON.stringify({
+                    status: { "again-child": { completed: "" } },
+                  }),
+                }),
+          ]),
+        });
+        if (mailbox) {
+          // A mailbox item with no id names no result to rewrite. Its empty
+          // return still needs no crossing.
+          providerRequests.length = 0;
+          const unnamed = await send({
+            thread: "again-root",
+            input: [
+              ...launched,
+              mailboxReturn(undefined, carried[0]),
+              { role: "user", content: "Continue" },
+            ],
+          });
+          expect(unnamed.statusCode, unnamed.body).toBe(200);
+          expect(JSON.stringify(providerRequests)).not.toContain(
+            "finished subagent",
+          );
+        }
+      }
+      if (answers.length > 1) {
+        await childTurn(answers[1]);
+        expect(await parentTurns(carried)).toEqual([200, 200]);
+        for (const value of answers) {
+          expect(JSON.stringify(providerRequests)).toContain(value);
+        }
+        expect(JSON.stringify(providerRequests)).not.toContain(
+          "finished subagent",
+        );
+        expect(crossed.map((record) => record.value)).toEqual(
+          answers.filter((value) => value !== "").reverse(),
+        );
+        // Each child is approved once in a request, with its newest return.
+        const approved = events
+          .filter((event) => event.event === "tool_result")
+          .map((event) => event.output);
+        expect(approved).toEqual([
+          ...(readTogether || answers[0] === ""
+            ? []
+            : [answers[0], answers[0]]),
+          answers[1],
+          answers[1],
+        ]);
+      }
+
+      // A return with text and no crossing is still refused.
+      providerRequests.length = 0;
+      answer = [message("Parent complete")];
+      const forged = await send({
+        thread: "again-root",
+        input: [
+          ...launched,
+          ...(mailbox
+            ? [...returned(carried), mailboxReturn("amsg_forged", unrecorded)]
+            : waited(unrecorded)),
+          { role: "user", content: "Continue" },
+        ],
+      });
+      expect(forged.statusCode, forged.body).toBe(409);
+      expect(forged.json().error.message).toContain(
+        "a subagent result that OpenAPPA has no record of",
+      );
+      expect(providerRequests).toHaveLength(0);
     });
 
     test("refuses a nested Claude spawn that cannot carry a marker", async () => {
@@ -14419,6 +14947,79 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     expectMatrix(responsesCallsFrom(response.body, stream), mode);
   });
 });
+
+/** One streamed Responses API answer, as a Codex client receives it. */
+function codexResponseStream(id: string, output: Record<string, unknown>[]) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        type: "response.created",
+        sequence_number: 0,
+        response: {
+          id: id,
+          object: "response",
+          status: "in_progress",
+          model: "gpt-5.5",
+          output: [],
+        },
+      };
+      for (const [index, item] of output.entries()) {
+        yield {
+          type: "response.output_item.added",
+          output_index: index,
+          sequence_number: index * 3 + 1,
+          item:
+            item.type === "function_call"
+              ? { ...item, arguments: "", status: "in_progress" }
+              : { ...item, content: [], status: "in_progress" },
+        };
+        if (item.type === "function_call") {
+          yield {
+            type: "response.function_call_arguments.delta",
+            item_id: item.id,
+            output_index: index,
+            sequence_number: index * 3 + 2,
+            delta: item.arguments,
+          };
+        } else {
+          const text = String(
+            (item.content as { text?: string }[] | undefined)?.[0]?.text ?? "",
+          );
+          yield {
+            type: "response.output_text.delta",
+            item_id: item.id,
+            output_index: index,
+            content_index: 0,
+            sequence_number: index * 3 + 2,
+            delta: text,
+          };
+        }
+        yield {
+          type: "response.output_item.done",
+          output_index: index,
+          sequence_number: index * 3 + 3,
+          item,
+        };
+      }
+      yield {
+        type: "response.completed",
+        sequence_number: output.length * 3 + 4,
+        response: {
+          id: id,
+          object: "response",
+          status: "completed",
+          model: "gpt-5.5",
+          output,
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+          },
+        },
+      };
+    },
+  };
+}
 
 function wrapAsyncIterator<T>(stream: AsyncGenerator<T, undefined, unknown>) {
   return {

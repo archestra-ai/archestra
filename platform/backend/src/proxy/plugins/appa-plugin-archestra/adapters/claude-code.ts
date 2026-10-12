@@ -95,6 +95,9 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     }),
     rulingFromResult: structuredQuestionRuling,
   };
+  // Claude Code connects MCP servers in the background and declares this tool
+  // in the requests it sends before they are ready.
+  readonly pendingServersTool = "WaitForMcpServers";
   matches(context: AppaMatchContext): boolean {
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""

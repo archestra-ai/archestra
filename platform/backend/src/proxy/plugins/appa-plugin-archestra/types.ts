@@ -117,6 +117,13 @@ export type AppaClientAdapter = {
     rulingFromResult?(result: NativeQuestionResult): NativeQuestionRuling;
   };
   /**
+   * The client's own tool that waits for MCP servers which are still
+   * connecting. The client declares it when it sends requests before its tool
+   * list is complete. The call takes no arguments and changes nothing, so it
+   * can carry a denial while the gateway notice tool is not declared yet.
+   */
+  readonly pendingServersTool?: string;
+  /**
    * Reads the trajectory identity the client itself puts on the wire: the id
    * it keeps stable across a resumed or compacted conversation, so a resume
    * reopens the same OpenAPPA root. A fork or an out-of-band summarizer gets a

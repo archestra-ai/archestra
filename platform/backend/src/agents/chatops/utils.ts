@@ -231,6 +231,19 @@ export function formatApprovalToolArgs(
 }
 
 /**
+ * Fit an OpenAPPA review into one Slack section (3,000 chars) with room for
+ * the code fence around it.
+ */
+export function formatApprovalReviewText(
+  text: string,
+  maxLength = 2800,
+): string {
+  return text.length > maxLength
+    ? `${text.slice(0, maxLength)}\n… (truncated)`
+    : text;
+}
+
+/**
  * Whether an error message reads like an LLM provider rejecting the API key —
  * e.g. Anthropic's 401 body "invalid x-api-key", OpenAI's "Incorrect API key
  * provided", Gemini's "API key not valid". Used to swap the generic chatops

@@ -2642,6 +2642,179 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
+  test("has Claude Code wait for its MCP servers once in place of a denial it cannot deliver yet", async ({
+    makeOrganization,
+  }) => {
+    // Claude Code declares WaitForMcpServers in the requests it sends before
+    // the gateway is connected. The denied call becomes that wait, so the turn
+    // goes on and the next request can declare the remedy tools. A session
+    // waits once: after that, a request without the tools is refused as before.
+    config.openappa.enabled = true;
+    config.openappa.yellEnabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({
+      sessionId: "gateway-still-connecting",
+      organizationId,
+    });
+    context.headers = { "user-agent": "claude-cli/2.1.289 (external, cli)" };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "Read" }, { name: "WaitForMcpServers" }],
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "allow" as const },
+        {
+          kind: "deny" as const,
+          feedback: "[appa] Refused: no plan.",
+          recorded: true as const,
+        },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    const yells = () =>
+      OpenAppaYellModel.list({ organizationId, status: "all", limit: 10 });
+    const admitted = { id: "admitted", name: "Read", arguments: '{"a":1}' };
+    const send = () =>
+      plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          admitted,
+          { id: "denied", name: "Read", arguments: '{"b":2}' },
+        ],
+      });
+    try {
+      await plugin.onSessionInit(context);
+      expect(await send()).toEqual({
+        decision: "allow",
+        toolCalls: [
+          admitted,
+          { id: "denied", name: "WaitForMcpServers", arguments: "{}" },
+        ],
+        blocked: [
+          { id: "denied", name: "Read", reason: "[appa] Refused: no plan." },
+        ],
+      });
+      expect(cancelCalls).not.toHaveBeenCalled();
+
+      const second = (await send()) as {
+        decision: string;
+        refusal: { contentMessage: string };
+      };
+      expect(second.decision).toBe("refuse");
+      expect(second.refusal.contentMessage).toContain(
+        "Send your message again",
+      );
+      expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
+      expect((await yells()).data).toHaveLength(0);
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("does not answer a denied wait call with another wait call", async () => {
+    // The wait tool carries a denial only for other tools. A policy that
+    // denies the wait tool itself must not see it released anyway.
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "wait-denied" });
+    context.headers = { "user-agent": "claude-cli/2.1.289 (external, cli)" };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "WaitForMcpServers" }],
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        {
+          kind: "deny" as const,
+          feedback: "[appa] Refused: no plan.",
+          recorded: true as const,
+        },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    try {
+      await plugin.onSessionInit(context);
+      expect(
+        await plugin.onToolCalls({
+          ...context,
+          toolCalls: [{ id: "wait", name: "WaitForMcpServers", arguments: {} }],
+        }),
+      ).toMatchObject({
+        decision: "refuse",
+        refusal: { reason: "openappa_no_notice_tool", blockedToolId: "wait" },
+      });
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("refuses a denial the runtime did not record instead of sending the wait call", async () => {
+    // The runtime answers a wait call's result with the ruling it recorded for
+    // that id. A denial made before dispatch, such as malformed arguments, has
+    // no such record, so only the refusal text can deliver its ruling. The
+    // session keeps its one wait for a later denial.
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "unrecorded-denial" });
+    context.headers = { "user-agent": "claude-cli/2.1.289 (external, cli)" };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "Read" }, { name: "WaitForMcpServers" }],
+    };
+    const unrecorded = {
+      kind: "deny" as const,
+      feedback: "The tool call arguments are not valid JSON.",
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValueOnce([unrecorded])
+      .mockResolvedValueOnce([{ ...unrecorded, recorded: true as const }]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    const send = () =>
+      plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "denied", name: "Read", arguments: '{"b":' }],
+      });
+    try {
+      await plugin.onSessionInit(context);
+      const first = (await send()) as {
+        decision: string;
+        refusal: { contentMessage: string };
+      };
+      expect(first.decision).toBe("refuse");
+      expect(first.refusal.contentMessage).toContain(
+        "The tool call arguments are not valid JSON.",
+      );
+      expect(await send()).toMatchObject({
+        decision: "allow",
+        toolCalls: [{ id: "denied", name: "WaitForMcpServers" }],
+      });
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
   test("withdraws evaluated calls by id when a child handback shares a refused batch", async ({
     makeOrganization,
   }) => {

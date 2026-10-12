@@ -563,7 +563,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const bulkDeleteDescription = (() => {
     const noun = selectedCount === 1 ? "agent" : "agents";
     if (selectedExternalAgents.length === 0) {
-      return `Delete ${selectedCount} ${noun}? This cannot be undone.`;
+      return `Delete ${selectedCount} ${noun}? ${selectedCount === 1 ? "It moves" : "They move"} to Deleted, where ${selectedCount === 1 ? "it" : "they"} can be restored.`;
     }
 
     const externalCount = selectedExternalAgents.length;
@@ -1283,7 +1283,7 @@ function DeleteAgentDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Delete Agent"
-      description="Are you sure you want to delete this agent? This action cannot be undone."
+      description="Are you sure you want to delete this agent? It moves to Deleted, where it can be restored."
       isPending={deleteAgent.isPending}
       onConfirm={handleDelete}
       confirmLabel="Delete Agent"

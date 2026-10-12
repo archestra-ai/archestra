@@ -21,7 +21,7 @@ export function ShareConversationDialog({
     <ResourcePermissionsDialog
       resource="conversation"
       scope={conversationId}
-      title="Chat permissions"
+      title="Share chat"
       description="Share a read-only view of this chat. Only its owner can continue the conversation."
       open={open}
       onOpenChange={onOpenChange}

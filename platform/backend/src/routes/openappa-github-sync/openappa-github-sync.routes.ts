@@ -14,6 +14,8 @@ import {
   AppaGithubAppAccountsSchema,
   AppaGithubAppInstallResultSchema,
   AppaGithubAppManifestSchema,
+  AppaGithubRepositoryQuerySchema,
+  AppaGithubRepositoryStatusSchema,
   CompleteAppaGithubAppSchema,
   InstallAppaGithubAppSchema,
   PendingAppaGithubAppSchema,
@@ -188,6 +190,26 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       else request.auditBefore = null;
       return reply.send(result);
     },
+  );
+  app.get(
+    "/api/openappa/github-app/repository",
+    {
+      schema: {
+        operationId: RouteId.GetAppaGithubRepositoryStatus,
+        description:
+          "Whether a policy repository already exists, as far as the organization's GitHub Apps can see",
+        tags: ["OpenAPPA"],
+        querystring: AppaGithubRepositoryQuerySchema,
+        response: constructResponseSchema(AppaGithubRepositoryStatusSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await openappaGithubAppSetup.repository(
+          request.organizationId,
+          request.query.repo,
+        ),
+      ),
   );
   app.get(
     "/api/openappa/github-app/accounts",

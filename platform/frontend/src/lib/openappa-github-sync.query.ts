@@ -144,6 +144,21 @@ export function useAppaGithubAppAccounts(params: {
     },
   });
 }
+/** Whether the policy repository already exists, as the organization's Apps see it. */
+export function useAppaGithubRepositoryStatus(repo: string | null) {
+  return useQuery({
+    enabled: !!repo,
+    queryKey: ["openappa", "github-app", "repository", repo],
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.getAppaGithubRepositoryStatus({
+          query: { repo: repo as string },
+        });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
 export function useStartAppaGithubApp() {
   return useMutation({
     mutationFn: async (

@@ -29,6 +29,21 @@ export const InstallAppaGithubAppSchema = z.object({
   repo: GithubRepositorySchema,
 });
 
+export const AppaGithubRepositoryQuerySchema = z.object({
+  repo: GithubRepositorySchema,
+});
+
+/**
+ * `template`: a private, unchanged-looking copy of the template, ready to use.
+ * `other`: exists with other content or visibility. `unknown`: no App can see it.
+ */
+export const AppaGithubRepositoryStatusSchema = z.object({
+  status: z.enum(["template", "other", "unknown"]),
+});
+export type AppaGithubRepositoryStatus = z.infer<
+  typeof AppaGithubRepositoryStatusSchema
+>;
+
 export const AppaGithubAppAccountsQuerySchema = z.object({
   repo: GithubRepositorySchema.optional(),
 });

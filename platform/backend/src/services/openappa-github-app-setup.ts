@@ -21,7 +21,10 @@ import {
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
 import { ApiError } from "@/types";
-import type { PendingAppaGithubApp } from "@/types/openappa-github-app-setup";
+import type {
+  AppaGithubRepositoryStatus,
+  PendingAppaGithubApp,
+} from "@/types/openappa-github-app-setup";
 import { decryptSecretValue, encryptSecretValue } from "@/utils/crypto";
 
 /**
@@ -285,6 +288,69 @@ class OpenAppaGithubAppSetup {
     );
   }
 
+  /**
+   * Whether `repo` already exists, so setup can skip creating it. Archestra can
+   * only see a private repository through a GitHub App installed on it, so a
+   * repository no App can reach reads as unknown rather than missing.
+   */
+  async repository(
+    organizationId: string,
+    repo: string,
+  ): Promise<AppaGithubRepositoryStatus> {
+    const tokens: (string | null)[] = [null];
+    for (const definition of await RuntimeCredentialDefinitionModel.list(
+      organizationId,
+    )) {
+      if (
+        definition.kind !== "github_app" ||
+        !definition.allowOrganization ||
+        definition.githubUrl !== GITHUB_API_URL ||
+        !definition.appId ||
+        !definition.installationId
+      )
+        continue;
+      const privateKey = await RuntimeCredentialConnectionModel.resolveValue({
+        organizationId,
+        credentialId: definition.key,
+        scope: "organization",
+      }).catch(() => null);
+      if (!privateKey) continue;
+      tokens.push(
+        await resolveInstallationToken({
+          githubUrl: GITHUB_API_URL,
+          appId: definition.appId,
+          installationId: definition.installationId,
+          privateKey,
+        }).catch(() => null),
+      );
+    }
+    for (const [index, token] of tokens.entries()) {
+      if (index > 0 && !token) continue;
+      const response = await fetch(`${GITHUB_API_URL}/repos/${repo}`, {
+        headers: {
+          Accept: "application/vnd.github+json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        redirect: "error",
+        signal: AbortSignal.timeout(15_000),
+      }).catch(() => null);
+      if (!response) continue;
+      if (!response.ok) continue;
+      const found = RepositorySchema.safeParse(await response.json());
+      if (!found.success) continue;
+      return {
+        status:
+          found.data.private &&
+          found.data.template_repository?.full_name.toLowerCase() ===
+            TEMPLATE_REPO
+            ? "template"
+            : "other",
+      };
+    }
+    return { status: "unknown" };
+  }
+
   private async assertAllowed(owner: Owner) {
     if (!enterpriseTier.isOpenappaActive())
       throw new ApiError(
@@ -491,6 +557,12 @@ async function canAccessRepo(params: {
     `GitHub returned HTTP ${response.status} while checking access to ${params.repo}.`,
   );
 }
+
+const TEMPLATE_REPO = "archestra-ai/openappa-config";
+const RepositorySchema = z.object({
+  private: z.boolean(),
+  template_repository: z.object({ full_name: z.string() }).nullish(),
+});
 
 const AccountSchema = z.object({
   login: z.string(),

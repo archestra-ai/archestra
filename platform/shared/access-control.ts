@@ -1672,6 +1672,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DiscardAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.InstallAppaGithubApp]: { organizationSettings: ["update"] },
   [RouteId.GetAppaGithubAppAccounts]: { credential: ["read"] },
+  [RouteId.GetAppaGithubRepositoryStatus]: { organizationSettings: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.GetOpenappaBatteries]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { openappaPolicy: ["read"] },

@@ -35,8 +35,10 @@ import {
 } from "@/components/ui/select";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
   useAppaGithubAppAccounts,
+  useAppaGithubRepositoryStatus,
   useCreateAppaGithubRepository,
   useDiscardAppaGithubApp,
   useInstallAppaGithubApp,
@@ -102,6 +104,15 @@ export function GithubSyncSetupDialog({
 
   const repo = `${owner.trim()}/${name.trim()}`;
   const repoValid = REPO_PATTERN.test(repo);
+  // Look the name up once typing pauses, so an existing repository isn't recreated.
+  const checkedRepo = useDebouncedValue(repoValid ? repo : null, 400);
+  const repoLookup = useAppaGithubRepositoryStatus(
+    step === "repo" ? checkedRepo : null,
+  );
+  const repoStatus: RepositoryStatus =
+    checkedRepo !== repo || repoLookup.isPending
+      ? "checking"
+      : (repoLookup.data?.status ?? "unknown");
   const accounts = useAppaGithubAppAccounts({
     enabled: step !== "repo" && !!canReadCredentials && apps.length > 0,
     repo,
@@ -252,7 +263,7 @@ export function GithubSyncSetupDialog({
           {step === "repo" ? (
             <Button
               type="button"
-              disabled={!repoValid}
+              disabled={!repoValid || repoStatus === "other"}
               onClick={() => setStep("app")}
             >
               <span>Continue</span>
@@ -296,23 +307,12 @@ export function GithubSyncSetupDialog({
             </div>
           </div>
 
-          <div className="flex items-center gap-4 rounded-lg border bg-card p-4">
-            <div className="min-w-0 flex-1 space-y-1">
-              <p className="text-sm font-medium">
-                Create it from the OpenAPPA template
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {openedTemplate
-                  ? "Finish on GitHub, keep it private, then continue here."
-                  : "GitHub opens with the template, owner and name filled in. Keep it private."}
-              </p>
-            </div>
-            <GitHubConnectButton
-              label="Create on GitHub"
-              disabled={!repoValid}
-              onClick={openTemplate}
-            />
-          </div>
+          <RepositoryCard
+            repo={repo}
+            status={repoValid ? repoStatus : "invalid"}
+            openedTemplate={openedTemplate}
+            onCreate={openTemplate}
+          />
 
           <div className="flex min-h-8 flex-wrap items-center gap-2 text-sm">
             <RefreshCw className="size-3.5 text-muted-foreground" />
@@ -604,6 +604,87 @@ export function GithubSyncSetupDialog({
 type Step = "repo" | "app" | "connect";
 type AppMode = "fork" | "pick" | "create";
 type Interval = "15m" | "1h" | "1d";
+type RepositoryStatus =
+  | "invalid"
+  | "checking"
+  | "template"
+  | "other"
+  | "unknown";
+
+/** Points the admin at GitHub to create the repository, unless it already exists. */
+function RepositoryCard({
+  repo,
+  status,
+  openedTemplate,
+  onCreate,
+}: {
+  repo: string;
+  status: RepositoryStatus;
+  openedTemplate: boolean;
+  onCreate: () => void;
+}) {
+  if (status === "template" || status === "other")
+    return (
+      <div
+        className={cn(
+          "flex items-start gap-3 rounded-lg border p-4",
+          status === "template"
+            ? "bg-card"
+            : "border-amber-500/30 bg-amber-50/60 dark:bg-amber-950/20",
+        )}
+        aria-live="polite"
+      >
+        {status === "template" ? (
+          <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+            <Check className="size-3" strokeWidth={3} />
+          </span>
+        ) : (
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+        )}
+        <div className="min-w-0 space-y-1">
+          <p className="text-sm font-medium">
+            <span className="font-mono">{repo}</span> already exists
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {status === "template"
+              ? "It's a private copy of the OpenAPPA template, so setup will use it. Nothing to create."
+              : "It isn't a private copy of the OpenAPPA template. Choose another name, or connect it instead if it already holds your policy."}
+          </p>
+        </div>
+      </div>
+    );
+  return (
+    <div className="flex items-center gap-4 rounded-lg border bg-card p-4">
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="text-sm font-medium">
+          Create it from the OpenAPPA template
+        </p>
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {status === "checking" ? (
+            <>
+              <LoaderCircle className="size-3 animate-spin" />
+              <span>Checking whether it already exists…</span>
+            </>
+          ) : openedTemplate ? (
+            <span>
+              Finish on GitHub and keep it private, then continue. If GitHub
+              says it already exists, just continue.
+            </span>
+          ) : (
+            <span>
+              GitHub opens with the template, owner and name filled in.
+            </span>
+          )}
+        </p>
+      </div>
+      <GitHubConnectButton
+        label="Create on GitHub"
+        disabled={status === "invalid" || status === "checking"}
+        onClick={onCreate}
+      />
+    </div>
+  );
+}
 
 function Stepper({ step }: { step: Step }) {
   const current = STEPS.findIndex((entry) => entry.id === step);

@@ -41,6 +41,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useAllPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useControlledRowSelection } from "@/lib/hooks/use-bulk-selection";
@@ -646,9 +651,20 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
             <span className="capitalize">
               {viewPermissionsRole?.name ?? ""}
             </span>
-            <Badge variant="secondary" className="font-normal">
-              Read-only
-            </Badge>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="secondary"
+                  className="cursor-default font-normal"
+                >
+                  Read-only
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-64">
+                Predefined roles can't be changed. To edit this one, use
+                Duplicate as custom role in its ⋯ menu.
+              </TooltipContent>
+            </Tooltip>
           </span>
         }
         description={

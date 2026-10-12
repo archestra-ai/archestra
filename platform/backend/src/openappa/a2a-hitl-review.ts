@@ -47,7 +47,7 @@ export async function remedyCallNeedsHumanReview(params: {
  * Who answers a paused review: one Slack user in one thread, or whoever can
  * send `taskOps.approvalDecisions` for the task over A2A.
  */
-export type HitlReviewAnswerer =
+type HitlReviewAnswerer =
   | {
       kind: "slack";
       reviewerUserId: string;

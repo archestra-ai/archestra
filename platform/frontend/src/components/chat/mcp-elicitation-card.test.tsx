@@ -178,8 +178,13 @@ describe("McpElicitationCard", () => {
       screen.queryByTestId("mcp-elicitation-submit"),
     ).not.toBeInTheDocument();
 
-    // Picking a single-choice option answers the tab and moves on.
+    // Picking an option only selects it; Next moves on.
     await user.click(screen.getByRole("radio", { name: "My team" }));
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveAttribute(
         "aria-selected",
@@ -470,7 +475,7 @@ describe("McpElicitationCard", () => {
     expect(footerButtons()).toEqual(["Back", "Submit"]);
   });
 
-  it("moves on when the already-picked option is clicked again", async () => {
+  it("stays on the tab when an option is picked, until Next is clicked", async () => {
     const user = userEvent.setup();
 
     render(
@@ -484,19 +489,14 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "A" }));
-    await waitFor(() =>
-      expect(screen.getByText("Second?")).toBeInTheDocument(),
-    );
-    await user.click(screen.getByTestId("mcp-elicitation-back"));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.getByText("First?")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "A" })).toBeChecked();
 
-    // Confirming the answer it already has moves on, like the first pick.
-    await user.click(screen.getByRole("radio", { name: "A" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveAttribute(
-        "aria-selected",
-        "true",
-      ),
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
+    expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
   });
 
@@ -598,6 +598,7 @@ describe("McpElicitationCard", () => {
     await user.click(screen.getByTestId("mcp-elicitation-back"));
     expect(screen.getByText("First?")).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "A" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByTestId("mcp-elicitation-submit")).toBeEnabled(),
     );
@@ -704,6 +705,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "B" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Second?")).toBeInTheDocument(),
     );
@@ -751,6 +753,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "A" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Second?")).toBeInTheDocument(),
     );
@@ -884,6 +887,7 @@ describe("McpElicitationCard", () => {
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: "Only me" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() => {
       expect(
         screen.getByRole("radio", { name: "Staging" }),
@@ -924,6 +928,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Blue" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Pick a fruit")).toBeInTheDocument(),
     );
@@ -1085,6 +1090,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Blue" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Pick a fruit")).toBeInTheDocument(),
     );

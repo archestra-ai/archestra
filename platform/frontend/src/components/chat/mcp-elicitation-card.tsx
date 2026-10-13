@@ -38,17 +38,10 @@ import {
 import { OpenappaReviewToolCard } from "./openappa-review-tool-card";
 
 /**
- * Long enough for the picked row to visibly highlight before the next
- * question replaces it, short enough not to read as lag.
- */
-const AUTO_ADVANCE_DELAY_MS = 300;
-
-/**
  * Displays pending multiple-choice questions in one inline card with one tab per question.
- * Selecting an option on a single-choice tab answers it and advances to the next tab.
  * A lone single-choice question is answered by the click itself, with Skip
  * to dismiss; a typed answer comes from the chat composer instead.
- * Multiple-choice tabs advance when the user clicks Next.
+ * With several questions, picking an option only selects it: Next moves on.
  * Navigation buttons appear in the footer of each tab.
  * The Submit button on the final tab sends all answers when every question is answered.
  * New questions append as tabs without resetting selections.
@@ -90,13 +83,10 @@ export function McpElicitationCard({
   const submissionSnapshotRef = useRef<ChatMcpElicitationRequest[] | null>(
     null,
   );
-  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Read by delayed auto-advance to inspect current tabs when the timer fires.
-  const questionIdsRef = useRef<string[]>([]);
   // Move focus to the active question so keyboard users stay focused after tab changes.
   const focusPanelOnChangeRef = useRef(false);
-  // Clicking an option answers a single-choice tab and advances. Moving
-  // between options with arrow keys selects the option without advancing.
+  // A pointer-opened "Type something" box takes focus; a keyboard user's
+  // focus stays where it is.
   const lastInputRef = useRef<"pointer" | "keyboard">("pointer");
   // Tracks if focus was inside the card, even if a focused control unmounts.
   const focusWithinRef = useRef(false);
@@ -216,7 +206,6 @@ export function McpElicitationCard({
       isPending: pendingRequestIds.has(request.id),
     };
   });
-  questionIdsRef.current = questions.map((question) => question.request.id);
 
   const hasUserAnswers = Object.keys(valuesById).length > 0;
   const userHasNavigated = userSelectedTabRef.current || hasUserAnswers;
@@ -252,15 +241,6 @@ export function McpElicitationCard({
     activeQuestion !== undefined &&
     answersOnClick(activeQuestion) &&
     otherOpenById[activeQuestion.request.id] !== true;
-
-  useEffect(
-    () => () => {
-      if (advanceTimerRef.current) {
-        clearTimeout(advanceTimerRef.current);
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     if (allMembersSettled) {
@@ -316,15 +296,7 @@ export function McpElicitationCard({
     return null;
   }
 
-  const cancelAutoAdvance = () => {
-    if (advanceTimerRef.current) {
-      clearTimeout(advanceTimerRef.current);
-      advanceTimerRef.current = null;
-    }
-  };
-
   const showQuestion = (id: string, options?: { focusPanel?: boolean }) => {
-    cancelAutoAdvance();
     focusPanelOnChangeRef.current = options?.focusPanel ?? false;
     userSelectedTabRef.current = true;
     setActiveId(id);
@@ -334,35 +306,6 @@ export function McpElicitationCard({
     const question = questions[index];
     if (question) {
       showQuestion(question.request.id, { focusPanel: true });
-    }
-  };
-
-  const scheduleAutoAdvance = (fromId: string) => {
-    cancelAutoAdvance();
-    advanceTimerRef.current = setTimeout(() => {
-      advanceTimerRef.current = null;
-      const ids = questionIdsRef.current;
-      const index = ids.indexOf(fromId);
-      if (index === -1 || index === ids.length - 1) {
-        return;
-      }
-      focusPanelOnChangeRef.current = true;
-      userSelectedTabRef.current = true;
-      setActiveId((current) =>
-        (current ?? ids[0]) === fromId ? ids[index + 1] : current,
-      );
-    }, AUTO_ADVANCE_DELAY_MS);
-  };
-
-  // A click on an option answers a single-choice tab, even a click on the
-  // option already picked (going back to a tab to confirm its answer).
-  const advanceOnPick = (question: CardQuestion) => {
-    if (
-      isMultiple &&
-      isSingleChoiceForm(question.fields) &&
-      lastInputRef.current === "pointer"
-    ) {
-      scheduleAutoAdvance(question.request.id);
     }
   };
 
@@ -398,10 +341,6 @@ export function McpElicitationCard({
     if (other && isSingleChoiceForm(fields) && !typed) {
       setOtherOpen({ question, open: false });
     }
-    // Typing never advances, and stops an advance a pick just scheduled;
-    // Next or Submit sends the text.
-    if (typed) cancelAutoAdvance();
-    else advanceOnPick(question);
   };
 
   /**
@@ -418,7 +357,6 @@ export function McpElicitationCard({
     const { request, fields } = question;
     const other = fields.find(isOtherTextField);
     if (!other) return;
-    cancelAutoAdvance();
     const cleared = open
       ? isSingleChoiceForm(fields)
         ? Object.fromEntries(
@@ -444,7 +382,6 @@ export function McpElicitationCard({
   const respondToAll = async (
     buildResponse: (question: CardQuestion) => ElicitationResponse,
   ) => {
-    cancelAutoAdvance();
     // Freeze only questions the backend is still waiting on. Already-settled
     // or acknowledged members stay out so a later dismiss cannot resurrect them.
     submissionSnapshotRef.current = pendingQuestions.map(
@@ -480,11 +417,7 @@ export function McpElicitationCard({
     fieldName: string;
     value: string;
   }) => {
-    if (!answersOnClick(question)) {
-      advanceOnPick(question);
-      return;
-    }
-    if (isSubmitting) {
+    if (!answersOnClick(question) || isSubmitting) {
       return;
     }
     const values = {
@@ -572,7 +505,7 @@ export function McpElicitationCard({
     );
   };
 
-  // Enter on a picked option confirms it, like the click that auto-advances.
+  // Enter on a picked option confirms it, like Next or Submit.
   const handleKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
     lastInputRef.current = "keyboard";
     const role =
@@ -672,7 +605,6 @@ export function McpElicitationCard({
           onChange={(value) =>
             setFieldValue({ question, fieldName: otherField.name, value })
           }
-          onFocus={cancelAutoAdvance}
         />,
       );
     }
@@ -681,7 +613,7 @@ export function McpElicitationCard({
     ) : (
       <fieldset
         aria-labelledby={questionId}
-        className="flex min-w-0 flex-col gap-4"
+        className="flex min-w-0 flex-col gap-1.5"
       >
         {inputs}
       </fieldset>

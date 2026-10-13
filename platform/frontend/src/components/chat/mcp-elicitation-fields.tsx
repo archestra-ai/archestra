@@ -447,7 +447,7 @@ export function ElicitationFieldInput({
           aria-label={!labelledBy && hideLabel ? field.label : undefined}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
-          className="flex flex-col gap-1"
+          className="flex flex-col gap-1.5"
         >
           {enumValues.map((option, index) => {
             const optionId = `${id}-${index}`;
@@ -631,9 +631,10 @@ function OptionButton({
 }
 
 /**
- * One selectable option row. Clicking anywhere on the row selects it.
- * Selected and hover states share the muted background.
- * The border appears only when the row is selected.
+ * One selectable option: a bordered tile like `OptionButton`, but it keeps
+ * its radio or checkbox, because picking here only selects and Next or
+ * Submit sends. Clicking anywhere on the tile selects it; the picked tile
+ * takes the primary border.
  */
 function OptionRow({
   htmlFor,
@@ -650,10 +651,12 @@ function OptionRow({
     <label
       htmlFor={htmlFor}
       className={cn(
-        "-mx-1 flex cursor-pointer items-start gap-2 rounded-md border px-3 py-1.5 transition-colors",
-        "hover:bg-muted/60 has-[:focus-visible]:bg-muted/60 has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring/50",
-        selected ? "border-border bg-muted" : "border-transparent",
-        error && !selected ? "border-destructive/40" : null,
+        "flex min-h-11 cursor-pointer items-start gap-3 rounded-md border bg-card px-3 py-2.5 shadow-xs transition-colors",
+        "hover:bg-muted/60 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50",
+        selected
+          ? "border-primary bg-primary/5 ring-1 ring-primary ring-inset"
+          : "border-border",
+        error && !selected ? "border-destructive/60" : null,
       )}
     >
       {children}

@@ -124,25 +124,29 @@ export class GitHostClient {
     ref: string;
     path: string;
   }): Promise<boolean> {
-    const url =
-      this.host.provider === "gitlab"
-        ? `${this.repoApi(params.repo)}/repository/tree?ref=${encodeURIComponent(params.ref)}&path=${encodeURIComponent(params.path)}&per_page=1`
-        : `${this.repoApi(params.repo)}/contents/${params.path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(params.ref)}`;
-    const response = await this.request(url, {
-      method: this.host.provider === "github" ? "HEAD" : "GET",
-    });
-    if (response.status === 404) return false;
-    if (!response.ok) throw await toError(response, params.path);
-    if (this.host.provider === "github") return true;
-    // GitLab answers an empty list for a missing folder and 404s only for a bad ref.
-    const entries = (await response.json()) as unknown[];
-    if (entries.length > 0) return true;
-    // A file, not a folder: ask the files API.
+    if (this.host.provider === "github") {
+      const response = await this.request(
+        `${this.repoApi(params.repo)}/contents/${params.path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(params.ref)}`,
+        { method: "HEAD" },
+      );
+      if (response.status === 404) return false;
+      if (!response.ok) throw await toError(response, params.path);
+      return true;
+    }
+    // GitLab has no one call for both: the files API sees only files, and the
+    // tree API 404s for a file as it does for a missing path.
     const file = await this.request(
       `${this.repoApi(params.repo)}/repository/files/${encodeURIComponent(params.path)}?ref=${encodeURIComponent(params.ref)}`,
       { method: "HEAD" },
     );
-    return file.ok;
+    if (file.ok) return true;
+    if (file.status !== 404) throw await toError(file, params.path);
+    const tree = await this.request(
+      `${this.repoApi(params.repo)}/repository/tree?ref=${encodeURIComponent(params.ref)}&path=${encodeURIComponent(params.path)}&per_page=1`,
+    );
+    if (tree.status === 404) return false;
+    if (!tree.ok) throw await toError(tree, params.path);
+    return ((await tree.json()) as unknown[]).length > 0;
   }
 
   /**

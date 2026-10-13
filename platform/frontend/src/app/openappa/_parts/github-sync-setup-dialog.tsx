@@ -902,7 +902,7 @@ export function GithubSyncSetupDialog({
               onChange={back}
             />
           )}
-          {gitlab && !editing ? (
+          {gitlab && editing?.provider !== "gitlab" ? (
             <RadioGroup
               value={projectMode}
               onValueChange={(value) =>
@@ -1065,9 +1065,15 @@ export function GithubSyncSetupDialog({
                   className="h-10 w-full"
                   value={repo}
                   onValueChange={setRepo}
-                  placeholder="Choose a repository"
-                  searchPlaceholder="Search repositories…"
-                  emptyMessage="No repository matches."
+                  placeholder={
+                    gitlab ? "Choose a project" : "Choose a repository"
+                  }
+                  searchPlaceholder={
+                    gitlab ? "Search projects…" : "Search repositories…"
+                  }
+                  emptyMessage={
+                    gitlab ? "No project matches." : "No repository matches."
+                  }
                   listClassName="max-h-72"
                   items={repositories.data.repositories.map((entry) => ({
                     value: entry.fullName,

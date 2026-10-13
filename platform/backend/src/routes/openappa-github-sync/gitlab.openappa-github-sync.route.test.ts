@@ -125,6 +125,10 @@ describe("APPA GitLab sync", () => {
       path: "team/with-policy",
       files: { "appa.toml": initialPolicy(), "traces/a.appa": "x" },
     });
+    gitlab.addProject({
+      path: "team/no-policy",
+      files: { "README.md": "# Notes" },
+    });
     const statusOf = async (repo: string) =>
       (
         await app.inject({
@@ -140,6 +144,10 @@ describe("APPA GitLab sync", () => {
     expect(await statusOf("team/with-policy")).toEqual({
       status: "policy",
       validations: true,
+    });
+    expect(await statusOf("team/no-policy")).toEqual({
+      status: "other",
+      validations: false,
     });
     expect(await statusOf("team/missing")).toEqual({
       status: "unreachable",

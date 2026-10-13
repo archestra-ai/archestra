@@ -232,14 +232,15 @@ export class FakeGitlab {
     if (kind === "tree") {
       const prefix = url.searchParams.get("path");
       const recursive = url.searchParams.get("recursive") === "true";
-      return HttpResponse.json(
-        treeEntries(files).filter((entry) =>
-          prefix
-            ? entry.path.startsWith(`${prefix}/`) &&
-              (recursive || !entry.path.slice(prefix.length + 1).includes("/"))
-            : recursive || !entry.path.includes("/"),
-        ),
+      const entries = treeEntries(files).filter((entry) =>
+        prefix
+          ? entry.path.startsWith(`${prefix}/`) &&
+            (recursive || !entry.path.slice(prefix.length + 1).includes("/"))
+          : recursive || !entry.path.includes("/"),
       );
+      // Like GitLab, a path that is a file or missing is "404 Tree Not Found".
+      if (prefix && entries.length === 0) return notFound();
+      return HttpResponse.json(entries);
     }
     if (kind === "files" && name) {
       const content = files.get(name);

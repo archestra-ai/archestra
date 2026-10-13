@@ -10,6 +10,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Boxes, MessagesSquare, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import { AgentSelector } from "@/components/agent-selector";
 import { EncryptedChatContentUnavailableLabel } from "@/components/encrypted-chat-content-unavailable";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
@@ -20,9 +21,9 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
@@ -168,6 +169,22 @@ function McpToolCallsTable({
       [cursorPagination.goNewest, updateUrlParams],
     ),
   });
+  // Every log page keeps its time range in the header's top-right corner.
+  const timeRangePicker = useMemo(
+    () => (
+      <TimeRangePicker
+        value={dateTimePicker.range}
+        onChange={dateTimePicker.setRange}
+        onClear={dateTimePicker.clearDateRange}
+      />
+    ),
+    [
+      dateTimePicker.range,
+      dateTimePicker.setRange,
+      dateTimePicker.clearDateRange,
+    ],
+  );
+  useLogsHeaderAction(timeRangePicker);
 
   const {
     data: mcpToolCallsResponse,
@@ -514,26 +531,6 @@ function McpToolCallsTable({
     });
   }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
 
-  // Shared date picker component
-  const datePickerComponent = (
-    <DateTimeRangePicker
-      startDate={dateTimePicker.startDate}
-      endDate={dateTimePicker.endDate}
-      isDialogOpen={dateTimePicker.isDateDialogOpen}
-      tempStartDate={dateTimePicker.tempStartDate}
-      tempEndDate={dateTimePicker.tempEndDate}
-      displayText={dateTimePicker.getDateRangeDisplay()}
-      onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-      onTempStartDateChange={dateTimePicker.setTempStartDate}
-      onTempEndDateChange={dateTimePicker.setTempEndDate}
-      onOpenDialog={dateTimePicker.openDateDialog}
-      onApply={dateTimePicker.handleApplyDateRange}
-      className={filterControlClass({
-        active: dateTimePicker.startDate !== undefined,
-      })}
-    />
-  );
-
   if (isMcpToolCallsLoadError) {
     return (
       <div className="space-y-4">
@@ -587,7 +584,6 @@ function McpToolCallsTable({
             })}
             contentClassName="min-w-[min(20rem,calc(100vw-2rem))]"
           />
-          {datePickerComponent}
         </FilterBar>
       </CollectionFilters>
 

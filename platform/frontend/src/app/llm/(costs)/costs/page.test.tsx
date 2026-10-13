@@ -91,10 +91,6 @@ vi.mock("@/components/ui/chart", () => ({
   ChartTooltipContent: () => null,
 }));
 
-vi.mock("@/components/ui/custom-date-time-range-dialog", () => ({
-  CustomDateTimeRangeDialog: () => null,
-}));
-
 describe("OrganizationCostsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();

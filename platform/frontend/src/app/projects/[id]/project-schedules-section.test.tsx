@@ -191,13 +191,11 @@ describe("ProjectSchedulesSection without scheduledTask:read", () => {
       ],
     } as unknown as ReturnType<typeof useScopedCapabilities>);
 
-    const user = userEvent.setup();
     render(<ProjectSchedulesSection projectId="project-1" />);
 
     expect(screen.getByText("Schedules")).toBeInTheDocument();
     expect(useScheduleTriggers).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    expect(screen.getByRole("menuitem", { name: "Permissions" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
   });
 });
 

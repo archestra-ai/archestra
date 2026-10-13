@@ -3339,6 +3339,19 @@ async function handleStreaming<
     const codexError =
       error instanceof CodexResponsesGenerationError ? error : undefined;
     if (codexError) {
+      // The terminal status and its reason are not on the chat completion type.
+      const outcome = asRecord(codexError.completion);
+      logger.warn(
+        {
+          status: outcome?.status,
+          incompleteReason: asRecord(outcome?.incomplete_details)?.reason,
+          errorCode: asRecord(outcome?.error)?.code,
+          errorMessage: asRecord(outcome?.error)?.message,
+          usagePresent: codexError.completion.usage !== undefined,
+          usage: codexError.completion.usage,
+        },
+        "Codex subscription response ended without completing",
+      );
       // Translation keeps partial text and usage, but is not a successful turn.
       failedStreamResponse = codexError.completion;
       streamAdapter.state.usage = provider

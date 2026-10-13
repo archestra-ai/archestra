@@ -99,6 +99,7 @@ import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import type { McpCatalogFormValues } from "../_parts/mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
+import { isMcpServerInstalledForViewer } from "../_parts/mcp-registry-visibility";
 import {
   getMcpServerActionModel,
   mcpServerAction,
@@ -473,10 +474,12 @@ function CatalogItemDetails({
   // same flow and visibility gate as the registry card. The gate reads
   // `item.toolCount` (not the fetched `tools` list) to match the card exactly.
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const isInstalledForViewer =
+    isMcpServerInstalledForViewer(allServersForCatalog);
   const showChatButton = shouldShowMcpCardChatButton({
     toolsCount: item.toolCount ?? 0,
     isBuiltin: variant === "builtin",
-    hasInstallation: allServersForCatalog.length > 0,
+    hasInstallation: isInstalledForViewer,
   });
 
   const [deleteRequested, setDeleteRequested] = useState(false);
@@ -504,7 +507,7 @@ function CatalogItemDetails({
             variant={variant}
             deploymentSummary={deploymentSummary}
             deploymentFeedState={deploymentFeedState}
-            connectionsCount={connectionsCount}
+            isInstalledForViewer={isInstalledForViewer}
           />
         )
       }
@@ -903,16 +906,22 @@ function ServerStatus({
   variant,
   deploymentSummary,
   deploymentFeedState,
-  connectionsCount,
+  isInstalledForViewer,
 }: {
   variant: "builtin" | "local" | "remote";
   deploymentSummary: DeploymentStatusSummary | null;
   /** Whether pod statuses can arrive at all, and whether any have yet. */
   deploymentFeedState: McpDeploymentFeedState;
-  connectionsCount: number;
+  /** The registry card's rule, so this page and the card's Install agree. */
+  isInstalledForViewer: boolean;
 }) {
   if (variant === "builtin") {
     return <Badge variant="secondary">Built-in</Badge>;
+  }
+  // Somebody else's connection (visible to an admin) does not install the
+  // server for the viewer, however its pod is doing.
+  if (!isInstalledForViewer) {
+    return <span className={typeRole({ role: "body" })}>Not installed</span>;
   }
   // A dot is a claim about a pod, so it is drawn only where a pod's state was
   // actually reported.
@@ -929,22 +938,19 @@ function ServerStatus({
       </span>
     );
   }
-  if (connectionsCount > 0) {
-    // No summary means no deployment entry for any of this server's ids. The
-    // feed's own state decides what that means, never the absence of an entry
-    // — the same rule the list's `installedStatusLabel` follows. A remote
-    // server has no pod at all, and the page of an installed server needs no
-    // label that says so, so it shows nothing.
-    if (variant === "remote" || deploymentFeedState === "disabled") {
-      return null;
-    }
-    return (
-      <span className={typeRole({ role: "body" })}>
-        {deploymentFeedState === "loading" ? "Checking…" : "Status unavailable"}
-      </span>
-    );
+  // No summary means no deployment entry for any of this server's ids. The
+  // feed's own state decides what that means, never the absence of an entry
+  // — the same rule the list's `installedStatusLabel` follows. A remote
+  // server has no pod at all, and the page of an installed server needs no
+  // label that says so, so it shows nothing.
+  if (variant === "remote" || deploymentFeedState === "disabled") {
+    return null;
   }
-  return <span className={typeRole({ role: "body" })}>Not installed</span>;
+  return (
+    <span className={typeRole({ role: "body" })}>
+      {deploymentFeedState === "loading" ? "Checking…" : "Status unavailable"}
+    </span>
+  );
 }
 
 /** Keep operational failures visible even while Overview is collapsed. */

@@ -15,6 +15,7 @@ import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
 import { ModeTile } from "../_components/mode-tile";
 import { NgrokStatus } from "../_components/ngrok-status";
+import { ProviderChannels } from "../_components/provider-channels";
 import { SetupSection } from "../_components/setup-section";
 import { SetupStep } from "../_components/setup-step";
 import { useReachabilityMode } from "../_components/use-reachability-mode";
@@ -50,6 +51,7 @@ export default function MsTeamsPage() {
         isLoading={setupDataLoading}
         providerLabel={channelLabel}
         docsUrl={getFrontendDocsUrl("agents/triggers-and-channels/ms-teams")}
+        collapseWhenDone
       >
         <LlmKeySetupStep />
         {isLocalDev ? (
@@ -132,6 +134,8 @@ export default function MsTeamsPage() {
           </div>
         </SetupStep>
       </SetupSection>
+
+      {msTeams?.configured && <ProviderChannels provider="ms-teams" />}
 
       <MsTeamsSetupDialog
         open={msTeamsSetupOpen}

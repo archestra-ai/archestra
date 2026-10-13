@@ -4,12 +4,14 @@ import { useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
+import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
 import {
   useConvertSlackAppToAgentBot,
   useCreateSlackAgentBotApp,
   useDeleteSlackAgentBot,
   useMigrateSlackApps,
   useSaveSlackAppConfigToken,
+  useSlackAgentBotChannels,
   useSlackAgentBots,
   useUpdateSlackAgentBot,
 } from "@/lib/chatops/chatops-config.query";
@@ -30,8 +32,12 @@ vi.mock("@/lib/chatops/chatops-config.query", () => ({
   useDeleteSlackAgentBot: vi.fn(),
   useMigrateSlackApps: vi.fn(),
   useSaveSlackAppConfigToken: vi.fn(),
+  useSlackAgentBotChannels: vi.fn(),
   useSlackAgentBots: vi.fn(),
   useUpdateSlackAgentBot: vi.fn(),
+}));
+vi.mock("@/lib/chatops/chatops.query", () => ({
+  useAllChatOpsBindings: vi.fn(),
 }));
 vi.mock("@/components/slack-bot-edit-dialog", () => ({
   SlackBotEditDialog: () => null,
@@ -118,6 +124,12 @@ beforeEach(() => {
     ],
   } as unknown as ReturnType<typeof useInternalAgents>);
   saveToken.mockResolvedValue({ success: true, migrated: [] });
+  vi.mocked(useSlackAgentBotChannels).mockReturnValue({
+    data: undefined,
+  } as unknown as ReturnType<typeof useSlackAgentBotChannels>);
+  vi.mocked(useAllChatOpsBindings).mockReturnValue({
+    data: { bindings: [] },
+  } as unknown as ReturnType<typeof useAllChatOpsBindings>);
   vi.mocked(useSaveSlackAppConfigToken).mockReturnValue(
     mutation(saveToken) as unknown as ReturnType<
       typeof useSaveSlackAppConfigToken
@@ -135,7 +147,7 @@ beforeEach(() => {
 });
 
 describe("SlackAgentBotsSection", () => {
-  it("says whose Slack app each bot is, so teammates know whom to ask", () => {
+  it("says who manages each bot's app in Slack, so teammates know whom to ask", () => {
     setup({
       bots: [
         bot("a1", "Marketing", { createdBy: { id: "me", name: "Me" } }),
@@ -143,10 +155,56 @@ describe("SlackAgentBotsSection", () => {
       ],
     });
 
-    expect(screen.getByText("Your Slack app")).toBeVisible();
     expect(
-      screen.getByText("Dana's Slack app — ask them to add you in Slack"),
+      screen.getByRole("columnheader", { name: "Managed in Slack by" }),
     ).toBeVisible();
+    expect(screen.getByRole("cell", { name: "You" })).toBeVisible();
+    expect(screen.getByRole("cell", { name: "Dana" })).toBeVisible();
+  });
+
+  it("shows how many channels a bot is in and where it replies to every message", () => {
+    vi.mocked(useSlackAgentBotChannels).mockReturnValue({
+      data: {
+        channels: [
+          { channelId: "C1", isMember: true },
+          { channelId: "C2", isMember: true },
+          { channelId: "C3", isMember: false },
+        ],
+      },
+    } as unknown as ReturnType<typeof useSlackAgentBotChannels>);
+    vi.mocked(useAllChatOpsBindings).mockReturnValue({
+      data: {
+        bindings: [
+          {
+            provider: "slack",
+            isDm: false,
+            answerAllMessages: true,
+            agentId: "a1",
+            channelName: "task-feed",
+            channelId: "C1",
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof useAllChatOpsBindings>);
+
+    setup({ bots: [bot("a1", "Marketing")] });
+
+    expect(screen.getByText("2 channels")).toBeVisible();
+    expect(screen.getByText("Replies to all in #task-feed")).toBeVisible();
+  });
+
+  it("says what is wrong with a bot only when something is", () => {
+    setup({
+      bots: [
+        bot("a1", "Marketing"),
+        bot("a2", "Coding", { needsAppLevelToken: true }),
+      ],
+    });
+
+    expect(screen.getByText("Needs app-level token")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Finish setup" })).toBeVisible();
+    // A working bot has no status words, only a dot readers get as text.
+    expect(screen.getByText("Connected")).toHaveClass("sr-only");
   });
 
   it("asks for the person's own token before adding a bot, then goes on to add it", async () => {

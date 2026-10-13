@@ -254,6 +254,7 @@ describe("McpCatalogItemDetailPage overview", () => {
           serverType: "local",
           ownerId: "u1",
           teamId: null,
+          canUseCredential: true,
           createdAt: "2026-08-02T10:00:00.000Z",
         },
       ],
@@ -304,6 +305,16 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(overview.getByText(/Single-tenant/)).toBeInTheDocument();
     expect(overview.getByText("stdio")).toBeInTheDocument();
     expect(overview.queryByText("Generated")).toBeNull();
+  });
+
+  it("labels a server with no transport set as stdio, which is what it runs", () => {
+    renderPage({
+      localConfig: { ...localItem.localConfig, transportType: undefined },
+    });
+
+    const overview = section("Overview");
+    expect(overview.getByText("stdio")).toBeInTheDocument();
+    expect(overview.queryByText(/Streamable HTTP/)).toBeNull();
   });
 
   it("says how callers authenticate, and never shows a secret's value", () => {
@@ -529,6 +540,7 @@ describe("McpCatalogItemDetailPage overview", () => {
           ownerEmail: "admin@example.com",
           teamId: null,
           scope: "org",
+          canUseCredential: true,
           secretStorageType: "none",
           createdAt: "2026-08-02T10:00:00.000Z",
           assignedAgents: [],
@@ -746,5 +758,13 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.getByText("Built-in")).toBeInTheDocument();
     expect(screen.queryByText("Not installed")).toBeNull();
     expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
+  });
+
+  it("gives a built-in server an Overview with something in it", () => {
+    renderPage({ serverType: "builtin", localConfig: null, toolCount: 12 });
+
+    const overview = section("Overview");
+    expect(overview.getByText("Built into Archestra")).toBeInTheDocument();
+    expect(overview.getByText("12 available")).toBeInTheDocument();
   });
 });

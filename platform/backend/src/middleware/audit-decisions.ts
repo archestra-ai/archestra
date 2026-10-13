@@ -931,6 +931,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ephemeral browser tab state; per-user UI cache",
   },
+  browserStorageStatesTable: {
+    audited: false,
+    reason:
+      "per-user browser cookies synced automatically after tool calls; no API mutates it",
+  },
 
   // =========================================================================
   // Chat active run (streaming execution state)

@@ -63,12 +63,29 @@ const fs = require('node:fs'); const path = require('node:path');
 const args = process.argv.slice(2); const home = process.env.CODEX_HOME;
 fs.appendFileSync(path.join(process.env.HOME, 'calls'), args.join(' ') + '\\n');
 if (args[0] === '--version') { console.log('codex-cli test-version'); process.exit(0); }
+if (args[0] === 'debug' && process.env.BROKEN_CONFIG) {
+  console.error('Error: ' + path.join(home, 'config.toml') + ':1:14: invalid transport\\n\\nCaused by:\\n    in \`mcp_servers.test_gateway\`');
+  process.exit(1);
+}
 if (args[0] === 'debug') {
   fs.writeFileSync(path.join(home, 'models_cache.json'), JSON.stringify({fetched_at: new Date().toISOString()}));
   console.log(JSON.stringify({models:[{slug:process.env.TEST_MODEL || 'app-model'}]})); process.exit(0);
 }
 if (args[0] === 'mcp' && args[1] === 'add') fs.appendFileSync(path.join(home, 'config.toml'), '\\n[mcp_servers.test_gateway]\\nurl = "https://example.com/v1/mcp/test"\\n');
 if (args[0] === 'plugin' && process.env.FAIL_MARKETPLACE) { console.error('Git clone failed: HTTP 502'); process.exit(22); }
+// Codex 0.162 keeps one source per marketplace name and refuses another one.
+const marketplace = path.join(process.env.HOME, 'marketplace-source');
+if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'remove') {
+  if (!fs.existsSync(marketplace)) { console.error('Error: marketplace \`' + args[3] + '\` is not configured or installed'); process.exit(1); }
+  fs.rmSync(marketplace);
+}
+if (args[0] === 'plugin' && args[1] === 'marketplace' && args[2] === 'add') {
+  if (fs.existsSync(marketplace) && fs.readFileSync(marketplace, 'utf8') !== args[3]) {
+    console.error("Error: marketplace 'test-skills' is already added from a different source; remove it before adding this source");
+    process.exit(1);
+  }
+  fs.writeFileSync(marketplace, args[3]);
+}
 `,
   );
   await chmod(cli, 0o700);
@@ -161,6 +178,51 @@ test("gateway-only setup skips model discovery and recovery removes a config cre
       { env: f.env },
     );
     await expect(stat(f.config)).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test("a rerun replaces the marketplace an earlier setup registered from another clone URL", async () => {
+  const f = await fixture();
+  try {
+    // Every setup gets a new credential in its clone URL.
+    await writeFile(
+      path.join(f.home, "marketplace-source"),
+      "https://old-token@example.com/skills/marketplace.git",
+    );
+    const result = await exec("bash", [f.script], { env: f.env }).catch(
+      (error) => error,
+    );
+    expect(`${result.stdout}${result.stderr}`).not.toContain(
+      "Marketplace registration failed",
+    );
+    expect(
+      await readFile(path.join(f.home, "marketplace-source"), "utf8"),
+    ).toBe(ctx.skills?.cloneUrl);
+    const calls = await readFile(path.join(f.home, "calls"), "utf8");
+    expect(calls).toContain(
+      `plugin marketplace remove test-skills\nplugin marketplace add ${ctx.skills?.cloneUrl}\n`,
+    );
+  } finally {
+    await rm(f.home, { recursive: true, force: true });
+  }
+});
+
+test("preflight shows the Codex error for a config Codex cannot load", async () => {
+  const f = await fixture();
+  try {
+    const result = await exec("bash", [f.script], {
+      env: { ...f.env, BROKEN_CONFIG: "1" },
+    }).catch((error) => error);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Could not read the Codex model catalog");
+    expect(result.stderr).toContain(
+      `Error: ${f.config}:1:14: invalid transport`,
+    );
+    expect(result.stderr).toContain("in `mcp_servers.test_gateway`");
+    expect(result.stderr).not.toContain(".archestra-codex-models-");
+    expect(await readFile(f.config, "utf8")).toBe(original);
   } finally {
     await rm(f.home, { recursive: true, force: true });
   }

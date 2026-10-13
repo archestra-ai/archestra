@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.37"
+    "version": "1.4.0-rc.38"
   },
   "components": {
     "schemas": {
@@ -122570,13 +122570,55 @@
                             "additionalProperties": false
                           }
                         },
-                        "connectionDefaultProviderKeys": {
+                        "connectionClientProviderKeys": {
                           "nullable": true,
                           "type": "object",
                           "additionalProperties": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "provider": {
+                                  "type": "string",
+                                  "enum": [
+                                    "openai",
+                                    "gemini",
+                                    "anthropic",
+                                    "bedrock",
+                                    "cohere",
+                                    "cerebras",
+                                    "mistral",
+                                    "perplexity",
+                                    "groq",
+                                    "xai",
+                                    "openrouter",
+                                    "vllm",
+                                    "ollama",
+                                    "ollama-native",
+                                    "zhipuai",
+                                    "deepseek",
+                                    "minimax",
+                                    "kimi",
+                                    "azure",
+                                    "github-copilot",
+                                    "microsoft-365-copilot",
+                                    "archestra",
+                                    "voyage",
+                                    "jev"
+                                  ]
+                                },
+                                "providerApiKeyId": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "provider",
+                                "providerApiKeyId"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "connectionSkillsEnabled": {
@@ -122800,7 +122842,7 @@
                         "connectionClientOrder",
                         "connectionShownProviders",
                         "connectionBaseUrls",
-                        "connectionDefaultProviderKeys",
+                        "connectionClientProviderKeys",
                         "connectionSkillsEnabled",
                         "connectionLlmProxyEnabled",
                         "connectionPluginsEnabled",
@@ -246555,6 +246597,9 @@
                   "teams": {
                     "not": {}
                   },
+                  "multitenant": {
+                    "type": "boolean"
+                  },
                   "oauthClientSecretVaultPath": {
                     "type": "string"
                   },
@@ -351804,13 +351849,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -352034,7 +352121,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -352904,13 +352991,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -353134,7 +353263,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -354245,13 +354374,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -354475,7 +354646,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -355197,13 +355368,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -355427,7 +355640,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -356149,13 +356362,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -356379,7 +356634,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -357113,13 +357368,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -357343,7 +357640,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -357631,13 +357928,54 @@
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "connectionDefaultProviderKeys": {
+                  "connectionClientProviderKeys": {
                     "nullable": true,
                     "type": "object",
                     "additionalProperties": {
-                      "type": "string",
-                      "format": "uuid",
-                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "openai",
+                              "gemini",
+                              "anthropic",
+                              "bedrock",
+                              "cohere",
+                              "cerebras",
+                              "mistral",
+                              "perplexity",
+                              "groq",
+                              "xai",
+                              "openrouter",
+                              "vllm",
+                              "ollama",
+                              "ollama-native",
+                              "zhipuai",
+                              "deepseek",
+                              "minimax",
+                              "kimi",
+                              "azure",
+                              "github-copilot",
+                              "microsoft-365-copilot",
+                              "archestra",
+                              "voyage",
+                              "jev"
+                            ]
+                          },
+                          "providerApiKeyId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "providerApiKeyId"
+                        ]
+                      }
                     }
                   },
                   "connectionDefaultClientId": {
@@ -358148,13 +358486,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -358378,7 +358758,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -359215,13 +359595,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -359445,7 +359867,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -360237,13 +360659,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -360467,7 +360931,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -361203,13 +361667,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -361433,7 +361939,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -362200,13 +362706,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -362430,7 +362978,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -363134,13 +363682,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -363364,7 +363954,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",
@@ -365272,13 +365862,55 @@
                         "additionalProperties": false
                       }
                     },
-                    "connectionDefaultProviderKeys": {
+                    "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
                       "additionalProperties": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "provider": {
+                              "type": "string",
+                              "enum": [
+                                "openai",
+                                "gemini",
+                                "anthropic",
+                                "bedrock",
+                                "cohere",
+                                "cerebras",
+                                "mistral",
+                                "perplexity",
+                                "groq",
+                                "xai",
+                                "openrouter",
+                                "vllm",
+                                "ollama",
+                                "ollama-native",
+                                "zhipuai",
+                                "deepseek",
+                                "minimax",
+                                "kimi",
+                                "azure",
+                                "github-copilot",
+                                "microsoft-365-copilot",
+                                "archestra",
+                                "voyage",
+                                "jev"
+                              ]
+                            },
+                            "providerApiKeyId": {
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            }
+                          },
+                          "required": [
+                            "provider",
+                            "providerApiKeyId"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "connectionSkillsEnabled": {
@@ -365502,7 +366134,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
-                    "connectionDefaultProviderKeys",
+                    "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
                     "connectionPluginsEnabled",

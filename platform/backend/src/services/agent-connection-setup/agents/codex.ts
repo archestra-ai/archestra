@@ -130,9 +130,11 @@ mkdir -p "$(dirname "$CONFIG")"
 umask 077
 if [ -f "$CONFIG" ]; then
   # Drop the previous managed block and any top-level provider selection.
-  awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
+  # Keep a table that Codex itself added inside the block.
+  awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} -v own=${sh(`[model_providers.${ctx.proxy.proxyName}]`)} -v own_headers=${sh(`[model_providers.${ctx.proxy.proxyName}.http_headers]`)} '
     $0 == start {skip=1; next}
     $0 == end {skip=0; next}
+    skip && /^\\[/ && $0 != own && $0 != own_headers {skip=0}
     !skip {
       if ($0 ~ /^\\[/) in_table=1
       if (!in_table && $0 ~ /^[[:space:]]*model_provider[[:space:]]*=/) next
@@ -168,7 +170,11 @@ echo "Codex uses your existing ChatGPT or OpenAI API-key login."`
   warn ${sh(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)}
 fi`;
     });
+    // Each setup gets a new clone URL, and Codex refuses to add a marketplace
+    // name again from a different source. Remove the earlier registration
+    // first; plugins installed from it stay installed.
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
+cli codex plugin marketplace remove ${sh(ctx.skills.marketplaceName)} >/dev/null 2>&1 || true
 if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   err "Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error."
   exit 1
@@ -234,11 +240,14 @@ if (Test-Path $arch_config) {
   # Drop any previous archestra-managed block for this provider (idempotent).
   $arch_start = ${psq(`# >>> ${marker} >>>`)}
   $arch_end = ${psq(`# <<< ${marker} <<<`)}
+  $arch_own = @(${psq(`[model_providers.${ctx.proxy.proxyName}]`)}, ${psq(`[model_providers.${ctx.proxy.proxyName}.http_headers]`)})
   $arch_skip = $false
   $arch_in_table = $false
   foreach ($arch_line in (Get-Content -Path $arch_config)) {
     if ($arch_line -eq $arch_start) { $arch_skip = $true; continue }
     if ($arch_line -eq $arch_end) { $arch_skip = $false; continue }
+    # Keep a table that Codex itself added inside the block.
+    if ($arch_skip -and $arch_line -match '^\\[' -and $arch_own -notcontains $arch_line) { $arch_skip = $false }
     if ($arch_skip) { continue }
     if ($arch_line -match '^\\[') { $arch_in_table = $true }
     if (-not $arch_in_table -and $arch_line -match '^\\s*model_provider\\s*=') { continue }
@@ -272,7 +281,9 @@ Write-Host 'Codex uses your existing ChatGPT or OpenAI API-key login.'`
 if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)} }`;
       })
       .join("\n");
+    // Remove the earlier registration first, as in the bash script.
     sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
+try { codex plugin marketplace remove ${psq(ctx.skills.marketplaceName)} 2>$null | Out-Null } catch { }
 codex plugin marketplace add ${psq(ctx.skills.cloneUrl)}
 if ($LASTEXITCODE -ne 0) { throw 'Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error.' }
 ${pluginInstalls}`);

@@ -1378,6 +1378,111 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("asks once per review_required result when Codex resends its history", async () => {
+    // Codex sends the whole conversation on every request. In `codex exec`
+    // the form cannot be shown, so ask_user fails and the review stays open.
+    // Asking again on every later request forced Codex into another ask_user
+    // call each turn, with no way to end the turn.
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const sessionId = "codex-exec-review";
+    const reviewRequired = (id: string) => ({
+      id,
+      name: "archestra__execute_remedy_plan",
+      content: JSON.stringify({
+        ok: false,
+        outcome: "review_required",
+        offer_id: "offer-exec",
+      }),
+      isError: false,
+    });
+    const noViewer = {
+      id: "call_ask",
+      name: "archestra__ask_user",
+      content:
+        "This client cannot show the HITL review. Keep the tool call blocked. Do not ask for approval in plain text and do not retry it.",
+      isError: true,
+    };
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const turn = async (
+      toolResults: Parameters<typeof plugin.onToolResults>[0]["toolResults"],
+    ) => {
+      const context = requestContext({ sessionId });
+      context.headers = { originator: "codex_cli_rs" };
+      context.provider = "openai";
+      context.interactionType = "openai:responses";
+      const trusted = context.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      trusted.request = {
+        tools: {
+          control: { name: "archestra__execute_remedy_plan" },
+          notice: { name: "archestra__get_remedy_plans" },
+          askUser: { name: "archestra__ask_user" },
+          platformToolNames: new Set(),
+          namespaces: new Map(),
+        },
+        customTools: new Set(),
+        declaredTools: [],
+        session: {},
+      };
+      const request = {
+        instructions: "Base",
+        input: [] as unknown[],
+        tool_choice: "auto",
+        parallel_tool_calls: true,
+      };
+      try {
+        await plugin.onSessionInit(context);
+        await plugin.onToolResults({ ...context, toolResults });
+        await plugin.onBeforeModel({ ...context, request });
+      } finally {
+        await plugin.onCleanup(context);
+      }
+      return {
+        asked: JSON.stringify(request).includes(
+          "The policy needs the user's approval for the last execute_remedy_plan result.",
+        ),
+        toolChoice: request.tool_choice,
+      };
+    };
+    await stageHitlReview({
+      session: (
+        requestContext({ sessionId }).resources.get(
+          APPA_PLUGIN_TRUSTED_CONTEXT,
+        ) as AppaTrustedContext
+      ).session,
+      review: { offerId: "offer-exec", text: "Canonical HITL review." },
+    });
+
+    try {
+      // The result comes back: the model is told to ask, and must call a tool.
+      await expect(turn([reviewRequired("call_execute")])).resolves.toEqual({
+        asked: true,
+        toolChoice: "required",
+      });
+      // ask_user could not show the form. The same result, resent, asks
+      // nothing, so the model can explain that the call stays blocked.
+      await expect(
+        turn([reviewRequired("call_execute"), noViewer]),
+      ).resolves.toEqual({ asked: false, toolChoice: "auto" });
+      await expect(
+        turn([reviewRequired("call_execute"), noViewer]),
+      ).resolves.toEqual({ asked: false, toolChoice: "auto" });
+      // A new execute_remedy_plan call for the review is asked about once more.
+      await expect(
+        turn([
+          reviewRequired("call_execute"),
+          noViewer,
+          reviewRequired("call_execute_again"),
+        ]),
+      ).resolves.toEqual({ asked: true, toolChoice: "required" });
+    } finally {
+      processResults.mockRestore();
+    }
+  });
+
   test("hands OpenCode the model's ask_user as its question tool", async () => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({
@@ -1910,7 +2015,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami?"="Approve" selected preview:\nApprove. You can now continue with these answers in mind.',
+        'Your questions have been answered: "Canonical HITL review."="Approve". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -1922,7 +2027,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami?"="Deny" selected preview:\nDeny. You can now continue with these answers in mind.',
+        'Your questions have been answered: "Canonical HITL review."="Deny". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2074,22 +2179,20 @@ describe("asking through the client's own question tool", () => {
       expect(question.name).toBe(nativeName);
       expect(question.namespace).toBe("");
       if (client === "Claude Code") {
-        // Claude Code asks the short question and previews the reviewed call.
+        // Claude Code does not depend on a preview that it may withhold.
         expect(JSON.parse(question.arguments as string)).toEqual({
           questions: [
             {
-              question: "Approve archestra__whoami?",
+              question: "Canonical HITL review.",
               header: "Approval",
               options: [
                 {
                   label: "Approve",
                   description: "Allow this exact tool call.",
-                  preview: "Approve",
                 },
                 {
                   label: "Deny",
                   description: "Keep this tool call blocked.",
-                  preview: "Deny",
                 },
               ],
               multiSelect: false,
@@ -2450,7 +2553,7 @@ describe("asking through the client's own question tool", () => {
       // An answer with the user's note. The selection it repeats is not a
       // submitted choice, and the wording is not one the adapter reads.
       answer: JSON.stringify(
-        'The user answered: "Approve archestra__whoami?"="Approve" selected preview:\nApprove notes: only once. Read the answers carefully and follow what they actually say.',
+        'The user answered: "Canonical HITL review."="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -3849,6 +3952,76 @@ describe("rendering runtime text for this client", () => {
       ]);
     } finally {
       evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("delivers a denial of arguments that are not JSON as a notice, and keeps the rest of the batch", async () => {
+    // Streamed tool input can end as text that is not JSON. The runtime denies
+    // that call before evaluation; its ruling must reach the client as a
+    // notice instead of failing the whole response.
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({ sessionId: "malformed-arguments" });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: undefined,
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+    };
+    const ruling =
+      "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.";
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: ruling },
+        { kind: "allow" as const },
+      ]);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "ask-1",
+            name: "archestra__ask_user",
+            arguments: '{"question":"Pick one',
+          },
+          {
+            id: "ask-2",
+            name: "archestra__ask_user",
+            arguments: '{"question":"Pick two"}',
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected a notice");
+      expect(outcome.toolCalls).toHaveLength(2);
+      expect(outcome.toolCalls[0]).toMatchObject({
+        id: "ask-1",
+        name: "archestra__get_remedy_plans",
+      });
+      expect(JSON.parse(String(outcome.toolCalls[0].arguments))).toEqual({
+        tool: "archestra__ask_user",
+        arguments: {},
+        ruling,
+        notice: { v: 1, call_id: "ask-1" },
+      });
+      expect(outcome.toolCalls[1]).toMatchObject({
+        id: "ask-2",
+        name: "archestra__ask_user",
+        arguments: '{"question":"Pick two"}',
+      });
+      expect(outcome.blocked).toEqual([
+        { id: "ask-1", name: "archestra__ask_user", reason: ruling },
+      ]);
+    } finally {
+      evaluateToolCalls.mockRestore();
+      await plugin.onCleanup(context);
     }
   });
 

@@ -31,6 +31,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
+  useMcpServers: () => ({ data: [] }),
   useDismissMcpServerAlerts: () => ({
     mutateAsync: dismissMutateAsync,
     isPending: false,

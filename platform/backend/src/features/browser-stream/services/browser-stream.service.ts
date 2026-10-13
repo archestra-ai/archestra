@@ -22,6 +22,7 @@ import {
   type ConversationStateKey,
   toConversationStateKey,
 } from "./browser-stream.state-manager";
+import { extractRunCodeResult } from "./run-code-result";
 
 /**
  * User context required for MCP client authentication
@@ -65,19 +66,28 @@ type BrowserTabsListData = {
 
 type BrowserTabsAction = "list" | "new" | "close" | "select";
 
+/** Frame captured in the same browser call as an input action. */
+interface InputActionFrame {
+  screenshot: string;
+  url: string;
+}
+
 interface ClickResult {
   success: boolean;
   error?: string;
+  frame?: InputActionFrame;
 }
 
 interface TypeResult {
   success: boolean;
   error?: string;
+  frame?: InputActionFrame;
 }
 
 interface ScrollResult {
   success: boolean;
   error?: string;
+  frame?: InputActionFrame;
 }
 
 interface SnapshotResult {
@@ -1577,6 +1587,27 @@ export class BrowserStreamService {
     }
   }
 
+  /** Read the frame that buildInputActionCode returns, if present. */
+  private parseInputActionFrame(
+    content: unknown,
+  ): InputActionFrame | undefined {
+    const value = extractRunCodeResult(this.extractTextContent(content));
+    if (!value) return undefined;
+    try {
+      const parsed = JSON.parse(value) as {
+        screenshot?: unknown;
+        url?: unknown;
+      };
+      if (typeof parsed.screenshot !== "string") return undefined;
+      return {
+        screenshot: `data:image/jpeg;base64,${parsed.screenshot}`,
+        url: typeof parsed.url === "string" ? parsed.url : "",
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
   /**
    * Find the Playwright browser run_code tool for an agent
    * This tool allows running arbitrary Playwright code including mouse operations
@@ -1617,11 +1648,8 @@ export class BrowserStreamService {
       );
     }
 
-    // Ensure viewport matches screenshot dimensions for accurate coordinate clicks
-    if (x !== undefined && y !== undefined) {
-      await this.resizeBrowser(agentId, conversationId, userContext);
-    }
-
+    // No resize here: takeScreenshot resizes before every frame, so the frame
+    // the user clicked on already matches the viewport coordinates.
     if (x !== undefined && y !== undefined) {
       // Use browser_run_code for native Playwright mouse click
       const runCodeTool = await this.findRunCodeTool(agentId);
@@ -1648,8 +1676,10 @@ export class BrowserStreamService {
           "Clicking at coordinates via browser_run_code (Playwright mouse.click)",
         );
 
-        // Native Playwright mouse click - async function with page argument
-        const code = `async (page) => { await page.mouse.click(${safeX}, ${safeY}); }`;
+        // Native Playwright mouse click, plus a frame in the same call
+        const code = buildInputActionCode(
+          `await page.mouse.click(${safeX}, ${safeY});`,
+        );
 
         try {
           const result = await this.executeTool({
@@ -1661,7 +1691,10 @@ export class BrowserStreamService {
           });
 
           if (!result.isError) {
-            return { success: true };
+            return {
+              success: true,
+              frame: this.parseInputActionFrame(result.content),
+            };
           }
 
           const errorText = this.extractTextContent(result.content);
@@ -1761,8 +1794,10 @@ export class BrowserStreamService {
 
         // Use JSON.stringify for safe escaping of all special characters
         const safeText = JSON.stringify(text);
-        // Native Playwright keyboard type - async function with page argument
-        const playwrightCode = `async (page) => { await page.keyboard.type(${safeText}); }`;
+        // Native Playwright keyboard type, plus a frame in the same call
+        const playwrightCode = buildInputActionCode(
+          `await page.keyboard.type(${safeText});`,
+        );
 
         const result = await this.executeTool({
           toolName: runCodeTool,
@@ -1773,14 +1808,15 @@ export class BrowserStreamService {
         });
 
         if (!result.isError) {
-          return { success: true };
+          return {
+            success: true,
+            frame: this.parseInputActionFrame(result.content),
+          };
         }
 
+        // browser_type needs an element ref, so it cannot stand in here
         const errorText = this.extractTextContent(result.content);
-        logger.warn(
-          { agentId, error: errorText },
-          "browser_run_code type failed, trying browser_type",
-        );
+        throw new ApiError(500, errorText || "Type failed");
       }
     }
 
@@ -1842,6 +1878,31 @@ export class BrowserStreamService {
       );
     }
 
+    // Prefer run_code: it returns a frame in the same call
+    const runCodeTool = await this.findRunCodeTool(agentId);
+    if (runCodeTool) {
+      const result = await this.executeTool({
+        toolName: runCodeTool,
+        // JSON.stringify escapes the client-supplied key name safely
+        args: {
+          code: buildInputActionCode(
+            `await page.keyboard.press(${JSON.stringify(key)});`,
+          ),
+        },
+        agentId,
+        conversationId,
+        userContext,
+      });
+      if (result.isError) {
+        const errorText = this.extractTextContent(result.content);
+        throw new ApiError(500, errorText || "Key press failed");
+      }
+      return {
+        success: true,
+        frame: this.parseInputActionFrame(result.content),
+      };
+    }
+
     const toolName = await this.findPressKeyTool(agentId);
     if (!toolName) {
       throw new ApiError(
@@ -1866,6 +1927,65 @@ export class BrowserStreamService {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Scroll with the mouse wheel at a viewport position, so the scrollable
+   * element under the pointer moves (not only the document)
+   */
+  async scroll(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+    params: { x: number; y: number; deltaX: number; deltaY: number },
+  ): Promise<ScrollResult> {
+    const tabResult = await this.selectOrCreateTab(
+      agentId,
+      conversationId,
+      userContext,
+    );
+    if (!tabResult.success) {
+      throw new ApiError(
+        500,
+        tabResult.error ?? "Failed to select browser tab",
+      );
+    }
+
+    const runCodeTool = await this.findRunCodeTool(agentId);
+    if (!runCodeTool) {
+      throw new ApiError(
+        400,
+        "No browser run code tool available for this agent",
+      );
+    }
+
+    // Values are schema-validated finite numbers; rounding keeps the
+    // generated code to plain integer literals
+    const x = Math.round(params.x);
+    const y = Math.round(params.y);
+    const deltaX = Math.round(params.deltaX);
+    const deltaY = Math.round(params.deltaY);
+    const code = buildInputActionCode(
+      `await page.mouse.move(${x}, ${y}); await page.mouse.wheel(${deltaX}, ${deltaY});`,
+    );
+
+    const result = await this.executeTool({
+      toolName: runCodeTool,
+      args: { code },
+      agentId,
+      conversationId,
+      userContext,
+    });
+
+    if (result.isError) {
+      const errorText = this.extractTextContent(result.content);
+      throw new ApiError(500, errorText || "Scroll failed");
+    }
+
+    return {
+      success: true,
+      frame: this.parseInputActionFrame(result.content),
+    };
   }
 
   /**
@@ -1920,4 +2040,15 @@ export class BrowserStreamService {
     const snapshot = this.extractTextContent(result.content);
     return { snapshot };
   }
+}
+
+/**
+ * Wrap an input action so the same browser call also returns a frame and the
+ * URL. Saves the separate resize/screenshot/URL calls after every input, and
+ * captures with the text caret visible (Playwright hides it by default).
+ */
+function buildInputActionCode(action: string): string {
+  // The capture is best-effort: a slow frame must not turn a completed action
+  // into a reported failure.
+  return `async (page) => { ${action} try { const shot = await page.screenshot({ type: "jpeg", quality: 70, caret: "initial", timeout: 1500 }); return { url: page.url(), screenshot: shot.toString("base64") }; } catch { return { url: page.url() }; } }`;
 }

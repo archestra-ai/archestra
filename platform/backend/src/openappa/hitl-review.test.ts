@@ -343,7 +343,7 @@ test("asks Claude Code one line and previews the call in full", async () => {
   });
 });
 
-test("shows a command exactly as it runs, then its description", async () => {
+test("shows a command in full under its description, wrapped to the pane", async () => {
   const command = "rm -rf __pycache__ && echo **done** `whoami`\n```\nEOF";
   const asked = await askedAbout("command-call", "Bash", {
     command,
@@ -353,13 +353,24 @@ test("shows a command exactly as it runs, then its description", async () => {
   expect(asked?.shortQuestion).toBe("Approve the Bash command?");
   expect(asked?.callPreview).toBe(
     [
-      "**Bash command**",
-      // Unwrapped: a line break in a command reads as a second command.
-      `\`\`\`\`sh\n${command}\n\`\`\`\``,
-      "Description: Clean up, then report",
+      "**Bash command**\n*Clean up, then report*",
+      // A wrapped line continues four spaces further in.
+      "````sh\nrm -rf __pycache__ && echo\n    **done** `whoami`\n```\nEOF\n````",
       "```yaml\ntimeout: 60000\n```",
     ].join("\n\n"),
   );
+});
+
+test("wraps every line of a long command to the narrowest pane", async () => {
+  const command = Array.from({ length: 15 }, (_, i) => `--flag${i}`).join(" ");
+  const asked = await askedAbout("long-command", "Bash", { command });
+  const lines = (asked?.callPreview ?? "")
+    .split("```sh\n")[1]
+    .split("\n```")[0]
+    .split("\n");
+  expect(lines.length).toBeGreaterThan(2);
+  expect(lines.every((line) => line.length <= 34)).toBe(true);
+  expect(lines.join("\n").replace(/\n {4}/g, " ")).toBe(command);
 });
 
 test("shows a file write as the file's content", async () => {
@@ -369,11 +380,7 @@ test("shows a file write as the file's content", async () => {
     content,
   });
   expect(asked?.callPreview).toBe(
-    [
-      "**Write call**",
-      "File: src/answer.ts",
-      `\`\`\`ts\n${content}\n\`\`\``,
-    ].join("\n\n"),
+    `**Write call**\n*src/answer.ts*\n\n\`\`\`ts\n${content}\n\`\`\``,
   );
 });
 
@@ -386,8 +393,7 @@ test("shows an edit as a diff, one per edit", async () => {
   });
   expect(edit?.callPreview).toBe(
     [
-      "**Edit call**",
-      "File: src/answer.ts",
+      "**Edit call**\n*src/answer.ts*",
       "```diff\n-const answer = 41;\n+const answer = 42;\n+const ready = true;\n```",
       "```yaml\nreplace_all: false\n```",
     ].join("\n\n"),
@@ -402,8 +408,7 @@ test("shows an edit as a diff, one per edit", async () => {
   });
   expect(multi?.callPreview).toBe(
     [
-      "**MultiEdit call**",
-      "File: a.py",
+      "**MultiEdit call**\n*a.py*",
       "```diff\n-a = 1\n+a = 2\n```",
       "```diff\n-b = 1\n+b = 2\n```",
     ].join("\n\n"),
@@ -411,18 +416,19 @@ test("shows an edit as a diff, one per edit", async () => {
 });
 
 test("shows any other call's arguments in full as YAML", async () => {
-  const body = "Line one with `code`\n\n  indented line\nlast line";
+  const title = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ");
   const asked = await askedAbout("yaml-call", "mcp/github/create_issue", {
-    title: Array.from({ length: 20 }, (_, i) => `word${i}`).join(" "),
-    body,
+    title,
+    body: "Line one with `code`\n\n  indented line\nlast line",
     labels: ["bug", "ui"],
     assignee: { login: "octocat" },
   });
-  const block = asked?.callPreview?.split("```yaml\n")[1] ?? "";
-  // Long lines stay whole; multi-line text keeps its lines.
-  expect(block).toContain(
-    `title: ${Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ")}\n`,
-  );
+  const block = (asked?.callPreview ?? "")
+    .split("```yaml\n")[1]
+    .split("\n```")[0];
+  expect(block.split("\n").every((line) => line.length <= 34)).toBe(true);
+  // A long value wraps and continues four spaces further in.
+  expect(block.replace(/\n {4}(?=word)/g, " ")).toContain(`title: ${title}\n`);
   expect(block).toContain(
     "body: |-\n  Line one with `code`\n\n    indented line\n  last line\n",
   );
@@ -491,7 +497,7 @@ test.each([
     expected:
       "Approve send_report?\n\nto  finance@example.com\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
     expectedAccepted:
-      "\n\nApproving also accepts:\n- the readers must be the public audience",
+      "\n\nApproving also accepts:\n• the readers must be the public\n  audience",
   },
 ])("asks about the call itself when the ruling covers $case", async ({
   coverage,
@@ -542,7 +548,7 @@ test("shows a command once although the proxy reviews it under both spellings", 
     offerIds: ["offer-1"],
   });
   expect(question?.callPreview).toBe(
-    "**Bash command**\n\n```sh\ngit push -u origin feature\n```\n\nDescription: Push the branch\n\nApproving also accepts:\n- the readers must be the public audience",
+    "**Bash command**\n*Push the branch*\n\n```sh\ngit push -u origin feature\n```\n\nApproving also accepts:\n• the readers must be the public\n  audience",
   );
   expect(question?.question).toBe(
     "Approve Bash?\n\ncommand      git push -u origin feature\ndescription  Push the branch\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",

@@ -455,36 +455,45 @@ function reviewCoverage(text: string): string[] | undefined {
 const COVERAGE_HEADING = "What this ruling would cover:";
 
 /**
- * The reviewed call as Claude Code previews it: a title naming the call, the
- * call in full, and what an approval also accepts. The preview has its own
- * code blocks, so Claude Code renders it as markdown.
+ * The reviewed call as Claude Code previews it beside the choices: a title
+ * naming the call, the call in full, and what an approval also accepts. The
+ * pane neither wraps nor fits long lines, so every line is wrapped to it.
  */
 function previewText(params: {
   preview: CallPreview;
   accepted: string[] | undefined;
 }): string {
+  const { subject, summary, body } = params.preview;
   const accepted = params.accepted ?? [];
+  const heading = [
+    ...wrapText(subject).map((line) => `**${escapeMarkdown(line)}**`),
+    ...(summary
+      ? wrapText(summary).map((line) => `*${escapeMarkdown(line)}*`)
+      : []),
+  ];
   return [
-    `**${escapeMarkdown(params.preview.subject)}**`,
-    ...params.preview.body,
+    heading.join("\n"),
+    ...body,
     ...(accepted.length > 0
       ? [
           [
             "Approving also accepts:",
-            ...accepted.map((line) => `- ${escapeMarkdown(line)}`),
-          ].join("\n"),
+            ...accepted.flatMap((line) => wrapText(line, "• ", "  ")),
+          ]
+            .map(escapeMarkdown)
+            .join("\n"),
         ]
       : []),
   ].join("\n\n");
 }
 
-type CallPreview = { subject: string; body: string[] };
+/** Shown under the title: a command's description, or the file a call writes. */
+type CallPreview = { subject: string; summary?: string; body: string[] };
 
 /**
- * The call in the form a person reads it in. A command is shown exactly as
- * it runs, a file write as the file's content, an edit as a diff, and any
- * other call as its arguments in YAML. Nothing is wrapped or shortened: a
- * code block scrolls instead, and a line break could read as a new command.
+ * The call in the form a person reads it in: a command as it runs, a file
+ * write as the file's content, an edit as a diff, and any other call as its
+ * arguments in YAML. Nothing is shortened.
  */
 function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
   const label = reviewedToolLabel(tool);
@@ -498,9 +507,9 @@ function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
         : "";
     return {
       subject: `${label} command`,
+      ...(summary ? { summary } : {}),
       body: [
-        codeBlock(command, "sh"),
-        ...(summary ? [`Description: ${escapeMarkdown(summary)}`] : []),
+        codeBlock(wrapCode(command), "sh"),
         ...argumentsBlock(
           without(args, summary ? ["command", "description"] : ["command"]),
         ),
@@ -509,13 +518,12 @@ function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
   }
   const subject = `${label} call`;
   if (typeof file_path === "string") {
-    const file = `File: ${escapeMarkdown(file_path)}`;
     if (name === "Write" && typeof content === "string")
       return {
         subject,
+        summary: file_path,
         body: [
-          file,
-          codeBlock(content, languageOf(file_path)),
+          codeBlock(wrapCode(content), languageOf(file_path)),
           ...argumentsBlock(without(args, ["file_path", "content"])),
         ],
       };
@@ -526,9 +534,9 @@ function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
     )
       return {
         subject,
+        summary: file_path,
         body: [
-          file,
-          codeBlock(diff(old_string, new_string), "diff"),
+          codeBlock(wrapCode(diff(old_string, new_string), true), "diff"),
           ...argumentsBlock(
             without(args, ["file_path", "old_string", "new_string"]),
           ),
@@ -538,10 +546,13 @@ function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
     if (name === "MultiEdit" && Array.isArray(edits) && edits.every(isEdit))
       return {
         subject,
+        summary: file_path,
         body: [
-          file,
           ...edits.map((edit) =>
-            codeBlock(diff(edit.old_string, edit.new_string), "diff"),
+            codeBlock(
+              wrapCode(diff(edit.old_string, edit.new_string), true),
+              "diff",
+            ),
           ),
           ...argumentsBlock(without(args, ["file_path", "edits"])),
         ],
@@ -554,13 +565,68 @@ function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
   };
 }
 
+/**
+ * Code wrapped to the preview pane. A wrapped line breaks at a space where it
+ * can and continues four spaces further in, so it does not read as a new
+ * line; a diff line keeps its sign.
+ */
+function wrapCode(text: string, diffLines = false): string {
+  return text
+    .split("\n")
+    .flatMap((line) => {
+      const lead = (diffLines ? /^[+-]?\s*/ : /^\s*/).exec(line)?.[0] ?? "";
+      const continuation =
+        lead.length + 4 <= PREVIEW_WIDTH / 2
+          ? `${lead}    `
+          : `${diffLines ? lead.slice(0, 1) : ""}    `;
+      return wrapLine({ line, lead: lead.length, continuation });
+    })
+    .join("\n");
+}
+
+/** Text on as few pane-wide lines as it takes, after `first`, under `rest`. */
+function wrapText(text: string, first = "", rest = ""): string[] {
+  return wrapLine({
+    line: `${first}${text.replace(/\s+/g, " ").trim()}`,
+    lead: first.length,
+    continuation: rest,
+  });
+}
+
+function wrapLine(params: {
+  line: string;
+  /** Characters at the start that a break must not split. */
+  lead: number;
+  continuation: string;
+}): string[] {
+  const lines: string[] = [];
+  let rest = params.line;
+  let floor = params.lead;
+  while (rest.length > PREVIEW_WIDTH) {
+    const space = rest.lastIndexOf(" ", PREVIEW_WIDTH);
+    const cut = space > floor ? space : PREVIEW_WIDTH;
+    lines.push(rest.slice(0, cut));
+    rest = `${params.continuation}${rest.slice(cut === space ? cut + 1 : cut)}`;
+    floor = params.continuation.length;
+  }
+  lines.push(rest);
+  return lines;
+}
+
+/**
+ * Columns of Claude Code's narrowest preview pane: VS Code beside the option
+ * list at its 576px breakpoint, with the default 14px editor font. The pane
+ * cuts longer lines.
+ */
+const PREVIEW_WIDTH = 34;
+
 /** The arguments as YAML in a block, or nothing when there are none. */
 function argumentsBlock(args: Record<string, unknown>): string[] {
   if (Object.keys(args).length === 0) return [];
-  // No folding: a folded line would read as a line break in the value.
+  // No YAML folding: wrapCode marks its own continuation lines.
   return [
     codeBlock(
-      dumpYaml(args, { lineWidth: -1, noRefs: true }).trimEnd(),
+      wrapCode(dumpYaml(args, { lineWidth: -1, noRefs: true }).trimEnd()),
       "yaml",
     ),
   ];

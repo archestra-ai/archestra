@@ -23,7 +23,6 @@ export function ClientConnectionApproval({
   gatewaySelected,
   gatewayName,
   proxySelected,
-  proxyUsesVirtualKey,
   skillsSelected,
 }: {
   requestId: string;
@@ -33,7 +32,6 @@ export function ClientConnectionApproval({
   gatewaySelected: boolean;
   gatewayName: string;
   proxySelected: boolean;
-  proxyUsesVirtualKey: boolean;
   skillsSelected: boolean;
 }) {
   const client = CONNECT_CLIENTS.find((c) => c.id === clientId);
@@ -82,20 +80,11 @@ export function ClientConnectionApproval({
                   </li>
                 )}
                 {skillsSelected && <li>Reload Cursor to see shared skills.</li>}
-                {proxySelected && proxyUsesVirtualKey && (
+                {proxySelected && (
                   <li>
-                    For model routing, find “Cursor model settings (manual
-                    step)” in the output of the setup command Cursor ran. Paste
-                    its proxy URL and virtual key into Cursor Settings → Models
-                    → API Keys.
-                  </li>
-                )}
-                {proxySelected && !proxyUsesVirtualKey && (
-                  <li>
-                    For model routing, find “Cursor model settings (manual
-                    step)” in the output of the setup command Cursor ran. Paste
-                    its proxy URL and your own OpenAI API key into Cursor
-                    Settings → Models → API Keys.
+                    Quit and reopen Cursor to load its model settings. Add
+                    models under Settings → Models by their provider-qualified
+                    id, such as anthropic:&lt;model&gt;.
                   </li>
                 )}
               </ul>

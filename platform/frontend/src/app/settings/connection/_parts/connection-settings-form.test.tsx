@@ -9,7 +9,14 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/llm-provider-api-keys.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/integration-overrides", () => ({
-  useModelProviderCatalog: () => ({ label: (provider: string) => provider }),
+  useModelProviderCatalog: () => ({
+    label: (provider: string) => provider,
+    visibleIds: [],
+  }),
+}));
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/llm-models.query", () => ({
+  useModelsWithApiKeys: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/components/agent-selector", () => ({
   AgentSelector: ({ agents }: { agents: { id: string; name: string }[] }) => (
@@ -88,7 +95,7 @@ beforeEach(() => {
       connectionDefaultClientId: null,
       connectionShownClientIds: null,
       connectionBaseUrls: null,
-      connectionDefaultProviderKeys: null,
+      connectionClientProviderKeys: null,
       connectionSkillsEnabled: true,
       connectionLlmProxyEnabled: true,
       connectionPluginsEnabled: true,
@@ -355,6 +362,40 @@ describe("ConnectionSettingsForm", () => {
         connectionClientOrder: expect.anything(),
       }),
     );
+  });
+
+  it("maps provider keys to one client's setup command and leaves the others on users' own keys", async () => {
+    vi.mocked(useLlmProviderApiKeys).mockReturnValue({
+      data: [
+        { id: "anthropic-org", name: "Anthropic org", provider: "anthropic" },
+        { id: "openai-org", name: "OpenAI org", provider: "openai" },
+        { id: "copilot", name: "Copilot", provider: "github-copilot" },
+      ],
+    } as unknown as ReturnType<typeof useLlmProviderApiKeys>);
+    const user = userEvent.setup();
+    render(<ConnectionSettingsForm />);
+
+    const clientKeys = (label: string) => {
+      const region = screen
+        .getAllByRole("region", { name: "Provider keys" })
+        .find((section) => within(section).queryByText(label));
+      if (!region) throw new Error(`No provider keys for ${label}`);
+      return region;
+    };
+    expect(
+      within(clientKeys("Claude Code")).getByText("Uses each user's own keys."),
+    ).toBeVisible();
+    await user.click(
+      within(clientKeys("Cursor")).getByRole("button", { name: /Enable all/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mutate.mock.lastCall?.[0].connectionClientProviderKeys).toEqual({
+      cursor: [
+        { provider: "anthropic", providerApiKeyId: "anthropic-org" },
+        { provider: "openai", providerApiKeyId: "openai-org" },
+      ],
+    });
   });
 
   it("offers shared gateways as the default but not a member's personal one", () => {

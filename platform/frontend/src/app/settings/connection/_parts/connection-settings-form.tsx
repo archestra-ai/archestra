@@ -3,9 +3,13 @@
 import {
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   providerRequiresPerUserCredential,
-  type SupportedProvider,
 } from "@archestra/shared";
-import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
+import {
+  INSTALLER_CLIENT_IDS,
+  INSTALLER_CLIENT_KEY_PROVIDERS,
+  INSTALLER_CLIENT_LABELS,
+  type InstallerClientId,
+} from "@archestra/shared/connection-setup";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ClientIcon } from "@/app/connection/client-icon";
@@ -19,7 +23,9 @@ import {
 } from "@/app/connection/connection-base-urls.utils";
 import { AgentSelector } from "@/components/agent-selector";
 import { CodeText } from "@/components/code-text";
-import { ProviderIcon } from "@/components/provider-icon";
+import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
+import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -36,7 +42,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
-import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   useOrganization,
@@ -78,10 +83,9 @@ export function ConnectionSettingsForm() {
       { description: string; isDefault: boolean; visible: boolean }
     >
   >({});
-  // provider → provider API key id used by auto-provisioned setup virtual keys
-  const [defaultProviderKeys, setDefaultProviderKeys] = useState<
-    Record<string, string>
-  >({});
+  // client → provider API keys its setup command's virtual key maps to
+  const [clientProviderKeys, setClientProviderKeys] =
+    useState<ClientProviderKeys>({});
   const [skillsEnabled, setSkillsEnabled] = useState(true);
   const [llmProxyEnabled, setLlmProxyEnabled] = useState(true);
   const [pluginsEnabled, setPluginsEnabled] = useState(true);
@@ -91,7 +95,6 @@ export function ConnectionSettingsForm() {
   );
   const pluginsFeatureEnabled = useFeature("plugins") === true;
   const { data: providerApiKeys } = useLlmProviderApiKeys();
-  const providerCatalog = useModelProviderCatalog();
 
   // Env-configured candidate URLs the admin can curate. Keep order stable so
   // the UI mirrors what end users see in the dropdowns elsewhere.
@@ -108,12 +111,7 @@ export function ConnectionSettingsForm() {
         .map((c) => c.id),
     );
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
-    setDefaultProviderKeys(
-      (organization.connectionDefaultProviderKeys ?? {}) as Record<
-        string,
-        string
-      >,
-    );
+    setClientProviderKeys(organization.connectionClientProviderKeys ?? {});
     setSkillsEnabled(organization.connectionSkillsEnabled);
     setLlmProxyEnabled(organization.connectionLlmProxyEnabled);
     setPluginsEnabled(organization.connectionPluginsEnabled);
@@ -173,11 +171,8 @@ export function ConnectionSettingsForm() {
     [baseUrlMeta, serverBaseUrlMeta, envBaseUrls],
   );
 
-  const serverDefaultProviderKeys =
-    (organization?.connectionDefaultProviderKeys ?? {}) as Record<
-      string,
-      string
-    >;
+  const serverClientProviderKeys: ClientProviderKeys =
+    organization?.connectionClientProviderKeys ?? {};
 
   const serverSkillsEnabled = organization?.connectionSkillsEnabled ?? true;
   const serverLlmProxyEnabled = organization?.connectionLlmProxyEnabled ?? true;
@@ -189,8 +184,8 @@ export function ConnectionSettingsForm() {
     DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS;
 
   const hasChanges =
-    JSON.stringify(defaultProviderKeys) !==
-      JSON.stringify(serverDefaultProviderKeys) ||
+    JSON.stringify(withoutEmptyClients(clientProviderKeys)) !==
+      JSON.stringify(withoutEmptyClients(serverClientProviderKeys)) ||
     gatewayId !== serverGatewayId ||
     defaultClientId !== serverDefaultClientId ||
     JSON.stringify([...shownClientIds].sort()) !==
@@ -227,10 +222,7 @@ export function ConnectionSettingsForm() {
         ? { connectionClientOrder: selectedClientOrder }
         : {}),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
-      connectionDefaultProviderKeys:
-        Object.keys(defaultProviderKeys).length > 0
-          ? defaultProviderKeys
-          : null,
+      connectionClientProviderKeys: withoutEmptyClients(clientProviderKeys),
       ...(skillsEnabled !== serverSkillsEnabled
         ? { connectionSkillsEnabled: skillsEnabled }
         : {}),
@@ -249,7 +241,7 @@ export function ConnectionSettingsForm() {
     setShownClientIds(serverShownClients);
     setClientOrder(serverClientOrder);
     setBaseUrlMeta(serverBaseUrlMeta);
-    setDefaultProviderKeys(serverDefaultProviderKeys);
+    setClientProviderKeys(serverClientProviderKeys);
     setSkillsEnabled(serverSkillsEnabled);
     setLlmProxyEnabled(serverLlmProxyEnabled);
     setPluginsEnabled(serverPluginsEnabled);
@@ -281,15 +273,15 @@ export function ConnectionSettingsForm() {
     (gateway) => !gateway.isPersonalGateway || gateway.id === gatewayId,
   );
 
-  const providerKeysByProvider = useMemo(() => {
-    const grouped = new Map<string, { id: string; name: string }[]>();
-    for (const key of providerApiKeys ?? []) {
-      const list = grouped.get(key.provider) ?? [];
-      list.push({ id: key.id, name: key.name });
-      grouped.set(key.provider, list);
-    }
-    return grouped;
-  }, [providerApiKeys]);
+  // Per-user providers (GitHub Copilot) can't be mapped: each user connects
+  // their own account at setup time, and the backend rejects such a mapping.
+  const sharedProviderKeys = useMemo(
+    () =>
+      (providerApiKeys ?? []).filter(
+        (key) => !providerRequiresPerUserCredential(key.provider),
+      ),
+    [providerApiKeys],
+  );
 
   return (
     <WithPermissions
@@ -393,82 +385,26 @@ export function ConnectionSettingsForm() {
               </SettingRow>
 
               <SettingSection
-                title="Default provider keys for setup commands"
-                description="Which provider API key a setup command's virtual key maps to. Automatic falls back to the user's own key resolution (personal, then team, then organization)."
+                title="Provider keys for setup commands"
+                description="The provider keys each client's setup command maps to the virtual key it mints. A client without keys uses each user's own: the key they resolve for the chosen provider (personal, then team, then organization), or their primary keys for Cursor and OpenCode."
               >
-                {providerKeysByProvider.size === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No provider API keys configured yet. Add one under{" "}
-                    <Link href="/settings/llm" className="underline">
-                      LLM provider keys
-                    </Link>{" "}
-                    to set a default.
-                  </p>
-                ) : (
-                  <div className="grid gap-2">
-                    {[...providerKeysByProvider.entries()].map(
-                      ([provider, keys]) => {
-                        // Per-user providers (GitHub Copilot) can't have a
-                        // shared default — each user connects their own account
-                        // at setup time (and the backend rejects such a default
-                        // on save). Show the row read-only so it's discoverable
-                        // and explained rather than silently missing.
-                        const isPerUser = providerRequiresPerUserCredential(
-                          provider as SupportedProvider,
-                        );
-                        return (
-                          <div
-                            key={provider}
-                            className="grid grid-cols-[minmax(0,1fr)_240px] items-center gap-3"
-                          >
-                            <div className="flex min-w-0 items-center gap-2">
-                              <ProviderIcon
-                                provider={provider as SupportedProvider}
-                              />
-                              <span className="truncate text-sm">
-                                {providerCatalog.label(
-                                  provider as SupportedProvider,
-                                )}
-                              </span>
-                            </div>
-                            {isPerUser ? (
-                              <span className="text-xs text-muted-foreground">
-                                Per-user — each user connects their own account
-                              </span>
-                            ) : (
-                              <SingleSelectCombobox
-                                className="w-full"
-                                value={
-                                  defaultProviderKeys[provider] ?? DEFAULT_VALUE
-                                }
-                                onChange={(value) =>
-                                  setDefaultProviderKeys((prev) => {
-                                    const next = { ...prev };
-                                    if (value === DEFAULT_VALUE) {
-                                      delete next[provider];
-                                    } else {
-                                      next[provider] = value;
-                                    }
-                                    return next;
-                                  })
-                                }
-                                options={[
-                                  { value: DEFAULT_VALUE, label: "Automatic" },
-                                  ...keys.map((key) => ({
-                                    value: key.id,
-                                    label: key.name,
-                                  })),
-                                ]}
-                                searchPlaceholder="Search keys…"
-                                disabled={locked}
-                              />
-                            )}
-                          </div>
-                        );
-                      },
-                    )}
-                  </div>
-                )}
+                <div className="grid gap-4">
+                  {INSTALLER_CLIENT_IDS.map((clientId) => (
+                    <ClientProviderKeysRow
+                      key={clientId}
+                      clientId={clientId}
+                      providerApiKeys={sharedProviderKeys}
+                      value={clientProviderKeys[clientId] ?? []}
+                      onChange={(value) =>
+                        setClientProviderKeys((prev) => ({
+                          ...prev,
+                          [clientId]: value,
+                        }))
+                      }
+                      disabled={locked}
+                    />
+                  ))}
+                </div>
               </SettingSection>
 
               {envBaseUrls.length > 1 && (
@@ -654,4 +590,72 @@ function SettingSection({
       {children}
     </SettingsBlock>
   );
+}
+
+type ClientProviderKeys = Partial<
+  Record<InstallerClientId, ProviderApiKeyMappings>
+>;
+
+/** One client's mapped provider keys; none means each user's own keys. */
+function ClientProviderKeysRow({
+  clientId,
+  providerApiKeys,
+  value,
+  onChange,
+  disabled,
+}: {
+  clientId: InstallerClientId;
+  providerApiKeys: LlmProviderApiKeyResponse[];
+  value: ProviderApiKeyMappings;
+  onChange: (value: ProviderApiKeyMappings) => void;
+  disabled: boolean;
+}) {
+  const client = CONNECT_CLIENTS.find((c) => c.id === clientId);
+  const keys = providerApiKeys.filter((key) =>
+    INSTALLER_CLIENT_KEY_PROVIDERS[clientId].includes(key.provider),
+  );
+  const label = (
+    <span className="flex items-center gap-2">
+      {client && <ClientIcon client={client} size={18} />}
+      <span>{INSTALLER_CLIENT_LABELS[clientId]}</span>
+    </span>
+  );
+  if (keys.length === 0) {
+    return (
+      <div className="space-y-1">
+        <span className="font-medium text-sm">{label}</span>
+        <p className="text-xs text-muted-foreground">
+          <span>
+            Uses each user's own keys. No provider key it can use is set up yet;
+            add one under{" "}
+            <Link href="/settings/llm" className="underline">
+              LLM provider keys
+            </Link>
+            .
+          </span>
+        </p>
+      </div>
+    );
+  }
+  return (
+    <fieldset disabled={disabled} className="min-w-0">
+      <ProviderKeyList
+        label={label}
+        emptyLabel="Uses each user's own keys."
+        value={value}
+        onChange={onChange}
+        providerApiKeys={keys}
+      />
+    </fieldset>
+  );
+}
+
+/** Drop clients left with no keys, so they read as unset. */
+function withoutEmptyClients(
+  keys: ClientProviderKeys,
+): ClientProviderKeys | null {
+  const set = Object.entries(keys).filter(
+    ([, mappings]) => mappings && mappings.length > 0,
+  );
+  return set.length > 0 ? Object.fromEntries(set) : null;
 }

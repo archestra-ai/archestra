@@ -1489,22 +1489,41 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
   });
 
-  it("explains Cursor needs an API key for proxy passthrough", async () => {
+  it("routes Cursor's models through the Model Router with one virtual key", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        { provider: "anthropic", isPrimary: true },
+        { provider: "openai", isPrimary: true },
+      ],
+    });
     renderPanel({ client: findClient("cursor") });
     await screen.findByText(COMMAND);
 
+    expect(createSetupMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clientId: "cursor",
+        proxyAuth: "primary-providers",
+        provider: undefined,
+      }),
+    );
     expect(
       screen.getByTestId("connect-change-proxy").closest("li"),
     ).toHaveTextContent(
-      "Prepare OpenAI proxy settings for Cursor; finish setup in Cursor Settings",
+      "Route Cursor's models (2 providers) through the Model Router using a virtual key",
     );
+  });
 
-    await userEvent.setup().click(screen.getByTestId("connect-change-proxy"));
+  it("still connects Cursor's tools when no key can route its models", async () => {
+    // The default keys are not primary, and no admin mapped any for Cursor.
+    renderPanel({ client: findClient("cursor") });
+    await screen.findByText(COMMAND);
+
+    expect(createSetupMock).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ proxyAuth: expect.anything() }),
+    );
     expect(
-      screen.getByText(
-        /Its subscription cannot authenticate requests through the proxy/,
-      ),
-    ).toBeInTheDocument();
+      screen.getByTestId("connect-change-proxy").closest("li"),
+    ).toHaveTextContent("Cursor keeps its own models");
   });
 
   it("gates step 3 and hides the OAuth step when virtual-key auth has no backing key", async () => {

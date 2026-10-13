@@ -9,7 +9,11 @@ import {
   resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
-import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
+import {
+  type ConnectSetupPart,
+  INSTALLER_CLIENT_KEY_PROVIDERS,
+  isInstallerClientId,
+} from "@archestra/shared/connection-setup";
 import {
   Download,
   KeyRound,
@@ -76,6 +80,7 @@ import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import {
   isDeliverablePlugin,
   type PluginListItem,
@@ -282,13 +287,18 @@ export function ConnectCommandPanel({
     Record<string, ConnectProxyAuth>
   >({});
   const [openCodeUseAllProviders, setOpenCodeUseAllProviders] = useState(true);
+  // Cursor sends every model through the Model Router, so it always gets one
+  // virtual key for many providers.
   const proxyAuth =
-    proxyAuthByClient[client.id] ??
-    (client.id === "opencode" ? "primary-providers" : "provider-key");
+    client.id === "cursor"
+      ? "primary-providers"
+      : (proxyAuthByClient[client.id] ??
+        (client.id === "opencode" ? "primary-providers" : "provider-key"));
   const setProxyAuth = (value: ConnectProxyAuth) =>
     setProxyAuthByClient((current) => ({ ...current, [client.id]: value }));
   const allPrimaryProviders =
-    client.id === "opencode" && proxyAuth === "primary-providers";
+    (client.id === "opencode" || client.id === "cursor") &&
+    proxyAuth === "primary-providers";
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
   // user can override it in the review step.
@@ -370,6 +380,22 @@ export function ConnectCommandPanel({
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
   const { data: availableKeys } = useAvailableLlmProviderApiKeys();
+  const { data: canAttribute } = useHasPermissions({
+    llmVirtualKey: ["create"],
+  });
+  // Keys an admin mapped for this client back its virtual key in place of the
+  // user's own primary keys.
+  const { data: organization } = useOrganization();
+  const adminMappedProviders = useMemo(
+    () =>
+      new Set(
+        (isInstallerClientId(client.id)
+          ? (organization?.connectionClientProviderKeys?.[client.id] ?? [])
+          : []
+        ).map((key) => key.provider),
+      ),
+    [organization, client.id],
+  );
   const usableOpenCodeKeys = useMemo(
     () =>
       (availableKeys ?? []).filter(
@@ -395,11 +421,13 @@ export function ConnectCommandPanel({
   // allow-list (independent of auth mode — used to explain the empty state).
   const supportedProviders = useMemo(() => {
     const supported =
-      client.id === "opencode" && proxyAuth !== "provider-key"
-        ? [...OPENCODE_PRIMARY_PROVIDERS]
-        : client.proxy.kind === "custom"
-          ? client.proxy.supportedProviders
-          : [];
+      client.id === "cursor"
+        ? [...INSTALLER_CLIENT_KEY_PROVIDERS.cursor]
+        : client.id === "opencode" && proxyAuth !== "provider-key"
+          ? [...OPENCODE_PRIMARY_PROVIDERS]
+          : client.proxy.kind === "custom"
+            ? client.proxy.supportedProviders
+            : [];
     const shown = shownProviders ? new Set(shownProviders) : null;
     return shown && !allPrimaryProviders
       ? supported.filter((p) => shown.has(p))
@@ -427,14 +455,15 @@ export function ConnectCommandPanel({
   // needs no key (the user brings their own at runtime).
   const providers = useMemo(() => {
     if (allPrimaryProviders) {
-      const primaryProviders = new Set(
-        usableOpenCodeKeys
-          .filter((key) => key.isPrimary)
-          .map((key) => key.provider),
-      );
-      return supportedProviders.filter((provider) =>
-        primaryProviders.has(provider),
-      );
+      const backing =
+        adminMappedProviders.size > 0
+          ? adminMappedProviders
+          : new Set(
+              usableOpenCodeKeys
+                .filter((key) => key.isPrimary)
+                .map((key) => key.provider),
+            );
+      return supportedProviders.filter((provider) => backing.has(provider));
     }
     if (proxyAuth !== "virtual-key") return supportedProviders;
     // OpenCode only offers configured credentials. Other clients can connect
@@ -450,6 +479,7 @@ export function ConnectCommandPanel({
     configuredProviders,
     allPrimaryProviders,
     usableOpenCodeKeys,
+    adminMappedProviders,
     client.id,
   ]);
   const provider =
@@ -510,7 +540,12 @@ export function ConnectCommandPanel({
   // mode with no configured providers); keep it for the row/editor, but it
   // only joins the command when a provider is also resolved.
   const hasProxy = activeLlmProxyId !== null;
-  const proxyActive = !!(activeLlmProxyId && provider);
+  // Cursor's tools and skills don't depend on its models: without a key to
+  // route or permission to mint one, its setup just leaves the models alone.
+  const cursorRoutingUnavailable =
+    client.id === "cursor" && (!provider || canAttribute !== true);
+  const proxyActive =
+    !!(activeLlmProxyId && provider) && !cursorRoutingUnavailable;
   // Virtual-key auth was chosen, but nothing can back it: the client routes only
   // providers with no configured key (and none are per-user), so no virtual key
   // can be minted. Emitting the script anyway would silently drop the inference
@@ -519,6 +554,7 @@ export function ConnectCommandPanel({
   const virtualKeyUnbacked =
     hasProxy &&
     !provider &&
+    client.id !== "cursor" &&
     (proxyAuth === "virtual-key" || allPrimaryProviders);
   const requiredPluginPlatform = platform === "windows" ? "windows" : "posix";
   // The selection follows the client across OS changes. Compatibility is a
@@ -595,11 +631,11 @@ export function ConnectCommandPanel({
   // OpenCode (its locally authenticated supported providers).
   // Used purely to tailor the passthrough description copy — the backend
   // provisions it automatically; there is no separate UI choice.
-  const { data: canAttribute } = useHasPermissions({
-    llmVirtualKey: ["create"],
-  });
   const primaryRoutingBlocked =
-    hasProxy && allPrimaryProviders && canAttribute !== true;
+    hasProxy &&
+    allPrimaryProviders &&
+    client.id !== "cursor" &&
+    canAttribute !== true;
   const passthroughAttributes =
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
@@ -823,7 +859,28 @@ export function ConnectCommandPanel({
     }
   };
 
-  const proxyEditor = hasProxy ? (
+  const cursorProxyEditor = (
+    <EditorField label="Model routing">
+      <p className="text-xs text-muted-foreground">
+        {canAttribute !== true ? (
+          <span>
+            Routing Cursor's models needs permission to create virtual keys.
+            Setup leaves them as they are.
+          </span>
+        ) : providers.length ? (
+          <span>
+            {`Cursor's models go through the ${appName} Model Router with a personal virtual key for ${formatList(providers.map((p) => providerCatalog.label(p)))}. Setup writes the router URL and key into Cursor's settings.`}
+          </span>
+        ) : (
+          <span>{CURSOR_NO_KEYS_MESSAGE}</span>
+        )}
+      </p>
+    </EditorField>
+  );
+
+  const proxyEditor = !hasProxy ? null : client.id === "cursor" ? (
+    cursorProxyEditor
+  ) : (
     <div className="grid gap-3">
       {client.id !== "opencode" &&
         providers.length > 1 &&
@@ -927,11 +984,6 @@ export function ConnectCommandPanel({
                   credentials. Only their base URLs change, and a personal
                   passthrough key attributes requests to you.
                 </span>
-              ) : client.id === "cursor" ? (
-                <span>
-                  Cursor needs your OpenAI API key for this option. Its
-                  subscription cannot authenticate requests through the proxy.
-                </span>
               ) : passthroughAttributes ? (
                 <span>
                   Only the base URL changes: requests keep using your own API
@@ -976,7 +1028,7 @@ export function ConnectCommandPanel({
         </div>
       </EditorField>
     </div>
-  ) : null;
+  );
 
   const modelEditor =
     supportsModelChoice && provider ? (
@@ -1088,11 +1140,14 @@ export function ConnectCommandPanel({
       </div>
     ) : null;
 
-  const noVirtualKeyMessage = allPrimaryProviders
-    ? "No usable primary model providers are available. Mark a compatible model provider key as primary, or choose another routing option."
-    : supportedNames.length === 1
-      ? `${client.label} only routes ${supportedNames[0]}, which has no key configured for a virtual key — switch to your provider key.`
-      : `None of ${client.label}'s providers have a key configured for a virtual key — switch to your provider key.`;
+  const noVirtualKeyMessage =
+    client.id === "cursor"
+      ? CURSOR_NO_KEYS_MESSAGE
+      : allPrimaryProviders
+        ? "No usable primary model providers are available. Mark a compatible model provider key as primary, or choose another routing option."
+        : supportedNames.length === 1
+          ? `${client.label} only routes ${supportedNames[0]}, which has no key configured for a virtual key — switch to your provider key.`
+          : `None of ${client.label}'s providers have a key configured for a virtual key — switch to your provider key.`;
   const pluginCountLabel =
     selectedPlugins.length === compatiblePlugins.length
       ? `${selectedPlugins.length} plugin${selectedPlugins.length === 1 ? "" : "s"}`
@@ -1175,14 +1230,20 @@ export function ConnectCommandPanel({
             )}
             {hasProxy && (
               <SetupSummaryRow
-                done={proxyActive && client.id !== "cursor"}
+                done={proxyActive}
                 editable
                 isEditing={editing === "proxy"}
                 onToggle={() => toggleEdit("proxy")}
                 editor={proxyEditor}
                 changeTestId="connect-change-proxy"
               >
-                {allPrimaryProviders ? (
+                {client.id === "cursor" ? (
+                  <span>
+                    {!cursorRoutingUnavailable
+                      ? `Route Cursor's models (${providers.length} ${providers.length === 1 ? "provider" : "providers"}) through the Model Router using a virtual key`
+                      : "Cursor keeps its own models"}
+                  </span>
+                ) : allPrimaryProviders ? (
                   <span>
                     {providers.length
                       ? `Route all primary model providers (${providers.length}) through the LLM Proxy using a virtual key`
@@ -1190,11 +1251,6 @@ export function ConnectCommandPanel({
                   </span>
                 ) : !provider ? (
                   noVirtualKeyMessage
-                ) : client.id === "cursor" ? (
-                  <span>
-                    Prepare {providerCatalog.label(provider)} proxy settings for
-                    Cursor; finish setup in Cursor Settings
-                  </span>
                 ) : effectiveProxyAuth === "virtual-key" ? (
                   <>
                     Route{" "}
@@ -1479,31 +1535,6 @@ export function ConnectCommandPanel({
               </AlertDescription>
             </Alert>
           )}
-          {connectRequest && client.id === "cursor" && proxyActive && (
-            <Alert variant="warning">
-              <TriangleAlert />
-              <AlertTitle>Cursor model setup needs a separate step</AlertTitle>
-              <AlertDescription>
-                {effectiveProxyAuth === "virtual-key" ? (
-                  <p>
-                    After approval, look in the output of the setup command
-                    Cursor runs. The “Cursor model settings (manual step)”
-                    section prints the proxy URL and virtual key.
-                  </p>
-                ) : (
-                  <p>
-                    After approval, look in the output of the setup command
-                    Cursor runs. The “Cursor model settings (manual step)”
-                    section prints the proxy URL. Use your own OpenAI API key; a
-                    Cursor subscription cannot supply one.
-                  </p>
-                )}
-                <p>
-                  Enter these values in Cursor Settings → Models → API Keys.
-                </p>
-              </AlertDescription>
-            </Alert>
-          )}
           <output
             className="sr-only"
             aria-live="polite"
@@ -1585,10 +1616,6 @@ export function ConnectCommandPanel({
                 gatewaySelected={!!gateway}
                 gatewayName={oauthServerName}
                 proxySelected={proxyActive}
-                proxyUsesVirtualKey={
-                  effectiveProxyAuth === "virtual-key" ||
-                  effectiveProxyAuth === "primary-providers"
-                }
                 skillsSelected={skillsEligible && includeSkills}
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (
@@ -2050,3 +2077,6 @@ function ConnectionSection({
   if (!compact) return <WizardStep {...props} />;
   return <section className="mb-6 max-w-2xl">{props.children}</section>;
 }
+
+const CURSOR_NO_KEYS_MESSAGE =
+  "No provider keys are available for Cursor. Mark a provider key as primary, or ask an admin to choose Cursor's provider keys.";

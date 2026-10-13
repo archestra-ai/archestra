@@ -152273,17 +152273,6 @@
                       "voyage",
                       "jev"
                     ]
-                  },
-                  "clientId": {
-                    "type": "string",
-                    "enum": [
-                      "claude-code",
-                      "cursor",
-                      "codex",
-                      "claude-desktop",
-                      "copilot-cli",
-                      "opencode"
-                    ]
                   }
                 },
                 "required": [

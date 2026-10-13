@@ -40,7 +40,7 @@ For Claude Code, Codex, Cursor, Copilot CLI, and OpenCode:
 
 - Node.js 18 or newer, and a terminal on the computer where you use the client.
 - The client's CLI on your `PATH`: `claude`, `codex`, `copilot`, or `opencode`. OpenCode must be 1.17 or newer. Copilot CLI proxy setup requires 1.0.95 or newer.
-- Python 3 for Claude Code. Git for Cursor and OpenCode skills.
+- Python 3 for Claude Code and for Cursor's models. Git for Cursor and OpenCode skills.
 - An Archestra URL on HTTPS. Plain HTTP works only on `localhost`.
 
 ## Connect a Coding Agent
@@ -62,7 +62,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 
 - **Claude Code:** if you skipped the sign-in, start Claude Code, run `/mcp`, select the gateway, and choose **Authenticate**.
 - **Codex:** if you skipped the sign-in, run `codex mcp login <gateway>`.
-- **Cursor:** sign in to the gateway under **Customize → MCPs** in Cursor, then reload Cursor to load the skills. Cursor keeps its own models unless you set up the proxy. To do that, find **Cursor model settings (manual step)** in the installer output. Enter the proxy URL and key it shows under **Settings → Models → API Keys**. Turn on **Use OpenAI API Key** and **Override OpenAI Base URL**. A Cursor subscription cannot be the key.
+- **Cursor:** quit and reopen Cursor, then sign in to the gateway under **Customize → MCPs**. Setup points Cursor's OpenAI API key settings at the [Model Router](/docs/llm-proxy/model-router) with a virtual key for your model providers. Add a model under **Settings → Models** by its provider-qualified ID, such as `anthropic:claude-sonnet-4-6`.
 - **Copilot CLI:** setup saves your provider settings and available key in `providers.json` and selects the model in `settings.json`. If setup reports a missing key, add it to `providers.json`. The environment variables printed at the end are optional.
 - **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`. If setup adds Archestra model providers to OpenCode, it changes a `model` or `small_model` you set to the same model on Archestra. If Archestra does not offer that model, setup removes the setting. Disconnect restores your setting.
 

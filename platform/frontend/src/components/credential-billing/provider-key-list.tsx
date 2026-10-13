@@ -3,7 +3,7 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { Plus, X } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   isSubscriptionKey,
   keysByProvider,
@@ -26,15 +26,22 @@ import { cn } from "@/lib/utils/tailwind";
  * per provider. Every provider starts on with its primary key; a line changes
  * the key or stops using the provider, and providers that are off stay listed
  * underneath with a way to add them back.
+ *
+ * With `emptyLabel`, using no provider is a valid choice that the label
+ * describes, rather than a gap to fill.
  */
 export function ProviderKeyList({
   value,
   onChange,
   providerApiKeys,
+  label = "Provider keys",
+  emptyLabel,
 }: {
   value: ProviderApiKeyMappings;
   onChange: (value: ProviderApiKeyMappings) => void;
   providerApiKeys: LlmProviderApiKeyResponse[];
+  label?: ReactNode;
+  emptyLabel?: string;
 }) {
   const catalog = useModelProviderCatalog();
   const modelIdsByKey = useModelIdsByKey();
@@ -82,7 +89,8 @@ export function ProviderKeyList({
   });
   const onLines = lines.filter((line) => line.on);
   const offLines = lines.filter((line) => !line.on);
-  const noneOn = providers.length > 0 && onLines.length === 0;
+  const noneOn =
+    providers.length > 0 && onLines.length === 0 && emptyLabel === undefined;
   const showList = open || noneOn;
   const notPrimaryCount = onLines.filter((line) => line.notPrimary).length;
   const noModelNames = onLines
@@ -115,7 +123,7 @@ export function ProviderKeyList({
   if (providers.length === 0) {
     return (
       <section aria-label="Provider keys" className="space-y-2">
-        <span className="font-medium text-sm">Provider keys</span>
+        <span className="font-medium text-sm">{label}</span>
         <NoProviderKeys unavailable={unavailable} />
       </section>
     );
@@ -124,7 +132,7 @@ export function ProviderKeyList({
   return (
     <section aria-label="Provider keys" className="space-y-2">
       <div className="flex min-h-8 items-center justify-between gap-2">
-        <span className="font-medium text-sm">Provider keys</span>
+        <span className="font-medium text-sm">{label}</span>
         <div className="flex gap-2">
           <Button
             type="button"
@@ -154,7 +162,13 @@ export function ProviderKeyList({
         </div>
       </div>
 
-      {!showList && (
+      {!showList && onLines.length === 0 && emptyLabel !== undefined && (
+        <p className="text-xs text-muted-foreground">
+          <span>{emptyLabel}</span>
+        </p>
+      )}
+
+      {!showList && onLines.length > 0 && (
         <div className="space-y-2">
           <div className="flex flex-wrap gap-1.5">
             {onLines.map((line) => (
@@ -287,7 +301,7 @@ export function ProviderKeyList({
               })}
             </fieldset>
           )}
-          {unavailable.length > 0 && (
+          {unavailable.length > 0 && emptyLabel === undefined && (
             <p className="text-xs text-muted-foreground">
               <span>
                 No key you can use for{" "}

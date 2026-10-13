@@ -203,8 +203,6 @@ const CreateConnectionSetupResponseSchema = z.object({
 
 const CreateConnectionVirtualKeyBodySchema = z.object({
   provider: SupportedProvidersSchema,
-  /** The client being set up, so the admin's key mapping for it applies. */
-  clientId: ConnectionSetupClientIdSchema.optional(),
 });
 
 const CreateConnectionVirtualKeyResponseSchema = z.object({
@@ -724,7 +722,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, organizationId, user }, reply) => {
-      const { provider, clientId } = body;
+      const { provider } = body;
 
       // Same gate as the virtual-key branch of CreateConnectionSetup: minting a
       // key requires the dedicated create permission.
@@ -754,13 +752,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userEmail: user.email,
           userTeamIds: await TeamModel.getUserTeamIds(user.id),
           provider,
-          clientId,
-          preferredProviderKeyId:
-            (clientId &&
-              organization.connectionClientProviderKeys?.[clientId]?.find(
-                (key) => key.provider === provider,
-              )?.providerApiKeyId) ||
-            null,
         });
 
       const value = await readVirtualKeyValue(virtualApiKeyId);

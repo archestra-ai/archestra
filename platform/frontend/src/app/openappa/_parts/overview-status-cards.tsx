@@ -51,11 +51,22 @@ export function OverviewStatusCards() {
   });
   if (!canReadSettings && !canReadPolicy && !canReadYells) return null;
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {canReadSettings && <GithubSyncCard />}
-      {canReadPolicy && <ValidationCard />}
-      {canReadYells && <YellsCard />}
-    </div>
+    <section aria-labelledby="overview-policy-health" className="space-y-3">
+      <div className="space-y-1">
+        <h2 id="overview-policy-health" className="text-base font-semibold">
+          Policy health
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Where your policy syncs from, how its validations ran, and what agents
+          reported.
+        </p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {canReadSettings && <GithubSyncCard />}
+        {canReadPolicy && <ValidationCard />}
+        {canReadYells && <YellsCard />}
+      </div>
+    </section>
   );
 }
 

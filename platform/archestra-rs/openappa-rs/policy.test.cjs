@@ -42,9 +42,9 @@ delta = {}
     );
     await hook({ event: 'tool_result', tool_call_id: tool, output: 'completed', outcome: 'success' });
   }
-  assert.notEqual(
-    (await hook({ event: 'tool_call', operation_id: 'call:unknown_local', tool: 'unknown_local', arguments: {} })).decision,
-    'allow_call',
+  await assert.rejects(
+    () => hook({ event: 'tool_call', operation_id: 'call:unknown_local', tool: 'unknown_local', arguments: {} }),
+    /not declared in this policy/,
     'an unknown local tool must stay governed',
   );
 });
@@ -58,13 +58,13 @@ test('saved text changes enforcement for new sessions and preserves existing ses
   const fresh = scope();
   assert.equal((await hook(fresh, { event: 'session_start' }, deny)).decision, 'ack');
   const call = { event: 'tool_call', operation_id: 'call:read', tool: 'read', arguments: {} };
-  assert.notEqual((await hook(fresh, call, deny)).decision, 'allow_call');
+  await assert.rejects(() => hook(fresh, call, deny), /not declared in this policy/);
   assert.equal((await hook(old, call, deny)).decision, 'allow_call');
   // A refused policy leaves the organization's last working deployment serving.
   await assert.rejects(hook(scope(), { event: 'session_start' }, '[policy]\nversion = 999'));
   const next = scope();
   assert.equal((await hook(next, { event: 'session_start' }, deny)).decision, 'ack');
-  assert.notEqual((await hook(next, call, deny)).decision, 'allow_call');
+  await assert.rejects(() => hook(next, call, deny), /not declared in this policy/);
 });
 
 test('a fork keeps its parent policy revision when its dispatch carries newer text', { skip: !databaseUrl }, async () => {
@@ -127,7 +127,7 @@ test('a new session opens under the text its dispatch carried while a stale sibl
   assert.equal((await freshStart).decision, 'ack');
   assert.equal((await staleStart).decision, 'ack');
 
-  assert.notEqual((await hook(fresh, call, deny)).decision, 'allow_call');
+  await assert.rejects(() => hook(fresh, call, deny), /not declared in this policy/);
   assert.equal((await hook(stale, call, allow)).decision, 'allow_call');
 });
 

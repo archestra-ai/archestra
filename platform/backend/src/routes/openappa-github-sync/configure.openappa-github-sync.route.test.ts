@@ -952,7 +952,10 @@ describe("APPA GitHub sync", () => {
     );
     const failure = await action({ action: "sync" });
     expect(failure.statusCode).toBe(200);
-    expect(failure.json().source.lastSyncError).toContain("404");
+    // A deleted repository reads as one, with the way out, not as a status code.
+    expect(failure.json().source.lastSyncError).toMatch(
+      /^Repository not found: example\/policies.*deleted or renamed.*Edit source/,
+    );
     expect(failure.json().source.sourceCommit).toBe(commit);
   });
 
@@ -1036,7 +1039,7 @@ describe("APPA GitHub sync", () => {
     await syncAppaGithubPolicy(organizationId);
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       content: policy,
-      lastSyncError: expect.stringContaining("404"),
+      lastSyncError: expect.stringContaining("Repository not found"),
     });
   });
   test("synced policies cannot be manually overwritten, disconnect enables editing", async () => {
@@ -1118,6 +1121,8 @@ describe("APPA GitHub sync", () => {
       heldSourceCommit: second,
       heldReasons: ["changes_credentials"],
       sourceCommit: commit,
+      lastSyncError:
+        "The repository's policy gives the github battery the github-token credential.",
     });
     const status = await app.inject({
       method: "GET",
@@ -1140,6 +1145,24 @@ describe("APPA GitHub sync", () => {
     registerRoutePermissions(managerApp);
     await managerApp.register(routes);
     try {
+      // Reading the policy is enough to review the hold, itemized.
+      const held = await managerApp.inject({
+        method: "GET",
+        url: "/api/openappa/github-sync/held",
+      });
+      expect(held.statusCode, held.body).toBe(200);
+      expect(held.json()).toEqual({
+        sourceCommit: second,
+        reasons: ["changes_credentials"],
+        grants: [
+          {
+            battery: "github",
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+          },
+        ],
+        droppedBatteries: [],
+      });
       expect(
         (
           await managerApp.inject({
@@ -1268,6 +1291,8 @@ describe("APPA GitHub sync", () => {
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       heldContent: pulled,
       heldReasons: ["drops_batteries"],
+      lastSyncError:
+        "The repository's policy removes batteries added here: jev.",
     });
     await OpenAppaCredentialBindingModel.upsert({
       organizationId,
@@ -1338,12 +1363,27 @@ describe("APPA GitHub sync", () => {
     expect(
       await GuardrailsPolicyModel.findLatest(organizationId),
     ).toMatchObject({ content: declared, revision: 1 });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/openappa/github-sync/held",
+        })
+      ).json(),
+    ).toMatchObject({ grants: [], droppedBatteries: ["github"] });
     // Accepting it is the operator's call, and it clears the pending flag.
     const accepted = await app.inject({
       method: "POST",
       url: "/api/openappa/github-sync/accept-held",
     });
     expect(accepted.statusCode, accepted.body).toBe(200);
+    // Nothing is left to review once it is accepted.
+    const after = await app.inject({
+      method: "GET",
+      url: "/api/openappa/github-sync/held",
+    });
+    expect(after.statusCode).toBe(200);
+    expect(after.json()).toBeNull();
     // What the repository drops is named, in the answer and in the record.
     expect(accepted.json()).toMatchObject({
       reasons: ["drops_batteries"],

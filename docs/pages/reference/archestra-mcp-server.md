@@ -230,7 +230,7 @@ Required RBAC permission: `update` on the skill (granted per item)
 | `read_file` | Read a persistent file directly, without copying it into the sandbox. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `save_file` | Write bytes you are providing inline in this call — text or base64 included in the arguments — to the conversation's persistent files. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `edit_file` | Edit an existing persistent file by replacing a snippet, keeping its id and filename. | [`agent:read`](/docs/reference/permissions#agent:read) |
-| `delete_file` | Permanently delete a persistent file, identified by `id` (from search_files / save_file) or by `filename`. | [`agent:read`](/docs/reference/permissions#agent:read) |
+| `delete_file` | Permanently delete a persistent file, identified by `id` (the `id` or `ref` from search_files, or a fileId from save_file) or by `filename`. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `copy_file` | Exchange a file between this chat and the app the user has open: copy a chat/project file or a chat attachment INTO the open app's file store (so the app can load it), or copy a file OUT of the app... | [`agent:read`](/docs/reference/permissions#agent:read) |
 
 #### search_files
@@ -320,7 +320,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | No | Id of the file to edit (from search_files / save_file). |
+| `id` | `string` | No | Id of the file to edit — the `id` or `ref` from search_files, or a fileId from save_file. |
 | `filename` | `string` | No | Filename to edit instead of `id`; rejected as ambiguous if more than one file shares the name. |
 | `old_string` | `string` | Yes | The exact text to replace; must match the file's current content (read it first with read_file). Include enough surrounding context to be unique unless replace_all is set. |
 | `new_string` | `string` | Yes | The text to insert in place of old_string. |
@@ -345,7 +345,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | No | Id of the file to delete (from search_files / save_file). |
+| `id` | `string` | No | Id of the file to delete — the `id` or `ref` from search_files, or a fileId from save_file. |
 | `filename` | `string` | No | Filename to delete instead of `id`; rejected as ambiguous if more than one file shares the name. |
 | `project_id` | `string` | No | Use this project's files instead of the current chat's — how you reach project files when working outside a chat (get_project returns the id). Only projects you own or that are shared with you can be used. Cannot be used from a chat that already belongs to a different project, nor combined with scope: "app". |
 
@@ -353,7 +353,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `fileId` | `string` | Yes |  |
+| `fileId` | `string` | Yes | The deleted file's id, or its `ref` for a rowless file. |
 | `filename` | `string` | Yes |  |
 | `deleted` | `true` | Yes |  |
 

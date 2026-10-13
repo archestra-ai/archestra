@@ -400,7 +400,7 @@ export function GithubSyncSetupDialog({
         interval,
         existing: !creatingProject,
         // Editing moves the running sync to the new repository, created or not.
-        ...(editing && { replace: true }),
+        ...((!creatingProject || editing) && { replace: !!editing }),
         ...location,
       },
       {

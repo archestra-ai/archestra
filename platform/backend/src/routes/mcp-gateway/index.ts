@@ -53,7 +53,11 @@ import {
   supportsInputRequired,
   verifyRequestState,
 } from "./mrtr";
-import { pendingInboundRequests } from "./pending-inbound-requests";
+import {
+  deliverClientMessage,
+  PendingInboundRequests,
+} from "./pending-inbound-requests";
+import { cachedPendingRequests } from "./pending-inbound-shared";
 import {
   buildDiscoverResult,
   extractTraceContext,
@@ -214,6 +218,7 @@ async function handleMcpPostRequest(
   resolution: ProtocolResolution,
   /** Rounds already spent on this call, from a verified requestState. */
   mrtrRound: number,
+  pendingRequests: PendingInboundRequests,
   lookups?: RequestLookups,
 ): Promise<unknown> {
   const { revision } = resolution;
@@ -245,41 +250,39 @@ async function handleMcpPostRequest(
     "requestId" in cancellationParams
   ) {
     const requestId = (cancellationParams as Record<string, unknown>).requestId;
-    if (typeof requestId === "string" || typeof requestId === "number") {
-      const pending = pendingInboundRequests.consume({
+    if (
+      (typeof requestId === "string" || typeof requestId === "number") &&
+      (await routeClientMessage({
+        pendingRequests,
         wireId: requestId,
         agentId: profileId,
         caller: principal,
-      });
-      if (pending) {
-        pending.transport.onmessage?.({
-          ...body,
-          params: { ...cancellationParams, requestId: pending.id },
-        } as unknown as JSONRPCMessage);
-        reply.status(202);
-        return;
-      }
+        message: body,
+      }))
+    ) {
+      reply.status(202);
+      return;
     }
   }
 
   // A JSON-RPC response or error without a method answers a server-initiated
   // request sent during an earlier POST call. Because each POST creates a fresh
-  // server, route the answer back to the active transport waiting for it.
+  // server, route the answer back to the active transport waiting for it, on
+  // this replica or, through the shared cache, on the one that sent it.
   // Unknown IDs or answers from other callers fall through to default handling.
-  if (body.method === undefined && body.id !== undefined && body.id !== null) {
-    const pending = pendingInboundRequests.consume({
-      wireId: body.id as string | number,
+  if (
+    body.method === undefined &&
+    (typeof body.id === "string" || typeof body.id === "number") &&
+    (await routeClientMessage({
+      pendingRequests,
+      wireId: body.id,
       agentId: profileId,
       caller: principal,
-    });
-    if (pending) {
-      pending.transport.onmessage?.({
-        ...body,
-        id: pending.id,
-      } as unknown as JSONRPCMessage);
-      reply.status(202);
-      return;
-    }
+      message: body,
+    }))
+  ) {
+    reply.status(202);
+    return;
   }
 
   const runId = readHeader(request, RUN_ID_HEADER);
@@ -489,7 +492,7 @@ async function handleMcpPostRequest(
     // outstanding request loses its live transport as soon as it closes.
     const onTransportClose = transport.onclose;
     transport.onclose = () => {
-      pendingInboundRequests.forgetTransport({ transport });
+      pendingRequests.forgetTransport({ transport });
       onTransportClose?.();
     };
 
@@ -502,7 +505,7 @@ async function handleMcpPostRequest(
       if (isServerInitiatedRequestMessage(message)) {
         let wireId: string | undefined;
         try {
-          wireId = pendingInboundRequests.register({
+          wireId = await pendingRequests.register({
             id: message.id,
             transport,
             agentId: profileId,
@@ -510,7 +513,7 @@ async function handleMcpPostRequest(
           });
           return await originalSend({ ...message, id: wireId }, options);
         } catch (error) {
-          if (wireId !== undefined) pendingInboundRequests.forget({ wireId });
+          if (wireId !== undefined) pendingRequests.forget({ wireId });
           throw error;
         }
       }
@@ -518,9 +521,9 @@ async function handleMcpPostRequest(
       const wireId =
         cancelled === undefined
           ? undefined
-          : pendingInboundRequests.wireIdOf({ transport, id: cancelled });
+          : pendingRequests.wireIdOf({ transport, id: cancelled });
       if (wireId !== undefined) {
-        pendingInboundRequests.forget({ wireId });
+        pendingRequests.forget({ wireId });
         return originalSend(
           {
             ...message,
@@ -618,8 +621,20 @@ async function handleMcpPostRequest(
 // /v1/mcp/<profile_id>
 // Authorization header: Bearer <platform_token>
 // =============================================================================
-const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
+const mcpGatewayRoutes: FastifyPluginAsyncZod<{
+  /** Tests pass one per app to run several replicas in one process. */
+  pendingRequests?: PendingInboundRequests;
+}> = async (fastify, options) => {
   const { endpoint } = config.mcpGateway;
+
+  // Forms and other requests this replica sends mid-call, and their answers.
+  // The answer may reach another replica; the shared cache brings it here.
+  const pendingRequests =
+    options.pendingRequests ??
+    new PendingInboundRequests({ shared: cachedPendingRequests });
+  fastify.addHook("onClose", async () => {
+    pendingRequests.close();
+  });
 
   // Legacy HTTP+SSE streams this process holds. Ended from `preClose`, before
   // Fastify drains the HTTP server: a held stream IS one of the in-flight
@@ -1261,6 +1276,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tokenAuthContext,
         resolution,
         mrtrRound,
+        pendingRequests,
         lookups,
       );
     },
@@ -1285,6 +1301,27 @@ const SERVER_INITIATED_METHODS = [
   "sampling/createMessage",
   "roots/list",
 ] as const;
+
+/**
+ * Hand a client's answer or cancellation to the Server waiting on it: here,
+ * or parked for the replica that sent the request. False when no request
+ * this caller was asked waits under that wire id.
+ */
+async function routeClientMessage(params: {
+  pendingRequests: PendingInboundRequests;
+  wireId: string | number;
+  agentId: string;
+  caller: string;
+  message: Record<string, unknown>;
+}): Promise<boolean> {
+  const { pendingRequests, ...answer } = params;
+  const pending = pendingRequests.consume(answer);
+  if (pending) {
+    deliverClientMessage({ entry: pending, message: answer.message });
+    return true;
+  }
+  return pendingRequests.parkForOtherReplica(answer);
+}
 
 function isServerInitiatedRequestMessage(
   message: JSONRPCMessage,

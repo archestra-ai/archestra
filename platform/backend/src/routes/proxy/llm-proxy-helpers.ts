@@ -809,7 +809,10 @@ export function handleError(
       type: "error",
       error: {
         // Keep the provider's own error type (and details) so native
-        // streaming clients classify the failure correctly.
+        // streaming clients classify the failure correctly. This uses
+        // upstreamBody, not upstreamPassthroughBody: the status (200) is
+        // already sent, so the status checks of the passthrough do not apply,
+        // and the type and details are all the client has to go on.
         type:
           (upstreamBody !== undefined && error instanceof Error
             ? nestedProviderErrorType(error)

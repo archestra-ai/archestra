@@ -21,6 +21,8 @@ import {
   SkillShareLinkModel,
   VirtualApiKeyModel,
 } from "@/models";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
 import {
   accessGrants,
   afterEach,
@@ -141,9 +143,25 @@ describe("GET /api/connection-setups/script/:token", () => {
               : clientId === "copilot-cli"
                 ? "openai"
                 : "anthropic";
-        await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
-          provider,
-        });
+        const providerKey = await makeLlmProviderApiKey(
+          organizationId,
+          (await makeSecret()).id,
+          { provider },
+        );
+        if (clientId === "opencode") {
+          // OpenCode setups only publish providers that have a usable model.
+          const model = await ModelModel.create({
+            provider,
+            modelId: "claude-test",
+            externalId: "claude-test",
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+          });
+          await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+            providerKey.id,
+            [model.id],
+          );
+        }
         const { rawToken } = await createSetup({
           clientId,
           baseUrl: "http://localhost:9000/v1",

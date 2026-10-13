@@ -328,12 +328,20 @@ ${opencodeOwnedMergeBash(
 
   if (ctx.proxy) {
     if (ctx.proxy.primaryProviders) {
-      const { routes, providers } = openCodePrimaryConfig(ctx.proxy);
+      const { routes, providers, nativeProviders, appName } =
+        openCodePrimaryConfig(ctx.proxy, ctx.appName);
       sections.push(`say "Configuring model providers in OpenCode"
 command -v node >/dev/null 2>&1 || { err "Node.js is required to configure model providers"; exit 1; }
-ARCHESTRA_OC_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" ARCHESTRA_OC_KEY=${sh(ctx.proxy.virtualKey ?? "")} ARCHESTRA_OC_PRIMARY=stdin node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)} <<'ARCHESTRA_PRIMARY_CATALOG'
-${JSON.stringify({ providers })}
+ARCHESTRA_OC_NOTICES="$(ARCHESTRA_OC_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" ARCHESTRA_OC_KEY=${sh(ctx.proxy.virtualKey ?? "")} ARCHESTRA_OC_PRIMARY=stdin node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)} <<'ARCHESTRA_PRIMARY_CATALOG'
+${JSON.stringify({ providers, nativeProviders, appName })}
 ARCHESTRA_PRIMARY_CATALOG
+)"
+[ -z "$ARCHESTRA_OC_NOTICES" ] || printf '%s\\n' "$ARCHESTRA_OC_NOTICES" | while IFS= read -r archNotice; do
+  case "$archNotice" in
+    info:*) ok "\${archNotice#info:}" ;;
+    warn:*) warn "\${archNotice#warn:}" ;;
+  esac
+done
 ${opencodeRoutingPluginBash({ routes, headers: opencodeProxyHeaders(ctx.proxy) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const routes = Object.fromEntries(
@@ -442,12 +450,13 @@ finally { Remove-Item Env:ARCHESTRA_OC_PRIMARY -ErrorAction SilentlyContinue }
   }
   if (ctx.proxy) {
     if (ctx.proxy.primaryProviders) {
-      const { routes, providers } = openCodePrimaryConfig(ctx.proxy);
+      const { routes, providers, nativeProviders, appName } =
+        openCodePrimaryConfig(ctx.proxy, ctx.appName);
       sections.push(`Say 'Configuring model providers in OpenCode'
 $env:ARCHESTRA_OC_MAJOR = [string]$archOcMajor
 $env:ARCHESTRA_OC_KEY = ${psq(ctx.proxy.virtualKey ?? "")}
 $env:ARCHESTRA_OC_PRIMARY = 'stdin'
-$archPrimaryCatalog = ${psq(JSON.stringify({ providers }))}
+$archPrimaryCatalog = ${psq(JSON.stringify({ providers, nativeProviders, appName }))}
 $archPrimaryScript = @'
 ${OPENCODE_PRIMARY_CONFIG_SCRIPT}
 '@
@@ -456,7 +465,11 @@ ${OPENCODE_PRIMARY_CONFIG_SCRIPT}
 $archPrimaryFile = Join-Path ([IO.Path]::GetTempPath()) ('archestra-opencode-primary-' + [guid]::NewGuid().ToString('N') + '.cjs')
 try {
   [IO.File]::WriteAllText($archPrimaryFile, $archPrimaryScript)
-  $archPrimaryCatalog | & node $archPrimaryFile; if ($LASTEXITCODE -ne 0) { throw 'Could not configure model providers' }
+  $archNotices = $archPrimaryCatalog | & node $archPrimaryFile; if ($LASTEXITCODE -ne 0) { throw 'Could not configure model providers' }
+  foreach ($archNotice in @($archNotices)) {
+    $archLine = [string]$archNotice
+    if ($archLine.StartsWith('info:')) { Ok $archLine.Substring(5) } elseif ($archLine.StartsWith('warn:')) { Warn $archLine.Substring(5) }
+  }
 }
 finally {
   Remove-Item -Force -ErrorAction SilentlyContinue $archPrimaryFile

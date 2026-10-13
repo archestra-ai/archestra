@@ -171,3 +171,70 @@ test.each([
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test.each([
+  1, 2,
+])("OpenCode %i writes both limit fields when either is known and omits limit when neither is", (major) => {
+  const home = mkdtempSync(path.join(tmpdir(), "opencode-limits-"));
+  const section = major === 2 ? "providers" : "provider";
+  const model = (
+    id: string,
+    context: number | null,
+    output: number | null,
+  ) => ({
+    id,
+    name: id,
+    context,
+    output,
+  });
+  try {
+    execFileSync(process.execPath, ["-e", OPENCODE_PRIMARY_CONFIG_SCRIPT], {
+      input: JSON.stringify(
+        openCodePrimaryConfig({
+          authMode: "primary-providers",
+          provider: "anthropic",
+          providerLabel: "Anthropic",
+          baseUrl: "https://proxy.example/v1",
+          url: "https://proxy.example/v1/anthropic",
+          proxyName: "proxy",
+          virtualKey: "arch_test",
+          virtualKeyName: "Primary providers",
+          passthroughVirtualKey: null,
+          model: null,
+          primaryProviders: [
+            {
+              provider: "anthropic",
+              name: "Anthropic",
+              models: [
+                model("context-only", 200000, null),
+                model("output-only", null, 8192),
+                model("both", 200000, 8192),
+                model("neither", null, null),
+              ],
+            },
+          ],
+        }),
+      ),
+      env: {
+        ...process.env,
+        HOME: home,
+        XDG_CONFIG_HOME: path.join(home, ".config"),
+        ARCHESTRA_OC_MAJOR: String(major),
+        ARCHESTRA_OC_KEY: "arch_test",
+        ARCHESTRA_OC_PRIMARY: "stdin",
+      },
+    });
+    const { models } = JSON.parse(
+      readFileSync(path.join(home, ".config/opencode/opencode.json"), "utf8"),
+    )[section]["archestra-anthropic"];
+    expect(models["context-only"].limit).toEqual({
+      context: 200000,
+      output: 0,
+    });
+    expect(models["output-only"].limit).toEqual({ context: 0, output: 8192 });
+    expect(models.both.limit).toEqual({ context: 200000, output: 8192 });
+    expect(models.neither).not.toHaveProperty("limit");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

@@ -306,6 +306,7 @@ export const handlers: HttpHandler[] = [
       "nav:connect",
       "nav:model-providers",
       "nav:mcp-registry",
+      "nav:guardrails",
       "feedback:popup",
     ],
   }),

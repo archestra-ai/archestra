@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOKEN_PREFIX,
+  ASK_USER_OTHER_ANSWER_FIELD,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
   TOOL_ASK_USER_FULL_NAME,
@@ -3850,10 +3851,21 @@ describe("createAgentServer tools/list", () => {
     }
   });
 
-  test("ask_user elicits a choice form through the MCP caller", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
+  test.for([
+    {
+      answer: "a selected option",
+      content: { choice: "Accept for this session" },
+      expected: { selected: ["Accept for this session"] },
+    },
+    {
+      answer: "a typed answer",
+      content: { [ASK_USER_OTHER_ANSWER_FIELD]: "  Only this time  " },
+      expected: { selected: [], text: "Only this time" },
+    },
+  ])("ask_user elicits a form and returns $answer through the MCP caller", async ({
+    content,
+    expected,
+  }, { makeAgent, makeOrganization }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const { server } = await createAgentServer({ agentId: agent.id });
@@ -3869,7 +3881,7 @@ describe("createAgentServer tools/list", () => {
 
     const sendRequest = vi.fn().mockResolvedValue({
       action: "accept",
-      content: { choice: "Accept for this session" },
+      content,
     });
     const result = await callToolHandler(
       {
@@ -3901,7 +3913,16 @@ describe("createAgentServer tools/list", () => {
           message: "Accept this change for the rest of this session?",
           requestedSchema: expect.objectContaining({
             type: "object",
-            required: ["choice"],
+            properties: expect.objectContaining({
+              choice: expect.objectContaining({
+                enum: ["Accept for this session", "Do not accept"],
+              }),
+              [ASK_USER_OTHER_ANSWER_FIELD]: {
+                type: "string",
+                title: "Type something",
+              },
+            }),
+            required: [],
           }),
         },
       },
@@ -3912,7 +3933,7 @@ describe("createAgentServer tools/list", () => {
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toEqual({
       action: "accept",
-      selected: ["Accept for this session"],
+      ...expected,
     });
   });
 

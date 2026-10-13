@@ -88,6 +88,10 @@ import {
 } from "./a2a-protocol";
 import { extractProtocolPartsFromUIMessage } from "./a2a-response-parts";
 import { a2aTaskRunService } from "./a2a-task-run-service";
+import {
+  buildStatusReasonMessage,
+  settleFailedA2ATask,
+} from "./a2a-task-settlement";
 
 /** Wire name of the single text artifact carrying a tasked run's answer. */
 const RESPONSE_ARTIFACT_NAME = "agent-response";
@@ -909,7 +913,7 @@ export class A2AManager {
       // it so pollers see a terminal outcome. If the run's own lifecycle
       // already settled it (or a cancel won), this CAS is a no-op.
       if (resumedWorkingTask) {
-        await this.settleFailedRun({
+        await settleFailedA2ATask({
           taskId: resumedWorkingTask.taskId,
           contextId: resumedWorkingTask.contextId,
           statusReason: error instanceof Error ? error.message : String(error),
@@ -1045,7 +1049,7 @@ export class A2AManager {
 
       if (approvalRequests.length > 0) {
         if (this.config.disableApprovalFlow) {
-          await this.settleFailedRun({
+          await settleFailedA2ATask({
             taskId,
             contextId,
             statusReason:
@@ -1183,7 +1187,7 @@ export class A2AManager {
           // subscribers read the cancellation now.
           a2aTaskRunService.wakeSubscribers(taskId);
         } else {
-          await this.settleFailedRun({
+          await settleFailedA2ATask({
             taskId,
             contextId,
             statusReason: reason,
@@ -1200,43 +1204,6 @@ export class A2AManager {
     } finally {
       run.finish();
     }
-  }
-
-  /** CAS the task to FAILED with its terminal event; no-op if already settled. */
-  private async settleFailedRun(params: {
-    taskId: string;
-    contextId: string;
-    statusReason: string;
-  }): Promise<void> {
-    await A2ATaskModel.transitionStateWithEvent({
-      id: params.taskId,
-      to: A2AProtocolTaskState.Failed,
-      allowedFrom: [
-        A2AProtocolTaskState.Submitted,
-        A2AProtocolTaskState.Working,
-      ],
-      statusReason: params.statusReason,
-      eventPayload: {
-        statusUpdate: {
-          taskId: params.taskId,
-          contextId: params.contextId,
-          status: {
-            state: A2AProtocolTaskState.Failed,
-            // Stream followers get the same diagnostics GetTask serves.
-            message: buildStatusReasonMessage({
-              taskId: params.taskId,
-              contextId: params.contextId,
-              reason: params.statusReason,
-            }),
-          },
-        },
-      },
-    });
-
-    // Inside the helper rather than at its call sites: a failure can settle a
-    // task from several escape paths, and a parked subscriber must learn about
-    // every one of them without waiting out its fallback interval.
-    a2aTaskRunService.wakeSubscribers(params.taskId);
   }
 
   /**
@@ -1518,6 +1485,8 @@ export class A2AManager {
     actor: A2AActor;
     agentId: string;
     request: A2AProtocolCancelTaskRequest;
+    /** Why the task stopped, when the platform rather than the client cancels it. */
+    statusReason?: string;
   }): Promise<A2AProtocolTask> {
     const task = await this.findTaskForAgent({
       taskId: params.request.id,
@@ -1529,6 +1498,8 @@ export class A2AManager {
       throw new A2AError(A2AErrorKind.TaskNotCancelable);
     }
 
+    const statusReason =
+      params.statusReason ?? "The task was canceled by the client.";
     const canceled = await A2ATaskModel.transitionStateWithEvent({
       id: task.id,
       to: A2AProtocolTaskState.Canceled,
@@ -1539,7 +1510,7 @@ export class A2AManager {
         A2AProtocolTaskState.AuthRequired,
         A2AProtocolTaskState.Unspecified,
       ],
-      statusReason: "The task was canceled by the client.",
+      statusReason,
       clearApprovals: true,
       eventPayload: {
         statusUpdate: {
@@ -1550,7 +1521,7 @@ export class A2AManager {
             message: buildStatusReasonMessage({
               taskId: task.id,
               contextId: task.contextId,
-              reason: "The task was canceled by the client.",
+              reason: statusReason,
             }),
           },
         },
@@ -1924,20 +1895,6 @@ function toProtocolPushConfig(config: {
 }
 
 /** TaskStatus.message carrying a terminal reason (same shape GetTask serves). */
-function buildStatusReasonMessage(params: {
-  taskId: string;
-  contextId: string;
-  reason: string;
-}): A2AProtocolMessage {
-  return {
-    messageId: `${params.taskId}-status`,
-    contextId: params.contextId,
-    taskId: params.taskId,
-    role: A2AProtocolRole.Agent,
-    parts: [{ text: params.reason }],
-  };
-}
-
 /** The user id a run executes as: team and organization tokens have none. */
 function executorUserId(actor: A2AActor): string {
   return actor.kind === "user" ? actor.id : "system";

@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
 import config from "@/config";
-import { describeK8sApiError, isK8sNotFoundError } from "@/k8s/shared";
+import {
+  describeK8sApiError,
+  isK8sNotFoundError,
+  isTransientK8sApiError,
+} from "@/k8s/shared";
 import logger from "@/logging";
 import {
   A2ATaskModel,
@@ -287,6 +292,14 @@ async function startAgentRunSession(params: {
       await backend.stageInputs({ session, inputs: inputFiles });
     }
   } catch (error) {
+    const launchFailure = describeLaunchFailure(error);
+    // Settle the task before cleanup is visible: the reconciler cancels any
+    // unfinished task whose workspace is being deleted, which would otherwise
+    // replace this launch error with a generic reason.
+    await recordLaunchFailure({
+      taskId: params.taskId,
+      failure: launchFailure,
+    });
     // A publication can succeed before its exec connection fails. Keep the
     // claim until stopping that possibly-running turn has been acknowledged.
     try {
@@ -325,7 +338,7 @@ async function startAgentRunSession(params: {
         "Cleanup after a failed Agent Runtime launch will retry",
       );
     }
-    throw describeLaunchFailure(error);
+    throw launchFailure;
   }
 
   return session;
@@ -648,9 +661,34 @@ async function persistTranscript(params: {
 function describeLaunchFailure(error: unknown): unknown {
   const summary = describeK8sApiError(error);
   if (!summary) return error;
-  return new Error(`Agent Runtime could not start the run. ${summary}.`, {
-    cause: error,
-  });
+  const message = isTransientK8sApiError(error)
+    ? `Agent Runtime could not start the run because the Kubernetes API was overloaded or unavailable (${summary}). Start the run again in a minute.`
+    : `Agent Runtime could not start the run. ${summary}.`;
+  return new Error(message, { cause: error });
+}
+
+async function recordLaunchFailure(params: {
+  taskId: string;
+  failure: unknown;
+}): Promise<void> {
+  try {
+    const task = await A2ATaskModel.findById(params.taskId);
+    if (!task) return;
+    await settleFailedA2ATask({
+      taskId: task.id,
+      contextId: task.contextId,
+      statusReason:
+        params.failure instanceof Error
+          ? params.failure.message
+          : String(params.failure),
+    });
+  } catch (error) {
+    // The run lifecycle settles the task from the rethrown error as well.
+    logger.warn(
+      { error, taskId: params.taskId },
+      "Could not record an Agent Runtime launch failure",
+    );
+  }
 }
 
 function delayMs(ms: number, signal?: AbortSignal): Promise<void> {

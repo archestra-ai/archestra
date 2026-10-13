@@ -2,10 +2,14 @@ import {
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   type SupportedProvider,
 } from "@archestra/shared/model-constants";
+import { OPENCODE_PASSTHROUGH_PROVIDER_ROUTES } from "@archestra/shared/opencode-provider-routes";
 import type { SetupScriptProxySection } from "../types";
 
 /** Custom providers keep the platform's catalog separate from local accounts. */
-export function openCodePrimaryConfig(proxy: SetupScriptProxySection) {
+export function openCodePrimaryConfig(
+  proxy: SetupScriptProxySection,
+  appName: string,
+) {
   const routes: Record<string, string> = {};
   const providers = Object.fromEntries(
     (proxy.primaryProviders ?? []).map((entry) => {
@@ -29,7 +33,15 @@ export function openCodePrimaryConfig(proxy: SetupScriptProxySection) {
       ];
     }),
   );
-  return { routes, providers };
+  // Lets the script carry a pinned native model (openai/x) over to its
+  // Archestra twin (archestra-openai/x) instead of dropping the pin.
+  const nativeProviders = Object.fromEntries(
+    OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
+      (route) =>
+        [route.openCodeProviderId, `archestra-${route.provider}`] as const,
+    ).filter(([, id]) => id in providers),
+  );
+  return { routes, providers, nativeProviders, appName };
 }
 
 /** Runs in Node on both platforms; restores only the fields this mode owns. */
@@ -81,13 +93,32 @@ if (input) {
     state.fields[field] = config[field] ?? null;
   }
   const ids = Object.keys(input.providers);
+  const inCatalog = (providerId, modelId) => Boolean(input.providers[providerId]?.models.some(model => model.id === modelId));
+  // Never add a pin. Keep one that is already served here, carry a native one
+  // over to its Archestra twin (exact model id), and drop the rest so OpenCode
+  // falls back to the first provider below instead of an account it cannot use.
+  const notices = [];
   for (const field of ["model", "small_model"]) {
-    if (typeof config[field] === "string" && !ids.includes(config[field].split("/")[0])) delete config[field];
+    const pin = config[field];
+    if (typeof pin !== "string") continue;
+    const slash = pin.indexOf("/");
+    const providerId = pin.slice(0, slash), modelId = pin.slice(slash + 1);
+    if (slash > 0 && inCatalog(providerId, modelId)) continue;
+    const twin = slash > 0 ? input.nativeProviders?.[providerId] : undefined;
+    if (twin && inCatalog(twin, modelId)) {
+      config[field] = twin + "/" + modelId;
+      notices.push("info:OpenCode " + field + " " + pin + " now uses " + config[field] + " from " + input.appName + ". Disconnect restores " + pin + ".");
+    } else {
+      delete config[field];
+      notices.push("warn:" + input.appName + " does not offer OpenCode " + field + " " + pin + ", so setup removed it. Choose a model in OpenCode with /models. Disconnect restores " + pin + ".");
+    }
   }
   config.enabled_providers = ids;
   if (Array.isArray(config.disabled_providers)) config.disabled_providers = config.disabled_providers.filter(id => !ids.includes(id));
   for (const [id, provider] of Object.entries(input.providers)) {
     state.sections[section][id] = config[section][id] ?? null;
+    // Re-insert so OpenCode sees the providers in catalog order on every run.
+    delete config[section][id];
     const models = Object.fromEntries(provider.models.map(model => {
       // OpenCode requires both limit fields once limit is set; 0 is its value for unknown.
       const context = model.context > 0 ? model.context : 0, output = model.output > 0 ? model.output : 0;
@@ -102,6 +133,7 @@ if (input) {
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify(state), { mode: 0o600 });
   fs.writeFileSync(keyPath, process.env.ARCHESTRA_OC_KEY, { mode: 0o600 });
+  for (const notice of notices) console.log(notice);
 } else {
   fs.rmSync(statePath, { force: true });
   fs.rmSync(keyPath, { force: true });

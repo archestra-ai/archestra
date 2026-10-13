@@ -7,11 +7,10 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
-import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
-import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { bindOrganizationCredential } from "@/test/openappa-credentials";
 import { openappaBatteriesService } from "./batteries";
 import {
   helperUrlBase,
@@ -818,7 +817,10 @@ describe("a battery with targets", () => {
       const policy = await openappaBatteriesService.recompile(organizationId);
       expect(policy.lastError).toBeNull();
       const composed = parsePolicyToml(policy.content)?.policy as
-        | { annotator?: Array<{ name: string }> }
+        | {
+            annotator?: Array<{ name: string }>;
+            tool?: Array<{ requires?: { attention?: string[] } }>;
+          }
         | undefined;
       const annotators = composed?.annotator?.map(
         (annotator) => annotator.name,
@@ -826,11 +828,17 @@ describe("a battery with targets", () => {
       return {
         status: batteries.find((battery) => battery.name === "acme")?.status,
         deploysTarget: annotators?.includes("acme.visibility") ?? false,
+        composesBaseRule:
+          composed?.tool?.some((tool) =>
+            tool.requires?.attention?.includes("acme-review"),
+          ) ?? false,
       };
     };
+    // Only the target's credential is unbound: its base still composes.
     expect(await acme()).toEqual({
       status: "missing_credentials",
       deploysTarget: false,
+      composesBaseRule: true,
     });
 
     await bindOrganizationCredential({
@@ -839,10 +847,19 @@ describe("a battery with targets", () => {
       variable: ACME_TOKEN,
       key: "acme-token",
     });
-    expect(await acme()).toEqual({ status: "active", deploysTarget: true });
+    expect(await acme()).toEqual({
+      status: "active",
+      deploysTarget: true,
+      // Still composed after the target, whose rule matches first.
+      composesBaseRule: true,
+    });
 
     config.daggerRuntime.enabled = false;
-    expect(await acme()).toEqual({ status: "active", deploysTarget: false });
+    expect(await acme()).toEqual({
+      status: "active",
+      deploysTarget: false,
+      composesBaseRule: true,
+    });
   });
 
   test("the remedies and audience views read a deployed target's rule in place of the base rule it shadows", async ({
@@ -964,42 +981,6 @@ readers = { "github:1" = "ana@corp.example" }
     expect(await roster()).toEqual({ "github:1": "ana@corp.example" });
   });
 });
-
-/** An organization credential with a value, bound to a battery variable. */
-async function bindOrganizationCredential(params: {
-  organizationId: string;
-  userId: string;
-  variable: string;
-  key: string;
-}) {
-  const { organizationId, userId, variable, key } = params;
-  await RuntimeCredentialDefinitionModel.create({
-    organizationId,
-    createdBy: userId,
-    definition: {
-      key,
-      name: key,
-      kind: "secret",
-      description: "",
-      icon: null,
-      allowPersonal: false,
-      allowOrganization: true,
-    },
-  });
-  await RuntimeCredentialConnectionModel.upsert({
-    organizationId,
-    scope: "organization",
-    userId: null,
-    credentialId: key,
-    value: `${key}-value`,
-  });
-  await openappaBatteriesService.setCredentialBinding({
-    userId,
-    organizationId,
-    variable,
-    key,
-  });
-}
 
 const ACME_TOKEN = "APPA_PROVIDER_ACME_TOKEN";
 

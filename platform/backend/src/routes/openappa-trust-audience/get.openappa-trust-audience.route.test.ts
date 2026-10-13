@@ -6,6 +6,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { bindOrganizationCredential } from "@/test/openappa-credentials";
 import { useRouteTestApp } from "@/test/route-test-app";
 import routes from "./openappa-trust-audience.routes";
 
@@ -171,8 +172,14 @@ requires = { audience = { contains = ["@eng"] } }
 `;
     await saveRoot(content);
     // GitHub's audience sources are its multi-user target's, which deploys
-    // where the sandbox runs its helpers.
+    // where the sandbox runs its helpers and once its token is bound.
     config.daggerRuntime.enabled = true;
+    await bindOrganizationCredential({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      key: "github-token",
+    });
 
     const body = await view();
 

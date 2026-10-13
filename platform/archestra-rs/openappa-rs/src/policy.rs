@@ -176,27 +176,24 @@ fn with_member_rosters(
     document: &toml::Table,
     bound: &[(&ResolvedBattery, BoundBattery)],
 ) -> Result<String, String> {
-    let parse = |text: &str| toml::from_str::<toml::Table>(text).map_err(|error| error.to_string());
-    let mut composed = vec![document.clone()];
-    let mut targets = Vec::new();
+    let mut declared: BTreeSet<String> = audience_entries(document)
+        .map(|(name, _)| name.to_owned())
+        .collect();
+    let mut looked_up = BTreeSet::new();
     for (_, battery) in bound {
-        composed.push(parse(&battery.base)?);
+        let base: toml::Table = toml::from_str(&battery.base).map_err(|error| error.to_string())?;
+        declared.extend(audience_entries(&base).map(|(name, _)| name.to_owned()));
         if let Some(target) = &battery.target {
-            let target = parse(target)?;
-            targets.push(target.clone());
-            composed.push(target);
+            let target: toml::Table = toml::from_str(target).map_err(|error| error.to_string())?;
+            for (name, entry) in audience_entries(&target) {
+                declared.insert(name.to_owned());
+                if let Some(roster) = entry.get("lookup").and_then(toml::Value::as_str) {
+                    looked_up.insert(roster.to_owned());
+                }
+            }
         }
     }
-    let rosters: BTreeSet<&str> = targets
-        .iter()
-        .flat_map(audience_entries)
-        .filter_map(|(_, entry)| entry.get("lookup")?.as_str())
-        .filter(|roster| {
-            !composed
-                .iter()
-                .any(|document| audience_entries(document).any(|(name, _)| name == *roster))
-        })
-        .collect();
+    let rosters: Vec<&String> = looked_up.difference(&declared).collect();
     if rosters.is_empty() {
         return Ok(root.to_owned());
     }

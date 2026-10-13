@@ -538,6 +538,10 @@ async function buildReport(
   const targets = new Map(
     resolution.aliases.map((alias) => [alias.namespace, alias.servers]),
   );
+  // A base waiting only on its target's credentials composes, and so enforces.
+  const composed = new Set(
+    snapshot.batteries.filter((each) => each.composed).map((each) => each.name),
+  );
   for (const included of resolution.entries) {
     if (!included.battery) continue;
     const status = statusOf.get(included.name) ?? "unavailable";
@@ -561,7 +565,7 @@ async function buildReport(
               batteryStatus: status,
               line,
             },
-            enforced: !refused && status === "active",
+            enforced: !refused && composed.has(included.name),
           }),
         );
     }

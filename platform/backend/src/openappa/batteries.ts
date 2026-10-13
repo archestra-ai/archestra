@@ -53,6 +53,7 @@ import {
   deployedFiles,
   deployedSource,
   prospectiveDeployment,
+  viewedDeployment,
 } from "./battery-target";
 import {
   addedGrants,
@@ -264,13 +265,17 @@ class OpenAppaBatteriesService {
     rootRevision: number;
     lastError: string | null;
   }> {
-    const current = await this.current(organizationId);
-    const { root, resolution, batteries, policy } = current;
+    const { root, resolution, batteries, policy } =
+      await this.current(organizationId);
     return {
       rootContent: root.content,
       resolution,
       batteries,
-      viewed: viewedEntries(current),
+      viewed: await this.deployedBatteries({
+        organizationId,
+        resolution,
+        deploy: viewedDeployment,
+      }),
       rootRevision: policy.rootRevision,
       lastError: policy.lastError,
     };
@@ -278,11 +283,19 @@ class OpenAppaBatteriesService {
 
   /** Show the exact policy bytes an include currently resolves to. */
   async policySource(organizationId: string, entry: string) {
-    const current = await this.current(organizationId);
-    const included = current.resolution.entries.find(
-      (item) => item.entry === entry,
-    );
-    const deployed = viewedEntries(current).get(entry);
+    const root = await guardrailsPolicyService.get(organizationId);
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: root.content,
+    });
+    const included = resolution.entries.find((item) => item.entry === entry);
+    const deployed = (
+      await this.deployedBatteries({
+        organizationId,
+        resolution,
+        deploy: viewedDeployment,
+      })
+    ).get(entry);
     if (!included || !deployed)
       throw new ApiError(404, "This battery policy is no longer included");
     return {
@@ -354,6 +367,8 @@ class OpenAppaBatteriesService {
   async deployedBatteries(params: {
     organizationId: string;
     resolution: PolicyResolution;
+    /** How one battery deploys; what it composes as unless a view asks otherwise. */
+    deploy?: typeof deployBattery;
   }): Promise<DeployedEntries> {
     const { organizationId, resolution } = params;
     const [bindable, bindings] = await Promise.all([
@@ -368,6 +383,7 @@ class OpenAppaBatteriesService {
       keyOf: (variable) =>
         resolution.credentials[variable] ?? stored.get(variable) ?? null,
       bindable,
+      deploy: params.deploy,
     });
   }
 
@@ -1210,28 +1226,49 @@ class OpenAppaBatteriesService {
       const catalogIds = [
         ...new Set(servers.flatMap(({ catalogs }) => [...catalogs])),
       ];
-      const status = batteryStatus({
-        resolved: entry.battery !== null && !duplicated.has(entry.name),
-        credentials,
-        bindable,
-        governs: organizationWide
-          ? { kind: "organization" }
-          : {
-              kind: "catalogs",
-              servers,
-              conflicting: catalogIds.some((catalogId) =>
-                prefixes.conflicting.has(catalogId),
-              ),
-            },
+      const statusOf = (
+        read: ReadonlyArray<{ variable: string; key: string | null }>,
+      ) =>
+        batteryStatus({
+          resolved: entry.battery !== null && !duplicated.has(entry.name),
+          credentials: read,
+          bindable,
+          governs: organizationWide
+            ? { kind: "organization" }
+            : {
+                kind: "catalogs",
+                servers,
+                conflicting: catalogIds.some((catalogId) =>
+                  prefixes.conflicting.has(catalogId),
+                ),
+              },
+        });
+      // Whether it composes depends only on what the chosen deployment reads:
+      // a base waiting on its target's credentials still composes.
+      const deploysWith = new Set(deployed.get(entry.entry)?.credentials);
+      const composed = composes({
+        status: statusOf(
+          credentials.filter(({ variable }) => deploysWith.has(variable)),
+        ),
+        scope,
       });
-      return { entry, scope, servers, credentials, catalogIds, status };
+      const status = statusOf(credentials);
+      return {
+        entry,
+        scope,
+        servers,
+        credentials,
+        catalogIds,
+        status,
+        composed,
+      };
     });
     // A tool rule routes to an annotator from the root or from a battery that
     // composes its own rules; a stubbed battery's rules route nothing.
     const routed = new Set([
       ...resolution.routedAnnotators,
       ...drafts
-        .filter(composes)
+        .filter(({ composed }) => composed)
         .flatMap(
           ({ entry }) => deployed.get(entry.entry)?.routedAnnotators ?? [],
         ),
@@ -1263,7 +1300,7 @@ class OpenAppaBatteriesService {
         line: entry.line,
         status,
         scope,
-        composed: composes({ status, scope }),
+        composed: draft.composed,
         helpers: entry.battery?.helpers ?? [],
         servers: servers.map(({ target, catalogs }) => ({
           target,
@@ -1942,34 +1979,12 @@ function compositionFingerprint(params: {
       JSON.stringify({
         batteries,
         credentials: planned.resolution.credentials,
+        // A base composes while its target waits on a credential; the rows still move.
+        statuses: planned.batteries.map(({ name, status }) => [name, status]),
         ...(held.length > 0 ? { held } : {}),
       }),
     ) +
     (root.revision === 0 ? `:${root.contentHash}` : "")
-  );
-}
-
-/**
- * What the views read for each included battery: what it composes as, or, for
- * one held back for want of a credential, what it composes as once bound.
- */
-function viewedEntries(planned: PlannedComposition): DeployedEntries {
-  return new Map(
-    planned.resolution.entries.flatMap(({ entry, battery }) => {
-      const deployed = planned.deployed.get(entry);
-      if (!battery || !deployed) return [];
-      const held = planned.batteries.some(
-        (view) => view.entry === entry && view.status === "missing_credentials",
-      );
-      return [
-        [
-          entry,
-          held
-            ? prospectiveDeployment(battery, sandboxRuntimeService.isEnabled)
-            : deployed,
-        ] as const,
-      ];
-    }),
   );
 }
 
@@ -1982,8 +1997,9 @@ function deployEntries(params: {
   resolution: PolicyResolution;
   keyOf: (variable: string) => string | null;
   bindable: ReadonlySet<string>;
+  deploy?: typeof deployBattery;
 }): DeployedEntries {
-  const { resolution, keyOf, bindable } = params;
+  const { resolution, keyOf, bindable, deploy = deployBattery } = params;
   const isBound = (variable: string) => {
     const key = keyOf(variable);
     return key !== null && bindable.has(key);
@@ -1994,7 +2010,7 @@ function deployEntries(params: {
         ? [
             [
               entry.entry,
-              deployBattery({
+              deploy({
                 battery: entry.battery,
                 isBound,
                 sandboxEnabled: sandboxRuntimeService.isEnabled,

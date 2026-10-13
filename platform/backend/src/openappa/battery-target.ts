@@ -39,6 +39,21 @@ export function declaredCredentials(battery: BatteryPackage): string[] {
   return battery.multiUser?.credentials ?? battery.credentials;
 }
 
+/**
+ * What the views show for a battery: what it composes as, or, while that
+ * deployment waits for a credential, what it composes as once bound.
+ */
+export function viewedDeployment(params: {
+  battery: BatteryPackage;
+  isBound: (variable: string) => boolean;
+  sandboxEnabled: boolean;
+}): DeployedBattery {
+  const deployed = deployBattery(params);
+  return deployed.credentials.every(params.isBound)
+    ? deployed
+    : prospectiveDeployment(params.battery, params.sandboxEnabled);
+}
+
 /** What the battery deploys as here once every credential it reads is bound. */
 export function prospectiveDeployment(
   battery: BatteryPackage,

@@ -171,10 +171,10 @@ describe("GET /api/openappa/coverage/tools", () => {
   }) => {
     await seed({ makeInternalMcpCatalog, makeTool, makeAgent, makeAgentTool });
 
+    // GitHub's base composes while its multi-user target waits on the token,
+    // so its rules hold beside the rest.
     expect(await rows("")).toEqual([
       "docs__list_pages",
-      "gh__get_me",
-      "mixed__get_me",
       "acme__create_item",
       "acme__delete_item",
       "acme__list_items",
@@ -182,13 +182,15 @@ describe("GET /api/openappa/coverage/tools", () => {
       "docs__microsoft_docs_fetch",
       "docs__microsoft_docs_search",
       "docs__microsoft_docs_search(query:*azure*)",
+      "gh__get_me",
+      "mixed__get_me",
       "mixed__list_items",
     ]);
     const page = await tools("?limit=3&offset=3");
     expect(page.data.map((row) => row.fullName)).toEqual([
-      "acme__create_item",
-      "acme__delete_item",
       "acme__list_items",
+      "acme__ping",
+      "docs__microsoft_docs_fetch",
     ]);
     expect(page.pagination).toMatchObject({
       currentPage: 2,
@@ -230,12 +232,12 @@ describe("GET /api/openappa/coverage/tools", () => {
       "docs__microsoft_docs_search(query:*azure*)",
     ]);
     expect(await rows("?governedBy=battery")).toEqual([
-      "gh__get_me",
-      "mixed__get_me",
       "acme__create_item",
       "acme__list_items",
       "docs__microsoft_docs_fetch",
       "docs__microsoft_docs_search",
+      "gh__get_me",
+      "mixed__get_me",
       "mixed__list_items",
     ]);
     expect(await rows("?governedBy=battery&battery=acme")).toEqual([

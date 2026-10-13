@@ -102,7 +102,7 @@ export async function connectAppaGithubRepository(params: {
   )
     throw new ApiError(
       409,
-      "Stop the existing GitHub sync before connecting another repository",
+      "Stop the current Git sync before connecting another repository",
     );
   await saveSource(params);
   await syncAppaGithubPolicy(params.organizationId);
@@ -139,7 +139,7 @@ export async function createAppaGithubRepository(params: {
   )
     throw new ApiError(
       409,
-      "Stop the existing GitHub sync before creating a repository",
+      "Stop the current Git sync before creating a repository",
     );
   if (
     !(await userHasPermission(

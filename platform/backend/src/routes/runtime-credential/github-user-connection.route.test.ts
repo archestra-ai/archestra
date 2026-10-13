@@ -128,6 +128,19 @@ test("connects the verified account once, binds PKCE, and resolves only its acce
     await resolveCredential({ ...owner, userId: "another-user" }),
   ).toBeNull();
   expect(await resolveCredential({ ...owner, userId: null })).toBeNull();
+  const [connection] = await db
+    .select({ githubId: schema.runtimeCredentialConnectionsTable.githubId })
+    .from(schema.runtimeCredentialConnectionsTable)
+    .where(
+      and(
+        eq(schema.runtimeCredentialConnectionsTable.userId, user.id),
+        eq(
+          schema.runtimeCredentialConnectionsTable.credentialId,
+          "github-user",
+        ),
+      ),
+    );
+  expect(connection.githubId).toBe(12345);
   expect((await complete(url)).statusCode).toBe(400);
   expect(exchanges).toHaveLength(1);
   expect(response.body).not.toContain("access-1");

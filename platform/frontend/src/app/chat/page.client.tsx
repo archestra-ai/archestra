@@ -2215,25 +2215,29 @@ export function ChatPageContent({
   >(async (message, e, options) => {
     e.preventDefault();
 
-    // Enqueue this submission instead of sending it now (throws on inputs that
-    // can't be queued, keeping the composer intact per the onSubmit contract).
-    // Only reached when queueing is on and a conversation exists.
+    // Enqueue this submission instead of sending it now (throws on an empty
+    // submit, keeping the composer intact per the onSubmit contract). Only
+    // reached when queueing is on and a conversation exists.
     const enqueueSubmission = () => {
       if (!conversationId) return;
-      if (message.files && message.files.length > 0) {
-        toast.error(
-          "Attachments can't be queued. Wait for the current response to finish, then send.",
-        );
-        // Keep the typed text, draft, and attachments for a later submit.
-        throw new Error("attachments-not-queueable");
-      }
       const queueText = message.text?.trim();
-      if (!queueText && !options?.skill && !options?.externalMcpSkill) {
+      const queueFiles = (message.files ?? []).map((file) => ({
+        url: file.url,
+        mediaType: file.mediaType,
+        ...(file.filename ? { filename: file.filename } : {}),
+      }));
+      if (
+        !queueText &&
+        queueFiles.length === 0 &&
+        !options?.skill &&
+        !options?.externalMcpSkill
+      ) {
         // Nothing to queue (Enter on an empty composer while streaming).
         throw new Error("empty-queue-submit");
       }
       chatMessageQueue.enqueue(conversationId, {
         text: message.text ?? "",
+        ...(queueFiles.length > 0 ? { files: queueFiles } : {}),
         ...(options?.skill ? { skill: options.skill } : {}),
         ...(options?.externalMcpSkill
           ? { externalMcpSkill: options.externalMcpSkill }
@@ -2244,6 +2248,7 @@ export function ChatPageContent({
         conversationId,
         agentId: conversation?.agentId ?? undefined,
         messageLength: message.text?.length ?? 0,
+        fileCount: queueFiles.length,
       });
     };
 

@@ -68,7 +68,6 @@ function show(
   resources = {
     gatewaySelected: true,
     proxySelected: true,
-    proxyUsesVirtualKey: true,
     skillsSelected: true,
   },
   setupId: string | null = "setup",
@@ -201,9 +200,7 @@ test("approval requires matching the terminal code, then submits the reviewed se
   ).toBeVisible();
   expect(screen.getByText("Reload Cursor to see shared skills.")).toBeVisible();
   expect(
-    screen.getByText(
-      /Paste its proxy URL and virtual key into Cursor Settings/,
-    ),
+    screen.getByText(/Quit and reopen Cursor to load its model settings/),
   ).toBeVisible();
   expect(requests).toEqual([{ decision: "approve", setupId: "setup" }]);
   expect(
@@ -217,7 +214,6 @@ test("approval only shows steps for selected Cursor resources", async () => {
   show("cursor", {
     gatewaySelected: true,
     proxySelected: false,
-    proxyUsesVirtualKey: false,
     skillsSelected: false,
   });
   await screen.findByText("ABCD-1234");
@@ -231,24 +227,8 @@ test("approval only shows steps for selected Cursor resources", async () => {
       "In Cursor, open Customize → MCPs and authenticate the gateway.",
     ),
   ).toBeVisible();
-  expect(screen.queryByText(/proxy URL and key/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/model settings/)).not.toBeInTheDocument();
   expect(screen.queryByText(/Reload Cursor/)).not.toBeInTheDocument();
-});
-
-test("Cursor provider-key setup tells the user which key to use", async () => {
-  show("cursor", {
-    gatewaySelected: false,
-    proxySelected: true,
-    proxyUsesVirtualKey: false,
-    skillsSelected: false,
-  });
-  await screen.findByText("ABCD-1234");
-  fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(screen.getByRole("button", { name: "Approve connection" }));
-  expect(
-    await screen.findByText(/Paste its proxy URL and your own OpenAI API key/),
-  ).toBeVisible();
-  expect(screen.queryByText(/virtual key/)).not.toBeInTheDocument();
 });
 
 test("Claude Desktop approval points to its connector step", async () => {

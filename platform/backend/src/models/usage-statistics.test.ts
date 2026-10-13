@@ -122,6 +122,15 @@ describe("UsageStatisticsModel.getMcpToolCallUsage", () => {
     ]);
     expect(result.totals).toEqual({ calls: 3, errors: 1 });
     expect(result.pagination.total).toBe(2);
+    const pastEnd = await UsageStatisticsModel.getMcpToolCallUsage({
+      timeframe: RANGE,
+      organizationId: org.id,
+      pagination: { limit: 1, offset: 100 },
+      groupBy: ["day", "toolName"],
+    });
+    expect(pastEnd.data).toEqual([]);
+    expect(pastEnd.pagination.total).toBe(2);
+    expect(pastEnd.totals).toEqual(result.totals);
   });
 
   test("reads the tool name and status of rows logged before the plaintext columns", async ({
@@ -176,7 +185,7 @@ describe("UsageStatisticsModel.getMcpToolCallUsage", () => {
     await toolCall({ agentId: foreignAgent.id, userId: bob.id, name: "a" });
 
     const base = {
-      timeframe: RANGE,
+      timeframe: RANGE as typeof RANGE,
       organizationId: org.id,
       pagination: PAGE,
       groupBy: ["userId" as const, "agentId" as const],
@@ -291,6 +300,16 @@ describe("UsageStatisticsModel.getAppUsage", () => {
         subscriptionCost: 0,
       }),
     ]);
+    const pastEnd = await UsageStatisticsModel.getAppUsage({
+      timeframe: RANGE,
+      organizationId: org.id,
+      pagination: { limit: 1, offset: 100 },
+      groupBy: ["day", "appId"],
+      accessibleAppIds: [board.id],
+    });
+    expect(pastEnd.data).toEqual([]);
+    expect(pastEnd.pagination.total).toBe(2);
+    expect(pastEnd.totals).toEqual(result.totals);
     expect(result.totals).toMatchObject({
       runs: 2,
       toolCalls: 1,
@@ -362,6 +381,15 @@ describe("UsageStatisticsModel.getSkillUsage", () => {
         users: 1,
       },
     ]);
+    const pastEnd = await UsageStatisticsModel.getSkillUsage({
+      timeframe: RANGE,
+      organizationId: org.id,
+      pagination: { limit: 1, offset: 100 },
+      groupBy: ["day", "skillId"],
+    });
+    expect(pastEnd.data).toEqual([]);
+    expect(pastEnd.pagination.total).toBe(2);
+    expect(pastEnd.totals).toEqual(result.totals);
     expect(result.totals).toEqual({
       activations: 4,
       contextTokens: 160,

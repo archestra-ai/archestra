@@ -20,10 +20,7 @@ import logger from "@/logging";
 import {
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   MemberModel,
-  ModelModel,
-  ModelTeamModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   TeamModel,
@@ -88,9 +85,9 @@ import {
 } from "../llm-proxy-handler";
 import {
   buildRoutableModelId,
+  listRoutableModels,
   type ModelRouterResolution,
   resolveModelRoute,
-  sortRoutableModels,
 } from "../model-router-resolver";
 
 type OpenAiWireProvider = LLMProvider<
@@ -824,37 +821,18 @@ function handleModelRouterResponsesProvider(
 }
 
 async function listModels(params: { auth: ModelRouterAuth }) {
-  const apiKeyIds = params.auth.providerApiKeys
-    .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
-    .map((mapping) => mapping.providerApiKeyId);
-  const linkedModels =
-    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
-  const candidateModels = linkedModels
-    .map(({ model }) => model)
-    .filter((model) => {
-      if (!modelRouterSupportedProviders.has(model.provider)) {
-        return false;
-      }
-      return (
-        ModelModel.supportsTextChat(model) ||
-        ModelModel.supportsEmbeddings(model)
-      );
-    });
-
   // Hide models the caller cannot invoke, mirroring the proxy-time check: a
   // user-attributed credential needs a `use` grant; auth without a user
   // identity may exercise only an organization-wide grant.
-  const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
-    modelIds: candidateModels.map((model) => model.id),
+  const chatModels = await listRoutableModels({
     organizationId: params.auth.organizationId,
+    providerApiKeyIds: params.auth.providerApiKeys
+      .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
+      .map((mapping) => mapping.providerApiKeyId),
     userId:
       params.auth.authMethod === "oauth_user" ? params.auth.userId : undefined,
-    action: "use",
+    includeEmbeddings: true,
   });
-
-  const chatModels = sortRoutableModels(
-    candidateModels.filter((model) => allowedModelIds.has(model.id)),
-  );
 
   return {
     object: "list" as const,

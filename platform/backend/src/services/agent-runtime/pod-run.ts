@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
+import {
+  DEFAULT_APP_NAME,
+  followAgentCatalogImage,
+  toPlaceholderTitle,
+} from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { settleFailedA2ATask } from "@/agents/a2a/a2a-task-settlement";
 import type { A2AExecuteResult } from "@/agents/a2a-executor";
@@ -356,6 +360,10 @@ export function resolveAgentRuntime(
   }
   return {
     ...agent.runtime,
+    image: followAgentCatalogImage({
+      image: agent.runtime.image,
+      catalogImages: config.agentRuntime.catalogImages,
+    }),
     agentId: agent.id,
     organizationId: agent.organizationId,
     environmentId: agent.environmentId,

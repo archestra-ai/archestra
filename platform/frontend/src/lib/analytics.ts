@@ -54,6 +54,7 @@ type ProductEvents = {
     conversationId?: string;
     agentId?: string;
     messageLength: number;
+    fileCount: number;
   };
   /** A suggested-prompt tile was clicked on the new-chat screen. */
   prompt_selected: { agentId?: string; promptLength: number };

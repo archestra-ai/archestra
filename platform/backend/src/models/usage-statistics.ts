@@ -79,20 +79,21 @@ class UsageStatisticsModel {
     const callCount = sql<number>`CAST(COUNT(*) AS INTEGER)`;
     const errorCount = sql<number>`CAST(COUNT(*) FILTER (WHERE ${IS_ERROR}) AS INTEGER)`;
 
+    const groupedQuery = db
+      .select({
+        ...selected,
+        calls: callCount,
+        errors: errorCount,
+        total: TOTAL_GROUPS,
+      })
+      .from(calls)
+      .leftJoin(schema.usersTable, eq(schema.usersTable.id, calls.userId))
+      .leftJoin(schema.agentsTable, eq(schema.agentsTable.id, calls.agentId))
+      .leftJoin(schema.appsTable, eq(schema.appsTable.id, calls.appId))
+      .where(where)
+      .groupBy(...Object.values(selected));
     const [rows, [totals]] = await Promise.all([
-      db
-        .select({
-          ...selected,
-          calls: callCount,
-          errors: errorCount,
-          total: TOTAL_GROUPS,
-        })
-        .from(calls)
-        .leftJoin(schema.usersTable, eq(schema.usersTable.id, calls.userId))
-        .leftJoin(schema.agentsTable, eq(schema.agentsTable.id, calls.agentId))
-        .leftJoin(schema.appsTable, eq(schema.appsTable.id, calls.appId))
-        .where(where)
-        .groupBy(...Object.values(selected))
+      groupedQuery
         .orderBy(...usageOrder(selected, callCount))
         .limit(pagination.limit)
         .offset(pagination.offset),
@@ -103,11 +104,18 @@ class UsageStatisticsModel {
     ]);
 
     return {
-      ...paginate(rows, pagination, (row) => ({
-        ...row,
-        calls: Number(row.calls),
-        errors: Number(row.errors),
-      })),
+      ...paginate(
+        rows,
+        pagination,
+        (row) => ({
+          ...row,
+          calls: Number(row.calls),
+          errors: Number(row.errors),
+        }),
+        await emptyPageTotal(rows, pagination, () =>
+          groupedQuery.limit(1).offset(0),
+        ),
+      ),
       totals: {
         calls: Number(totals?.calls ?? 0),
         errors: Number(totals?.errors ?? 0),
@@ -224,8 +232,7 @@ class UsageStatisticsModel {
       CAST(COALESCE(SUM(facts.subscription_cost), 0) AS DOUBLE PRECISION) AS subscription_cost`;
 
     const dayFirst = groupBy.includes("day") ? sql`day ASC, ` : sql``;
-    const [page, totals] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+    const groupedQuery = sql`
         WITH facts AS (${facts})
         SELECT ${sql.join(
           selectedEntries.map(
@@ -246,8 +253,11 @@ class UsageStatisticsModel {
           selectedEntries.map(([alias]) => sql`${sql.identifier(alias)} ASC`),
           sql`, `,
         )}
-        LIMIT ${pagination.limit} OFFSET ${pagination.offset}
-      `),
+      `;
+    const [page, totals] = await Promise.all([
+      db.execute<Record<string, unknown>>(
+        sql`${groupedQuery} LIMIT ${pagination.limit} OFFSET ${pagination.offset}`,
+      ),
       db.execute<Record<string, unknown>>(sql`
         WITH facts AS (${facts})
         SELECT ${metrics} FROM facts
@@ -265,22 +275,36 @@ class UsageStatisticsModel {
     });
 
     return {
-      ...paginate(page.rows, pagination, (row) => ({
-        ...(groupBy.includes("day") ? { day: String(row.day) } : {}),
-        ...(groupBy.includes("appId")
-          ? {
-              appId: String(row.app_id),
-              appName: (row.app_name as string | null) ?? null,
-            }
-          : {}),
-        ...(groupBy.includes("userId")
-          ? {
-              userId: (row.user_id as string | null) ?? null,
-              userName: (row.user_name as string | null) ?? null,
-            }
-          : {}),
-        ...toMetrics(row),
-      })),
+      ...paginate(
+        page.rows,
+        pagination,
+        (row) => ({
+          ...(groupBy.includes("day") ? { day: String(row.day) } : {}),
+          ...(groupBy.includes("appId")
+            ? {
+                appId: String(row.app_id),
+                appName: (row.app_name as string | null) ?? null,
+              }
+            : {}),
+          ...(groupBy.includes("userId")
+            ? {
+                userId: (row.user_id as string | null) ?? null,
+                userName: (row.user_name as string | null) ?? null,
+              }
+            : {}),
+          ...toMetrics(row),
+        }),
+        await emptyPageTotal(
+          page.rows,
+          pagination,
+          async () =>
+            (
+              await db.execute<Record<string, unknown>>(
+                sql`${groupedQuery} LIMIT 1`,
+              )
+            ).rows,
+        ),
+      ),
       totals: totals.rows[0] ? toMetrics(totals.rows[0]) : emptyTotals,
     };
   }
@@ -337,20 +361,21 @@ class UsageStatisticsModel {
     const contextTokens = sql<number>`CAST(COALESCE(SUM(${events.contextTokens}), 0) AS BIGINT)`;
     const users = sql<number>`CAST(COUNT(DISTINCT ${events.userId}) AS INTEGER)`;
 
+    const groupedQuery = db
+      .select({
+        ...selected,
+        activations,
+        contextTokens,
+        users,
+        total: TOTAL_GROUPS,
+      })
+      .from(events)
+      .innerJoin(skills, eq(skills.id, events.skillId))
+      .leftJoin(schema.usersTable, eq(schema.usersTable.id, events.userId))
+      .where(where)
+      .groupBy(...Object.values(selected));
     const [rows, [totals]] = await Promise.all([
-      db
-        .select({
-          ...selected,
-          activations,
-          contextTokens,
-          users,
-          total: TOTAL_GROUPS,
-        })
-        .from(events)
-        .innerJoin(skills, eq(skills.id, events.skillId))
-        .leftJoin(schema.usersTable, eq(schema.usersTable.id, events.userId))
-        .where(where)
-        .groupBy(...Object.values(selected))
+      groupedQuery
         .orderBy(...usageOrder(selected, activations))
         .limit(pagination.limit)
         .offset(pagination.offset),
@@ -362,12 +387,19 @@ class UsageStatisticsModel {
     ]);
 
     return {
-      ...paginate(rows, pagination, (row) => ({
-        ...row,
-        activations: Number(row.activations),
-        contextTokens: Number(row.contextTokens),
-        users: Number(row.users),
-      })),
+      ...paginate(
+        rows,
+        pagination,
+        (row) => ({
+          ...row,
+          activations: Number(row.activations),
+          contextTokens: Number(row.contextTokens),
+          users: Number(row.users),
+        }),
+        await emptyPageTotal(rows, pagination, () =>
+          groupedQuery.limit(1).offset(0),
+        ),
+      ),
       totals: {
         activations: Number(totals?.activations ?? 0),
         contextTokens: Number(totals?.contextTokens ?? 0),
@@ -478,10 +510,22 @@ function paginate<Row extends { total?: unknown }, Out>(
   rows: Row[],
   pagination: PaginationQuery,
   map: (row: Omit<Row, "total">) => Out,
+  emptyTotal = 0,
 ) {
-  const total = rows.length > 0 ? Number(rows[0].total) : 0;
+  const total = rows.length > 0 ? Number(rows[0].total) : emptyTotal;
   return {
     data: rows.map(({ total: _total, ...row }) => map(row)),
     pagination: calculatePaginationMeta(total, pagination),
   };
+}
+
+/** Preserve group counts even when the requested page lies past the last row. */
+async function emptyPageTotal(
+  rows: { total?: unknown }[],
+  pagination: PaginationQuery,
+  firstPage: () => PromiseLike<{ total?: unknown }[]>,
+): Promise<number> {
+  if (rows.length || pagination.offset === 0) return 0;
+  const [first] = await firstPage();
+  return Number(first?.total ?? 0);
 }

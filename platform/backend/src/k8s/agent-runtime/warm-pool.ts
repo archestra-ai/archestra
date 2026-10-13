@@ -1,3 +1,4 @@
+import { TimeInMs } from "@archestra/shared";
 import type { CustomObjectsApi } from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
@@ -98,7 +99,9 @@ class AgentWarmPoolManager {
         this.clients = createK8sClients(kubeConfig, namespace);
       }
       const clients = this.clients;
-      const candidates = await AgentModel.listWarmPoolCandidates();
+      const candidates = await AgentModel.listWarmPoolCandidates({
+        since: new Date(Date.now() - RECENT_RUN_WINDOW_MS),
+      });
       const desired = new Map<
         string,
         {
@@ -393,6 +396,8 @@ class AgentWarmPoolManager {
 
 export const agentWarmPoolManager = new AgentWarmPoolManager();
 
+/** Agents idle longer than this hold no spare capacity. */
+const RECENT_RUN_WINDOW_MS = 7 * TimeInMs.Day;
 const POOL_LABEL = "archestra.io/warm-pool";
 const MANAGED_LABELS = { "archestra.io/purpose": "agent-warm-pool" };
 const MANAGED_SELECTOR = "archestra.io/purpose=agent-warm-pool";

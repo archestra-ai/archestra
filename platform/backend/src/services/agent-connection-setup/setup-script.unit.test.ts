@@ -1679,6 +1679,12 @@ ${script.slice(pluginStart, pluginEnd)}
       "kilo --prompt 'What can you do with my Archestra tools?'",
     );
     expect(script).toContain("If Kilo Code is already open, close it first");
+    // The guard removes the handoff plugin it installed when it removes itself.
+    expect(script).toContain(
+      platform === "windows"
+        ? "($GuardPath + '.prompt.md'), ($GuardPath + '.handoff.mjs')"
+        : '"$GUARD_PATH.prompt.md" "$GUARD_PATH.handoff.mjs"',
+    );
     for (const openCodeOnly of [
       "opencode.json",
       "opencode-routing-plugin-state",

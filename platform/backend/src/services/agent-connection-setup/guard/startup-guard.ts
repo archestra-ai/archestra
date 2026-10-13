@@ -430,7 +430,7 @@ uninstall_guard() {
   }
   GUARD_UNINSTALLED=1
   rm -f "$GUARD_PATH.instructions-source.json" "$GUARD_PATH.instructions-refresh.py"
-  rm -f "$GUARD_PATH" "$SKIP_FILE" "$GUARD_PATH.prompt.md" 2>/dev/null || true
+  rm -f "$GUARD_PATH" "$SKIP_FILE" "$GUARD_PATH.prompt.md"${client.inlineConfigEnv ? ' "$GUARD_PATH.handoff.mjs"' : ""} 2>/dev/null || true
   rm -rf "$GUARD_PATH.instructions" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
     [ -f "$profile" ] || continue

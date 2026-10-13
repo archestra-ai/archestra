@@ -160,7 +160,7 @@ function Remove-ArchGuard {
   $Script:GuardUninstalled = $true
   Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions-source.json'), ($GuardPath + '.instructions-refresh.ps1')
   Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile
-  Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.prompt.md')
+  Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.prompt.md')${client.inlineConfigEnv ? ", ($GuardPath + '.handoff.mjs')" : ""}
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions')
   $profilePaths = @()
   $docs = [Environment]::GetFolderPath('MyDocuments')

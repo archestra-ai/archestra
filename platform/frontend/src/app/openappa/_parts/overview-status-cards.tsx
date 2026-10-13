@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,7 +37,6 @@ import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
-import { openAppaUrl } from "./overview-setup-cards";
 
 /** Where the policy syncs from, the latest validation run, and the unresolved yells. */
 export function OverviewStatusCards() {
@@ -120,10 +118,6 @@ function GithubSyncCard() {
             "Keep your guardrail policy in a repository, so every change is a reviewed pull request."
           )
         }
-        learnMore={{
-          href: openAppaUrl("/validation"),
-          label: "CI checks",
-        }}
         action={
           !sync.data?.enabled ? null : connected &&
             source?.setupPullRequestNumber ? (
@@ -299,7 +293,6 @@ function StatusCard({
   status,
   description,
   children,
-  learnMore,
   action,
 }: {
   icon: ReactNode;
@@ -307,7 +300,6 @@ function StatusCard({
   status?: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
-  learnMore?: { href: string; label: string };
   action: ReactNode;
 }) {
   return (
@@ -327,19 +319,7 @@ function StatusCard({
         )}
         {children}
       </CardContent>
-      {(action || learnMore) && (
-        <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
-          {action}
-          {learnMore && (
-            <ExternalDocsLink
-              href={learnMore.href}
-              className="shrink-0 text-xs text-muted-foreground"
-            >
-              {learnMore.label}
-            </ExternalDocsLink>
-          )}
-        </CardFooter>
-      )}
+      <CardFooter className="px-4">{action}</CardFooter>
     </Card>
   );
 }

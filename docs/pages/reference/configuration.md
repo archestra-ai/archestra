@@ -1456,4 +1456,4 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`
   - Values: `1`–`64`
-  - A check that waits more than 30 seconds for a connection fails. Raise it when policies consult slow external authorities.
+  - A check holds a connection only for each database step, never while it waits on an external consult. A step that waits more than 30 seconds for a free connection fails.

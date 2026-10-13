@@ -81213,6 +81213,10 @@ export type GetMcpToolCallsData = {
          * Filter by exact MCP server name
          */
         mcpServerName?: string;
+        /**
+         * Filter by the user the call is attributed to. Ignored without `log:admin`, which already scopes the listing to the caller.
+         */
+        userId?: string;
         limit?: number;
         cursor?: string;
     };

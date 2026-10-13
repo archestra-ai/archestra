@@ -225,8 +225,9 @@ export const openappaProcessedResultsTable = pgTable(
 
 // The lease a dispatch holds on one trajectory family while it claims and
 // completes receipts. It names the owning dispatch and where the family's event
-// log ended when the dispatch began. A later dispatch that finds pending
-// receipts may release them only when the log still ends at `event_seq`.
+// log ended when the dispatch began. A later dispatch recovers pending receipts
+// under the same lock. A failed dispatch may release only its own receipts,
+// and only when the log still ends at `event_seq`.
 export const openappaDispatchLeasesTable = pgTable(
   "openappa_dispatch_leases",
   {
@@ -235,7 +236,7 @@ export const openappaDispatchLeasesTable = pgTable(
     // The last event sequence of the root when the lease was taken, or -1 for
     // an empty log.
     eventSeq: bigint("event_seq", { mode: "number" }).notNull(),
-    // Consecutive dispatches of this family that stopped with pending receipts.
+    // Lease generation while this family retains pending receipts; not a retry limit.
     attempt: integer().notNull().default(1),
   },
   (table) => [

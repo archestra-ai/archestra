@@ -133,8 +133,12 @@ test('a probe-declared spawn starts its child once, under the real call', { skip
 test('an attested return schema admits only bounded leaves', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();
-  const { declared, call } = await startSpawn(run, { ...schema, additionalProperties: false });
-  assert.equal(declared.result.isError, true, 'the delegation tool describes this dialect to the model');
+  await assert.rejects(
+    () => startSpawn(run, { ...schema, additionalProperties: false }),
+    /return_schema.*does not compile.*return shape/,
+    'the delegation tool rejects an unsupported return-shape dialect',
+  );
+  const call = await run.hook(run.parent, run.spawnCall('s1'));
   assert.equal(call.decision, 'deny_call', 'a refused declaration leaves the spawn held');
 });
 

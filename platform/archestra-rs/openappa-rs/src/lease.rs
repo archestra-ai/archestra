@@ -1,24 +1,26 @@
 //! The lease one dispatch holds on its trajectory family while it claims and
 //! completes receipts.
 //!
-//! A receipt stays `pending` from its claim to its completion, and a pending
-//! receipt stops every later dispatch of the family. A process that stops in
-//! between leaves the receipt pending for good. The lease records which
-//! dispatch was doing that work and where the family's event log ended when
-//! the work began, so a later dispatch can tell what the stopped one left:
+//! A receipt stays `pending` from its claim to its completion, and a process
+//! that stops in between leaves it pending. A later dispatch of the family
+//! finds it while holding the family's advisory lock, so it knows the
+//! receipt's owner is gone: PostgreSQL drops that lock when the owner's
+//! connection ends, and no sooner. No clock is compared.
 //!
-//! - The event log has not advanced: the runtime kept nothing of the stopped
-//!   work, so its receipts are released and the operation runs again when it
-//!   is next submitted.
-//! - The event log advanced: the runtime kept part of a decision the host
-//!   never saw. Nothing here can replay that safely, so the family stays
-//!   closed for an operator.
+//! What the stopped dispatch kept is then answered per operation, never
+//! guessed from the family's log position:
 //!
-//! A lease lasts as long as its owner's connection does. Every function here
-//! runs on the dispatch's own connection, which holds the family's advisory
-//! lock. PostgreSQL drops that lock when the owner's connection ends, and no
-//! sooner, so a dispatch that holds the lock and still finds pending receipts
-//! knows their owner is no longer working on them. No clock is compared.
+//! - A resubmitted operation whose receipt is pending is driven again through
+//!   the runtime. Work the event log never kept runs as a first run; work it
+//!   kept is answered from the committed facts, without re-execution. Either
+//!   way the pending receipt completes with exactly the decision the host was
+//!   owed, and no family is closed for an ordinary interruption.
+//! - A dispatch whose own work failed while it committed nothing to the log
+//!   releases the receipts it claimed at once, so the host's retry runs them
+//!   again without waiting for the recovery above.
+//!
+//! Every function here runs on the dispatch's own connection, which holds the
+//! family's advisory lock for the whole dispatch.
 use appa_eventlog::postgres::{LeasedPostgres, PostgresError};
 use postgres::GenericClient;
 use std::{future::Future, time::Duration};
@@ -27,81 +29,12 @@ use tokio::time::MissedTickBehavior;
 /// How often a working dispatch checks that it still owns its lease.
 const PROBE_INTERVAL: Duration = Duration::from_secs(5);
 
-/// A family stops recovering by itself after this many dispatches in a row
-/// stopped with pending receipts: an operation that ends its process every
-/// time must not be run again on every retry.
-const MAX_ATTEMPTS: i32 = 3;
-
-/// What a dispatch found when it looked at its family's pending receipts.
-#[derive(Debug, PartialEq)]
-pub(crate) enum Admission {
-    /// Nothing is pending. `attempt` numbers the lease this dispatch takes.
-    Clear { attempt: i32 },
-    /// Receipts are pending and cannot be released without an operator.
-    Interrupted,
-}
-
-/// The lease a stopped dispatch left behind.
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct Left {
-    event_seq: i64,
-    attempt: i32,
-}
-
-/// Whether pending receipts left under `lease` can be released, with the event
-/// log now ending at `head`.
-fn admission(lease: Option<Left>, head: i64) -> Admission {
-    match lease {
-        Some(lease) if lease.event_seq == head && lease.attempt < MAX_ATTEMPTS => {
-            Admission::Clear {
-                attempt: lease.attempt + 1,
-            }
-        }
-        // The runtime kept part of the work, the family keeps stopping, or the
-        // receipts were claimed without a lease: by a version that took none,
-        // by a remedy, or by a peer operation.
-        _ => Admission::Interrupted,
-    }
-}
-
-/// Decides whether this dispatch may work on `root`, releasing the receipts of
-/// an owner that stopped before the runtime kept anything.
-pub(crate) fn admit(pg: &LeasedPostgres, root: &str) -> Result<Admission, PostgresError> {
-    let root = root.to_owned();
-    pg.with_client(move |client| {
-        if !has_pending(client, &root)? {
-            return Ok(Admission::Clear { attempt: 1 });
-        }
-        let lease = client
-            .query_opt(
-                "SELECT event_seq, attempt FROM openappa_dispatch_leases WHERE root = $1",
-                &[&root],
-            )?
-            .map(|row| Left {
-                event_seq: row.get(0),
-                attempt: row.get(1),
-            });
-        let admission = admission(lease, head(client, &root)?);
-        if admission != Admission::Interrupted {
-            let mut transaction = client.transaction()?;
-            release(&mut transaction, &root)?;
-            transaction.commit()?;
-        }
-        Ok(admission)
-    })
-}
-
-/// Works on `root` without a lease. Receipts claimed this way are never
-/// released for a second run, so no earlier lease may remain to vouch for them.
-pub(crate) fn forgo(pg: &LeasedPostgres, root: &str) -> Result<(), PostgresError> {
-    let root = root.to_owned();
-    pg.with_client(move |client| {
-        client.execute(
-            "DELETE FROM openappa_dispatch_leases WHERE root = $1",
-            &[&root],
-        )?;
-        Ok(())
-    })
+/// The receipts one dispatch may have claimed, all in one session of its
+/// family: operation ids and the tool-call ids of processed results.
+pub(crate) struct OwnReceipts {
+    pub session_id: String,
+    pub operations: Vec<String>,
+    pub results: Vec<String>,
 }
 
 /// What became of the work a lease guarded.
@@ -119,25 +52,24 @@ pub(crate) struct DispatchLease {
 }
 
 impl DispatchLease {
-    /// Takes the lease of a family [`admit`] found clear. The event log's end is
-    /// read here, so take it after the dispatch's last write that precedes its
-    /// first claim.
-    pub(crate) fn take(
-        pg: &LeasedPostgres,
-        root: &str,
-        attempt: i32,
-    ) -> Result<Self, PostgresError> {
+    /// Takes the lease of a family. The event log's end is read here, so take
+    /// it after the dispatch's last write that precedes its first claim.
+    /// `attempt` counts the family's lease generations: a family whose
+    /// dispatches keep stopping shows a growing number, which is telemetry for
+    /// diagnostics, never a reason to refuse the family.
+    pub(crate) fn take(pg: &LeasedPostgres, root: &str) -> Result<Self, PostgresError> {
         let key = root.to_owned();
         let owner = pg.with_client(move |client| {
             let seq = head(client, &key)?;
             Ok(client
                 .query_one(
                     "INSERT INTO openappa_dispatch_leases (root, owner, event_seq, attempt) \
-                     VALUES ($1, gen_random_uuid()::text, $2, $3) \
+                     VALUES ($1, gen_random_uuid()::text, $2, 1) \
                      ON CONFLICT (root) DO UPDATE SET owner = EXCLUDED.owner, \
-                         event_seq = EXCLUDED.event_seq, attempt = EXCLUDED.attempt \
+                         event_seq = EXCLUDED.event_seq, \
+                     attempt = LEAST(openappa_dispatch_leases.attempt, 2147483646) + 1 \
                      RETURNING owner",
-                    &[&key, &seq, &attempt],
+                    &[&key, &seq],
                 )?
                 .get(0))
         })?;
@@ -171,10 +103,22 @@ impl DispatchLease {
 
     /// Ends a lease this dispatch still holds. `finished` is whether its work
     /// returned a decision. Work that failed and left the event log where the
-    /// lease found it is released at once, so the host's retry runs it again.
-    /// Any other pending receipt keeps its lease for the next dispatch to judge.
-    pub(crate) fn settle(&self, pg: &LeasedPostgres, finished: bool) -> Result<(), PostgresError> {
+    /// lease found it kept nothing, so the receipts it claimed are released at
+    /// once and the host's retry runs them again. Any other pending receipt is
+    /// recovered when its own operation is resubmitted, and keeps the lease
+    /// row as the sign that recovery is owed.
+    pub(crate) fn settle(
+        &self,
+        pg: &LeasedPostgres,
+        finished: bool,
+        own: &OwnReceipts,
+    ) -> Result<(), PostgresError> {
         let (root, owner) = (self.root.clone(), self.owner.clone());
+        let (session_id, operations, results) = (
+            own.session_id.clone(),
+            own.operations.clone(),
+            own.results.clone(),
+        );
         pg.with_client(move |client| {
             let mut transaction = client.transaction()?;
             let held = transaction
@@ -187,16 +131,15 @@ impl DispatchLease {
             let Some(event_seq) = held else {
                 return Ok(());
             };
-            if has_pending(&mut transaction, &root)? {
-                if finished || head(&mut transaction, &root)? != event_seq {
-                    return Ok(());
-                }
-                release(&mut transaction, &root)?;
+            if !finished && head(&mut transaction, &root)? == event_seq {
+                release_own(&mut transaction, &root, &session_id, &operations, &results)?;
             }
-            transaction.execute(
-                "DELETE FROM openappa_dispatch_leases WHERE root = $1 AND owner = $2",
-                &[&root, &owner],
-            )?;
+            if !has_pending(&mut transaction, &root)? {
+                transaction.execute(
+                    "DELETE FROM openappa_dispatch_leases WHERE root = $1 AND owner = $2",
+                    &[&root, &owner],
+                )?;
+            }
             transaction.commit()?;
             Ok(())
         })
@@ -237,46 +180,30 @@ fn head(client: &mut impl GenericClient, root: &str) -> Result<i64, PostgresErro
         .get(0))
 }
 
-fn release(client: &mut impl GenericClient, root: &str) -> Result<(), PostgresError> {
-    client.execute(
-        "DELETE FROM openappa_operations WHERE root = $1 AND status = 'pending'",
-        &[&root],
-    )?;
-    client.execute(
-        "DELETE FROM openappa_processed_results WHERE root = $1 AND status = 'pending'",
-        &[&root],
-    )?;
+/// Releases the pending rows one dispatch claimed itself: its session's rows
+/// for exactly the operation and tool-call ids it worked on. Another
+/// dispatch's receipts, including recovered ones still awaiting their own
+/// resubmission, are never touched.
+fn release_own(
+    client: &mut impl GenericClient,
+    root: &str,
+    session_id: &str,
+    operations: &[String],
+    results: &[String],
+) -> Result<(), PostgresError> {
+    if !operations.is_empty() {
+        client.execute(
+            "DELETE FROM openappa_operations \
+             WHERE root = $1 AND session_id = $2 AND operation_id = ANY($3) AND status = 'pending'",
+            &[&root, &session_id, &operations],
+        )?;
+    }
+    if !results.is_empty() {
+        client.execute(
+            "DELETE FROM openappa_processed_results \
+             WHERE root = $1 AND session_id = $2 AND tool_call_id = ANY($3) AND status = 'pending'",
+            &[&root, &session_id, &results],
+        )?;
+    }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{Admission, Left, MAX_ATTEMPTS, admission};
-
-    fn left(event_seq: i64, attempt: i32) -> Option<Left> {
-        Some(Left { event_seq, attempt })
-    }
-
-    #[test]
-    fn pending_receipts_without_a_lease_need_an_operator() {
-        assert_eq!(admission(None, 4), Admission::Interrupted);
-    }
-
-    #[test]
-    fn stopped_work_is_released_only_when_the_log_did_not_advance() {
-        assert_eq!(admission(left(4, 1), 4), Admission::Clear { attempt: 2 });
-        assert_eq!(admission(left(4, 1), 5), Admission::Interrupted);
-        assert_eq!(admission(left(-1, 1), -1), Admission::Clear { attempt: 2 });
-    }
-
-    #[test]
-    fn a_family_that_keeps_stopping_is_not_released_again() {
-        assert_eq!(
-            admission(left(4, MAX_ATTEMPTS - 1), 4),
-            Admission::Clear {
-                attempt: MAX_ATTEMPTS
-            }
-        );
-        assert_eq!(admission(left(4, MAX_ATTEMPTS), 4), Admission::Interrupted);
-    }
 }

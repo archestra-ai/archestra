@@ -1810,6 +1810,49 @@ describe("ToolInvocationPolicyModel", () => {
 
       expect(result).toBe(true);
     });
+    for (const insertApprovalFirst of [true, false]) {
+      test(`overlapping specific policies require approval regardless of insertion order (approval inserted ${insertApprovalFirst ? "first" : "last"})`, async ({
+        makeAgent,
+        makeTool,
+        makeAgentTool,
+        makeToolPolicy,
+      }) => {
+        const agent = await makeAgent();
+        const toolName = `overlapping-policies-tool-${insertApprovalFirst}`;
+        const tool = await makeTool({ agentId: agent.id, name: toolName });
+        await makeAgentTool(agent.id, tool.id);
+        await ToolInvocationPolicyModel.deleteByToolId(tool.id);
+
+        const approvalPolicy = {
+          conditions: [
+            { key: "path", operator: "startsWith" as const, value: "/etc" },
+          ],
+          action: "require_approval" as const,
+          reason: "System paths need approval",
+        };
+        const allowPolicy = {
+          conditions: [
+            { key: "mode", operator: "equal" as const, value: "read" },
+          ],
+          action: "allow_when_context_is_untrusted" as const,
+          reason: "Reads are allowed",
+        };
+        const insertionOrder = insertApprovalFirst
+          ? [approvalPolicy, allowPolicy]
+          : [allowPolicy, approvalPolicy];
+        for (const policy of insertionOrder) {
+          await makeToolPolicy(tool.id, policy);
+        }
+
+        const result = await ToolInvocationPolicyModel.checkApprovalRequired(
+          toolName,
+          { path: "/etc/shadow", mode: "read" },
+          mockContext,
+        );
+
+        expect(result).toBe(true);
+      });
+    }
   });
 
   describe("hasBlockingPolicy", () => {

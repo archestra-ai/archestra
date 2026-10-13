@@ -110,7 +110,7 @@ import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
 import { chatOpenAppaSession, getOpenappaStatus } from "@/openappa/service";
-import { superyelled } from "@/openappa/superyell";
+import { startedUnenforced } from "@/openappa/unenforced";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -2550,7 +2550,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!(await isGuardrailsV2Active())) return reply.send(null);
       // A superyelled conversation is out of OpenAPPA: its label no longer
       // applies.
-      if (await superyelled(chatOpenAppaSession(organizationId, user.id, id)))
+      if (
+        await startedUnenforced(
+          chatOpenAppaSession(organizationId, user.id, id),
+        )
+      )
         return reply.send(null);
       return reply.send(
         await getOpenappaStatus({ organizationId, sessionId: id }),

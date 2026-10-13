@@ -113,7 +113,6 @@ import {
   APPA_SUBAGENT_BINDING_HEADER,
   verifySubagentBinding,
 } from "@/openappa/subagent-binding";
-import { ungoverned } from "@/openappa/superyell";
 import {
   APPA_THREAD_RECORD,
   clientKeepsThreadPairing,
@@ -132,6 +131,7 @@ import {
   stampedSessions,
   withoutTrajectoryStamp,
 } from "@/openappa/trajectory-stamp";
+import { startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
@@ -1295,7 +1295,7 @@ export async function handleLLMProxy<
     isEncryptedChatSession &&
     !(
       sessionId &&
-      (await ungoverned({
+      (await startedUnenforced({
         organization_id: resolvedAgent.organizationId,
         session_id: sessionId,
       }))
@@ -1968,7 +1968,7 @@ export async function handleLLMProxy<
       });
       if (
         openappaSession &&
-        (await ungoverned(
+        (await startedUnenforced(
           appaTrajectory({
             adapters: APPA_CLIENT_ADAPTERS,
             headers: pluginContext.headers,

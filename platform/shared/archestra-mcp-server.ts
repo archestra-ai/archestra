@@ -833,6 +833,22 @@ export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
+ * The OpenAPPA feedback tools. superyell sends the same report as yell, then
+ * turns OpenAPPA off for the session, so both are offered and refused alike.
+ */
+export const YELL_TOOL_SHORT_NAMES = [
+  "yell",
+  "superyell",
+] as const satisfies readonly ArchestraToolShortName[];
+export type YellToolShortName = (typeof YELL_TOOL_SHORT_NAMES)[number];
+
+export function isYellToolShortName(
+  shortName: string | null | undefined,
+): shortName is YellToolShortName {
+  return (YELL_TOOL_SHORT_NAMES as readonly string[]).includes(shortName ?? "");
+}
+
+/**
  * The required OpenAPPA tools a client connection approves up front. superyell
  * turns OpenAPPA off for a session, so the client keeps asking before it too.
  */

@@ -20,7 +20,10 @@ import type {
   ExternalConsultRole,
 } from "@/types/openappa-external-consults";
 import type { ThreadCall, ThreadTool } from "@/types/openappa-thread-state";
-import type { UnenforcedCallReason } from "@/types/openappa-unenforced";
+import type {
+  UnenforcedCallReason,
+  UnenforcedSessionReason,
+} from "@/types/openappa-unenforced";
 import organizationsTable from "./organization";
 
 // The payload and policy bytes belong to OpenAPPA. TypeScript never decodes
@@ -245,13 +248,14 @@ export const openappaDispatchLeasesTable = pgTable(
   ],
 );
 
-// The proxy writes the two tables below only while Guardrails enforcement is
-// off, and reads them while it is on. OpenAPPA ignores what they name: the
-// part of a session that it did not see.
+// The proxy writes the two tables below while Guardrails enforcement is off,
+// and reads them while it is on. OpenAPPA ignores what they name: the part of
+// a session that it did not see, or a session a person superyelled.
 
-// Sessions that started while enforcement was off: the proxy saw a request of
-// the session, and the runtime had no record of it. Such a session and the
-// children it starts stay out of OpenAPPA after enforcement turns on.
+// Sessions OpenAPPA leaves alone. Most started while enforcement was off: the
+// proxy saw a request of the session, and the runtime had no record of it. A
+// person can also take a governed session out with an approved `superyell`.
+// Such a session and the children it starts stay out of OpenAPPA.
 export const openappaUnenforcedSessionsTable = pgTable(
   "openappa_unenforced_sessions",
   {
@@ -262,25 +266,10 @@ export const openappaUnenforcedSessionsTable = pgTable(
     // parent's id and its own, so the parent tells it apart from a root that
     // has the same id.
     parentId: text("parent_id"),
-    createdAt: timestamp("created_at", { withTimezone: true })
+    reason: text()
+      .$type<UnenforcedSessionReason>()
       .notNull()
-      .defaultNow(),
-  },
-  (table) => [primaryKey({ columns: [table.organizationId, table.sessionId] })],
-);
-
-// Sessions a person took out of OpenAPPA with an approved `superyell`. The
-// proxy treats such a session, and the children it starts, as one that started
-// while enforcement was off: OpenAPPA no longer governs it, and its label no
-// longer applies.
-export const openappaSuperyelledSessionsTable = pgTable(
-  "openappa_superyelled_sessions",
-  {
-    organizationId: text("organization_id").notNull(),
-    // The caller-scoped id, as `openappa_sessions.session_id` holds it.
-    sessionId: text("session_id").notNull(),
-    // The user who approved the superyell, when known.
-    userId: text("user_id"),
+      .default("enforcement_off"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

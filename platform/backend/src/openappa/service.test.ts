@@ -36,6 +36,7 @@ import {
   sessionFromHeaders,
   startRuntimeChild,
 } from "./service";
+import { startedUnenforced } from "./unenforced";
 import { rememberYellSession } from "./yell-session";
 
 /** Proxy-written run. Not an offer JWS and not a model-selected session. */
@@ -545,6 +546,114 @@ describe("APPA feature boundary", () => {
     await expect(
       executeArchestraTool("archestra__yell", args, gateway),
     ).rejects.toThrow("requires an authenticated session");
+  });
+
+  test("a gateway superyell reports like yell, then takes the session and its children out of OpenAPPA", async () => {
+    config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
+    const args = {
+      message: "Turn it off, it blocks the demo",
+      with_trajectory: true,
+    };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "Receipt report-2" }] },
+      }),
+    );
+    const resolution = {
+      canonicalize: (name: string) => name,
+      looseRunToolDispatch: false,
+    };
+    const gateway = {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+    };
+    // A yell with the same arguments does not stand in for the superyell.
+    await rememberYellSession({
+      session,
+      call: { id: "toolu_yell", name: "archestra__yell", arguments: args },
+      resolution,
+    });
+    await expect(
+      executeArchestraTool("archestra__superyell", args, gateway),
+    ).rejects.toThrow("requires an authenticated session");
+    expect(await startedUnenforced(session)).toBe(false);
+
+    await rememberYellSession({
+      session,
+      call: {
+        id: "toolu_super",
+        name: "archestra__superyell",
+        arguments: args,
+      },
+      resolution,
+    });
+    const result = await executeArchestraTool(
+      "archestra__superyell",
+      args,
+      gateway,
+    );
+
+    expect(result.content).toEqual([
+      {
+        type: "text",
+        text: expect.stringMatching(/Report saved[\s\S]*OpenAPPA is off/),
+      },
+    ]);
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
+      event: "yell",
+      operation_id: "yell:toolu_super",
+      arguments: args,
+    });
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toEqual([
+      expect.objectContaining({
+        message: args.message,
+        sessionId: "conversation",
+      }),
+    ]);
+    expect(await startedUnenforced(session)).toBe(true);
+    // A child it starts is out, and so is the child's own child.
+    const child = {
+      ...session,
+      session_id: "conversation/worker",
+      parent_id: "conversation",
+    };
+    expect(await startedUnenforced(child)).toBe(true);
+    expect(
+      await startedUnenforced({
+        ...session,
+        session_id: "conversation/worker/helper",
+        parent_id: "conversation/worker",
+      }),
+    ).toBe(true);
+    // Other sessions stay governed.
+    expect(await startedUnenforced({ ...session, session_id: "another" })).toBe(
+      false,
+    );
+  });
+
+  test("superyell refuses while Guardrails enforcement is off", async () => {
+    config.openappa.yellEnabled = true;
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const result = await executeArchestraTool(
+      "archestra__superyell",
+      { message: "Turn it off", with_trajectory: false },
+      {
+        agent: { id: "agent", name: "Assistant" },
+        organizationId,
+        userId: "alice",
+        sessionId: "conversation",
+        currentToolCallId: "toolu_super",
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(await startedUnenforced(session)).toBe(false);
   });
 
   test("a gateway yell finds only the platform's yell, in its organization, with its arguments", async () => {

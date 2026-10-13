@@ -1012,16 +1012,12 @@ export const AUDIT_DECISIONS = {
   },
   openappaUnenforcedSessionsTable: {
     audited: false,
-    reason: "proxy record of sessions that started while enforcement was off",
+    reason:
+      "proxy record of sessions that started while enforcement was off or were superyelled",
   },
   openappaThreadStatesTable: {
     audited: false,
     reason: "proxy record of what a governed provider thread was ruled on",
-  },
-  openappaSuperyelledSessionsTable: {
-    audited: false,
-    reason:
-      "proxy record of sessions taken out of OpenAPPA by an approved superyell; the approval is the HITL review",
   },
   openappaUnenforcedCallsTable: {
     audited: false,

@@ -18,9 +18,10 @@ import {
 import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import { CODEX_GUARD_CLIENT } from "./guard/clients";
+import { inSingleQuotedHereString } from "./guard/startup-guard.windows";
 import { renderSetupScript } from "./index";
 import { CODEX_HANDOFF_HELPER } from "./payloads/codex-handoff";
-import type { SetupScriptProxySection } from "./types";
+import type { SetupScriptContext, SetupScriptProxySection } from "./types";
 
 const execFileAsync = promisify(execFile);
 const powershellAvailable =
@@ -576,6 +577,151 @@ exit 0
     });
   },
 );
+
+describe.skipIf(!powershellAvailable)("PowerShell setup script syntax", () => {
+  test("every rendered Windows setup script parses", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "archestra-ps-parse-"));
+    try {
+      const variants = windowsSetupVariants();
+      const names: string[] = [];
+      for (const [index, variant] of variants.entries()) {
+        names.push(variant.name);
+        await writeFile(
+          path.join(root, `${index}.ps1`),
+          renderSetupScript(variant.ctx),
+        );
+      }
+      const driverPath = path.join(root, "parse.ps1");
+      await writeFile(
+        driverPath,
+        `$out = @{}
+foreach ($f in Get-ChildItem -Path $env:ARCHESTRA_TEST_ROOT -Filter '*.ps1' | Where-Object Name -ne 'parse.ps1') {
+  $errors = $null
+  $null = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
+  if ($errors.Count -gt 0) { $out[$f.BaseName] = ('line ' + $errors[0].Extent.StartLineNumber + ': ' + $errors[0].Message) }
+}
+$out | ConvertTo-Json -Compress
+`,
+      );
+      const { stdout } = await execFileAsync(
+        "pwsh",
+        ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driverPath],
+        {
+          env: { ...process.env, ARCHESTRA_TEST_ROOT: root },
+          timeout: 120_000,
+        },
+      );
+      const raw: Record<string, string> = JSON.parse(stdout.trim() || "{}");
+      const failures = Object.entries(raw).map(
+        ([index, error]) => `${names[Number(index)]}: ${error}`,
+      );
+      expect(failures).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 180_000);
+});
+
+describe("Windows startup guard here-strings", () => {
+  test("embedding content with a line starting with '@ fails instead of ending the here-string early", () => {
+    expect(() =>
+      inSingleQuotedHereString("Write-Host 1\n'@\nWrite-Host 2"),
+    ).toThrow("here-string");
+    expect(inSingleQuotedHereString("Write-Host 'a@b'")).toBe(
+      "Write-Host 'a@b'",
+    );
+  });
+});
+
+function windowsSetupVariants(): Array<{
+  name: string;
+  ctx: SetupScriptContext;
+}> {
+  const proxy = (
+    provider: "anthropic" | "openai",
+    authMode: "provider-key" | "virtual-key" | "primary-providers",
+    primaryProviders?: SetupScriptProxySection["primaryProviders"],
+  ): SetupScriptProxySection => ({
+    authMode,
+    provider,
+    providerLabel: provider,
+    baseUrl: "https://proxy.example.com/v1",
+    url: `https://proxy.example.com/v1/${provider}`,
+    proxyName: "default_proxy",
+    virtualKey: authMode === "provider-key" ? null : "arch_test",
+    virtualKeyName: authMode === "provider-key" ? null : "Setup",
+    passthroughVirtualKey: authMode === "provider-key" ? "arch_pass" : null,
+    model: null,
+    ...(primaryProviders ? { primaryProviders } : {}),
+  });
+  const catalog = [
+    {
+      provider: "anthropic" as const,
+      name: "Anthropic",
+      models: [
+        { id: "claude-test", name: "Claude", context: 200000, output: null },
+      ],
+    },
+  ];
+  const variants: Array<{ name: string; ctx: SetupScriptContext }> = [];
+  for (const clientId of [
+    "claude-code",
+    "codex",
+    "copilot-cli",
+    "cursor",
+    "opencode",
+  ] as const) {
+    const provider = clientId === "claude-code" ? "anthropic" : "openai";
+    const proxies: Array<[string, SetupScriptProxySection | null]> = [
+      ["no-proxy", null],
+      ["provider-key", proxy(provider, "provider-key")],
+      ["virtual-key", proxy(provider, "virtual-key")],
+      ...(clientId === "opencode"
+        ? ([
+            ["virtual-key-catalog", proxy("openai", "virtual-key", catalog)],
+            [
+              "primary-providers",
+              proxy("anthropic", "primary-providers", catalog),
+            ],
+          ] as Array<[string, SetupScriptProxySection]>)
+        : []),
+    ];
+    for (const [proxyName, proxySection] of proxies) {
+      for (const mcp of [true, false]) {
+        for (const skills of [true, false]) {
+          for (const handoff of [true, false]) {
+            variants.push({
+              name: `${clientId} proxy=${proxyName} mcp=${mcp} skills=${skills} handoff=${handoff}`,
+              ctx: {
+                clientId,
+                platform: "windows",
+                appName: "Archestra",
+                mcp: mcp
+                  ? {
+                      serverName: "prod_gateway",
+                      toolPrefix: "archestra__",
+                      url: "https://proxy.example.com/v1/mcp/gw",
+                    }
+                  : null,
+                proxy: proxySection,
+                skills: skills
+                  ? {
+                      cloneUrl: "https://proxy.example.com/skills/repo.git",
+                      marketplaceName: "acme-skills",
+                    }
+                  : null,
+                runtimeHandoffInstructions: handoff
+                  ? DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+                  : null,
+              },
+            });
+          }
+        }
+      }
+    }
+  }
+  return variants;
+}
 
 type ClaudeSettings = {
   env: Record<string, unknown>;

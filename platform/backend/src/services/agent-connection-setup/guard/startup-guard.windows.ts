@@ -1079,7 +1079,7 @@ if ((Test-Path $archGuardPath) -and -not (Select-String -Path $archGuardPath -Pa
   $archGuardPreFeature = $true
 }
 $archGuardBody = @'
-${renderStartupGuardPowerShell(ctx, client)}'@
+${inSingleQuotedHereString(renderStartupGuardPowerShell(ctx, client))}'@
 [IO.File]::WriteAllText($archGuardPath, $archGuardBody, (New-Object System.Text.UTF8Encoding $true))
 Write-Host ('Updated ' + $archGuardPath)
 if ($archGuardPreFeature) {
@@ -1097,7 +1097,7 @@ $archGuardBlock = @'
 ${client.markerStart}
 # Pre-flight connectivity check for ${ctx.appName}-connected ${client.label}.
 # Remove this block and ~/${client.psScriptRelpath} to uninstall.
-${refreshBlock}
+${inSingleQuotedHereString(refreshBlock)}
 function ${client.binary} {
   $archGuard = Join-Path $env:USERPROFILE '${client.psScriptRelpath}'
   $archUtilityCommand = $args.Count -gt 0 -and $args[0] -in @(${client.utilitySubcommands.map(psq).join(", ")}, '--help', '-h', '--version', '-v')
@@ -1300,6 +1300,20 @@ Remove-Item Function:${client.binary} -ErrorAction SilentlyContinue`;
 // ===================================================================
 // Internal helpers
 // ===================================================================
+
+/**
+ * A line starting with '@ would end the enclosing here-string early, and the
+ * rest of the script would then parse as setup code.
+ * @public — exported for tests; used internally otherwise.
+ */
+export function inSingleQuotedHereString(content: string): string {
+  if (/^'@/m.test(content)) {
+    throw new Error(
+      "Rendered content embedded in a single-quoted here-string has a line starting with '@",
+    );
+  }
+  return content;
+}
 
 /**
  * The pre-loader header: the Archestra mark with the title beside it, for the

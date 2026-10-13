@@ -1,6 +1,7 @@
 "use client";
 
-import { MessageCircle } from "lucide-react";
+import { BUILT_IN_AGENT_NAMES } from "@archestra/shared";
+import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
 import { Card } from "@/components/ui/card";
 import { OPENAPPA_SUGGESTED_LAUNCH_PROMPTS } from "@/lib/openappa-chat-prompts";
 import { OpenAppaChatButton } from "./openappa-chat-button";
@@ -23,8 +24,8 @@ export function OpenAppaChatStrip() {
     <Card className="gap-2 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <OpenAppaChatButton size="sm">
-          <MessageCircle />
-          <span>Chat with the configuration agent</span>
+          <AppaKeeperIcon />
+          <span>{`Chat with ${BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG}`}</span>
         </OpenAppaChatButton>
         {QUESTIONS.map((question) => (
           <OpenAppaChatButton
@@ -34,7 +35,6 @@ export function OpenAppaChatStrip() {
             className="rounded-full"
             promptKey={question.promptKey}
           >
-            <MessageCircle />
             <span>{question.label}</span>
           </OpenAppaChatButton>
         ))}

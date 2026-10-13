@@ -1,11 +1,13 @@
 "use client";
 
-import { CoverageCharts } from "./coverage-charts";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { RulesCard } from "./coverage-charts";
 import { EntitiesTable } from "./entities-table";
 import { OpenAppaChatStrip } from "./openappa-chat-strip";
 import { OverviewSetupCards } from "./overview-setup-cards";
-import { RemediesPanels } from "./remedies-panels";
-import { TrustAudienceCard } from "./trust-audience-card";
+import { RemediesCard } from "./remedies-panels";
+import { LabelCard } from "./trust-audience-card";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 /** The visible policy targets whose tool calls can enter the OpenAPPA path. */
@@ -13,32 +15,37 @@ export function OverviewTab() {
   const { isFresh } = useOpenAppaSetupState();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       <OverviewSetupCards />
       {isFresh === false && (
         <>
           <OpenAppaChatStrip />
-          <div className="grid gap-4 xl:grid-cols-5">
-            <TrustAudienceCard className="xl:col-span-2" />
-            <RemediesPanels />
-          </div>
           <section
-            aria-labelledby="overview-policy-coverage"
+            aria-labelledby="overview-how-it-decides"
             className="space-y-3"
           >
-            <div className="space-y-1">
-              <h2
-                id="overview-policy-coverage"
-                className="text-base font-semibold"
-              >
-                Policy coverage
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                How many of your tools a rule covers, and the batteries that
-                could cover more.
-              </p>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="space-y-1">
+                <h2
+                  id="overview-how-it-decides"
+                  className="text-base font-semibold"
+                >
+                  How your policy decides
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Every agent session carries a label. Reading data changes it,
+                  and the label decides which calls get blocked.
+                </p>
+              </div>
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="/openappa/policy">View policy</Link>
+              </Button>
             </div>
-            <CoverageCharts />
+            <div className="grid gap-3 lg:grid-cols-3">
+              <LabelCard />
+              <RulesCard />
+              <RemediesCard />
+            </div>
           </section>
           <section aria-labelledby="overview-mcp-servers" className="space-y-3">
             <div className="space-y-1">
@@ -46,7 +53,7 @@ export function OverviewTab() {
                 MCP servers
               </h2>
               <p className="text-sm text-muted-foreground">
-                Review and configure the rules for each MCP server
+                Review and configure the rules for each MCP server.
               </p>
             </div>
             <EntitiesTable />

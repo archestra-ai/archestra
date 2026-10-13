@@ -52,7 +52,7 @@ describe("user routes", () => {
       expect(permissions.organization).toContain("update");
       expect(permissions.organization).toContain("delete");
       expect(permissions.agent).toBeDefined();
-      expect(permissions.toolPolicy).toBeDefined();
+      expect(permissions.mcpRegistry).toBeDefined();
 
       // Verify admin has all resource permissions from allAvailableActions
       for (const [resource, actions] of Object.entries(allAvailableActions)) {
@@ -111,7 +111,7 @@ describe("user routes", () => {
       const customRole = await makeCustomRole(organizationId, {
         permission: {
           agent: ["read"],
-          toolPolicy: ["read"],
+          mcpRegistry: ["read"],
         },
       });
 
@@ -141,7 +141,7 @@ describe("user routes", () => {
 
       const permissions = response.json();
       expect(permissions.agent).toEqual(["read"]);
-      expect(permissions.toolPolicy).toEqual(["read"]);
+      expect(permissions.mcpRegistry).toEqual(["read"]);
       // Custom role should not have organization permissions
       expect(permissions.organization).toBeUndefined();
 
@@ -221,7 +221,7 @@ describe("user routes", () => {
       await makeCustomRole(organizationId, {
         permission: {
           agent: ["read"],
-          toolPolicy: ["read"],
+          mcpRegistry: ["read"],
         },
       });
 
@@ -237,7 +237,7 @@ describe("user routes", () => {
       expect(permissions.organization).toContain("update");
       expect(permissions.organization).toContain("delete");
       expect(permissions.agent).toBeDefined();
-      expect(permissions.toolPolicy).toBeDefined();
+      expect(permissions.mcpRegistry).toBeDefined();
     });
   });
 });

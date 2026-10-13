@@ -12,6 +12,7 @@ type InitialAgentListItem = Pick<
   | "icon"
   | "systemPrompt"
   | "runtime"
+  | "builtIn"
 >;
 
 export function filterAndSortInitialAgents(params: {
@@ -23,6 +24,7 @@ export function filterAndSortInitialAgents(params: {
   const { allAgents, currentAgentId, search, userId } = params;
 
   let result = allAgents.filter((agent) => {
+    if (agent.builtIn) return false;
     if (agent.scope === "personal") {
       return agent.authorId === userId;
     }

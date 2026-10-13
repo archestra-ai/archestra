@@ -1,3 +1,5 @@
+import { LOG_CONTENT_POLICY_REDACTED_VALUE } from "./log-content";
+
 /**
  * The two ways an encrypted chat's audit content can be unavailable to a
  * reader, as stable shapes both the backend writer and the UI reader agree on.
@@ -40,10 +42,14 @@ const LEGACY_ENCRYPTED_CHAT_REDACTED_VALUES = [
  * Every `__redacted` value a stored row may carry, current spelling first.
  * Read schemas validate persisted content, so they have to admit the legacy
  * value as well — hence a shared list rather than a literal at each site.
+ *
+ * The Log Content mode's marker is here too: it also means "never
+ * stored", outside any locked chat, so the same readers have to recognize it.
  */
 export const ENCRYPTED_CHAT_REDACTED_VALUES = [
   ENCRYPTED_CHAT_REDACTED_MARKER.__redacted,
   ...LEGACY_ENCRYPTED_CHAT_REDACTED_VALUES,
+  LOG_CONTENT_POLICY_REDACTED_VALUE,
 ] as const;
 
 /**

@@ -27,8 +27,8 @@ import { type MouseEventHandler, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { TableCard } from "@/components/table-card-view";
+import { TableRowActions } from "@/components/table-row-actions";
 import {
   Avatar,
   AvatarFallback,
@@ -84,6 +84,11 @@ import {
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
+import {
+  InstallBlockedTooltip,
+  installBlockedSummary,
+  useMcpInstallBlockers,
+} from "./mcp-credential-blockers";
 import {
   type AgentUsage,
   agentOwnerLabel,
@@ -181,6 +186,7 @@ export function McpServerCard({
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
+  const installBlockers = useMcpInstallBlockers(item);
 
   // A named, explicit environment is useful placement information. The
   // implicit Default is the baseline and stays unlabeled. Built-in servers
@@ -900,7 +906,24 @@ export function McpServerCard({
   // When the image is gated, the full-width approval banner at the top of the
   // card body explains it and carries the action — so drop the inline install
   // button entirely (it would only fail the gate).
-  const localInstallButton = showApprovalPanel ? null : (
+  const localInstallButton = showApprovalPanel ? null : installBlockers.length >
+      0 && isLocalMcpEnabled ? (
+    <div className="flex-1">
+      <PermissionButton
+        permissions={{ mcpServerInstallation: ["create"] }}
+        disabled
+        tooltip={installBlockedSummary(installBlockers)}
+        reasonContent={<InstallBlockedTooltip blockers={installBlockers} />}
+        size="sm"
+        variant="outline"
+        className="w-full"
+        data-testid={`${E2eTestId.ConnectCatalogItemButton}-${item.name}`}
+      >
+        <Server className="h-4 w-4" />
+        Install
+      </PermissionButton>
+    </div>
+  ) : (
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -1060,9 +1083,7 @@ export function McpServerCard({
           </span>
         }
         actions={
-          <ResourceTableRowActions
-            kind="catalog"
-            resource={item}
+          <TableRowActions
             itemName={item.name}
             actions={
               canEditCatalog

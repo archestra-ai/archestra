@@ -124,8 +124,18 @@ export const K8sNetworkPolicyCapabilitiesSchema = z.object({
   probedAt: z.string().nullable(),
 });
 
+export const K8sAgentSandboxCapabilitiesSchema = z.object({
+  // Whether the cluster serves every Agent Sandbox resource Agent Runtime
+  // creates. Agent Runtime is available exactly when this is true.
+  installed: z.boolean(),
+  // `<plural>.<group>` names of the resources the cluster does not serve.
+  missingResources: z.array(z.string()),
+  message: z.string(),
+});
+
 export const K8sCapabilitiesSchema = z.object({
   networkPolicy: K8sNetworkPolicyCapabilitiesSchema,
+  agentSandbox: K8sAgentSandboxCapabilitiesSchema,
 });
 
 export const SelectEnvironmentSchema = createSelectSchema(
@@ -249,6 +259,9 @@ export type EffectiveNetworkPolicy = z.infer<
 >;
 export type K8sNetworkPolicyCapabilities = z.infer<
   typeof K8sNetworkPolicyCapabilitiesSchema
+>;
+export type K8sAgentSandboxCapabilities = z.infer<
+  typeof K8sAgentSandboxCapabilitiesSchema
 >;
 export type K8sCapabilities = z.infer<typeof K8sCapabilitiesSchema>;
 

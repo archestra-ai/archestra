@@ -19,11 +19,16 @@ import {
 import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import { OauthClientLabelModel } from "./entity-labels";
+import LimitModel from "./limit";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type ResourceAccessFilter,
 } from "./resource-permission-subject";
 import UserModel from "./user";
+
+/** Who created a client: kept in its metadata, not in a column. */
+const oauthClientAuthorColumn = sql`${schema.oauthClientsTable.metadata}->>'authorId'`;
 
 class LlmOauthClientModel {
   static async findAllByOrganization(params: {
@@ -64,6 +69,8 @@ class LlmOauthClientModel {
     grantType?: LlmOauthClientGrantType;
     labels?: Record<string, string[]>;
     viewer?: { userId: string };
+    /** The list's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter;
   }) {
     const labelFilteredIds = params.labels
       ? await OauthClientLabelModel.getIdsMatchingLabels(params.labels)
@@ -148,6 +155,8 @@ class LlmOauthClientModel {
     authorId: string;
     /** The starting audience beside the author, who always gets full access. */
     initialGrants?: ResourcePermissionGrant[];
+    /** Team a client-credentials client's spend is charged to. */
+    billingTeamId?: string | null;
   }) {
     const grantType = params.grantType ?? "client_credentials";
     const isAuthorizationCode = grantType === "authorization_code";
@@ -167,6 +176,11 @@ class LlmOauthClientModel {
         ? []
         : (params.providerApiKeys ?? []),
       authorId: params.authorId,
+      // Users signed in through an authorization_code client pay for
+      // themselves, so only client-credentials clients bill a team.
+      billingTeamId: isAuthorizationCode
+        ? null
+        : (params.billingTeamId ?? null),
     };
 
     const client = await withDbTransaction(async (tx) => {
@@ -330,6 +344,8 @@ class LlmOauthClientModel {
     name: string;
     providerApiKeys?: LlmOauthClientProviderKey[];
     redirectUris?: string[];
+    /** Omit to keep the current billing team. */
+    billingTeamId?: string | null;
   }) {
     // The grant type is fixed at creation; reload the client to preserve it and
     // to apply only the fields that grant type actually uses.
@@ -354,6 +370,11 @@ class LlmOauthClientModel {
             providerApiKeyId: key.providerApiKeyId,
           }))),
       authorId: existing.authorId,
+      billingTeamId: isAuthorizationCode
+        ? null
+        : params.billingTeamId !== undefined
+          ? params.billingTeamId
+          : existing.billingTeamId,
     };
 
     const client = await withDbTransaction(async (tx) => {
@@ -407,6 +428,14 @@ class LlmOauthClientModel {
         scope: params.id,
       });
       // SPDX-SnippetEnd
+      await tx
+        .delete(schema.limitsTable)
+        .where(
+          and(
+            eq(schema.limitsTable.entityType, "llm_oauth_client"),
+            eq(schema.limitsTable.entityId, params.id),
+          ),
+        );
       return true;
     });
   }
@@ -436,6 +465,13 @@ class LlmOauthClientModel {
       redirectUris: [...client.redirectUris].sort(),
       disabled: client.disabled,
       authorId: client.authorId,
+      billingTeamId: client.billingTeamId,
+      spendCap: client.spendCap
+        ? {
+            limitValue: client.spendCap.limitValue,
+            cleanupInterval: client.spendCap.cleanupInterval,
+          }
+        : null,
       createdAt: client.createdAt.toISOString(),
       updatedAt: client.updatedAt.toISOString(),
     };
@@ -457,6 +493,7 @@ function listWhereClause(params: {
   viewer: GrantPrincipal | null;
   /** Client ids matching a `?labels=` filter; omit when not filtering. */
   labelFilteredIds?: string[];
+  access?: ResourceAccessFilter;
 }) {
   return and(
     params.labelFilteredIds !== undefined
@@ -487,6 +524,15 @@ function listWhereClause(params: {
           resource: "llmOauthClient",
           scopeColumn: schema.oauthClientsTable.id,
           action: "read",
+        })
+      : undefined,
+    params.access
+      ? ResourcePermissionPolicyModel.accessRelationCondition({
+          ...params.access,
+          organizationId: params.organizationId,
+          resource: "llmOauthClient",
+          scopeColumn: schema.oauthClientsTable.id,
+          ownerColumn: oauthClientAuthorColumn,
         })
       : undefined,
     // SPDX-SnippetEnd
@@ -541,27 +587,47 @@ async function hydrateOauthClients(
       ),
     ),
   ];
-  const [apiKeyRows, authorNames, creators, labelsByClient] = await Promise.all(
-    [
-      providerApiKeyIds.length > 0
-        ? db
-            .select({
-              id: schema.llmProviderApiKeysTable.id,
-              name: schema.llmProviderApiKeysTable.name,
-              provider: schema.llmProviderApiKeysTable.provider,
-              isPrimary: schema.llmProviderApiKeysTable.isPrimary,
-              createdAt: schema.llmProviderApiKeysTable.createdAt,
-            })
-            .from(schema.llmProviderApiKeysTable)
-            .where(
-              inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds),
-            )
-        : [],
-      UserModel.getNamesByIds(authorIds),
-      CreatedByModel.resolve(authorIds),
-      OauthClientLabelModel.getLabelsForMany(clients.map((c) => c.id)),
-    ],
-  );
+  const billingTeamIds = [
+    ...new Set(parsed.flatMap(({ metadata }) => metadata?.billingTeamId ?? [])),
+  ];
+  const [
+    apiKeyRows,
+    authorNames,
+    creators,
+    labelsByClient,
+    billingTeams,
+    spendCaps,
+  ] = await Promise.all([
+    providerApiKeyIds.length > 0
+      ? db
+          .select({
+            id: schema.llmProviderApiKeysTable.id,
+            name: schema.llmProviderApiKeysTable.name,
+            provider: schema.llmProviderApiKeysTable.provider,
+            isPrimary: schema.llmProviderApiKeysTable.isPrimary,
+            createdAt: schema.llmProviderApiKeysTable.createdAt,
+          })
+          .from(schema.llmProviderApiKeysTable)
+          .where(inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds))
+      : [],
+    UserModel.getNamesByIds(authorIds),
+    CreatedByModel.resolve(authorIds),
+    OauthClientLabelModel.getLabelsForMany(clients.map((c) => c.id)),
+    billingTeamIds.length > 0
+      ? db
+          .select({
+            id: schema.teamsTable.id,
+            name: schema.teamsTable.name,
+          })
+          .from(schema.teamsTable)
+          .where(inArray(schema.teamsTable.id, billingTeamIds))
+      : [],
+    LimitModel.findSpendCaps({
+      entityType: "llm_oauth_client",
+      entityIds: clients.map((c) => c.id),
+    }),
+  ]);
+  const billingTeamsById = new Map(billingTeams.map((team) => [team.id, team]));
   const apiKeysById = new Map(apiKeyRows.map((row) => [row.id, row]));
 
   return parsed.flatMap(({ client, metadata }) => {
@@ -597,6 +663,14 @@ async function hydrateOauthClients(
           CreatedByModel.id(metadata, metadata.authorId),
         ),
         labels: labelsByClient.get(client.id) ?? [],
+        // A deleted team leaves its id in the metadata; it bills nobody.
+        billingTeamId: metadata.billingTeamId
+          ? (billingTeamsById.get(metadata.billingTeamId)?.id ?? null)
+          : null,
+        billingTeam: metadata.billingTeamId
+          ? (billingTeamsById.get(metadata.billingTeamId) ?? null)
+          : null,
+        spendCap: spendCaps.get(client.id) ?? null,
         createdAt: client.createdAt,
         updatedAt: client.updatedAt,
       },

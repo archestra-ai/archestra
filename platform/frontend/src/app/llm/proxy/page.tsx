@@ -32,17 +32,20 @@ import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
+import { primaryKeyMappings } from "@/components/credential-billing/provider-key-data";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 import { LlmProviderOptionLabel } from "@/components/llm-provider-select-items";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
+import { ProviderIcon } from "@/components/provider-icon";
 import { SecretCopyButton } from "@/components/secret-copy-button";
 import {
   TerminalCard,
   terminalActionClass,
   terminalCodeClass,
+  terminalRaisedClass,
 } from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -162,8 +165,8 @@ function endpointTabClass(active: boolean) {
   return cn(
     "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors",
     active
-      ? "bg-terminal-emphasis/10 font-semibold text-terminal-foreground shadow-sm"
-      : "text-terminal-muted hover:text-terminal-emphasis",
+      ? cn("border font-semibold", terminalRaisedClass)
+      : "border border-transparent text-terminal-muted hover:bg-terminal-elevated hover:text-terminal-emphasis",
   );
 }
 
@@ -249,7 +252,7 @@ function ProxyEndpointCard({
               <img
                 src={PROVIDER_CONFIG[provider].icon}
                 alt=""
-                className="size-3.5 rounded-sm"
+                className="size-3.5 rounded-sm dark:invert"
               />
               {providerCatalog.label(provider)}
             </UnstyledButton>
@@ -410,7 +413,7 @@ function ConnectSteps({
   const clientOptions = (oauthClients?.data ?? []).filter((client) =>
     client.providerApiKeys.some((mapping) => servesTarget(mapping.provider)),
   );
-  const options =
+  const allOptions =
     auth === "oauth"
       ? clientOptions.map((client) => ({
           id: client.id,
@@ -431,6 +434,19 @@ function ConnectSteps({
           mappings: key.providerApiKeys,
           oauth: null,
         }));
+  // The reader's own credentials come first, so the default pick is one they
+  // can reveal; anyone else's follow under their own heading.
+  const noun = auth === "oauth" ? "clients" : "keys";
+  const isOwn = (option: { authorId: string | null }) =>
+    !!session?.user && option.authorId === session.user.id;
+  const options = [
+    ...allOptions
+      .filter(isOwn)
+      .map((option) => ({ ...option, group: `Your ${noun}` })),
+    ...allOptions
+      .filter((option) => !isOwn(option))
+      .map((option) => ({ ...option, group: `Other ${noun}` })),
+  ];
   // Like a standard key, the first fits until another is picked. Passthrough
   // attribution is optional, so "None" (an explicit null) stays none.
   const picked =
@@ -470,15 +486,9 @@ function ConnectSteps({
 
   const hasProviderKey = targetProviderKeys.length > 0;
   const [addProviderKeyOpen, setAddProviderKeyOpen] = useState(false);
-  // A virtual key maps one key per provider, so a new key starts with the
-  // first key of each provider; the create dialog shows and changes them.
-  const firstKeyPerProvider = targetProviderKeys
-    .filter(
-      (key, index) =>
-        targetProviderKeys.findIndex((k) => k.provider === key.provider) ===
-        index,
-    )
-    .map((key) => ({ provider: key.provider, providerApiKeyId: key.id }));
+  // A new key starts with the primary key of each provider this target
+  // serves; the create dialog shows and changes them.
+  const primaryKeyPerProvider = primaryKeyMappings(targetProviderKeys);
   const idpStep = useIdentityProviderStep();
 
   // Which provider key a request uses belongs to the credential, so the
@@ -510,10 +520,15 @@ function ConnectSteps({
         .map((mapping) => (
           <span
             key={mapping.providerApiKeyId}
-            className="rounded-full border bg-muted px-2 py-0.5 text-xs text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-full border bg-muted py-0.5 pr-2 pl-1.5 text-xs text-foreground"
           >
-            {providerCatalog.label(mapping.provider)} ·{" "}
-            {mapping.providerApiKeyName}
+            <span aria-hidden className="shrink-0">
+              <ProviderIcon provider={mapping.provider} size={14} />
+            </span>
+            <span>
+              {providerCatalog.label(mapping.provider)} ·{" "}
+              {mapping.providerApiKeyName}
+            </span>
           </span>
         ))}
     </span>
@@ -711,7 +726,7 @@ function ConnectSteps({
           if (!open) setCreateKeyType(null);
         }}
         keyType={createKeyType ?? "standard"}
-        initialProviderApiKeys={firstKeyPerProvider}
+        initialProviderApiKeys={primaryKeyPerProvider}
         targetLabel={targetLabel}
         onCreated={(key) => {
           setCreated(key);
@@ -758,6 +773,7 @@ function KeyField({
             type="button"
             disabled={isRevealing}
             aria-label={revealed ? "Hide key" : "Show key"}
+            aria-pressed={revealed !== null}
             className={cn(terminalActionClass, "size-7")}
             onClick={async () => {
               if (revealed) {
@@ -773,11 +789,11 @@ function KeyField({
             }}
           >
             {isRevealing ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="animate-spin" />
             ) : revealed ? (
-              <EyeOff className="size-3.5" />
+              <EyeOff />
             ) : (
-              <Eye className="size-3.5" />
+              <Eye />
             )}
           </UnstyledButton>
           <SecretCopyButton

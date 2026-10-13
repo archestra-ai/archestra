@@ -4,6 +4,10 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import logger from "@/logging";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
+  type CatalogAccessCaller,
+  filterToolsByCallerCatalogAccess,
+} from "@/services/caller-catalog-access";
+import {
   COMPLETE_RESULT_TYPE,
   MCP_PROTOCOL_VERSION_HEADER,
   STATELESS_MCP_PROTOCOL_REVISION,
@@ -94,9 +98,15 @@ export function acknowledgedFilter(
  * that change a tool's description but not the set. Membership is what
  * clients key caching on, so that is the signal worth polling cheaply.
  */
-export async function toolsListFingerprint(agentId: string): Promise<string> {
-  const { tools } =
+export async function toolsListFingerprint(
+  agentId: string,
+  caller?: CatalogAccessCaller,
+): Promise<string> {
+  const { tools: agentTools } =
     await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+  const tools = caller
+    ? await filterToolsByCallerCatalogAccess(agentTools, caller)
+    : agentTools;
   const names = tools.map((tool) => tool.name).sort();
   return createHash("sha256").update(names.join("\n")).digest("base64url");
 }
@@ -117,6 +127,8 @@ export async function runSubscriptionStream(params: {
   agentId: string;
   subscriptionId: string | number;
   requested: SubscriptionFilter;
+  /** Who is listening: their tool list is narrowed to catalogs they can see. */
+  caller?: CatalogAccessCaller;
   /** Injectable for tests; defaults to the real fingerprint. */
   computeFingerprint?: () => Promise<string>;
   pollIntervalMs?: number;
@@ -128,7 +140,8 @@ export async function runSubscriptionStream(params: {
     agentId,
     subscriptionId,
     requested,
-    computeFingerprint = () => toolsListFingerprint(agentId),
+    caller,
+    computeFingerprint = () => toolsListFingerprint(agentId, caller),
     pollIntervalMs = SUBSCRIPTION_POLL_INTERVAL_MS,
     heartbeatMs = SUBSCRIPTION_HEARTBEAT_MS,
   } = params;

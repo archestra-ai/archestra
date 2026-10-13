@@ -17,6 +17,7 @@ import db, { schema } from "@/database";
 import type {
   A2AMessage,
   A2ATask,
+  A2ATaskApprovalRequest,
   A2ATaskState,
   InsertA2AMessage,
   InsertA2ATask,
@@ -346,13 +347,7 @@ class A2ATaskModel {
         outcome: "applied" | "resumed";
         task: A2ATask;
         /** All approval rows after this application, fresh from the db. */
-        approvalRows: {
-          approvalId: string;
-          toolCallId: string;
-          toolName: string;
-          approved: boolean;
-          resolved: boolean;
-        }[];
+        approvalRows: A2ATaskApprovalRequest[];
         /** The approval message's content after the transform. */
         content: unknown;
       }
@@ -403,13 +398,7 @@ class A2ATaskModel {
           .where(eq(schema.a2aMessagesTable.id, params.lastMessageId));
 
         const approvalRows = await tx
-          .select({
-            approvalId: schema.a2aTaskApprovalRequestsTable.approvalId,
-            toolCallId: schema.a2aTaskApprovalRequestsTable.toolCallId,
-            toolName: schema.a2aTaskApprovalRequestsTable.toolName,
-            approved: schema.a2aTaskApprovalRequestsTable.approved,
-            resolved: schema.a2aTaskApprovalRequestsTable.resolved,
-          })
+          .select()
           .from(schema.a2aTaskApprovalRequestsTable)
           .where(eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId));
 

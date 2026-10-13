@@ -300,6 +300,9 @@ function SessionsTable() {
             clientSource,
           } = getSessionDisplayData(session);
 
+          const placeholder = session.contentNotStored
+            ? "Content not stored"
+            : "No message";
           const primaryText = isArchestraChat
             ? conversationTitle
             : displayText ||
@@ -307,12 +310,12 @@ function SessionsTable() {
                 ? (INTERACTION_SOURCE_DISPLAY[
                     session.source as keyof typeof INTERACTION_SOURCE_DISPLAY
                   ]?.label ?? session.source)
-                : "No message");
+                : placeholder);
 
           return (
             <div className="flex min-w-0 flex-col gap-1.5 py-0.5">
               <div
-                className={`truncate text-sm font-medium ${primaryText === "No message" ? "text-muted-foreground" : ""}`}
+                className={`truncate text-sm font-medium ${primaryText === placeholder ? "text-muted-foreground" : ""}`}
               >
                 {primaryText}
               </div>

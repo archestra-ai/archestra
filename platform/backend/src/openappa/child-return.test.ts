@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import {
-  childReturnMarkersConfigured,
   collectAndStripChildReturns,
   mintChildReturnMarker,
 } from "./child-return";
@@ -176,9 +175,73 @@ describe("OpenAPPA child-return markers", () => {
         },
       ],
     };
+    const sent = structuredClone(body);
     expect(() =>
       collectAndStripChildReturns(body, { codexMailboxReturns: true }),
     ).toThrow(/OpenAPPA withheld/);
+
+    // A caller that does not know yet whether OpenAPPA governs the request
+    // takes the refusal instead, and the message stays as the client sent it.
+    const refusals: string[] = [];
+    collectAndStripChildReturns(body, {
+      codexMailboxReturns: true,
+      onRefusal: (refusal) => refusals.push(refusal.message),
+    });
+    expect(refusals).toEqual([expect.stringMatching(/^OpenAPPA withheld/)]);
+    expect(body).toEqual(sent);
+  });
+
+  test("still collects a mailbox return next to messages it cannot read", () => {
+    const header =
+      "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n";
+    const mail = (text: string, id?: string, payload?: string) => ({
+      type: "agent_message",
+      ...(id ? { id } : {}),
+      author: "/root/worker",
+      recipient: "/root",
+      content: [
+        { type: "input_text", text },
+        ...(payload
+          ? [{ type: "encrypted_content", encrypted_content: payload }]
+          : []),
+      ],
+    });
+    // The kinds a Codex agent sends besides a task and its final answer. Codex
+    // 0.162 sends the text of a message between agents as an encrypted part.
+    const message = mail(
+      "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n",
+      undefined,
+      "gAAAA_opaque_message",
+    );
+    const post = mail(
+      "Message Type: CHANNEL_POST\nSender: /root/worker\nChannel: build\nMessage ID: m-1\nThread ID: t-1\nPayload:\nPosted",
+    );
+    const body = {
+      input: [
+        structuredClone(message),
+        mail(header + carrier(requiredMarker(RETURN)), "mail-1"),
+        structuredClone(post),
+      ],
+    };
+    const refusals: string[] = [];
+
+    const collected = collectAndStripChildReturns(body, {
+      codexMailboxReturns: true,
+      onRefusal: (refusal) => refusals.push(refusal.message),
+    });
+
+    expect(refusals).toEqual([
+      "OpenAPPA withheld an unsupported Codex mailbox message",
+      "OpenAPPA withheld an unsupported Codex mailbox message",
+    ]);
+    expect(collected.completions).toEqual([
+      { value: RETURN.value, envelopeId: "mail-1", assistantOrigin: false },
+    ]);
+    expect(body.input).toEqual([
+      message,
+      mail(header + RETURN.value, "mail-1"),
+      post,
+    ]);
   });
 
   test("leaves task ciphertext, unrelated clients and quoted mailbox data untouched", () => {
@@ -776,17 +839,38 @@ describe("OpenAPPA child-return markers", () => {
     expect(() => collectAndStripChildReturns(body)).toThrow(
       "OpenAPPA received a malformed child-return marker",
     );
+    // Only a withheld return waits for the caller. A malformed marker is
+    // rejected whether or not the caller takes refusals.
+    expect(() =>
+      collectAndStripChildReturns(body, { onRefusal: () => {} }),
+    ).toThrow("OpenAPPA received a malformed child-return marker");
   });
 
-  test("mints deterministically through a fresh module graph", async () => {
-    const marker = requiredMarker(RETURN);
+  test("reports a return the body walk cannot read and leaves it as the client sent it", () => {
+    // The walk reads the returns of every other client. This one is an
+    // OpenCode background completion without its result framing.
+    const body = {
+      messages: [
+        {
+          role: "user",
+          content: '<task id="child" state="completed">RAW</task>',
+        },
+        { role: "user", content: "Carry on" },
+      ],
+    };
+    const sent = structuredClone(body);
+    const refusals: string[] = [];
 
-    vi.resetModules();
-    const reloadedConfig = (await import("@/config")).default;
-    reloadedConfig.openappa.offerSigningSecret = SECRET;
-    const reloaded = await import("./child-return");
+    const collected = collectAndStripChildReturns(body, {
+      openCodeBackgroundReturns: true,
+      onRefusal: (refusal) => refusals.push(refusal.message),
+    });
 
-    expect(reloaded.mintChildReturnMarker(RETURN)).toBe(marker);
+    expect(refusals).toEqual([
+      "OpenAPPA withheld a malformed child completion",
+    ]);
+    expect(collected.completions).toEqual([]);
+    expect(body).toEqual(sent);
   });
 
   test("bounds marker scanning and scans large indentation linearly", () => {
@@ -802,20 +886,29 @@ describe("OpenAPPA child-return markers", () => {
     ]);
   }, 30_000);
 
-  test("requires a signing key to mint", () => {
+  test("mints and strips a display marker without a signing key", () => {
     config.openappa.offerSigningSecret = "";
 
-    expect(childReturnMarkersConfigured()).toBe(false);
-    expect(mintChildReturnMarker(RETURN)).toBeUndefined();
+    const marker = mintChildReturnMarker(RETURN);
+    expect(marker).toBe(mintChildReturnMarker(RETURN));
+    expect(
+      mintChildReturnMarker({ ...RETURN, value: "other summary" }),
+    ).not.toBe(marker);
+    const { body, collected } = collectNativeResult(
+      `${RETURN.value}\n\n${marker}`,
+      "Task",
+    );
+    expect(nativeResultContent(body)).toBe(RETURN.value);
+    expect(collected.completions).toEqual([
+      expect.objectContaining({ value: RETURN.value }),
+    ]);
   });
 });
 
 function requiredMarker(
   returned: Parameters<typeof mintChildReturnMarker>[0],
 ): string {
-  const marker = mintChildReturnMarker(returned);
-  if (!marker) throw new Error("expected a child-return marker");
-  return marker;
+  return mintChildReturnMarker(returned);
 }
 
 function carrier(marker: string, value: string = RETURN.value): string {

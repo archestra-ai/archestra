@@ -10,10 +10,7 @@ import {
   APPA_SESSION_HEADER,
   ArchestraInternalErrorCode,
   type BillingMode,
-  BUILT_IN_AGENT_IDS,
   CHAT_API_KEY_ID_HEADER,
-  DELEGATION_BILLING_ENVIRONMENT_HEADER,
-  DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
   InteractionSourceSchema,
@@ -26,7 +23,6 @@ import {
   providerRequiresPerUserCredential,
   SOURCE_HEADER,
   stripClaudeContextVariantSuffix,
-  UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
 import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
 import {
@@ -47,22 +43,17 @@ import {
   ENCRYPTED_CHAT_KEY_HEADER,
   parseEncryptedChatDekHeader,
 } from "@/content-encryption/encrypted-chat";
-import {
-  type DualLlmProgressEvent,
-  dualLlmProgressBus,
-} from "@/guardrails/dual-llm-progress-bus";
+import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import {
   AgentTeamModel,
   AppModel,
   ConversationModel,
-  EnvironmentModel,
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
   OpenAppaSessionModel,
-  OrganizationModel,
   TeamModel,
   UserModel,
 } from "@/models";
@@ -119,8 +110,26 @@ import {
 } from "@/openappa/service";
 import { formatSessionReceipt } from "@/openappa/session-token";
 import {
+  APPA_SUBAGENT_BINDING_HEADER,
+  verifySubagentBinding,
+} from "@/openappa/subagent-binding";
+import {
+  APPA_THREAD_RECORD,
+  clientKeepsThreadPairing,
+  echoedCallsMessage,
+  readThreadRequest,
+  type ThreadRecord,
+  threadAlreadyContinuedBody,
+  threadNotFoundBody,
+  threadStates,
+  threadToolsOf,
+  threadUnsupportedBody,
+  toolSkeletonOf,
+} from "@/openappa/thread-state";
+import {
   restoreTrajectoryStampText,
   stampedSessions,
+  withoutTrajectoryStamp,
 } from "@/openappa/trajectory-stamp";
 import { startedUnenforced } from "@/openappa/unenforced";
 import {
@@ -157,7 +166,6 @@ import {
   type LlmProxyPluginRegistry,
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
-  type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
 import {
   RUNTIME_BINDING_HEADER,
@@ -167,20 +175,16 @@ import {
   runtimeSessionConflicts,
 } from "@/services/agent-runtime/runtime-identity";
 import {
+  carriesConnectionSetupReference,
   connectionProxySetupContext,
   verifyConnectionProxySetupContext,
 } from "@/services/connection-proxy-setup-context";
-import {
-  nativeSetupClientFromProvenance,
-  resolveConnectionSetupScope,
-} from "@/services/connection-setup-scope";
+import { nativeSetupClientFromProvenance } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
-  DUAL_LLM_KEEPALIVE_SSE_COMMENT,
-  type DualLlmAnalysis,
   type GatewayAgent,
   type HostedToolCall,
   type InsertInteraction,
@@ -191,14 +195,16 @@ import {
   type LLMStreamAdapter,
   type OpenAiCodexPassthrough,
   type ToolCallBlock,
-  type ToolInvocation,
-  UNSAFE_CONTEXT_BOUNDARY_REASON,
-  type UnsafeContextBoundary,
 } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
+import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
+import {
+  discardUnadmittedResponsesOutput,
+  ResponsesStreamIncompleteError,
+} from "./adapters/openai-responses";
 import {
   assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
@@ -215,12 +221,11 @@ import {
   applyInputTokenFallback,
   buildInteractionRecord,
   calculateInteractionCosts,
-  canonicalizeCommonMessageToolNames,
+  calculateUsageCost,
   handleError,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
-  toolCallsForPolicyEvaluation,
   toSpanUserInfo,
   toToolCallBlock,
   withProviderToolCallIds,
@@ -259,17 +264,9 @@ export interface LLMProxyContext<TRequest> {
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
-  contextIsTrusted: boolean;
   enabledToolNames: Set<string>;
   /** Which tool each client-presented name is, and whether the gateway attested it. */
   toolIdentity: utils.gatewayToolNames.GatewayToolIdentity;
-  /**
-   * The org's default invocation policy for a discovered tool, which rules a
-   * call whose identity no tool row carries (see `toolCallsForPolicyEvaluation`).
-   */
-  discoveredToolInvocationDefault: ToolInvocation.ToolInvocationPolicyAction;
-  dualLlmAnalyses: DualLlmAnalysis[];
-  unsafeContextBoundary?: UnsafeContextBoundary;
   /**
    * Encrypted chat session: span content capture is suppressed and persisted
    * content is either encrypted or redacted (usage/cost metadata untouched).
@@ -282,12 +279,6 @@ export interface LLMProxyContext<TRequest> {
    * fallback. Resolved once per request so every write site agrees.
    */
   encryptedChat: EncryptedChatAuditDisposition;
-  /**
-   * Caller environment an advisor consultation bills to, resolved from the
-   * loopback-gated delegation header and re-validated against the executing
-   * agent row. Undefined for every non-advisor request.
-   */
-  delegationBillingEnvironmentId?: string;
   /**
    * MCP App whose runtime made this call, resolved from the loopback-gated app
    * header and re-validated against the executing agent's organization.
@@ -305,6 +296,8 @@ export interface LLMProxyContext<TRequest> {
     name: string;
     clientId: string;
   };
+  /** Team the authenticating credential's spend is charged to. */
+  billingTeamId?: string;
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   virtualKeyId?: string;
@@ -314,7 +307,6 @@ export interface LLMProxyContext<TRequest> {
   source: InteractionSource;
   runId?: string;
   parentContext?: Context;
-  teamIds?: string[];
   teams?: SpanTeamInfo[];
   userTeams?: SpanTeamInfo[];
   /**
@@ -360,6 +352,8 @@ export type LLMProxyAuthOverride = {
     clientId: string;
   };
   userId?: string;
+  /** Team the authenticating credential's spend is charged to. */
+  billingTeamId?: string;
 };
 
 function getProviderMessagesCount(messages: unknown): number | null {
@@ -684,6 +678,11 @@ export async function handleLLMProxy<
   // Removes receipts and delegation markers before forwarding requests.
   // Markers must not reach providers or logs, even when OpenAPPA is off.
   // When active, OpenAPPA resolves extracted markers into lineage evidence.
+  // A child return the proxy cannot read is withheld from a governed parent
+  // only, and the proxy does not know yet whether OpenAPPA governs this
+  // request. Until it does, the first refusal waits here and that return stays
+  // as the client sent it.
+  let childReturnRefusal: ApiError | undefined;
   const requestWireFamily = appaWireFamily(provider.interactionType);
   let strippedReceiptCodes: string[] = [];
   let delegationMarkers: AppaDelegationMarker[] | undefined;
@@ -721,10 +720,13 @@ export async function handleLLMProxy<
     childReturns = collectAndStripChildReturns(body, {
       openCodeBackgroundReturns: nativeClient === "opencode",
       codexMailboxReturns: nativeClient === "codex",
+      onRefusal: (refusal) => {
+        childReturnRefusal ??= refusal;
+      },
     });
   }
   // Restores original provider call IDs before request processing, logging,
-  // or policy evaluation: the trajectory stamps first, then any stamp a
+  // or plugin rulings: the trajectory stamps first, then any stamp a
   // client copied into text. Neither needs an OpenAPPA session, so no id the
   // proxy gave a client reaches a provider with Guardrails off either.
   const trajectoryStamps = restoreTrajectoryStamps({
@@ -771,6 +773,9 @@ export async function handleLLMProxy<
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
   let virtualKeyId = authOverride?.virtualKeyId;
   let passthroughVirtualKeyId: string | undefined;
+  // The first credential that names a billing team pays; the passthrough key
+  // resolves first, matching its precedence for per-key limits.
+  let billingTeamId = authOverride?.billingTeamId;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
   let jwksUserId: string | undefined;
@@ -840,11 +845,6 @@ export async function handleLLMProxy<
     ordinarySession.sessionId !== appaSessionHeader
       ? { sessionId: appaSessionHeader, sessionSource: "appa_header" as const }
       : ordinarySession;
-  const inheritedContextUntrusted =
-    utils.headers.metaHeader.getHeaderValue(
-      headersForExtraction,
-      UNTRUSTED_CONTEXT_HEADER,
-    ) === "true";
 
   // Extract W3C trace context (traceparent/tracestate) from incoming request headers.
   // When the chat route calls the LLM proxy via localhost, the traced fetch injects these
@@ -924,6 +924,7 @@ export async function handleLLMProxy<
       });
       passthroughVirtualKeyId = passthroughResult.passthroughVirtualKeyId;
       passthroughUserId = passthroughResult.userId;
+      billingTeamId ??= passthroughResult.billingTeamId;
       // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
       userId = passthroughResult.userId;
       resolvedUser = await UserModel.getById(userId);
@@ -1065,6 +1066,7 @@ export async function handleLLMProxy<
       wasOAuthAuthenticated = true;
       authMethod = oauthResult.authMethod;
       authenticatedApp = oauthResult.authenticatedApp;
+      billingTeamId ??= oauthResult.billingTeamId;
       if (oauthResult.userId) {
         oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
@@ -1095,6 +1097,7 @@ export async function handleLLMProxy<
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
       virtualKeyId = virtualResult.virtualKeyId;
+      billingTeamId ??= virtualResult.billingTeamId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
       if (virtualResult.virtualKeyIsPersonal) {
@@ -1270,9 +1273,11 @@ export async function handleLLMProxy<
     userId,
     dek: readEncryptedChatDek(request),
   });
-  // Content never reaches spans or logs for an encrypted-chat session, whether it
-  // ends up encrypted or redacted.
-  const suppressContent = encryptedChat.kind !== "none";
+  // Content never reaches spans or logs for an encrypted-chat session or a
+  // deployment whose Log Content mode is Metadata only.
+  const isEncryptedChatSession = encryptedChat.kind !== "none";
+  const suppressContent =
+    isEncryptedChatSession || resolveLogContentMode() === "metadata_only";
   const {
     active: appaActive,
     featureEnabled: appaFeatureEnabled,
@@ -1286,7 +1291,7 @@ export async function handleLLMProxy<
   // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
   if (
     appaActive &&
-    suppressContent &&
+    isEncryptedChatSession &&
     !(
       sessionId &&
       (await startedUnenforced({
@@ -1301,14 +1306,6 @@ export async function handleLLMProxy<
     );
   }
 
-  // Advisor consultations bill to the delegating caller's environment (the
-  // advisor's own row is env-less). Resolved once so the limit check and every
-  // interaction write agree on it.
-  const delegationBillingEnvironmentId =
-    await resolveDelegationBillingEnvironment(request, resolvedAgent);
-
-  // App-runtime completions carry the calling app, so per-app runtime spend is
-  // attributable instead of collapsing into the shared App Runtime agent.
   const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
   // Check usage limits
@@ -1323,7 +1320,8 @@ export async function handleLLMProxy<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
-        environmentIdOverride: delegationBillingEnvironmentId,
+        llmOauthClientId: authenticatedApp?.id,
+        billingTeamId,
         agent: resolvedAgent,
         teamSource: lookups,
       });
@@ -1379,12 +1377,6 @@ export async function handleLLMProxy<
         internalChat: isInternalChat,
       });
 
-    // Resolve the agent's organization once, to apply its configured default
-    // discovered-tool guardrails to any tools persisted below.
-    const organization = await OrganizationModel.getById(
-      resolvedAgent.organizationId,
-    );
-
     // Persist tools declared by client (only for llm_proxy agents)
     if (resolvedAgent.agentType === "llm_proxy") {
       const tools = requestAdapter.getTools();
@@ -1393,10 +1385,8 @@ export async function handleLLMProxy<
           { toolCount: tools.length },
           `[${providerName}Proxy] Processing tools from request`,
         );
-        // Apply the org's configured default policies to every newly
-        // discovered tool persisted below.
-        await utils.tools.persistTools(
-          tools.map((t) => ({
+        await utils.tools.persistTools({
+          tools: tools.map((t) => ({
             toolName: t.name,
             toolParameters: t.inputSchema,
             toolDescription: t.description,
@@ -1410,16 +1400,9 @@ export async function handleLLMProxy<
                 }
               : {}),
           })),
-          resolvedAgentId,
-          organization
-            ? {
-                invocationAction:
-                  organization.defaultDiscoveredToolInvocationPolicy,
-                resultAction: organization.defaultDiscoveredToolResultPolicy,
-              }
-            : undefined,
-          { userId, externalAgentId },
-        );
+          agentId: resolvedAgentId,
+          observer: { userId, externalAgentId },
+        });
       }
     }
 
@@ -1479,13 +1462,11 @@ export async function handleLLMProxy<
       }
     };
 
-    // Fetch the agent's teams (with labels) once. Used both for policy
-    // evaluation context (trusted data) and for trace span team attributes.
+    // Fetch the agent's teams (with labels) once for trace span team attributes.
     const teams = await AgentTeamModel.getTeamLabelInfoForAgent(
       resolvedAgentId,
       lookups,
     );
-    const teamIds = teams.map((team) => team.id);
 
     // Fetch the requesting user's teams (with labels) for trace span attributes.
     const userTeams = userId
@@ -1528,107 +1509,15 @@ export async function handleLLMProxy<
       });
     }
 
-    // Evaluate trusted data policies
-    logger.debug(
-      {
-        resolvedAgentId,
-        considerContextUntrusted: resolvedAgent.considerContextUntrusted,
-        inheritedContextUntrusted,
-      },
-      `[${providerName}Proxy] Evaluating trusted data policies`,
-    );
-
-    // Map client-decorated gateway tool names (such as Claude Code
-    // `mcp__<label>__archestra__run_tool`) to platform canonical names
-    // before guardrail evaluation. This ensures policy lookups evaluate
-    // the actual tool instead of the client prefix or dispatch wrapper.
-    const effectiveConsiderContextUntrusted =
-      resolvedAgent.considerContextUntrusted || inheritedContextUntrusted;
-    const initialUntrustedReason = resolvedAgent.considerContextUntrusted
-      ? UNSAFE_CONTEXT_BOUNDARY_REASON.agentConfiguredUntrusted
-      : inheritedContextUntrusted
-        ? UNSAFE_CONTEXT_BOUNDARY_REASON.inheritedFromParent
-        : undefined;
-    // Dual LLM progress delivery. A chat-loopback request carries a progress
-    // channel header and receives structured events on the in-process bus,
-    // which the chat turn renders as model-invisible analysis parts. Everyone
-    // else gets protocol-level SSE keep-alive comments while an analysis
-    // holds the stream idle. Narration text is never injected into the
-    // stream: on chat-completions transports injected content shares the
-    // model's implicit text stream and fuses into the assistant's answer.
-    const dualLlmProgressChannelRaw =
-      request.headers[DUAL_LLM_PROGRESS_CHANNEL_HEADER.toLowerCase()];
-    const dualLlmProgressChannel =
-      typeof dualLlmProgressChannelRaw === "string" &&
-      dualLlmProgressChannelRaw.length > 0
-        ? dualLlmProgressChannelRaw
-        : undefined;
-    const publishDualLlmEvent = dualLlmProgressChannel
-      ? (event: DualLlmProgressEvent) =>
-          dualLlmProgressBus.publish(dualLlmProgressChannel, event)
-      : undefined;
-    // Only on `text/event-stream`: the keep-alive is an SSE comment, which
-    // the NDJSON and binary event-stream transports would surface as a parse
-    // error rather than ignore. Those streams simply go without one.
-    const writeDualLlmKeepAlive =
-      !publishDualLlmEvent &&
-      sseHeaders?.["Content-Type"]?.startsWith("text/event-stream")
-        ? () => {
-            ensureStreamHeaders();
-            reply.raw.write(DUAL_LLM_KEEPALIVE_SSE_COMMENT);
-          }
-        : undefined;
-
-    const evaluateLegacyTrust = async () =>
-      await utils.trustedData.evaluateIfContextIsTrusted({
-        // The request body is mutable by the wire restorers below. Build this
-        // just before analysis so signed transport footers reach no model.
-        messages: canonicalizeCommonMessageToolNames(
-          requestAdapter.getMessages(),
-          toolIdentity.canonicalize,
-        ),
-        agentId: resolvedAgentId,
-        organizationId: resolvedAgent.organizationId,
-        userId,
-        considerContextUntrusted: effectiveConsiderContextUntrusted,
-        policyContext: { teamIds, externalAgentId },
-        looseRunToolDispatch: toolIdentity.looseRunToolDispatch,
-        onDualLlmStart: (info) => {
-          writeDualLlmKeepAlive?.();
-          publishDualLlmEvent?.({ kind: "start", ...info });
-        },
-        onDualLlmProgress: (progress) => {
-          writeDualLlmKeepAlive?.();
-          publishDualLlmEvent?.({ kind: "qa", ...progress });
-        },
-        // A failed analysis fails the request closed. Chat renders the failure
-        // from the structured event; for other clients the message is written
-        // as a text delta — safe here because the request errors out and no
-        // model output follows that could fuse with it.
-        onDualLlmError: (info) => {
-          publishDualLlmEvent?.({ kind: "error", ...info });
-          if (!publishDualLlmEvent && requestAdapter.isStreaming()) {
-            ensureStreamHeaders();
-            reply.raw.write(streamAdapter.formatTextDeltaSSE(info.message));
-          }
-        },
-        onDualLlmComplete: (analysis, info) =>
-          publishDualLlmEvent?.({
-            kind: "complete",
-            toolCallId: analysis.toolCallId,
-            toolName: info.toolName,
-            analysis,
-            cached: info.cached,
-          }),
-        initialUntrustedReason,
-      });
-    let legacyTrustOutcome:
-      | Awaited<ReturnType<typeof evaluateLegacyTrust>>
-      | undefined;
     let pluginToolResultsOutcome:
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
+    // Set when a thread continue was given its tools back for the ruling.
+    let hydratedThreadTools = false;
+    let continuingThread = false;
+    let threadDeltaSystem: unknown;
+    let threadEchoedCalls: object | undefined;
     // The session a request has while enforcement is off, for the records
     // OpenAPPA reads once it turns on. Nothing governs it.
     let observedSession: OpenAppaSession | undefined;
@@ -1651,11 +1540,27 @@ export async function handleLLMProxy<
             secret: config.auth.secret,
           }),
       );
-    let connectionSetupBypass = appaActive && approvedProxySetup;
-    if (connectionSetupBypass) {
+    // The setup URL stays in the client's settings for the whole window, so
+    // sessions started after the setup send it too. Only the conversation
+    // that ran the installer holds the setup reference the installer printed.
+    const installerConversation =
+      approvedProxySetup &&
+      !!approvedProxySetupContext &&
+      carriesConnectionSetupReference({
+        token: approvedProxySetupContext,
+        requestBody: body,
+        secret: config.auth.secret,
+      });
+    const installerSetupBypass = appaActive && installerConversation;
+    if (installerSetupBypass) {
       logger.info(
         { profileId: resolvedAgent.id, proof: "approved-installer" },
         "Connection setup APPA bypass active",
+      );
+    } else if (appaActive && approvedProxySetup) {
+      logger.info(
+        { profileId: resolvedAgent.id },
+        "Connection setup URL outside the installer's conversation; Guardrails apply",
       );
     }
     let appaCallerId: string | undefined;
@@ -1703,11 +1608,30 @@ export async function handleLLMProxy<
         (isInternalChat || (!authenticatedApp && !virtualKeyId))
           ? userId
           : undefined);
-      // Delegated A2A runs share the parent's logging session, but have no
-      // APPA child-return lifecycle. Keep their events out of that trajectory;
-      // the existing guardrails still evaluate the child independently.
-      // Only the trusted internal executor's agent chain selects this path.
+      // A delegated run an OpenAPPA spawn bound to a child trajectory carries
+      // the executor's signed binding; its turns run on that trajectory.
+      const subagentToken = isInternalRequest
+        ? firstHeaderValue(
+            headersForExtraction[APPA_SUBAGENT_BINDING_HEADER.toLowerCase()],
+          )
+        : undefined;
+      const subagentBinding = subagentToken
+        ? verifySubagentBinding(subagentToken, {
+            organizationId: resolvedAgent.organizationId,
+            agentId: resolvedAgent.id,
+          })
+        : null;
+      // A child that claims a trajectory it cannot prove must not run unbound.
+      if (subagentToken && !subagentBinding) {
+        throw new ApiError(403, "The subagent binding is invalid or expired");
+      }
+      // Other delegated A2A runs share the parent's logging session, but have
+      // no APPA child-return lifecycle. Keep their events out of that
+      // trajectory; the existing guardrails still evaluate the child
+      // independently. Only the trusted internal executor's agent chain
+      // selects this path.
       const delegatedRun =
+        !subagentBinding &&
         isInternalRequest &&
         isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
       const runtimeLookup =
@@ -1720,7 +1644,7 @@ export async function handleLLMProxy<
           : { status: "unbound" as const };
       if (
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         runtimeLookup.status === "conflict"
       ) {
         throw new ApiError(
@@ -1743,7 +1667,7 @@ export async function handleLLMProxy<
       const presentedRuntimeSession = appaClaims.sessionId;
       if (
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         runtimeIdentity &&
         runtimeSessionConflicts({
           workloadName: runtimeIdentity.workloadName,
@@ -1755,24 +1679,39 @@ export async function handleLLMProxy<
           "OpenAPPA session does not match the authenticated runtime workspace",
         );
       }
+      const runtimeBindingToken = firstHeaderValue(
+        headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
+      );
       const runtimeBindingMatches =
         runtimeIdentity !== null &&
         runtimeBindingAuthorizes({
-          token: firstHeaderValue(
-            headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
-          ),
+          token: runtimeBindingToken,
           secret: config.openappa.offerSigningSecret,
           identity: runtimeIdentity,
         });
       if (
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         runtimeIdentity &&
         !runtimeBindingMatches
       ) {
+        // An image whose client predates the binding sends none. Only that
+        // case is named: why a presented binding failed stays undisclosed.
+        const bindingMissing = !runtimeBindingToken;
+        logger.warn(
+          {
+            agentId: runtimeIdentity.agentId,
+            workspaceId: runtimeIdentity.workspaceId,
+            taskId: runtimeIdentity.taskId,
+            reason: bindingMissing ? "missing" : "invalid",
+          },
+          "OpenAPPA rejected a runtime request without a verified binding",
+        );
         throw new ApiError(
           400,
-          "OpenAPPA runtime binding does not match this run",
+          bindingMissing
+            ? "This run's image did not send the X-Archestra-Runtime-Binding header that Guardrails require. Rebuild the image on a current maintained agent image, or send ARCHESTRA_AGENT_RUNTIME_BINDING in that header. Then start a new run."
+            : "OpenAPPA runtime binding does not match this run",
         );
       }
       const runtimeSession =
@@ -1784,7 +1723,15 @@ export async function handleLLMProxy<
               })
             )?.session
           : undefined;
-      const runtimeSessionId = runtimeSession?.session_id;
+      // A bound subagent ends its turns the way a runtime workspace does: its
+      // return is keyed by the spawn call that opened it.
+      const runtimeSessionId =
+        runtimeSession?.session_id ?? subagentBinding?.session.session_id;
+      const runtimeTaskId = runtimeSession
+        ? runtimeIdentity?.taskId
+        : subagentBinding?.spawnCallId;
+      // Enforcement rejects conflicts above; observing and setup-bypass paths
+      // must also avoid adopting the conflicting workspace's authority.
       const boundRuntimeIdentity =
         runtimeIdentity &&
         runtimeBindingMatches &&
@@ -1820,7 +1767,7 @@ export async function handleLLMProxy<
         !virtualKeyId;
       const unsupportedClient =
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         !isInternalChat &&
         !delegatedRun &&
         headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
@@ -1841,7 +1788,7 @@ export async function handleLLMProxy<
       }
       if (
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         !delegatedRun &&
         !unsupportedClient
       ) {
@@ -1872,48 +1819,19 @@ export async function handleLLMProxy<
             "OpenAPPA requires a valid client-native session ID",
           );
         }
-        if (
-          !isInternalChat &&
-          authenticatedUserId &&
-          appaIdentity.sessionId &&
-          hasNativeClientSession
-        ) {
-          const setupScope = await resolveConnectionSetupScope({
-            principal: {
-              userId: authenticatedUserId,
-              organizationId: resolvedAgent.organizationId,
-              targetOrganizationId: resolvedAgent.organizationId,
-              guardrailsActive: appaActive,
-            },
-            evidence: {
-              kind: "native-session",
-              identity: appaIdentity,
-              requestBody: body,
-            },
-          });
-          connectionSetupBypass = setupScope !== null;
-          if (setupScope?.kind === "native-session") {
-            logger.info(
-              { clientId: setupScope.clientId },
-              "Connection setup APPA bypass active",
-            );
-          }
-        }
         // Receipts were stripped from history above, before any forwarding or
         // logging. APPA now resolves the collected codes into lineage evidence
         // owned by this caller.
-        const receiptSessions =
-          !connectionSetupBypass && callerId
-            ? await sessionReceiptEvidence({
-                organizationId: resolvedAgent.organizationId,
-                callerId,
-                codes: strippedReceiptCodes,
-              })
-            : [];
+        const receiptSessions = callerId
+          ? await sessionReceiptEvidence({
+              organizationId: resolvedAgent.organizationId,
+              callerId,
+              codes: strippedReceiptCodes,
+            })
+          : [];
         // History carrying verified stamps or session receipts identifies
         // parent context. A new session opens as a fork of its deepest ancestor.
         const traceable =
-          !connectionSetupBypass &&
           appaCallerId &&
           appaIdentity.sessionId &&
           appaFamily &&
@@ -1946,30 +1864,28 @@ export async function handleLLMProxy<
               })
             : undefined;
         fillAppaSessionHeaders(headersForExtraction, appaIdentity);
-        // Reading connect.md can taint the rest of setup, so the verified
-        // session bypasses APPA trust and invocation decisions together.
-        openappaSession = connectionSetupBypass
-          ? undefined
-          : sessionFromHeaders({
-              headers: headersForExtraction,
-              organizationId: resolvedAgent.organizationId,
-              callerId,
-              // Chat sessions use conversation IDs with verified ownership.
-              ...(isInternalChat
-                ? {}
-                : {
-                    // Scope external sessions to the authenticated principal.
-                    scope:
-                      platformLoopback &&
-                      incomingAppaSessionHeader !== undefined
-                        ? undefined
-                        : callerId,
-                    // Bind fallback root if no session was provided.
-                    fallbackSessionId: callerId
-                      ? `${callerId}@${resolvedAgent.id}`
-                      : undefined,
-                  }),
-            });
+        openappaSession = sessionFromHeaders({
+          headers: headersForExtraction,
+          organizationId: resolvedAgent.organizationId,
+          callerId,
+          // Chat sessions use conversation IDs with verified ownership.
+          ...(isInternalChat
+            ? {}
+            : {
+                // Scope external sessions to the authenticated principal.
+                scope:
+                  platformLoopback && incomingAppaSessionHeader !== undefined
+                    ? undefined
+                    : callerId,
+                // Bind fallback root if no session was provided.
+                fallbackSessionId: callerId
+                  ? `${callerId}@${resolvedAgent.id}`
+                  : undefined,
+              }),
+        });
+        // The executor signed the trajectory its spawn bound; the child's own
+        // headers name the parent conversation and carry no authority here.
+        if (subagentBinding) openappaSession = subagentBinding.session;
         if (runtimeSession) {
           if (openappaSession?.session_id !== runtimeSession.session_id) {
             throw new ApiError(
@@ -1980,7 +1896,7 @@ export async function handleLLMProxy<
           // The launcher stored the authenticated parent before giving the pod data.
           openappaSession = runtimeSession;
         }
-        if (!openappaSession && !connectionSetupBypass)
+        if (!openappaSession)
           throw new ApiError(
             400,
             "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
@@ -2004,6 +1920,7 @@ export async function handleLLMProxy<
       } else if (
         appaObserving &&
         !delegatedRun &&
+        !subagentBinding &&
         (isInternalRequest ||
           authenticatedUserId ||
           authenticatedApp ||
@@ -2061,9 +1978,7 @@ export async function handleLLMProxy<
               toolIdentity,
               request: lineageRequest(),
               claims: appaClaims,
-              ...(runtimeSessionId
-                ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
-                : {}),
+              ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
               ...(isInternalChat ? { chatSource: source } : {}),
             },
           }).session,
@@ -2078,6 +1993,9 @@ export async function handleLLMProxy<
         openappaSession = undefined;
       }
       if (openappaSession) {
+        // OpenAPPA governs this request, so a child return the proxy could not
+        // read at its entry is refused now.
+        if (childReturnRefusal) throw childReturnRefusal;
         // A Chat session is a conversation, and the request must name the
         // user whose conversation it is: without one there is nothing to
         // check the binding against, so the request is refused rather than
@@ -2109,13 +2027,120 @@ export async function handleLLMProxy<
         // request and the tool results are built from it.
         // Unsupported declarations are rejected; proxy-only clients without
         // gateway remedies are still governed and receive text refusals.
-        // The ordinary invocation policies still run: they are evaluated inside
-        // the plugin pass, before APPA reserves a call.
+        // A provider-side thread continue carries no tools: the proxy rules
+        // with the ones the thread was created with, and never sends them.
+        let appaToolIdentity = toolIdentity;
+        // A stored response keeps the conversation (and tools) at the provider,
+        // so the request in hand is only a delta that the ruling cannot read.
+        // Refused rather than ruled on blind.
+        if (
+          provider.interactionType.endsWith(":responses") &&
+          (body as { previous_response_id?: unknown }).previous_response_id
+        ) {
+          throw new ApiError(
+            400,
+            "OpenAPPA cannot govern a Responses request that continues a stored response (previous_response_id). Send the whole conversation as input instead.",
+          );
+        }
+        const threadRequest =
+          provider.interactionType === "anthropic:messages"
+            ? readThreadRequest(body)
+            : undefined;
+        if (threadRequest) {
+          const declaresTools = declaredToolEntries(body).length > 0;
+          const previousMessageId =
+            threadRequest.type === "continue"
+              ? threadRequest.previousMessageId
+              : undefined;
+          const found =
+            threadRequest.type === "continue"
+              ? await threadStates.forContinue({
+                  organizationId: resolvedAgent.organizationId,
+                  sessionId: openappaSession.session_id,
+                  previousMessageId: threadRequest.previousMessageId,
+                })
+              : undefined;
+          if (found && !found.ok) {
+            logger.info(
+              {
+                sessionId: openappaSession.session_id,
+                reason: found.reason,
+                proxyRequestId: `req_archestra_${request.id}`,
+              },
+              "OpenAPPA forces a governed thread to replay",
+            );
+            // Sent as is: the client reads the provider's own error shape,
+            // which the route's error schema would reduce to message and type.
+            // A store that cannot be read makes the client go stateless.
+            const serialize = (payload: unknown) => JSON.stringify(payload);
+            if (found.reason === "unavailable")
+              return reply
+                .status(400)
+                .serializer(serialize)
+                .send(threadUnsupportedBody(request.id));
+            if (found.reason === "consumed")
+              return reply
+                .status(400)
+                .serializer(serialize)
+                .send(threadAlreadyContinuedBody(request.id));
+            return reply
+              .status(404)
+              .serializer(serialize)
+              .send(threadNotFoundBody(request.id));
+          }
+          const state = found?.ok ? found : undefined;
+          let threadRecord: ThreadRecord;
+          if (state) {
+            // The system prompt of a continue is the client's own delta.
+            continuingThread = true;
+            threadDeltaSystem = structuredClone(
+              (body as { system?: unknown }).system,
+            );
+            // The results answer calls the thread holds: put them back, as a
+            // full request would carry them, for the ruling only.
+            const messages = (body as { messages?: unknown }).messages;
+            if (state.calls.length > 0 && Array.isArray(messages)) {
+              threadEchoedCalls = echoedCallsMessage(state.calls);
+              messages.unshift(threadEchoedCalls);
+            }
+          }
+          if (state && !declaresTools) {
+            (body as { tools?: unknown }).tools = toolSkeletonOf(state.tools);
+            hydratedThreadTools = true;
+            appaToolIdentity =
+              await utils.gatewayToolNames.resolveGatewayToolIdentity({
+                organizationId: resolvedAgent.organizationId,
+                declarations: state.tools,
+                internalChat: isInternalChat,
+              });
+            threadRecord = {
+              organizationId: resolvedAgent.organizationId,
+              sessionId: openappaSession.session_id,
+              rootMessageId: state.rootMessageId,
+              ...(previousMessageId ? { previousMessageId } : {}),
+            };
+          } else {
+            // A create, or a continue that sends changed tools: they become
+            // the thread's tools from this response on.
+            threadRecord = {
+              organizationId: resolvedAgent.organizationId,
+              sessionId: openappaSession.session_id,
+              tools: threadToolsOf({
+                declarations: gatewayToolDeclarations,
+                types: declaredToolEntries(body).map(
+                  (entry) => (entry.tool as { type?: string } | null)?.type,
+                ),
+              }),
+              ...(previousMessageId ? { previousMessageId } : {}),
+            };
+          }
+          pluginContext.resources.set(APPA_THREAD_RECORD, threadRecord);
+        }
         const appaRequest = prepareAppaRequest({
           body,
           interactionType: provider.interactionType,
           session: appaIdentity,
-          identity: toolIdentity,
+          identity: appaToolIdentity,
           trustBarePlatformTools: isInternalChat,
           ...(delegationMarkers ? { delegationMarkers } : {}),
           ...(childReturns ? { childReturns } : {}),
@@ -2126,14 +2151,13 @@ export async function handleLLMProxy<
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
           session: openappaSession,
           profileId: resolvedAgent.id,
-          toolIdentity,
+          toolIdentity: appaToolIdentity,
           request: appaRequest,
           claims: appaClaims,
-          ...(runtimeSessionId
-            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
-            : {}),
+          ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "active",
+          ...(threadRequest ? { thread: threadRequest.type } : {}),
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
       } else if (observedSession) {
@@ -2143,9 +2167,7 @@ export async function handleLLMProxy<
           toolIdentity,
           request: lineageRequest(),
           claims: appaClaims,
-          ...(runtimeSessionId
-            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
-            : {}),
+          ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "inactive",
           ...(isInternalChat ? { chatSource: source } : {}),
@@ -2153,18 +2175,11 @@ export async function handleLLMProxy<
       }
       await pluginRegistry.onSessionInit(pluginContext);
       pluginSessionInitialized = true;
-      if (openappaSession) {
-        legacyTrustOutcome = await evaluateLegacyTrust();
-      }
       pluginToolResultsOutcome = await pluginRegistry.onToolResults({
         ...pluginContext,
         // Adapters can defer wire updates until serialization; pass the filtered
         // content explicitly so APPA cannot inspect a blocked/raw version.
-        toolResults: requestAdapter.getToolResults().map((result) => ({
-          ...result,
-          content:
-            legacyTrustOutcome?.toolResultUpdates[result.id] ?? result.content,
-        })),
+        toolResults: requestAdapter.getToolResults(),
       });
       const issued = pluginContext.resources.get(
         APPA_CHILD_TRAJECTORY_RECEIPT,
@@ -2184,14 +2199,11 @@ export async function handleLLMProxy<
           (declaredToolEntries(body).length > 0 &&
             !isClientPromptSuggestion(body))) &&
         appaCallerId &&
-        appaFamily &&
-        config.openappa.offerSigningSecret.length > 0
+        appaFamily
       ) {
         const receipt = await OpenAppaSessionModel.ensureReceiptToken({
           organizationId: resolvedAgent.organizationId,
-          callerId: appaCallerId,
           sessionId: openappaSession.session_id,
-          secret: config.openappa.offerSigningSecret,
         });
         if (receipt && (receipt.receiptIssuedAt == null || clientCompaction)) {
           sessionReceipt = {
@@ -2210,14 +2222,15 @@ export async function handleLLMProxy<
         };
       }
     }
+    // The connection-setup bypass: the approved-installer proof, settled
+    // before the guards and not mutated past them.
+    const connectionSetupBypass = installerSetupBypass;
     // Nothing OpenAPPA wrote for the client and the gateway goes on to the
     // provider, whether or not this request has a session (deployment switch
     // off, a connection-setup or unsupported-client bypass, a delegated run)
     // and whatever restoration above could not put back. Runs after
     // prepareAppaRequest collected the notices' signed offers and the plugin
-    // read this request's results. A request without a session evaluates
-    // trusted data on the result, as a session does on its restored history.
-    // It changes no call id, so the tool-result updates below still land.
+    // read this request's results. It changes no call id, so the tool-result updates below still land.
     const providerBoundRewrites = sanitizeProviderBoundRequest({
       body,
       interactionType: provider.interactionType,
@@ -2233,25 +2246,8 @@ export async function handleLLMProxy<
         `[${providerName}Proxy] Removed OpenAPPA transport members from the provider-bound request`,
       );
     }
-    const trustedDataOutcome = connectionSetupBypass
-      ? {
-          toolResultUpdates: {},
-          contextIsTrusted: true,
-          dualLlmAnalyses: [],
-          unsafeContextBoundary: undefined,
-        }
-      : (legacyTrustOutcome ??
-        pluginToolResultsOutcome?.contextTrust ??
-        (await evaluateLegacyTrust()));
-    const { contextIsTrusted, dualLlmAnalyses, unsafeContextBoundary } =
-      trustedDataOutcome;
     const toolResultUpdates = Object.fromEntries(
-      Object.entries({
-        ...("toolResultUpdates" in trustedDataOutcome
-          ? trustedDataOutcome.toolResultUpdates
-          : {}),
-        ...pluginToolResultsOutcome?.toolResultUpdates,
-      }).map(
+      Object.entries(pluginToolResultsOutcome?.toolResultUpdates ?? {}).map(
         // Approved outputs are rendered from results as the client sent them:
         // a trajectory stamp one echoed still never reaches the provider.
         ([id, content]) => [id, restoreTrajectoryStampText(content)],
@@ -2265,9 +2261,8 @@ export async function handleLLMProxy<
       {
         resolvedAgentId,
         toolResultUpdatesCount: Object.keys(toolResultUpdates).length,
-        contextIsTrusted,
       },
-      "Messages filtered after trusted data evaluation",
+      "Tool results updated by proxy plugins",
     );
 
     // Read per-key base URL override from header, but ONLY from internal (localhost) requests.
@@ -2397,6 +2392,24 @@ export async function handleLLMProxy<
 
     // Build final request
     const builtRequest = requestAdapter.toProviderRequest();
+    // The provider thread owns the tools of a continue; the ruling only borrowed them.
+    if (continuingThread) {
+      const thread = builtRequest as {
+        tools?: unknown;
+        system?: unknown;
+        messages: unknown[];
+      };
+      if (hydratedThreadTools) delete thread.tools;
+      // The thread keeps the system prompt it was created with, guidance
+      // included. A continue sends only its own system blocks, as the client
+      // wrote them: guidance the ruling added to them would repeat in the thread.
+      if (threadDeltaSystem === undefined) delete thread.system;
+      else thread.system = threadDeltaSystem;
+      // The adapters may hand back copies, so the echo is found by its place
+      // (first) and its content (the same call ids), not by identity.
+      if (threadEchoedCalls && isEchoOf(thread.messages[0], threadEchoedCalls))
+        thread.messages = thread.messages.slice(1);
+    }
 
     // Repair unpaired UTF-16 surrogates before the body leaves for the
     // provider. Half a surrogate pair has no UTF-8 encoding, so a provider
@@ -2430,19 +2443,12 @@ export async function handleLLMProxy<
         : repairedRequest
     ) as TRequest;
 
-    // Which called tool names count as available to evaluatePolicies, in the
-    // canonical form tool-call names are compared in. Read from the request
-    // body rather than `getTools()`, which keeps only schema-carrying function
-    // tools: a tool the caller declared and executes itself (Anthropic's
-    // bash/text_editor/computer, OpenAI chat `custom` tools, every non-function
-    // tool on the Responses surface) is absent from that list, so every call to
-    // one would be refused.
-    //
-    // Those names resolve to no `toolsTable` row, so no policy speaks for them
-    // and this set is the only thing that could refuse them. Counting them
-    // keeps them reachable, which is what the caller asked for by declaring
-    // them, and leaves the client — which is the one executing them — as the
-    // boundary that governs them.
+    // The tool names the request declares, in the canonical form tool-call
+    // names are compared in. Read from the request body rather than
+    // `getTools()`, which keeps only schema-carrying function tools: a tool the
+    // caller declared and executes itself (Anthropic's bash/text_editor/
+    // computer, OpenAI chat `custom` tools, every non-function tool on the
+    // Responses surface) is absent from that list but is still declared.
     //
     // Includes Codex namespace members resolved within their declared namespaces.
     // Evaluated after removing the OpenAPPA notice tool from the request body.
@@ -2453,15 +2459,6 @@ export async function handleLLMProxy<
           toolIdentity.canonicalize(name, namespace),
         ),
     );
-
-    // Convert headers to Record<string, string> for policy evaluation context
-    const headersRecord: Record<string, string> = {};
-    const rawHeaders = headers as Record<string, unknown>;
-    for (const [key, value] of Object.entries(rawHeaders)) {
-      if (typeof value === "string") {
-        headersRecord[key] = value;
-      }
-    }
 
     const ctx: LLMProxyContext<TRequest> = {
       connectionVerification,
@@ -2474,23 +2471,17 @@ export async function handleLLMProxy<
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
       actualModel,
-      contextIsTrusted,
       enabledToolNames,
       toolIdentity,
-      discoveredToolInvocationDefault:
-        organization?.defaultDiscoveredToolInvocationPolicy ??
-        "block_when_context_is_untrusted",
-      dualLlmAnalyses,
-      unsafeContextBoundary,
       suppressContent,
       encryptedChat,
-      delegationBillingEnvironmentId,
       appId: attributedAppId,
       externalAgentId,
       authMethod,
       billingMode,
       getBillingMode: () => billingMode,
       authenticatedApp,
+      billingTeamId,
       userId,
       resolvedUser,
       virtualKeyId,
@@ -2500,7 +2491,6 @@ export async function handleLLMProxy<
       source,
       runId,
       parentContext,
-      teamIds,
       teams,
       userTeams,
       streamTiming,
@@ -2530,6 +2520,17 @@ export async function handleLLMProxy<
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
     const lifecycleError = error;
+    if (lifecycleError instanceof RecordedCodexGenerationFailure) {
+      return handleError(
+        lifecycleError,
+        reply,
+        provider.extractErrorMessage,
+        false,
+        provider.extractInternalCode.bind(provider),
+        provider.formatStreamErrorFrame,
+        provider.translatesWireFormat,
+      );
+    }
     if (pluginContext && pluginSessionInitialized) {
       try {
         pluginSessionInitialized = false;
@@ -2544,8 +2545,12 @@ export async function handleLLMProxy<
     // Persist failed interactions so they appear in LLM logs
     try {
       const errorMessage = provider.extractErrorMessage(lifecycleError);
+      // Provider errors routinely echo the prompt back.
       logger.info(
-        { profileId: resolvedAgent.id, errorMessage },
+        {
+          profileId: resolvedAgent.id,
+          ...(suppressContent ? {} : { errorMessage }),
+        },
         "Persisting error interaction record",
       );
       const record: InsertInteraction = {
@@ -2562,6 +2567,7 @@ export async function handleLLMProxy<
         authMethod,
         authenticatedAppId: authenticatedApp?.id,
         authenticatedAppName: authenticatedApp?.name,
+        billingTeamId,
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
@@ -2575,11 +2581,7 @@ export async function handleLLMProxy<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(
-        record,
-        encryptedChat,
-        delegationBillingEnvironmentId,
-      );
+      await persistProxyInteraction(record, encryptedChat);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -2594,6 +2596,7 @@ export async function handleLLMProxy<
       requestAdapter.isStreaming(),
       provider.extractInternalCode.bind(provider),
       provider.formatStreamErrorFrame,
+      provider.translatesWireFormat,
     );
   }
 }
@@ -2676,21 +2679,17 @@ async function handleStreaming<
     agent,
     originalRequest,
     actualModel,
-    contextIsTrusted,
     enabledToolNames,
     toolIdentity,
-    discoveredToolInvocationDefault,
-    dualLlmAnalyses,
-    unsafeContextBoundary,
     suppressContent,
     encryptedChat,
-    delegationBillingEnvironmentId,
     appId,
     externalAgentId,
     authMethod,
     billingMode: initialBillingMode,
     getBillingMode,
     authenticatedApp,
+    billingTeamId,
     userId,
     virtualKeyId,
     passthroughVirtualKeyId,
@@ -2700,7 +2699,6 @@ async function handleStreaming<
     source,
     runId,
     parentContext,
-    teamIds,
     teams,
     userTeams,
     streamTiming,
@@ -2741,13 +2739,15 @@ async function handleStreaming<
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
+  let failedStreamResponse: unknown;
+  let clientGone = false;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
   // that is already committed and idle (see StreamKeepAlive) — it is armed
-  // now, before the upstream call, so it also covers a stream the dual-LLM
-  // keep-alive committed during preflight and a slow post-stream policy
-  // evaluation, but it cannot itself turn a pending upstream error into a 200.
+  // now, before the upstream call, so it also covers a stream committed
+  // during preflight and a slow post-stream plugin ruling, but it cannot
+  // itself turn a pending upstream error into a 200.
   const keepAlive = new StreamKeepAlive(
     reply.raw,
     config.llmProxy.streamKeepAliveIntervalMs,
@@ -2757,6 +2757,13 @@ async function handleStreaming<
   );
   keepAlive.start();
   const writeToClient = (data: string | Uint8Array) => {
+    // A disconnected client can no longer read anything; writing would throw
+    // write-after-end. Call sites that gate work on the socket state keep
+    // their own checks — this one only skips the write itself.
+    if (reply.raw.destroyed) {
+      clientGone = true;
+      return;
+    }
     if (ctx.connectionVerification) {
       // Includes policy-generated frames as well as provider frames. Do not
       // let an executable call reach the native client's dispatcher.
@@ -2855,6 +2862,7 @@ async function handleStreaming<
         authMethod,
         authenticatedAppId: authenticatedApp?.id,
         authenticatedAppName: authenticatedApp?.name,
+        billingTeamId,
         type: provider.interactionType,
         request: originalRequest as InteractionRequest,
         processedRequest: request as InteractionRequest,
@@ -2863,11 +2871,7 @@ async function handleStreaming<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(
-        record,
-        encryptedChat,
-        delegationBillingEnvironmentId,
-      );
+      await persistProxyInteraction(record, encryptedChat);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -2956,7 +2960,7 @@ async function handleStreaming<
 
           // An adapter reports a tool-call chunk by withholding `sseData`, so
           // the call accumulates and is released, or discarded, once
-          // `evaluatePolicies` has run. Releasing one earlier would mean
+          // the tool-call plugins have ruled on it. Releasing one earlier would mean
           // predicting the gate's verdict from cheaper signals, and any
           // disagreement hands the client a runnable call the gate refused —
           // the MCP gateway's re-check resolves against the agent's assigned
@@ -3042,17 +3046,11 @@ async function handleStreaming<
               state.usage.reasoningTokens,
             );
           }
-          const cost = await utils.costOptimization.calculateCost(
-            actualModel,
-            state.usage.inputTokens,
-            state.usage.outputTokens,
-            providerName,
-            {
-              readTokens: state.usage.cacheReadTokens,
-              writeTokens: state.usage.cacheWriteTokens,
-              write1hTokens: state.usage.cacheWrite1hTokens,
-            },
-          );
+          const cost = await calculateUsageCost({
+            model: actualModel,
+            usage: state.usage,
+            provider: providerName,
+          });
           if (cost !== undefined) {
             llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
             llmSpan.setAttribute(ATTR_ARCHESTRA_BILLING_MODE, billingMode);
@@ -3074,6 +3072,31 @@ async function handleStreaming<
     });
 
     logger.info("Stream loop completed, processing final events");
+
+    if (
+      await failResponsesGeneration({
+        response: streamAdapter.toProviderResponse(),
+        ctx,
+      })
+    ) {
+      // The adapter holds the failure terminal with any executable fragments.
+      // Drop those fragments, not the provider's terminal status or usage.
+      if (!streamAdapter.formatToolCallsSSE) {
+        throw new ApiError(
+          503,
+          "LLM provider cannot safely release a failed Responses generation",
+        );
+      }
+      const failureEvents = streamAdapter.formatToolCallsSSE([]);
+      if (bufferModelResponse) {
+        for (const event of bufferedModelEvents) writeToClient(event);
+      }
+      for (const event of failureEvents) writeToClient(event);
+      writeToClient(streamAdapter.formatEndSSE());
+      reply.raw.end();
+      streamCompleted = true;
+      return reply;
+    }
 
     const hostedToolCalls = streamAdapter.getHostedToolCalls?.() ?? [];
     const hostedHold = streamAdapter.formatHeldHostedToolCallsSSE
@@ -3109,8 +3132,8 @@ async function handleStreaming<
       }
     }
 
-    // Evaluate tool invocation policies. A held turn's own calls rest on what
-    // was withheld, so they went with it.
+    // Let the proxy plugins rule on the turn's tool calls. A held turn's own
+    // calls rest on what was withheld, so they went with it.
     const toolCalls = hostedHold ? [] : streamAdapter.state.toolCalls;
     let toolInvocationRefusal: LlmProxyToolCallRefusal | null = null;
 
@@ -3130,7 +3153,7 @@ async function handleStreaming<
           toolCallCount: toolCalls.length,
           toolNames: toolCalls.map((tc) => tc.name),
         },
-        "Evaluating tool invocation policies",
+        "Ruling on tool calls with proxy plugins",
       );
 
       const policyOutcome = await evaluateProxyPluginToolCalls(
@@ -3138,28 +3161,6 @@ async function handleStreaming<
         ctx.pluginContext,
         rewrittenToolCalls ?? toolCalls,
         streamAdapter.formatToolCallsSSE !== undefined,
-        async (calls) =>
-          ctx.connectionSetupBypass
-            ? null
-            : await utils.toolInvocation.evaluatePolicies(
-                toolCallsForPolicyEvaluation({
-                  toolCalls: [...calls],
-                  toolIdentity,
-                  discoveredToolDefault: discoveredToolInvocationDefault,
-                }),
-                agent.id,
-                {
-                  teamIds: teamIds ?? [],
-                  externalAgentId,
-                  sensitiveContextOrigin:
-                    utils.trustedData.sensitiveContextOriginFromBoundary(
-                      unsafeContextBoundary,
-                    ),
-                },
-                contextIsTrusted,
-                enabledToolNames,
-                { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-              ),
       );
       if (policyOutcome.wasRewritten)
         rewrittenToolCalls = policyOutcome.toolCalls;
@@ -3183,11 +3184,22 @@ async function handleStreaming<
 
       logger.info(
         { refused: !!toolInvocationRefusal },
-        "Tool invocation policy result",
+        "Proxy plugin tool-call ruling",
       );
 
       toolCallBlock = toToolCallBlock(toolInvocationRefusal);
     }
+
+    await recordGovernedThreadResponse({
+      context: ctx.pluginContext,
+      messageId: streamAdapter.state.responseId,
+      providerCalls: toolCalls,
+      clientCalls: toolInvocationRefusal
+        ? []
+        : (rewrittenToolCalls ?? toolCalls),
+      refused: toolInvocationRefusal !== null,
+      held: !!hostedHold,
+    });
 
     if (toolInvocationRefusal) {
       const { contentMessage, reason, allToolCallNames } =
@@ -3324,6 +3336,63 @@ async function handleStreaming<
     return reply;
   } catch (error) {
     const lifecycleError = error;
+    const codexError =
+      error instanceof CodexResponsesGenerationError ? error : undefined;
+    if (codexError) {
+      // Translation keeps partial text and usage, but is not a successful turn.
+      failedStreamResponse = codexError.completion;
+      streamAdapter.state.usage = provider
+        .createResponseAdapter(codexError.completion as TResponse, request)
+        .getUsage();
+      streamAdapter.state.toolCalls = [];
+      streamAdapter.state.rawToolCallEvents = [];
+      streamAdapter.state.stopReason = codexError.isIncompleteTerminal
+        ? codexError.completion.choices[0].finish_reason
+        : "error";
+    }
+    const eofError =
+      error instanceof ResponsesStreamIncompleteError &&
+      provider.provider === "openai" &&
+      provider.interactionType === "openai:responses"
+        ? error
+        : undefined;
+    if (eofError) {
+      // Discard held executable fragments without emitting a synthetic success.
+      streamAdapter.formatToolCallsSSE?.([]);
+      streamAdapter.state.toolCalls = [];
+      streamAdapter.state.rawToolCallEvents = [];
+      streamAdapter.state.stopReason = "error";
+      const observed = asRecord(
+        discardUnadmittedResponsesOutput(
+          streamAdapter.toProviderResponse() as Parameters<
+            typeof discardUnadmittedResponsesOutput
+          >[0],
+        ),
+      );
+      // Construct from a safe subset of inert envelope fields only: a blind
+      // spread of the observed provider response could carry executable-
+      // capable fields (tool_calls, function_call items) into the recorded
+      // failure.
+      failedStreamResponse = {
+        id: streamAdapter.state.responseId || `proxy_resp_${Date.now()}`,
+        object: "response",
+        ...(observed?.created_at !== undefined
+          ? { created_at: observed.created_at }
+          : {}),
+        model: streamAdapter.state.model || actualModel,
+        status: "incomplete",
+        incomplete_details: null,
+        error: { code: eofError.code, message: eofError.message },
+        output: Array.isArray(observed?.output)
+          ? observed.output.filter(
+              (item) =>
+                asRecord(item)?.type !== "function_call" &&
+                asRecord(item)?.type !== "custom_tool_call",
+            )
+          : [],
+        usage: observed?.usage ?? null,
+      };
+    }
     try {
       if (pluginRegistry && pluginContext) {
         await pluginRegistry.fail({ ...pluginContext, error });
@@ -3333,6 +3402,31 @@ async function handleStreaming<
         { err: pluginError },
         "Plugin cleanup failed while handling proxy error",
       );
+    }
+    if (codexError?.isIncompleteTerminal) {
+      // Preserve Chat's legal partial terminal only after failure cleanup.
+      if (bufferModelResponse) {
+        for (const event of bufferedModelEvents) writeToClient(event);
+      }
+      const terminal = streamAdapter.processChunk({
+        id: codexError.completion.id,
+        object: "chat.completion.chunk",
+        created: codexError.completion.created,
+        model: codexError.completion.model,
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: codexError.completion.choices[0].finish_reason,
+          },
+        ],
+        usage: codexError.completion.usage,
+      } as TChunk);
+      if (terminal.sseData) writeToClient(terminal.sseData);
+      writeToClient(streamAdapter.formatEndSSE());
+      reply.raw.end();
+      streamCompleted = true;
+      return reply;
     }
     // If the stream never established (e.g. a provider 400 rejecting the
     // request), record the duration here for providers we instrument in the
@@ -3355,20 +3449,33 @@ async function handleStreaming<
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
       const errorMessage = provider.extractErrorMessage(lifecycleError);
+      // Provider errors routinely echo the prompt back.
       logger.info(
-        { profileId: agent.id, errorMessage },
+        { profileId: agent.id, ...(suppressContent ? {} : { errorMessage }) },
         "Persisting error interaction record for failed stream",
       );
-      await recordUsagelessInteraction({ error: errorMessage });
+      await recordUsagelessInteraction(
+        failedStreamResponse ?? { error: errorMessage },
+      );
     }
 
+    const formatStreamErrorFrame = provider.formatStreamErrorFrame;
     return handleError(
       lifecycleError,
       reply,
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
-      provider.formatStreamErrorFrame,
+      eofError && formatStreamErrorFrame
+        ? (event: unknown) => {
+            const source = asRecord(event);
+            return formatStreamErrorFrame({
+              ...source,
+              error: { ...asRecord(source?.error), code: eofError.code },
+            });
+          }
+        : formatStreamErrorFrame,
+      provider.translatesWireFormat,
     );
   } finally {
     keepAlive.stop();
@@ -3376,13 +3483,14 @@ async function handleStreaming<
     // Always record interaction (whether stream completed or was aborted)
     if (!streamCompleted) {
       logger.info(
+        { clientGone },
         "Stream was aborted before completion, recording partial interaction",
       );
     }
 
     // Client-visible first byte, preflight included. Observed here rather
-    // than at commit time because the commit can happen during preflight
-    // (dual-LLM keep-alive), before the handler has the labels in hand.
+    // than at commit time because the commit can happen during preflight,
+    // before the handler has the labels in hand.
     if (streamTiming.firstByteAt !== undefined) {
       metrics.llm.reportTimeToFirstByte(
         providerName,
@@ -3457,6 +3565,7 @@ async function handleStreaming<
           authMethod,
           billingMode,
           authenticatedApp,
+          billingTeamId,
           runId,
           userId,
           virtualKeyId,
@@ -3469,21 +3578,15 @@ async function handleStreaming<
           request: originalRequest,
           processedRequest: request,
           response: withProviderToolCallIds(
-            streamAdapter.toProviderResponse(),
+            failedStreamResponse ?? streamAdapter.toProviderResponse(),
             streamAdapter.state.toolCalls,
           ),
           actualModel,
           usage,
           costs,
-          dualLlmAnalyses,
-          unsafeContextBoundary,
           toolCallBlock,
         });
-        await persistProxyInteraction(
-          record,
-          encryptedChat,
-          delegationBillingEnvironmentId,
-        );
+        await persistProxyInteraction(record, encryptedChat);
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -3497,7 +3600,7 @@ async function handleStreaming<
       // call must not disappear from interaction history.
       await recordUsagelessInteraction(
         withProviderToolCallIds(
-          streamAdapter.toProviderResponse(),
+          failedStreamResponse ?? streamAdapter.toProviderResponse(),
           streamAdapter.state.toolCalls,
         ),
       );
@@ -3526,21 +3629,17 @@ async function handleNonStreaming<
     agent,
     originalRequest,
     actualModel,
-    contextIsTrusted,
     enabledToolNames,
     toolIdentity,
-    discoveredToolInvocationDefault,
-    dualLlmAnalyses,
-    unsafeContextBoundary,
     suppressContent,
     encryptedChat,
-    delegationBillingEnvironmentId,
     appId,
     externalAgentId,
     authMethod,
     billingMode: initialBillingMode,
     getBillingMode,
     authenticatedApp,
+    billingTeamId,
     userId,
     virtualKeyId,
     passthroughVirtualKeyId,
@@ -3550,7 +3649,6 @@ async function handleNonStreaming<
     source,
     runId,
     parentContext,
-    teamIds,
     teams,
     userTeams,
     pluginRegistry,
@@ -3567,6 +3665,7 @@ async function handleNonStreaming<
   };
   let billingMode = initialBillingMode;
   const requestStartTime = Date.now();
+  let codexGenerationError: CodexResponsesGenerationError | undefined;
 
   logger.debug(
     { model: actualModel },
@@ -3610,17 +3709,24 @@ async function handleNonStreaming<
         if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
       } catch (error) {
-        if (provider.recordRequestDurationInHandler) {
-          metrics.llm.reportRequestDuration(
-            providerName,
-            agent,
-            actualModel,
-            (Date.now() - requestStartTime) / 1000,
-            extractDurationStatusCode(error),
-            source,
-          );
+        if (error instanceof CodexResponsesGenerationError) {
+          // Reuse accounting/persistence below without running success hooks.
+          codexGenerationError = error;
+          result = error.completion as TResponse;
+          billingMode = getBillingMode();
+        } else {
+          if (provider.recordRequestDurationInHandler) {
+            metrics.llm.reportRequestDuration(
+              providerName,
+              agent,
+              actualModel,
+              (Date.now() - requestStartTime) / 1000,
+              extractDurationStatusCode(error),
+              source,
+            );
+          }
+          throw error;
         }
-        throw error;
       }
       if (provider.recordRequestDurationInHandler) {
         metrics.llm.reportRequestDuration(
@@ -3628,7 +3734,9 @@ async function handleNonStreaming<
           agent,
           actualModel,
           (Date.now() - requestStartTime) / 1000,
-          "200",
+          codexGenerationError && !codexGenerationError.isIncompleteTerminal
+            ? extractDurationStatusCode(codexGenerationError)
+            : "200",
           source,
         );
       }
@@ -3686,17 +3794,11 @@ async function handleNonStreaming<
           usage.reasoningTokens,
         );
       }
-      const cost = await utils.costOptimization.calculateCost(
-        actualModel,
-        usage.inputTokens,
-        usage.outputTokens,
-        providerName,
-        {
-          readTokens: usage.cacheReadTokens,
-          writeTokens: usage.cacheWriteTokens,
-          write1hTokens: usage.cacheWrite1hTokens,
-        },
-      );
+      const cost = await calculateUsageCost({
+        model: actualModel,
+        usage,
+        provider: providerName,
+      });
       if (cost !== undefined) {
         llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
         llmSpan.setAttribute(ATTR_ARCHESTRA_BILLING_MODE, billingMode);
@@ -3720,13 +3822,19 @@ async function handleNonStreaming<
     },
   });
 
-  const hostedHold = responseAdapter.withHeldHostedToolCalls
-    ? await holdProxyPluginHostedToolCalls(
-        ctx.pluginRegistry,
-        ctx.pluginContext,
-        responseAdapter.getHostedToolCalls?.() ?? [],
-      )
-    : null;
+  const generationFailed = await failResponsesGeneration({
+    response: responseAdapter.getOriginalResponse(),
+    ctx,
+    error: codexGenerationError,
+  });
+  const hostedHold =
+    !generationFailed && responseAdapter.withHeldHostedToolCalls
+      ? await holdProxyPluginHostedToolCalls(
+          ctx.pluginRegistry,
+          ctx.pluginContext,
+          responseAdapter.getHostedToolCalls?.() ?? [],
+        )
+      : null;
   for (const blocked of hostedHold?.blocked ?? []) {
     recordBlockedToolCallMetrics({
       allToolCallNames: [blocked.name],
@@ -3743,14 +3851,25 @@ async function handleNonStreaming<
     });
   }
   // A held turn's own calls rest on what was withheld, so they go with it.
-  const toolCalls = hostedHold ? [] : responseAdapter.getToolCalls();
+  const toolCalls =
+    generationFailed || hostedHold ? [] : responseAdapter.getToolCalls();
   logger.debug(
     { toolCallCount: toolCalls.length },
-    `[${providerName}Proxy] Non-streaming response received, checking tool invocation policies`,
+    `[${providerName}Proxy] Non-streaming response received, ruling on tool calls`,
   );
 
-  // Evaluate tool invocation policies
+  // Let the proxy plugins rule on the response's tool calls
   let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
+  if (toolCalls.length === 0) {
+    await recordGovernedThreadResponse({
+      context: ctx.pluginContext,
+      messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
+      providerCalls: [],
+      clientCalls: [],
+      refused: false,
+      held: !!hostedHold,
+    });
+  }
   if (toolCalls.length > 0) {
     const emittedToolCalls = toolCalls.map((toolCall) => ({
       id: toolCall.id,
@@ -3772,32 +3891,20 @@ async function handleNonStreaming<
       ctx.pluginContext,
       rewrittenToolCalls ?? emittedToolCalls,
       responseAdapter.withRewrittenToolCalls !== undefined,
-      async (calls) =>
-        ctx.connectionSetupBypass
-          ? null
-          : await utils.toolInvocation.evaluatePolicies(
-              toolCallsForPolicyEvaluation({
-                toolCalls: [...calls],
-                toolIdentity,
-                discoveredToolDefault: discoveredToolInvocationDefault,
-              }),
-              agent.id,
-              {
-                teamIds: teamIds ?? [],
-                externalAgentId,
-                sensitiveContextOrigin:
-                  utils.trustedData.sensitiveContextOriginFromBoundary(
-                    unsafeContextBoundary,
-                  ),
-              },
-              contextIsTrusted,
-              enabledToolNames,
-              { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-            ),
     );
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
     const toolInvocationRefusal = policyOutcome.refusal;
+    await recordGovernedThreadResponse({
+      context: ctx.pluginContext,
+      messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
+      providerCalls: toolCalls,
+      clientCalls: toolInvocationRefusal
+        ? []
+        : (rewrittenToolCalls ?? emittedToolCalls),
+      refused: toolInvocationRefusal !== null,
+      held: !!hostedHold,
+    });
     // Record metrics for tool calls substituted with denial notices.
     for (const blocked of policyOutcome.blocked) {
       recordBlockedToolCallMetrics({
@@ -3899,6 +4006,7 @@ async function handleNonStreaming<
         authMethod,
         billingMode,
         authenticatedApp,
+        billingTeamId,
         runId,
         userId,
         virtualKeyId,
@@ -3914,15 +4022,9 @@ async function handleNonStreaming<
         actualModel,
         usage,
         costs,
-        dualLlmAnalyses,
-        unsafeContextBoundary,
         toolCallBlock: toToolCallBlock(toolInvocationRefusal),
       });
-      await persistProxyInteraction(
-        refusalRecord,
-        encryptedChat,
-        delegationBillingEnvironmentId,
-      );
+      await persistProxyInteraction(refusalRecord, encryptedChat);
 
       if (pluginRegistry && pluginContext) {
         // A refusal is a terminal answer: the turn ends here, as it does on
@@ -3946,14 +4048,25 @@ async function handleNonStreaming<
   // Computed once: a translator adapter that rewrites remembers the inner
   // (logged) shape it produced, so `getLoggedResponse` below must observe the
   // same call that produced the client response.
-  const unobservedClientResponse =
-    hostedHold && responseAdapter.withHeldHostedToolCalls
+  const originalResponse = responseAdapter.getOriginalResponse();
+  const failedResponse =
+    generationFailed && !codexGenerationError
+      ? asRecord(originalResponse)
+      : null;
+  const unobservedClientResponse = failedResponse
+    ? (discardUnadmittedResponsesOutput(
+        originalResponse as Parameters<
+          typeof discardUnadmittedResponsesOutput
+        >[0],
+      ) as unknown as TResponse)
+    : hostedHold && responseAdapter.withHeldHostedToolCalls
       ? responseAdapter.withHeldHostedToolCalls(hostedHold.notices)
       : rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
         ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
-        : responseAdapter.getOriginalResponse();
+        : originalResponse;
   let clientResponse = unobservedClientResponse;
   if (
+    !generationFailed &&
     pluginRegistry &&
     pluginContext &&
     pluginRegistry.buffersModelResponse(pluginContext)
@@ -3976,7 +4089,7 @@ async function handleNonStreaming<
       );
     }
   }
-  if (pluginRegistry && pluginContext) {
+  if (!generationFailed && pluginRegistry && pluginContext) {
     const pluginResponse = await pluginRegistry.onModelResponse({
       ...pluginContext,
       response: clientResponse,
@@ -4029,6 +4142,7 @@ async function handleNonStreaming<
     );
   });
 
+  let responsePersisted = false;
   try {
     const record = buildInteractionRecord({
       agent,
@@ -4036,6 +4150,7 @@ async function handleNonStreaming<
       authMethod,
       billingMode,
       authenticatedApp,
+      billingTeamId,
       runId,
       userId,
       virtualKeyId,
@@ -4055,20 +4170,17 @@ async function handleNonStreaming<
       // purpose, and after a rewrite they hand back that shape's rewritten form.
       // Either way under the provider's call ids, as the requests are logged.
       response: withProviderToolCallIds(
-        responseAdapter.getLoggedResponse?.() ?? clientResponse,
+        generationFailed
+          ? clientResponse
+          : (responseAdapter.getLoggedResponse?.() ?? clientResponse),
         [...(rewrittenToolCalls ?? []), ...(hostedHold?.notices ?? [])],
       ),
       actualModel,
       usage,
       costs,
-      dualLlmAnalyses,
-      unsafeContextBoundary,
     });
-    await persistProxyInteraction(
-      record,
-      encryptedChat,
-      delegationBillingEnvironmentId,
-    );
+    await persistProxyInteraction(record, encryptedChat);
+    responsePersisted = true;
   } catch (interactionError) {
     logger.error(
       { err: interactionError, profileId: agent.id },
@@ -4076,6 +4188,14 @@ async function handleNonStreaming<
     );
   }
 
+  if (generationFailed) {
+    if (codexGenerationError && !codexGenerationError.isIncompleteTerminal) {
+      throw responsePersisted
+        ? new RecordedCodexGenerationFailure(codexGenerationError)
+        : codexGenerationError;
+    }
+    return sendResponse(clientResponse);
+  }
   if (pluginRegistry && pluginContext) {
     await pluginRegistry.complete({
       ...pluginContext,
@@ -4118,6 +4238,53 @@ async function handleNonStreaming<
     if (appended) markSessionReceiptIssued(sessionReceipt);
   }
   return sendResponse(outboundResponse);
+}
+
+class RecordedCodexGenerationFailure extends ApiError {
+  constructor(error: CodexResponsesGenerationError) {
+    super(502, error.message);
+  }
+}
+
+/** A native terminal failure ends the HTTP response, not the governed turn. */
+async function failResponsesGeneration(params: {
+  response: unknown;
+  ctx: Pick<LLMProxyContext<unknown>, "pluginRegistry" | "pluginContext">;
+  error?: Error;
+}): Promise<boolean> {
+  const response = asRecord(params.response);
+  if (
+    !params.error &&
+    (response?.object !== "response" ||
+      (response.status !== "incomplete" && response.status !== "failed"))
+  ) {
+    return false;
+  }
+  const details = asRecord(response?.error);
+  const reason = asRecord(response?.incomplete_details)?.reason;
+  const error =
+    params.error ??
+    new Error(
+      typeof details?.message === "string"
+        ? details.message
+        : `Provider response ${response?.status}${
+            typeof reason === "string" ? `: ${reason}` : ""
+          }`,
+    );
+  const { pluginRegistry, pluginContext } = params.ctx;
+  if (pluginRegistry && pluginContext) {
+    try {
+      await pluginRegistry.fail({ ...pluginContext, error });
+    } catch (pluginError) {
+      // Cleanup still runs in registry.fail's finally block. The native failure
+      // remains the only client terminal, even if a plugin's error hook fails.
+      logger.warn(
+        { err: pluginError },
+        "Plugin cleanup failed while handling provider terminal failure",
+      );
+    }
+  }
+  return true;
 }
 
 // Verifies that preamble frames carry no content before release without buffering.
@@ -4271,15 +4438,83 @@ function observedAppaSession(params: {
   }
 }
 
+/**
+ * Whether `message` is the echoed calls the ruling borrowed: an assistant
+ * message with the same tool call ids, in the same order.
+ */
+function isEchoOf(message: unknown, echo: object): boolean {
+  const ids = (value: unknown): unknown[] => {
+    const content = (value as { content?: unknown } | undefined)?.content;
+    return Array.isArray(content)
+      ? content.map((block) => (block as { id?: unknown } | undefined)?.id)
+      : [];
+  };
+  if ((message as { role?: string } | undefined)?.role !== "assistant")
+    return false;
+  const found = ids(message);
+  const expected = ids(echo);
+  return (
+    expected.length > 0 &&
+    found.length === expected.length &&
+    found.every((id, index) => id === expected[index])
+  );
+}
+
+function parseCallArguments(args: unknown): Record<string, unknown> {
+  if (args && typeof args === "object") return args as Record<string, unknown>;
+  try {
+    const parsed = typeof args === "string" ? JSON.parse(args) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Keeps what a governed provider thread was ruled on, so its next continue can
+ * be ruled on too. A response the client holds a rewrite of that the provider
+ * cannot continue from is kept as diverged: the continue is answered with a
+ * replay request.
+ */
+async function recordGovernedThreadResponse(params: {
+  context: LlmProxyRequestContext | undefined;
+  messageId: string | undefined;
+  providerCalls: readonly { id: string }[];
+  clientCalls: readonly { id: string; name: string; arguments?: unknown }[];
+  refused: boolean;
+  held: boolean;
+}): Promise<void> {
+  const record = params.context?.resources.get(APPA_THREAD_RECORD) as
+    | ThreadRecord
+    | undefined;
+  if (!record) return;
+  await threadStates.record({
+    record,
+    messageId: params.messageId,
+    calls: params.refused
+      ? []
+      : params.clientCalls.map((call) => ({
+          id: call.id,
+          name: call.name,
+          input: parseCallArguments(call.arguments),
+        })),
+    diverged: !clientKeepsThreadPairing({
+      providerCallIds: params.providerCalls.map((call) => call.id),
+      clientCallIds: params.clientCalls.map((call) =>
+        withoutTrajectoryStamp(call.id),
+      ),
+      refused: params.refused,
+      held: params.held,
+    }),
+  });
+}
+
 async function evaluateProxyPluginToolCalls(
   registry: LlmProxyPluginRegistry | undefined,
   context: LlmProxyRequestContext | undefined,
   toolCalls: readonly AccumulatedToolCall[],
   /** Whether this transport re-emits the calls the plugins return. */
   canRewriteToolCalls: boolean,
-  validate: (
-    calls: LlmProxyToolCallsContext["toolCalls"],
-  ) => Promise<LlmProxyToolCallRefusal | null>,
 ): Promise<{
   refusal: LlmProxyToolCallRefusal | null;
   toolCalls: AccumulatedToolCall[];
@@ -4288,7 +4523,7 @@ async function evaluateProxyPluginToolCalls(
 }> {
   if (!registry || !context)
     return {
-      refusal: await validate(toolCalls),
+      refusal: null,
       toolCalls: [...toolCalls],
       wasRewritten: false,
       blocked: [],
@@ -4301,10 +4536,11 @@ async function evaluateProxyPluginToolCalls(
         ? call.arguments
         : JSON.stringify(call.arguments),
   }));
-  const outcome = await registry.onToolCalls(
-    { ...context, toolCalls, canRewriteToolCalls },
-    validate,
-  );
+  const outcome = await registry.onToolCalls({
+    ...context,
+    toolCalls,
+    canRewriteToolCalls,
+  });
   if (outcome.decision === "allow") {
     const releasedCalls = outcome.toolCalls.map((toolCall) => ({
       ...toolCall,
@@ -4562,87 +4798,13 @@ function extractDurationStatusCode(error: unknown): string {
 async function persistProxyInteraction(
   record: InsertInteraction,
   encryptedChat: EncryptedChatAuditDisposition,
-  environmentIdOverride?: string,
 ): Promise<void> {
   await InteractionModel.create(
     encryptedChat.kind === "redact"
       ? redactEncryptedChatInteraction(record)
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
-    environmentIdOverride ? { environmentIdOverride } : undefined,
   );
-}
-
-/**
- * Resolve the environment an advisor consultation bills to, from
- * DELEGATION_BILLING_ENVIRONMENT_HEADER. Honored only when all three hold:
- * the request arrived over the loopback socket (the in-process A2A executor's
- * path — the raw socket peer, not request.ip, which trustProxy can rewrite
- * from forwarded headers), the executing agent row is the advisor built-in,
- * and the id names an environment of that agent's organization. Anything else
- * ignores the header with a warning: the worst a spoofed value can do is
- * misattribute advisor spend between one organization's environments.
- */
-async function resolveDelegationBillingEnvironment(
-  request: FastifyRequest,
-  agent: GatewayAgent,
-): Promise<string | undefined> {
-  const raw =
-    request.headers[DELEGATION_BILLING_ENVIRONMENT_HEADER.toLowerCase()];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (!value) {
-    return undefined;
-  }
-
-  if (!isLoopbackRequest(request)) {
-    logger.warn(
-      { agentId: agent.id },
-      "Ignoring delegation billing environment header from a non-loopback peer",
-    );
-    return undefined;
-  }
-  if (agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR) {
-    logger.warn(
-      { agentId: agent.id },
-      "Ignoring delegation billing environment header on a non-advisor agent",
-    );
-    return undefined;
-  }
-  // The env-id column is a uuid; a non-uuid value would make the lookup's cast
-  // throw and 500 the LLM call (leaking the query), so reject it here — an
-  // unusable header must be ignored, not fatal.
-  if (!isUuid(value)) {
-    logger.warn(
-      { agentId: agent.id },
-      "Ignoring malformed delegation billing environment header",
-    );
-    return undefined;
-  }
-  // A lookup failure must not fail the LLM call — the header only refines
-  // billing attribution, so on any error fall back to the agent's own env.
-  let environment: Awaited<
-    ReturnType<typeof EnvironmentModel.findByIdForOrganization>
-  >;
-  try {
-    environment = await EnvironmentModel.findByIdForOrganization(
-      value,
-      agent.organizationId,
-    );
-  } catch (error) {
-    logger.warn(
-      { err: error, agentId: agent.id },
-      "Ignoring delegation billing environment header after a lookup error",
-    );
-    return undefined;
-  }
-  if (!environment) {
-    logger.warn(
-      { agentId: agent.id, environmentId: value },
-      "Ignoring delegation billing environment header naming an unknown environment",
-    );
-    return undefined;
-  }
-  return environment.id;
 }
 
 /**

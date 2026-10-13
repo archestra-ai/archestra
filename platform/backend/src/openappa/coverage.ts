@@ -52,11 +52,16 @@ class OpenAppaCoverageService {
     params: { organizationId: string; catalogId: string } & CoverageVisibility,
   ): Promise<CoverageTool[]> {
     if (!params.visibleCatalogIds?.includes(params.catalogId)) return [];
-    const { tools } = await buildReport(params.organizationId, {
-      ...params,
-      visibleCatalogIds: [params.catalogId],
-      includeAutoModeTools: false,
-    });
+    const { tools } = await buildReport(
+      params.organizationId,
+      {
+        ...params,
+        visibleCatalogIds: [params.catalogId],
+        includeAutoModeTools: false,
+        includeAppCatalogs: true,
+      },
+      params.catalogId,
+    );
     return tools
       .map((row) => row.tool)
       .filter((tool) => tool.catalogId === params.catalogId);
@@ -252,6 +257,8 @@ class OpenAppaCoverageService {
         include: battery.include,
         namespaces: battery.namespaces,
         credentials: battery.credentials,
+        benefit: battery.benefit,
+        setup: battery.setup,
         newlyCovered: wouldGovern(battery.policy, serverTools),
         rules: batteryRules(battery.policy, serverTools),
       });
@@ -433,6 +440,8 @@ type CoverageVisibility = {
   autoModePage?: CoverageEntitiesQuery;
   /** Only resolve Auto-mode access for the target whose tools are requested. */
   autoModeEntityId?: string;
+  /** Per-catalog inspection reads app catalogs too; the overview leaves them out. */
+  includeAppCatalogs?: boolean;
 };
 
 /** A rule as it applies to one full tool name, battery rules once per alias target. */
@@ -443,15 +452,20 @@ type Candidate = {
   kind: Exclude<CoverageKind, "unlisted">;
 };
 
+/**
+ * `catalogId` reads only that catalog's tools and assignments. Each tool's row
+ * depends on its own catalog, assignments and the policy alone, so the rows
+ * for that catalog are the same as an organization-wide report's.
+ */
 async function buildReport(
   organizationId: string,
   visibility?: CoverageVisibility,
+  catalogId?: string,
 ): Promise<Report> {
   const [snapshot, inventory] = await Promise.all([
     openappaBatteriesService.coverageSnapshot(organizationId),
-    ToolModel.findCoverageInventory(
-      organizationId,
-      visibility?.userId
+    ToolModel.findCoverageInventory(organizationId, {
+      visibility: visibility?.userId
         ? {
             userId: visibility.userId,
             agentTypes: visibility.agentTypes ?? ["agent", "mcp_gateway"],
@@ -459,7 +473,9 @@ async function buildReport(
               visibility.excludeOtherPersonalTypes ?? [],
           }
         : undefined,
-    ),
+      includeAppCatalogs: visibility?.includeAppCatalogs,
+      catalogId,
+    }),
   ]);
   const { resolution, rootContent } = snapshot;
   const refused = snapshot.lastError !== null;
@@ -736,11 +752,7 @@ async function buildReport(
   }
   const visibleCatalogIds = new Set(visibility?.visibleCatalogIds ?? []);
   for (const catalog of inventory.catalogs) {
-    if (
-      catalog.id === ARCHESTRA_MCP_CATALOG_ID ||
-      !visibleCatalogIds.has(catalog.id)
-    )
-      continue;
+    if (!visibleCatalogIds.has(catalog.id)) continue;
     const serverTools = toolsByCatalog.get(catalog.id) ?? [];
     entitiesById.set(catalog.id, {
       id: catalog.id,
@@ -788,11 +800,7 @@ function autoModePageEntityIds(
       type: entity.agentType,
     })),
     ...inventory.catalogs
-      .filter(
-        (catalog) =>
-          catalog.id !== ARCHESTRA_MCP_CATALOG_ID &&
-          visibleCatalogIds.has(catalog.id),
-      )
+      .filter((catalog) => visibleCatalogIds.has(catalog.id))
       .map((catalog) => ({
         id: catalog.id,
         name: catalog.name,

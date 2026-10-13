@@ -16,6 +16,7 @@ export const SLACK_REQUIRED_BOT_SCOPES = [
   "commands",
   "app_mentions:read",
   "channels:history",
+  "channels:join",
   "channels:read",
   "chat:write",
   "files:read",
@@ -25,7 +26,6 @@ export const SLACK_REQUIRED_BOT_SCOPES = [
   "im:history",
   "im:read",
   "im:write",
-  "reactions:read",
   "users:read",
   "users:read.email",
 ] as const;
@@ -93,4 +93,24 @@ export function buildSlackSlashCommandsForCommand(
     STATUS: `${commandPrefix}${SLACK_SLASH_COMMAND_SUFFIXES.STATUS}`,
     HELP: `${commandPrefix}${SLACK_SLASH_COMMAND_SUFFIXES.HELP}`,
   };
+}
+
+/**
+ * Slack's rule for a bot's handle, which is what people type after @:
+ * lowercase letters, digits, `.`, `_` and `-`, at most 35 characters.
+ */
+export const SLACK_BOT_HANDLE_PATTERN = /^[a-z0-9][a-z0-9._-]{0,34}$/;
+
+/**
+ * The default handle for an agent's Slack bot: "Archestra" + "Marketing Team"
+ * → "archestra_marketing_team".
+ */
+export function slackHandleFor(appName: string, agentName: string): string {
+  return [appName, agentName]
+    .join("_")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 35);
 }

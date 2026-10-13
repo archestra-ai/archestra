@@ -91,8 +91,9 @@ vi.mock("@/observability/tracing", async (importOriginal) => {
   };
 });
 
-vi.mock("./context-compaction", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./context-compaction")>();
+vi.mock("./compaction/compact-messages", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./compaction/compact-messages")>();
   return {
     ...actual,
     compactMessagesForChat: mockCompactMessagesForChat,

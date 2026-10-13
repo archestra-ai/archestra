@@ -32,7 +32,6 @@ vi.mock("sonner");
 vi.mock("@/lib/auth/auth.query");
 
 const origin = "http://localhost:9000";
-const entityId = "f12fd5c7-d482-4a3b-9971-bbe81ca4fdf0";
 const serverId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
 const server = setupServer(
   http.get("http://localhost:9000/api/agents/all", () =>
@@ -70,58 +69,69 @@ beforeEach(() => {
   );
   server.use(
     http.get(`${origin}/api/openappa/coverage/entities`, ({ request }) => {
-      entityRequests.push(new URL(request.url).searchParams);
+      const params = new URL(request.url).searchParams;
+      entityRequests.push(params);
+      const inventory = [
+        {
+          id: ARCHESTRA_MCP_CATALOG_ID,
+          name: "Archestra",
+          type: "mcp_server",
+          scope: "org",
+          builtIn: true,
+          builtInAgentConfig: { name: "openappa-configuration-agent" },
+          authorId: null,
+          labels: [],
+          icon: null,
+          toolCount: 3,
+          // The third tool has only a selector rule; coverage counts the
+          // unconditional rules, consistently with the bar and overview.
+          governedCount: 3,
+          fallbackCount: 1,
+          builtInCount: 1,
+          rules: {
+            root: 1,
+            battery: 1,
+            notEnforced: 0,
+            notCovered: 1,
+            catchAll: 0,
+          },
+          autoMode: false,
+        },
+        {
+          id: serverId,
+          name: "GitHub",
+          type: "mcp_server",
+          scope: "personal",
+          icon: null,
+          toolCount: 19,
+          governedCount: 4,
+          fallbackCount: 15,
+          builtInCount: 0,
+          rules: {
+            root: 0,
+            battery: 4,
+            notEnforced: 0,
+            notCovered: 15,
+            catchAll: 0,
+          },
+          autoMode: false,
+        },
+      ];
+      inventory.push({
+        ...inventory[0],
+        id: "research-gateway",
+        name: "Research gateway",
+        type: "mcp_gateway",
+      });
+      const data = inventory.filter(
+        (entity) => !params.get("type") || entity.type === params.get("type"),
+      );
       return HttpResponse.json({
-        data: [
-          {
-            id: entityId,
-            name: "Research gateway",
-            type: "mcp_gateway",
-            scope: "org",
-            builtIn: true,
-            builtInAgentConfig: { name: "openappa-configuration-agent" },
-            authorId: null,
-            labels: [],
-            icon: null,
-            toolCount: 3,
-            // The third tool has only a selector rule; coverage counts the
-            // unconditional rules, consistently with the bar and overview.
-            governedCount: 3,
-            fallbackCount: 1,
-            builtInCount: 1,
-            rules: {
-              root: 1,
-              battery: 1,
-              notEnforced: 0,
-              notCovered: 1,
-              catchAll: 0,
-            },
-            autoMode: true,
-          },
-          {
-            id: serverId,
-            name: "GitHub",
-            type: "mcp_server",
-            scope: "personal",
-            icon: null,
-            toolCount: 19,
-            governedCount: 4,
-            fallbackCount: 15,
-            builtInCount: 0,
-            rules: {
-              root: 0,
-              battery: 4,
-              notEnforced: 0,
-              notCovered: 15,
-              catchAll: 0,
-            },
-            autoMode: false,
-          },
-        ],
+        data,
         pagination: {
           currentPage: 1,
           limit: 10,
-          total: 2,
+          total: data.length,
           totalPages: 1,
           hasNext: false,
           hasPrev: false,
@@ -190,7 +200,7 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-test("lists registry servers and gateways, servers first, each with a chat and scoped details", async () => {
+test("lists MCP servers including Archestra, each with a chat and scoped details", async () => {
   render(
     <QueryClientProvider
       client={
@@ -202,24 +212,31 @@ test("lists registry servers and gateways, servers first, each with a chat and s
   );
 
   const targets = screen;
-  expect(await targets.findByText("Research gateway")).toBeVisible();
-  expect(entityRequests[0]?.get("sortBy")).toBe("type");
+  expect(await targets.findByText("Archestra")).toBeVisible();
+  expect(targets.queryByText("Research gateway")).toBeNull();
+  expect(targets.getByText("2 MCP servers")).toBeVisible();
+  expect(entityRequests[0]?.get("sortBy")).toBe("name");
+  expect(entityRequests[0]?.get("type")).toBe("mcp_server");
+  expect(screen.queryByRole("combobox", { name: "Type" })).toBeNull();
   expect(entityRequests[0]?.get("sortDirection")).toBe("asc");
   // One chat for every target, whatever its coverage.
-  const gatewayLink = await targets.findByRole("link", {
-    name: "Ask in chat: Research gateway",
+  const archestraLink = await targets.findByRole("link", {
+    name: "Ask in chat: Archestra",
   });
-  const gatewayUrl = new URL(gatewayLink.getAttribute("href") ?? "", origin);
-  expect([...gatewayUrl.searchParams.keys()]).toEqual([
+  const archestraUrl = new URL(
+    archestraLink.getAttribute("href") ?? "",
+    origin,
+  );
+  expect([...archestraUrl.searchParams.keys()]).toEqual([
     "agentId",
     "user_prompt",
   ]);
-  expect(gatewayUrl.searchParams.get("agentId")).toBe("appa-agent");
-  expect(gatewayUrl.searchParams.get("user_prompt")).toContain(
-    'MCP gateway "Research gateway"',
+  expect(archestraUrl.searchParams.get("agentId")).toBe("appa-agent");
+  expect(archestraUrl.searchParams.get("user_prompt")).toContain(
+    'MCP server "Archestra"',
   );
-  expect(gatewayUrl.searchParams.get("user_prompt")).toContain(
-    `Target ID: ${entityId}`,
+  expect(archestraUrl.searchParams.get("user_prompt")).toContain(
+    `Target ID: ${ARCHESTRA_MCP_CATALOG_ID}`,
   );
   const serverLink = await targets.findByRole("link", {
     name: "Ask in chat: GitHub",
@@ -239,25 +256,24 @@ test("lists registry servers and gateways, servers first, each with a chat and s
   ).toBeVisible();
   for (const header of ["Name", "Type", "Tool coverage", "Actions"])
     expect(targets.getByRole("columnheader", { name: header })).toBeVisible();
-  expect(targets.getByRole("columnheader", { name: "Type" })).toHaveAttribute(
+  expect(targets.getByRole("columnheader", { name: "Name" })).toHaveAttribute(
     "aria-sort",
     "ascending",
   );
-  expect(targets.getByText("Auto mode")).toBeVisible();
+  expect(targets.queryByText("Auto mode")).toBeNull();
   expect(targets.getByText("4 of 19 covered")).toBeVisible();
-  fireEvent.click(targets.getByRole("button", { name: /Research gateway/ }));
-  const researchSummary = within(await screen.findByRole("dialog"));
+  fireEvent.click(targets.getByRole("button", { name: /Archestra/ }));
+  const archestraSummary = within(await screen.findByRole("dialog"));
   for (const [value, label] of [
-    ["3", "tools reachable for you"],
+    ["3", "synced tools"],
     ["2", "covered"],
     ["1", "no rule"],
-    ["1", "built-in tool"],
   ]) {
-    expect(researchSummary.getByText(label).parentElement).toHaveTextContent(
+    expect(archestraSummary.getByText(label).parentElement).toHaveTextContent(
       `${value}${label}`,
     );
   }
-  expect(await researchSummary.findAllByText("No rule")).toHaveLength(2);
+  expect(await archestraSummary.findByText("No rule")).toBeVisible();
   const dialog = screen.getByRole("dialog");
   expect(
     within(dialog).getByRole("columnheader", { name: "MCP server" }),
@@ -265,16 +281,8 @@ test("lists registry servers and gateways, servers first, each with a chat and s
   expect(
     within(dialog).getByRole("columnheader", { name: "Tool name" }),
   ).toBeVisible();
-  expect(within(dialog).getByText("GitHub")).toBeVisible();
-  expect(within(dialog).getByText("🐙")).toBeVisible();
-  await userEvent.click(
-    await within(dialog).findByRole("combobox", { name: "MCP server" }),
-  );
-  await userEvent.click(screen.getByRole("option", { name: "GitHub" }));
-  await waitFor(() => {
-    expect(within(dialog).getByText("get_issue")).toBeVisible();
-    expect(within(dialog).queryByText("search_tools")).not.toBeInTheDocument();
-  });
+  expect(await within(dialog).findByText("search_tools")).toBeVisible();
+  expect(within(dialog).queryByText("get_issue")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
   fireEvent.click(targets.getByRole("button", { name: /GitHub/ }));
   const githubSummary = within(await screen.findByRole("dialog"));
@@ -691,7 +699,7 @@ test("sorts by name, type, or tool count from the headers, kept in the URL", asy
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(
-      "entitiesSortBy=tools&entitiesSortDirection=asc&entitiesPage=2",
+      "entitiesSortBy=tools&entitiesSortDirection=asc&entitiesPage=2&entitiesType=mcp_gateway",
     ) as unknown as ReturnType<typeof useSearchParams>,
   );
   render(
@@ -704,7 +712,9 @@ test("sorts by name, type, or tool count from the headers, kept in the URL", asy
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByText("Research gateway")).toBeVisible();
+  expect(await screen.findByText("Archestra")).toBeVisible();
+  expect(entityRequests[0]?.get("type")).toBe("mcp_server");
+  expect(screen.queryByText("Research gateway")).toBeNull();
   expect(entityRequests[0]?.get("sortBy")).toBe("tools");
   expect(entityRequests[0]?.get("sortDirection")).toBe("asc");
   expect(

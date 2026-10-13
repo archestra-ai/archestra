@@ -4763,7 +4763,7 @@ describe("mcp server core route coverage", () => {
       await expect(McpServerModel.findById(runtime.id)).resolves.not.toBeNull();
     });
 
-    test("uninstalling the last connection retains tools, policies, and assignments (binding retained)", async ({
+    test("uninstalling the last connection retains tools and assignments (binding retained)", async ({
       makeInternalMcpCatalog,
     }) => {
       const { default: AgentModel } = await import("@/models/agent");
@@ -4816,12 +4816,6 @@ describe("mcp server core route coverage", () => {
       expect(assignmentBefore).toHaveLength(1);
       expect(assignmentBefore[0].mcpServerId).toBe(installedServer.id);
 
-      const policiesBefore = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-      expect(policiesBefore.length).toBeGreaterThan(0);
-
       const deleteResponse = await app.inject({
         method: "DELETE",
         url: `/api/mcp_server/${installedServer.id}`,
@@ -4838,12 +4832,6 @@ describe("mcp server core route coverage", () => {
         .from(schema.toolsTable)
         .where(eq(schema.toolsTable.catalogId, catalog.id));
       expect(toolsAfter).toHaveLength(1);
-
-      const policiesAfter = await db
-        .select()
-        .from(schema.toolInvocationPoliciesTable)
-        .where(eq(schema.toolInvocationPoliciesTable.toolId, tool.id));
-      expect(policiesAfter).toHaveLength(policiesBefore.length);
 
       const assignmentAfter = await db
         .select({ mcpServerId: schema.agentToolsTable.mcpServerId })

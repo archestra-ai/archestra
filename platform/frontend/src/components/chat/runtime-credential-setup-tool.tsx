@@ -35,12 +35,12 @@ export function RuntimeCredentialSetupTool({
 
   return (
     <>
-      <InlineNotice variant="neutral" className="my-2 w-full max-w-2xl">
+      <InlineNotice variant="neutral" className="my-2 w-full">
         <GithubIcon aria-hidden />
         <span className="font-medium">GitHub sync</span>
         <InlineNoticeText className="flex-1">
-          Install an App on the future repository owner with Administration,
-          Contents, and Pull requests Read &amp; write.
+          Install an App on the policy repository with Contents and Pull
+          requests Read &amp; write.
         </InlineNoticeText>
         <Button
           size="xs"

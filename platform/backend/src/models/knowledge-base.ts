@@ -23,7 +23,9 @@ import type {
 import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessSelection,
+} from "./resource-permission-subject";
 
 /**
  * Filters shared by the list and its count, so a page can never show N rows
@@ -48,6 +50,8 @@ async function buildOrgFilters(params: {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonal?: boolean;
+  /** The list's "Show" filter, read against `viewerUserId`. */
+  access?: ResourceAccessSelection;
 }) {
   const normalizedSearch = params.search?.trim();
   const viewer = params.viewerUserId
@@ -108,6 +112,16 @@ async function buildOrgFilters(params: {
           ResourcePermissionPolicyModel.grantsReadToAnyTeam({
             ...ownAudienceContext(params.organizationId),
             teamIds: params.teamIds,
+          }),
+        ]
+      : []),
+    ...(viewer && params.viewerUserId && params.access
+      ? [
+          ResourcePermissionPolicyModel.accessRelationCondition({
+            ...ownAudienceContext(params.organizationId),
+            userId: params.viewerUserId,
+            subjects: viewer.subjects,
+            ...params.access,
           }),
         ]
       : []),
@@ -179,6 +193,8 @@ class KnowledgeBaseModel {
     authorIds?: string[];
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
+    /** The list's "Show" filter, read against `viewerUserId`. */
+    access?: ResourceAccessSelection;
   }): Promise<KnowledgeBase[]> {
     const filters = await buildOrgFilters(params);
 
@@ -442,6 +458,8 @@ class KnowledgeBaseModel {
     authorIds?: string[];
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
+    /** The list's "Show" filter, read against `viewerUserId`. */
+    access?: ResourceAccessSelection;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })

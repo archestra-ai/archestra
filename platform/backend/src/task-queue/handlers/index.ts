@@ -1,9 +1,11 @@
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { threadStates } from "@/openappa/thread-state";
 import { deleteExpiredUnenforcedRecords } from "@/openappa/unenforced";
 import {
   checkDueAppaGithubSyncs,
   syncAppaGithubPolicy,
 } from "@/services/openappa-github-sync";
+import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import type { TaskQueueService } from "../task-queue";
 import { handleAuditLogCleanup } from "./audit-log-cleanup-handler";
 import { handleBatchEmbedding } from "./batch-embedding-handler";
@@ -72,12 +74,17 @@ export function registerTaskHandlers(taskQueueService: TaskQueueService): void {
       throw new Error("Missing organizationId");
     await syncAppaGithubPolicy(payload.organizationId);
   });
+  taskQueueService.registerHandler(
+    "openappa_policy_validation",
+    runAutomaticOpenAppaPolicyTests,
+  );
   taskQueueService.registerHandler("openappa_effective_policy_recompile", () =>
     openappaBatteriesService.recompileAll(),
   );
-  taskQueueService.registerHandler("openappa_unenforced_cleanup", () =>
-    deleteExpiredUnenforcedRecords(),
-  );
+  taskQueueService.registerHandler("openappa_unenforced_cleanup", async () => {
+    await deleteExpiredUnenforcedRecords();
+    await threadStates.deleteExpired();
+  });
   taskQueueService.registerHandler("skill_github_sync", handleSkillGithubSync);
   taskQueueService.registerHandler(
     "check_due_plugin_github_syncs",

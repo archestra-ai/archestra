@@ -15,6 +15,7 @@ import { usePermissionSources } from "@/lib/auth/permission-sources.query";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { environmentKeys } from "./environment.query";
+import { parseRoleAssignmentBlocked } from "./role-assignment-blocked";
 import {
   getApiErrorInternalCode,
   handleApiError,
@@ -294,6 +295,9 @@ export function useCreateInvitation(organizationId: string | undefined) {
       });
 
       if (response.error) {
+        // A refused role is explained in the dialog, not a toast.
+        const blocked = parseRoleAssignmentBlocked(response.error);
+        if (blocked) throw blocked;
         toast.error(
           response.error.message || "Failed to generate invitation link",
         );
@@ -679,6 +683,9 @@ export function useUpdateAuthSettings(
         await archestraApiSdk.updateAuthSettings({ body: data });
 
       if (error) {
+        // A refused default role is explained on the page, not a toast.
+        const blocked = parseRoleAssignmentBlocked(error);
+        if (blocked) throw blocked;
         toast.error(onErrorMessage);
         return null;
       }

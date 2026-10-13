@@ -1,6 +1,7 @@
 import { promisify } from "node:util";
 import { gzip } from "node:zlib";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import type { OpenAppaSession } from "./service";
@@ -11,7 +12,8 @@ export async function recordOpenAppaClientFailure(params: {
   toolCallId: string;
   ruling: string;
 }) {
-  if (!config.openappa.enabled || !config.openappa.yellEnabled) return;
+  if (!enterpriseTier.isOpenappaActive() || !config.openappa.yellEnabled)
+    return;
   try {
     const message =
       "The client could not receive an OpenAPPA remedy because its request did not declare the gateway remedy tools.";

@@ -13,6 +13,7 @@ import {
   secretManager,
 } from "@/secrets-manager";
 import { ApiError } from "@/types";
+import { SecretDecryptionError } from "@/utils/secret-decryption-error";
 
 /**
  * A non-fatal warning attached to a connection setup when the Anthropic key it
@@ -130,7 +131,7 @@ export async function ensureConnectionVirtualKey(params: {
   });
 
   if (existing) {
-    const secret = await secretManager().getSecret(existing.secretId);
+    const secret = await readReusableConnectionSecret(existing.secretId);
     if (secret) {
       await VirtualApiKeyModel.ensureProviderMapping({
         virtualApiKeyId: existing.id,
@@ -211,7 +212,7 @@ export async function ensureConnectionPassthroughKey(params: {
   if (existing) {
     const secret =
       existing.keyType === "passthrough"
-        ? await secretManager().getSecret(existing.secretId)
+        ? await readReusableConnectionSecret(existing.secretId)
         : null;
     if (existing.keyType === "passthrough" && secret) {
       return existing.id;
@@ -273,6 +274,17 @@ export async function readVirtualKeyValue(
 // ===================================================================
 // Internal helpers
 // ===================================================================
+
+async function readReusableConnectionSecret(secretId: string) {
+  try {
+    return await secretManager().getSecret(secretId);
+  } catch (error) {
+    if (!(error instanceof SecretDecryptionError)) throw error;
+    // These tokens are generated locally. The existing replacement flow can
+    // revoke the unreadable key and provision a fresh one for new setups.
+    return null;
+  }
+}
 
 /**
  * Validates the admin-mapped key at use time (it may have been deleted or

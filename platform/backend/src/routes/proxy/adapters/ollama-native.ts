@@ -221,8 +221,8 @@ class OllamaNativeRequestAdapter
     if (Object.keys(this.toolResultUpdates).length > 0) {
       messages = messages.map((message, index) => {
         if (message.role !== "tool") return message;
-        // Must use the same identity `toCommonFormat` handed to the guardrails,
-        // or a sanitized result silently reverts to the untrusted original.
+        // Must use the same identity `toCommonFormat` handed to the plugins,
+        // or an approved replacement silently reverts to the original.
         const updated =
           this.toolResultUpdates[this.toolResultId(message, index)];
         return updated !== undefined
@@ -303,9 +303,7 @@ class OllamaNativeRequestAdapter
         content: nativeContentToText(message.content),
       };
       // Every tool result must surface as a tool call, even when the name is
-      // unresolvable. `evaluateIfContextIsTrusted` decides a context is trusted
-      // purely from an empty tool-call list, so dropping one here disables
-      // trusted-data policies and dual-LLM sanitization with no other signal.
+      // unresolvable, or common-format readers lose it with no other signal.
       if (message.role === "tool") {
         const toolCall = this.findToolCallInMessages(messages, message);
         common.toolCalls = [
@@ -430,11 +428,11 @@ class OllamaNativeStreamAdapter
   readonly state: StreamAccumulatorState;
   /**
    * Seeded now, then overwritten by each upstream chunk. `created_at` is
-   * REQUIRED by ollama-ai-provider-v2's stream schema, and the dual-LLM
-   * progress callbacks emit lines through `formatTextDeltaSSE` before
-   * `executeStream` has produced a chunk — leaving this undefined makes
-   * `JSON.stringify` drop the key and the client fails the whole stream with
-   * `finishReason: "error"` on the very first progress line.
+   * REQUIRED by ollama-ai-provider-v2's stream schema, and the proxy can
+   * format lines through `formatTextDeltaSSE` before `executeStream` has
+   * produced a chunk — leaving this undefined makes `JSON.stringify` drop the
+   * key and the client fails the whole stream with `finishReason: "error"` on
+   * the very first such line.
    */
   private createdAt: string = new Date().toISOString();
   private thinking = "";

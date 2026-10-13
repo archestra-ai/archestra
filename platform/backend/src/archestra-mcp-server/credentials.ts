@@ -1,6 +1,12 @@
-import { TOOL_TRANSFER_CREDENTIAL_SHORT_NAME } from "@archestra/shared";
+import {
+  type BatteryCredentialRequest,
+  BatteryCredentialRequestSchema,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
+  TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
+} from "@archestra/shared";
 import { z } from "zod";
 import { AgentModel } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declarePersonalRuntimeCredential,
   transferPersonalRuntimeCredential,
@@ -13,11 +19,14 @@ import {
   listRuntimeCredentialDefinitions,
   updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
+import { CredentialAccess } from "@/services/credential-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
+  ApiError,
   InsertRuntimeCredentialDefinitionSchema,
   UpdateRuntimeCredentialDefinitionSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   agentCredentialSetupUrl,
   catchError,
@@ -157,6 +166,12 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const actor = requireActor(context);
       try {
+        await CredentialAccess.requireByKey({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+          key: args.key,
+          action: "update",
+        });
         const updated = await updateRuntimeCredentialDefinition({
           organizationId: actor.organizationId,
           key: args.key,
@@ -168,7 +183,7 @@ const registry = defineArchestraTools([
           name: updated.name,
         });
       } catch (error) {
-        return catchError(error, "updating the credential");
+        return credentialError(error, "updating the credential");
       }
     },
   }),
@@ -181,13 +196,19 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const actor = requireActor(context);
       try {
+        await CredentialAccess.requireByKey({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+          key: args.key,
+          action: "delete",
+        });
         await deleteRuntimeCredentialDefinition({
           organizationId: actor.organizationId,
           key: args.key,
         });
         return structuredSuccessResult({ deleted: args.key });
       } catch (error) {
-        return catchError(error, "deleting the credential");
+        return credentialError(error, "deleting the credential");
       }
     },
   }),
@@ -202,6 +223,40 @@ const registry = defineArchestraTools([
         action: "open_credential_dialog",
         kind: "github_app",
       });
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
+    title: "Open battery credentials",
+    description: `Show the person one card in ${archestraMcpBranding.appName} chat for the tokens these batteries need: what each battery adds, how to make its token, and a picker of the organization's credentials with an option to add a new one or skip. Pass every battery that needs a step in one call, by the names list_guardrails_battery_fits returns. This returns at once. The person answers with a message that starts with "Battery credentials:" and names the credential key for each variable, or says it was skipped. Secrets stay outside the conversation.`,
+    schema: z.strictObject({
+      batteries: z
+        .array(z.string().min(1))
+        .min(1)
+        .describe("The battery names, e.g. slack or github."),
+    }),
+    outputSchema: BatteryCredentialRequestSchema,
+    async handler({ args, context }) {
+      const actor = requireActor(context);
+      const setups = await openappaBatteriesService.batterySetups(
+        actor.organizationId,
+      );
+      const request: BatteryCredentialRequest = { batteries: [] };
+      const unknown: string[] = [];
+      for (const name of new Set(args.batteries)) {
+        const setup = setups.get(name);
+        if (setup)
+          request.batteries.push({ name, title: batteryTitle(name), ...setup });
+        else unknown.push(name);
+      }
+      if (unknown.length > 0)
+        return errorResult(
+          `No battery is named ${unknown.join(", ")}. Use the names list_guardrails_battery_fits returns.`,
+        );
+      return structuredSuccessResult(
+        request,
+        `Opened the credential card for ${request.batteries.map((battery) => battery.title).join(", ")}. Wait for the person's "Battery credentials: ..." reply.`,
+      );
     },
   }),
   defineArchestraTool({
@@ -364,4 +419,19 @@ function credentialSummary(
 ) {
   const { icon: _icon, ...summary } = definition;
   return summary;
+}
+
+function batteryTitle(name: string): string {
+  if (name === "github") return "GitHub";
+  return name
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/** A refusal names its reason; anything else stays a generic failure. */
+function credentialError(error: unknown, action: string) {
+  if (error instanceof ApiError && error.statusCode < 500)
+    return errorResult(error.message);
+  return catchError(error, action);
 }

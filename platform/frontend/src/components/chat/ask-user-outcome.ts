@@ -2,7 +2,7 @@ import type { DynamicToolUIPart, ToolUIPart } from "ai";
 
 export type AskUserOutcome =
   | { status: "waiting" }
-  | { status: "answered"; selected: string[] }
+  | { status: "answered"; selected: string[]; text?: string }
   | { status: "declined" }
   | { status: "dismissed" }
   | { status: "timed-out" }
@@ -16,8 +16,8 @@ export type AskUserGroupMember = {
 
 /**
  * What came of an `ask_user` call: still waiting, the option(s) the user
- * picked, or that they dismissed or declined the question or never answered.
- * Reads the structured result (`{ action, selected, timedOut? }`) Chat stores
+ * picked or typed, or that they dismissed or declined the question or never
+ * answered. Reads the structured result (`{ action, selected, text?, timedOut? }`) Chat stores
  * with the call. Returns null when it cannot be read, or for approval states,
  * so the caller keeps the generic tool card.
  */
@@ -58,7 +58,9 @@ function outcomeFromStructured(
             (item): item is string => typeof item === "string",
           )
         : [];
-      return { status: "answered", selected };
+      return typeof structured.text === "string"
+        ? { status: "answered", selected, text: structured.text }
+        : { status: "answered", selected };
     }
     case "decline":
       return { status: "declined" };

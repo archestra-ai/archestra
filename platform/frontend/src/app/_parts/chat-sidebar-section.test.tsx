@@ -47,10 +47,13 @@ vi.mock("@/lib/chat/global-chat.context", () => ({
   useGlobalChat: () => ({
     animatingTitleIds: new Set(),
     markTitleAnimating: vi.fn(),
-    getSession: (id: string) =>
-      mockChatState.sessionStatusById[id]
-        ? { status: mockChatState.sessionStatusById[id] }
-        : undefined,
+    generatingConversationIds: new Set(
+      Object.entries(mockChatState.sessionStatusById)
+        .filter(
+          ([, status]) => status === "submitted" || status === "streaming",
+        )
+        .map(([id]) => id),
+    ),
   }),
 }));
 

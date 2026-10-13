@@ -98,6 +98,16 @@ export function verifyToolAttestation(params: {
   return decodePayload(payload);
 }
 
+/** An untrusted lookup hint only; verify the marker with the fetched organization's key. */
+export function getUnverifiedToolAttestationGatewayId(
+  marker: string,
+): string | null {
+  const match = FULL_TOKEN.exec(marker);
+  const payload = match ? decodeBase64Url(match[1]) : null;
+  if (!payload || payload.length < MIN_PAYLOAD_BYTES) return null;
+  return decodePayload(payload)?.gatewayId ?? null;
+}
+
 /**
  * Removes every token, each with one trailing "\n", and defangs every
  * "[[gwa1." left over, so no marker-shaped token survives. Linear in the

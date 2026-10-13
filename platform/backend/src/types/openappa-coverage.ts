@@ -240,8 +240,12 @@ export const CoverageBatteryFitSchema = z.object({
   /** The `include` entry that declares the battery. */
   include: z.string(),
   namespaces: z.array(z.string()),
-  /** Credential variables `[credentials]` must bind to a runtime credential key before calls it routes run. */
+  /** Credential variables that need a runtime credential key bound before calls it routes run. */
   credentials: z.array(z.string()),
+  /** One line on what the battery's helpers ask the provider and what that buys. */
+  benefit: z.string().nullable(),
+  /** The steps that set up the battery's credentials, one line each. */
+  setup: z.array(z.string()),
   /** The server's uncovered tools that the battery would judge. */
   newlyCovered: z.number().int(),
   /** Every battery rule that names one of the server's tools. */

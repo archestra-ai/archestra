@@ -112,5 +112,30 @@ describe("MCP gateway tools/list query budget", () => {
     );
     // Was 157 before the caller and agent were resolved once per request.
     expect(statements.length).toBeLessThanOrEqual(60);
+    // Listing several installations must batch catalog metadata and labels,
+    // reuse caller teams, and avoid enriching each server with its users.
+    expect(
+      statements.filter((query) => query.includes('from "mcp_catalog_labels"')),
+    ).toHaveLength(1);
+    expect(
+      statements.filter(
+        (query) =>
+          query.includes('from "internal_mcp_catalog"') &&
+          query.includes('"installation_command"'),
+      ),
+    ).toHaveLength(1);
+    expect(
+      statements.filter((query) => query.includes('from "team_member"')),
+    ).toHaveLength(1);
+    expect(
+      statements.filter((query) => query.includes('from "mcp_server_user"')),
+    ).toHaveLength(0);
+    expect(
+      statements.filter(
+        (query) =>
+          query.startsWith("select distinct") &&
+          query.includes('from "agent_tools"'),
+      ),
+    ).toHaveLength(0);
   });
 });

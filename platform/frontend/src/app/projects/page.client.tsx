@@ -6,13 +6,11 @@ import {
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
 import { FolderKanban, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentSelector } from "@/components/agent-selector";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
@@ -27,12 +25,12 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { IdentityFields } from "@/components/identity-fields";
-import { LabelTags } from "@/components/label-tags";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ResourceDeletedStatusFilter,
@@ -40,16 +38,8 @@ import {
 } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { StandardFormDialog } from "@/components/standard-dialog";
-import {
-  TableCard,
-  TableCardGrid,
-  TableCardSelectionScope,
-  TableCardView,
-  TableCardViewContent,
-  TableCardViewToggle,
-} from "@/components/table-card-view";
-import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
@@ -60,14 +50,11 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
+import { BulkRangeSelectionScope } from "@/lib/bulk-range-selection-context";
 import {
   useProjectLabelKeys,
   useProjectLabelValues,
 } from "@/lib/entity-labels.query";
-import {
-  type BulkCardSelectionProps,
-  useBulkCardSelection,
-} from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { useHasAnyApiKey } from "@/lib/llm-provider-api-keys.query";
@@ -86,8 +73,8 @@ import {
   useProjects,
   useRestoreProject,
 } from "@/lib/projects/projects.query";
-import { ProjectActionsMenu } from "./project-actions-menu";
 import { ProjectDeleteConfirmDialog } from "./project-delete-confirm-dialog";
+import { ProjectPinnedTiles } from "./project-pinned-tiles";
 import { DeletedProjectsTable, ProjectsTable } from "./projects-table";
 
 export default function ProjectsPageClient() {
@@ -105,8 +92,16 @@ const PROJECTS_DESCRIPTION =
 
 function ProjectsList() {
   const searchParams = useSearchParams();
-  const { scope, teamIds, authorIds, excludeAuthorIds, hasActiveScopeFilters } =
-    useScopeFilterParams();
+  const {
+    scope,
+    teamIds,
+    authorIds,
+    excludeAuthorIds,
+    access,
+    sharedWith,
+    owner,
+    hasActiveScopeFilters,
+  } = useScopeFilterParams();
   const search = searchParams.get("search") ?? undefined;
   const labelsFilter = searchParams.get("labels") ?? undefined;
   // The trash. The backend serves this slice to project admins only (empty for
@@ -124,6 +119,9 @@ function ProjectsList() {
     teamIds,
     authorIds,
     excludeAuthorIds,
+    access,
+    sharedWith,
+    owner,
     status: isDeletedView ? "deleted" : undefined,
     labels: labelsFilter,
     toastOnError: false,
@@ -149,11 +147,11 @@ function ProjectsList() {
     useState<ProjectListItem | null>(null);
   const [permanentlyDeletingProject, setPermanentlyDeletingProject] =
     useState<ProjectListItem | null>(null);
-  // Pinned-first grouping applies in every scope: oversight projects simply
-  // aren't pinnable, so they fall into the unpinned section on their own. Not
-  // in the trash, though — a deleted project keeps its `pinnedAt`, and the
-  // trash table has no Pinned section and no pin indicator, so sorting there
-  // would float a row to the top with nothing on screen explaining why.
+  // Pinned projects become tiles above the table in every scope: oversight
+  // projects simply aren't pinnable, so they stay in the table on their own.
+  // Not in the trash, though — a deleted project keeps its `pinnedAt`, and the
+  // trash table has no tiles and no pin indicator, so splitting there would
+  // hide a row with nothing on screen explaining why.
   const projects = useMemo(
     () => (isDeletedView ? (data ?? []) : sortProjectsPinnedFirst(data ?? [])),
     [data, isDeletedView],
@@ -238,136 +236,137 @@ function ProjectsList() {
         </div>
       }
     >
-      <TableCardView storageKey="archestra-projects-view">
-        <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
-        {editingProject && (
-          <EditProjectDialog
-            projectId={editingProject.id}
-            open
-            onOpenChange={(open) => {
-              if (!open) closeEditDialog();
-            }}
-          />
-        )}
-        {deletingProject && (
-          <ProjectDeleteConfirmDialog
-            project={deletingProject}
-            open={!!deletingProject}
-            onOpenChange={(open) => {
-              if (!open) setDeletingProject(null);
-            }}
-            isPending={deleteProject.isPending}
-            onConfirm={async () => {
-              const ok = await deleteProject.mutateAsync({
-                id: deletingProject.id,
-              });
-              if (ok) setDeletingProject(null);
-            }}
-          />
-        )}
-        {permanentlyDeletingProject && (
-          <DeleteConfirmDialog
-            open={!!permanentlyDeletingProject}
-            onOpenChange={(open) => {
-              if (!open) setPermanentlyDeletingProject(null);
-            }}
-            title="Delete project permanently"
-            description={`This destroys "${permanentlyDeletingProject.name}" along with its files and scheduled tasks. Its chats were kept as ordinary conversations when it was deleted and stay. Nothing recovers the project itself.`}
-            isPending={permanentlyDeleteProject.isPending}
-            onConfirm={async () => {
-              const ok = await permanentlyDeleteProject.mutateAsync({
-                id: permanentlyDeletingProject.id,
-              });
-              if (ok) setPermanentlyDeletingProject(null);
-            }}
-            confirmLabel={PERMANENT_DELETE_LABEL}
-          />
-        )}
-        <div>
-          <CollectionFilters>
-            <FilterBar
-              search={
-                !isDeletedView ? (
-                  <SearchInput
-                    isLoading={isFetching}
-                    placeholder="Search projects"
-                    paramName="search"
-                    className={filterSearchClass}
-                  />
-                ) : null
-              }
-              leading
-              actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
-            >
-              {/* Hidden in the trash: the backend serves that slice whole, ignoring
+      <BulkActionsScope>
+        <BulkRangeSelectionScope>
+          <CreateProjectDialog open={createOpen} onOpenChange={setCreateOpen} />
+          {editingProject && (
+            <EditProjectDialog
+              projectId={editingProject.id}
+              open
+              onOpenChange={(open) => {
+                if (!open) closeEditDialog();
+              }}
+            />
+          )}
+          {deletingProject && (
+            <ProjectDeleteConfirmDialog
+              project={deletingProject}
+              open={!!deletingProject}
+              onOpenChange={(open) => {
+                if (!open) setDeletingProject(null);
+              }}
+              isPending={deleteProject.isPending}
+              onConfirm={async () => {
+                const ok = await deleteProject.mutateAsync({
+                  id: deletingProject.id,
+                });
+                if (ok) setDeletingProject(null);
+              }}
+            />
+          )}
+          {permanentlyDeletingProject && (
+            <DeleteConfirmDialog
+              open={!!permanentlyDeletingProject}
+              onOpenChange={(open) => {
+                if (!open) setPermanentlyDeletingProject(null);
+              }}
+              title="Delete project permanently"
+              description={`This destroys "${permanentlyDeletingProject.name}" along with its files and scheduled tasks. Its chats were kept as ordinary conversations when it was deleted and stay. Nothing recovers the project itself.`}
+              isPending={permanentlyDeleteProject.isPending}
+              onConfirm={async () => {
+                const ok = await permanentlyDeleteProject.mutateAsync({
+                  id: permanentlyDeletingProject.id,
+                });
+                if (ok) setPermanentlyDeletingProject(null);
+              }}
+              confirmLabel={PERMANENT_DELETE_LABEL}
+            />
+          )}
+          <div>
+            <CollectionFilters>
+              <FilterBar
+                search={
+                  !isDeletedView ? (
+                    <SearchInput
+                      isLoading={isFetching}
+                      placeholder="Search projects"
+                      paramName="search"
+                      className={filterSearchClass}
+                    />
+                  ) : null
+                }
+                leading
+              >
+                {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
-              {!isDeletedView && (
-                <EntityLabelFilter
-                  useLabelKeys={useProjectLabelKeys}
-                  useLabelValues={useProjectLabelValues}
-                  className={filterControlClass({
-                    active: Boolean(labelsFilter),
-                  })}
-                />
-              )}
-              {/* Gated on overseeing every project, matching the slice the
+                {!isDeletedView && (
+                  <ResourceAccessFilter resource="project" noun="projects" />
+                )}
+                {!isDeletedView && (
+                  <EntityLabelFilter
+                    useLabelKeys={useProjectLabelKeys}
+                    useLabelValues={useProjectLabelValues}
+                    className={filterControlClass({
+                      active: Boolean(labelsFilter),
+                    })}
+                  />
+                )}
+                {/* Gated on overseeing every project, matching the slice the
               backend serves: anyone else switching to Deleted would get an
               empty table. */}
-              <ResourceDeletedStatusFilter
-                deletePermission={{ project: ["update"] }}
-                deletePermissionScope="*"
-              />
-            </FilterBar>
-          </CollectionFilters>
-          {(isPending || isFetching) &&
-          projects.length === 0 ? null : isDeletedView ? (
-            projects.length === 0 ? (
-              <EmptyState icon={FolderKanban} title="No deleted projects" />
-            ) : (
-              <DeletedProjectsTable
-                projects={projects}
-                onRestore={(project) =>
-                  restoreProject.mutate({ id: project.id })
+                <ResourceDeletedStatusFilter
+                  deletePermission={{ project: ["update"] }}
+                  deletePermissionScope="*"
+                />
+              </FilterBar>
+            </CollectionFilters>
+            {(isPending || isFetching) &&
+            projects.length === 0 ? null : isDeletedView ? (
+              projects.length === 0 ? (
+                <EmptyState icon={FolderKanban} title="No deleted projects" />
+              ) : (
+                <DeletedProjectsTable
+                  projects={projects}
+                  onRestore={(project) =>
+                    restoreProject.mutate({ id: project.id })
+                  }
+                  onPermanentlyDelete={setPermanentlyDeletingProject}
+                />
+              )
+            ) : projects.length === 0 ? (
+              <EmptyState
+                icon={FolderKanban}
+                title={
+                  hasActiveFilter
+                    ? "No projects match your filters"
+                    : "No projects yet"
                 }
-                onPermanentlyDelete={setPermanentlyDeletingProject}
+                description={
+                  hasActiveFilter
+                    ? "Try adjusting your search or filters."
+                    : undefined
+                }
               />
-            )
-          ) : projects.length === 0 ? (
-            <EmptyState
-              icon={FolderKanban}
-              title={
-                hasActiveFilter
-                  ? "No projects match your filters"
-                  : "No projects yet"
-              }
-              description={
-                hasActiveFilter
-                  ? "Try adjusting your search or filters."
-                  : undefined
-              }
-            />
-          ) : (
-            <div className="space-y-6">
-              {pinnedProjects.length > 0 && (
-                <ProjectSection
-                  title="Pinned"
+            ) : (
+              <div className="space-y-6">
+                <ProjectPinnedTiles
                   projects={pinnedProjects}
+                  onUnpin={togglePin}
+                  onEdit={openEditDialog}
+                  onDelete={setDeletingProject}
+                />
+                <ProjectSection
+                  title="All projects"
+                  projects={unpinnedProjects}
                   onTogglePin={togglePin}
                   onEdit={openEditDialog}
                   onDelete={setDeletingProject}
                 />
-              )}
-              <ProjectSection
-                title={pinnedProjects.length > 0 ? "All projects" : undefined}
-                projects={unpinnedProjects}
-                onTogglePin={togglePin}
-                onEdit={openEditDialog}
-                onDelete={setDeletingProject}
-              />
-            </div>
-          )}
-        </div>
-      </TableCardView>
+              </div>
+            )}
+          </div>
+        </BulkRangeSelectionScope>
+      </BulkActionsScope>
     </PageLayout>
   );
 }
@@ -383,7 +382,7 @@ function ProjectSection({
   onEdit,
   onDelete,
 }: {
-  title?: string;
+  title: string;
   projects: ProjectListItem[];
   onTogglePin: (project: ProjectListItem) => void;
   onEdit: (project: ProjectListItem) => void;
@@ -433,14 +432,6 @@ function ProjectSection({
     filterSignature: `projects:${projects.map((project) => project.id).join(",")}`,
     matchDescription: "are listed here",
   });
-  const cardSelection = useBulkCardSelection({
-    rows: projects,
-    getRowId: (project) => project.id,
-    rowSelection,
-    setRowSelection,
-    canSelect: canSelectProject,
-    rangeSelection,
-  });
   const selectedForSharing = selectedProjects.filter(canShareProjectItem);
   const selectedForDelete = selectedProjects.filter(canDeleteProjectItem);
 
@@ -448,11 +439,9 @@ function ProjectSection({
 
   return (
     <section className="space-y-3">
-      {title ? (
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          {title}
-        </h2>
-      ) : null}
+      <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h2>
       <BulkActions
         count={selectedProjects.length}
         noun="project"
@@ -490,30 +479,16 @@ function ProjectSection({
           <span>Delete</span>
         </PermissionButton>
       </BulkActions>
-      <TableCardViewContent
-        table={
-          <ProjectsTable
-            projects={projects}
-            onTogglePin={onTogglePin}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            rowSelection={rowSelection}
-            onRowSelectionChange={setRowSelection}
-            onPageRowIdsChange={onPageRowIdsChange}
-            canSelect={canSelectProject}
-            rangeSelection={rangeSelection}
-          />
-        }
-        cards={
-          <ProjectCards
-            projects={projects}
-            cardSelection={cardSelection}
-            onVisibleRowIdsChange={onPageRowIdsChange}
-            onTogglePin={onTogglePin}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        }
+      <ProjectsTable
+        projects={projects}
+        onTogglePin={onTogglePin}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        rowSelection={rowSelection}
+        onRowSelectionChange={setRowSelection}
+        onPageRowIdsChange={onPageRowIdsChange}
+        canSelect={canSelectProject}
+        rangeSelection={rangeSelection}
       />
       {bulkDeleteOpen && (
         <DeleteConfirmDialog
@@ -558,108 +533,6 @@ function ProjectSection({
         />
       )}
     </section>
-  );
-}
-
-function ProjectCards({
-  projects,
-  cardSelection,
-  onVisibleRowIdsChange,
-  onTogglePin,
-  onEdit,
-  onDelete,
-}: {
-  projects: ProjectListItem[];
-  cardSelection: (project: ProjectListItem) => BulkCardSelectionProps;
-  onVisibleRowIdsChange: (ids: string[]) => void;
-  onTogglePin: (project: ProjectListItem) => void;
-  onEdit: (project: ProjectListItem) => void;
-  onDelete: (project: ProjectListItem) => void;
-}) {
-  return (
-    <TableCardSelectionScope
-      rowIds={projects.map((project) => project.id)}
-      onVisibleRowIdsChange={onVisibleRowIdsChange}
-    >
-      <TableCardGrid>
-        {projects.map((project) => (
-          <ProjectCard
-            key={project.id}
-            project={project}
-            onTogglePin={onTogglePin}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            {...cardSelection(project)}
-          />
-        ))}
-      </TableCardGrid>
-    </TableCardSelectionScope>
-  );
-}
-
-function ProjectCard({
-  project,
-  onTogglePin,
-  onEdit,
-  onDelete,
-  selected,
-  selectionDisabled,
-  onSelectedChange,
-  onSelectionClick,
-}: {
-  project: ProjectListItem;
-  onTogglePin: (project: ProjectListItem) => void;
-  onEdit: (project: ProjectListItem) => void;
-  onDelete: (project: ProjectListItem) => void;
-} & BulkCardSelectionProps) {
-  const { data: isProjectAdmin } = useHasPermissions(
-    { project: ["update"] },
-    "*",
-  );
-  const router = useRouter();
-  return (
-    <TableCard
-      icon={<AgentIcon icon={project.icon} fallbackType="project" size={20} />}
-      title={
-        <span className="flex min-w-0 items-center gap-1.5">
-          <Link href={`/projects/${project.id}`} className="truncate">
-            {project.name}
-          </Link>
-          <LabelTags labels={project.labels} />
-        </span>
-      }
-      description={project.description}
-      actions={
-        <ProjectActionsMenu
-          project={project}
-          pinned={!!project.pinnedAt}
-          canPin={project.viewerRole !== "admin"}
-          canManage={canManageProject(project.viewerRole, !!isProjectAdmin)}
-          canDelete={canDeleteProject({
-            viewerRole: project.viewerRole,
-            isProjectAdmin: !!isProjectAdmin,
-          })}
-          onTogglePin={() => onTogglePin(project)}
-          onEdit={() => onEdit(project)}
-          onDelete={() => onDelete(project)}
-        />
-      }
-      selected={selected}
-      selectionDisabled={selectionDisabled}
-      selectionDisabledTooltip="You cannot modify this project"
-      onSelectedChange={onSelectedChange}
-      onSelectionClick={onSelectionClick}
-      selectionLabel={`Select ${project.name}`}
-      onNavigate={() => router.push(`/projects/${project.id}`)}
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        {project.viewerRole === "admin" && project.visibility === null ? (
-          <Badge variant="secondary">
-            {project.ownerName ? `Owned by ${project.ownerName}` : "Other user"}
-          </Badge>
-        ) : null}
-      </div>
-    </TableCard>
   );
 }
 

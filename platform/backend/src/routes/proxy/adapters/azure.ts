@@ -24,6 +24,7 @@ import {
 } from "@/clients/azure-openai-credentials";
 import {
   buildAzureDeploymentBaseUrl,
+  isAzureOpenAiFirstPartyModelName,
   isAzureThinkingModelName,
   normalizeAzureApiKey,
   shouldUseAzureOpenAiApiVersion,
@@ -310,7 +311,7 @@ export const azureAdapterFactory: LLMProvider<
   ): Promise<AzureResponse> {
     const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
-      ...request,
+      ...withAzureMaxCompletionTokens(request, (client as AzureClient).baseUrl),
       ...defaultAzureReasoningEffort(request),
       stream: false,
     } as unknown as ChatCompletionCreateParamsNonStreaming;
@@ -326,7 +327,7 @@ export const azureAdapterFactory: LLMProvider<
   ): Promise<AsyncIterable<AzureStreamChunk>> {
     const azureClient = getAzureClientForRequest(client, request.model);
     const azureRequest = {
-      ...request,
+      ...withAzureMaxCompletionTokens(request, (client as AzureClient).baseUrl),
       ...defaultAzureReasoningEffort(request),
       stream: true,
       stream_options: { include_usage: true },
@@ -389,6 +390,42 @@ function defaultAzureReasoningEffort(request: AzureRequest): {
 }
 
 const DEFAULT_AZURE_REASONING_EFFORT: ReasoningEffort = "medium";
+
+/**
+ * Azure's OpenAI reasoning deployments reject `max_tokens` ("Use
+ * 'max_completion_tokens' instead"), and clients still send it: the AI SDK
+ * only switches fields for model names it knows are reasoning models, which
+ * misses newer families. `max_completion_tokens` caps every OpenAI chat model
+ * the same way, so send it for OpenAI deployments. Open models keep
+ * `max_tokens`, and so do classic endpoints pinned to an api-version that
+ * predates `max_completion_tokens`.
+ */
+function withAzureMaxCompletionTokens(
+  request: AzureRequest,
+  baseUrl: string | undefined,
+): AzureRequest {
+  const { max_tokens: maxTokens, ...rest } = request;
+  if (
+    maxTokens == null ||
+    request.max_completion_tokens != null ||
+    !isAzureOpenAiFirstPartyModelName(request.model) ||
+    !azureAcceptsMaxCompletionTokens(baseUrl)
+  ) {
+    return request;
+  }
+  return { ...rest, max_completion_tokens: maxTokens };
+}
+
+function azureAcceptsMaxCompletionTokens(baseUrl: string | undefined): boolean {
+  // v1 URLs carry no api-version and always accept the field. Dated
+  // api-versions compare lexically; the field shipped in 2024-09-01-preview.
+  return (
+    !shouldUseAzureOpenAiApiVersion(baseUrl) ||
+    config.llm.azure.apiVersion >= MAX_COMPLETION_TOKENS_API_VERSION
+  );
+}
+
+const MAX_COMPLETION_TOKENS_API_VERSION = "2024-09-01";
 
 function getAzureDefaultQuery(
   baseUrl: string | undefined,

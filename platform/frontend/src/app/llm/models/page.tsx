@@ -44,7 +44,12 @@ import {
 } from "@/components/model-badges";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -99,13 +104,14 @@ import {
 
 export default function ModelsPage() {
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const { hasActiveScopeFilters, access, sharedWith } = useScopeFilterParams();
   const {
     data: models = [],
     isFetching,
     isLoadingError: isModelsLoadError,
     error: modelsError,
     refetch,
-  } = useModelsWithApiKeys({ toastOnError: false });
+  } = useModelsWithApiKeys({ toastOnError: false, access, sharedWith });
   const { data: apiKeys = [], isLoading: isApiKeysLoading } =
     useLlmProviderApiKeys();
   const syncModelsMutation = useSyncLlmModels();
@@ -223,6 +229,8 @@ export default function ModelsPage() {
       modelTypeFilter,
       freeOnly,
       labelsFilter,
+      access,
+      sharedWith,
     }),
     matchDescription: "match the current filters",
   });
@@ -232,7 +240,8 @@ export default function ModelsPage() {
       apiKeyFilter !== "all" ||
       modelTypeFilter !== "all" ||
       (canFilterFreeModels && freeOnly) ||
-      labelsFilter,
+      labelsFilter ||
+      hasActiveScopeFilters,
   );
   const clearFilters = useCallback(() => {
     updateQueryParams({
@@ -241,6 +250,9 @@ export default function ModelsPage() {
       modelType: null,
       freeOnly: null,
       labels: null,
+      ...Object.fromEntries(
+        RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
+      ),
     });
   }, [updateQueryParams]);
 
@@ -265,7 +277,8 @@ export default function ModelsPage() {
 
   const refreshModelsButton = (
     <div className="flex items-center gap-2">
-      <Button
+      <PermissionButton
+        permissions={{ llmModel: ["update"] }}
         variant="outline"
         size="sm"
         onClick={handleRefresh}
@@ -275,7 +288,7 @@ export default function ModelsPage() {
           className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
         />
         {isRefreshingModels ? "Refreshing..." : "Refresh Models"}
-      </Button>
+      </PermissionButton>
       <ResourceListActions resource="llmModel" />
     </div>
   );
@@ -612,7 +625,9 @@ export default function ModelsPage() {
         </div>
       )}
       <BulkActionsScope>
-        {models.length > 0 && (
+        {/* An access filter that matches nothing keeps the bar, so it can
+            be cleared. */}
+        {(models.length > 0 || hasActiveScopeFilters) && (
           <CollectionFilters>
             <FilterBar
               leading
@@ -626,6 +641,11 @@ export default function ModelsPage() {
                 />
               }
             >
+              <ResourceAccessFilter
+                resource="llmModel"
+                noun="models"
+                owned={false}
+              />
               <LlmProviderApiKeyDropdown
                 availableKeys={apiKeys}
                 selectedApiKeyId={apiKeyFilter === "all" ? null : apiKeyFilter}
@@ -768,7 +788,9 @@ export default function ModelsPage() {
             "contextLength",
             "outputLength",
           ]}
-          tableClassName="min-w-[1000px]"
+          // Cached pricing and the key a model came from matter least next
+          // to its prices and limits, so a narrow window drops them first.
+          columnDropOrder={["pricingCache", "apiKeys"]}
           data={filteredModels}
           getRowId={(row) => row.id}
           rowSelection={rowSelection}

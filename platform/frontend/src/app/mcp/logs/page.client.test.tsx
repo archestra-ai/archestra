@@ -27,6 +27,7 @@ vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/agent.query", () => ({ useProfiles: vi.fn() }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: vi.fn(),
 }));
 vi.mock("@/lib/mcp/mcp-server.query", () => ({ useMcpServers: vi.fn() }));

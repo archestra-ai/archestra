@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -56,9 +56,11 @@ Click your name in the sidebar, then **My Usage**. It shows your billed spend, r
 A limit blocks matching requests once spend reaches it. Requests run again when the limit resets, or when you raise it.
 
 1. Go to **Costs & Limits → Limits** and click **Add Limit**.
-2. Choose who it applies to: organization, team, user, agent, LLM Proxy, virtual key, or environment.
+2. Choose who it applies to: organization, team, user, agent, virtual key, LLM OAuth client, or environment.
 3. Pick models, or **All models**.
 4. Enter **Limit value ($)**, choose the **Cleanup interval**, and click **Create limit**.
+
+Use an organization limit to cap total LLM spend.
 
 The table shows each limit's use so far, and when it resets.
 
@@ -96,7 +98,7 @@ Archestra tells the two apart from the credential on each request. You configure
 
 ## Where Token Prices Come From
 
-Every cost uses the model's price. Archestra syncs input, output, and cache prices for known models. A model it does not know gets an estimated price. For a custom or self-hosted model, set the price yourself. See [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities).
+A cost uses the model's price. Archestra syncs input, output, and cache prices for known models. OpenRouter is the exception: Archestra records the cost OpenRouter reports for each request, so the price of the provider it routed to is what counts. A model it does not know gets an estimated price. For a custom or self-hosted model, set the price yourself. See [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities).
 
 Prompt caching lowers the cost of a prompt that starts the same way each time. Costs and logs show the cache reads and writes the provider reports. Archestra adds cache points to its own chat and agent requests. Proxy requests keep the caller's own cache markers.
 

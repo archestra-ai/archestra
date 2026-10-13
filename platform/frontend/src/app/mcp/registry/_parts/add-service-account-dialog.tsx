@@ -20,7 +20,12 @@ import {
 } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
+import { cn } from "@/lib/utils/tailwind";
 
 type ServiceAccountTarget = { type: "team"; teamId: string } | { type: "org" };
 
@@ -136,7 +141,10 @@ export function AddServiceAccountDialog({
                 {canAddOrg && (
                   <Label
                     htmlFor="service-account-org"
-                    className="flex cursor-pointer items-start gap-2.5 rounded-md border p-3 font-normal has-[:checked]:border-primary"
+                    className={cn(
+                      "flex cursor-pointer items-start gap-2.5 rounded-md p-3 font-normal",
+                      radioCardClass(),
+                    )}
                     data-testid={E2eTestId.ManageCredentialsAddToOrgButton}
                   >
                     <RadioGroupItem
@@ -158,7 +166,10 @@ export function AddServiceAccountDialog({
                   <Label
                     key={team.id}
                     htmlFor={`service-account-team-${team.id}`}
-                    className="flex cursor-pointer items-start gap-2.5 rounded-md border p-3 font-normal has-[:checked]:border-primary"
+                    className={cn(
+                      "flex cursor-pointer items-start gap-2.5 rounded-md p-3 font-normal",
+                      radioCardClass(),
+                    )}
                     data-testid={getManageCredentialsAddToTeamOptionTestId(
                       team.name,
                     )}

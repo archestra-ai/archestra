@@ -5,15 +5,14 @@ import {
   PROJECT_DESCRIPTION_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
 } from "@archestra/shared";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { AgentSelector } from "@/components/agent-selector";
 import { IdentityFields } from "@/components/identity-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
@@ -27,7 +26,6 @@ import {
 } from "@/lib/projects/project-agent-audience";
 import { useProject, useUpdateProject } from "@/lib/projects/projects.query";
 
-type ProjectDialogSection = "general" | "permissions";
 type EditProjectForm = {
   name: string;
   description: string;
@@ -39,8 +37,8 @@ type EditProjectForm = {
 const NO_DEFAULT_AGENT = "__org_default__";
 
 /**
- * Single edit entry point for a project's owner/admin: its identity and default
- * agent on one page, who can reach it on another. Fetches the project detail by
+ * Single edit entry point for a project's owner/admin: its identity, default
+ * agent, and who can reach it, saved together. Fetches the project detail by
  * id so it works from the projects list (whose rows lack the default agent) as
  * well as the project page. Renders nothing until the detail has loaded.
  */
@@ -67,33 +65,6 @@ export function EditProjectDialog({
 
 // === internal ===
 
-/**
- * A dialog page. The inactive one is hidden rather than unmounted:
- * react-hook-form skips validation for fields that are not mounted, so
- * unmounting General would let a rejected name reach the update route as soon
- * as the user switched pages.
- */
-function DialogSection({
-  id,
-  activeSection,
-  children,
-}: {
-  id: ProjectDialogSection;
-  activeSection: ProjectDialogSection;
-  children: React.ReactNode;
-}) {
-  return (
-    <div hidden={id !== activeSection} className="space-y-4">
-      {children}
-    </div>
-  );
-}
-
-const NAV_ITEMS = [
-  { id: "general" as const, label: "General" },
-  { id: "permissions" as const, label: "Permissions" },
-];
-
 function EditProjectDialogForm({
   project,
   open,
@@ -103,8 +74,16 @@ function EditProjectDialogForm({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [activeSection, setActiveSection] =
-    useState<ProjectDialogSection>("general");
+  // The permissions block keeps its edits in its own form. This dialog's
+  // Save is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
   const updateProject = useUpdateProject();
   // Without `agent:read` the list comes back empty, which would read as "this
   // org has no agents" rather than "not yours to set" — hide the field instead.
@@ -130,8 +109,8 @@ function EditProjectDialogForm({
   const [labels, setLabels] = useState<ProfileLabel[]>(project.labels);
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
-  // Who the project reaches is edited on the Permissions page, which saves
-  // itself — so the agent offer is judged against the sharing on record.
+  // Permission edits are saved with the rest of the form, so until then the
+  // agent offer is judged against the sharing on record.
   const share: ProjectShareAudience = useMemo(
     () => ({
       visibility: project.visibility ?? "none",
@@ -171,6 +150,7 @@ function EditProjectDialogForm({
   const onSubmit = form.handleSubmit(
     async ({ name, description, icon, defaultAgentId }) => {
       const nextLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+      await permissionsSave.current?.();
 
       const ok = await updateProject.mutateAsync({
         id: project.id,
@@ -192,137 +172,124 @@ function EditProjectDialogForm({
   );
 
   return (
-    <TabbedDialogShell
+    <StandardFormDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Edit project"
       description={`Update "${project.name}" and who can reach it.`}
-      sidebarLabel={name.trim() || project.name}
-      sidebarDescription="Project"
-      sidebarIcon={<AgentIcon icon={icon} fallbackType="project" size={16} />}
-      activeSection={activeSection}
-      navItems={NAV_ITEMS}
-      onActiveSectionChange={setActiveSection}
+      isDirty={permissionsDirty}
       onSubmit={onSubmit}
-      className="max-w-4xl h-[70vh]"
+      bodyClassName="space-y-4"
       footer={
-        // Permissions saves itself, so the form's own Save would only be a
-        // second button doing something else on the page it sits under.
-        activeSection === "permissions" ? (
-          <Button type="button" onClick={() => onOpenChange(false)}>
-            Close
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
           </Button>
-        ) : (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                updateProject.isPending || !name.trim().length || hasLengthError
-              }
-            >
-              Save
-            </Button>
-          </>
-        )
+          <Button
+            type="submit"
+            disabled={
+              updateProject.isPending || !name.trim().length || hasLengthError
+            }
+          >
+            Save
+          </Button>
+        </>
       }
     >
-      <DialogSection id="general" activeSection={activeSection}>
-        <IdentityFields
-          icon={icon}
-          onIconChange={(next) =>
-            form.setValue("icon", next, { shouldDirty: true })
-          }
-          fallbackType="project"
-          label={<Label htmlFor="edit-project-name">Name *</Label>}
-        >
-          <Input
-            id="edit-project-name"
-            maxLength={PROJECT_NAME_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.name}
-            {...form.register("name", {
-              required: "Project name is required.",
-              maxLength: {
-                value: PROJECT_NAME_MAX_LENGTH,
-                message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.name?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.name.message}
-            </p>
-          )}
-        </IdentityFields>
-
-        <div className="space-y-2">
-          <Label htmlFor="edit-project-description">Description</Label>
-          <Textarea
-            id="edit-project-description"
-            placeholder="What is this project about?"
-            rows={3}
-            maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-            aria-invalid={!!form.formState.errors.description}
-            {...form.register("description", {
-              maxLength: {
-                value: PROJECT_DESCRIPTION_MAX_LENGTH,
-                message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
-              },
-            })}
-          />
-          {form.formState.errors.description?.message && (
-            <p className="text-xs text-destructive">
-              {form.formState.errors.description.message}
-            </p>
-          )}
-        </div>
-
-        {canReadAgents === true && (
-          <div className="space-y-2">
-            <Label>Default agent</Label>
-            <FieldDescription>
-              Preselected for new chats and scheduled tasks in this project.
-              Anyone can still pick a different agent for an individual chat.
-            </FieldDescription>
-            <AgentSelector
-              mode="single"
-              agents={selectableAgents}
-              value={defaultAgentId ?? NO_DEFAULT_AGENT}
-              onValueChange={(value) =>
-                form.setValue(
-                  "defaultAgentId",
-                  value === NO_DEFAULT_AGENT ? null : value,
-                  { shouldDirty: true },
-                )
-              }
-              hint={audienceHint(share.visibility)}
-              emptyMessage="No agents this project's members can all use."
-              sentinelOption={{
-                value: NO_DEFAULT_AGENT,
-                label: "Default",
-              }}
-              className="w-full"
-            />
-          </div>
-        )}
-
-        <AdvancedLabelsSection
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={setLabels}
+      <IdentityFields
+        icon={icon}
+        onIconChange={(next) =>
+          form.setValue("icon", next, { shouldDirty: true })
+        }
+        fallbackType="project"
+        label={<Label htmlFor="edit-project-name">Name *</Label>}
+      >
+        <Input
+          id="edit-project-name"
+          maxLength={PROJECT_NAME_MAX_LENGTH}
+          aria-invalid={!!form.formState.errors.name}
+          {...form.register("name", {
+            required: "Project name is required.",
+            maxLength: {
+              value: PROJECT_NAME_MAX_LENGTH,
+              message: `Project name must be ${PROJECT_NAME_MAX_LENGTH} characters or fewer.`,
+            },
+          })}
         />
-      </DialogSection>
+        {form.formState.errors.name?.message && (
+          <p className="text-xs text-destructive">
+            {form.formState.errors.name.message}
+          </p>
+        )}
+      </IdentityFields>
 
-      <DialogSection id="permissions" activeSection={activeSection}>
-        <ResourceAccessSection resource="project" id={project.id} standalone />
-      </DialogSection>
-    </TabbedDialogShell>
+      <div className="space-y-2">
+        <Label htmlFor="edit-project-description">Description</Label>
+        <Textarea
+          id="edit-project-description"
+          placeholder="What is this project about?"
+          rows={3}
+          maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
+          aria-invalid={!!form.formState.errors.description}
+          {...form.register("description", {
+            maxLength: {
+              value: PROJECT_DESCRIPTION_MAX_LENGTH,
+              message: `Description must be ${PROJECT_DESCRIPTION_MAX_LENGTH} characters or fewer.`,
+            },
+          })}
+        />
+        {form.formState.errors.description?.message && (
+          <p className="text-xs text-destructive">
+            {form.formState.errors.description.message}
+          </p>
+        )}
+      </div>
+
+      {canReadAgents === true && (
+        <div className="space-y-2">
+          <Label>Default agent</Label>
+          <FieldDescription>
+            Preselected for new chats and scheduled tasks in this project.
+            Anyone can still pick a different agent for an individual chat.
+          </FieldDescription>
+          <AgentSelector
+            mode="single"
+            agents={selectableAgents}
+            value={defaultAgentId ?? NO_DEFAULT_AGENT}
+            onValueChange={(value) =>
+              form.setValue(
+                "defaultAgentId",
+                value === NO_DEFAULT_AGENT ? null : value,
+                { shouldDirty: true },
+              )
+            }
+            hint={audienceHint(share.visibility)}
+            emptyMessage="No agents this project's members can all use."
+            sentinelOption={{
+              value: NO_DEFAULT_AGENT,
+              label: "Default",
+            }}
+            className="w-full"
+          />
+        </div>
+      )}
+
+      <ResourceAccessSection
+        resource="project"
+        id={project.id}
+        registerSave={registerPermissionsSave}
+        onDirtyChange={setPermissionsDirty}
+      />
+      <AdvancedLabelsSection
+        ref={labelsRef}
+        labels={labels}
+        onLabelsChange={setLabels}
+      />
+    </StandardFormDialog>
   );
 }
 

@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import {
   PLUGIN_MARKETPLACE_IMPORT_LIMIT,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -14,6 +17,7 @@ import {
   PluginTeamModel,
   TaskModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import {
   importPluginFromGithub,
   normalizeGithubPluginRepoUrl,
@@ -223,6 +227,9 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(z.array(PluginListItemSchema)),
       },
@@ -245,6 +252,13 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         accessiblePluginIds,
         labels: parseLabelsParam(query.labels),
+        access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+          userId: user.id,
+          organizationId,
+          relations: query.access,
+          sharedWith: query.sharedWith,
+          ownerIds: query.owner,
+        }),
       });
       return reply.send(plugins);
     },

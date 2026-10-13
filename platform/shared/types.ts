@@ -64,6 +64,12 @@ export class ApiError extends Error {
    * minutes. Those SDKs retry 408, 409, 429, and 5xx statuses by default.
    */
   shouldRetry?: boolean;
+  /**
+   * Structured context the client can render, surfaced as `details` on the
+   * error response. Its shape is set by `internalCode`, which must be present
+   * whenever this is.
+   */
+  details?: Record<string, unknown>;
 
   constructor(statusCode: number, message: string, internalCode?: string) {
     super(message);

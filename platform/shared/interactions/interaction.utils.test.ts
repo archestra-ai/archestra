@@ -58,8 +58,6 @@ describe("DynamicInteraction with a failed-interaction error response", () => {
     const interaction = new DynamicInteraction(openAiErrorInteraction);
     expect(interaction.getToolNamesUsed()).toEqual([]);
     expect(interaction.getToolNamesRequested()).toEqual([]);
-    expect(interaction.getToolNamesRefused()).toEqual([]);
-    expect(interaction.getToolRefusedCount()).toBe(0);
   });
 });
 
@@ -150,8 +148,6 @@ describe("DynamicInteraction with a normal provider response", () => {
       expect(interaction.getLastAssistantResponse()).toBe("");
       expect(interaction.getToolNamesRequested()).toEqual([]);
       expect(interaction.getToolNamesUsed()).toEqual([]);
-      expect(interaction.getToolNamesRefused()).toEqual([]);
-      expect(interaction.getToolRefusedCount()).toBe(0);
       expect(interaction.isLastMessageToolCall()).toBe(false);
       expect(interaction.getLastToolCallId()).toBeNull();
     }

@@ -596,6 +596,134 @@ describe("routing to an organization-wide battery", () => {
   });
 });
 
+describe("validating against this deployment", () => {
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
+  const MINIMAL = "[policy]\nversion = 2\n";
+
+  test("a starter whose archestra battery has no catalog here is refused when it is new, and warned about when it is the current revision", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const starter = (await guardrailsPolicyService.get(organizationId)).content;
+
+    // On its own the starter composes: the archestra battery declares the
+    // audience source its `internal` audience reads.
+    const standalone = await openappaDeclarations.composeForCheck({
+      root: starter,
+      resolution: await openappaDeclarations.resolve({
+        organizationId,
+        content: starter,
+      }),
+    });
+    expect(standalone.errors).toEqual([]);
+
+    // As the current revision it refuses nothing new, so it stays writable,
+    // and the refusal the runtime meets is reported as it meets it.
+    const current = await guardrailsPolicyService.validate(starter, {
+      organizationId,
+    });
+    expect(current.valid).toBe(true);
+    expect(current.errors).toEqual([]);
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    const refusal = effective.lastError?.split("\n") ?? [];
+    expect(refusal).toHaveLength(2);
+    expect(current.warnings).toHaveLength(refusal.length);
+
+    // Replacing a revision this deployment composes, preview and save refuse it.
+    const saved = await guardrailsPolicyService.update({
+      organizationId,
+      userId,
+      content: MINIMAL,
+      expectedRevision: 0,
+    });
+    const replacing = await guardrailsPolicyService.validate(starter, {
+      organizationId,
+    });
+    expect(replacing.valid).toBe(false);
+    expect(replacing.errors).toHaveLength(refusal.length);
+    await expect(
+      guardrailsPolicyService.update({
+        organizationId,
+        userId,
+        content: starter,
+        expectedRevision: saved.revision,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  test("seeding the catalog the held-back battery names lets the starter compose", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const starter = (await guardrailsPolicyService.get(organizationId)).content;
+    await openappaBatteriesService.getEffectivePolicy(organizationId);
+
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+    expect(
+      await guardrailsPolicyService.validate(starter, {
+        organizationId,
+        previous: MINIMAL,
+      }),
+    ).toEqual({ valid: true, errors: [], warnings: [] });
+    expect(
+      (await openappaBatteriesService.recompile(organizationId)).lastError,
+    ).toBeNull();
+  });
+
+  test("a draft that declares a battery for a server not installed yet stays valid", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const acme = await uploadAcme({ organizationId, userId });
+
+    const draft = await guardrailsPolicyService.validate(
+      root([acme.entry], ["acme_prod"]),
+      { organizationId, previous: MINIMAL },
+    );
+    expect(draft).toEqual({ valid: true, errors: [], warnings: [] });
+  });
+
+  test("a draft that keeps the current revision's refusal and adds an unrelated not-yet-served battery stays valid", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const acme = await uploadAcme({ organizationId, userId });
+    const starter = (await guardrailsPolicyService.get(organizationId)).content;
+    const native = await import("@archestra/openappa-rs");
+    const edited = await native.editOpenappaPolicy(starter, [
+      { kind: "addInclude", entry: acme.entry },
+      { kind: "bindServers", namespace: "acme", servers: ["acme_prod"] },
+    ]);
+    expect(edited.errors).toEqual([]);
+
+    const current = await guardrailsPolicyService.validate(starter, {
+      organizationId,
+    });
+    const draft = await guardrailsPolicyService.validate(edited.content ?? "", {
+      organizationId,
+    });
+    expect(draft.valid).toBe(true);
+    expect(draft.errors).toEqual([]);
+    expect(draft.warnings).toHaveLength(current.warnings.length + 1);
+  });
+});
+
 const BATTERY_MANIFEST = `schema = 1
 name = "acme"
 description = "Acme battery under test"

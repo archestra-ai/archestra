@@ -80,14 +80,14 @@ test.describe("LLM Provider API Keys", () => {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    await page
-      .getByRole("button", { name: "Permissions", exact: true })
-      .click();
+    // Access sits on General, not on a Permissions tab of its own.
     await expect(
-      page.getByRole("heading", { name: "Permissions", exact: true }),
+      page.getByRole("button", { name: "Permissions", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Who can use it", exact: true }),
     ).toBeVisible();
     // SPDX-SnippetEnd
-    await page.getByRole("button", { name: "General", exact: true }).click();
     await expect(page.getByLabel(/Base URL/)).toBeHidden();
     await page.getByRole("button", { name: "Advanced", exact: true }).click();
     await expect(page.getByLabel(/Base URL/)).toBeVisible();

@@ -18,10 +18,19 @@ import config from "@/config";
 import { EnvironmentModel, InternalMcpCatalogModel } from "@/models";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import SecretModel from "@/models/secret";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import { ApiError, type User } from "@/types";
+import { deriveKeyFromSecret, encryptSecretValueWithKey } from "@/utils/crypto";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
 describe("internal MCP catalog routes", () => {
@@ -75,6 +84,71 @@ describe("internal MCP catalog routes", () => {
     await app.close();
   });
 
+  test("GET /api/internal_mcp_catalog access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+    makeInternalMcpCatalog,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const callerId = policyAuthor;
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const myTeam = await makeTeam(organizationId, callerId);
+    await makeTeamMember(myTeam.id, callerId);
+    const otherTeam = await makeTeam(organizationId, otherUser.id);
+
+    const seed = (name: string, access: TestAccess, authorId = otherUser.id) =>
+      makeInternalMcpCatalog({
+        name: `${name}-${suffix}`,
+        organizationId,
+        authorId,
+        access,
+      });
+    await seed("mine", "personal", callerId);
+    await seed("other-personal", "personal");
+    await seed("org", "org");
+    await seed("my-team", { teams: [myTeam.id] });
+    await seed("other-team", { teams: [otherTeam.id] });
+    await seed("shared-with-me", { users: [callerId] });
+
+    const list = async (access?: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog${access ? `?access=${access}` : ""}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .map((item: { name: string }) => item.name)
+        .filter((name: string) => name.endsWith(`-${suffix}`))
+        .map((name: string) => name.replace(`-${suffix}`, ""))
+        .sort();
+    };
+
+    // The admin reads every catalog item through a `*` grant, which the
+    // filter must not count as "shared".
+    expect(await list()).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "other-personal",
+      "other-team",
+      "shared-with-me",
+    ]);
+    expect(await list("mine,shared,org")).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "shared-with-me",
+    ]);
+    expect(await list("others")).toEqual(["other-personal", "other-team"]);
+    expect(await list("mine")).toEqual(["mine"]);
+    expect(await list("shared")).toEqual(["my-team", "shared-with-me"]);
+    expect(await list("org")).toEqual(["org"]);
+  });
+
   test("GET /api/internal_mcp_catalog/:id/tools hides implicit Archestra meta tools", async ({
     makeAgent,
     seedAndAssignArchestraTools,
@@ -95,6 +169,79 @@ describe("internal MCP catalog routes", () => {
     expect(toolNames).not.toContain(TOOL_SEARCH_TOOLS_FULL_NAME);
     expect(toolNames).not.toContain(TOOL_RUN_TOOL_FULL_NAME);
     expect(toolNames).toContain(TOOL_TODO_WRITE_FULL_NAME);
+  });
+
+  test("GET /api/internal_mcp_catalog/:id/tools lists stored tools with an unreadable catalog credential", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const secret = await SecretModel.create({
+      name: "synthetic-catalog-credential",
+      secret: { client_secret: "synthetic-value" },
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: policyAuthor,
+      oauthConfig: {
+        name: "synthetic-oauth",
+        server_url: "https://example.com/mcp",
+        client_id: "synthetic-client",
+        redirect_uris: [],
+        scopes: [],
+        default_scopes: [],
+        supports_resource_metadata: false,
+      },
+    });
+    await InternalMcpCatalogModel.update(catalog.id, {
+      clientSecretId: secret.id,
+    });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "synthetic__lookup",
+      rawName: "lookup",
+    });
+    await SecretModel.updateRawSecret(
+      secret.id,
+      encryptSecretValueWithKey(
+        { client_secret: "synthetic-value" },
+        deriveKeyFromSecret("synthetic-previous-key"),
+      ),
+    );
+
+    await expect(SecretModel.findById(secret.id)).rejects.toThrow();
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/internal_mcp_catalog/${catalog.id}/tools`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      expect.objectContaining({ id: tool.id, name: "synthetic__lookup" }),
+    ]);
+  });
+
+  test("GET /api/internal_mcp_catalog/:id/tools refuses inaccessible and missing catalogs", async ({
+    makeInternalMcpCatalog,
+    makeOrganization,
+    makeTool,
+  }) => {
+    const otherOrganization = await makeOrganization();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: otherOrganization.id,
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "private__lookup",
+      rawName: "lookup",
+    });
+
+    for (const id of [catalog.id, crypto.randomUUID()]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog/${id}/tools`,
+      });
+      expect(response.statusCode).toBe(404);
+    }
   });
 
   test("restoring a deleted catalog returns its tools to the composed guardrails policy", async ({

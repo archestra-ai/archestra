@@ -37,6 +37,9 @@ type KnowledgeBasesPaginatedParams = Pick<
   | "authorIds"
   | "excludeAuthorIds"
   | "excludeOtherPersonal"
+  | "access"
+  | "sharedWith"
+  | "owner"
 >;
 
 /**

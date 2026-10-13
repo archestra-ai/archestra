@@ -1,3 +1,4 @@
+import type { PrincipalSource } from "@/models/resource-permission-subject";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError } from "@/types";
 import { isForeignKeyConstraintError } from "@/utils/db";
@@ -35,6 +36,7 @@ export async function getMcpCatalogPermissionChecker(params: {
 export async function isMcpInstallationAdmin(params: {
   userId: string;
   organizationId: string;
+  lookups?: PrincipalSource;
 }): Promise<boolean> {
   return ResourcePermissions.allows({
     userId: params.userId,
@@ -42,6 +44,7 @@ export async function isMcpInstallationAdmin(params: {
     resource: "mcpRegistry",
     scope: "*",
     action: "update",
+    lookups: params.lookups,
   });
 }
 

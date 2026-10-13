@@ -71,23 +71,22 @@ export type CommonToolResult = {
   namespace?: string;
   /**
    * The arguments of the paired tool call, when the source format carries
-   * them. Required to resolve a `run_tool` dispatch to its target tool so
-   * trusted-data policies evaluate the tool that actually produced the
-   * result instead of the built-in wrapper.
+   * them, so a `run_tool` dispatch can be resolved to the target tool that
+   * actually produced the result instead of the built-in wrapper.
    */
   arguments?: Record<string, unknown>;
   content: unknown;
+  /**
+   * `content` is the structure the client sent (blocks, parts, a JSON object),
+   * not a JSON string the adapter parsed. Only then are binary parts replaced
+   * by markers in the body handed to the policy runtime.
+   */
+  structured?: boolean;
   isError: boolean;
   error?: string;
   _meta?: Record<string, unknown>;
   structuredContent?: Record<string, unknown>;
 };
-
-/**
- * Result of evaluating trusted data policies
- * Maps tool call IDs to their updated content (if modified)
- */
-export type ToolResultUpdates = Record<string, string>;
 
 export interface CommonMessage {
   /** Message role */

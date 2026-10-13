@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  BUILT_IN_AGENT_IDS,
   DocsPage,
   getSystemPromptTemplateExpressions,
 } from "@archestra/shared";
@@ -40,7 +39,6 @@ export function SystemPromptEditor({
   variant = "default",
   showTitle = true,
   headerExtra,
-  builtInAgentId,
 }: {
   title?: string;
   description?: string;
@@ -67,8 +65,6 @@ export function SystemPromptEditor({
   showTitle?: boolean;
   /** Extra element rendered in the header, beside the title. */
   headerExtra?: React.ReactNode;
-  /** Optional built-in agent id to expose built-in-agent-specific template variables */
-  builtInAgentId?: string | null;
 }) {
   const docsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAgents,
@@ -90,9 +86,7 @@ export function SystemPromptEditor({
   const unparseableExpressions = useUnparseableExpressions(
     templating ? value : "",
   );
-  const templateExpressions = getSystemPromptTemplateExpressions({
-    builtInAgentId,
-  });
+  const templateExpressions = getSystemPromptTemplateExpressions();
   const [templatingInfoOpen, setTemplatingInfoOpen] = useState(false);
 
   return (
@@ -281,29 +275,25 @@ export function SystemPromptEditor({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                      ? "Use the tool context"
-                      : "Personalize a response"}
+                    Personalize a response
                   </p>
                   <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-xs leading-relaxed">
                     <code>
-                      {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                        ? "Evaluate {{tool.name}} from {{mcpServerName}}."
-                        : "You are helping {{user.name}}. Today is {{currentDate}}."}
+                      {
+                        "You are helping {{user.name}}. Today is {{currentDate}}."
+                      }
                     </code>
                   </pre>
                 </div>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                      ? "Include details when available"
-                      : "Tailor instructions to a team"}
+                    Tailor instructions to a team
                   </p>
                   <pre className="whitespace-pre-wrap break-words rounded-md bg-muted/50 p-3 text-xs leading-relaxed">
                     <code>
-                      {builtInAgentId === BUILT_IN_AGENT_IDS.POLICY_CONFIG
-                        ? "{{#if tool.description}}\nConsider: {{tool.description}}\n{{/if}}"
-                        : '{{#includes user.teams "Engineering"}}\nUse technical detail and code examples.\n{{/includes}}'}
+                      {
+                        '{{#includes user.teams "Engineering"}}\nUse technical detail and code examples.\n{{/includes}}'
+                      }
                     </code>
                   </pre>
                 </div>

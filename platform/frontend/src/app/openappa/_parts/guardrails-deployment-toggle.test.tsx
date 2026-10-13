@@ -61,7 +61,7 @@ function show() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <SidebarProvider>
         <SidebarMenu>
@@ -70,6 +70,7 @@ function show() {
       </SidebarProvider>
     </QueryClientProvider>,
   );
+  return { client, ...view };
 }
 
 test("the sidebar warns while enforcement is off and links to the Guardrails page", async () => {
@@ -81,8 +82,13 @@ test("the sidebar warns while enforcement is off and links to the Guardrails pag
 
 test("the sidebar says nothing once enforcement is on", async () => {
   enabled = true;
-  const { container } = show();
+  const { client, container } = show();
+  await waitFor(() =>
+    expect(client.getQueryState(["guardrails-deployment"])?.status).toBe(
+      "success",
+    ),
+  );
   // Nothing to warn about, so no row at all — not a row reporting success.
-  await waitFor(() => expect(container.querySelector("li")).toBeNull());
+  expect(container.querySelector("li")).toBeNull();
   expect(screen.queryByText(/Guardrails/)).toBeNull();
 });

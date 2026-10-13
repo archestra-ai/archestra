@@ -5,7 +5,10 @@ import {
   PaginationQuerySchema,
   parseLabelsParam,
   perUserCredentialLabel,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -20,12 +23,15 @@ import {
   VirtualApiKeyLabelModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { readVirtualKeyValue } from "@/services/connection-setup";
+import { credentialBilling } from "@/services/credential-billing";
 import { CredentialResourcePermissions } from "@/services/credential-resource-permissions";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
+  CredentialSpendCapInputSchema,
   constructResponseSchema,
   type LabelWithDetails,
   LabelWithDetailsSchema,
@@ -60,6 +66,16 @@ const VirtualApiKeyBodyObjectSchema = z.object({
     )
     .default([]),
   labels: z.array(LabelWithDetailsSchema).optional(),
+  /**
+   * Team the key's spend is charged to. Omit to keep the current team; `null`
+   * stops billing a team.
+   */
+  billingTeamId: z.string().nullable().optional(),
+  /**
+   * The key's spend cap, stored as a `token_cost` limit on the key. Omit to
+   * keep it; `null` removes it.
+   */
+  spendCap: CredentialSpendCapInputSchema.nullable().optional(),
 });
 
 /**
@@ -137,6 +153,9 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(VirtualApiKeyWithParentInfoSchema),
@@ -153,13 +172,16 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           keyType,
           scope,
           labels,
+          access: relations,
+          sharedWith,
+          owner,
         },
         organizationId,
         user,
       },
       reply,
     ) => {
-      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
+      const [userTeamIds, isVirtualKeyAdmin, access] = await Promise.all([
         TeamModel.getUserTeamIds(user.id),
         ResourcePermissions.allows({
           userId: user.id,
@@ -167,6 +189,13 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resource: "llmVirtualKey",
           scope: "*",
           action: "update",
+        }),
+        ResourcePermissionSubjectModel.resolveAccessFilter({
+          userId: user.id,
+          organizationId,
+          relations,
+          sharedWith,
+          ownerIds: owner,
         }),
       ]);
 
@@ -181,6 +210,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         keyType,
         scope,
         labels: parseLabelsParam(labels),
+        access,
       });
       return reply.send(result);
     },
@@ -430,6 +460,11 @@ async function createVirtualApiKey(params: {
     organizationId,
     isAdmin: isVirtualKeyAdmin,
   });
+  await credentialBilling.assertCanSetBillingTeam({
+    organizationId,
+    userId: user.id,
+    teamId: body.billingTeamId,
+  });
 
   // Passthrough keys are always personal and carry no provider keys; they only
   // authenticate the acting user.
@@ -447,15 +482,22 @@ async function createVirtualApiKey(params: {
       expiresAt: body.expiresAt ?? null,
       scope: "personal",
       authorId: ownerId,
+      billingTeamId: body.billingTeamId ?? null,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       initialPermissionGrants: body.initialGrants ?? [],
       // SPDX-SnippetEnd
     });
+    await credentialBilling.applySpendCap({
+      entityType: "virtual_key",
+      entityId: created.virtualKey.id,
+      cap: body.spendCap,
+    });
 
     return {
       ...created.virtualKey,
+      ...(await readBilling(created.virtualKey)),
       value: created.value,
       teams: created.teams,
       authorName: created.authorName,
@@ -488,15 +530,22 @@ async function createVirtualApiKey(params: {
       scope: "personal",
       authorId: ownerId,
       providerApiKeys: body.providerApiKeys,
+      billingTeamId: body.billingTeamId ?? null,
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       initialPermissionGrants: body.initialGrants ?? [],
       // SPDX-SnippetEnd
     });
+  await credentialBilling.applySpendCap({
+    entityType: "virtual_key",
+    entityId: virtualKey.id,
+    cap: body.spendCap,
+  });
 
   return {
     ...virtualKey,
+    ...(await readBilling(virtualKey)),
     value,
     teams,
     authorName,
@@ -570,6 +619,22 @@ async function updateVirtualApiKey(params: {
     throw new ApiError(400, "Virtual key type cannot be changed");
   }
 
+  await credentialBilling.assertCanSetBillingTeam({
+    organizationId,
+    userId: user.id,
+    teamId: body.billingTeamId,
+    currentTeamId: accessContext.billingTeamId,
+  });
+  await credentialBilling.assertCanSetSpendCap({
+    organizationId,
+    userId: user.id,
+    cap: body.spendCap,
+    current: await credentialBilling.getSpendCap({
+      entityType: "virtual_key",
+      entityId: id,
+    }),
+  });
+
   let updatedVirtualKey: Awaited<ReturnType<typeof VirtualApiKeyModel.update>>;
   if (accessContext.keyType === "passthrough") {
     updatedVirtualKey = await VirtualApiKeyModel.update({
@@ -581,6 +646,7 @@ async function updateVirtualApiKey(params: {
       authorId: accessContext.authorId,
       teamIds: [],
       providerApiKeys: [],
+      billingTeamId: body.billingTeamId,
     });
   } else {
     // An edit changes the key itself, never who can reach it. Access lives in
@@ -616,12 +682,18 @@ async function updateVirtualApiKey(params: {
       authorId: accessContext.authorId,
       teamIds: accessContext.teamIds,
       providerApiKeys: body.providerApiKeys,
+      billingTeamId: body.billingTeamId,
     });
   }
 
   if (!updatedVirtualKey) {
     throw new ApiError(404, "Virtual API key not found");
   }
+  await credentialBilling.applySpendCap({
+    entityType: "virtual_key",
+    entityId: id,
+    cap: body.spendCap,
+  });
 
   const visibilityMetadata =
     await VirtualApiKeyModel.getVisibilityForVirtualApiKeyIds([id]);
@@ -629,6 +701,7 @@ async function updateVirtualApiKey(params: {
 
   return {
     ...updatedVirtualKey,
+    ...(await readBilling(updatedVirtualKey)),
     teams: visibilityMetadata.teams.get(id) ?? [],
     authorName: visibilityMetadata.authorName.get(id) ?? null,
     createdBy: await CreatedByModel.resolveOne(
@@ -637,6 +710,14 @@ async function updateVirtualApiKey(params: {
     providerApiKeys,
     labels: await syncAndReadLabels(id, body.labels),
   };
+}
+
+async function readBilling(virtualKey: {
+  id: string;
+  billingTeamId: string | null;
+}) {
+  const billing = await VirtualApiKeyModel.getBillingMetadata([virtualKey]);
+  return billing.get(virtualKey.id) ?? { billingTeam: null, spendCap: null };
 }
 
 /**

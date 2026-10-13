@@ -8,6 +8,7 @@ import {
   clientFilterToAgentIds,
   DynamicInteraction,
   isClaudeSessionSource,
+  isLogContentNotStored,
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
   TimeInMs,
 } from "@archestra/shared";
@@ -44,6 +45,10 @@ import {
   encodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
+import {
+  resolveLogContentMode,
+  withholdInteractionContent,
+} from "@/log-content";
 import logger from "@/logging";
 import type {
   InsertInteraction,
@@ -449,36 +454,30 @@ class InteractionModel {
   static async create(
     data: InsertInteraction,
     auditContext?: EncryptedChatAuditContext | null,
-    opts?: {
-      /**
-       * Environment to stamp instead of the executing agent's own. The proxy
-       * supplies it for advisor consultations (loopback-verified), which bill
-       * to the delegating caller's environment because the advisor's row is
-       * org-wide and env-less.
-       */
-      environmentIdOverride?: string;
-    },
   ) {
-    const audit = auditContext ?? null;
     // Snapshot the environment from the agent at creation time (single funnel
     // for all interaction writes) so per-environment cost-limit usage stays
     // stable under later agent reassignment. The agent is authoritative: when a
     // profile is present its current environment wins over any caller-supplied
-    // value. Only profile-less system interactions may set it explicitly, and
-    // only the proxy's verified advisor-delegation path may override it.
-    const environmentId =
-      opts?.environmentIdOverride ??
-      (data.profileId
-        ? await AgentModel.findEnvironmentId(data.profileId)
-        : (data.environmentId ?? null));
+    // value. Only profile-less system interactions may set it explicitly.
+    const environmentId = data.profileId
+      ? await AgentModel.findEnvironmentId(data.profileId)
+      : (data.environmentId ?? null);
+    // Enforced here, in the single funnel, so no writer can store content
+    // the deployment's Log Content mode withholds.
+    const withheld = resolveLogContentMode() === "metadata_only";
+    const record = withheld ? withholdInteractionContent(data) : data;
+    // A withheld row holds no content to encrypt under a conversation key, so
+    // it is written like the encrypted-chat fallback: unkeyed, marker in place.
+    const audit = withheld ? null : (auditContext ?? null);
 
     // Sanitize JSONB fields to strip null bytes (\u0000) that PostgreSQL rejects
     const sanitized = {
-      ...data,
+      ...record,
       environmentId,
-      request: stripUnstorableChars(data.request),
-      processedRequest: stripUnstorableChars(data.processedRequest),
-      response: stripUnstorableChars(data.response),
+      request: stripUnstorableChars(record.request),
+      processedRequest: stripUnstorableChars(record.processedRequest),
+      response: stripUnstorableChars(record.response),
     };
 
     // Delta-encode Claude Code / Claude Desktop requests so we don't re-store the
@@ -492,9 +491,14 @@ class InteractionModel {
     // but relying on that coincidence would be fragile: a delta chain mixes rows
     // across requests and only the request that created a row carries its key,
     // so a chain spanning keys could not be reconstructed by any reader.
-    const { values, tip } = audit
-      ? { values: sanitized, tip: null }
-      : await InteractionDeltaManager.encodeOnWrite(sanitized);
+    //
+    // Withheld rows are excluded too: there is no conversation to share with
+    // a parent, and leaving their hash columns empty keeps a later full-content
+    // row from chaining onto a request that was never stored.
+    const { values, tip } =
+      audit || withheld
+        ? { values: sanitized, tip: null }
+        : await InteractionDeltaManager.encodeOnWrite(sanitized);
 
     const [interaction] = await db
       .insert(schema.interactionsTable)
@@ -1184,23 +1188,28 @@ class InteractionModel {
     // Put the most active users first so a large organization's filter surfaces
     // likely choices before its alphabetical tail. Names and ids close ties to
     // keep the order stable between requests.
-    const activityCount = count();
-    const result = await db
+    // Aggregate the log before joining names so user metadata is joined once
+    // per distinct user instead of once per interaction.
+    const activity = db
       .select({
         userId: schema.interactionsTable.userId,
-        userName: schema.usersTable.name,
+        activityCount: count().as("activity_count"),
       })
       .from(schema.interactionsTable)
-      .innerJoin(
-        schema.usersTable,
-        eq(schema.interactionsTable.userId, schema.usersTable.id),
-      )
       .where(and(...conditions))
-      .groupBy(schema.interactionsTable.userId, schema.usersTable.name)
+      .groupBy(schema.interactionsTable.userId)
+      .as("user_activity");
+    const result = await db
+      .select({
+        userId: activity.userId,
+        userName: schema.usersTable.name,
+      })
+      .from(activity)
+      .innerJoin(schema.usersTable, eq(activity.userId, schema.usersTable.id))
       .orderBy(
-        desc(activityCount),
+        desc(activity.activityCount),
         asc(schema.usersTable.name),
-        asc(schema.interactionsTable.userId),
+        asc(activity.userId),
       );
 
     return result
@@ -1253,9 +1262,10 @@ class InteractionModel {
         );
         return;
       }
-      const teamIds = await AgentTeamModel.getTeamsForAgent(
-        interaction.profileId,
-      );
+      // A credential's billing team takes the place of the agent's teams.
+      const teamIds = interaction.billingTeamId
+        ? [interaction.billingTeamId]
+        : await AgentTeamModel.getTeamsForAgent(interaction.profileId);
       if (teamIds.length === 0) {
         logger.warn(
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
@@ -1268,8 +1278,17 @@ class InteractionModel {
         entityType: LimitEntityType;
         entityId: string | null | undefined;
       }> = [
-        { entityType: "user", entityId: interaction.userId },
+        // The billing team pays instead of the caller, so a team-billed
+        // interaction leaves the caller's personal limit untouched.
+        {
+          entityType: "user",
+          entityId: interaction.billingTeamId ? null : interaction.userId,
+        },
         { entityType: "virtual_key", entityId: interaction.virtualKeyId },
+        {
+          entityType: "llm_oauth_client",
+          entityId: interaction.authenticatedAppId,
+        },
         {
           entityType: "virtual_key",
           entityId: interaction.passthroughVirtualKeyId,
@@ -1685,7 +1704,10 @@ class InteractionModel {
       })
       .from(t)
       .where(and(...conditions))
-      .orderBy(desc(t.createdAt), desc(t.id))
+      // Drizzle's descending timestamp indexes use NULLS LAST. PostgreSQL
+      // otherwise defaults DESC to NULLS FIRST and sorts the entire history,
+      // even though createdAt is non-nullable.
+      .orderBy(sql`${t.createdAt} DESC NULLS LAST`, desc(t.id))
       .limit(cursorQuery.limit + 1);
 
     return rows.map((row) => ({
@@ -1924,6 +1946,7 @@ class InteractionModel {
         lastUserMessagePreview: lastInteraction?.lastUserMessagePreview ?? null,
         lastInteractionId: lastInteraction?.lastInteractionId ?? null,
         lastInteractionType: lastInteraction?.lastInteractionType ?? null,
+        contentNotStored: lastInteraction?.contentNotStored ?? false,
         conversationTitle: s.conversationTitle,
         claudeCodeTitle: lastInteraction?.claudeCodeTitle ?? null,
       };
@@ -1950,7 +1973,13 @@ class InteractionModel {
     const seen = new Set<string>();
     let scanned = 0;
 
-    while (keys.length < needed && scanned < maxScanRows) {
+    // Each scanned interaction can yield at most one session. A page beyond
+    // the scan budget cannot be filled by this walk, so go straight to grouping.
+    while (
+      needed <= maxScanRows &&
+      keys.length < needed &&
+      scanned < maxScanRows
+    ) {
       const batch = await db
         .select({
           id: schema.interactionsTable.id,
@@ -1968,7 +1997,7 @@ class InteractionModel {
         // which works from the oldest end — far below anything this walk
         // reads.
         .orderBy(
-          desc(schema.interactionsTable.createdAt),
+          sql`${schema.interactionsTable.createdAt} DESC NULLS LAST`,
           desc(schema.interactionsTable.id),
         )
         .limit(SESSION_SCAN_BATCH_ROWS)
@@ -2035,6 +2064,7 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
     >
@@ -2078,6 +2108,7 @@ class InteractionModel {
         lastUserMessagePreview: string | null;
         lastInteractionId: string | null;
         lastInteractionType: string | null;
+        contentNotStored: boolean;
         claudeCodeTitle: string | null;
       }
     >();
@@ -2109,7 +2140,6 @@ class InteractionModel {
       let claudeCodeTitle: string | null | undefined;
 
       for (const interaction of windowRows) {
-        const requestStr = JSON.stringify(interaction.request);
         const isOpenCodeSideTurn =
           interaction.sessionSource === "opencode_session" &&
           computeRequestType(
@@ -2119,10 +2149,7 @@ class InteractionModel {
           ) === "subagent";
 
         // Check for title generation request (Claude Code)
-        if (
-          requestStr.includes("Please write a 5-10 word title") &&
-          claudeCodeTitle === undefined
-        ) {
+        if (interaction.isTitleGeneration && claudeCodeTitle === undefined) {
           // Extract title from response
           const response = interaction.response as {
             content?: Array<{ text?: string }>;
@@ -2135,8 +2162,8 @@ class InteractionModel {
         if (
           !lastMainInteraction &&
           !isOpenCodeSideTurn &&
-          !requestStr.includes("prompt suggestion generator") &&
-          !requestStr.includes("Please write a 5-10 word title")
+          !interaction.isPromptSuggestion &&
+          !interaction.isTitleGeneration
         ) {
           // Check if request has valid content - support both OpenAI/Anthropic and Gemini formats
           // We accept any interaction that has a valid request structure, not just text content.
@@ -2162,7 +2189,14 @@ class InteractionModel {
           const hasGeminiContent =
             Array.isArray(request?.contents) && request.contents.length > 0;
 
-          if (hasOpenAiContent || hasResponsesContent || hasGeminiContent) {
+          // A Metadata only turn is a real turn whose content was never
+          // stored: it is the session's tip, with no preview to show.
+          if (
+            hasOpenAiContent ||
+            hasResponsesContent ||
+            hasGeminiContent ||
+            isLogContentNotStored(interaction.request)
+          ) {
             lastMainInteraction = interaction;
           }
         }
@@ -2236,6 +2270,9 @@ class InteractionModel {
           : null,
         lastInteractionId: lastMainInteraction?.id ?? null,
         lastInteractionType: lastMainInteraction?.type ?? null,
+        contentNotStored: lastMainInteraction
+          ? isLogContentNotStored(lastMainInteraction.request)
+          : false,
         claudeCodeTitle: claudeCodeTitle ?? null,
       });
     }
@@ -2282,22 +2319,25 @@ class InteractionModel {
       sessionKeys.map((k) => sql`${k}`),
       sql`, `,
     );
+    // Migration-created indexes use DESC NULLS LAST. PostgreSQL requires the
+    // same ordering to stop at LIMIT, even though created_at is NOT NULL.
+    // The reverse scan therefore needs ASC NULLS FIRST.
     const oldestBranch =
       oldest > 0
         ? sql`
         UNION ALL
-        (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
                 encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
-         ORDER BY created_at ASC, id ASC
+         ORDER BY created_at ASC NULLS FIRST, id ASC
          LIMIT ${oldest})`
         : sql``;
     const sessionlessBranch =
       uuidKeys.length > 0
         ? sql`
       UNION ALL
-      SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
+      SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
              encrypted_chat_conversation_id
       FROM interactions
       WHERE id IN (${sql.join(
@@ -2315,7 +2355,6 @@ class InteractionModel {
       source: InteractionSource | null;
       thread_id: string | null;
       request: unknown;
-      response: unknown;
       type: string;
       // Raw SQL bypasses Drizzle's column mapping, so timestamps arrive as
       // whatever the driver hands back — a Date on one, a string on another.
@@ -2332,15 +2371,15 @@ class InteractionModel {
       -- insertion order (the same tiebreak the write path already uses to
       -- resolve a delta parent). Final ordering is applied in JS, since the
       -- per-key UNION below has no single ordering to inherit.
-      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.response, t.type,
+      SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.type,
              t.created_at, t.encrypted_chat_conversation_id
       FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
       CROSS JOIN LATERAL (
-        (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
+        (SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
                 encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
-         ORDER BY created_at DESC, id DESC
+         ORDER BY created_at DESC NULLS LAST, id DESC
          LIMIT ${newest})
         ${oldestBranch}
       ) t
@@ -2361,6 +2400,7 @@ class InteractionModel {
     // overlap, and the caller's scan must not see the same row twice.
     const byId = new Map<string, SessionWindowRow>();
     for (const row of interactionsResult.rows) {
+      const requestText = JSON.stringify(row.request);
       byId.set(row.id, {
         id: row.id,
         sessionId: row.session_id,
@@ -2368,10 +2408,41 @@ class InteractionModel {
         source: row.source,
         threadId: row.thread_id,
         request: row.request,
-        response: row.response,
+        response: undefined,
+        isTitleGeneration: requestText.includes(
+          "Please write a 5-10 word title",
+        ),
+        isPromptSuggestion: requestText.includes("prompt suggestion generator"),
         type: row.type,
         createdAt: new Date(row.created_at).getTime(),
       });
+    }
+
+    // Ordinary previews only use the request. Load response bodies in one
+    // batch for the sampled title-generation turns that actually need them;
+    // full assistant responses can otherwise dwarf the session-list reads.
+    const titleIds = [...byId.values()]
+      .filter((row) => row.isTitleGeneration)
+      .map((row) => row.id);
+    if (titleIds.length > 0) {
+      const titles = await db
+        .select({
+          id: schema.interactionsTable.id,
+          response: schema.interactionsTable.response,
+          encryptedChatConversationId:
+            schema.interactionsTable.encryptedChatConversationId,
+        })
+        .from(schema.interactionsTable)
+        .where(inArray(schema.interactionsTable.id, titleIds));
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      for (const title of titles) {
+        readInteractionRow(title);
+        const row = byId.get(title.id);
+        if (row) row.response = title.response;
+      }
+      // SPDX-SnippetEnd
     }
 
     return [...byId.values()].sort(
@@ -2454,6 +2525,8 @@ type SessionWindowRow = {
   threadId: string | null;
   request: unknown;
   response: unknown;
+  isTitleGeneration: boolean;
+  isPromptSuggestion: boolean;
   type: string;
   /** Epoch milliseconds — see the driver note in fetchSessionWindowRows. */
   createdAt: number;

@@ -10,7 +10,9 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import logger from "@/logging";
 import { AgentModel, LimitModel } from "@/models";
+import { createLimit } from "@/services/limit";
 import {
+  ApiError,
   LimitCleanupIntervalSchema,
   LimitEntityTypeSchema,
   LimitTypeSchema,
@@ -62,7 +64,7 @@ const CreateLimitToolArgsSchema = z
       "The type of entity to apply the limit to.",
     ),
     entity_id: UuidIdSchema.describe(
-      "The ID of the entity (organization, team, agent, user, virtual_key, or environment).",
+      "The ID of the entity (organization, team, agent, user, virtual_key, environment, or llm_oauth_client).",
     ),
     limit_type: LimitTypeSchema.describe("The type of limit to apply."),
     limit_value: z
@@ -115,7 +117,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_LIMIT_SHORT_NAME,
     title: "Create Limit",
     description:
-      "Create a new cost or usage limit for an organization, team, agent, user, virtual key, environment, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
+      "Create a new cost or usage limit for an organization, team, agent, user, virtual key, environment, LLM OAuth client, or MCP gateway. Supports token_cost, mcp_server_calls, and tool_calls limit types.",
     schema: CreateLimitToolArgsSchema,
     outputSchema: z.object({
       limit: LimitOutputItemSchema,
@@ -129,7 +131,7 @@ const registry = defineArchestraTools([
       );
 
       try {
-        const limit = await LimitModel.create({
+        const limit = await createLimit({
           entityType: args.entity_type,
           entityId: args.entity_id,
           limitType: args.limit_type,
@@ -158,6 +160,7 @@ const registry = defineArchestraTools([
           }${limit.toolName ? `\nTool: ${limit.toolName}` : ""}`,
         );
       } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
         return catchError(error, "creating limit");
       }
     },

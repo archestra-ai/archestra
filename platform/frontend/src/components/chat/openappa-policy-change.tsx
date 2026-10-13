@@ -1,26 +1,26 @@
 "use client";
 
-import {
-  ArrowUpRight,
-  CheckCircle2,
-  FileText,
-  GitPullRequest,
-  TriangleAlert,
-} from "lucide-react";
+import { ArrowUpRight, CheckCircle2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
-  CodeBlock,
-  CodeBlockCopyButton,
-} from "@/components/ai-elements/code-block";
-import { Badge } from "@/components/ui/badge";
+  TRUNCATED_CONTENT_MAX_LINES,
+  TruncatedContent,
+} from "@/components/ai-elements/truncated-content";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { cn } from "@/lib/utils/tailwind";
+import { getPolicyDiffRows, type PolicyDiffRow } from "./policy-diff-rows";
 
 type PolicyChange = {
   stage?: "preview";
   delivery: "revision" | "pull_request";
   before: string;
   after: string;
+  /** The backend's unified diff, trimmed to the changed hunks. */
+  diff?: string;
   path?: string;
   revision?: number;
   number?: number;
@@ -31,45 +31,60 @@ type PolicyChange = {
   effective?: { error: string | null; batteries: { status: string }[] };
 };
 
-export function OpenAppaPolicyChange({ output }: { output: unknown }) {
-  const change = parsePolicyChange(output);
+export function OpenAppaPolicyChange({
+  output,
+  validationChange = false,
+}: {
+  output: unknown;
+  validationChange?: boolean;
+}) {
+  const change = parsePolicyChange(output, validationChange);
   if (!change) return null;
+  const counts = validationChange
+    ? parseReplayCounts(parseOutput(output)?.counts)
+    : null;
   const path = change.path ?? "organization.appa.toml";
-  const diff = policyDiff(change.before, change.after, path);
+  // Previewing the unsaved starter changes no line.
+  const unchanged = change.before === change.after;
   const pullUrl =
     change.delivery === "pull_request" &&
     change.url?.startsWith("https://github.com/")
       ? change.url
       : null;
   return (
-    <div className="space-y-3 px-3 pb-3 pt-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <FileText className="size-4 text-muted-foreground" />
-        <span className="text-sm font-medium">
-          {change.stage === "preview" ? "Proposed policy" : "Policy change"}
-        </span>
-        <Badge variant="secondary">
-          {change.stage === "preview"
-            ? change.delivery === "pull_request"
-              ? "GitHub pull request"
-              : "Local revision"
-            : change.delivery === "pull_request"
-              ? `PR #${change.number}`
-              : `Revision ${change.revision}`}
-        </Badge>
-        {pullUrl && (
-          <Button variant="outline" size="sm" className="ml-auto" asChild>
+    <div className="space-y-3 p-3">
+      {pullUrl && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" asChild>
             <a href={pullUrl} target="_blank" rel="noreferrer">
               <span>Review pull request</span>
               <ArrowUpRight className="size-3.5" />
             </a>
           </Button>
-        )}
-      </div>
-      <p className="font-mono text-xs text-muted-foreground">{path}</p>
-      <CodeBlock code={diff} language="diff" aria-label="Policy diff">
-        <CodeBlockCopyButton />
-      </CodeBlock>
+        </div>
+      )}
+      {/* A validation change can touch any of several files; name it. The
+          policy is always the one file, so its name says nothing. */}
+      {validationChange && (
+        <p className="font-mono text-xs text-muted-foreground">{path}</p>
+      )}
+      <PolicyDiff
+        rows={getPolicyDiffRows({
+          before: change.before,
+          after: change.after,
+          // Previewing the unsaved starter changes no line: every line is new.
+          diff: unchanged
+            ? null
+            : change.diff || policyDiff(change.before, change.after, path),
+        })}
+      />
+      {counts && (
+        <InlineNotice variant={replayPassed(counts) ? "success" : "warning"}>
+          {replayPassed(counts) ? <CheckCircle2 /> : <TriangleAlert />}
+          <span className="font-medium">Draft replay</span>
+          <InlineNoticeText>{replaySummary(counts)}</InlineNoticeText>
+        </InlineNotice>
+      )}
       {change.warnings?.map((warning) => (
         <InlineNotice key={warning} variant="warning">
           <TriangleAlert />
@@ -88,30 +103,106 @@ export function OpenAppaPolicyChange({ output }: { output: unknown }) {
   );
 }
 
-/** A published result stays visible even when tool details are collapsed. */
-export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
+/**
+ * The proposed policy as numbered lines: new lines green, removed lines red,
+ * unchanged runs folded. Long views cut off like a tool's Input and Output.
+ */
+function PolicyDiff({ rows }: { rows: PolicyDiffRow[] }) {
+  return (
+    <TruncatedContent lineCount={rows.length}>
+      {(showAll) => (
+        <section
+          aria-label="Policy diff"
+          className="overflow-hidden rounded-md border border-border/50 bg-background py-1 font-mono text-[0.6875rem] leading-4"
+        >
+          {(showAll ? rows : rows.slice(0, TRUNCATED_CONTENT_MAX_LINES)).map(
+            (row, index) => (
+              <PolicyDiffLine
+                // biome-ignore lint/suspicious/noArrayIndexKey: static, ordered rows
+                key={index}
+                row={row}
+              />
+            ),
+          )}
+        </section>
+      )}
+    </TruncatedContent>
+  );
+}
+
+function PolicyDiffLine({ row }: { row: PolicyDiffRow }) {
+  if (row.kind === "gap") {
+    return (
+      <div className="bg-muted/40 pl-11 font-sans leading-5 text-muted-foreground">
+        <span aria-hidden>···</span>
+        <span className="sr-only">Unchanged lines hidden</span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        // Long lines wrap under their own text instead of scrolling sideways.
+        "flex whitespace-pre-wrap [overflow-wrap:anywhere]",
+        row.kind === "add" && "bg-emerald-500/10",
+        row.kind === "remove" && "bg-destructive/10",
+      )}
+    >
+      <span className="w-10 shrink-0 select-none pr-2 text-right text-muted-foreground/70">
+        {row.line ?? ""}
+      </span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 border-l-[3px] border-transparent pl-2",
+          row.kind === "add" &&
+            "border-emerald-600 text-emerald-800 dark:text-emerald-300",
+          row.kind === "remove" &&
+            "border-destructive text-destructive line-through decoration-destructive/40",
+        )}
+      >
+        {row.kind === "add" ? (
+          <span className="sr-only">Added: </span>
+        ) : row.kind === "remove" ? (
+          <span className="sr-only">Removed: </span>
+        ) : null}
+        <span>{row.text || " "}</span>
+      </span>
+    </div>
+  );
+}
+
+type SaveResult = {
+  tone: "success" | "warning";
+  title: string;
+  detail: string;
+  action: { label: string; href: string; external: boolean };
+  /** A local save, so the GitHub sync tip may apply. */
+  local: boolean;
+};
+
+/**
+ * What a saved policy change reports: an opened pull request, or a saved
+ * revision and whether enforcement now uses it. Null for a preview or a
+ * result that is neither.
+ */
+export function getPolicySaveResult(output: unknown): SaveResult | null {
   const change = parsePolicyChange(output);
   if (
     change?.stage !== "preview" &&
     change?.delivery === "pull_request" &&
     change.url?.startsWith("https://github.com/")
   ) {
-    return (
-      <div className="mt-4 w-full max-w-2xl">
-        <InlineNotice variant="success">
-          <GitPullRequest />
-          <span className="font-medium">{`Opened PR #${change.number}`}</span>
-          <InlineNoticeText>
-            Review and merge it to apply this policy change.
-          </InlineNoticeText>
-          <Button variant="outline" size="xs" className="ml-auto" asChild>
-            <a href={change.url} target="_blank" rel="noreferrer">
-              Review pull request
-            </a>
-          </Button>
-        </InlineNotice>
-      </div>
-    );
+    return {
+      tone: "success",
+      title: `Opened PR #${change.number}`,
+      detail: "merge it to apply",
+      action: {
+        label: "Review pull request",
+        href: change.url,
+        external: true,
+      },
+      local: false,
+    };
   }
   if (
     !change ||
@@ -126,37 +217,219 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
     Array.isArray(change.effective.batteries) &&
     change.effective.batteries.every((battery) => battery.status === "active");
   const active = healthy && change.enforcement?.enabled === true;
+  return {
+    tone: active ? "success" : "warning",
+    title: `Saved revision ${change.revision}`,
+    detail: active
+      ? "enforcement on"
+      : change.effective?.error ||
+        change.enforcement?.reason ||
+        (change.enforcement?.enabled === false
+          ? "enforcement is off"
+          : "check composition and enforcement"),
+    action: active
+      ? { label: "View Guardrails", href: "/openappa", external: false }
+      : { label: "Check policy", href: "/openappa/policy", external: false },
+    local: true,
+  };
+}
+
+/**
+ * Which save a tool call's result reports, if any: the call that saved the
+ * policy, or the one that saved validations, with a readable result.
+ */
+export function getOpenAppaSaveResult({
+  shortName,
+  output,
+}: {
+  shortName: string | null;
+  output: unknown;
+}): "policy" | "validation" | null {
+  if (shortName === "update_guardrails_policy") {
+    return getPolicySaveResult(output) ? "policy" : null;
+  }
+  if (shortName === "publish_openappa_validation_change") {
+    return getValidationSaveResult(output) ? "validation" : null;
+  }
+  return null;
+}
+
+/** The result of a saved policy change, as one line in its tool card. */
+export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
+  const result = getPolicySaveResult(output);
+  if (!result) return null;
   return (
-    <div className="mt-4 w-full max-w-2xl">
-      <InlineNotice variant={active ? "success" : "warning"}>
-        {active ? <CheckCircle2 /> : <TriangleAlert />}
-        <span className="font-medium">{`Saved revision ${change.revision}`}</span>
-        <InlineNoticeText>
-          {active
-            ? "Enforcement confirmed on. New conversations use this policy."
-            : change.effective?.error ||
-              change.enforcement?.reason ||
-              (change.enforcement?.enabled === false
-                ? "Enforcement is off. Check the Policy page."
-                : "Check composition and enforcement on the Policy page.")}
-        </InlineNoticeText>
-        <Button variant="outline" size="xs" className="ml-auto" asChild>
-          <Link href={active ? "/openappa" : "/openappa/policy"}>
-            <span>{active ? "View Guardrails" : "Check policy"}</span>
-          </Link>
-        </Button>
-      </InlineNotice>
+    <SaveResultLine result={result}>
+      {result.local ? <GithubSyncTip /> : null}
+    </SaveResultLine>
+  );
+}
+
+function SaveResultLine({
+  result,
+  children,
+}: {
+  result: SaveResult;
+  children?: ReactNode;
+}) {
+  const linkClassName = cn(
+    "inline-flex items-center gap-0.5 font-medium underline underline-offset-4",
+    result.tone === "success"
+      ? "text-emerald-700 dark:text-emerald-400"
+      : "text-amber-700 dark:text-amber-400",
+  );
+  return (
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-4 py-3 text-sm">
+      <span
+        className={cn(
+          "font-medium",
+          result.tone === "success"
+            ? "text-emerald-700 dark:text-emerald-400"
+            : "text-amber-700 dark:text-amber-400",
+        )}
+      >
+        {result.title}
+      </span>
+      <span className="text-muted-foreground">· {result.detail} ·</span>
+      {result.action.external ? (
+        <a
+          href={result.action.href}
+          target="_blank"
+          rel="noreferrer"
+          className={linkClassName}
+        >
+          {result.action.label}
+          <ArrowUpRight className="size-3.5" aria-hidden />
+        </a>
+      ) : (
+        <Link href={result.action.href} className={linkClassName}>
+          {result.action.label}
+        </Link>
+      )}
+      {children}
     </div>
   );
 }
 
-export function isOpenAppaPolicyChange(output: unknown): boolean {
-  return parsePolicyChange(output) !== null;
+/**
+ * In a locally saved revision's banner: GitHub sync is set up in the guardrails
+ * settings, opened in a new tab so the chat stays put and the operator sees
+ * what setup leaves to do (such as merging its pull request).
+ */
+function GithubSyncTip() {
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  const { data: sync } = useAppaGithubSync();
+  if (canManage !== true || !sync?.enabled || sync.source?.repo) return null;
+  return (
+    // Its own line under the result.
+    <p className="basis-full text-xs text-muted-foreground">
+      Tip: keep the policy in GitHub, so changes go through pull requests.{" "}
+      <a
+        href="/settings/guardrails?setup=github-sync"
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-0.5 font-medium underline underline-offset-4"
+      >
+        Set up GitHub sync
+        <ArrowUpRight className="size-3" aria-hidden />
+      </a>
+    </p>
+  );
 }
 
-function parsePolicyChange(output: unknown): PolicyChange | null {
+/**
+ * What saved validations report: an opened pull request, or a local save,
+ * with the draft replay's counts. Null for a preview or an unreadable result.
+ */
+export function getValidationSaveResult(output: unknown): SaveResult | null {
+  const change = parseOutput(output);
+  if (!change || change.stage === "preview") return null;
+  const counts = parseReplayCounts(change.counts);
+  if (!counts) return null;
+  const pullUrl =
+    change.delivery === "pull_request" &&
+    typeof change.url === "string" &&
+    change.url.startsWith("https://github.com/") &&
+    Number.isSafeInteger(change.number) &&
+    (change.number as number) > 0
+      ? change.url
+      : null;
+  if (
+    !pullUrl &&
+    (change.delivery !== "revision" ||
+      typeof change.version !== "string" ||
+      !change.version)
+  )
+    return null;
+  const replay = `draft replay: ${replaySummary(counts).replace(/\.$/, "")}`;
+  const tone = replayPassed(counts) ? "success" : "warning";
+  if (pullUrl) {
+    return {
+      tone,
+      title: `Opened PR #${change.number}`,
+      detail: `merge it to apply · ${replay}`,
+      action: { label: "Review pull request", href: pullUrl, external: true },
+      local: false,
+    };
+  }
+  return {
+    tone,
+    title:
+      change.policyChanged === true
+        ? "Saved policy and validations"
+        : "Saved validations",
+    detail: replay,
+    action: {
+      label: "View Validations",
+      href: "/openappa/validation",
+      external: false,
+    },
+    local: true,
+  };
+}
+
+/** The result of saved validations, as one line in its tool card. */
+export function OpenAppaValidationCompletion({ output }: { output: unknown }) {
+  const result = getValidationSaveResult(output);
+  return result ? <SaveResultLine result={result} /> : null;
+}
+
+type ReplayCounts = { passed: number; failed: number; cannotRun: number };
+
+function parseReplayCounts(value: unknown): ReplayCounts | null {
+  if (!value || typeof value !== "object") return null;
+  const counts = value as Record<string, unknown>;
+  if (
+    ![counts.passed, counts.failed, counts.cannotRun].every(
+      (count) =>
+        typeof count === "number" && Number.isSafeInteger(count) && count >= 0,
+    )
+  )
+    return null;
+  return counts as ReplayCounts;
+}
+
+function replayPassed(counts: ReplayCounts) {
+  return counts.failed === 0 && counts.cannotRun === 0 && counts.passed > 0;
+}
+
+function replaySummary(counts: ReplayCounts) {
+  return `${counts.passed} passed, ${counts.failed} failed, ${counts.cannotRun} could not run.`;
+}
+
+export function isOpenAppaPolicyChange(
+  output: unknown,
+  validationChange = false,
+): boolean {
+  return parsePolicyChange(output, validationChange) !== null;
+}
+
+function parseOutput(output: unknown): Record<string, unknown> | null {
   let candidate = output;
   if (candidate && typeof candidate === "object") {
+    if ("isError" in candidate && candidate.isError === true) return null;
     if ("structuredContent" in candidate) {
       candidate = candidate.structuredContent;
     } else if ("content" in candidate) {
@@ -176,7 +449,30 @@ function parsePolicyChange(output: unknown): PolicyChange | null {
     }
   }
   if (!candidate || typeof candidate !== "object") return null;
-  const value = candidate as Record<string, unknown>;
+  return candidate as Record<string, unknown>;
+}
+
+function parsePolicyChange(
+  output: unknown,
+  validationChange = false,
+): PolicyChange | null {
+  let value = parseOutput(output);
+  if (!value) return null;
+  if (validationChange) {
+    if (value.stage === "preview") {
+      const policy = value.policy;
+      if (
+        !policy ||
+        typeof policy !== "object" ||
+        !("changed" in policy) ||
+        policy.changed !== true
+      )
+        return null;
+      value = { ...value, ...policy };
+    } else if (value.before === value.after) {
+      return null;
+    }
+  }
   if (
     (value.delivery !== "revision" && value.delivery !== "pull_request") ||
     typeof value.before !== "string" ||

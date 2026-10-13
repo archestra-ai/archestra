@@ -6,15 +6,19 @@ import {
   providerDisplayNames,
   type ResourceVisibilityScope,
 } from "@archestra/shared";
+import type { UIMessageChunk } from "ai";
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { agentCredentialSetupUrl } from "@/archestra-mcp-server/helpers";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
+  A2AContextModel,
   AgentModel,
+  AgentRunModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
@@ -26,7 +30,15 @@ import {
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { RouteCategory } from "@/observability/tracing";
+import {
+  attachHitlReviews,
+  type ChatHitlDecision,
+  decideChatHitlReview,
+} from "@/openappa/a2a-hitl-review";
+import { approvalPromptCall } from "@/openappa/review-display";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
 import { getHiddenMessagingChannels } from "@/services/integration-overrides";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type {
@@ -35,9 +47,13 @@ import type {
   ChatOpsProcessingResult,
   ChatOpsProvider,
   ChatOpsProviderType,
+  ChatOpsReplyStream,
+  ChatReplyOptions,
+  DiscoveredChannel,
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
+import { AgentRuntimeCredentialsRequiredError } from "@/types/agent-runtime";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
@@ -59,15 +75,23 @@ import {
   ensureProvisionedUser,
   resolveSignupWelcomeMode,
 } from "./auto-provision";
-import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
+import {
+  claimThreadMuteHint,
+  getThreadMuteMarker,
+  invalidateChannelAnswerAll,
+} from "./channel-activation";
 import { compactChatOpsResponse } from "./chatops-response";
-import { chatOpsRunRegistry } from "./chatops-run-registry";
+import { chatOpsRunRegistry, wasRunSuperseded } from "./chatops-run-registry";
+import { watchChatOpsTask } from "./chatops-task-watcher";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
+  CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS,
   CHATOPS_CONTEXT_COMPACTED_NOTICE,
   CHATOPS_MESSAGE_RETENTION,
   CHATOPS_NO_REPLY_SENTINEL,
+  CHATOPS_SESSION_RESET_REPLY,
+  CHATOPS_SESSION_ROLLOVER_HINT,
   SLACK_DEFAULT_CONNECTION_MODE,
   THREAD_MUTE_HINT,
 } from "./constants";
@@ -76,11 +100,13 @@ import SlackProvider from "./slack-provider";
 import TelegramProvider from "./telegram-provider";
 import {
   buildAgentFooter,
+  buildChannelDescriptionBlock,
   buildChannelInstructionsBlock,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   errorMessage,
   isLlmProviderAuthError,
+  isSessionResetCommand,
   isSlackDmChannel,
   stripAgentFooterChrome,
 } from "./utils";
@@ -92,6 +118,8 @@ import {
 export class ChatOpsManager {
   private msTeamsProvider: MSTeamsProvider | null = null;
   private slackProvider: SlackProvider | null = null;
+  /** Additional Slack apps, each pinned to one agent, keyed by agent id. */
+  private slackAgentBots = new Map<string, SlackProvider>();
   private telegramProvider: TelegramProvider | null = null;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
   private readonly a2aManager: A2AManager;
@@ -115,7 +143,12 @@ export class ChatOpsManager {
     return this.msTeamsProvider;
   }
 
-  getSlackProvider(): SlackProvider | null {
+  /**
+   * The main Slack connection, or with `agentId` the Slack bot pinned to that
+   * agent.
+   */
+  getSlackProvider(agentId?: string): SlackProvider | null {
+    if (agentId) return this.slackAgentBots.get(agentId) ?? null;
     return this.slackProvider;
   }
 
@@ -170,6 +203,7 @@ export class ChatOpsManager {
     return (
       (this.msTeamsProvider?.isConfigured() ?? false) ||
       (this.slackProvider?.isConfigured() ?? false) ||
+      [...this.slackAgentBots.values()].some((bot) => bot.isConfigured()) ||
       (this.telegramProvider?.isConfigured() ?? false)
     );
   }
@@ -198,19 +232,17 @@ export class ChatOpsManager {
     filename: string;
     data: Buffer;
     comment?: string;
+    /** Set when the conversation is with a Slack bot pinned to this agent. */
+    pinnedAgentId?: string;
   }): Promise<void> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
       throw new Error("The task's messaging-channel binding no longer exists");
     }
-    const provider: ChatOpsProvider | null =
-      binding.provider === "slack"
-        ? this.slackProvider
-        : binding.provider === "ms-teams"
-          ? this.msTeamsProvider
-          : binding.provider === "telegram"
-            ? this.telegramProvider
-            : null;
+    const provider = this.providerForBinding(
+      binding.provider,
+      params.pinnedAgentId,
+    );
     if (!provider?.isConfigured()) {
       throw new Error(`The ${binding.provider} provider is not configured`);
     }
@@ -233,6 +265,8 @@ export class ChatOpsManager {
     threadId: string;
     text: string;
     agentName?: string;
+    /** Set when the conversation is with a Slack bot pinned to this agent. */
+    pinnedAgentId?: string;
   }): Promise<void> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
@@ -242,14 +276,10 @@ export class ChatOpsManager {
       );
       return;
     }
-    const provider =
-      binding.provider === "slack"
-        ? this.slackProvider
-        : binding.provider === "ms-teams"
-          ? this.msTeamsProvider
-          : binding.provider === "telegram"
-            ? this.telegramProvider
-            : null;
+    const provider = this.providerForBinding(
+      binding.provider,
+      params.pinnedAgentId,
+    );
     if (!provider?.isConfigured()) {
       logger.warn(
         { bindingId: params.bindingId, provider: binding.provider },
@@ -294,7 +324,13 @@ export class ChatOpsManager {
     if (await cacheManager.get(cacheKey)) return;
 
     try {
-      const channels = await provider.discoverChannels(context);
+      // Every Slack connection shares the channel table, so a channel only one
+      // pinned bot belongs to must count as active, or the stale sweep below
+      // deletes its binding.
+      const channels =
+        provider.providerId === "slack"
+          ? await this.discoverAllSlackChannels(context)
+          : await provider.discoverChannels(context);
       if (!channels?.length) {
         logger.debug(
           { workspaceId },
@@ -356,29 +392,37 @@ export class ChatOpsManager {
 
     // Load configs from DB (the single source of truth)
     // Errors are caught individually so a single broken config doesn't prevent other providers from initializing
-    const [msTeamsConfig, slackConfig, telegramConfig] = await Promise.all([
-      ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
-        logger.error(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[ChatOps] Failed to load MS Teams config, skipping",
-        );
-        return null;
-      }),
-      ChatOpsConfigModel.getSlackConfig().catch((error) => {
-        logger.error(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[ChatOps] Failed to load Slack config, skipping",
-        );
-        return null;
-      }),
-      ChatOpsConfigModel.getTelegramConfig().catch((error) => {
-        logger.error(
-          { error: error instanceof Error ? error.message : String(error) },
-          "[ChatOps] Failed to load Telegram config, skipping",
-        );
-        return null;
-      }),
-    ]);
+    const [msTeamsConfig, slackConfig, telegramConfig, slackAgentBotConfigs] =
+      await Promise.all([
+        ChatOpsConfigModel.getMsTeamsConfig().catch((error) => {
+          logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            "[ChatOps] Failed to load MS Teams config, skipping",
+          );
+          return null;
+        }),
+        ChatOpsConfigModel.getSlackConfig().catch((error) => {
+          logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            "[ChatOps] Failed to load Slack config, skipping",
+          );
+          return null;
+        }),
+        ChatOpsConfigModel.getTelegramConfig().catch((error) => {
+          logger.error(
+            { error: error instanceof Error ? error.message : String(error) },
+            "[ChatOps] Failed to load Telegram config, skipping",
+          );
+          return null;
+        }),
+        ChatOpsConfigModel.getSlackAgentBots().catch((error) => {
+          logger.error(
+            { error: errorMessage(error) },
+            "[ChatOps] Failed to load Slack agent bots, skipping",
+          );
+          return [];
+        }),
+      ]);
 
     // A channel an admin switched off must actually stop listening — a bot
     // left running would keep answering messages the organization no longer
@@ -409,6 +453,15 @@ export class ChatOpsManager {
       // access manager capabilities (e.g., getAccessibleChatopsAgents for slash commands)
       this.slackProvider.setEventHandler(this);
     }
+    if (!hiddenChannels.has("slack")) {
+      for (const botConfig of slackAgentBotConfigs) {
+        const bot = new SlackProvider(botConfig, {
+          pinnedAgentId: botConfig.agentId,
+        });
+        bot.setEventHandler(this);
+        this.slackAgentBots.set(botConfig.agentId, bot);
+      }
+    }
     // The Telegram integration is feature-flagged: without the master switch
     // the provider never starts, even if the DB already holds a config.
     if (
@@ -429,6 +482,10 @@ export class ChatOpsManager {
     const providers: { name: string; provider: ChatOpsProvider | null }[] = [
       { name: "MS Teams", provider: this.msTeamsProvider },
       { name: "Slack", provider: this.slackProvider },
+      ...[...this.slackAgentBots].map(([agentId, provider]) => ({
+        name: `Slack bot for agent ${agentId}`,
+        provider,
+      })),
       { name: "Telegram", provider: this.telegramProvider },
     ];
 
@@ -444,6 +501,14 @@ export class ChatOpsManager {
           );
         }
       }
+    }
+
+    // Each Slack bot ignores messages that @mention one of the others.
+    const slackBotUserIds = this.getSlackProviders().flatMap(
+      (slack) => slack.getBotUserId() ?? [],
+    );
+    for (const slack of this.getSlackProviders()) {
+      slack.setSiblingBotUserIds(slackBotUserIds);
     }
 
     // Eager channel discovery for providers that support it (fire-and-forget).
@@ -482,6 +547,10 @@ export class ChatOpsManager {
       await this.slackProvider.cleanup();
       this.slackProvider = null;
     }
+    for (const bot of this.slackAgentBots.values()) {
+      await bot.cleanup();
+    }
+    this.slackAgentBots.clear();
     if (this.telegramProvider) {
       await this.telegramProvider.cleanup();
       this.telegramProvider = null;
@@ -580,9 +649,11 @@ export class ChatOpsManager {
     });
 
     // If no binding found and this is a DM, check for a pending DM binding
-    // (pre-assigned from the UI before the first real DM interaction)
+    // (pre-assigned from the UI before the first real DM interaction). A
+    // pinned bot's DM is its own channel and never takes over another's.
     const isDm = message.metadata?.channelType === "im";
-    if (!binding && isDm && message.senderEmail) {
+    const pinnedAgentId = provider.pinnedAgentId;
+    if (!binding && isDm && message.senderEmail && !pinnedAgentId) {
       const pending = await ChatOpsChannelBindingModel.findPendingDmBinding({
         organizationId,
         provider: provider.providerId,
@@ -605,7 +676,7 @@ export class ChatOpsManager {
     // Fallback: if the DM channel ID changed (e.g., after bot reinstallation),
     // the pending lookup above misses. Try to find an existing DM binding by
     // email and update its channelId to the new one, preserving the agentId.
-    if (!binding && isDm && message.senderEmail) {
+    if (!binding && isDm && message.senderEmail && !pinnedAgentId) {
       const existingDm =
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId,
@@ -626,7 +697,37 @@ export class ChatOpsManager {
       }
     }
 
-    if (!binding || !binding.agentId) {
+    if (pinnedAgentId) {
+      // A pinned bot always answers as its agent: the binding only carries the
+      // channel (instructions, answer-all, task follow-ups). A channel nobody
+      // has claimed yet goes to the first bot's agent, so it shows up on that
+      // agent's page with its settings; other bots in it answer when
+      // @mentioned. Its DM is labelled with the agent the same way.
+      if (binding && !binding.agentId) {
+        binding =
+          (await ChatOpsChannelBindingModel.update(binding.id, {
+            agentId: pinnedAgentId,
+          })) ?? binding;
+        await invalidateChannelAnswerAll({
+          provider: binding.provider,
+          channelId: binding.channelId,
+          workspaceId: binding.workspaceId,
+        });
+      }
+      binding ??= await ChatOpsChannelBindingModel.upsertByChannel({
+        organizationId,
+        provider: provider.providerId,
+        channelId: message.channelId,
+        workspaceId: message.workspaceId,
+        workspaceName: provider.getWorkspaceName() ?? undefined,
+        channelName: isDm
+          ? `Direct Message - ${message.senderEmail}`
+          : ((await provider.getChannelName(message.channelId)) ?? undefined),
+        isDm,
+        dmOwnerEmail: isDm ? message.senderEmail : undefined,
+        agentId: pinnedAgentId,
+      });
+    } else if (!binding || !binding.agentId) {
       // Create binding early (without agent) so the DM/channel appears in the UI
       if (!binding) {
         const channelName = isDm
@@ -657,25 +758,18 @@ export class ChatOpsManager {
       binding = { ...binding, agentId };
     }
 
-    // A bare mention can arrive as either app_mention or message; ingress
-    // dedup keeps the first, so both forms must produce the same reply.
-    const isEmptySlackMention =
-      provider.providerId === "slack" &&
+    // A bare mention (no text, no file) still goes to the agent, so it answers
+    // in its own voice — a greeting, or a reply to what the thread is about —
+    // instead of a canned line. It can arrive as either app_mention or
+    // message; processMessage's dedup keeps the first.
+    const isBareMention =
       (message.metadata?.eventType === "app_mention" ||
         message.metadata?.botMentioned === true) &&
-      !message.text.trim();
-    if (isEmptySlackMention) {
-      // Deduplicate this early-return path so Slack retries don't produce duplicate replies.
-      const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
-        message.messageId,
-      );
-      if (isNew) {
-        await provider.sendReply({
-          originalMessage: message,
-          text: "How can I help you?",
-        });
-      }
-      return;
+      !message.text.trim() &&
+      !message.attachments?.length &&
+      !message.skippedAttachments?.length;
+    if (isBareMention) {
+      message.text = BARE_MENTION_TEXT;
     }
 
     // Process message through assigned agent
@@ -788,9 +882,10 @@ export class ChatOpsManager {
       announceAccessErrors = true,
     } = params;
 
-    // Deduplication check
+    // Deduplication check. Two bots in one channel both receive a message and
+    // each decides on its own, so the claim is per bot.
     const isNew = await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
-      message.messageId,
+      processedMessageKey(provider, message),
     );
     if (!isNew) {
       return { success: true };
@@ -805,6 +900,11 @@ export class ChatOpsManager {
 
     if (!binding) {
       return { success: true, error: "NO_BINDING" };
+    }
+
+    // A pinned bot answers as its own agent, whatever the channel is bound to.
+    if (provider.pinnedAgentId) {
+      binding.agentId = provider.pinnedAgentId;
     }
 
     // Channel binding with no agent yet (e.g. Teams, which calls processMessage
@@ -826,7 +926,28 @@ export class ChatOpsManager {
     }
 
     // Verify the agent exists and is an internal agent
-    const agent = await AgentModel.findById(binding.agentId);
+    let agent = await AgentModel.findById(binding.agentId);
+
+    // The bound agent was deleted or turned into a gateway/proxy: treat the
+    // channel as unassigned so the user gets a reply or the picker, not silence.
+    if ((!agent || agent.agentType !== "agent") && !provider.pinnedAgentId) {
+      logger.warn(
+        { agentId: binding.agentId, bindingId: binding.id },
+        "[ChatOps] Bound agent is not an internal agent, re-resolving",
+      );
+      const agentId = await this.resolveOrPromptChannelAgent({
+        provider,
+        message,
+        binding,
+        isDm: binding.isDm,
+      });
+      if (!agentId) {
+        return { success: true };
+      }
+      binding.agentId = agentId;
+      agent = await AgentModel.findById(agentId);
+    }
+
     if (!agent || agent.agentType !== "agent") {
       logger.warn(
         { agentId: binding.agentId, bindingId: binding.id },
@@ -838,12 +959,14 @@ export class ChatOpsManager {
       };
     }
 
-    // Resolve inline agent mention
-    const { agentToUse, cleanedMessageText } =
-      await this.resolveInlineAgentMention({
-        messageText: message.text,
-        defaultAgent: agent,
-      });
+    // Resolve inline agent mention. A pinned bot is already one agent's name;
+    // "Sales >" in its thread is just text.
+    const { agentToUse, cleanedMessageText } = provider.pinnedAgentId
+      ? { agentToUse: agent, cleanedMessageText: message.text }
+      : await this.resolveInlineAgentMention({
+          messageText: message.text,
+          defaultAgent: agent,
+        });
 
     // Security: Validate user has access to the agent
     logger.debug(
@@ -869,11 +992,27 @@ export class ChatOpsManager {
       return { success: false, error: authResult.error };
     }
 
+    const serverSideSessions = usesServerSideSessions(provider, message);
+
+    // A chat without reply threads is one rolling session, so it needs an
+    // explicit way to start over. In a thread, a new thread does that.
+    if (
+      serverSideSessions &&
+      !message.threadId &&
+      isSessionResetCommand(cleanedMessageText)
+    ) {
+      return await this.resetChatSession({
+        provider,
+        message,
+        agentName: agentToUse.name,
+        sendReply,
+      });
+    }
+
     // Build context from thread history (includes downloading historical
     // image attachments). Server-side-session providers skip the platform
     // fetch: their history lives in the thread's persistent A2A context and
     // reaches the model as real prior turns instead of a text block.
-    const serverSideSessions = provider.usesServerSideSessions === true;
     const { contextMessages, historyAttachments } = serverSideSessions
       ? { contextMessages: [], historyAttachments: [] }
       : await this.fetchThreadHistory(message, provider);
@@ -935,6 +1074,11 @@ export class ChatOpsManager {
         contextLines.push(`- Message permalink: ${permalink}`);
       }
       systemPrefix = contextLines.join("\n");
+    }
+    if (!binding.isDm && provider.getChannelDescription) {
+      systemPrefix += buildChannelDescriptionBlock(
+        await provider.getChannelDescription(message.channelId),
+      );
     }
 
     // Group conversations: the agent receives every message, so frame the
@@ -1605,10 +1749,17 @@ export class ChatOpsManager {
         "[ChatOps] User does not have access to agent",
       );
       if (!denyQuietly) {
+        const appName = await OrganizationModel.getAppName();
         await this.sendSecurityErrorReply(
           provider,
           message,
-          `You don't have access to the agent "${agentName}". Contact your administrator for access.`,
+          [
+            `You can't use *${agentName}* yet — it hasn't been shared with you in ${appName}.`,
+            `Ask whoever manages ${agentName} to share it with you (${userEmail}): ${config.frontendBaseUrl}/agents/${agentId}`,
+            ...(provisioned.invitationId !== null
+              ? [`You'll also get a DM from me with a link to sign in.`]
+              : []),
+          ].join("\n"),
         );
       }
       return {
@@ -1631,7 +1782,9 @@ export class ChatOpsManager {
   }
 
   /**
-   * Send a security error reply back to the user via the chat provider.
+   * Tell the sender why they were refused — only them, where the platform
+   * allows it (a Slack channel: an ephemeral message), so the thread is not
+   * interrupted for everyone else.
    */
   private async sendSecurityErrorReply(
     provider: ChatOpsProvider,
@@ -1646,9 +1799,19 @@ export class ChatOpsManager {
       "[ChatOps] Sending security error reply",
     );
     try {
+      const isChannel = message.metadata?.conversationType !== "personal";
+      if (isChannel && provider.sendEphemeralMessage) {
+        await provider.sendEphemeralMessage({
+          channelId: message.channelId,
+          userId: message.senderId,
+          text: `:lock: ${errorText}`,
+          threadId: message.threadId,
+        });
+        return;
+      }
       await provider.sendReply({
         originalMessage: message,
-        text: `⚠️ **Access Denied**\n\n${errorText}`,
+        text: `🔒 ${errorText}`,
       });
       logger.debug("[ChatOps] Security error reply sent successfully");
     } catch (error) {
@@ -1784,6 +1947,13 @@ export class ChatOpsManager {
       userId,
     } = params;
 
+    // An Agent with its own runtime runs there, never as a foreground LLM
+    // call — the same rule every other invocation surface follows.
+    const fullAgent = await AgentModel.findById(agent.id);
+    if (fullAgent && resolveAgentRuntime(fullAgent)) {
+      return await this.startAgentRuntimeRun(params);
+    }
+
     // Stamp the start time so a deliberate no-reply can report how long the
     // agent thought before deciding (shown in the Teams channel placeholder).
     message.metadata = {
@@ -1831,27 +2001,32 @@ export class ChatOpsManager {
       provider: provider.providerId,
       channelId: message.channelId,
       threadId: message.threadId ?? message.channelId,
+      scope: provider.stateScope,
     };
     // A sender's follow-up message supersedes their still-running turn: the
     // stale reply is dropped and only the follow-up gets answered — with the
     // earlier message in context. Only for server-side-session providers,
     // whose pre-execution persistence guarantees the superseded turn stays in
     // the thread history (stateless providers would lose it entirely).
-    const supersede =
-      provider.usesServerSideSessions === true
-        ? {
-            senderId: message.senderId,
-            sequence:
-              typeof message.metadata?.telegramMessageId === "number"
-                ? message.metadata.telegramMessageId
-                : message.timestamp.getTime(),
-          }
-        : undefined;
+    const supersede = usesServerSideSessions(provider, message)
+      ? {
+          senderId: message.senderId,
+          sequence:
+            typeof message.metadata?.telegramMessageId === "number"
+              ? message.metadata.telegramMessageId
+              : message.timestamp.getTime(),
+        }
+      : undefined;
     const { signal: abortSignal, unregister } = chatOpsRunRegistry.register(
       threadKey,
       { supersede },
     );
     const muteMarkerAtStart = await getThreadMuteMarker(threadKey);
+
+    // Held in a ref: the transient-error retry below swaps in a fresh stream.
+    const replyStream = {
+      current: this.openReplyStream({ provider, message, sendReply }),
+    };
 
     try {
       const executeParams = {
@@ -1864,6 +2039,9 @@ export class ChatOpsManager {
         userId,
         abortSignal,
         notifyContextCompaction: sendReply,
+        onUiMessageChunk: replyStream.current
+          ? async (chunk: UIMessageChunk) => replyStream.current?.push(chunk)
+          : undefined,
       };
       let execution: Awaited<ReturnType<ChatOpsManager["executeMessage"]>>;
       try {
@@ -1877,6 +2055,8 @@ export class ChatOpsManager {
             provider,
             message,
             threadKey,
+            replyStream: replyStream.current,
+            abortSignal,
           });
         }
         // Web chat surfaces transient provider failures as a retry button;
@@ -1894,9 +2074,17 @@ export class ChatOpsManager {
           },
           "[ChatOps] Retrying execution once after a transient provider error",
         );
+        // The failed attempt's partial stream would read as the start of the
+        // retried answer — drop it and stream the retry fresh.
+        await replyStream.current?.abandon({ keepContent: false });
+        replyStream.current = this.openReplyStream({
+          provider,
+          message,
+          sendReply,
+        });
         execution = await this.executeMessage(executeParams);
       }
-      const { result, responseAgent } = execution;
+      const { result, responseAgent, session } = execution;
 
       // Drop the reply if the thread was muted while the run was in flight —
       // whether we aborted it here (abortSignal) or it ran to completion on
@@ -1906,7 +2094,13 @@ export class ChatOpsManager {
         abortSignal.aborted ||
         (await this.threadMutedSinceStart(threadKey, muteMarkerAtStart))
       ) {
-        return await this.suppressMutedReply({ provider, message, threadKey });
+        return await this.suppressMutedReply({
+          provider,
+          message,
+          threadKey,
+          replyStream: replyStream.current,
+          abortSignal,
+        });
       }
 
       return await this.replyByMessageExecutionResult({
@@ -1915,19 +2109,31 @@ export class ChatOpsManager {
         provider,
         sendReply,
         result,
+        session,
+        replyStream: replyStream.current,
+        reviewer: { userId, organizationId: binding.organizationId },
       });
     } catch (error) {
       // A mute that aborted the run mid-flight (e.g. during the retry leg above)
       // surfaces here as a throw — stay silent rather than posting it as an
       // error, since the user just asked the bot to be quiet.
       if (abortSignal.aborted) {
-        return await this.suppressMutedReply({ provider, message, threadKey });
+        return await this.suppressMutedReply({
+          provider,
+          message,
+          threadKey,
+          replyStream: replyStream.current,
+          abortSignal,
+        });
       }
 
       logger.error(
         { messageId: message.messageId, error: errorMessage(error) },
         "[ChatOps] Failed to execute A2A message",
       );
+
+      // A half-streamed answer followed by an error reads as two replies.
+      await replyStream.current?.abandon({ keepContent: false });
 
       if (sendReply) {
         await this.sendExecutionErrorReply({
@@ -1947,6 +2153,226 @@ export class ChatOpsManager {
     } finally {
       if (typingHeartbeat) clearInterval(typingHeartbeat);
       unregister();
+      // Close a stream an unexpected throw left open (a no-op once finished),
+      // then clear the working indicator: Slack agent sessions stay
+      // "processing" until told otherwise, even after the reply is posted.
+      await replyStream.current?.abandon({ keepContent: true });
+      if (sendReply) {
+        await provider
+          .clearTypingStatus?.(message.channelId, message.threadId ?? "")
+          ?.catch(() => {});
+      }
+    }
+  }
+
+  /** Every Slack connection: the main app, then the pinned agent bots. */
+  private getSlackProviders(): SlackProvider[] {
+    return [
+      ...(this.slackProvider ? [this.slackProvider] : []),
+      ...this.slackAgentBots.values(),
+    ];
+  }
+
+  /**
+   * The channels every Slack connection is a member of, merged. A connection
+   * whose listing fails contributes nothing (SlackProvider logs it).
+   */
+  private async discoverAllSlackChannels(
+    context: unknown,
+  ): Promise<DiscoveredChannel[]> {
+    const listings = await Promise.all(
+      this.getSlackProviders().map((slack) => slack.discoverChannels(context)),
+    );
+    const byId = new Map<string, DiscoveredChannel>();
+    for (const channel of listings.flat()) {
+      if (!byId.has(channel.channelId)) byId.set(channel.channelId, channel);
+    }
+    return [...byId.values()];
+  }
+
+  /**
+   * The connection that posts into a binding's conversation: the Slack bot
+   * pinned to the run's agent when the conversation was with that bot.
+   */
+  private providerForBinding(
+    providerType: ChatOpsProviderType,
+    pinnedAgentId: string | undefined,
+  ): ChatOpsProvider | null {
+    if (providerType === "slack" && pinnedAgentId) {
+      return this.slackAgentBots.get(pinnedAgentId) ?? null;
+    }
+    return this.getChatOpsProvider(providerType);
+  }
+
+  /**
+   * Open a reply stream when the provider supports one and the sender is
+   * plainly waiting for an answer: a DM, or a message that @mentions the bot.
+   * Elsewhere in a channel the agent often decides to stay quiet, and text it
+   * streamed before deciding would flash up and vanish.
+   */
+  private openReplyStream(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    sendReply: boolean;
+  }): ChatOpsReplyStream | null {
+    const { provider, message, sendReply } = params;
+    if (!sendReply || !provider.startReplyStream) return null;
+    const addressed =
+      message.metadata?.conversationType === "personal" ||
+      message.metadata?.botMentioned === true;
+    return addressed ? provider.startReplyStream(message) : null;
+  }
+
+  /**
+   * Post a reply, finishing the live streamed message instead when there is
+   * one, so the answer is not posted twice.
+   */
+  private async deliverReply(params: {
+    provider: ChatOpsProvider;
+    replyStream?: ChatOpsReplyStream | null;
+    options: ChatReplyOptions;
+  }): Promise<void> {
+    const { provider, replyStream, options } = params;
+    if (replyStream?.isLive) {
+      await replyStream.finish(options);
+      return;
+    }
+    await provider.sendReply(options);
+  }
+
+  /**
+   * Start a durable run in the Agent's runtime. The run posts its result to
+   * this thread when it settles, so this turn only acknowledges the start. A
+   * follow-up from the same person continues their latest workspace for the
+   * thread, so the work carries over between messages.
+   */
+  private async startAgentRuntimeRun(params: {
+    agent: { id: string; name: string };
+    binding: { id: string; organizationId: string };
+    message: IncomingChatMessage;
+    provider: ChatOpsProvider;
+    fullMessage: string;
+    ephemeralExecutionPrefix?: string;
+    sendReply: boolean;
+    userId: string;
+  }): Promise<ChatOpsProcessingResult> {
+    const {
+      agent,
+      binding,
+      message,
+      provider,
+      fullMessage,
+      ephemeralExecutionPrefix,
+      sendReply,
+      userId,
+    } = params;
+    const threadId = message.threadId ?? message.channelId ?? message.messageId;
+    const actor = {
+      kind: "user" as const,
+      id: userId,
+      organizationId: binding.organizationId,
+    };
+    // The Teams replay path (sendReply: false) posts `agentResponse` itself.
+    const acknowledge = async (
+      text: string,
+    ): Promise<ChatOpsProcessingResult> => {
+      if (sendReply) {
+        await provider.sendReply({
+          originalMessage: message,
+          text,
+          footer: buildAgentFooter(agent.name),
+          conversationReference: message.metadata?.conversationReference,
+        });
+      }
+      return { success: true, agentResponse: text };
+    };
+
+    try {
+      const previous = await AgentRunModel.findLatestInChatOpsThread({
+        bindingId: binding.id,
+        threadId,
+        agentId: agent.id,
+        organizationId: binding.organizationId,
+        actorKind: actor.kind,
+        actorId: actor.id,
+      });
+      const workspace = previous?.workspace;
+      const workspaceRetained =
+        !!workspace &&
+        !["deleted", "deleting"].includes(workspace.state) &&
+        workspace.expiresAt.getTime() > Date.now();
+      // A workspace runs one turn at a time. Starting another now would fail
+      // its claim, so say so instead of posting a failed run.
+      if (
+        previous &&
+        workspaceRetained &&
+        (workspace.activeTaskId ||
+          !["idle", "suspended"].includes(workspace.state))
+      ) {
+        return await acknowledge(
+          `The previous run in this thread is still working. I will post its result here when it finishes, then you can send your follow-up: ${agentRunUrl(previous.run.taskId)}`,
+        );
+      }
+
+      const task = await startDetachedAgentTask({
+        actor,
+        agentId: agent.id,
+        message: fullMessage,
+        attachments: message.attachments,
+        systemParams: {
+          resumeFromTaskId:
+            previous && workspaceRetained ? previous.run.taskId : undefined,
+          sessionId: buildChatOpsSessionId(
+            provider.providerId,
+            message.channelId,
+            message.threadId,
+          ),
+          source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
+          routeCategory: RouteCategory.CHATOPS,
+          completionTarget: {
+            type: "chatops",
+            bindingId: binding.id,
+            threadId,
+            ...(provider.pinnedAgentId && {
+              pinnedAgentId: provider.pinnedAgentId,
+            }),
+          },
+          ephemeralExecutionPrefix,
+        },
+      });
+      void watchChatOpsTask({
+        taskId: task.id,
+        bindingId: binding.id,
+        threadId,
+        agentName: agent.name,
+        pinnedAgentId: provider.pinnedAgentId,
+      }).catch((error) => {
+        logger.warn(
+          { error: errorMessage(error), taskId: task.id },
+          "[ChatOps] Failed to watch Agent Runtime run for thread completion",
+        );
+      });
+      logger.info(
+        { agentId: agent.id, taskId: task.id, messageId: message.messageId },
+        "[ChatOps] Started Agent Runtime run",
+      );
+      return await acknowledge(
+        `Started a run for this. I will post the result in this thread when it finishes: ${agentRunUrl(task.id)}`,
+      );
+    } catch (error) {
+      logger.error(
+        { messageId: message.messageId, error: errorMessage(error) },
+        "[ChatOps] Failed to start Agent Runtime run",
+      );
+      if (sendReply) {
+        await this.sendExecutionErrorReply({
+          provider,
+          message,
+          error,
+          agentName: agent.name,
+        });
+      }
+      return { success: false, error: errorMessage(error) };
     }
   }
 
@@ -1971,10 +2397,12 @@ export class ChatOpsManager {
 
   /**
    * Silently drop the reply for a run aborted mid-flight — the thread was
-   * muted, or the run was superseded by the sender's follow-up message: clear
-   * the lingering "typing…" indicator and report success with no response
-   * (same shape as the agent deliberately staying quiet), so nothing is
-   * posted.
+   * stopped or muted, or the run was superseded by the sender's follow-up
+   * message: clear the lingering "typing…" indicator and report success with
+   * no response (same shape as the agent deliberately staying quiet), so
+   * nothing is posted. A streamed partial answer stays when the user stopped
+   * it (they saw it and chose to stop there) and goes when a follow-up
+   * superseded it.
    */
   private async suppressMutedReply(params: {
     provider: ChatOpsProvider;
@@ -1984,8 +2412,13 @@ export class ChatOpsManager {
       channelId: string;
       threadId: string;
     };
+    replyStream: ChatOpsReplyStream | null;
+    abortSignal: AbortSignal;
   }): Promise<ChatOpsProcessingResult> {
-    const { provider, message, threadKey } = params;
+    const { provider, message, threadKey, replyStream, abortSignal } = params;
+    await replyStream?.abandon({
+      keepContent: !wasRunSuperseded(abortSignal),
+    });
     logger.info(
       {
         messageId: message.messageId,
@@ -1993,7 +2426,7 @@ export class ChatOpsManager {
         channelId: threadKey.channelId,
         threadId: threadKey.threadId,
       },
-      "[ChatOps] Run aborted (thread muted or superseded by a follow-up) — dropping reply",
+      "[ChatOps] Run aborted (thread stopped, muted, or superseded by a follow-up) — dropping reply",
     );
     await provider
       .clearTypingStatus?.(message.channelId, message.threadId ?? "")
@@ -2028,6 +2461,21 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
+        footer: footer(),
+        conversationReference: message.metadata?.conversationReference,
+      });
+      return;
+    }
+
+    // The Agent's runtime needs per-user credentials the sender has not set
+    // up — link straight to the form instead of a generic apology.
+    if (error instanceof AgentRuntimeCredentialsRequiredError) {
+      await provider.sendReply({
+        originalMessage: message,
+        text: `This agent runs in its own runtime, which needs credentials you have not set up yet: ${error.missing.map((entry) => entry.label).join(", ")}. Add them, then send your message again: ${agentCredentialSetupUrl(
+          error.agentId,
+          error.missing.map((entry) => entry.key),
+        )}`,
         footer: footer(),
         conversationReference: message.metadata?.conversationReference,
       });
@@ -2146,9 +2594,23 @@ export class ChatOpsManager {
     sendReply: boolean;
     currentApprovalId?: string; // if replying from an approval flow
     result: A2AProtocolSendMessageResponse;
+    session?: ChatSessionReplyInfo;
+    /** The run's streamed reply, finished here instead of posting anew. */
+    replyStream?: ChatOpsReplyStream | null;
+    /** The user who answers this run's OpenAPPA reviews. */
+    reviewer: ChatOpsReviewer;
   }): Promise<ChatOpsProcessingResult> {
-    const { agent, message, provider, sendReply, currentApprovalId, result } =
-      params;
+    const {
+      agent,
+      message,
+      provider,
+      sendReply,
+      currentApprovalId,
+      result,
+      session,
+      replyStream,
+      reviewer,
+    } = params;
 
     const approvalRequests =
       extractApprovalRequestsFromSendMessageResult(result);
@@ -2161,6 +2623,8 @@ export class ChatOpsManager {
         approvalRequests,
         currentApprovalId,
         result,
+        replyStream,
+        reviewer,
       });
     }
 
@@ -2184,18 +2648,35 @@ export class ChatOpsManager {
       agentChoseSilence = true;
       agentResponse = "";
     }
+    // Whatever streamed before the agent settled on silence must not stay.
+    if (!agentResponse) {
+      await replyStream?.abandon({ keepContent: false });
+    }
 
     if (sendReply && agentResponse) {
-      await provider.sendReply({
-        originalMessage: message,
-        text: agentResponse,
-        footer: buildAgentFooter(agent.name),
-        // Teach the off switch once per channel thread: sticky auto-reply only
-        // applies in channels, so the hint rides the bot's first reply there.
-        ...((await this.shouldHintThreadMute(provider, message)) && {
-          hint: THREAD_MUTE_HINT,
-        }),
-        conversationReference: message.metadata?.conversationReference,
+      await this.deliverReply({
+        provider,
+        replyStream,
+        options: {
+          originalMessage: message,
+          text: agentResponse,
+          footer: buildAgentFooter(
+            agent.name,
+            session?.ownerName
+              ? `conversation started by ${session.ownerName}`
+              : undefined,
+          ),
+          // The first reply of a rolled-over chat session says so: otherwise
+          // the agent forgetting the earlier topic reads as a bug. Otherwise,
+          // teach the off switch once per channel thread: sticky auto-reply
+          // only applies in channels, so the hint rides the bot's first reply.
+          ...(session?.rolledOver
+            ? { hint: CHATOPS_SESSION_ROLLOVER_HINT }
+            : (await this.shouldHintThreadMute(provider, message)) && {
+                hint: THREAD_MUTE_HINT,
+              }),
+          conversationReference: message.metadata?.conversationReference,
+        },
       });
     } else if (
       sendReply &&
@@ -2221,8 +2702,7 @@ export class ChatOpsManager {
       });
     } else if (sendReply && !agentResponse) {
       // Nothing was (or will be) posted to the thread — clear the transient
-      // "thinking" indicator so it doesn't spin forever (Slack only
-      // auto-clears it when a message is posted).
+      // "thinking" indicator so it doesn't spin forever.
       await provider
         .clearTypingStatus?.(message.channelId, message.threadId ?? "")
         ?.catch(() => {});
@@ -2240,13 +2720,18 @@ export class ChatOpsManager {
    *
    * True only on the bot's FIRST reply in a channel thread — sticky auto-reply
    * (and thus muting) exists only in channels, and claimThreadMuteHint ensures
-   * the hint rides a single reply per thread rather than every one.
+   * the hint rides a single reply per thread rather than every one. Never for
+   * providers whose own Stop control is the off switch.
    */
   private async shouldHintThreadMute(
     provider: ChatOpsProvider,
     message: IncomingChatMessage,
   ): Promise<boolean> {
-    if (message.metadata?.conversationType !== "channel" || !message.threadId) {
+    if (
+      provider.hasNativeStopControl ||
+      message.metadata?.conversationType !== "channel" ||
+      !message.threadId
+    ) {
       return false;
     }
     return await claimThreadMuteHint({
@@ -2264,6 +2749,8 @@ export class ChatOpsManager {
     approvalRequests: A2AArchestraApprovalRequest[];
     currentApprovalId?: string; // if replying from an approval flow
     result: A2AProtocolSendMessageResponse;
+    replyStream?: ChatOpsReplyStream | null;
+    reviewer: ChatOpsReviewer;
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
@@ -2273,6 +2760,8 @@ export class ChatOpsManager {
       approvalRequests,
       currentApprovalId,
       result,
+      replyStream,
+      reviewer,
     } = params;
     const { task } = result;
     if (!task) {
@@ -2309,13 +2798,30 @@ export class ChatOpsManager {
     );
 
     if (sendReply) {
-      await provider.sendReply({
-        originalMessage: message,
-        text:
-          agentResponse ||
-          "Approval required before I can continue with this action.",
-        footer: buildAgentFooter(agent.name),
-        conversationReference: message.metadata?.conversationReference,
+      await this.deliverReply({
+        provider,
+        replyStream,
+        options: {
+          originalMessage: message,
+          text:
+            agentResponse ||
+            "Approval required before I can continue with this action.",
+          footer: buildAgentFooter(agent.name),
+          conversationReference: message.metadata?.conversationReference,
+        },
+      });
+
+      const reviews = await attachHitlReviews({
+        organizationId: reviewer.organizationId,
+        taskId: task.id,
+        approvalRequests,
+        answerer: {
+          kind: "chat",
+          reviewerUserId: reviewer.userId,
+          channelId: message.channelId,
+          threadId: message.threadId,
+        },
+        now: new Date(),
       });
 
       for (const approvalRequest of approvalRequests) {
@@ -2330,8 +2836,11 @@ export class ChatOpsManager {
           taskId: task.id,
           channelId: message.channelId,
           threadId: message.threadId,
-          toolName,
-          toolArgs: toolInput,
+          ...approvalPromptCall({
+            toolName,
+            toolArgs: toolInput,
+            review: reviews.get(approvalRequest.approvalId),
+          }),
           originalMessage: message,
         });
       }
@@ -2357,9 +2866,13 @@ export class ChatOpsManager {
     abortSignal?: AbortSignal;
     /** Post a chat notice when loading history triggers a compaction. */
     notifyContextCompaction?: boolean;
+    /** Sees every chunk of the run as it is produced (reply streaming). */
+    onUiMessageChunk?: (chunk: UIMessageChunk) => Promise<void>;
   }): Promise<{
     result: A2AProtocolSendMessageResponse;
     responseAgent: { id: string; name: string };
+    /** Set when the turn ran on a server-side session. */
+    session?: ChatSessionReplyInfo;
   }> {
     const {
       agent,
@@ -2371,6 +2884,7 @@ export class ChatOpsManager {
       userId,
       abortSignal,
       notifyContextCompaction,
+      onUiMessageChunk,
     } = params;
 
     // Use thread ID (or channel ID for non-threaded messages) as session ID
@@ -2390,17 +2904,20 @@ export class ChatOpsManager {
     };
 
     // Server-side sessions: every thread runs against its persistent A2A
-    // context, which carries the conversation history Telegram's API can't
-    // provide.
-    const contextId =
-      provider.usesServerSideSessions === true
-        ? await this.resolveThreadContextId({
-            provider,
-            message,
-            threadId: effectiveThreadId,
-            actor,
-          })
-        : undefined;
+    // context, which carries the conversation history the platform API can't
+    // provide (Telegram, MS Teams 1:1 and group chats).
+    const threadContext = usesServerSideSessions(provider, message)
+      ? await this.resolveThreadContextId({
+          provider,
+          message,
+          threadId: effectiveThreadId,
+          actor,
+          // Only a chat without reply threads rolls over. A thread is a
+          // conversation the user chose, so it never expires on its own.
+          rollOverWhenIdle: !message.threadId,
+        })
+      : undefined;
+    const contextId = threadContext?.contextId;
 
     const request = buildSendMessageRequest({
       contextId,
@@ -2419,6 +2936,9 @@ export class ChatOpsManager {
         type: "chatops",
         bindingId: binding.id,
         threadId: effectiveThreadId,
+        ...(provider.pinnedAgentId && {
+          pinnedAgentId: provider.pinnedAgentId,
+        }),
       },
       ephemeralExecutionPrefix,
     };
@@ -2430,6 +2950,7 @@ export class ChatOpsManager {
       request,
       systemParams,
       abortSignal,
+      onUiMessageChunk,
       // Tell the user their conversation was summarized — otherwise the model
       // suddenly "forgetting" details reads as a bug.
       onContextCompacted: notifyContextCompaction
@@ -2449,20 +2970,37 @@ export class ChatOpsManager {
         : undefined,
     });
 
-    return { result: initialResult, responseAgent: agent };
+    return {
+      result: initialResult,
+      responseAgent: agent,
+      ...(threadContext && {
+        session: {
+          rolledOver: threadContext.rolledOver,
+          ownerName: await this.describeSessionOwner({
+            message,
+            contextId: threadContext.contextId,
+          }),
+        },
+      }),
+    };
   }
 
   /**
    * Resolve (or create) the persistent A2A context backing a chat thread.
    * The mapping is keyed like the LLM session id — thread id, falling back
-   * to channel id — so a Telegram DM or plain group is one long conversation.
+   * to channel id — so a DM or plain group chat is one long conversation.
+   *
+   * With `rollOverWhenIdle`, a context idle for longer than
+   * CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS is swapped for a fresh one, so a
+   * chat without reply threads does not carry yesterday's topic forever.
    */
   private async resolveThreadContextId(params: {
     provider: ChatOpsProvider;
     message: IncomingChatMessage;
     threadId: string;
     actor: { kind: "user"; id: string; organizationId: string };
-  }): Promise<string> {
+    rollOverWhenIdle: boolean;
+  }): Promise<{ contextId: string; rolledOver: boolean }> {
     const threadKey = {
       provider: params.provider.providerId,
       channelId: params.message.channelId,
@@ -2471,7 +3009,36 @@ export class ChatOpsManager {
     };
     const existing = await ChatOpsThreadContextModel.findByThread(threadKey);
     if (existing) {
-      return existing.contextId;
+      if (
+        !params.rollOverWhenIdle ||
+        !(await isContextIdle(existing.contextId))
+      ) {
+        return { contextId: existing.contextId, rolledOver: false };
+      }
+      const fresh = await A2AContextManager.createContext(params.actor);
+      const replaced = await ChatOpsThreadContextModel.replaceContext({
+        id: existing.id,
+        expectedContextId: existing.contextId,
+        contextId: fresh.id,
+      });
+      if (replaced) {
+        logger.info(
+          {
+            provider: threadKey.provider,
+            channelId: threadKey.channelId,
+            previousContextId: existing.contextId,
+            contextId: fresh.id,
+          },
+          "[ChatOps] Rolled an idle chat over to a new session",
+        );
+        return { contextId: replaced.contextId, rolledOver: true };
+      }
+      // A concurrent message rolled it over first: join that session. Only
+      // the winner's reply carries the rollover hint.
+      const current = await ChatOpsThreadContextModel.findByThread(threadKey);
+      if (current) {
+        return { contextId: current.contextId, rolledOver: false };
+      }
     }
 
     // The context's recorded owner is whoever spoke first; later access goes
@@ -2482,7 +3049,94 @@ export class ChatOpsManager {
       ...threadKey,
       contextId: context.id,
     });
-    return mapping.contextId;
+    return { contextId: mapping.contextId, rolledOver: false };
+  }
+
+  /**
+   * Handle a reset command in a chat without reply threads: drop the chat's
+   * session mapping, so the next message starts a new context. The old
+   * context is kept, so its history is not lost.
+   */
+  private async resetChatSession(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    agentName: string;
+    sendReply: boolean;
+  }): Promise<ChatOpsProcessingResult> {
+    const { provider, message, agentName, sendReply } = params;
+    const removed = await ChatOpsThreadContextModel.deleteByThread({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      workspaceId: message.workspaceId ?? null,
+      threadId: message.channelId,
+    });
+    logger.info(
+      {
+        provider: provider.providerId,
+        channelId: message.channelId,
+        previousContextId: removed?.contextId ?? null,
+      },
+      "[ChatOps] Chat session reset on request",
+    );
+
+    if (sendReply) {
+      await provider.sendReply({
+        originalMessage: message,
+        text: CHATOPS_SESSION_RESET_REPLY,
+        footer: buildAgentFooter(agentName),
+        conversationReference: message.metadata?.conversationReference,
+      });
+    }
+    return { success: true, agentResponse: CHATOPS_SESSION_RESET_REPLY };
+  }
+
+  /**
+   * The display name of a session's owner, for the reply footer of a group
+   * chat without reply threads. There, unlike a thread (owned by whoever
+   * started it), nothing on screen shows whose conversation it is. Null in
+   * every other conversation, and when the owner cannot be resolved.
+   */
+  private async describeSessionOwner(params: {
+    message: IncomingChatMessage;
+    contextId: string;
+  }): Promise<string | null> {
+    if (
+      params.message.threadId ||
+      params.message.metadata?.conversationType !== "groupChat"
+    ) {
+      return null;
+    }
+    const context = await A2AContextModel.findById(params.contextId);
+    if (!context || context.actorKind !== "user") return null;
+    const owner = await UserModel.getById(context.actorId);
+    return owner?.name?.trim() || null;
+  }
+
+  /**
+   * Tells only the clicker why a click changed nothing. Slack can show a
+   * message to one person; MS Teams cannot, so the reply goes to the thread.
+   */
+  private async tellApprovalClicker(params: {
+    provider: ChatOpsProvider;
+    decision: ChatOpsApprovalDecision;
+    text: string;
+  }): Promise<void> {
+    const { provider, decision, text } = params;
+    if (provider.providerId === "slack") {
+      await provider.sendEphemeralMessage?.({
+        channelId: decision.channelId,
+        userId: decision.userId,
+        threadId: decision.threadTs,
+        text,
+      });
+      return;
+    }
+    await provider.sendReply({
+      originalMessage: decision.originalMessage,
+      text,
+      conversationReference:
+        decision.originalMessage.metadata?.conversationReference,
+    });
   }
 
   async handleInteractiveApprovalDecision(
@@ -2504,14 +3158,6 @@ export class ChatOpsManager {
         return;
       }
 
-      if (
-        email?.toLowerCase() !==
-        decision.originalMessage.senderEmail?.toLowerCase()
-      ) {
-        // Only initial requester can approve/decline
-        return;
-      }
-
       const binding = await ChatOpsChannelBindingModel.findByChannel({
         provider: provider.providerId,
         channelId: decision.channelId,
@@ -2525,7 +3171,40 @@ export class ChatOpsManager {
         );
         return;
       }
-      if (!binding.agentId) {
+
+      // An OpenAPPA review is decided by its stored reviewer, in its thread,
+      // before it expires, once. The button payload only names the review.
+      const openappaReview = await decideChatHitlReview({
+        organizationId: binding.organizationId,
+        taskId: decision.taskId,
+        approvalId: decision.approvalId,
+        clickerUserId: user.id,
+        clickChannelId: decision.channelId,
+        approved: decision.approved,
+        now: new Date(),
+      });
+      if (
+        openappaReview.status !== "not_openappa" &&
+        openappaReview.status !== "recorded"
+      ) {
+        await this.tellApprovalClicker({
+          provider,
+          decision,
+          text: reviewRefusalText(openappaReview),
+        });
+        return;
+      }
+
+      if (
+        openappaReview.status === "not_openappa" &&
+        email?.toLowerCase() !==
+          decision.originalMessage.senderEmail?.toLowerCase()
+      ) {
+        // Only initial requester can approve/decline
+        return;
+      }
+      const agentId = provider.pinnedAgentId ?? binding.agentId;
+      if (!agentId) {
         logger.error(
           {
             bindingId: binding.id,
@@ -2537,10 +3216,10 @@ export class ChatOpsManager {
         return;
       }
 
-      const agent = await AgentModel.findById(binding.agentId);
+      const agent = await AgentModel.findById(agentId);
       if (!agent) {
         logger.error(
-          { bindingId: binding.id, agentId: binding.agentId },
+          { bindingId: binding.id, agentId },
           "[ChatOps] Could not find agent for approval decision",
         );
         return;
@@ -2566,6 +3245,10 @@ export class ChatOpsManager {
           messageKey: decision.messageTs,
           toolName: decision.toolName,
           approved: decision.approved,
+          ...(openappaReview.status === "recorded" && {
+            decidedByUserId: decision.userId,
+            decidedByName: decision.userName,
+          }),
         });
       }
 
@@ -2573,23 +3256,29 @@ export class ChatOpsManager {
       // the approval task lives under the shared thread context, whose
       // recorded owner may be another participant (trusted access), and the
       // resumed run must see the thread's history.
-      const approvalA2aManager =
-        provider.usesServerSideSessions === true
-          ? this.statefulA2aManager
-          : this.a2aManager;
+      const approvalA2aManager = usesServerSideSessions(
+        provider,
+        originalMessage,
+      )
+        ? this.statefulA2aManager
+        : this.a2aManager;
       const result = await approvalA2aManager.sendMessage({
         actor: {
           kind: "user" as const,
           id: user.id,
           organizationId: binding.organizationId,
         },
-        agentId: binding.agentId,
+        agentId,
         request: buildApprovalDecisionSendMessageRequest({
           taskId: decision.taskId,
           approvalDecisions: [
             {
               approvalId: decision.approvalId,
-              approved: decision.approved,
+              // For an OpenAPPA review the reviewer has answered either way:
+              // `execute_remedy_plan` runs with the recorded ruling, so a
+              // decline also reaches OpenAPPA, which closes the offer.
+              approved:
+                openappaReview.status === "recorded" || decision.approved,
             },
           ],
         }),
@@ -2613,7 +3302,14 @@ export class ChatOpsManager {
         sendReply: true,
         currentApprovalId: decision.approvalId,
         result,
+        reviewer: { userId: user.id, organizationId: binding.organizationId },
       });
+      await provider
+        .clearTypingStatus?.(
+          originalMessage.channelId,
+          originalMessage.threadId ?? "",
+        )
+        ?.catch(() => {});
     } catch (error) {
       logger.error(
         {
@@ -2724,6 +3420,74 @@ function isTransientProviderError(error: unknown): error is ProviderError {
   );
 }
 
+function reviewRefusalText(
+  review: Exclude<
+    ChatHitlDecision,
+    { status: "not_openappa" } | { status: "recorded" }
+  >,
+): string {
+  switch (review.status) {
+    case "forbidden":
+      return review.reviewerUserId
+        ? "Only the person who asked for this action can approve or decline it."
+        : "This review has no reviewer, so no one can decide it.";
+    case "already_decided":
+      return `This review was already ${review.ruling === "approve" ? "approved" : "declined"}.`;
+    case "expired":
+      return "This review expired, so the action stays blocked.";
+    case "closed":
+      return "This review is closed.";
+  }
+}
+
+/** The user who started the run, and so answers its OpenAPPA reviews. */
+interface ChatOpsReviewer {
+  userId: string;
+  organizationId: string;
+}
+
+/** What the reply of a server-side-session turn says about the session. */
+interface ChatSessionReplyInfo {
+  /** This turn started a new session because the chat was idle. */
+  rolledOver: boolean;
+  /** Shown in the footer where nothing else shows whose conversation it is. */
+  ownerName: string | null;
+}
+
+/**
+ * Whether this message's conversation keeps its history server-side. Some
+ * providers decide per provider (Telegram), others per conversation (MS
+ * Teams: 1:1 and group chats yes, channel threads no).
+ */
+function usesServerSideSessions(
+  provider: ChatOpsProvider,
+  message: IncomingChatMessage,
+): boolean {
+  return (
+    provider.usesServerSideSessions === true ||
+    provider.usesServerSideSessionsFor?.(message) === true
+  );
+}
+
+/**
+ * Whether a session has had no message for longer than the rollover window.
+ * Every message write touches the context's `updatedAt`. A missing context
+ * counts as idle, so the chat gets a fresh one.
+ */
+async function isContextIdle(contextId: string): Promise<boolean> {
+  const context = await A2AContextModel.findById(contextId);
+  if (!context) return true;
+  return (
+    Date.now() - context.updatedAt.getTime() >
+    CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS
+  );
+}
+
+/** The web page that follows an Agent Runtime run started from a thread. */
+function agentRunUrl(taskId: string): string {
+  return `${config.frontendBaseUrl}/chat/runs/${taskId}`;
+}
+
 /**
  * Check if a given input string matches an agent name.
  * Tolerant matching: case-insensitive, ignores spaces.
@@ -2735,4 +3499,22 @@ export function matchesAgentName(input: string, agentName: string): boolean {
   const normalizedInput = input.toLowerCase().replace(/\s+/g, "");
   const normalizedName = agentName.toLowerCase().replace(/\s+/g, "");
   return normalizedInput === normalizedName;
+}
+
+/** What the agent sees for an @mention with no message. */
+const BARE_MENTION_TEXT =
+  "(The sender @mentioned you without a message. Reply briefly: greet them, or pick up what the thread is about.)";
+
+/**
+ * The key a message is claimed under for deduplication. Slack bots pinned to
+ * an agent share channels with each other and with the main app, and each one
+ * receives — and answers on its own — the same message id.
+ */
+function processedMessageKey(
+  provider: ChatOpsProvider,
+  message: IncomingChatMessage,
+): string {
+  return provider.stateScope
+    ? `${provider.stateScope}:${message.messageId}`
+    : message.messageId;
 }

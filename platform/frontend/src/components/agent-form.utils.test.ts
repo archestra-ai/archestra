@@ -4,6 +4,7 @@ import {
   assignedSubagentsSummary,
   assignedToolsSummary,
   excludedSourcesSummary,
+  excludedSubagentsSummary,
   excludedToolsSummary,
   getDescriptionPlaceholder,
   getNamePlaceholder,
@@ -167,6 +168,15 @@ describe("TOOL_CONNECTION_PROMPTING", () => {
     for (const line of Object.values(TOOL_CONNECTION_PROMPTING)) {
       expect(line).not.toMatch(/^Requested|^Require /);
     }
+  });
+});
+
+describe("All-mode subagent summary", () => {
+  it("says every local agent is a subagent, and counts exclusions", () => {
+    expect(excludedSubagentsSummary(0)).toBe("All local agents are subagents.");
+    expect(excludedSubagentsSummary(2)).toBe(
+      "All local agents are subagents, except 2 excluded.",
+    );
   });
 });
 

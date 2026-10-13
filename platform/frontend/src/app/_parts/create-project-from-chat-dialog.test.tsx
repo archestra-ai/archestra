@@ -58,7 +58,7 @@ describe("CreateProjectFromChatDialog", () => {
     } as unknown as ReturnType<typeof useRouter>);
   });
 
-  it("creates the project with a label from Advanced", async () => {
+  it("creates the project with a label", async () => {
     render(
       <CreateProjectFromChatDialog
         conversationId="conversation-id"
@@ -68,7 +68,6 @@ describe("CreateProjectFromChatDialog", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.change(screen.getByLabelText("Label key"), {
       target: { value: "stage" },
     });

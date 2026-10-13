@@ -42,6 +42,7 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import {
   formatResponsesFunctionCallFrames,
@@ -235,10 +236,9 @@ class AzureResponsesRequestAdapter
     }
 
     // Pair function_call_output items with their function_call by call_id so
-    // tool results surface as CommonMessage.toolCalls — the shape trusted-data
-    // / Dual LLM policy evaluation reads. Without the pairing, Responses-routed
-    // conversations look tool-free to the evaluator and sanitization is
-    // silently bypassed.
+    // tool results surface as CommonMessage.toolCalls. Without the pairing,
+    // Responses-routed conversations look tool-free to anything that reads
+    // the common format.
     const toolCallsByCallId = getToolCallsByCallId(this.request.input);
 
     return this.request.input.flatMap((item) =>
@@ -266,6 +266,7 @@ class AzureResponsesRequestAdapter
           ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
+          structured: typeof item.output !== "string",
           isError: false,
         },
       ];
@@ -343,6 +344,10 @@ class AzureResponsesRequestAdapter
         // hand the model exactly what was withheld.
         const updatedOutput = this.toolResultUpdates[item.call_id];
         if (updatedOutput === undefined) {
+          return item;
+        }
+        // Kept as sent: the output's parts (input_image, input_text) stay.
+        if (isApprovedAsSent({ sent: item.output, approved: updatedOutput })) {
           return item;
         }
 
@@ -1033,8 +1038,8 @@ function toCommonMessages(
 ): CommonMessage[] {
   // "easy input message" items carry role/content and omit `type` (it defaults
   // to "message"); the AI SDK emits this shape. Without handling it here,
-  // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
-  // evaluation (llm-proxy-handler) silently sees an empty conversation.
+  // getMessages() drops the user's prompt and every common-format reader
+  // silently sees an empty conversation.
   if ((item.type === "message" || item.type === undefined) && "role" in item) {
     return [
       {
@@ -1054,9 +1059,9 @@ function toCommonMessages(
       {
         role: "tool",
         content,
-        // An output whose function_call was pruned from the input still
-        // carries untrusted data — surface it under the "unknown" name so
-        // default trusted-data policies apply rather than nothing.
+        // An output whose function_call was pruned from the input is still a
+        // tool result — surface it under the "unknown" name rather than drop
+        // it.
         toolCalls: [
           {
             id: item.call_id,

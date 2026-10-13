@@ -737,7 +737,7 @@
         "type": "prometheus",
         "uid": "${metrics_datasource}"
       },
-      "description": "Rate of tool calls blocked by tool invocation policies, grouped by agent name",
+      "description": "Rate of tool calls blocked by guardrails, grouped by agent name",
       "fieldConfig": {
         "defaults": {
           "color": {

@@ -26,7 +26,7 @@ afterAll(() => server.close());
 it.each([
   "conversation",
   "agentRun",
-] as const)("%s adds team access in one dialog and saves only session capabilities", async (resource) => {
+] as const)("%s shares with a team through the add field, granting only session capabilities", async (resource) => {
   const user = userEvent.setup();
   const ownerGrant = {
     subject: { type: "user", id: "owner" },
@@ -40,9 +40,14 @@ it.each([
     revision: 1,
     grants: [ownerGrant],
     inheritedGrants: [],
+    actorSubjects: [{ type: "user", id: "owner" }],
     effectiveActions: ["read", "manage-permissions"],
   };
   let saved: unknown;
+  let releaseSave = () => {};
+  const saveHeld = new Promise<void>((resolve) => {
+    releaseSave = resolve;
+  });
   server.use(
     http.get(`${origin}/api/resource-permissions/${resource}/${scope}`, () =>
       HttpResponse.json(policy),
@@ -58,7 +63,19 @@ it.each([
       `${origin}/api/resource-permissions/${resource}/${scope}`,
       async ({ request }) => {
         saved = await request.json();
-        policy = { ...policy, revision: 2 };
+        await saveHeld;
+        policy = {
+          ...policy,
+          revision: 2,
+          grants: [
+            ownerGrant,
+            {
+              subject: { type: "team", id: "support" },
+              name: "Support",
+              actions: ["read"],
+            },
+          ],
+        };
         return HttpResponse.json(policy);
       },
     ),
@@ -86,17 +103,22 @@ it.each([
     expect(
       screen.getByText(/Apps in this chat have their own permissions/),
     ).toBeVisible();
-  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
-  await user.click(screen.getByRole("button", { name: /Teams/ }));
-  await user.click(screen.getByRole("combobox", { name: "Add teams" }));
-  await user.click(await screen.findByRole("option", { name: /Support/ }));
+  await user.click(
+    within(dialog).getByRole("combobox", { name: "Add access" }),
+  );
+  await user.click(await screen.findByRole("option", { name: "Support" }));
   expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
-  expect(screen.queryByText("Can edit")).not.toBeInTheDocument();
-  expect(screen.queryByText("Full access")).not.toBeInTheDocument();
-  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
+  // A session has no "use", and a new recipient never starts out able to
+  // manage access, so the draft grant is view-only.
+  expect(
+    within(dialog).getByRole("combobox", { name: "Permission for Support" }),
+  ).toHaveTextContent("Can view");
+  expect(screen.getByTestId("audience-chip")).toHaveTextContent("Team-wide");
   await user.click(
     within(dialog).getByRole("button", { name: "Save permissions" }),
   );
+  await waitFor(() => expect(saved).toBeDefined());
+  releaseSave();
   await waitFor(() =>
     expect(saved).toEqual({
       revision: 1,
@@ -109,4 +131,52 @@ it.each([
       ],
     }),
   );
+  // Nothing is left to save: the list is back to its saved state.
+  await waitFor(() =>
+    expect(
+      within(dialog).queryByRole("button", { name: "Save permissions" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(within(dialog).getByText("Support")).toBeVisible();
+});
+
+it.each([
+  ["conversation", `/chat/${scope}`],
+  ["agentRun", `/chat/runs/${scope}`],
+] as const)("%s shows a short link but copies the full URL", async (resource, path) => {
+  const user = userEvent.setup();
+  server.use(
+    http.get(`${origin}/api/resource-permissions/${resource}/${scope}`, () =>
+      HttpResponse.json({
+        resource,
+        scope,
+        name: "Review",
+        revision: 1,
+        grants: [],
+        inheritedGrants: [],
+        actorSubjects: [{ type: "user", id: "owner" }],
+        effectiveActions: ["read", "manage-permissions"],
+      }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      {resource === "conversation" ? (
+        <ShareConversationDialog
+          conversationId={scope}
+          open
+          onOpenChange={vi.fn()}
+        />
+      ) : (
+        <ShareAgentRunDialog taskId={scope} open onOpenChange={vi.fn()} />
+      )}
+    </QueryClientProvider>,
+  );
+  const url = `${window.location.origin}${path}`;
+  expect(screen.getByTitle(url)).toHaveTextContent(/11111111…1111$/);
+  await user.click(screen.getByRole("button", { name: "Copy link" }));
+  expect(await navigator.clipboard.readText()).toBe(url);
 });

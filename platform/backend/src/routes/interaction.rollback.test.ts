@@ -250,7 +250,6 @@ describe("interaction routes", () => {
     ]);
     expect(response.json().data[0]).not.toHaveProperty("request");
     expect(response.json().data[0]).not.toHaveProperty("response");
-    expect(response.json().data[0]).not.toHaveProperty("dualLlmAnalyses");
   });
 
   test("lists interactions whose response carries a non-standard finish_reason", async ({
@@ -759,6 +758,43 @@ describe("interaction routes", () => {
     });
     expect(all.statusCode).toBe(200);
     expect(all.json().data).toHaveLength(5);
+  });
+
+  test("reads historical guardrail interactions after feature removal", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({ organizationId, authorId: currentUser.id });
+    const interaction = await InteractionModel.create({
+      profileId: agent.id,
+      sessionId: "historical-session",
+      source: "guardrail:dual_llm",
+      type: "openai:chatCompletions",
+      request: { model: "gpt-4", messages: [] } as InsertInteraction["request"],
+      response: {
+        id: "synthetic-response",
+        object: "chat.completion",
+        created: 1,
+        model: "gpt-4",
+        choices: [],
+      } as InsertInteraction["response"],
+    });
+
+    const sessions = await app.inject({
+      method: "GET",
+      url: "/api/interactions/sessions?limit=10",
+    });
+    expect(sessions.statusCode).toBe(200);
+    expect(sessions.json().data[0]).toMatchObject({
+      source: "guardrail:dual_llm",
+      sources: ["guardrail:dual_llm"],
+    });
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/interactions/${interaction.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().source).toBe("guardrail:dual_llm");
   });
 
   test("cursor-paginates distinct sessions plus sessionless interactions", async ({

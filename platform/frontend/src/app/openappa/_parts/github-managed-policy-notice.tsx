@@ -1,18 +1,65 @@
 "use client";
 
-import { AlertTriangle, ExternalLink, LockKeyhole } from "lucide-react";
+import {
+  AlertTriangle,
+  ExternalLink,
+  GitPullRequestArrow,
+  LockKeyhole,
+} from "lucide-react";
 import Link from "next/link";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { type HeldPull, HeldPullNotice } from "./held-pull-notice";
 
-export function GithubManagedPolicyNotice() {
+type AppaGithubSyncStatus = NonNullable<
+  ReturnType<typeof useAppaGithubSync>["data"]
+>;
+
+export function GithubManagedPolicyNotice({
+  validationDirectory,
+  held: heldFromPolicy,
+}: {
+  validationDirectory?: string;
+  /** The hold as the policy reports it, for viewers who can't read sync settings. */
+  held?: HeldPull | null;
+} = {}) {
   const { data } = useAppaGithubSync();
   const source = data?.source;
   const failed = Boolean(source?.lastSyncError);
+  const validations = validationDirectory !== undefined;
   const href =
-    source?.repo && source.path
-      ? `https://github.com/${source.repo}/blob/${encodeURIComponent(source.ref ?? "HEAD")}/${source.path.split("/").map(encodeURIComponent).join("/")}`
-      : null;
+    validations && source?.repo
+      ? `${data?.githubWebUrl}/${source.repo}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
+      : githubPolicyFileUrl(data, "blob");
+
+  // A pull waiting for approval is not a failure: say what it waits for.
+  const held: HeldPull | null = source?.heldReasons?.length
+    ? { reasons: source.heldReasons, message: source.lastSyncError }
+    : (heldFromPolicy ?? null);
+  if (held?.reasons.length)
+    return <HeldPullNotice held={held} batteriesLink={!heldFromPolicy} />;
+
+  // Setup isn't finished until its pull request merges: ask for that instead.
+  if (!failed && source?.repo && source.setupPullRequestNumber)
+    return (
+      <InlineNotice variant="info">
+        <GitPullRequestArrow aria-hidden />
+        <span className="font-medium">Merge your initial policy</span>
+        <InlineNoticeText className="flex-1">
+          Your current policy stays active until it merges.
+        </InlineNoticeText>
+        <a
+          href={`${data?.githubWebUrl}/${source.repo}/pull/${source.setupPullRequestNumber}`}
+          target="_blank"
+          rel="noreferrer"
+          data-slot="inline-notice-action"
+          className="ml-auto inline-flex shrink-0 items-center gap-0.5 font-medium underline-offset-4 hover:underline"
+        >
+          <span>Review and merge PR</span>
+          <ExternalLink className="size-3" aria-hidden />
+        </a>
+      </InlineNotice>
+    );
 
   return (
     <InlineNotice variant={failed ? "error" : "neutral"}>
@@ -37,15 +84,21 @@ export function GithubManagedPolicyNotice() {
           <span>repository</span>
         )}{" "}
         <span>
-          {failed
-            ? "owns this policy, but its updates could not be synced."
-            : "owns this policy. Change its rules and batteries there."}
+          {validations
+            ? failed
+              ? "owns these validations, but its updates could not be synced."
+              : validationDirectory
+                ? "owns these validations. Change their files there."
+                : "owns these validations. Validations are disabled until you set a directory in sync settings."
+            : failed
+              ? "owns this policy, but its updates could not be synced."
+              : "owns this policy. Change its rules and batteries there."}
         </span>
-        {failed && (
+        {(failed || validationDirectory === "") && (
           <>
             {" "}
             <Link
-              href="/settings/openappa"
+              href="/settings/guardrails"
               className="underline underline-offset-2 hover:no-underline"
             >
               Review sync settings
@@ -56,4 +109,15 @@ export function GithubManagedPolicyNotice() {
       </InlineNoticeText>
     </InlineNotice>
   );
+}
+
+/** The synced policy file on GitHub, to read (`blob`) or to change (`edit`). */
+export function githubPolicyFileUrl(
+  sync: AppaGithubSyncStatus | null | undefined,
+  view: "blob" | "edit",
+): string | null {
+  const source = sync?.source;
+  if (!sync || !source?.repo || !source.path) return null;
+  const path = source.path.split("/").map(encodeURIComponent).join("/");
+  return `${sync.githubWebUrl}/${source.repo}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
 }

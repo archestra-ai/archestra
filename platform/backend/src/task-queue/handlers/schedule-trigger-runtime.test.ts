@@ -31,7 +31,6 @@ test.for([
   makeScheduleTrigger,
   makeScheduleTriggerRun,
 }) => {
-  config.agentRuntime.enabled = true;
   config.agentRuntime.platformBaseUrl = "https://platform.example.test";
   vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
   vi.spyOn(backend, "assertReady").mockResolvedValue();
@@ -181,12 +180,13 @@ test.for([
     settled?.completedAt,
   );
 
-  // Runtime configuration must never silently fall back to foreground execution.
-  config.agentRuntime.enabled = false;
+  // Runtime configuration must never silently fall back to foreground
+  // execution when the cluster loses the Agent Sandbox controller.
+  vi.spyOn(backend, "isEnabled", "get").mockReturnValue(false);
   const disabled = await makeScheduleTriggerRun(trigger.id);
   await handleScheduleTriggerRunExecution({ runId: disabled.id });
   expect(await ScheduleTriggerRunModel.findById(disabled.id)).toMatchObject({
     status: "failed",
-    error: expect.stringContaining("Agent Runtime is disabled"),
+    error: expect.stringContaining("not available on this deployment"),
   });
 });

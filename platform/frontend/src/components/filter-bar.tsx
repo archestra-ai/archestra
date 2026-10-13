@@ -329,9 +329,17 @@ export function FilterBarContextualActions({
  * `Select`, an `AgentSelector`, a bespoke popover); `FilterSelect` applies it
  * for you.
  *
- * `active` styling stays on the border and background: the label itself keeps
- * the foreground colour rather than dimming to `muted-foreground` when idle,
- * which dips under the 4.5:1 contrast minimum on some themes (WCAG 1.4.3).
+ * It normalises whatever the underlying trigger is (Select, SearchableSelect,
+ * an outline Button opening a popover or menu) so every filter on every page
+ * looks the same:
+ *   - State is shown on the border and background only. The value text is the
+ *     foreground colour whether it reads "All …", a placeholder-like default
+ *     ("Labels") or a selection; muted text dips under 4.5:1 on some themes
+ *     (WCAG 1.4.3) and made defaults look disabled next to Select values.
+ *   - One height, padding, gap and chevron. Triggers ship their chevron with
+ *     their own margin, size and opacity; those are reset here so the gap is
+ *     the flex `gap` alone.
+ *   - The Select/Input `--input` edge, since every filter picks a value.
  */
 export function filterControlClass({
   active = false,
@@ -343,7 +351,10 @@ export function filterControlClass({
   return cn(
     // `min-h-8` matters as much as `h-8`: AgentSelector's trigger sets
     // `h-auto min-h-9` for its two-line rows, and a bare `h-8` would lose to it.
-    "h-8 min-h-8 w-auto min-w-0 max-w-[15rem] gap-1.5 px-2.5 text-sm font-normal",
+    // `has-[>svg]:px-2.5` cancels Button's wider padding when it holds an icon.
+    "h-8 min-h-8 w-auto min-w-0 max-w-[15rem] gap-1.5 px-2.5 has-[>svg]:px-2.5 text-sm font-normal shadow-none",
+    "border-input bg-transparent text-foreground data-[placeholder]:text-foreground [&_span.text-muted-foreground]:text-foreground",
+    "[&_svg.lucide-chevron-down]:ml-0 [&_svg.lucide-chevron-down]:size-4 [&_svg.lucide-chevron-down]:text-muted-foreground [&_svg.lucide-chevron-down]:opacity-100",
     active && "border-primary/50 bg-primary/10 font-medium",
     className,
   );

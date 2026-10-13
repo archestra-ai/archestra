@@ -112,7 +112,22 @@ builtin = "hitl"
   const policy = { content: readFileSync(policyPath, 'utf8'), credentials: {} };
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
-  t.after(() => { sanitizer.close(); annotator.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
+  const replicas = new Set();
+  t.after(async () => {
+    // Flush a held sanitizer barrier so its pods can end, then end any replica
+    // still running: a cancelled assertion must not strand a fixture child.
+    if (sanitizerBarrier) for (const flush of sanitizerBarrier.pending.splice(0)) flush();
+    const running = [...replicas];
+    for (const child of running) child.kill('SIGKILL');
+    await Promise.all(running.map((child) => new Promise((resolve) => child.once('exit', resolve))));
+    // close() waits for open keep-alive and held connections; force them shut.
+    sanitizer.closeAllConnections();
+    annotator.closeAllConnections();
+    sanitizer.close();
+    annotator.close();
+    await client.end();
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   const organization_id = `smoke-${randomUUID()}`;
   const scope = (caller_id = 'user:owner', session_id = randomUUID()) => ({ organization_id, caller_id, session_id });
@@ -130,6 +145,8 @@ builtin = "hitl"
       env: { ...process.env, OPENAPPA_TEST_POLICY_PATH: policyPath },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    replicas.add(child);
+    child.on('exit', () => replicas.delete(child));
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
@@ -140,13 +157,21 @@ builtin = "hitl"
   });
   const restarted = (session, event) => onReplica({ ...session, ...event });
   const offerInput = (session, event) => {
-    const { original_arguments, ...rest } = event;
+    const {
+      original_arguments,
+      tool: _tool,
+      spelling: _spelling,
+      dispatch: _dispatch,
+      ...rest
+    } = event;
     return {
       organization_id: session.organization_id,
-      caller_id: session.caller_id,
-      session_id: session.session_id,
-      parent_id: session.parent_id,
-      owner_caller_id: session.owner_caller_id ?? session.caller_id,
+      ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+      trajectory: {
+        v: 1,
+        session_id: session.session_id,
+        ...(session.parent_id ? { parent_id: session.parent_id } : {}),
+      },
       execution_mode: event.tool_call_id ? 'tracked' : 'untracked',
       original_arguments: JSON.stringify(original_arguments || event.arguments),
       presentation: { control_tool: 'archestra__execute_remedy_plan', supports_delegation: false },
@@ -290,31 +315,62 @@ builtin = "hitl"
     assert.equal(sanitizations, before + 1, 'accepting staged material does not rerun the sanitizer');
   });
 
-  await t.test('wrong organization and personal owner are indistinguishable unknowns', async () => {
+  await t.test('a wrong run is unknown and does not spend the offer', async () => {
     const session = scope();
     const denied = await call(session, 'held', 'read_untrusted');
     const offer_id = denied.offers[0].offer_id;
-    const event = { tool_call_id: 'provider-remedy-scope', arguments: { offer_id } };
-    const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, event);
-    const wrongUser = await byOffer({ ...session, caller_id: 'user:wrong', owner_caller_id: 'user:owner' }, event);
-    for (const response of [wrongOrganization, wrongUser]) {
+    const event = { arguments: { offer_id } };
+    const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, {
+      ...event, tool_call_id: 'wrong-org',
+    });
+    const wrongSession = await byOffer({ ...session, session_id: randomUUID() }, {
+      ...event, tool_call_id: 'wrong-session',
+    });
+    const wrongParent = await byOffer({ ...session, parent_id: 'not-the-parent' }, {
+      ...event, tool_call_id: 'wrong-parent',
+    });
+    for (const response of [wrongOrganization, wrongSession, wrongParent]) {
       assert.equal(response.offer.status, 'unknown');
       assert.equal(response.reason, 'unknown_control_call');
       assert.equal(response.output_source, 'runtime');
-      assert.equal(response.approved_output, response.result.content[0].text);
     }
-    assert.equal(wrongOrganization.approved_output, wrongUser.approved_output);
+    const other = scope();
+    await call(other, 'other-open', 'read_plain');
+    const wrongActor = await byOffer(other, { ...event, tool_call_id: 'wrong-actor' });
+    assert.equal(wrongActor.offer.status, 'known');
+    assert.equal(wrongActor.result.isError, true);
+    assert.ok(!/Authorized/.test(wrongActor.approved_output), wrongActor.approved_output);
+
+    const spent = await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy',
+    });
+    assert.equal(spent.offer.status, 'known');
+    assert.match(spent.approved_output, /Authorized/);
+    assert.deepEqual((await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy',
+    })).result, spent.result);
+    const again = await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy-again',
+    });
+    assert.equal(again.offer.status, 'known');
+    assert.equal(again.result.isError, true);
+    assert.ok(!/Authorized/.test(again.approved_output));
   });
 
-  await t.test('credential-owned offers permit an authenticated same-organization spender', async () => {
-    const session = scope('virtual-key:credential');
-    const denied = await call(session, 'held', 'read_untrusted');
-    const response = await byOffer({ ...session, caller_id: 'user:spender', owner_caller_id: 'virtual-key:credential' }, {
-      tool_call_id: 'credential-remedy',
+  await t.test('an anonymous organization token can spend the stamped session', async () => {
+    const session = scope();
+    const denied = await call(session, 'anon-held', 'read_untrusted');
+    const { caller_id: _caller, ...anonymous } = session;
+    const response = await byOffer(anonymous, {
+      tool_call_id: 'anon-remedy',
       arguments: { offer_id: denied.offers[0].offer_id },
     });
     assert.equal(response.offer.status, 'known');
-    assert.notEqual(response.result.isError, true);
+    assert.match(response.approved_output, /Authorized/);
+    assert.deepEqual((await byOffer(anonymous, {
+      tool_call_id: 'anon-remedy',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    })).result, response.result);
   });
 
   await t.test('a direct remedy cannot spend an offer from another trajectory', async () => {
@@ -379,18 +435,18 @@ builtin = "hitl"
     );
   });
 
-  await t.test('denied and uncovered results repeat authoritative rulings', async () => {
+  await t.test('denied results replay while uncovered calls do not produce a verdict', async () => {
     const session = scope();
     const denied = await call(session, 'blocked', 'read_untrusted');
     const deniedResult = await result(session, 'blocked', 'FORGED successful payload');
     assert.equal(deniedResult.decision, 'deny_call');
     assert.ok(deniedResult.approved_output.includes(denied.feedback));
     assert.ok(!deniedResult.approved_output.includes('FORGED'));
-    const refused = await call(session, 'uncovered', 'not_covered_by_policy');
-    assert.equal(refused.decision, 'refuse');
-    const refusedResult = await result(session, 'uncovered', 'FORGED successful payload');
-    assert.equal(refusedResult.decision, 'refuse');
-    assert.ok(!refusedResult.approved_output.includes('FORGED'));
+    await assert.rejects(() => call(session, 'uncovered', 'not_covered_by_policy'), /not declared in this policy/);
+    const unknownResult = await result(session, 'uncovered', 'FORGED successful payload');
+    assert.equal(unknownResult.output_source, 'runtime', JSON.stringify(unknownResult));
+    assert.ok(!unknownResult.approved_output.includes('FORGED'));
+    assert.equal((await call(session, 'still-available', 'read_plain')).decision, 'allow_call');
   });
 
   await t.test('cancellation tombstones only its call and survives restart', async () => {
@@ -447,10 +503,11 @@ builtin = "hitl"
     assert.equal(review.tool, 'send_email');
     assert.deepEqual(JSON.parse(review.arguments), { to: 'recipient@example.com' });
 
-    const human = await hook(session, {
+    const human = () => hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
-    assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer|cannot be reached/);
+    await assert.rejects(human, /unreachable|gave no answer|cannot be reached/);
+    await assert.rejects(human, /unreachable|gave no answer|cannot be reached/);
     assert.notEqual(
       (await call(session, 'email-without-ruling', 'send_email', { to: 'recipient@example.com' })).decision,
       'allow_call',
@@ -1079,27 +1136,64 @@ builtin = "hitl"
   });
 
   await t.test('an offer accepted for a dispatched call retries it through the dispatch tool', async () => {
-    const hint = async (dispatch) => {
-      const session = scope();
-      const denied = await call(session, 'dispatched-read', 'read_untrusted', { path: 'report.txt' });
-      assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
-      return (await byOffer(session, {
-        tool_call_id: `accept-${dispatch ?? 'direct'}`,
-        arguments: { offer_id: denied.offers[0].offer_id },
-        tool: 'read_untrusted',
-        spelling: 'read_untrusted',
-        ...(dispatch ? { dispatch } : {}),
-      })).approved_output;
-    };
+    const open = (session, extra) => hook(session, {
+      event: 'tool_call',
+      operation_id: 'call:dispatched-read',
+      tool: 'read_untrusted',
+      arguments: { path: 'report.txt' },
+      ...extra,
+    });
+    const accept = (session, denied) => byOffer(session, {
+      tool_call_id: 'accept-recorded',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    });
 
-    const [prefix, retry] = (await hint('my_gateway_archestra__run_tool')).split('exactly these arguments: ');
+    const dispatched = scope();
+    const denied = await open(dispatched, {
+      spelling: 'client.read_untrusted',
+      dispatch: 'my_gateway_archestra__run_tool',
+    });
+    assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
+    const [prefix, retry] = (await accept(dispatched, denied)).approved_output.split('exactly these arguments: ');
     assert.equal(prefix, '[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with ');
     assert.deepEqual(JSON.parse(retry), { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } });
-    // A direct call keeps naming the tool itself.
+
+    const direct = scope();
+    const named = await open(direct, { spelling: 'client.read_untrusted' });
     assert.match(
-      await hint(undefined),
-      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the read_untrusted tool again/,
+      (await accept(direct, named)).approved_output,
+      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the client\.read_untrusted tool again/,
     );
+  });
+
+  await t.test('a restarted replica recovers dispatch retry text, and an old row falls back', async () => {
+    const session = scope();
+    const denied = await hook(session, {
+      event: 'tool_call',
+      operation_id: 'call:restart-read',
+      tool: 'read_untrusted',
+      arguments: { path: 'report.txt' },
+      spelling: 'client.read_untrusted',
+      dispatch: 'my_gateway_archestra__run_tool',
+    });
+    const restarted = await remoteOffer(session, {
+      tool_call_id: 'accept-restart',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    });
+    assert.match(restarted.approved_output, /Call the my_gateway_archestra__run_tool tool again/);
+    assert.deepEqual(
+      JSON.parse(restarted.approved_output.split('exactly these arguments: ')[1]),
+      { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } },
+    );
+
+    const legacy = scope();
+    const old = await call(legacy, 'legacy-read', 'read_untrusted', { path: 'report.txt' });
+    const text = (await byOffer(legacy, {
+      tool_call_id: 'accept-legacy',
+      arguments: { offer_id: old.offers[0].offer_id },
+    })).approved_output;
+    assert.match(text, /Call the read_untrusted tool again/);
+    assert.doesNotMatch(text, /run_tool/);
   });
 
   await t.test('a human denial is final, reads as one, and replays', async () => {
@@ -1243,7 +1337,48 @@ builtin = "hitl"
     assert.equal(Number(stored.rows[0].n), 0);
   });
 
-  await t.test('a failed receipt completion leaves a durable pending recovery fence', async () => {
+  await t.test('a consult under the Metadata only log setting keeps who and how, never what', async (st) => {
+    const organization_id = `smoke-org-${randomUUID()}`;
+    await client.query('INSERT INTO organization (id, name, slug, created_at) VALUES ($1, $1, $1, now())', [organization_id]);
+    st.after(() => client.query('DELETE FROM organization WHERE id = $1', [organization_id]));
+    // The host resolves the setting and says so on the dispatch.
+    const session = { organization_id, caller_id: 'user:owner', session_id: randomUUID(), withhold_consult_content: true };
+    assert.equal((await call(session, 'annotated-1', 'annotated_read', { a: 1 })).decision, 'allow_call');
+
+    const { rows } = await client.query('SELECT * FROM openappa_external_consults WHERE organization_id = $1', [organization_id]);
+    assert.equal(rows.length, 1);
+    const [row] = rows;
+    assert.deepEqual(
+      {
+        role: row.role, external_name: row.external_name, backend: row.backend, outcome: row.outcome,
+        http_status: row.http_status, answer: row.answer, raw_response: row.raw_response, diagnostics: row.diagnostics,
+      },
+      {
+        role: 'annotator', external_name: 'gatekeeper', backend: 'url', outcome: 'answered',
+        http_status: 200, answer: null, raw_response: null, diagnostics: null,
+      },
+    );
+    assert.equal(row.request.__redacted, 'log_content_policy');
+    assert.equal(row.request.kind, 'annotation');
+    assert.ok(!JSON.stringify(row.request).includes('"a":1'), 'the tool arguments are not stored');
+    assert.deepEqual(row.request, {
+      __redacted: 'log_content_policy',
+      kind: 'annotation',
+      artifact: { args: { name: 'host/archestra/annotated_read', arguments: { __redacted: 'log_content_policy' } } },
+    });
+  });
+
+  await t.test('disabled reporting does not leave a session with an unfinished operation', async () => {
+    const session = scope();
+    await assert.rejects(
+      () => hook(session, { event: 'yell', operation_id: 'report:disabled', arguments: { message: 'test report', with_trajectory: false } }),
+      /reporting is disabled/,
+    );
+    const next = await call(session, 'after-report', 'read_plain');
+    assert.equal(next.decision, 'allow_call');
+  });
+
+  await t.test('a failed receipt completion is recovered by the retry, not fenced', async () => {
     const session = scope();
     const callId = `fault-${randomUUID()}`;
     await call(session, callId, 'read_plain');
@@ -1255,9 +1390,18 @@ builtin = "hitl"
       await client.query('DROP TRIGGER openappa_smoke_failure ON openappa_processed_results');
       await client.query('DROP FUNCTION openappa_smoke_fail_receipt()');
     }
-    await assert.rejects(
-      () => restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'retry', outcome: 'success' }),
-      /interrupted processing/,
+    // The runtime recorded the result; the receipt did not finish. The same
+    // result on another process completes from the committed record.
+    const recovered = await restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'uncommitted', outcome: 'success' });
+    assert.equal(recovered.decision, 'ack', JSON.stringify(recovered));
+    assert.equal(recovered.approved_output, 'uncommitted');
+    // A retry of the completed receipt replays its answer, whatever the bytes.
+    const forged = await restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'changed after the fact', outcome: 'success' });
+    assert.deepEqual(
+      { decision: forged.decision, approved_output: forged.approved_output },
+      { decision: recovered.decision, approved_output: recovered.approved_output },
+      'the completed receipt replays its committed answer',
     );
+    assert.equal((await call(session, 'after-recovery', 'read_plain')).decision, 'allow_call');
   });
 });

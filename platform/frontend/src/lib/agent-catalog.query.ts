@@ -1,7 +1,9 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  isSameResourceAccess,
   MAX_BULK_IDS,
+  type ResourceAccessRelation,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -10,7 +12,10 @@ import {
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
+import {
+  PERSISTED_QUERY_META,
+  seedOnlyStaleTime,
+} from "@/lib/query-persistence";
 import { throwOnApiError } from "@/lib/utils/api";
 
 const { getAgentCatalog } = archestraApiSdk;
@@ -26,6 +31,8 @@ export function useAgentCatalog(
     initialData?: archestraApiTypes.GetAgentCatalogResponses["200"];
     initialDataExcludeOtherPersonalAgents?: boolean;
     initialDataPinned?: boolean;
+    /** `access` filter of the server seed; never reuse it for another selection. */
+    initialDataAccess?: ResourceAccessRelation[];
     initialDataLimit?: number;
     enabled?: boolean;
   },
@@ -34,6 +41,7 @@ export function useAgentCatalog(
     initialData,
     initialDataExcludeOtherPersonalAgents,
     initialDataPinned,
+    initialDataAccess,
     initialDataLimit,
     enabled,
     ...query
@@ -50,6 +58,9 @@ export function useAgentCatalog(
     query.excludeAuthorIds === undefined &&
     query.excludeOtherPersonalAgents ===
       initialDataExcludeOtherPersonalAgents &&
+    isSameResourceAccess(query.access, initialDataAccess) &&
+    query.sharedWith === undefined &&
+    query.owner === undefined &&
     query.pinned === initialDataPinned &&
     query.labels === undefined &&
     query.status === undefined &&
@@ -71,6 +82,7 @@ export function useAgentCatalog(
       useInitialData && initialData && catalog.state.data === initialData
         ? true
         : "always",
+    staleTime: seedOnlyStaleTime(useInitialData ? initialData : undefined),
     enabled,
     meta: PERSISTED_QUERY_META,
   });

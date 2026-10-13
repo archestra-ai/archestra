@@ -32,6 +32,7 @@ import { PluginLabelModel } from "./entity-labels";
 import PluginTeamModel from "./plugin-team";
 import PluginUserModel from "./plugin-user";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import type { ResourceAccessFilter } from "./resource-permission-subject";
 
 class PluginModel {
   static async transferOwnership(params: {
@@ -67,6 +68,8 @@ class PluginModel {
     organizationId: string;
     accessiblePluginIds?: string[];
     labels?: Record<string, string[]>;
+    /** The list's "Show" filter; omit when not filtering. */
+    access?: ResourceAccessFilter;
   }): Promise<PluginListItem[]> {
     if (params.accessiblePluginIds?.length === 0) return [];
 
@@ -87,6 +90,19 @@ class PluginModel {
           labelFilteredIds
             ? inArray(schema.pluginsTable.id, labelFilteredIds)
             : undefined,
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          params.access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                ...params.access,
+                organizationId: schema.pluginsTable.organizationId,
+                resource: "plugin",
+                scopeColumn: schema.pluginsTable.id,
+                ownerColumn: schema.pluginsTable.authorId,
+              })
+            : undefined,
+          // SPDX-SnippetEnd
           notDeleted(schema.pluginsTable),
         ),
       )

@@ -3,17 +3,14 @@ import {
   ENCRYPTED_CHAT_REDACTED_VALUES,
   InteractionSourceSchema,
   isEncryptedChatUnavailableContent,
+  LogContentNotStoredSchema,
   SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
 import { SelectConversationChatErrorSchema } from "./conversation-chat-error";
-import { DualLlmAnalysisSchema } from "./dual-llm";
-import {
-  ToolCallBlockSchema,
-  UnsafeContextBoundarySchema,
-} from "./interaction-guardrails";
+import { ToolCallBlockSchema } from "./interaction-guardrails";
 import {
   Anthropic,
   Azure,
@@ -212,7 +209,7 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
   EmbeddingInteractionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
-  Anthropic.API.MessagesResponseSchema,
+  Anthropic.API.MessagesResponseWireSchema,
   Bedrock.API.ConverseResponseSchema,
   Cerebras.API.ChatCompletionResponseSchema,
   Mistral.API.ChatCompletionResponseSchema,
@@ -240,13 +237,16 @@ export const InteractionResponseSchema = z.union([
 ]);
 
 /**
- * The two shapes an encrypted chat's content takes when it is not
- * available to the reader: encrypted under the browser key (locked), or never
- * stored (redacted). Neither resembles a provider payload, so every read arm
+ * The shapes content takes when it is not available to the reader: an encrypted
+ * chat's, encrypted under the browser key (locked) or never stored (redacted),
+ * and content the Log Content mode kept out of storage. Neither resembles a provider payload, so every read arm
  * has to accept them explicitly — otherwise one encrypted-chat row 500s the whole
  * interactions list rather than rendering as unavailable.
  */
 const EncryptedChatUnavailableContentSchema = z.union([
+  // First, so the outcome it carries is not stripped by the generic
+  // `__redacted` arm below, which also admits its value.
+  LogContentNotStoredSchema,
   z.object({ __encryptedChatSealed: z.string() }),
   z.object({ __redacted: z.enum(ENCRYPTED_CHAT_REDACTED_VALUES) }),
 ]);
@@ -254,8 +254,6 @@ const EncryptedChatUnavailableContentSchema = z.union([
 const extendedFields = {
   source: InteractionSourceSchema.nullable().optional(),
   authMethod: InteractionAuthMethodSchema.nullable().optional(),
-  dualLlmAnalyses: z.array(DualLlmAnalysisSchema).nullable().optional(),
-  unsafeContextBoundary: UnsafeContextBoundarySchema.nullable().optional(),
   toolCallBlock: ToolCallBlockSchema.nullable().optional(),
 };
 
@@ -477,7 +475,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(Anthropic.API.MessagesRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(Anthropic.API.MessagesResponseSchema),
+    response: withErrorResponse(Anthropic.API.MessagesResponseWireSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
@@ -500,7 +498,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(Bedrock.API.InvokeRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(Bedrock.API.InvokeResponseSchema),
+    response: withErrorResponse(Bedrock.API.InvokeResponseWireSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
@@ -905,6 +903,15 @@ export const SessionSummarySchema = z.object({
   /** Interaction backing the preview and latest-conversation detail view. */
   lastInteractionId: z.string().uuid().nullable(),
   lastInteractionType: z.string().nullable(),
+  /**
+   * The session's latest turn was logged under Metadata only, so it has no
+   * preview to show.
+   */
+  contentNotStored: z
+    .boolean()
+    .describe(
+      "True when the session's latest turn was logged under the Metadata only Log Content mode, so it has no message preview.",
+    ),
   conversationTitle: z.string().nullable(),
   claudeCodeTitle: z.string().nullable(),
 });

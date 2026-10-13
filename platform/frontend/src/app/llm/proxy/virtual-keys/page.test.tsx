@@ -172,7 +172,15 @@ describe("VirtualKeysPage provider-key filter", () => {
       within(table)
         .getAllByRole("columnheader")
         .map((header) => header.textContent),
-    ).toEqual(["", "Name", "Token", "Providers", "Activity", "Actions"]);
+    ).toEqual(["", "Name", "Providers", "Budget", "Activity", "Actions"]);
+    const nameCell = within(table).getByText("Regional key").closest("td");
+    if (!nameCell) throw new Error("Missing name cell");
+    expect(within(nameCell).getByText("arch_abc…")).toBeVisible();
+    expect(
+      within(nameCell).getByRole("img", { name: "Standard key" }),
+    ).toBeInTheDocument();
+    expect(within(table).getByText("No team")).toBeVisible();
+    expect(within(table).getByText("No cap")).toBeVisible();
     expect(
       within(table).queryByRole("columnheader", { name: "Type" }),
     ).toBeNull();

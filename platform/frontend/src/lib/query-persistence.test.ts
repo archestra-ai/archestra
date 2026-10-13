@@ -70,6 +70,25 @@ describe("query persistence", () => {
     expect(restored.getQueryData(["volatile"])).toBeUndefined();
   });
 
+  it("does not persist invalidated data before it has been refetched", async () => {
+    await seed(
+      client,
+      ["agents", "list"],
+      { data: [{ name: "Before" }] },
+      true,
+    );
+    await seed(client, ["shell"], { name: "Unchanged" }, true);
+    syncPersistedQueryCacheScope(client, "user-1:org-1");
+    await client.invalidateQueries({ queryKey: ["agents"] });
+    await flushWrites();
+
+    const restored = makeClient();
+    restorePersistedQueryCache(restored);
+    expect(restored.getQueryData(["agents", "list"])).toBeUndefined();
+    expect(restored.getQueryData(["shell"])).toEqual({ name: "Unchanged" });
+    restored.clear();
+  });
+
   it("keeps credentials out of the snapshot", async () => {
     await seed(
       client,

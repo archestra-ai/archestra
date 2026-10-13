@@ -1,14 +1,13 @@
 import { KubeConfig } from "@kubernetes/client-node";
 import { HttpResponse, http } from "msw";
 import { beforeEach, expect, test, vi } from "vitest";
-import config from "@/config";
 import { useMswServer } from "@/test/msw";
 import manager from "./manager";
+import { agentSandboxApi } from "./sandbox-api";
 
 // The manager caches clients; isolate the fake cluster from shared workers.
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
-    agentRuntime: { enabled: true },
     orchestrator: {
       kubernetes: { kubeconfig: "", loadKubeconfigFromCurrentCluster: false },
     },
@@ -19,7 +18,7 @@ vi.mock("@/config", async () =>
 const server = useMswServer();
 
 beforeEach(() => {
-  config.agentRuntime.enabled = true;
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
   vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
     function (this: KubeConfig) {
       this.loadFromOptions({
@@ -46,8 +45,8 @@ test.for([
   expect(requests).toBe(1);
 });
 
-test("omits connection hints when the runtime is disabled", async () => {
-  config.agentRuntime.enabled = false;
+test("omits connection hints when the Agent Sandbox controller is not installed", async () => {
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
   await expect(manager.getWorkspaceConnection(SESSION)).resolves.toBeNull();
 });
 

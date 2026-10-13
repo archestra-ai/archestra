@@ -250,6 +250,66 @@ describe("GET /api/projects (scope + search)", () => {
     ).toEqual([]);
   });
 
+  test("access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+  }) => {
+    const admin = await makeUser();
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const other = await makeUser();
+    await makeMember(other.id, organizationId, {});
+    const myTeam = await makeTeam(organizationId, admin.id);
+    await makeTeamMember(myTeam.id, admin.id);
+    const otherTeam = await makeTeam(organizationId, other.id);
+
+    await create(admin, "mine");
+    await create(other, "other-personal");
+    const org = await create(other, "org");
+    await share(other, org.id, "organization");
+    const mineTeam = await create(other, "my-team");
+    await share(other, mineTeam.id, "team", [myTeam.id]);
+    const foreignTeam = await create(other, "other-team");
+    await share(other, foreignTeam.id, "team", [otherTeam.id]);
+    const sharedWithMe = await create(other, "shared-with-me");
+    await shareForTest({
+      resource: "project",
+      scope: sharedWithMe.id,
+      organizationId,
+      visibility: "user",
+      userIds: [admin.id],
+    });
+    actingUser = admin;
+
+    const listNames = async (access?: string) => {
+      const response = await list(access ? `?access=${access}` : "");
+      expect(response.statusCode, response.body).toBe(200);
+      return names(response.body).sort();
+    };
+
+    // The admin reads every project through a `*` grant, which the filter
+    // must not count as "shared".
+    expect(await listNames()).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "other-personal",
+      "other-team",
+      "shared-with-me",
+    ]);
+    expect(await listNames("mine,shared,org")).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "shared-with-me",
+    ]);
+    expect(await listNames("others")).toEqual(["other-personal", "other-team"]);
+    expect(await listNames("mine")).toEqual(["mine"]);
+    expect(await listNames("shared")).toEqual(["my-team", "shared-with-me"]);
+    expect(await listNames("org")).toEqual(["org"]);
+  });
+
   test("admin oversight of a team-shared project exposes its team names", async ({
     makeUser,
     makeMember,

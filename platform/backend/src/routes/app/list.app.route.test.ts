@@ -1,7 +1,14 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import type { AppListItem, User } from "@/types";
 
 type AppListResponse = {
@@ -539,6 +546,82 @@ describe("GET /api/apps", () => {
     expect(items.find((i) => i.id === ownPersonal.id)?.viewerRole).toBe(
       "owner",
     );
+  });
+
+  test("access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+    makeApp,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId);
+    const myTeam = await makeTeam(organizationId, user.id);
+    await makeTeamMember(myTeam.id, user.id);
+    const otherTeam = await makeTeam(organizationId, otherUser.id);
+
+    const seed = (name: string, access: TestAccess, authorId = otherUser.id) =>
+      makeApp({ organizationId, name: `${name} ${suffix}`, authorId, access });
+    await seed("Mine", "personal", user.id);
+    await seed("Other Personal", "personal");
+    await seed("Org", "org");
+    await seed("My Team", { teams: [myTeam.id] });
+    await seed("Other Team", { teams: [otherTeam.id] });
+    await seed("Shared With Me", { users: [user.id] });
+    // An external app reaches the caller through its install's scope.
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: `External ${suffix}`,
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+    });
+    await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: `external-${suffix}`,
+      meta: { _meta: { ui: { resourceUri: "ui://external/app.html" } } },
+    });
+
+    const list = async (access?: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/apps?limit=100&offset=0&search=${suffix}${access ? `&access=${access}` : ""}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json() as AppListResponse;
+      expect(body.pagination.total).toBe(body.data.length);
+      return body.data
+        .map((item) => item.name.replace(` ${suffix}`, ""))
+        .sort();
+    };
+
+    // The admin reads every app through a `*` grant, which the filter must
+    // not count as "shared".
+    expect(await list()).toEqual([
+      "External",
+      "Mine",
+      "My Team",
+      "Org",
+      "Other Personal",
+      "Other Team",
+      "Shared With Me",
+    ]);
+    expect(await list("mine,shared,org")).toEqual([
+      "External",
+      "Mine",
+      "My Team",
+      "Org",
+      "Shared With Me",
+    ]);
+    expect(await list("others")).toEqual(["Other Personal", "Other Team"]);
+    expect(await list("mine")).toEqual(["Mine"]);
+    expect(await list("shared")).toEqual(["My Team", "Shared With Me"]);
+    expect(await list("org")).toEqual(["External", "Org"]);
   });
 
   test("Personal → Other users surfaces another author's personal app tagged as oversight (viewerRole admin + authorName)", async ({

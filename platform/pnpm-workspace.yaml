@@ -56,8 +56,9 @@ overrides:
   # CVE-2026-54466 (GHSA-xv26-6w52-cph6, message corruption via protocol
   # length-header abuse) fixed in 0.7.5, the package's latest release.
   websocket-driver: '>=0.7.5'
-  # GHSA-vcvr-r3jv-pc5j (CRITICAL) fixed in 16.3.6.
-  next: 16.3.6
+  # GHSA-vcvr-r3jv-pc5j (CRITICAL) fixed in 16.3.6; CVE-2026-94483 (HIGH, SSRF)
+  # fixed in 16.3.8.
+  next: 16.3.8
   # form-data 3.0.5 / 4.0.6 fix CVE-2026-12143 (HIGH). Floors rather than exact
   # pins, and bounded per major so a <4 consumer is not jumped onto 4.x.
   form-data@>=4: '>=4.0.6'
@@ -131,9 +132,8 @@ overrides:
   # CVE-2026-90711 (CRITICAL, authentication bypass by spoofing) fixed in 2.0.8.
   proxy-addr: '>=2.0.8 <3'
   # CVE-2026-93749 (HIGH, improper validation of specified quantity) fixed in
-  # 1.2.2. Pinned exact while 1.2.2 is inside the release-age window; see
-  # minimumReleaseAgeExclude.
-  source-map-js: 1.2.2
+  # 1.2.2.
+  source-map-js: '>=1.2.2'
   # CVE-2026-67213 (GHSA-2v37-7h3g-55p8, HIGH, custom generators loop forever
   # when size is 0): the 3.3.17 fix was incomplete, advisory now requires
   # 3.3.18 on the v3 line. Transitive via postcss and points-on-path; scoped
@@ -175,6 +175,14 @@ patchedDependencies:
   # OpenAPPA uses these IDs to match released calls to returned results.
   # Remove when the provider preserves both functionCall.id and functionResponse.id.
   '@ai-sdk/google@3.0.43': patches/@ai-sdk__google@3.0.43.patch
+  # Grok can think, start its answer, and think again in one response. The chat
+  # model named every reasoning run `reasoning-<completion id>` and sent the
+  # second run's deltas to the part it had already closed, so chat stopped with
+  # "Received reasoning-delta for missing reasoning part". The patch opens a new
+  # part for each run of reasoning or text. Pinned by
+  # backend/src/clients/xai-interleaved-reasoning.unit.test.ts; drop it after an
+  # upgrade passes that test unpatched.
+  '@ai-sdk/xai@3.0.67': patches/@ai-sdk__xai@3.0.67.patch
   # OAuth-only SSO (GitHub) has userinfo but no JWKS/discovery document.
   # Skip runtime discovery only with explicit non-OIDC scopes and complete
   # OAuth endpoints; retain OIDC discovery and URL/SSRF validation.
@@ -217,12 +225,10 @@ verifyDepsBeforeRun: false
 # 10080 minutes = 7 days.
 # https://daniakash.com/posts/simplest-supply-chain-defense/
 minimumReleaseAge: 10080
+# CVE-2026-106445 / CVE-2026-106446: urgent Handlebars security fix.
+# Published 2026-10-05; remove after 2026-10-12 22:38 UTC (7-day window).
 minimumReleaseAgeExclude:
-  # TEMPORARY: source-map-js 1.2.2 (fix CVE-2026-93749, HIGH) was published
-  # 2026-09-30 and clears the 7-day window on 2026-10-07. Remove on/after that
-  # date and relax the override to a '>=1.2.2' floor.
-  - source-map-js
-
+  - handlebars@4.7.10
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare
 # zod as a peer dependency, so hoist zod to the root node_modules.

@@ -1,6 +1,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   type ErrorExtended,
 } from "@archestra/shared";
 
@@ -56,6 +57,7 @@ export default async function McpGatewaysPageServer() {
             sortDirection: DEFAULT_SORT_DIRECTION,
             agentTypes: gatewayAgentTypes,
             pinned: false,
+            access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
           },
         }),
         archestraApiSdk.getAgents({
@@ -67,6 +69,7 @@ export default async function McpGatewaysPageServer() {
             sortDirection: DEFAULT_SORT_DIRECTION,
             agentTypes: gatewayAgentTypes,
             pinned: true,
+            access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
           },
         }),
         canReadTeams

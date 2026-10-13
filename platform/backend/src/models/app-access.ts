@@ -3,7 +3,9 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessSelection,
+} from "./resource-permission-subject";
 
 /**
  * Read-side accessibility for apps, decided by grants on the app, plus the
@@ -21,6 +23,8 @@ class AppAccessModel {
   static async getUserAccessibleAppIds(params: {
     organizationId: string;
     userId?: string;
+    /** The list's "Show", "Shared with", and "Owner" filters. */
+    access?: ResourceAccessSelection;
   }): Promise<string[]> {
     const { organizationId, userId } = params;
     if (userId === undefined) return [];
@@ -54,6 +58,17 @@ class AppAccessModel {
             scopeColumn: schema.appsTable.id,
             action: "read",
           }),
+          params.access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                organizationId,
+                resource: "app",
+                scopeColumn: schema.appsTable.id,
+                ownerColumn: schema.appsTable.authorId,
+                userId,
+                subjects: principal.subjects,
+                ...params.access,
+              })
+            : undefined,
         ),
       );
     return rows.map((row) => row.id);

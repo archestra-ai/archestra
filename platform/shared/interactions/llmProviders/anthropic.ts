@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "../../index";
 import type { PartialUIMessage } from "../types";
-import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
+import type { Interaction, InteractionUtils } from "./common";
 
 class AnthropicMessagesInteraction implements InteractionUtils {
   private request: archestraApiTypes.AnthropicMessagesRequest;
@@ -71,11 +71,6 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     return Array.from(toolsUsed);
   }
 
-  getToolNamesRefused(): string[] {
-    // TODO: Implement tool refusal detection for Anthropic if needed
-    return [];
-  }
-
   getToolNamesRequested(): string[] {
     const toolsRequested = new Set<string>();
 
@@ -89,10 +84,6 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     }
 
     return Array.from(toolsRequested);
-  }
-
-  getToolRefusedCount(): number {
-    return 0;
   }
 
   getLastUserMessage(): string {
@@ -142,7 +133,6 @@ class AnthropicMessagesInteraction implements InteractionUtils {
           role: "assistant";
           content: archestraApiTypes.AnthropicMessagesResponse["content"];
         },
-    _dualLlmAnalyses?: DualLlmAnalysis[],
   ): PartialUIMessage {
     const parts: PartialUIMessage["parts"] = [];
     const { content, role } = message;
@@ -179,7 +169,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
     };
   }
 
-  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
+  mapToUiMessages(): PartialUIMessage[] {
     const uiMessages: PartialUIMessage[] = [];
     const messages = this.request.messages;
 
@@ -208,7 +198,7 @@ class AnthropicMessagesInteraction implements InteractionUtils {
         continue;
       }
 
-      const uiMessage = this.mapToUiMessage(msg, dualLlmAnalyses);
+      const uiMessage = this.mapToUiMessage(msg);
 
       // If this is an assistant message with tool_use blocks, look ahead for tool results
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -281,27 +271,6 @@ class AnthropicMessagesInteraction implements InteractionUtils {
                   } else {
                     toolCallParts.push(outputPart);
                   }
-
-                  // Check for dual LLM result
-                  const dualLlmResultForTool = dualLlmAnalyses?.find(
-                    (result) => result.toolCallId === block.id,
-                  );
-
-                  if (dualLlmResultForTool) {
-                    toolCallParts.push({
-                      type: "dual-llm-analysis",
-                      toolCallId: dualLlmResultForTool.toolCallId,
-                      safeResult: dualLlmResultForTool.result,
-                      conversations: Array.isArray(
-                        dualLlmResultForTool.conversations,
-                      )
-                        ? (dualLlmResultForTool.conversations as Array<{
-                            role: "user" | "assistant";
-                            content: string | unknown;
-                          }>)
-                        : [],
-                    });
-                  }
                 }
               }
             }
@@ -321,10 +290,10 @@ class AnthropicMessagesInteraction implements InteractionUtils {
 
     // Map response
     uiMessages.push(
-      this.mapToUiMessage(
-        { role: "assistant", content: this.response.content },
-        dualLlmAnalyses,
-      ),
+      this.mapToUiMessage({
+        role: "assistant",
+        content: this.response.content,
+      }),
     );
 
     return uiMessages;

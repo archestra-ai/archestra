@@ -6,11 +6,17 @@ import { useId } from "react";
 import { TerminalBlock } from "@/app/connection/terminal-block";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -122,18 +128,18 @@ export function AuthMethodPicker<T extends string>({
           <div
             key={method.value}
             className={cn(
-              "flex flex-col gap-2 rounded-md border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-              reason
-                ? "opacity-50"
-                : checked
-                  ? "border-foreground bg-muted/40"
-                  : "hover:bg-muted/30",
+              "flex flex-col rounded-md",
+              radioCardClass({ checked, disabled: !!reason }),
             )}
           >
+            {/* The label carries the card's padding and grows to fill it, so
+                anywhere on the card selects the method except the manage link,
+                which sits beside the label (not inside it) and is only as wide
+                as its text. */}
             <Label
               htmlFor={`${id}-${method.value}`}
               className={cn(
-                "flex items-start gap-3 font-normal",
+                "flex flex-1 items-start gap-3 p-3 font-normal",
                 reason ? "cursor-not-allowed" : "cursor-pointer",
               )}
             >
@@ -155,7 +161,8 @@ export function AuthMethodPicker<T extends string>({
             {method.manage && (
               <Link
                 href={method.manage.href}
-                className="ml-7 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                // Text-wide, 24px tall (WCAG 2.5.8), aligned under the title.
+                className="-mt-2 mb-2 ml-10 self-start py-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
                 {method.manage.label} →
               </Link>
@@ -193,12 +200,24 @@ export function CredentialSelect({
   createLabel: string;
   canCreate: boolean;
   onCreate: () => void;
-  options: Array<{ id: string; label: string }>;
+  /**
+   * In display order. Options with a `group` are listed under that heading;
+   * the headings appear only when the options fall into more than one group.
+   */
+  options: Array<{ id: string; label: string; group?: string }>;
   value: string | undefined;
   onChange: (id: string | null) => void;
   /** Offered when picking nothing is valid. */
   noneLabel?: string;
 }) {
+  const groups: Array<{ heading: string | undefined; items: typeof options }> =
+    [];
+  for (const option of options) {
+    const last = groups.at(-1);
+    if (last && last.heading === option.group) last.items.push(option);
+    else groups.push({ heading: option.group, items: [option] });
+  }
+  const showHeadings = groups.length > 1;
   if (options.length === 0) {
     return canCreate ? (
       <Button onClick={onCreate}>
@@ -217,10 +236,17 @@ export function CredentialSelect({
       </SelectTrigger>
       <SelectContent>
         {noneLabel && <SelectItem value={NONE_VALUE}>{noneLabel}</SelectItem>}
-        {options.map((option) => (
-          <SelectItem key={option.id} value={option.id}>
-            {option.label}
-          </SelectItem>
+        {groups.map((group, index) => (
+          <SelectGroup key={group.heading ?? `group-${index}`}>
+            {showHeadings && group.heading && (
+              <SelectLabel>{group.heading}</SelectLabel>
+            )}
+            {group.items.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
         ))}
       </SelectContent>
     </Select>

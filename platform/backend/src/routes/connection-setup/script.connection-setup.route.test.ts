@@ -6,8 +6,10 @@ import {
   PERSONAL_MCP_GATEWAY_NAME,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import JSZip from "jszip";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
@@ -19,6 +21,8 @@ import {
   SkillShareLinkModel,
   VirtualApiKeyModel,
 } from "@/models";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
 import {
   accessGrants,
   afterEach,
@@ -41,11 +45,10 @@ import { userHasPermission } from "@/auth";
 import config, { parseOpenAppaConfig } from "@/config";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { clientConnectionService } from "@/services/client-connection";
-import { verifyConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
 import {
-  CONNECTION_SETUP_CONTEXT_PARAM,
-  verifyConnectionSetupContext,
-} from "@/services/connection-setup-context";
+  connectionSetupReference,
+  verifyConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
 import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
@@ -140,9 +143,25 @@ describe("GET /api/connection-setups/script/:token", () => {
               : clientId === "copilot-cli"
                 ? "openai"
                 : "anthropic";
-        await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
-          provider,
-        });
+        const providerKey = await makeLlmProviderApiKey(
+          organizationId,
+          (await makeSecret()).id,
+          { provider },
+        );
+        if (clientId === "opencode") {
+          // OpenCode setups only publish providers that have a usable model.
+          const model = await ModelModel.create({
+            provider,
+            modelId: "claude-test",
+            externalId: "claude-test",
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+          });
+          await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+            providerKey.id,
+            [model.id],
+          );
+        }
         const { rawToken } = await createSetup({
           clientId,
           baseUrl: "http://localhost:9000/v1",
@@ -199,6 +218,16 @@ describe("GET /api/connection-setups/script/:token", () => {
             secret: config.auth.secret,
           }),
         ).toBe(false);
+        if (clientId !== "claude-desktop") {
+          // The installer prints the reference the proxy looks for in the
+          // conversation that ran it, as plain text in its ending.
+          expect(response.body).toContain(
+            `Setup reference   ${connectionSetupReference({
+              setupId: setup.id,
+              secret: config.auth.secret,
+            })}`,
+          );
+        }
       });
     }
   }
@@ -311,7 +340,8 @@ describe("GET /api/connection-setups/script/:token", () => {
         );
       } else {
         expect(response.body).not.toContain(instructions);
-        expect(response.body).not.toContain("--append-system-prompt-file");
+        // Even initially disabled connections install the refresh path so admins can enable instructions later.
+        expect(response.body).toContain("instructions-refresh.py");
       }
     });
   }
@@ -469,6 +499,18 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).toContain("/skills/marketplace.git");
     expect(script).toContain("archestra_mkt_");
     expect(script).not.toContain("/skills/m/archestra_skl_");
+    // The credential remembers its setup, so syncs can be told apart by agent.
+    const [credential] = await db
+      .select({ clientId: schema.connectionSetupsTable.clientId })
+      .from(schema.skillMarketplaceCredentialsTable)
+      .innerJoin(
+        schema.connectionSetupsTable,
+        eq(
+          schema.connectionSetupsTable.id,
+          schema.skillMarketplaceCredentialsTable.connectionSetupId,
+        ),
+      );
+    expect(credential?.clientId).toBe("claude-code");
     const links = await SkillShareLinkModel.listByOrganization({
       organizationId,
     });
@@ -836,14 +878,13 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).toContain("copilot_internal/v2/token");
     // token obtained at runtime, not injected server-side
     expect(script).toContain("ARCHESTRA_GHCP_TOKEN");
-    // The CLI's provider headers attribute the session the same way Claude
-    // Code's and Codex's do: the client id always, plus the provisioned
+    // The provider JSON includes both the client id and the provisioned
     // passthrough key that ties each request back to this user.
     expect(script).toContain(
-      `${EXTERNAL_AGENT_ID_HEADER}: ${COPILOT_CLI_CLIENT_ID}`,
+      `"${EXTERNAL_AGENT_ID_HEADER}":"${COPILOT_CLI_CLIENT_ID}"`,
     );
     expect(script).toMatch(
-      new RegExp(`${VIRTUAL_KEY_HEADER}: arch_[0-9a-f]{64}`),
+      new RegExp(`"${VIRTUAL_KEY_HEADER}":"arch_[0-9a-f]{64}"`),
     );
   });
 
@@ -989,11 +1030,10 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(response.statusCode).toBe(410);
   });
 
-  test("mints a signed MCP context only for an approved installer redemption", async ({
+  test("an approved installer redemption renders the same gateway URL as a direct setup", async ({
     makeAgent,
   }) => {
     const prior = config.openappa;
-    const secret = "test-offer-signing-secret-32chars";
     const prompt =
       "Read http://localhost:9000/connect.md?client=claude-code and connect Claude Code.";
     const gateway = await makeAgent({
@@ -1006,7 +1046,23 @@ describe("GET /api/connection-setups/script/:token", () => {
       connectionRuntimeHandoffInstructions: prompt,
     });
 
-    async function installerTicket() {
+    try {
+      config.openappa = {
+        ...parseOpenAppaConfig(),
+        offerSigningSecret: "test-offer-signing-secret-32chars",
+      };
+      await GuardrailsDeploymentModel.setEnabled(true);
+
+      const { rawToken: directToken } = await createSetup({
+        clientId: "claude-code",
+        platform: "linux",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+      });
+      const direct = await fetchScript(directToken);
+      expect(direct.statusCode, direct.body).toBe(200);
+      expect(direct.body).toContain(prompt);
+
       const pending = await clientConnectionService.start({
         clientId: "claude-code",
         platform: "linux",
@@ -1019,99 +1075,32 @@ describe("GET /api/connection-setups/script/:token", () => {
       });
       const setup = await ConnectionSetupModel.findByToken(rawToken);
       if (!setup) throw new Error("setup ticket missing");
-      return {
-        pending,
-        setup,
-        installerToken: `archestra_con_${pending.deviceCode}`,
-        rawToken,
-      };
-    }
+      const installerToken = `archestra_con_${pending.deviceCode}`;
 
-    try {
-      config.openappa = parseOpenAppaConfig("true");
-      const inactive = await installerTicket();
-      const unapproved = await fetchScript(inactive.installerToken);
-      expect(unapproved.statusCode).toBe(404);
-      expect(unapproved.body).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
-      expect(unapproved.body).not.toContain("cs1_");
-
-      expect(
-        (
-          await clientConnectionService.decide({
-            id: inactive.pending.id,
-            setupId: inactive.setup.id,
-            userId: user.id,
-            organizationId,
-          })
-        ).status,
-      ).toBe("approved");
-      const withoutGuardrails = await fetchScript(inactive.installerToken);
-      expect(withoutGuardrails.statusCode, withoutGuardrails.body).toBe(200);
-      expect(withoutGuardrails.body).not.toContain(
-        CONNECTION_SETUP_CONTEXT_PARAM,
-      );
-      expect(withoutGuardrails.body).toContain(prompt);
-
-      config.openappa = {
-        ...parseOpenAppaConfig("true"),
-        offerSigningSecret: secret,
-      };
-      await GuardrailsDeploymentModel.setEnabled(true);
-
-      const { rawToken: directToken } = await createSetup({
-        clientId: "claude-code",
-        platform: "linux",
-        baseUrl: "http://localhost:9000/v1",
-        mcpGatewayId: gateway.id,
-      });
-      const direct = await fetchScript(directToken);
-      expect(direct.statusCode, direct.body).toBe(200);
-      expect(direct.body).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
-      expect(direct.body).toContain(prompt);
-      expect(direct.body).toBe(withoutGuardrails.body);
-
-      const active = await installerTicket();
-      const beforeApproval = await fetchScript(active.installerToken);
+      const beforeApproval = await fetchScript(installerToken);
       expect(beforeApproval.statusCode).toBe(404);
-      expect(beforeApproval.body).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
 
       expect(
         (
           await clientConnectionService.decide({
-            id: active.pending.id,
-            setupId: active.setup.id,
+            id: pending.id,
+            setupId: setup.id,
             userId: user.id,
             organizationId,
           })
         ).status,
       ).toBe("approved");
-      const approved = await fetchScript(active.installerToken);
+      const approved = await fetchScript(installerToken);
       expect(approved.statusCode, approved.body).toBe(200);
-      const contexts = [
-        ...approved.body.matchAll(
-          new RegExp(`${CONNECTION_SETUP_CONTEXT_PARAM}=([^'&\\s]+)`, "g"),
-        ),
-      ].map((match) => decodeURIComponent(match[1]));
-      expect(contexts.length).toBeGreaterThan(0);
-      expect(new Set(contexts).size).toBe(1);
-      expect(contexts[0]).toMatch(/^cs1_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
-      expect(
-        verifyConnectionSetupContext({
-          token: contexts[0],
-          userId: user.id,
-          organizationId,
-          gatewayId: gateway.id,
-          secret,
-        }),
-      ).toBe(true);
-      const stripped = approved.body.replace(
-        new RegExp(`\\?${CONNECTION_SETUP_CONTEXT_PARAM}=[^'&\\s]+`, "g"),
-        "",
+      // Each installation has its own instruction-refresh credential.
+      const withoutCredential = (body: string) =>
+        body.replace(
+          /cmi1_[0-9a-f-]+\.[A-Za-z0-9_-]+/g,
+          "installation-credential",
+        );
+      expect(withoutCredential(approved.body)).toBe(
+        withoutCredential(direct.body),
       );
-      expect(stripped).toBe(withoutGuardrails.body);
-      expect(stripped).toContain(prompt);
-      expect(stripped).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
-      expect(stripped).not.toContain(contexts[0]);
     } finally {
       config.openappa = prior;
     }

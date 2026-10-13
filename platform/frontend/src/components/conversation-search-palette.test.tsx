@@ -465,32 +465,6 @@ describe("ConversationSearchPalette", () => {
     }
   });
 
-  // The two pages share a name, so exactly one of them is offered: OpenAPPA
-  // replaces the legacy page while it is on, and the legacy page returns,
-  // policies untouched, once it is off.
-  it.each([
-    { openappaEnabled: true, destination: "/openappa" },
-    { openappaEnabled: false, destination: "/mcp/tool-guardrails" },
-  ])("offers one Guardrails page: %j", ({ openappaEnabled, destination }) => {
-    mockUseConversations.mockReturnValue({
-      data: [],
-      isLoading: false,
-      isFetching: false,
-    });
-    vi.mocked(useFeature).mockImplementation(
-      (feature) => feature === "openappaEnabled" && openappaEnabled,
-    );
-
-    render(<ConversationSearchPalette {...defaultProps} />);
-    fireEvent.change(screen.getByTestId("command-input"), {
-      target: { value: "guardrails" },
-    });
-
-    expect(screen.getAllByText("Guardrails")).toHaveLength(1);
-    fireEvent.click(screen.getByText("Guardrails"));
-    expect(mockRouterPush).toHaveBeenCalledWith(destination);
-  });
-
   it("searches pages by their visible labels and navigates to a match", () => {
     mockUseConversations.mockReturnValue({
       data: [],

@@ -152,10 +152,10 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
   /** Check if streaming is requested */
   isStreaming(): boolean;
 
-  /** Get messages in common format (for trusted data evaluation) */
+  /** Get messages in common format */
   getMessages(): CommonMessage[];
 
-  /** Get tool results from messages (for trusted data evaluation) */
+  /** Get tool results from messages (for proxy plugins) */
   getToolResults(): CommonToolResult[];
 
   /**
@@ -185,7 +185,7 @@ export interface LLMRequestAdapter<TRequest, TMessages = unknown> {
   setModel(model: string): void;
 
   /**
-   * Update a tool result's content (for trusted data updates)
+   * Update a tool result's content (for plugin-approved replacements)
    * @param toolCallId - The tool call ID to update
    * @param newContent - New content string
    */
@@ -242,7 +242,7 @@ export interface LLMResponseAdapter<TResponse> {
   /** Get text content from response */
   getText(): string;
 
-  /** Get tool calls from response (for tool invocation policies) */
+  /** Get tool calls from response (for proxy plugin rulings) */
   getToolCalls(): CommonToolCall[];
 
   /** Check if response has tool calls */
@@ -381,16 +381,6 @@ export interface ChunkProcessingResult {
 }
 
 /**
- * Keep-alive frame written while a dual LLM analysis holds a stream idle
- * before the upstream call. A `:`-prefixed line is defined by the event-stream
- * spec as a comment, so every compliant SSE parser drops it without touching
- * message content — which also means it is only safe on `text/event-stream`
- * transports, not on the NDJSON or binary event streams some providers speak.
- */
-export const DUAL_LLM_KEEPALIVE_SSE_COMMENT =
-  ": archestra dual-llm analysis in progress\n\n";
-
-/**
  * Adapter interface for streaming LLM responses
  *
  * Handles parsing provider-specific chunks, accumulating state,
@@ -426,10 +416,10 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   getSSEHeaders(): Record<string, string>;
 
   /**
-   * Format a text fragment as SSE to inject into an ongoing stream.
-   * Used to surface a terminal dual LLM sanitization failure before the
-   * request fails closed. Never used for mid-stream progress: injected text
-   * is indistinguishable from model output and fuses into the answer.
+   * Format a text fragment as SSE to inject into an ongoing stream (e.g. a
+   * footer appended to a completed turn). Never used for mid-stream progress:
+   * injected text is indistinguishable from model output and fuses into the
+   * answer.
    */
   formatTextDeltaSSE(text: string): string | Uint8Array;
 
@@ -467,6 +457,10 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * produced in the same turn has already been streamed to the client, so this
    * must continue that message rather than open a new one — unlike
    * {@link formatCompleteTextSSE}, which replaces the response wholesale.
+   *
+   * OpenAI Responses also replaces its retained output and terminal snapshot.
+   * Passing no calls clears held executable output. At unexpected EOF the
+   * caller must discard the returned frames, which can synthesize a terminal.
    *
    * Optional: an adapter that does not implement it keeps the pre-existing
    * behavior for its provider (the calls are refused with the
@@ -558,6 +552,14 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    * upstream cause.
    */
   readonly formatStreamErrorFrame?: (event: unknown) => string;
+
+  /**
+   * Set by adapters that serve a client wire format different from the
+   * upstream provider's (e.g. OpenAI-format client, Anthropic upstream). The
+   * upstream's error body is foreign to the client there, so the proxy keeps
+   * its own error envelope instead of relaying it.
+   */
+  readonly translatesWireFormat?: boolean;
 
   // ---------------------------------------------------------------------------
   // Adapter Creation
@@ -660,6 +662,8 @@ export interface UsageView {
   reasoningTokens?: number;
   /** True when inputTokens is a locally-computed estimate, not a provider-reported count (see applyInputTokenFallback). Absent/false = provider-measured. */
   inputTokensEstimated?: boolean;
+  /** USD the provider reports it billed for this response (OpenRouter's `usage.cost`). When present it is the recorded cost instead of a token-price estimate. */
+  providerReportedCost?: number;
 }
 
 /**

@@ -61,6 +61,7 @@ import { ConversationFilesPanel } from "@/components/chat/conversation-files-pan
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { getComposerAnswer } from "@/components/chat/mcp-elicitation-fields";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   AppsPanelContent,
@@ -95,7 +96,11 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Version } from "@/components/version";
-import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
+import {
+  useAgentDefaultSuggestedPrompts,
+  useChatAgents,
+  useDefaultAgentId,
+} from "@/lib/agent.query";
 import {
   useAgentRuntimePreflight,
   useStartAgentRun,
@@ -153,6 +158,7 @@ import {
   getMessageFeedback,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
+import { isConversationShared } from "@/lib/chat/conversation-sharing";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import {
   generateEncryptedChatKey,
@@ -857,17 +863,10 @@ export function ChatPageContent({
     canManageShare === true,
   );
   const isShared = sharingPolicy.data
-    ? [
-        ...sharingPolicy.data.grants,
-        ...sharingPolicy.data.inheritedGrants,
-      ].some(
-        (grant) =>
-          grant.actions.includes("read") &&
-          !(
-            grant.subject.type === "user" &&
-            grant.subject.id === conversation?.userId
-          ),
-      )
+    ? isConversationShared({
+        grants: sharingPolicy.data.grants,
+        ownerId: conversation?.userId,
+      })
     : !!conversation?.share;
   const isReadOnlyConversation =
     !!conversationId &&
@@ -979,11 +978,20 @@ export function ChatPageContent({
   const initialAgent = internalAgents.find(
     (agent) => agent.id === initialAgentId,
   );
+  const initialAgentHasOwnPrompts =
+    (initialAgent?.suggestedPrompts?.length ?? 0) > 0;
+  const { data: defaultSuggestedPrompts } = useAgentDefaultSuggestedPrompts(
+    initialAgentId,
+    { enabled: Boolean(initialAgent) && !initialAgentHasOwnPrompts },
+  );
+  const initialSuggestedPrompts = initialAgentHasOwnPrompts
+    ? initialAgent?.suggestedPrompts
+    : defaultSuggestedPrompts;
   const activeSelectionAgent = conversationId
     ? conversationAgent
     : initialAgent;
   const suggestionPreview = resolveSuggestionPreview(
-    initialAgent?.suggestedPrompts,
+    initialSuggestedPrompts,
     hoveredSuggestionPrompt,
   );
   const {
@@ -1870,7 +1878,10 @@ export function ChatPageContent({
   const activeAgentId = conversationAgentId ?? initialAgentId;
   const promptAgentId = conversation?.agent?.id ?? activeAgentId;
   const newChatAgentId =
-    activeAgentId ?? initialAgentId ?? internalAgents[0]?.id ?? null;
+    activeAgentId ??
+    initialAgentId ??
+    internalAgents.find((agent) => !agent.builtIn)?.id ??
+    null;
 
   // Get current agent info
   const currentProfileId = conversationAgentId;
@@ -2235,6 +2246,27 @@ export function ChatPageContent({
         messageLength: message.text?.length ?? 0,
       });
     };
+
+    // An open single-pick question takes the composer's text as its typed
+    // answer instead of a new message waiting behind it in the queue.
+    const composerAnswer =
+      chatSession &&
+      !message.files?.length &&
+      !options?.skill &&
+      !options?.externalMcpSkill &&
+      !options?.sandboxCommand
+        ? getComposerAnswer({
+            requests: chatSession.pendingMcpElicitations ?? [],
+            text: message.text ?? "",
+          })
+        : null;
+    if (composerAnswer && chatSession) {
+      if (!(await chatSession.resolveMcpElicitation(composerAnswer))) {
+        // Already reported; keep the text for another try (onSubmit contract).
+        throw new Error("elicitation-answer-not-saved");
+      }
+      return;
+    }
 
     const queueEnabled = !!conversationId;
     const submitAction = classifyChatSubmitAction({
@@ -3374,7 +3406,15 @@ export function ChatPageContent({
                                 )
                             )?.name ?? conversation?.agent?.name
                           }
-                          selectedModel={conversationModelId ?? initialModel}
+                          selectedModel={
+                            chatModels.find(
+                              (m) =>
+                                m.dbId ===
+                                (conversationModelId ?? initialModel),
+                            )?.id ??
+                            conversationModelId ??
+                            initialModel
+                          }
                           modelSource={
                             conversationModelSource ?? initialModelSource
                           }
@@ -3411,7 +3451,7 @@ export function ChatPageContent({
                   </ViewTransition>
 
                   {isReadOnlyConversation ? (
-                    <div className="sticky bottom-0 bg-background p-4">
+                    <div className={COMPOSER_DOCK_CLASS}>
                       <div className="max-w-4xl mx-auto space-y-3">
                         <div className="relative">
                           <div className="border-input dark:bg-input/30 relative flex w-full flex-col rounded-md border shadow-xs opacity-30 blur-[3px] pointer-events-none select-none">
@@ -3465,7 +3505,7 @@ export function ChatPageContent({
                       </div>
                     </div>
                   ) : isAgentDeleted ? (
-                    <div className="sticky bottom-0 bg-background p-4">
+                    <div className={COMPOSER_DOCK_CLASS}>
                       <div className="max-w-4xl mx-auto">
                         <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
                           <div className="flex items-center gap-3 text-muted-foreground">
@@ -3491,12 +3531,12 @@ export function ChatPageContent({
                     /* Review chat with no LLM key: the replay plays in the panel
                        without a key, but chatting needs one — prompt for it here
                        instead of the composer (which assumes a selected model). */
-                    <div className="sticky bottom-0 bg-background p-4">
+                    <div className={COMPOSER_DOCK_CLASS}>
                       <ReviewChatNoKeyNotice onKeyAdded={handleFirstKeyAdded} />
                     </div>
                   ) : (
                     activeAgentId && (
-                      <div className="sticky bottom-0 bg-background p-4">
+                      <div className={COMPOSER_DOCK_CLASS}>
                         {/* Shared-element pair with the centered New Chat
                             composer (and the project-page composer): on the
                             splash → conversation swap the box morphs from
@@ -3667,7 +3707,7 @@ export function ChatPageContent({
                       </div>
                       {(() => {
                         if (isInitialRuntimeMode) return null;
-                        const prompts = initialAgent?.suggestedPrompts;
+                        const prompts = initialSuggestedPrompts;
                         if (!prompts || prompts.length === 0) return null;
                         return (
                           <SuggestedPromptPills
@@ -4109,3 +4149,8 @@ function ReviewChatNoKeyNotice({ onKeyAdded }: { onKeyAdded: () => void }) {
 function subscriptionDebug(event: string, data: Record<string, unknown>) {
   console.info(`[subscription-debug] ${event}`, data);
 }
+
+// Messages scroll under the composer; a short fade above it keeps a line
+// from being sliced in half by the opaque band.
+const COMPOSER_DOCK_CLASS =
+  "sticky bottom-0 bg-background p-4 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-gradient-to-t before:from-background before:to-transparent";

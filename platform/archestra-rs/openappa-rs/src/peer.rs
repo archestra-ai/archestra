@@ -93,20 +93,11 @@ async fn execute(
     let leased = state.lease().await?;
     let pg = postgres_store(&leased.state.store)?;
     let _lock = SessionLock::acquire(pg, root.clone())?;
-    // The family shares a log and operation journal. An interrupted receipt can
-    // leave its projection incomplete, so non-recovery operations fail closed
-    // across the root; ordinary open tool dispatches are not pending receipts.
-    if kind != PeerKind::Read
-        && leased
-            .state
-            .store
-            .has_pending_receipts(&TrajectoryId::new(root.as_str()))
-            .map_err(error)?
-    {
-        return Err(error(
-            "OpenAPPA session has interrupted processing; operator recovery is required",
-        ));
-    }
+    // Holding the family's lock, a pending receipt here is one its owner's
+    // dispatch left when it stopped: the lock ends with the owner's connection.
+    // The peer stores deduplicate their own effects (a resubmitted send with
+    // the same payload replays its stored row), so a pending claim proceeds to
+    // re-drive the operation and completes the receipt with its answer.
     let actor = acting_actor(pg, &input, &root)?;
     match kind {
         PeerKind::Send => send(&leased.state, pg, &input, &actor).await,
@@ -175,7 +166,10 @@ async fn send(
         context: None,
     }) {
         Ok(OperationClaim::Complete { decision }) => return Ok(decision),
-        Ok(OperationClaim::Claimed) => {}
+        // A pending receipt is this same send, claimed by a dispatch that
+        // stopped before finishing it. The peer store answers a resubmission
+        // of the same payload with its stored row, so the send is not doubled.
+        Ok(OperationClaim::Claimed) | Err(ReceiptError::Pending) => {}
         Err(ReceiptError::InputMismatch) => {
             return Ok(denied(
                 "OpenAPPA did not send this message: the operation id was already used for a different message.",
@@ -289,23 +283,25 @@ async fn list(
     let key = peer_operation_key(input, operation);
     let tool = bounded_tool(input.tool.as_deref())?;
     let request = json!({ "event": "peer_list", "tool": tool });
-    match state.store.claim_operation(OperationRequest {
+    let decision = match state.store.claim_operation(OperationRequest {
         key: key.clone(),
         root: actor.root.clone(),
         input: request,
         context: None,
     }) {
-        Ok(OperationClaim::Complete { decision }) => return Ok(decision),
-        Ok(OperationClaim::Claimed) => {}
+        Ok(OperationClaim::Complete { decision }) => decision,
+        Ok(OperationClaim::Claimed) | Err(ReceiptError::Pending) => {
+            let notices = list_notices(state, pg, input, actor).await?;
+            let decision = list_result(&notices);
+            state
+                .store
+                .complete_operation(key, decision.clone())
+                .map_err(error)?;
+            decision
+        }
         Err(ReceiptError::InputMismatch) => return Ok(withheld_peer_list()),
         Err(reason) => return Err(error(reason)),
-    }
-    let notices = list_notices(state, pg, input, actor).await?;
-    let decision = list_result(&notices);
-    state
-        .store
-        .complete_operation(key, decision.clone())
-        .map_err(error)?;
+    };
     let result_key = peer_result_key(input, tool_call_id);
     let approved = decision
         .get("approved_output")

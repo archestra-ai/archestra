@@ -922,6 +922,55 @@ describe("a battery with targets", () => {
     });
   });
 
+  test("a battery whose annotator only its target declares governs the organization", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    config.daggerRuntime.enabled = true;
+    const { entry } = await uploadTargetedNotary({ organizationId, userId });
+    await bindOrganizationCredential({
+      organizationId,
+      userId,
+      variable: NOTARY_TOKEN,
+      key: "notary-token",
+    });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, [], { route: "notary.check" }),
+    });
+
+    const policy = await openappaBatteriesService.recompile(organizationId);
+    expect(policy.lastError).toBeNull();
+    const composed = parsePolicyToml(policy.content)?.policy as
+      | { annotator?: Array<{ name: string }> }
+      | undefined;
+    expect(composed?.annotator?.map(({ name }) => name)).toContain(
+      "notary.check",
+    );
+    const { batteries } =
+      await openappaBatteriesService.policyDeclarations(organizationId);
+    expect(batteries.find(({ name }) => name === "notary")).toMatchObject({
+      scope: "organization",
+      status: "active",
+    });
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).map(
+        ({ batteryName, catalogId, target }) => ({
+          batteryName,
+          catalogId,
+          target,
+        }),
+      ),
+    ).toEqual([
+      { batteryName: "notary", catalogId: null, target: "multi-user" },
+    ]);
+  });
+
   test("a deployed target's member roster is declared by the host until the root declares its own", async ({
     makeOrganization,
     makeUser,
@@ -983,6 +1032,57 @@ readers = { "github:1" = "ana@corp.example" }
 });
 
 const ACME_TOKEN = "APPA_PROVIDER_ACME_TOKEN";
+const NOTARY_TOKEN = "APPA_PROVIDER_NOTARY_TOKEN";
+
+/** A battery with an empty base whose multi-user target declares one credentialed annotator. */
+async function uploadTargetedNotary(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  const empty = "[policy]\nversion = 2\n";
+  return openappaBatteriesService.uploadPackage({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    name: "notary",
+    files: [
+      {
+        path: "appa-package.toml",
+        text: `schema = 1
+name = "notary"
+description = "Checks every call"
+
+[battery]
+policy = "appa.toml"
+hosts = ["claude-code"]
+helpers = ["check.py"]
+
+[battery.targets.single-user]
+policy = "single-user.toml"
+
+[battery.targets.multi-user]
+policy = "multi-user.toml"
+`,
+      },
+      { path: "appa.toml", text: empty },
+      { path: "single-user.toml", text: empty },
+      {
+        path: "multi-user.toml",
+        text: `${empty}
+[[policy.annotator]]
+name = "notary.check"
+ranks = ["suspicious", "trusted"]
+audiences = ["self"]
+marks = []
+
+[externals.annotators."notary.check"]
+command = ["python3", "check.py"]
+token_env = "${NOTARY_TOKEN}"
+`,
+      },
+      { path: "check.py", text: "print('{}')\n" },
+    ],
+  });
+}
 
 const BATTERY_MANIFEST = `schema = 1
 name = "acme"

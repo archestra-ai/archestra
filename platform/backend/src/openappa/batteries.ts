@@ -48,6 +48,7 @@ import type {
 import { mapWithConcurrency } from "@/utils/concurrency";
 import {
   type DeployedFile,
+  declaredAnnotators,
   declaredCredentials,
   deployBattery,
   deployedFiles,
@@ -101,7 +102,7 @@ class OpenAppaBatteriesService {
         source,
         contentHash,
         namespaces: battery.namespaces,
-        annotators: battery.annotators,
+        annotators: declaredAnnotators(battery),
         scope: batteryScope(battery),
         helpers: battery.helpers,
         credentials: declaredCredentials(battery),
@@ -876,7 +877,7 @@ class OpenAppaBatteriesService {
       contentHash,
       entry,
       namespaces: inspected.namespaces,
-      annotators: inspected.annotators,
+      annotators: declaredAnnotators(inspected),
       helpers: inspected.helpers,
       credentials: declaredCredentials(inspected),
       setup: inspected.setup ?? null,
@@ -2022,11 +2023,14 @@ function deployEntries(params: {
   );
 }
 
-/** A battery with no tool namespace and at least one annotator governs the organization. */
+/**
+ * A battery with no tool namespace and at least one annotator, in its base or
+ * its target, governs the organization.
+ */
 function batteryScope(battery: NativeBatteryPackage | null): BatteryScope {
   return battery !== null &&
     battery.namespaces.length === 0 &&
-    battery.annotators.length > 0
+    declaredAnnotators(battery).length > 0
     ? "organization"
     : "catalogs";
 }

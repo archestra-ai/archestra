@@ -39,6 +39,11 @@ export function declaredCredentials(battery: BatteryPackage): string[] {
   return battery.multiUser?.credentials ?? battery.credentials;
 }
 
+/** Every annotator a deployment of the battery may declare, whichever target it takes. */
+export function declaredAnnotators(battery: BatteryPackage): string[] {
+  return battery.multiUser?.annotators ?? battery.annotators;
+}
+
 /**
  * What the views show for a battery: what it composes as, or, while that
  * deployment waits for a credential, what it composes as once bound.

@@ -27,6 +27,9 @@ catalog:
   typescript-7: "npm:typescript@7.0.1-rc"
   zod: ^4.3.4
 overrides:
+  # iconv-lite 0.6.x publishes a .idea/ folder, which sandboxed agents can't
+  # write, so installs fail there. 0.7 keeps the same API and ships without it.
+  iconv-lite@<0.7: ^0.7.2
   # CVE-2026-49356 (GHSA-4x5r-pxfx-6jf8, LOW, arbitrary source-map read via
   # sourceMappingURL handling) fixed in 7.29.6. Transitive-only (build tooling),
   # so an override is the only way to lift every resolution past the vulnerable

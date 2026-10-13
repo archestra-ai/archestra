@@ -94,9 +94,10 @@ if (input) {
   }
   const ids = Object.keys(input.providers);
   const inCatalog = (providerId, modelId) => Boolean(input.providers[providerId]?.models.some(model => model.id === modelId));
-  // Never add a pin. Keep one that is already served here, carry a native one
-  // over to its Archestra twin (exact model id), and drop the rest so OpenCode
-  // falls back to the first provider below instead of an account it cannot use.
+  // Never add a pin. Keep one that is already served here, move a native one
+  // to the catalog provider with the same model id, and drop the rest so
+  // OpenCode falls back to the first provider below instead of an account it
+  // cannot use.
   const notices = [];
   for (const field of ["model", "small_model"]) {
     const pin = config[field];

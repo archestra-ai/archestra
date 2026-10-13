@@ -1,5 +1,5 @@
 {
-  "id": "3267be8c-932c-4009-b3d7-872a743956af",
+  "id": "0245252c-5ce0-448d-b316-50f5dd685aaa",
   "prevId": "97329a84-b507-48e3-b8ba-c491e03fea6c",
   "version": "7",
   "dialect": "postgresql",
@@ -20497,6 +20497,12 @@
           "notNull": true,
           "default": "'value'"
         },
+        "github_id": {
+          "name": "github_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "metadata": {
           "name": "metadata",
           "type": "jsonb",
@@ -28094,13 +28100,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'enforcement_off'"
         },
         "created_at": {
           "name": "created_at",

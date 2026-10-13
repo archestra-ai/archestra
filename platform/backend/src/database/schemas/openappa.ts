@@ -269,6 +269,25 @@ export const openappaUnenforcedSessionsTable = pgTable(
   (table) => [primaryKey({ columns: [table.organizationId, table.sessionId] })],
 );
 
+// Sessions a person took out of OpenAPPA with an approved `superyell`. The
+// proxy treats such a session, and the children it starts, as one that started
+// while enforcement was off: OpenAPPA no longer governs it, and its label no
+// longer applies.
+export const openappaSuperyelledSessionsTable = pgTable(
+  "openappa_superyelled_sessions",
+  {
+    organizationId: text("organization_id").notNull(),
+    // The caller-scoped id, as `openappa_sessions.session_id` holds it.
+    sessionId: text("session_id").notNull(),
+    // The user who approved the superyell, when known.
+    userId: text("user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.organizationId, table.sessionId] })],
+);
+
 // Tool calls of a governed session whose outcome the runtime did not see,
 // because enforcement was off: a call the model made then (`made`), and a
 // spawn whose child ran or got a message then (`child`). A record covers only

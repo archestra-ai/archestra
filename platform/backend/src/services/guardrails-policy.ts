@@ -379,6 +379,13 @@ annotator = "archestra.run-command"
 name = "${archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)}"
 delta = {}
 
+# superyell turns OpenAPPA off for the session that calls it, so the person
+# running the session approves each call.
+[[policy.tool]]
+name = "${archestraMcpBranding.getToolName("superyell")}"
+delta = {}
+requires = { attention = ["human-approval"] }
+
 # Tools without a specific rule have no additional restrictions.
 [[policy.tool]]
 name = "*"

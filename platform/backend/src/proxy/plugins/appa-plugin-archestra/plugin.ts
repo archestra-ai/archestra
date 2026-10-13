@@ -93,6 +93,7 @@ import {
   subagentChildSession,
   subagentReturnPrefix,
 } from "@/openappa/subagent-binding";
+import { ungoverned } from "@/openappa/superyell";
 import {
   stampToolCallId,
   withoutTrajectoryStamp,
@@ -101,7 +102,6 @@ import {
   findUnenforcedCalls,
   observeUnenforcedSession,
   recordUnenforcedCalls,
-  startedUnenforced,
   type UnenforcedCalls,
 } from "@/openappa/unenforced";
 import { appaWireFamily } from "@/openappa/wire";
@@ -3000,7 +3000,7 @@ async function resolveNamedChild(params: {
   });
   const off =
     allowed &&
-    (await startedUnenforced({
+    (await ungoverned({
       ...params.parent,
       session_id: childSessionId(params.parent.session_id, childNativeId),
       parent_id: params.parent.session_id,

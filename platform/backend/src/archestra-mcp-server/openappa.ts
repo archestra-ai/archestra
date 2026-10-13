@@ -53,6 +53,7 @@ import {
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
+import { superyell } from "@/openappa/superyell";
 import {
   recallYellSession,
   YellArgumentsSchema,
@@ -132,6 +133,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  successResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
@@ -555,6 +557,49 @@ const registry = defineArchestraTools([
         toolCallId: identity.callId,
         args,
       });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "superyell",
+    title: "Turn OpenAPPA off for this session",
+    description:
+      "Turn OpenAPPA off for this session, after the person running it approves. The session's label resets to nothing and OpenAPPA stops checking its calls, until the session ends; children it starts afterwards are not checked either. Other sessions are not affected. Call it only when the user asks to turn OpenAPPA off for this session. Say why in reason; the person approving reads it.",
+    schema: z.strictObject({
+      reason: z
+        .string()
+        .trim()
+        .min(1)
+        .max(2000)
+        .describe("Why OpenAPPA should be turned off for this session."),
+    }),
+    async handler({ args, context }) {
+      if (!(await getGuardrailsDeployment()).active)
+        return errorResult("Guardrails enforcement is off");
+      const id = context.sessionId ?? context.conversationId;
+      const session =
+        context.openappaSubagent?.session ??
+        context.openappaSession ??
+        (context.organizationId && context.userId && id
+          ? chatOpenAppaSession(context.organizationId, context.userId, id)
+          : undefined);
+      if (!session)
+        throw new ApiError(
+          400,
+          "Turning OpenAPPA off requires an authenticated session",
+        );
+      await superyell({ session, userId: context.userId });
+      logger.warn(
+        {
+          organizationId: session.organization_id,
+          sessionId: session.session_id,
+          userId: context.userId,
+          reason: args.reason,
+        },
+        "OpenAPPA turned off for a session by an approved superyell",
+      );
+      return successResult(
+        "OpenAPPA is off for this session. Its label is reset, and its calls are no longer checked.",
+      );
     },
   }),
   defineArchestraTool({

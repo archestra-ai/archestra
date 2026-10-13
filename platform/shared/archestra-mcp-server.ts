@@ -235,6 +235,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
+  "superyell",
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
@@ -456,6 +457,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   whoami: "identity",
   execute_remedy_plan: "openappa",
   yell: "openappa",
+  superyell: "openappa",
   get_remedy_plans: "openappa",
   list_peer_messages: "openappa",
   read_peer_message: "openappa",
@@ -827,7 +829,15 @@ export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "yell",
+  "superyell",
 ] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * The required OpenAPPA tools a client connection approves up front. superyell
+ * turns OpenAPPA off for a session, so the client keeps asking before it too.
+ */
+export const CLIENT_APPROVED_OPENAPPA_TOOL_SHORT_NAMES =
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES.filter((name) => name !== "superyell");
 
 export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
   return (REQUIRED_OPENAPPA_TOOL_SHORT_NAMES as readonly string[]).includes(

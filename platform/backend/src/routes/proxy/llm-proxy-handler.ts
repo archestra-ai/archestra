@@ -113,6 +113,7 @@ import {
   APPA_SUBAGENT_BINDING_HEADER,
   verifySubagentBinding,
 } from "@/openappa/subagent-binding";
+import { ungoverned } from "@/openappa/superyell";
 import {
   APPA_THREAD_RECORD,
   clientKeepsThreadPairing,
@@ -131,7 +132,6 @@ import {
   stampedSessions,
   withoutTrajectoryStamp,
 } from "@/openappa/trajectory-stamp";
-import { startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
@@ -1287,14 +1287,15 @@ export async function handleLLMProxy<
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
   const appaObserving = appaFeatureEnabled && !appaActive;
-  // An encrypted chat that started while enforcement was off stays out of
-  // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
+  // An encrypted chat that started while enforcement was off, or that a
+  // person superyelled, stays out of OpenAPPA, so the encrypted storage
+  // OpenAPPA lacks does not matter to it.
   if (
     appaActive &&
     isEncryptedChatSession &&
     !(
       sessionId &&
-      (await startedUnenforced({
+      (await ungoverned({
         organization_id: resolvedAgent.organizationId,
         session_id: sessionId,
       }))
@@ -1967,7 +1968,7 @@ export async function handleLLMProxy<
       });
       if (
         openappaSession &&
-        (await startedUnenforced(
+        (await ungoverned(
           appaTrajectory({
             adapters: APPA_CLIENT_ADAPTERS,
             headers: pluginContext.headers,
@@ -1984,11 +1985,12 @@ export async function handleLLMProxy<
           }).session,
         ))
       ) {
-        // The session started while enforcement was off. OpenAPPA never
-        // governs it: the request goes on as if enforcement were off.
+        // The session started while enforcement was off, or a person
+        // superyelled it. OpenAPPA never governs it: the request goes on as
+        // if enforcement were off.
         logger.info(
           { sessionId: openappaSession.session_id },
-          "OpenAPPA ignores a session that started while Guardrails enforcement was off",
+          "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
         );
         openappaSession = undefined;
       }

@@ -622,6 +622,118 @@ $out | ConvertTo-Json -Compress
   }, 180_000);
 });
 
+describe.skipIf(!powershellAvailable)(
+  "Windows PowerShell 5.1 native argument passing",
+  () => {
+    test("OpenCode primary-providers setup and its guard disconnect run when quotes in native arguments are dropped", async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "archestra-oc-legacy-"));
+      const home = path.join(root, "home");
+      const bin = path.join(root, "bin");
+      const configPath = path.join(
+        home,
+        ".config",
+        "opencode",
+        "opencode.json",
+      );
+      const existing = {
+        model: "local/old",
+        provider: { local: { name: "Local" } },
+      };
+      try {
+        await mkdir(path.dirname(configPath), { recursive: true });
+        await mkdir(bin);
+        await writeFile(configPath, JSON.stringify(existing));
+        await writeFile(
+          path.join(bin, "opencode"),
+          '#!/bin/sh\n[ "$1" = --version ] && echo 1.18.32\nexit 0\n',
+        );
+        await chmod(path.join(bin, "opencode"), 0o755);
+        await writeFile(
+          path.join(root, "setup.ps1"),
+          renderSetupScript({
+            clientId: "opencode",
+            platform: "windows",
+            appName: "Archestra",
+            mcp: {
+              serverName: "prod_gateway",
+              toolPrefix: "archestra__",
+              url: "https://proxy.example.com/v1/mcp/gw",
+            },
+            proxy: {
+              authMode: "primary-providers",
+              provider: "anthropic",
+              providerLabel: "Anthropic",
+              baseUrl: "https://proxy.example.com/v1",
+              url: "https://proxy.example.com/v1/anthropic",
+              proxyName: "default_proxy",
+              virtualKey: "arch_test",
+              virtualKeyName: "Setup",
+              passthroughVirtualKey: null,
+              model: null,
+              primaryProviders: [
+                {
+                  provider: "anthropic",
+                  name: "Anthropic",
+                  models: [
+                    {
+                      id: "claude-test",
+                      name: "Claude",
+                      context: 200000,
+                      output: null,
+                    },
+                  ],
+                },
+              ],
+            },
+            skills: null,
+          }),
+        );
+        // Legacy is how Windows PowerShell 5.1 passes arguments to native
+        // commands: double quotes inside an argument do not reach the program.
+        const driverPath = path.join(root, "driver.ps1");
+        await writeFile(
+          driverPath,
+          `$PSNativeCommandArgumentPassing = 'Legacy'
+& (Join-Path $env:ARCHESTRA_TEST_ROOT 'setup.ps1')
+if ($LASTEXITCODE) { exit $LASTEXITCODE }
+Copy-Item (Join-Path $env:USERPROFILE '.config/opencode/opencode.json') (Join-Path $env:ARCHESTRA_TEST_ROOT 'connected.json')
+$env:ARCHESTRA_GUARD_ACTION = 'disconnect'
+& (Join-Path $env:USERPROFILE '.archestra/opencode-startup-guard.ps1')
+exit $LASTEXITCODE
+`,
+        );
+        await execFileAsync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driverPath],
+          {
+            cwd: home,
+            env: {
+              HOME: home,
+              USERPROFILE: home,
+              XDG_CONFIG_HOME: "",
+              PATH: `${bin}:${process.env.PATH}`,
+              NO_COLOR: "1",
+              ARCHESTRA_TEST_ROOT: root,
+            },
+            timeout: 60_000,
+          },
+        );
+        const connected = JSON.parse(
+          await readFile(path.join(root, "connected.json"), "utf8"),
+        );
+        expect(
+          connected.provider["archestra-anthropic"].models["claude-test"].limit,
+        ).toEqual({ context: 200000, output: 0 });
+        expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual(
+          existing,
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }, 90_000);
+  },
+);
+
 describe("Windows startup guard here-strings", () => {
   test("embedding content with a line starting with '@ fails instead of ending the here-string early", () => {
     expect(() =>

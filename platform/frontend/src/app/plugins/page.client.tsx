@@ -616,6 +616,11 @@ function PluginsList() {
                         "Claude Code",
                         clientFilterIcon("claude-code"),
                       ],
+                      [
+                        "claude-desktop",
+                        "Claude Desktop",
+                        clientFilterIcon("claude-desktop"),
+                      ],
                       ["codex", "Codex", clientFilterIcon("codex")],
                       [
                         "copilot-cli",

@@ -1016,6 +1016,9 @@ function clientTypeFromValue(value: string | null): ClientType | null {
     case "claude":
     case "claude-code":
       return "claude-code";
+    case "claude-desktop":
+    case "cowork":
+      return "claude-desktop";
     case "copilot":
     case "copilot-cli":
     case "github-copilot":

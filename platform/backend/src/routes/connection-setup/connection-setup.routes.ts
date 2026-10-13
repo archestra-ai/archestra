@@ -598,7 +598,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
       } else if (
-        clientId !== "claude-desktop" &&
         clientId !== "opencode" &&
         config.plugins.enabled &&
         organization.connectionPluginsEnabled
@@ -1025,10 +1024,7 @@ interface MarketplaceRenderContext {
   skillIds: string[];
   pluginIds: string[];
   pluginNames: string[];
-  pluginClientType: Exclude<
-    ConnectionSetupClientId,
-    "claude-desktop" | "opencode"
-  > | null;
+  pluginClientType: Exclude<ConnectionSetupClientId, "opencode"> | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
 }
@@ -1263,9 +1259,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       pluginIds,
       pluginNames,
       pluginClientType:
-        pluginIds.length > 0 &&
-        setup.clientId !== "claude-desktop" &&
-        setup.clientId !== "opencode"
+        pluginIds.length > 0 && setup.clientId !== "opencode"
           ? setup.clientId
           : null,
       pluginPlatform:

@@ -320,6 +320,7 @@ describe("NewPluginPage", () => {
         {
           sourceMarketplaceRepo: "anthropics/claude-plugins-official",
           sourceMarketplacePluginName: "policy-runtime",
+          clientType: "claude-code",
         },
       ],
     } as unknown as ReturnType<typeof usePlugins>);
@@ -503,12 +504,17 @@ describe("NewPluginPage", () => {
     const clientFilter = screen.getByRole("combobox", {
       name: "Filter marketplace clients",
     });
-    expect(clientFilter).toHaveTextContent("All clients");
+    // The marketplace's clients start selected; a Claude Desktop copy of
+    // its Claude Code plugins is offered but opt-in.
+    expect(clientFilter).toHaveTextContent("Select clients");
     await user.click(clientFilter);
     const claudeClient = screen.getByRole("menuitemcheckbox", {
       name: "Claude Code",
     });
     expect(claudeClient).toBeChecked();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Claude Desktop" }),
+    ).not.toBeChecked();
     await user.click(claudeClient);
     expect(screen.queryByText("plugin-0")).not.toBeInTheDocument();
     expect(screen.getByText("plugin-1")).toBeVisible();

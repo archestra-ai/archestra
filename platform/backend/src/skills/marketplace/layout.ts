@@ -125,7 +125,12 @@ export function computeLayout(
       description: plugin.description,
       version,
     });
-    if (plugin.clientType === "claude-code") {
+    // Claude Desktop reads the same `.claude-plugin` marketplace as Claude
+    // Code. A share link carries one client's plugins, so the two never mix.
+    if (
+      plugin.clientType === "claude-code" ||
+      plugin.clientType === "claude-desktop"
+    ) {
       claudeMarketplace.plugins.push(simpleEntry);
     } else if (plugin.clientType === "cursor") {
       cursorMarketplace.plugins.push(simpleEntry);

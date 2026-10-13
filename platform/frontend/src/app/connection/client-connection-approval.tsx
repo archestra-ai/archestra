@@ -128,40 +128,38 @@ export function ClientConnectionApproval({
     request.data.clientId === clientId && request.data.platform === platform;
   return (
     <div>
-      <div className="space-y-5 p-5 sm:p-6">
-        <div className="flex items-center gap-3">
-          {client && <ClientIcon client={client} size={32} />}
-          <h2 className="text-base font-semibold tracking-tight">
-            Confirm the connection
-          </h2>
+      <div className="space-y-3 p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          {client && <ClientIcon client={client} size={24} />}
+          <div className="min-w-0 space-y-0.5">
+            <h2 className="text-sm font-semibold">Confirm the connection</h2>
+            <p className="text-sm text-muted-foreground">
+              Check the code matches your terminal, then approve.
+            </p>
+          </div>
         </div>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Confirm the code matches your terminal. Approval lets your AI apply
-          the selected setup to your client.
-        </p>
-        <div className="space-y-2 rounded-lg border bg-muted/40 px-4 py-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            Terminal code
-          </p>
-          <p className="break-all font-mono text-2xl font-semibold tracking-wider">
-            {request.data.userCode}
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 rounded-lg border bg-muted/40 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">Terminal code</p>
+            <p className="break-all font-mono text-xl font-semibold tracking-wider">
+              {request.data.userCode}
+            </p>
+          </div>
+          {request.data.deviceName && (
+            <p className="break-words pb-1 text-xs text-muted-foreground">
+              <span>from </span>
+              <span className="font-medium text-foreground">
+                {request.data.deviceName}
+              </span>
+            </p>
+          )}
         </div>
-        {request.data.deviceName && (
-          <p className="break-words text-sm text-muted-foreground">
-            <span>Requested from </span>
-            <span className="font-medium text-foreground">
-              {request.data.deviceName}
-            </span>
-          </p>
-        )}
         <label
           htmlFor="confirm-connection-code"
-          className="flex items-start gap-2.5 text-sm leading-relaxed"
+          className="flex items-center gap-2.5 text-sm"
         >
           <Checkbox
             id="confirm-connection-code"
-            className="mt-0.5"
             checked={confirmed}
             onCheckedChange={(value) => setConfirmed(value === true)}
           />
@@ -176,7 +174,7 @@ export function ClientConnectionApproval({
           </InlineNotice>
         )}
       </div>
-      <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-5 py-4 sm:px-6">
+      <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-4 py-3 sm:px-5">
         <Button
           size="sm"
           disabled={!confirmed || !matches || !setupId || decision.isPending}

@@ -1,7 +1,7 @@
 import {
   CLAUDE_CODE_CLIENT_ID,
   COPILOT_CLI_CLIENT_ID,
-  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  defaultRuntimeHandoffInstructions,
   EXTERNAL_AGENT_ID_HEADER,
   PERSONAL_MCP_GATEWAY_NAME,
   VIRTUAL_KEY_HEADER,
@@ -142,6 +142,52 @@ describe("GET /api/connection-setups/script/:token", () => {
     );
     expect(response.body).toContain(`ARCHESTRA_CURSOR_API_KEY='${virtualKey}'`);
     expect(response.body).not.toContain("/connection-setup/");
+  });
+
+  test("cursor installer lists the Model Router's chat models and the organization default", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const providerKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "anthropic", isPrimary: true },
+    );
+    const createModel = (modelId: string, embeddingDimensions?: 1024) =>
+      ModelModel.create({
+        provider: "anthropic",
+        modelId,
+        externalId: `anthropic/${modelId}`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        embeddingDimensions,
+      });
+    const sonnet = await createModel("claude-sonnet-test");
+    const haiku = await createModel("claude-haiku-test");
+    const embedding = await createModel("embed-test", 1024);
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      sonnet.id,
+      haiku.id,
+      embedding.id,
+    ]);
+    await OrganizationModel.patch(organizationId, {
+      defaultModelId: sonnet.id,
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "cursor",
+      baseUrl: "http://localhost:9000/v1",
+      proxyAuth: "primary-providers",
+    });
+    const response = await fetchScript(rawToken);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain(
+      `ARCHESTRA_CURSOR_MODELS='${JSON.stringify({
+        ids: ["anthropic:claude-haiku-test", "anthropic:claude-sonnet-test"],
+        defaultId: "anthropic:claude-sonnet-test",
+      })}'`,
+    );
   });
 
   // Cursor has no single-provider proxy setup; its Model Router setup is
@@ -298,13 +344,13 @@ describe("GET /api/connection-setups/script/:token", () => {
       clientId: "claude-code",
       enabled: undefined,
       instructions: null,
-      expected: DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+      expected: defaultRuntimeHandoffInstructions("Archestra"),
     },
     {
       clientId: "claude-code",
       enabled: true,
       instructions: null,
-      expected: DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+      expected: defaultRuntimeHandoffInstructions("Archestra"),
     },
     {
       clientId: "claude-code",

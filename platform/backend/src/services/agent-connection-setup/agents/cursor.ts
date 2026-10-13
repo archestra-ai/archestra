@@ -13,6 +13,9 @@ import type {
 const CURSOR_APPLICATION_USER_KEY =
   "src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser";
 
+/** Row recording the Model Router ids the last setup added to Cursor's picker. */
+const CURSOR_ROUTER_MODELS_KEY = "archestra/cursorModelRouterModels";
+
 // Cursor setup. Cursor has no CLI to drive: the script merges ~/.cursor/mcp.json,
 // clones the skills, and writes the model settings into Cursor's settings
 // database. Bash and PowerShell versions sit side by side, then the agent module
@@ -39,7 +42,45 @@ print(f"Updated {path}")`;
 // Cursor keeps its API key settings in a SQLite store rather than a JSON file.
 // The Settings > Models > API Keys toggles live in the applicationUser blob and
 // the key in its own row. Values arrive through the child process env.
+//
+// The picker then lists only the Model Router's models: they become user-added
+// models, and every built-in model Cursor knows of is switched off (a user can
+// switch one back on). The ids written are remembered in their own row, so a
+// re-run replaces them instead of keeping models the router no longer lists.
 const CURSOR_MODEL_SETTINGS_PY = `import json, os, sqlite3
+
+def set_picker_models(db, user, models):
+    ids = models["ids"]
+    marker = "${CURSOR_ROUTER_MODELS_KEY}"
+    row = db.execute("SELECT value FROM ItemTable WHERE key = ?", (marker,)).fetchone()
+    stale = set(json.loads(row[0])) if row and row[0] else set()
+    built_in = [m["name"] for m in user.get("availableDefaultModels2", []) if m.get("name")]
+    ours = set(ids) | stale
+    settings = user.setdefault("aiSettings", {})
+    settings["userAddedModels"] = [
+        m for m in settings.get("userAddedModels", []) if m not in ours
+    ] + ids
+    settings["modelOverrideEnabled"] = [
+        m for m in settings.get("modelOverrideEnabled", [])
+        if m not in ours and m not in built_in
+    ] + ids
+    settings["modelOverrideDisabled"] = [
+        m for m in settings.get("modelOverrideDisabled", [])
+        if m not in ours and m not in built_in
+    ] + built_in
+    # Chat, Cmd+K and the other features keep their own selected model; move
+    # any still on a built-in model to the organization's default.
+    default = models.get("defaultId")
+    if default:
+        for feature in settings.get("modelConfig", {}).values():
+            if isinstance(feature, dict) and feature.get("modelName") not in ids:
+                feature["modelName"] = default
+                feature["selectedModels"] = [{"modelId": default, "parameters": []}]
+    db.execute(
+        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+        (marker, json.dumps(ids)),
+    )
+
 path = os.environ["ARCHESTRA_CURSOR_STATE_DB"]
 backup = path + ".archestra-backup"
 db = sqlite3.connect(path, timeout=5)
@@ -57,6 +98,9 @@ try:
     user = json.loads(row[1]) if row and row[1] else {}
     user["openAIBaseUrl"] = os.environ["ARCHESTRA_CURSOR_BASE_URL"]
     user["useOpenAIKey"] = True
+    models = json.loads(os.environ.get("ARCHESTRA_CURSOR_MODELS") or "null")
+    if models and models["ids"]:
+        set_picker_models(db, user, models)
     db.execute(
         "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
         (key, json.dumps(user)),
@@ -243,7 +287,7 @@ for arch_candidate in "$HOME/Library/Application Support/Cursor/User/globalStora
 done
 cursor_models_set=0
 if [ -n "$cursor_state_db" ] && command -v python3 >/dev/null 2>&1; then
-  if ARCHESTRA_CURSOR_STATE_DB="$cursor_state_db" ARCHESTRA_CURSOR_BASE_URL=${sh(proxy.url)} ARCHESTRA_CURSOR_API_KEY=${sh(proxy.virtualKey)} python3 - <<'ARCHESTRA_CURSOR_PY'
+  if ARCHESTRA_CURSOR_STATE_DB="$cursor_state_db" ARCHESTRA_CURSOR_BASE_URL=${sh(proxy.url)} ARCHESTRA_CURSOR_API_KEY=${sh(proxy.virtualKey)} ARCHESTRA_CURSOR_MODELS=${sh(JSON.stringify(proxy.cursorModels ?? null))} python3 - <<'ARCHESTRA_CURSOR_PY'
 ${CURSOR_MODEL_SETTINGS_PY}
 ARCHESTRA_CURSOR_PY
   then
@@ -283,6 +327,7 @@ if ((Test-Path $cursorStateDb) -and $cursorPython) {
   $env:ARCHESTRA_CURSOR_STATE_DB = $cursorStateDb
   $env:ARCHESTRA_CURSOR_BASE_URL = ${psq(proxy.url)}
   $env:ARCHESTRA_CURSOR_API_KEY = ${psq(proxy.virtualKey)}
+  $env:ARCHESTRA_CURSOR_MODELS = ${psq(JSON.stringify(proxy.cursorModels ?? null))}
   [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(CURSOR_MODEL_SETTINGS_PY).toString("base64")}')) | & $cursorPython - *> $null
   $cursorModelsSet = $LASTEXITCODE -eq 0
   Remove-Item Env:ARCHESTRA_CURSOR_API_KEY -ErrorAction SilentlyContinue
@@ -329,7 +374,9 @@ function cursorEnding(ctx: SetupScriptContext): AgentEnding {
   );
   if (ctx.proxy?.virtualKey) {
     notes.push(
-      `Add models in Cursor Settings > Models by their ${ctx.appName} id, such as anthropic:<model>. ${ctx.proxy.url}/models lists them.`,
+      ctx.proxy.cursorModels?.ids.length
+        ? `Cursor's model picker now lists only ${ctx.appName} models; its built-in models are switched off (Settings > Models turns one back on).`
+        : `Add models in Cursor Settings > Models by their ${ctx.appName} id, such as anthropic:<model>. ${ctx.proxy.url}/models lists them.`,
     );
   }
   return {

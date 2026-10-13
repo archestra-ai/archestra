@@ -14,7 +14,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared/consts";
+import { defaultRuntimeHandoffInstructions } from "@archestra/shared/consts";
 import { parse as parseToml } from "smol-toml";
 import { expect, test } from "vitest";
 import { renderSetupScript } from "../index";
@@ -36,7 +36,7 @@ test("Windows npm Codex shim preserves multiword handoff config at launch", asyn
   const marker = path.join(home, "launched");
   const args = [
     "-c",
-    `developer_instructions=${JSON.stringify(DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS)}`,
+    `developer_instructions=${JSON.stringify(defaultRuntimeHandoffInstructions("Archestra"))}`,
     "-c",
     "model_provider=llm_proxy",
     "exec",

@@ -36,12 +36,18 @@ export function ProviderKeyList({
   providerApiKeys,
   label = "Provider keys",
   emptyLabel,
+  alwaysOpen = false,
 }: {
   value: ProviderApiKeyMappings;
   onChange: (value: ProviderApiKeyMappings) => void;
   providerApiKeys: LlmProviderApiKeyResponse[];
   label?: ReactNode;
   emptyLabel?: string;
+  /**
+   * Always show the editable list, with no Change/Done toggle. For a dialog
+   * whose own Done button already ends the edit.
+   */
+  alwaysOpen?: boolean;
 }) {
   const catalog = useModelProviderCatalog();
   const modelIdsByKey = useModelIdsByKey();
@@ -91,7 +97,7 @@ export function ProviderKeyList({
   const offLines = lines.filter((line) => !line.on);
   const noneOn =
     providers.length > 0 && onLines.length === 0 && emptyLabel === undefined;
-  const showList = open || noneOn;
+  const showList = alwaysOpen || open || noneOn;
   const notPrimaryCount = onLines.filter((line) => line.notPrimary).length;
   const noModelNames = onLines
     .filter((line) => line.noModels)
@@ -148,7 +154,7 @@ export function ProviderKeyList({
           >
             Enable all
           </Button>
-          {!noneOn && (
+          {!noneOn && !alwaysOpen && (
             <Button
               type="button"
               variant="outline"
@@ -162,11 +168,13 @@ export function ProviderKeyList({
         </div>
       </div>
 
-      {!showList && onLines.length === 0 && emptyLabel !== undefined && (
-        <p className="text-xs text-muted-foreground">
-          <span>{emptyLabel}</span>
-        </p>
-      )}
+      {(!showList || alwaysOpen) &&
+        onLines.length === 0 &&
+        emptyLabel !== undefined && (
+          <p className="text-xs text-muted-foreground">
+            <span>{emptyLabel}</span>
+          </p>
+        )}
 
       {!showList && onLines.length > 0 && (
         <div className="space-y-2">
@@ -258,7 +266,11 @@ export function ProviderKeyList({
           )}
           {offLines.length > 0 && (
             <fieldset
-              className={cn("min-w-0 space-y-1.5", !noneOn && "border-t pt-3")}
+              className={cn(
+                "min-w-0 space-y-1.5",
+                // Divide from the used providers only when any are listed above.
+                onLines.length > 0 && "border-t pt-3",
+              )}
               aria-label="Providers not used"
             >
               {!noneOn && (

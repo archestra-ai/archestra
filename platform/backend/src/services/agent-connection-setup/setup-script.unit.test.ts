@@ -2759,6 +2759,123 @@ db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KE
       await rm(home, { recursive: true, force: true });
     }
   });
+
+  test("cursor: the model picker lists only Model Router models, and a re-run replaces them", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-models-"));
+    try {
+      const stateDb = path.join(
+        home,
+        "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+      );
+      await mkdir(path.dirname(stateDb), { recursive: true });
+      const user = {
+        availableDefaultModels2: [
+          { name: "default" },
+          { name: "grok-4.6" },
+          { name: "claude-sonnet-4-6" },
+        ],
+        aiSettings: {
+          userAddedModels: ["my-own-model"],
+          modelOverrideEnabled: ["grok-4.6", "my-own-model"],
+          modelOverrideDisabled: ["claude-sonnet-4-6"],
+          modelConfig: {
+            composer: {
+              modelName: "grok-4.6",
+              maxMode: false,
+              selectedModels: [{ modelId: "grok-4.6", parameters: [] }],
+            },
+          },
+        },
+      };
+      await sqlite(
+        stateDb,
+        `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", ${JSON.stringify(JSON.stringify(user))}))`,
+      );
+      const run = async (cursorModels: {
+        ids: string[];
+        defaultId: string | null;
+      }) => {
+        const base = fullContext("cursor");
+        if (!base.proxy) throw new Error("Missing proxy");
+        const scriptPath = path.join(home, "connect.sh");
+        await writeFile(
+          scriptPath,
+          renderSetupScript({
+            ...base,
+            mcp: null,
+            skills: null,
+            proxy: {
+              ...base.proxy,
+              authMode: "primary-providers",
+              cursorModels,
+            },
+          }),
+        );
+        const { stdout } = await execFileAsync("bash", [scriptPath], {
+          env: { ...process.env, HOME: home, NO_COLOR: "1" },
+        });
+        const rows = JSON.parse(
+          await sqlite(
+            stateDb,
+            `print(json.dumps(dict(db.execute("SELECT key, value FROM ItemTable").fetchall())))`,
+          ),
+        );
+        return {
+          stdout,
+          settings: JSON.parse(rows[CURSOR_APPLICATION_USER_KEY]).aiSettings,
+        };
+      };
+
+      const first = await run({
+        ids: ["anthropic:claude-sonnet-4-6", "openai:gpt-5.4"],
+        defaultId: "anthropic:claude-sonnet-4-6",
+      });
+      expect(first.stdout).toContain("model picker now lists only Archestra");
+      // Cursor routes every mapped provider, so the banner names none.
+      expect(first.stdout).toContain("Sets up:    LLM proxy\n");
+      expect(first.settings.userAddedModels).toEqual([
+        "my-own-model",
+        "anthropic:claude-sonnet-4-6",
+        "openai:gpt-5.4",
+      ]);
+      expect(first.settings.modelOverrideEnabled).toEqual([
+        "my-own-model",
+        "anthropic:claude-sonnet-4-6",
+        "openai:gpt-5.4",
+      ]);
+      expect(first.settings.modelOverrideDisabled).toEqual([
+        "default",
+        "grok-4.6",
+        "claude-sonnet-4-6",
+      ]);
+      expect(first.settings.modelConfig.composer).toEqual({
+        modelName: "anthropic:claude-sonnet-4-6",
+        maxMode: false,
+        selectedModels: [
+          { modelId: "anthropic:claude-sonnet-4-6", parameters: [] },
+        ],
+      });
+
+      // The router stopped listing the Anthropic model: it leaves the picker,
+      // the user's own model stays, and a model with no router default keeps
+      // its selection.
+      const second = await run({ ids: ["openai:gpt-5.4"], defaultId: null });
+      expect(second.settings.userAddedModels).toEqual([
+        "my-own-model",
+        "openai:gpt-5.4",
+      ]);
+      expect(second.settings.modelOverrideEnabled).toEqual([
+        "my-own-model",
+        "openai:gpt-5.4",
+      ]);
+      expect(second.settings.modelConfig.composer.modelName).toBe(
+        "anthropic:claude-sonnet-4-6",
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("renderSetupScript (windows)", () => {

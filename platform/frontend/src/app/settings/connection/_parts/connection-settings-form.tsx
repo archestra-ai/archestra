@@ -1,16 +1,11 @@
 "use client";
 
 import {
-  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  defaultRuntimeHandoffInstructions,
   providerRequiresPerUserCredential,
+  resolveRuntimeHandoffInstructions,
 } from "@archestra/shared";
-import {
-  INSTALLER_CLIENT_IDS,
-  INSTALLER_CLIENT_KEY_PROVIDERS,
-  INSTALLER_CLIENT_LABELS,
-  type InstallerClientId,
-} from "@archestra/shared/connection-setup";
-import Link from "next/link";
+import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ClientIcon } from "@/app/connection/client-icon";
 import { CONNECT_CLIENTS, orderedClients } from "@/app/connection/clients";
@@ -23,9 +18,6 @@ import {
 } from "@/app/connection/connection-base-urls.utils";
 import { AgentSelector } from "@/components/agent-selector";
 import { CodeText } from "@/components/code-text";
-import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
-import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -42,13 +34,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   useOrganization,
   useUpdateConnectionSettings,
 } from "@/lib/organization.query";
 
-import { AvailableAgentsList } from "./available-agents-list";
+import {
+  AvailableAgentsList,
+  type ClientProviderKeys,
+} from "./available-agents-list";
 
 const DEFAULT_VALUE = "__default__";
 // "Any client" is always visible on the connection page; admins cannot hide it.
@@ -66,6 +62,8 @@ const NO_DEFAULT_URL = "__none__";
 
 export function ConnectionSettingsForm() {
   const { data: organization } = useOrganization();
+  const appName = useAppName();
+  const defaultInstructions = defaultRuntimeHandoffInstructions(appName);
   const { data: mcpGateways } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
@@ -90,9 +88,8 @@ export function ConnectionSettingsForm() {
   const [llmProxyEnabled, setLlmProxyEnabled] = useState(true);
   const [pluginsEnabled, setPluginsEnabled] = useState(true);
   const [runtimeHandoffEnabled, setRuntimeHandoffEnabled] = useState(true);
-  const [runtimeHandoffInstructions, setRuntimeHandoffInstructions] = useState(
-    DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
-  );
+  const [runtimeHandoffInstructions, setRuntimeHandoffInstructions] =
+    useState(defaultInstructions);
   const pluginsFeatureEnabled = useFeature("plugins") === true;
   const { data: providerApiKeys } = useLlmProviderApiKeys();
 
@@ -119,10 +116,12 @@ export function ConnectionSettingsForm() {
       organization.connectionRuntimeHandoffEnabled ?? true,
     );
     setRuntimeHandoffInstructions(
-      organization.connectionRuntimeHandoffInstructions ??
-        DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+      resolveRuntimeHandoffInstructions({
+        stored: organization.connectionRuntimeHandoffInstructions,
+        appName,
+      }),
     );
-  }, [organization]);
+  }, [organization, appName]);
 
   const updateMutation = useUpdateConnectionSettings(
     "Connection settings updated",
@@ -179,9 +178,10 @@ export function ConnectionSettingsForm() {
   const serverPluginsEnabled = organization?.connectionPluginsEnabled ?? true;
   const serverRuntimeHandoffEnabled =
     organization?.connectionRuntimeHandoffEnabled ?? true;
-  const serverRuntimeHandoffInstructions =
-    organization?.connectionRuntimeHandoffInstructions ??
-    DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS;
+  const serverRuntimeHandoffInstructions = resolveRuntimeHandoffInstructions({
+    stored: organization?.connectionRuntimeHandoffInstructions,
+    appName,
+  });
 
   const hasChanges =
     JSON.stringify(withoutEmptyClients(clientProviderKeys)) !==
@@ -213,8 +213,7 @@ export function ConnectionSettingsForm() {
       connectionRuntimeHandoffEnabled: runtimeHandoffEnabled,
       connectionRuntimeHandoffInstructions:
         !runtimeHandoffInstructions.trim() ||
-        runtimeHandoffInstructions.trim() ===
-          DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+        runtimeHandoffInstructions.trim() === defaultInstructions
           ? null
           : runtimeHandoffInstructions.trim(),
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
@@ -293,51 +292,28 @@ export function ConnectionSettingsForm() {
         return (
           <>
             <SettingsSectionStack>
-              <SettingsBlock
-                title="Managed instructions"
-                description="When users connect an agent through the Connect page, these managed instructions are appended to its system prompt."
-                control={
-                  <Switch
-                    checked={runtimeHandoffEnabled}
-                    onCheckedChange={setRuntimeHandoffEnabled}
-                    disabled={locked}
-                    aria-label="Enable managed instructions"
-                  />
-                }
+              <SettingRow
+                title="Default client"
+                description="Pre-selected client tile."
               >
-                <div className="space-y-2">
-                  <Label htmlFor="managed-instructions">
-                    Instructions for connected agents
-                  </Label>
-                  <Textarea
-                    id="managed-instructions"
-                    value={runtimeHandoffInstructions}
-                    onChange={(event) =>
-                      setRuntimeHandoffInstructions(event.target.value)
-                    }
-                    rows={2}
-                    maxLength={20000}
-                    disabled={locked || !runtimeHandoffEnabled}
-                    className="font-mono text-xs leading-relaxed"
-                  />
-                  <div className="flex justify-between gap-4 text-xs text-muted-foreground">
-                    <span>
-                      Supported agents receive updates on next launch; other
-                      clients need setup or manual copying.
-                    </span>
-                    <span className="shrink-0 tabular-nums">
-                      {runtimeHandoffInstructions.length.toLocaleString()} /
-                      20,000
-                    </span>
-                  </div>
-                  {runtimeHandoffEnabled &&
-                    !runtimeHandoffInstructions.trim() && (
-                      <InlineNotice variant="error">
-                        Enter instructions.
-                      </InlineNotice>
-                    )}
-                </div>
-              </SettingsBlock>
+                <SingleSelectCombobox
+                  className="w-60"
+                  value={defaultClientId ?? "none"}
+                  onChange={(value) =>
+                    setDefaultClientId(value === "none" ? null : value)
+                  }
+                  options={[
+                    { value: "none", label: "Not selected" },
+                    ...CONNECT_CLIENTS.map((c) => ({
+                      value: c.id,
+                      label: c.label,
+                      icon: <ClientIcon client={c} size={18} />,
+                    })),
+                  ]}
+                  searchPlaceholder="Search clients…"
+                  disabled={locked}
+                />
+              </SettingRow>
 
               <SettingRow
                 title="Default MCP Gateway"
@@ -362,49 +338,62 @@ export function ConnectionSettingsForm() {
               </SettingRow>
 
               <SettingRow
-                title="Default client"
-                description="Pre-selected client tile."
+                title="LLM Proxy on Connect"
+                description="Offer routing through the LLM Proxy. Existing client configs keep working."
               >
-                <SingleSelectCombobox
-                  className="w-60"
-                  value={defaultClientId ?? "none"}
-                  onChange={(value) =>
-                    setDefaultClientId(value === "none" ? null : value)
-                  }
-                  options={[
-                    { value: "none", label: "Not selected" },
-                    ...CONNECT_CLIENTS.map((c) => ({
-                      value: c.id,
-                      label: c.label,
-                      icon: <ClientIcon client={c} size={18} />,
-                    })),
-                  ]}
-                  searchPlaceholder="Search clients…"
+                <Switch
+                  checked={llmProxyEnabled}
+                  onCheckedChange={setLlmProxyEnabled}
                   disabled={locked}
+                  aria-label="Offer the LLM Proxy on the Connect page"
                 />
               </SettingRow>
 
-              <SettingSection
-                title="Provider keys for setup commands"
-                description="The provider keys each client's setup command maps to the virtual key it mints. A client without keys uses each user's own: the key they resolve for the chosen provider (personal, then team, then organization), or their primary keys for Cursor and OpenCode."
+              <SettingRow
+                title="Skills on Connect"
+                description="Offer installing shared skills. Existing installs keep working."
               >
-                <div className="grid gap-4">
-                  {INSTALLER_CLIENT_IDS.map((clientId) => (
-                    <ClientProviderKeysRow
-                      key={clientId}
-                      clientId={clientId}
-                      providerApiKeys={sharedProviderKeys}
-                      value={clientProviderKeys[clientId] ?? []}
-                      onChange={(value) =>
-                        setClientProviderKeys((prev) => ({
-                          ...prev,
-                          [clientId]: value,
-                        }))
-                      }
-                      disabled={locked}
-                    />
-                  ))}
-                </div>
+                <Switch
+                  checked={skillsEnabled}
+                  onCheckedChange={setSkillsEnabled}
+                  disabled={locked}
+                  aria-label="Offer skills on the Connect page"
+                />
+              </SettingRow>
+
+              {pluginsFeatureEnabled && (
+                <SettingRow
+                  title="Plugins on Connect"
+                  description="Offer installing approved plugins. Existing installs keep working."
+                >
+                  <Switch
+                    checked={pluginsEnabled}
+                    onCheckedChange={setPluginsEnabled}
+                    disabled={locked}
+                    aria-label="Offer plugins on the Connect page"
+                  />
+                </SettingRow>
+              )}
+
+              <SettingSection
+                title="Agents users can connect"
+                description="Pick which agents show on the Connect page and drag to set their order. Click one to choose the model keys it uses."
+              >
+                <AvailableAgentsList
+                  clients={clientsInOrder}
+                  shownClientIds={shownClientIds}
+                  onShownClientIdsChange={setShownClientIds}
+                  onOrderChange={setClientOrder}
+                  clientProviderKeys={clientProviderKeys}
+                  onClientKeysChange={(clientId, value) =>
+                    setClientProviderKeys((prev) => ({
+                      ...prev,
+                      [clientId]: value,
+                    }))
+                  }
+                  providerApiKeys={sharedProviderKeys}
+                  disabled={locked}
+                />
               </SettingSection>
 
               {envBaseUrls.length > 1 && (
@@ -489,56 +478,48 @@ export function ConnectionSettingsForm() {
                 </SettingSection>
               )}
 
-              <SettingRow
-                title="LLM Proxy on Connect"
-                description="Offer routing through the LLM Proxy. Existing client configs keep working."
-              >
-                <Switch
-                  checked={llmProxyEnabled}
-                  onCheckedChange={setLlmProxyEnabled}
-                  disabled={locked}
-                  aria-label="Offer the LLM Proxy on the Connect page"
-                />
-              </SettingRow>
-
-              <SettingRow
-                title="Skills on Connect"
-                description="Offer installing shared skills. Existing installs keep working."
-              >
-                <Switch
-                  checked={skillsEnabled}
-                  onCheckedChange={setSkillsEnabled}
-                  disabled={locked}
-                  aria-label="Offer skills on the Connect page"
-                />
-              </SettingRow>
-
-              {pluginsFeatureEnabled && (
-                <SettingRow
-                  title="Plugins on Connect"
-                  description="Offer installing approved plugins. Existing installs keep working."
-                >
+              <SettingsBlock
+                title="Instructions for connected agents"
+                description="Added to the system prompt of every agent users connect from the Connect page."
+                control={
                   <Switch
-                    checked={pluginsEnabled}
-                    onCheckedChange={setPluginsEnabled}
+                    checked={runtimeHandoffEnabled}
+                    onCheckedChange={setRuntimeHandoffEnabled}
                     disabled={locked}
-                    aria-label="Offer plugins on the Connect page"
+                    aria-label="Enable instructions for connected agents"
                   />
-                </SettingRow>
-              )}
-
-              <SettingSection
-                title="Available agents"
-                description="Choose which agents are available on Connect, and in what order."
+                }
               >
-                <AvailableAgentsList
-                  clients={clientsInOrder}
-                  shownClientIds={shownClientIds}
-                  onShownClientIdsChange={setShownClientIds}
-                  onOrderChange={setClientOrder}
-                  disabled={locked}
-                />
-              </SettingSection>
+                <div className="space-y-2">
+                  <Textarea
+                    aria-label="Instructions for connected agents"
+                    value={runtimeHandoffInstructions}
+                    onChange={(event) =>
+                      setRuntimeHandoffInstructions(event.target.value)
+                    }
+                    rows={2}
+                    maxLength={20000}
+                    disabled={locked || !runtimeHandoffEnabled}
+                    className="font-mono text-xs leading-relaxed"
+                  />
+                  <div className="flex justify-between gap-4 text-xs text-muted-foreground">
+                    <span>
+                      Supported agents receive updates on next launch; other
+                      clients need setup or manual copying.
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {runtimeHandoffInstructions.length.toLocaleString()} /
+                      20,000
+                    </span>
+                  </div>
+                  {runtimeHandoffEnabled &&
+                    !runtimeHandoffInstructions.trim() && (
+                      <InlineNotice variant="error">
+                        Enter instructions.
+                      </InlineNotice>
+                    )}
+                </div>
+              </SettingsBlock>
             </SettingsSectionStack>
             <SettingsSaveBar
               hasChanges={hasChanges}
@@ -589,64 +570,6 @@ function SettingSection({
     <SettingsBlock title={title} description={description} control={null}>
       {children}
     </SettingsBlock>
-  );
-}
-
-type ClientProviderKeys = Partial<
-  Record<InstallerClientId, ProviderApiKeyMappings>
->;
-
-/** One client's mapped provider keys; none means each user's own keys. */
-function ClientProviderKeysRow({
-  clientId,
-  providerApiKeys,
-  value,
-  onChange,
-  disabled,
-}: {
-  clientId: InstallerClientId;
-  providerApiKeys: LlmProviderApiKeyResponse[];
-  value: ProviderApiKeyMappings;
-  onChange: (value: ProviderApiKeyMappings) => void;
-  disabled: boolean;
-}) {
-  const client = CONNECT_CLIENTS.find((c) => c.id === clientId);
-  const keys = providerApiKeys.filter((key) =>
-    INSTALLER_CLIENT_KEY_PROVIDERS[clientId].includes(key.provider),
-  );
-  const label = (
-    <span className="flex items-center gap-2">
-      {client && <ClientIcon client={client} size={18} />}
-      <span>{INSTALLER_CLIENT_LABELS[clientId]}</span>
-    </span>
-  );
-  if (keys.length === 0) {
-    return (
-      <div className="space-y-1">
-        <span className="font-medium text-sm">{label}</span>
-        <p className="text-xs text-muted-foreground">
-          <span>
-            Uses each user's own keys. No provider key it can use is set up yet;
-            add one under{" "}
-            <Link href="/settings/llm" className="underline">
-              LLM provider keys
-            </Link>
-            .
-          </span>
-        </p>
-      </div>
-    );
-  }
-  return (
-    <fieldset disabled={disabled} className="min-w-0">
-      <ProviderKeyList
-        label={label}
-        emptyLabel="Uses each user's own keys."
-        value={value}
-        onChange={onChange}
-        providerApiKeys={keys}
-      />
-    </fieldset>
   );
 }
 

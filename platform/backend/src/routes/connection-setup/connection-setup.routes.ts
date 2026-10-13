@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
-  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   legacyMcpClientServerNames,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   OPENCODE_PRIMARY_PROVIDERS,
   providerDisplayNames,
   RouteId,
   resolveMcpClientServerName,
+  resolveRuntimeHandoffInstructions,
   STARTUP_GUARD_FORMAT_VERSION,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -79,6 +79,10 @@ import {
   PLUGIN_DELIVERY_MAX_COUNT,
   type PluginPlatform,
 } from "@/types";
+import {
+  buildRoutableModelId,
+  listRoutableModels,
+} from "../proxy/model-router-resolver";
 import {
   CONNECTION_HEALTH_PATH,
   CONNECTION_INSTRUCTIONS_PATH,
@@ -1160,6 +1164,14 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       ? `${proxyApiPrefix}/connection-setup/${setupProxyContext}`
       : proxyApiPrefix;
     proxy = {
+      cursorModels:
+        setup.clientId === "cursor" && setup.virtualApiKeyId && virtualKeyValue
+          ? await getCursorModels({
+              organizationId: setup.organizationId,
+              virtualApiKeyId: setup.virtualApiKeyId,
+              defaultModelId: organization.defaultModelId ?? null,
+            })
+          : undefined,
       primaryProviders:
         setup.clientId === "opencode" &&
         setup.proxyAuth !== "provider-key" &&
@@ -1325,8 +1337,10 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
           : null,
       runtimeHandoffInstructions:
         mcp && organization.connectionRuntimeHandoffEnabled
-          ? (organization.connectionRuntimeHandoffInstructions ??
-            DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS)
+          ? resolveRuntimeHandoffInstructions({
+              stored: organization.connectionRuntimeHandoffInstructions,
+              appName,
+            })
           : null,
     },
     marketplaceRender,
@@ -1639,4 +1653,31 @@ function assertConnectSkillsEnabledOrGone(organization: Organization): void {
 
 function assertConnectPluginsEnabledOrGone(organization: Organization): void {
   if (!organization.connectionPluginsEnabled) throw GONE();
+}
+
+/**
+ * The chat models Cursor's picker should list: what the Model Router's
+ * GET /models returns for this virtual key, plus the organization's default
+ * model when the key can route it.
+ */
+async function getCursorModels(params: {
+  organizationId: string;
+  virtualApiKeyId: string;
+  defaultModelId: string | null;
+}): Promise<{ ids: string[]; defaultId: string | null }> {
+  const mappings = await VirtualApiKeyModel.getProviderApiKeysForRouting(
+    params.virtualApiKeyId,
+  );
+  const models = await listRoutableModels({
+    organizationId: params.organizationId,
+    providerApiKeyIds: mappings.map((mapping) => mapping.providerApiKeyId),
+    includeEmbeddings: false,
+  });
+  const defaultModel = models.find(
+    (model) => model.id === params.defaultModelId,
+  );
+  return {
+    ids: models.map(buildRoutableModelId),
+    defaultId: defaultModel ? buildRoutableModelId(defaultModel) : null,
+  };
 }

@@ -1,10 +1,15 @@
 import {
   isSupportedProvider,
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
   type SupportedProvider,
   type SupportedProviderEndpoint,
   SupportedProviders,
 } from "@archestra/shared";
-import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
+import {
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
+  ModelTeamModel,
+} from "@/models";
 import { ApiError, type Model } from "@/types";
 
 export type ModelRouterResolution = {
@@ -105,6 +110,40 @@ export function sortRoutableModels(models: Model[]): Model[] {
   });
 }
 
+/**
+ * The models a Model Router caller may invoke through these provider keys, in
+ * the order GET /models lists them. Callers without a user identity (virtual
+ * keys) see only organization-wide `use` grants, as at proxy time.
+ */
+export async function listRoutableModels(params: {
+  organizationId: string;
+  providerApiKeyIds: string[];
+  userId?: string;
+  includeEmbeddings: boolean;
+}): Promise<Model[]> {
+  const linkedModels =
+    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(
+      params.providerApiKeyIds,
+    );
+  const candidateModels = linkedModels
+    .map(({ model }) => model)
+    .filter(
+      (model) =>
+        modelRouterSupportedProviders.has(model.provider) &&
+        (ModelModel.supportsTextChat(model) ||
+          (params.includeEmbeddings && ModelModel.supportsEmbeddings(model))),
+    );
+  const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
+    modelIds: candidateModels.map((model) => model.id),
+    organizationId: params.organizationId,
+    userId: params.userId,
+    action: "use",
+  });
+  return sortRoutableModels(
+    candidateModels.filter((model) => allowedModelIds.has(model.id)),
+  );
+}
+
 function toResolution(
   model: Model,
   requestedModel: string,
@@ -179,3 +218,7 @@ async function filterModelsByLinkedApiKeys(
   const linkedIds = new Set(linked.map(({ model }) => model.id));
   return models.filter((model) => linkedIds.has(model.id));
 }
+
+const modelRouterSupportedProviders = new Set<SupportedProvider>(
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
+);

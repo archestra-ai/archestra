@@ -76,6 +76,9 @@ describe("guardrails batteries", () => {
 
   const bindGithubToken = async () => {
     await RuntimeCredentialDefinitionModel.create({
+      // Not shared with the organization, which a new credential is by
+      // default: these tests decide who else may use it.
+      initialPermissionGrants: [],
       organizationId,
       createdBy: adminId,
       definition: {
@@ -1079,6 +1082,9 @@ describe("guardrails batteries", () => {
     });
 
     await RuntimeCredentialDefinitionModel.create({
+      // Not shared with the organization, which a new credential is by
+      // default: these tests decide who else may use it.
+      initialPermissionGrants: [],
       organizationId,
       createdBy: adminId,
       definition: {
@@ -1260,6 +1266,9 @@ describe("guardrails batteries", () => {
     });
 
     await RuntimeCredentialDefinitionModel.create({
+      // Not shared with the organization, which a new credential is by
+      // default: these tests decide who else may use it.
+      initialPermissionGrants: [],
       organizationId,
       createdBy: adminId,
       definition: {

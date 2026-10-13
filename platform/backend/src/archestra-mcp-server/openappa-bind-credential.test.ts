@@ -36,6 +36,9 @@ beforeEach(
     await seedAndAssignArchestraTools(created.id);
     agent = { id: created.id, name: created.name };
     await RuntimeCredentialDefinitionModel.create({
+      // Not shared with the organization, which a new credential is by
+      // default: these tests decide who else may use it.
+      initialPermissionGrants: [],
       organizationId,
       createdBy: adminId,
       definition: {

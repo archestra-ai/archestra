@@ -57,6 +57,9 @@ describe("binding a battery credential", () => {
   /** An organization credential with a value, which a binding may name. */
   const connectGithubToken = async () => {
     await RuntimeCredentialDefinitionModel.create({
+      // Not shared with the organization, which a new credential is by
+      // default: these tests decide who else may use it.
+      initialPermissionGrants: [],
       organizationId,
       createdBy: admin.id,
       definition: {

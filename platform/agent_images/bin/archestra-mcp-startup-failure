@@ -8,7 +8,9 @@ publish_failure() {
   "$(dirname "$0")/archestra-agent-failure" mcp_startup "$message"
   if [ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" = one_shot ]; then
     runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
-    printf '%s\n' "$message" > "${runtime_dir}/final-answer.txt"
+    temporary="${runtime_dir}/final-answer.tmp.$$"
+    printf '%s\n' "$message" > "$temporary"
+    mv "$temporary" "${runtime_dir}/final-answer.txt"
     touch "${runtime_dir}/turn-complete.failed" "${runtime_dir}/turn-complete"
   else
     "${ARCHESTRA_AGENT_ATTENTION_COMMAND:-archestra-agent-attention}" \

@@ -79,12 +79,14 @@ class Diagnostics(unittest.TestCase):
                     self.assertTrue((root / "turn-complete").exists())
                     initial = json.loads(Path(prefix + ".failure").read_text())
                     self.assertEqual(initial["code"], "mcp_startup")
+                    self.assertIn("could not load", (root / "final-answer.txt").read_text())
                     server.release.set()
                     process.communicate(timeout=5)
                     self.assertEqual(process.returncode, 0)
                     final = json.loads(Path(prefix + ".failure").read_text())
                     self.assertIn("Gateway rejected the runtime workspace binding.", final["message"])
                     self.assertNotIn("private-token", final["message"])
+                    self.assertEqual((root / "final-answer.txt").read_text().strip(), final["message"])
                 finally:
                     server.release.set()
                     if process.poll() is None:

@@ -867,6 +867,50 @@ describe("plugin routes", () => {
       expect.objectContaining({ name: "first-plugin" }),
       expect.objectContaining({ name: "second-plugin" }),
     ]);
+
+    // Claude Desktop reads the Claude Code plugin format, so the same entries
+    // import again as Desktop copies. Another client's format does not.
+    const desktop = await ctx.app.inject({
+      method: "POST",
+      url: "/api/plugins/github/marketplace/import",
+      payload: {
+        ...importPayload,
+        selected: selected.map((entry: { displayName: string }) => ({
+          ...entry,
+          clientType: "claude-desktop",
+        })),
+      },
+    });
+    expect(desktop.statusCode).toBe(200);
+    expect(desktop.json().failed).toEqual([]);
+    expect(
+      desktop
+        .json()
+        .created.map(
+          (plugin: {
+            clientType: string;
+            sourceMarketplacePluginName: string;
+          }) => [plugin.sourceMarketplacePluginName, plugin.clientType],
+        ),
+    ).toEqual([
+      ["first-plugin", "claude-desktop"],
+      ["second-plugin", "claude-desktop"],
+    ]);
+
+    const codex = await ctx.app.inject({
+      method: "POST",
+      url: "/api/plugins/github/marketplace/import",
+      payload: {
+        ...importPayload,
+        selected: selected.map((entry: { displayName: string }) => ({
+          ...entry,
+          clientType: "codex",
+        })),
+      },
+    });
+    expect(codex.statusCode).toBe(200);
+    expect(codex.json().created).toEqual([]);
+    expect(codex.json().failed).toHaveLength(2);
   });
 
   test("rejects marketplace imports above the beta batch limit", async () => {

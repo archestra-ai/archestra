@@ -97639,7 +97639,7 @@ export type GetPluginsResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -97707,7 +97707,7 @@ export type CreatePluginData = {
          * Emoji or base64 image data URL shown with the name.
          */
         icon?: string | null;
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
         files: Array<{
             path: string;
@@ -97823,7 +97823,7 @@ export type CreatePluginResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -97996,7 +97996,7 @@ export type DiscoverGithubPluginMarketplaceResponses = {
             name: string;
             description: string;
             version: string;
-            clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+            clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
             sourceRepoUrl: string | null;
             sourceRef: string | null;
             sourceSubdir: string;
@@ -98033,7 +98033,7 @@ export type ImportGithubPluginMarketplaceData = {
             name: string;
             displayName: string;
             description?: string;
-            clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+            clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
             supportedPlatforms: Array<'posix' | 'windows'>;
             sourceRepoUrl: string;
             sourceRef: string | null;
@@ -98145,7 +98145,7 @@ export type ImportGithubPluginMarketplaceResponses = {
             organizationId: string;
             authorId: string | null;
             scope: 'personal' | 'team' | 'org';
-            clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+            clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
             supportedPlatforms: Array<'posix' | 'windows'>;
             pluginSlug: string;
             displayName: string;
@@ -98350,7 +98350,7 @@ export type ImportGithubPluginData = {
     } & {
         displayName: string;
         description?: string;
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
         initialGrants?: Array<{
             subject: {
@@ -98456,7 +98456,7 @@ export type ImportGithubPluginResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -98734,7 +98734,7 @@ export type ApplyGithubPluginUpdateResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -98894,7 +98894,7 @@ export type UpdatePluginGithubSyncResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -99228,7 +99228,7 @@ export type GetPluginResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -99417,7 +99417,7 @@ export type UpdatePluginResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -99577,7 +99577,7 @@ export type GetPluginSkillsResponses = {
         sourceMarketplaceRepo: string | null;
         pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         skillPath: string;
         name: string;
@@ -99788,7 +99788,7 @@ export type GetPluginSkillResponses = {
         sourceMarketplaceRepo: string | null;
         pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         skillPath: string;
         name: string;

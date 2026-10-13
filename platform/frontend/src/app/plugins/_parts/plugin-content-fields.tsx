@@ -25,6 +25,7 @@ export interface PluginFileDraft {
 
 export type PluginClientType =
   | "claude-code"
+  | "claude-desktop"
   | "copilot-cli"
   | "codex"
   | "cursor";
@@ -165,6 +166,7 @@ export function PluginContentFields({
 
 const PLUGIN_CLIENT_OPTIONS = [
   ["claude-code", "Claude Code"],
+  ["claude-desktop", "Claude Desktop"],
   ["copilot-cli", "Copilot CLI"],
   ["codex", "Codex"],
   ["cursor", "Cursor (advertised only)"],

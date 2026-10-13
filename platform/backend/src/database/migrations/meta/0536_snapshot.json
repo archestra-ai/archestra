@@ -1,5 +1,5 @@
 {
-  "id": "664ecfa3-3a71-4095-acb2-6922c3d3e6d4",
+  "id": "97329a84-b507-48e3-b8ba-c491e03fea6c",
   "prevId": "96af2c48-3a45-4aa6-af45-143e674b7033",
   "version": "7",
   "dialect": "postgresql",
@@ -19569,6 +19569,12 @@
               "asc": true,
               "isExpression": true,
               "nulls": "last"
+            },
+            {
+              "expression": "client_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
           "isUnique": true,
@@ -28088,13 +28094,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'enforcement_off'"
         },
         "created_at": {
           "name": "created_at",

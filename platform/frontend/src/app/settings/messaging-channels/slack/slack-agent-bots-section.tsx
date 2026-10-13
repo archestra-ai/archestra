@@ -102,7 +102,9 @@ export function SlackAgentBotsSection({
   const [addOpen, setAddOpen] = useState(false);
   const [manualAgent, setManualAgent] = useState<AgentRef | null>(null);
   const [finishBot, setFinishBot] = useState<FinishTarget | null>(null);
-  const [removeBot, setRemoveBot] = useState<AgentRef | null>(null);
+  const [removeBot, setRemoveBot] = useState<
+    (AgentRef & { handle: string }) | null
+  >(null);
   const [editBot, setEditBot] = useState<AgentBot | null>(null);
   const [shareBot, setShareBot] = useState<ShareTarget | null>(null);
 
@@ -394,6 +396,7 @@ export function SlackAgentBotsSection({
                                   setRemoveBot({
                                     id: bot.agentId,
                                     name: `@${handle}`,
+                                    handle,
                                   })
                                 }
                               >
@@ -522,6 +525,7 @@ export function SlackAgentBotsSection({
         title="Remove Slack bot"
         description={`${removeBot?.name ?? "This bot"} stops answering in Slack. A Slack app ${appName} created or manages is deleted from Slack too.`}
         isPending={deleteMutation.isPending}
+        confirmationPhrase={removeBot?.handle}
         confirmLabel="Remove"
         pendingLabel="Removing..."
         onConfirm={async () => {

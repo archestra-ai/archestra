@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import {
   resolveRunToolDispatch,
   resolveRunToolTarget,
-  resolveUnprovenRunToolTarget,
 } from "./run-tool-target";
 
 describe("resolveRunToolDispatch", () => {
@@ -97,62 +96,6 @@ describe("resolveRunToolDispatch", () => {
           kind: "not_dispatch",
         });
       }
-    }
-  });
-});
-
-describe("resolveUnprovenRunToolTarget", () => {
-  // A wrapper whose declaration carries no effective attestation: the gateway
-  // registered twice, a replayed marker, or a lookalike. Its target is ruled
-  // on too, taken as written.
-  test("names the target of a run_tool-shaped call in every client form", () => {
-    for (const toolName of [
-      "mcp__gw__archestra__run_tool",
-      "gw_archestra__run_tool",
-      "mcp__archestra__archestra__run_tool",
-      // Bare, or a Codex member joined to its namespace.
-      "archestra__run_tool",
-    ]) {
-      expect(
-        resolveUnprovenRunToolTarget({
-          toolName,
-          args: {
-            tool_name: "github__issue_write",
-            tool_args: { title: "hello" },
-          },
-        }),
-      ).toEqual({
-        toolName: "github__issue_write",
-        toolInput: { title: "hello" },
-      });
-    }
-  });
-
-  test("never names a built-in, and needs a usable target", () => {
-    for (const args of [
-      { tool_name: "whoami" },
-      { tool_name: "archestra__whoami" },
-      { tool_name: "" },
-      { tool_args: {} },
-      "not an object",
-    ]) {
-      expect(
-        resolveUnprovenRunToolTarget({
-          toolName: "mcp__gw__archestra__run_tool",
-          args,
-        }),
-      ).toBeUndefined();
-    }
-  });
-
-  test("does not read a third-party tool named run_tool as the wrapper", () => {
-    for (const toolName of ["run_tool", "mcp__gw__github__run_tool"]) {
-      expect(
-        resolveUnprovenRunToolTarget({
-          toolName,
-          args: { tool_name: "github__issue_write" },
-        }),
-      ).toBeUndefined();
     }
   });
 });

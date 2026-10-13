@@ -6,6 +6,7 @@ import { A2AContextModel, A2ATaskModel, AgentRunModel } from "@/models";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { expect, test } from "@/test";
 import manager from "./manager";
+import { agentSandboxApi } from "./sandbox-api";
 import { agentWarmPoolManager } from "./warm-pool";
 
 const { testNamespace } = vi.hoisted(() => ({
@@ -29,7 +30,7 @@ test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
   async ({ makeOrganization, makeUser, makeAgent }) => {
     const namespace = testNamespace;
     kubectl(["create", "namespace", namespace]);
-    config.agentRuntime.enabled = true;
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
     config.agentRuntime.warmPoolSize = 1;
     config.agentRuntime.warmPoolMaxPools = 1;
     config.agentRuntime.workspaceStorageSize = "1Gi";

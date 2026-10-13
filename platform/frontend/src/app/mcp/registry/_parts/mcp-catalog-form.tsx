@@ -73,7 +73,11 @@ import {
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { SecretInput } from "@/components/ui/secret-input";
 import {
@@ -681,10 +685,7 @@ export function McpCatalogForm({
   useEffect(() => {
     if (hasEnvRuleViolations) setAdvancedOpen(true);
   }, [hasEnvRuleViolations]);
-  const advancedSummary =
-    mode === "create"
-      ? "Environment, permissions, and labels"
-      : "Environment and labels";
+  const advancedSummary = "Environment and labels";
   const addHeaderButton = (
     <AddListItemButton
       label="Add Header"
@@ -980,11 +981,8 @@ export function McpCatalogForm({
               </InlineNotice>
             )}
 
-            <SettingsSectionGroup>
-              <SettingsSection
-                title="Details"
-                description="How this server appears in the registry."
-              >
+            <SettingsSectionGroup stacked>
+              <SettingsSection>
                 <FormField
                   control={form.control}
                   name="name"
@@ -1046,6 +1044,25 @@ export function McpCatalogForm({
                   )}
                 />
               </SettingsSection>
+
+              {/* Who can use it: its own full-width block under the details,
+                  as on the agent form. */}
+              {mode === "create" && (
+                <SettingsSection>
+                  <FormField
+                    control={form.control}
+                    name="initialGrants"
+                    render={({ field }) => (
+                      <InitialResourcePermissions
+                        standalone
+                        resource="mcpRegistry"
+                        grants={field.value ?? []}
+                        onChange={field.onChange}
+                      />
+                    )}
+                  />
+                </SettingsSection>
+              )}
 
               <SettingsSection
                 title={
@@ -2343,20 +2360,6 @@ export function McpCatalogForm({
                         )}
                       />
                     </SettingsSection>
-                    {mode === "create" && (
-                      <FormField
-                        control={form.control}
-                        name="initialGrants"
-                        render={({ field }) => (
-                          <InitialResourcePermissions
-                            layout="settings"
-                            resource="mcpRegistry"
-                            grants={field.value ?? []}
-                            onChange={field.onChange}
-                          />
-                        )}
-                      />
-                    )}
                     <SettingsSection
                       title="Labels"
                       description="Key-value labels to organize and filter servers."
@@ -2715,13 +2718,10 @@ function AuthMethodCard(params: {
       aria-pressed={params.selected}
       aria-disabled={isDisabled}
       onClick={isDisabled ? undefined : params.onSelect}
-      className={[
-        "w-full text-left rounded-lg border p-4 transition-colors",
-        params.selected
-          ? "border-primary bg-primary/5"
-          : "border-border bg-card hover:border-foreground/30",
-        isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
-      ].join(" ")}
+      className={cn(
+        "w-full cursor-pointer rounded-lg p-4 text-left",
+        radioCardClass({ checked: params.selected, disabled: isDisabled }),
+      )}
     >
       <div className="flex items-start gap-3">
         <div
@@ -2902,10 +2902,8 @@ function HostingChoice({
               key={option.value}
               htmlFor={`server-hosting-${option.value}`}
               className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-lg border px-4 py-3 font-normal transition-colors has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50",
-                value === option.value
-                  ? "border-primary bg-primary/5"
-                  : "hover:bg-muted/50",
+                "flex cursor-pointer items-start gap-3 rounded-lg px-4 py-3 font-normal",
+                radioCardClass({ checked: value === option.value }),
               )}
             >
               <RadioGroupItem

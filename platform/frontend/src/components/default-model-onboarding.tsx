@@ -18,7 +18,7 @@ import { useUpdateAgentSettings } from "@/lib/organization.query";
  * default model (organization.defaultModelId + defaultLlmApiKeyId).
  *
  * That org default is the first fallback every built-in background subagent —
- * chat title generation, context compaction, dual-LLM, ... — resolves to when
+ * chat title generation, context compaction, ... — resolves to when
  * it has no model of its own. Left unset, those background calls fall through
  * to the best-available model, which can load a heavy reasoning model for a
  * throwaway task. Setting a default here closes that trap; each built-in agent

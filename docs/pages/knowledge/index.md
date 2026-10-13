@@ -2,7 +2,7 @@
 title: Knowledge (RAG)
 description: Give agents and MCP clients cited answers from connected sources and uploaded documents
 order: 5
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -108,10 +108,10 @@ Who may read each document depends on where it comes from:
 
 When the search goes through a Knowledge Base, the person also needs **Can use** on the base. **Can view** lets a person browse a source, but not search it.
 
-Set **Can use** on the **Permissions** tab of each connector, file, or Knowledge Base. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+Set **Can use** in the permissions of each connector, file, or Knowledge Base. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 - Sharing a Knowledge Base does not share its connectors or files. Each one needs its own grant.
 - Grant changes apply at once. Source permission changes apply at the connector's next permission sync.
 - A team or organization token has no person behind it. It finds only sources shared with everyone in the organization.
 
-Granular access and permission sync are Enterprise features. See [Licensing](/docs/get-started#licensing).
+Granular access and permission sync are Enterprise features. See [Pricing Model](/docs/get-started/pricing-model).

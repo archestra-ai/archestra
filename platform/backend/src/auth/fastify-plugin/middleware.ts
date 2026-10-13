@@ -22,6 +22,7 @@ import {
   ARCHESTRA_CATALOG_PROXY_PREFIX,
   AUTH_STATE_PATH,
   CONNECTION_HEALTH_PATH,
+  CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
@@ -235,6 +236,8 @@ export class Authnz {
       // this path — the exemption is intentional here and must survive a
       // rename of either path.
       (isGetOrHead && url === AUTH_STATE_PATH) ||
+      // Managed instructions authenticate their installation credential in the handler.
+      (isGetOrHead && url === CONNECTION_INSTRUCTIONS_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&

@@ -22,6 +22,7 @@ import {
 } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { AgentEmailSettingsDialog } from "@/app/settings/messaging-channels/email/agent-email-settings-dialog";
 import { AgentIcon } from "@/components/agent-icon";
+import { AgentSlackBotSection } from "@/components/agent-slack-bot-section";
 import { ChannelIcon } from "@/components/channel-icon";
 import { CopyButton } from "@/components/copy-button";
 import { FormDialog } from "@/components/form-dialog";
@@ -46,6 +47,7 @@ import {
   useApplyChatOpsBindingPlan,
   useChatOpsStatus,
 } from "@/lib/chatops/chatops.query";
+import { useSlackAgentBots } from "@/lib/chatops/chatops-config.query";
 import { useAgentEmailAddress } from "@/lib/chatops/incoming-email.query";
 import { useConfig } from "@/lib/config/config.query";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
@@ -179,10 +181,18 @@ export function AgentChatAppsEditor({
   }, [fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError]);
 
   const providerAvailabilityPending = configPending;
+  const slackOffered = !messagingChannelCatalog.isHidden("slack");
+  // With one bot per agent, Slack channels belong to the Slack bot section:
+  // assigning one here would not make anyone answer in it. A Slack app still
+  // routed by channel (not yet converted) keeps Slack in this list.
+  const slackBots = useSlackAgentBots({ quiet: true });
+  const slackHasAgentBots =
+    !!slackBots.data && slackBots.data.unassignedApp === null;
   const visibleProviders = CHAT_PROVIDERS.filter(
     (provider) =>
       !messagingChannelCatalog.isHidden(provider) &&
-      (provider !== "telegram" || telegramEnabled),
+      (provider !== "telegram" || telegramEnabled) &&
+      (provider !== "slack" || !slackHasAgentBots),
   );
   const visibleProviderIds = new Set(visibleProviders);
   const bindings = (data?.bindings ?? []).filter((binding) =>
@@ -266,8 +276,8 @@ export function AgentChatAppsEditor({
   const assignmentOptions = buildAssignmentOptions({
     subject,
     visibilityLocation: emailAgent
-      ? "the Permissions tab"
-      : "Permissions in the Configuration step",
+      ? "Who can use it on General"
+      : "Who can use it in the Configuration step",
     agentNames,
     bindings,
     configuredDmProviders,
@@ -282,7 +292,13 @@ export function AgentChatAppsEditor({
     optionOrder,
     currentIds,
   );
-  const normalizedSelectedIds = [...selectedIds].sort();
+  // A selected channel can vanish from the list after the selection was
+  // seeded (deleted, or its provider hidden). It has nothing left to save, so
+  // it must not count as a change.
+  const bindingIds = new Set(bindings.map((binding) => binding.id));
+  const normalizedSelectedIds = selectedIds
+    .filter((id) => id.startsWith(VIRTUAL_DM_PREFIX) || bindingIds.has(id))
+    .sort();
   const isDirty =
     initializedAgentId === subjectKey &&
     (normalizedSelectedIds.length !== currentIds.length ||
@@ -407,10 +423,20 @@ export function AgentChatAppsEditor({
       });
     }
 
+    const updates = [...changedAssignments.values()];
+    // Nothing to write: the API rejects an empty plan, and there is nothing
+    // for it to do anyway.
+    if (updates.length === 0 && plan.dmProviders.length === 0) {
+      setPendingChannelDetails({});
+      setPendingPlan(null);
+      resolveSave(true);
+      return;
+    }
+
     applyBindingPlanMutation.mutate(
       {
         targetAgentId,
-        updates: [...changedAssignments.values()],
+        updates,
         directMessages: plan.dmProviders.map((provider) => ({ provider })),
       },
       {
@@ -594,6 +620,15 @@ export function AgentChatAppsEditor({
 
   return (
     <>
+      {/* The agent's own Slack bot: an existing agent only, and only where
+          Slack is offered at all. */}
+      {subjectId && slackOffered && (
+        <AgentSlackBotSection
+          agentId={subjectId}
+          agentName={subject.name}
+          agentIcon={subject.icon}
+        />
+      )}
       {/* Every chat provider hidden but email still on: there is no pool to
           pick from, so the section would only ever show an empty state. */}
       {visibleProviders.length > 0 && (
@@ -1412,7 +1447,7 @@ function buildAssignmentOptions({
           ? (agentNames.get(binding.agentId) ?? "another agent")
           : null,
       disabledReason: personalAssignmentRefused
-        ? `A personal agent answers only in its owner's direct messages. To use shared channels, open ${visibilityLocation} and add "Everyone in this organization" with "Can use" access.`
+        ? `A personal agent answers only in its owner's direct messages. To use shared channels, add a team, a role or everyone in ${visibilityLocation}.`
         : null,
       virtualDm: false,
       isDm: binding.isDm,

@@ -1,12 +1,12 @@
 import { and, eq } from "drizzle-orm";
-import config from "@/config";
+import type { MockInstance } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { agentRuntimeManager } from "@/k8s/agent-runtime";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { Agent, User } from "@/types";
 
 describe("Runtime credential routes", () => {
@@ -14,8 +14,7 @@ describe("Runtime credential routes", () => {
   let agent: Agent;
   let user: User;
   let organizationId: string;
-  let previousFeatureEnabled: boolean;
-  let previousClusterReachable: unknown;
+  let sandboxInstalled: MockInstance<() => boolean>;
 
   beforeEach(async ({ makeAgent, makeAdmin, makeMember, makeOrganization }) => {
     const organization = await makeOrganization();
@@ -71,13 +70,9 @@ describe("Runtime credential routes", () => {
     const { default: routes } = await import("./runtime-credential.routes");
     await app.register(routes);
 
-    previousFeatureEnabled = config.agentRuntime.enabled;
-    previousClusterReachable = Reflect.get(
-      agentRuntimeManager,
-      "clusterReachable",
-    );
-    config.agentRuntime.enabled = true;
-    Reflect.set(agentRuntimeManager, "clusterReachable", true);
+    sandboxInstalled = vi
+      .spyOn(agentSandboxApi, "isInstalled", "get")
+      .mockReturnValue(true);
   });
 
   test("GitHub App definitions require organization ownership", async () => {
@@ -122,12 +117,7 @@ describe("Runtime credential routes", () => {
   });
 
   afterEach(async () => {
-    config.agentRuntime.enabled = previousFeatureEnabled;
-    Reflect.set(
-      agentRuntimeManager,
-      "clusterReachable",
-      previousClusterReachable,
-    );
+    sandboxInstalled.mockRestore();
     await app.close();
   });
 
@@ -255,8 +245,8 @@ describe("Runtime credential routes", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  test("keeps credentials available when Agent Runtime is disabled", async () => {
-    config.agentRuntime.enabled = false;
+  test("keeps credentials available when the Agent Sandbox controller is not installed", async () => {
+    sandboxInstalled.mockReturnValue(false);
 
     const response = await app.inject({
       method: "GET",

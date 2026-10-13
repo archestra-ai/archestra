@@ -129,7 +129,18 @@ describe("formSchema", () => {
         localConfig: undefined,
       };
 
-      expect(() => formSchema.parse(data)).toThrow("Must be a valid URL");
+      expect(() => formSchema.parse(data)).toThrow("Must be an http(s) URL");
+    });
+
+    it("should reject a remote server URL with a non-http scheme", () => {
+      const data = {
+        ...baseValidData,
+        serverType: "remote" as const,
+        serverUrl: "javascript:alert(1)",
+        localConfig: undefined,
+      };
+
+      expect(formSchema.safeParse(data).success).toBe(false);
     });
 
     it("should reject duplicate auth and additional header names", () => {
@@ -262,7 +273,7 @@ describe("formSchema", () => {
       };
 
       expect(() => formSchema.parse(data)).toThrow(
-        "Either command or Docker image must be provided",
+        "Either command or container image must be provided",
       );
     });
 
@@ -283,7 +294,7 @@ describe("formSchema", () => {
       };
 
       expect(() => formSchema.parse(data)).toThrow(
-        "Either command or Docker image must be provided",
+        "Either command or container image must be provided",
       );
     });
 

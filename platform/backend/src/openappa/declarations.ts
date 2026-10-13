@@ -6,11 +6,13 @@ import type {
   HelperBindingInput,
   BatteryPackage as NativeBatteryPackage,
   PolicyDeclarations,
+  TokenEnvReader,
 } from "@archestra/openappa-rs";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import { OpenappaCredentialError } from "@/openappa/failure";
 import {
   OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
@@ -21,6 +23,7 @@ import { ApiError } from "@/types";
 import type {
   BatteryPackageFile,
   BatterySource,
+  CredentialSource,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
@@ -53,6 +56,8 @@ export type PolicyResolution = {
   credentials: Record<string, string>;
   /** The annotators the root's own tool rules route calls to. */
   routedAnnotators: string[];
+  /** Every root external or profile naming a `token_env`, by reader identity. */
+  tokenEnvReaders: TokenEnvReader[];
   /**
    * Everything wrong with the declarations themselves: a shape the reader could
    * not make sense of, and an entry spelled outside the two admitted forms.
@@ -61,9 +66,22 @@ export type PolicyResolution = {
 };
 
 /**
- * One credential value reaching one battery's helper sandbox: the battery an
- * include entry resolves to, a variable its manifest declares, and the store key
- * the `[credentials]` table binds to that variable.
+ * A root document as the host composes it: the stored text with the stored
+ * bindings applied for every variable an included battery reads and the text
+ * itself does not bind. The content is never saved.
+ */
+type BoundPolicy = {
+  content: string;
+  resolution: PolicyResolution;
+  credentialSource: Record<string, CredentialSource>;
+};
+
+/**
+ * One credential value reaching code outside the platform: a battery's helper
+ * sandbox (`battery` is the name an include entry resolves to) or a root external
+ * or profile the runtime authenticates with it (`battery` is the reader's
+ * identity, its `externals` path and binding), a variable it reads, and the store
+ * key the `[credentials]` table binds to that variable.
  */
 type Grant = { battery: string; variable: string; key: string };
 
@@ -139,6 +157,9 @@ class OpenAppaDeclarations {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
     process.env[OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV] =
       `http://127.0.0.1:${config.api.port}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`;
+    // The host sets every hosted policy's body size limit to the proxy's own,
+    // so a tool result the proxy accepted is never dropped by that cap.
+    process.env[OPENAPPA_MAX_BODY_BYTES_ENV] = String(config.api.bodyLimit);
     return OPENAPPA_BRIDGE_TOKEN_ENV;
   }
 
@@ -206,7 +227,74 @@ class OpenAppaDeclarations {
         declarations.credentials.map(({ variable, key }) => [variable, key]),
       ),
       routedAnnotators: declarations.routedAnnotators,
+      tokenEnvReaders: declarations.tokenEnvReaders,
       errors,
+    };
+  }
+
+  /**
+   * Resolve a root document with the organization's stored bindings applied.
+   * A `[credentials]` line in the text wins; a stored binding fills a variable
+   * the text leaves out, and only when an included battery reads it, since the
+   * runtime refuses a `[credentials]` variable no helper reads.
+   */
+  async resolveWithBindings(params: {
+    organizationId: string;
+    content: string;
+  }): Promise<BoundPolicy> {
+    const { organizationId, content } = params;
+    const [resolution, bindings] = await Promise.all([
+      this.resolve(params),
+      OpenAppaCredentialBindingModel.list(organizationId),
+    ]);
+    const credentialSource: Record<string, CredentialSource> =
+      Object.fromEntries(
+        Object.keys(resolution.credentials).map((variable) => [
+          variable,
+          "policy",
+        ]),
+      );
+    const read = new Set(
+      resolution.entries.flatMap((entry) => entry.battery?.credentials ?? []),
+    );
+    const filling = bindings.filter(
+      (binding) =>
+        read.has(binding.variable) && !(binding.variable in credentialSource),
+    );
+    if (filling.length === 0) return { content, resolution, credentialSource };
+    const native = await loadNative();
+    const edited = await native.editOpenappaPolicy(
+      content,
+      filling.map((binding) => ({
+        kind: "setCredential",
+        variable: binding.variable,
+        key: binding.credentialKey,
+      })),
+    );
+    if (edited.content === undefined || edited.content === null) {
+      logger.warn(
+        { organizationId, errors: edited.errors },
+        "OpenAPPA credential bindings could not be applied to the policy",
+      );
+      return { content, resolution, credentialSource };
+    }
+    return {
+      content: edited.content,
+      resolution: {
+        ...resolution,
+        credentials: {
+          ...resolution.credentials,
+          ...Object.fromEntries(
+            filling.map((binding) => [binding.variable, binding.credentialKey]),
+          ),
+        },
+      },
+      credentialSource: {
+        ...credentialSource,
+        ...Object.fromEntries(
+          filling.map((binding) => [binding.variable, "binding" as const]),
+        ),
+      },
     };
   }
 
@@ -294,11 +382,14 @@ class OpenAppaDeclarations {
    * Compose a document for its own sake: the same composition the recompose makes,
    * with the helper endpoints pointed at a placeholder, since a document that is
    * only being checked has no derived install row to serve its helpers from. A
-   * composition that returns content is a successful validation.
+   * composition that returns content is a successful validation. The batteries
+   * named in `held` compose as the empty battery, as a deployment holding them
+   * back composes them.
    */
   async composeForCheck(params: {
     root: string;
     resolution: PolicyResolution;
+    held?: ReadonlySet<string>;
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
@@ -306,10 +397,12 @@ class OpenAppaDeclarations {
       root: params.root,
       batteries: this.composeInputs({
         entries: params.resolution.entries,
-        helpers: (entry) =>
-          entry.battery && entry.battery.externals.length > 0
+        helpers: (entry) => {
+          if (params.held?.has(entry.name)) return "stub";
+          return entry.battery && entry.battery.externals.length > 0
             ? { urlBase: helperUrlBase(CHECKED_HELPER_OWNER), tokenEnv }
-            : null,
+            : null;
+        },
       }),
     });
   }
@@ -371,7 +464,10 @@ class OpenAppaDeclarations {
     };
   }
 
-  /** Every grant a resolution holds: resolved batteries × declared variables × the table. */
+  /**
+   * Every grant a resolution holds: resolved batteries × declared variables × the
+   * table, and the root's own readers.
+   */
   grants(resolution: PolicyResolution): Grant[] {
     const grants: Grant[] = [];
     for (const entry of resolution.entries) {
@@ -381,7 +477,15 @@ class OpenAppaDeclarations {
         if (key) grants.push({ battery: entry.name, variable, key });
       }
     }
-    return grants;
+    return [...grants, ...this.rootGrants(resolution)];
+  }
+
+  /** The grants the runtime itself sends: a root reader × the key its variable is bound to. */
+  rootGrants(resolution: PolicyResolution): Grant[] {
+    return resolution.tokenEnvReaders.flatMap(({ variable, reader }) => {
+      const key = resolution.credentials[variable];
+      return key ? [{ battery: reader, variable, key }] : [];
+    });
   }
 
   /**
@@ -498,6 +602,7 @@ const OPENAPPA_BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 
 /** Where the addon's `builtin = "archestra"` annotator posts; read by `openappa-rs`. */
 const OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV = "APPA_ARCHESTRA_ANNOTATOR_URL";
+const OPENAPPA_MAX_BODY_BYTES_ENV = "APPA_ARCHESTRA_MAX_BODY_BYTES";
 
 /**
  * The owner a document being checked names for its helpers. No install row has

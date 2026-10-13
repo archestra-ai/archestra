@@ -1,0 +1,1 @@
+CREATE INDEX "openappa_operations_org_created_idx" ON "openappa_operations" USING btree ("organization_id","created_at");

@@ -2,7 +2,7 @@
 title: Tracing
 description: Send OpenTelemetry traces and logs for every LLM call, tool call, and agent run to your collector
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -72,7 +72,9 @@ The root span's `route.category` tells you how the agent was invoked:
 | Slack, Microsoft Teams, Telegram | `chatops` |
 | Email | `email` |
 
-Calls from your own applications to the [LLM Proxy](/docs/llm-proxy) (`route.category=llm-proxy`) and the [MCP Gateway](/docs/mcp/gateway) (`route.category=mcp-gateway`) start their own traces. To group them, send the same [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) header with each request. Archestra records it as `gen_ai.conversation.id`.
+Calls from your own applications to the [LLM Proxy](/docs/llm-proxy) (`route.category=llm-proxy`) and the [MCP Gateway](/docs/mcp/gateway) (`route.category=mcp-gateway`) start their own traces.
+
+To group LLM Proxy calls into one trace, send [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) with your conversation ID. Archestra records it as `gen_ai.conversation.id`. When Guardrails are active, [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) takes precedence as the recorded session identity. MCP Gateway spans do not group by `X-Archestra-Session-Id`.
 
 Archestra also emits:
 
@@ -121,7 +123,7 @@ Each tool call through the MCP Gateway is a span named `execute_tool {tool_name}
 | `gen_ai.tool.call.id` | The tool call ID |
 | `mcp.server.name` | The MCP server, for example `github` |
 | `mcp.is_error_result` | `true` when the tool returned an error result |
-| `mcp.blocked` | `true` when a [tool policy](/docs/agents/guardrails) blocked the call |
+| `mcp.blocked` | `true` when a [guardrail](/docs/agents/guardrails) blocked the call |
 | `mcp.blocked_reason` | Why the call was blocked |
 | `error.type` | The error class, when the call throws |
 

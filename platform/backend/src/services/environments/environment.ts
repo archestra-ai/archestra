@@ -96,17 +96,22 @@ export async function listEnvironments(params: {
       EnvironmentModel.countDefaultAssigned(organizationId),
       EnvironmentResourceDefaultModel.getForOrganization(organizationId),
     ]);
-  // Deploying into an environment takes a `use` grant on it.
-  const environments = await Promise.all(
-    rows.map(async (environment) => ({
-      ...environment,
-      canDeploy: await canDeployToEnvironment({
-        organizationId,
-        userId,
-        scope: environment.id,
-      }),
-    })),
-  );
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  // The rows already establish organization ownership. Resolve the caller's
+  // deployment grants once rather than repeating authorization for every row.
+  const usableEnvironmentIds =
+    await ResourcePermissions.getUsableEnvironmentIds({
+      organizationId,
+      userId,
+      environmentIds: rows.map((environment) => environment.id),
+    });
+  const environments = rows.map((environment) => ({
+    ...environment,
+    canDeploy: usableEnvironmentIds.has(environment.id),
+  }));
+  // SPDX-SnippetEnd
   return { environments, defaultAssignedCatalogCount, resourceDefaults };
 }
 

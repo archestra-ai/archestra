@@ -97,12 +97,14 @@ function PaginationNavButtons({
   onPrevious,
   onNext,
   className,
+  children,
 }: {
   canGoPrevious: boolean;
   canGoNext: boolean;
   onPrevious: () => void;
   onNext: () => void;
   className?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <>
@@ -116,6 +118,7 @@ function PaginationNavButtons({
         <span className="sr-only">Go to previous page</span>
         <ChevronLeft className="h-4 w-4" />
       </Button>
+      {children}
       <Button
         variant="outline"
         size="icon-sm"
@@ -229,29 +232,17 @@ export function TablePagination({
 
           {/* Pagination controls */}
           <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="icon-sm"
+            <PaginationNavButtons
               className="disabled:opacity-25"
-              onClick={goPrevious}
-              disabled={!canGoPrevious}
+              canGoPrevious={canGoPrevious}
+              canGoNext={canGoNext}
+              onPrevious={goPrevious}
+              onNext={goNext}
             >
-              <span className="sr-only">Go to previous page</span>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm font-semibold tabular-nums min-w-[44px] text-center">
-              {currentPage} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="disabled:opacity-25"
-              onClick={goNext}
-              disabled={!canGoNext}
-            >
-              <span className="sr-only">Go to next page</span>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+              <span className="text-sm font-semibold tabular-nums min-w-[44px] text-center">
+                {currentPage} / {totalPages}
+              </span>
+            </PaginationNavButtons>
           </div>
         </div>
       </div>

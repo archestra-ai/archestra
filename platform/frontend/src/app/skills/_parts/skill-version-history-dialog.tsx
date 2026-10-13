@@ -211,7 +211,7 @@ function VersionHistory({
       title="Version history"
       description={
         skill
-          ? `Every change to "${skill.name}"'s instructions or files is kept as a version. Restoring one adds a new version.`
+          ? `Every change to the instructions or files of "${skill.name}" is kept as a version. Restoring one adds a new version.`
           : "Every change to a skill's instructions or files is kept as a version."
       }
       size="large"

@@ -27,6 +27,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { LabelTags } from "@/components/label-tags";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
+import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
 import { SearchInput } from "@/components/search-input";
 import { AccountHealthBadge } from "@/components/service-account-status-badge";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -361,17 +362,22 @@ export default function ServiceAccountsSettingsPage() {
 
   const closeDialog = () => {
     setIsCreateDialogOpen(false);
+    createMutation.reset();
     form.reset(DEFAULT_FORM_VALUES);
     setNewLabels([]);
   };
 
   const handleSubmit = form.handleSubmit(async (values) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? newLabels;
-    const account = await createMutation.mutateAsync({
-      name: values.name.trim(),
-      role: values.role,
-      labels: finalLabels,
-    });
+    const account = await createMutation
+      .mutateAsync({
+        name: values.name.trim(),
+        role: values.role,
+        labels: finalLabels,
+      })
+      // The dialog shows the failure: a notice for a refused role, a toast
+      // for anything else.
+      .catch(() => null);
     if (!account) return;
 
     closeDialog();
@@ -640,7 +646,10 @@ export default function ServiceAccountsSettingsPage() {
                 multiple
                 id="service-account-role"
                 value={form.watch("role")}
-                onValueChange={(role) => form.setValue("role", role)}
+                onValueChange={(role) => {
+                  form.setValue("role", role);
+                  createMutation.reset();
+                }}
                 placeholder="Select a role"
                 className="w-full"
               />
@@ -649,6 +658,10 @@ export default function ServiceAccountsSettingsPage() {
                 determine which objects this account can reach.
               </FieldDescription>
             </div>
+            <RoleAssignmentBlockedNotice
+              error={createMutation.error}
+              name={formatRoleName(form.watch("role"))}
+            />
             <AdvancedLabelsSection
               ref={labelsRef}
               labels={newLabels}

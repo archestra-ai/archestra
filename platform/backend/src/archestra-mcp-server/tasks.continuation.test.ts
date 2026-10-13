@@ -42,15 +42,10 @@ beforeEach(
     makeAgent,
     seedAndAssignArchestraTools,
   }) => {
-    const previous = {
-      enabled: config.agentRuntime.enabled,
-      url: config.agentRuntime.platformBaseUrl,
-    };
-    config.agentRuntime.enabled = true;
+    const previousUrl = config.agentRuntime.platformBaseUrl;
     config.agentRuntime.platformBaseUrl = "https://platform.example.test";
     onTestFinished(() => {
-      config.agentRuntime.enabled = previous.enabled;
-      config.agentRuntime.platformBaseUrl = previous.url;
+      config.agentRuntime.platformBaseUrl = previousUrl;
     });
     vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
     vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);

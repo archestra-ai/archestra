@@ -478,4 +478,69 @@ describe("GET /api/llm-virtual-keys", () => {
       personalOnly.json().data.map((key: { name: string }) => key.name),
     ).toEqual(["personal-scoped-key"]);
   });
+
+  test("GET /api/llm-virtual-keys narrows by access, sharedWith and owner", async ({
+    makeLlmProviderApiKey,
+    makeMember,
+    makeSecret,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    grantEverywhere(["llmVirtualKey"]);
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId);
+    const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id);
+    const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
+    const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);
+    const create = (
+      name: string,
+      authorId: string,
+      initialPermissionGrants: Parameters<
+        typeof VirtualApiKeyModel.create
+      >[0]["initialPermissionGrants"],
+    ) =>
+      VirtualApiKeyModel.create({
+        organizationId,
+        name,
+        scope: "personal",
+        authorId,
+        initialPermissionGrants,
+        providerApiKeys: [
+          { provider: parentKey.provider, providerApiKeyId: parentKey.id },
+        ],
+      });
+    await create("Mine", user.id, []);
+    await create("Team", otherUser.id, [
+      { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+    ]);
+    await create("Org", otherUser.id, [
+      { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
+    ]);
+
+    const list = async (params: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/llm-virtual-keys?${params}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .data.map((key: { name: string }) => key.name)
+        .sort();
+    };
+
+    expect(await list("access=mine")).toEqual(["Mine"]);
+    expect(await list(`sharedWith=team:${team.id}`)).toEqual(["Team"]);
+    expect(await list("sharedWith=org")).toEqual(["Org"]);
+    expect(await list(`owner=${otherUser.id}`)).toEqual(["Org", "Team"]);
+    expect(await list(`owner=${otherUser.id}&sharedWith=org`)).toEqual(["Org"]);
+
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/api/llm-virtual-keys?sharedWith=group:1",
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
 });

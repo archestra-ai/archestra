@@ -1,4 +1,7 @@
-import { archestraApiClient } from "@archestra/shared";
+import {
+  archestraApiClient,
+  ROLE_ASSIGNMENT_BLOCKED_CODE,
+} from "@archestra/shared";
 import {
   focusManager,
   QueryClient,
@@ -8,6 +11,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -25,9 +29,11 @@ import {
   useActiveMemberRole,
   useIsGlobalAdmin,
   useOrganization,
+  useUpdateAuthSettings,
 } from "@/lib/organization.query";
 
 vi.mock("@/lib/clients/auth/auth-client");
+vi.mock("sonner");
 
 const API_ORIGIN = "http://localhost:9000";
 const server = setupServer();
@@ -316,5 +322,58 @@ describe("useIsGlobalAdmin", () => {
       expect(result.current.isLoading).toBe(false);
     });
     expect(result.current.isGlobalAdmin).toBe(false);
+  });
+});
+
+describe("useUpdateAuthSettings", () => {
+  it("preserves a refused default role for the inline notice without toasting or replacing cached settings", async () => {
+    vi.clearAllMocks();
+    const details = {
+      subjectType: "role",
+      total: 1,
+      items: [
+        {
+          resource: "agent",
+          scope: "00000000-0000-4000-8000-000000000001",
+          name: "Release helper",
+          missing: ["manage-permissions"],
+        },
+      ],
+    };
+    server.use(
+      http.patch(`${API_ORIGIN}/api/organization/auth-settings`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              message: "Cannot share this role's items",
+              type: "api_authorization_error",
+              internal_code: ROLE_ASSIGNMENT_BLOCKED_CODE,
+              details,
+            },
+          },
+          { status: 403 },
+        ),
+      ),
+    );
+    const { result, queryClient } = renderWithClient(() =>
+      useUpdateAuthSettings("Saved", "Failed"),
+    );
+    const original = { defaultMemberRole: "member" };
+    queryClient.setQueryData(organizationKeys.details(), original);
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ defaultMemberRole: "editor" }),
+      ).rejects.toMatchObject({ details });
+    });
+
+    await waitFor(() =>
+      expect(result.current.error).toMatchObject({ details }),
+    );
+    expect(queryClient.getQueryData(organizationKeys.details())).toEqual(
+      original,
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

@@ -30,12 +30,15 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
   useScopeFilterParams,
 } from "@/components/resource-scope-filter";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -45,6 +48,7 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import type { TableRowAction } from "@/components/table-row-actions";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
@@ -151,7 +155,12 @@ function PluginsList() {
     isFetching,
     isLoadingError,
     refetch,
-  } = usePlugins(true, { labels: labelsFilter });
+  } = usePlugins(true, {
+    labels: labelsFilter,
+    access: scopeFilter.access,
+    sharedWith: scopeFilter.sharedWith,
+    owner: scopeFilter.owner,
+  });
 
   const setFilter = useCallback(
     (name: string, value: string) => {
@@ -241,6 +250,7 @@ function PluginsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
       "labels",
     ]) {
       params.delete(key);
@@ -317,9 +327,7 @@ function PluginsList() {
       },
     ];
     return (
-      <ResourceTableRowActions
-        kind="plugin"
-        resource={{ ...plugin, name: plugin.displayName }}
+      <TableRowActions
         actions={actions}
         dropdownActions={dropdownActions}
         itemName={plugin.displayName}
@@ -594,6 +602,7 @@ function PluginsList() {
                     />
                   }
                 >
+                  <ResourceAccessFilter resource="plugin" noun="plugins" />
                   <FacetSelect
                     label="Filter by client"
                     value={client}

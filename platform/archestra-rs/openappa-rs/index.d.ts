@@ -26,6 +26,7 @@ export interface BatteryPackage {
   helpers: Array<string>
   credentials: Array<string>
   externals: Array<BatteryExternal>
+  benefit?: string
   setup?: string
   files: Array<BatteryFileInput>
 }
@@ -125,8 +126,14 @@ export interface EditedPolicy {
  */
 export declare function editOpenappaPolicy(content: string, edits: Array<PolicyEditInput>): Promise<EditedPolicy>
 
-/** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
+/**
+ * Executes a remedy for the proxy-stamped trajectory, resolving that session
+ * from PostgreSQL. The caller, when present, is the receipt spender.
+ */
 export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy): Promise<string>
+
+/** The upstream pin and host replay boundary version stored with each run. */
+export declare function getOpenappaReplayEngineVersion(): string
 
 /** Read the current label of a started session without mutating its trajectory. */
 export declare function getOpenappaStatus(organizationId: string, sessionId: string): Promise<OpenappaStatus | null>
@@ -156,6 +163,12 @@ export declare function initializeOpenappa(databaseUrl: string, postgresMaxConne
 export declare function inspectOpenappaBattery(files: Array<BatteryFileInput>): Promise<BatteryPackage>
 
 /**
+ * Parse scenario files into tools and assertion counts without loading a policy
+ * or evaluating any call.
+ */
+export declare function inspectOpenappaPolicyTests(input: string): Promise<string>
+
+/**
  * The batteries bundled with the pinned OpenAPPA checkout that govern MCP tools,
  * which is what Archestra serves, or declare annotators alone.
  */
@@ -180,7 +193,7 @@ export declare function loadChildReturns(organizationId: string, parentSessionId
 
 /**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
- * Session routing comes from the verified offer claims; no offer-owner lookup.
+ * Session routing comes from the proxy-stamped current trajectory; no offer-owner lookup.
  */
 export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string): Promise<OfferReviewOutput | null>
 
@@ -222,6 +235,8 @@ export interface PolicyDeclarations {
    * their values in `DispatchPolicy.credentials`.
    */
   runtimeCredentials: Array<string>
+  /** Every root external or profile naming a `token_env`, bound or not. */
+  tokenEnvReaders: Array<TokenEnvReader>
   /**
    * A shape the reader could not make sense of, naming the key and its line. An
    * unparsable document is one error and no declarations.
@@ -247,6 +262,13 @@ export interface PolicyEditInput {
 
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
+/**
+ * Evaluate bounded `.appa` scenarios against the supplied effective policy. The
+ * replay core answers consults through an in-process stand-in, never a live party,
+ * and keeps every trajectory in memory.
+ */
+export declare function replayOpenappaPolicy(input: string): Promise<string>
+
 export interface ReportingOptions {
   endpoint: string
   hostname?: string
@@ -258,6 +280,15 @@ export interface ServerAliasDeclaration {
   namespace: string
   servers: Array<string>
   line: number
+}
+
+/**
+ * A root external or profile naming a `token_env`; `reader` is its `externals`
+ * path.
+ */
+export interface TokenEnvReader {
+  variable: string
+  reader: string
 }
 
 /**

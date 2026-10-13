@@ -23,17 +23,12 @@ import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
-import {
-  TableCardGrid,
-  TableCardSelectionScope,
-  TableCardView,
-  TableCardViewContent,
-  TableCardViewToggle,
-} from "@/components/table-card-view";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
+import { BulkActionsScope } from "@/components/ui/bulk-actions-context";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -55,12 +50,13 @@ import {
   useAppAccessContext,
 } from "@/lib/apps/use-app-access";
 import { reportBulkOutcome } from "@/lib/bulk-action";
-import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
+import { BulkRangeSelectionScope } from "@/lib/bulk-range-selection-context";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
-import { AppCard } from "./_parts/app-card";
 import { AppCreateDialog } from "./_parts/app-create-dialog";
-import { AppsTable, getAppRowKey } from "./_parts/apps-table";
+import { AppPinnedTiles } from "./_parts/app-pinned-tiles";
+import { AppsTable } from "./_parts/apps-table";
+import { getAppRowKey } from "./_parts/use-open-app";
 
 type AppListItem = archestraApiTypes.GetAppsResponses["200"]["data"][number];
 type OwnedApp = Extract<AppListItem, { source: "owned" }>;
@@ -74,7 +70,8 @@ export default function AppsPage() {
   // Scope/owner filtering is server-side (mirroring the Projects list) so an
   // app admin's "Personal → Other users" view can reach apps that aren't in the
   // default page. The scope filter component owns these URL params.
-  const { scope, authorIds, excludeAuthorIds } = useScopeFilterParams();
+  const { scope, authorIds, excludeAuthorIds, access, sharedWith, owner } =
+    useScopeFilterParams();
   const settingsId = searchParams.get("settings");
   // Label filtering is server-side too: an owned app matches its own labels, an
   // external one its backing MCP server's, so both halves of the list filter.
@@ -89,6 +86,9 @@ export default function AppsPage() {
       scope,
       authorIds,
       excludeAuthorIds,
+      access,
+      sharedWith,
+      owner,
       labels: labelsFromUrl || undefined,
     },
     { toastOnError: false },
@@ -109,8 +109,8 @@ export default function AppsPage() {
   });
 
   // Only the "kind" split (owned vs external) is client-side now; scope/owner
-  // filtering happens on the server. Pinned-first grouping applies on top,
-  // mirroring the Projects page: a "Pinned" section above, everything else below.
+  // filtering happens on the server. Pinned apps become tiles above the table,
+  // newest pin first, mirroring the Projects page; the table holds the rest.
   const filtered = useMemo(
     () =>
       sortAppsPinnedFirst(
@@ -120,10 +120,6 @@ export default function AppsPage() {
   );
   const pinnedApps = filtered.filter((app) => app.pinnedAt);
   const unpinnedApps = filtered.filter((app) => !app.pinnedAt);
-  // Below "Pinned", owned and external apps are separate sections: apps you
-  // authored here vs UIs that came with installed MCP servers.
-  const ownedApps = unpinnedApps.filter((app) => app.source === "owned");
-  const externalApps = unpinnedApps.filter((app) => app.source === "external");
 
   const hasActiveFilters =
     Boolean(search) || kind !== "all" || Boolean(labelsFromUrl);
@@ -184,116 +180,111 @@ export default function AppsPage() {
         </div>
       }
     >
-      <TableCardView storageKey="archestra-apps-view">
-        <CollectionFilters>
-          <FilterBar
-            leading
-            actions={<TableCardViewToggle />}
-            search={
-              <SearchInput
-                isLoading={isFetching}
-                paramName="search"
-                placeholder="Search apps"
-                className={filterSearchClass}
-              />
-            }
-          >
-            <Select
-              value={kind}
-              onValueChange={(value) =>
-                setParam("kind", value === "all" ? null : value)
+      <BulkActionsScope>
+        <BulkRangeSelectionScope>
+          <CollectionFilters>
+            <FilterBar
+              leading
+              search={
+                <SearchInput
+                  isLoading={isFetching}
+                  paramName="search"
+                  placeholder="Search apps"
+                  className={filterSearchClass}
+                />
               }
             >
-              <SelectTrigger
-                size="sm"
-                aria-label="Filter by kind"
-                className={filterControlClass({ active: kind !== "all" })}
+              <ResourceAccessFilter resource="app" noun="apps" />
+              <Select
+                value={kind}
+                onValueChange={(value) =>
+                  setParam("kind", value === "all" ? null : value)
+                }
               >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" side="bottom" align="start">
-                <SelectItem value="all">All kinds</SelectItem>
-                <SelectItem value="owned">Apps</SelectItem>
-                <SelectItem value="external">MCP Server Apps</SelectItem>
-              </SelectContent>
-            </Select>
+                <SelectTrigger
+                  size="sm"
+                  aria-label="Filter by kind"
+                  className={filterControlClass({ active: kind !== "all" })}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent position="popper" side="bottom" align="start">
+                  <SelectItem value="all">All kinds</SelectItem>
+                  <SelectItem value="owned">Apps</SelectItem>
+                  <SelectItem value="external">MCP Server Apps</SelectItem>
+                </SelectContent>
+              </Select>
 
-            <LabelSelect
-              labelKeys={labelKeys}
-              LabelKeyRowComponent={AppLabelKeyRow}
-              className={filterControlClass({ active: Boolean(parsedLabels) })}
-            />
-          </FilterBar>
-          {parsedLabels && (
-            <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
-          )}
-        </CollectionFilters>
-
-        <LoadingWrapper
-          isPending={(isPending || isFetching) && filtered.length === 0}
-          loadingFallback={null}
-        >
-          {isLoadingError ? (
-            <QueryLoadError
-              title="Couldn't load your apps"
-              onRetry={() => refetch()}
-            />
-          ) : filtered.length === 0 ? (
-            <EmptyState
-              className="min-h-[40vh]"
-              icon={AppWindow}
-              title={
-                hasActiveFilters
-                  ? "No apps match your search"
-                  : "No apps here yet"
-              }
-              description={
-                hasActiveFilters
-                  ? "Try adjusting your search or filters."
-                  : "Create an app to get started."
-              }
-              onClearFilters={hasActiveFilters ? clearFilters : undefined}
-            />
-          ) : (
-            <div className="space-y-6">
-              <AppSection
-                title="Pinned"
-                apps={pinnedApps}
-                onOpenSettings={openSettings}
+              <LabelSelect
+                labelKeys={labelKeys}
+                LabelKeyRowComponent={AppLabelKeyRow}
+                className={filterControlClass({
+                  active: Boolean(parsedLabels),
+                })}
               />
-              <AppSection
-                title="Apps"
-                apps={ownedApps}
-                onOpenSettings={openSettings}
-              />
-              <AppSection
-                title="Apps from installed MCP servers"
-                apps={externalApps}
-                onOpenSettings={openSettings}
-              />
-            </div>
-          )}
-        </LoadingWrapper>
+            </FilterBar>
+            {parsedLabels && (
+              <LabelFilterBadges onRemoveLabel={handleRemoveLabel} />
+            )}
+          </CollectionFilters>
 
-        <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+          <LoadingWrapper
+            isPending={(isPending || isFetching) && filtered.length === 0}
+            loadingFallback={null}
+          >
+            {isLoadingError ? (
+              <QueryLoadError
+                title="Couldn't load your apps"
+                onRetry={() => refetch()}
+              />
+            ) : filtered.length === 0 ? (
+              <EmptyState
+                className="min-h-[40vh]"
+                icon={AppWindow}
+                title={
+                  hasActiveFilters
+                    ? "No apps match your search"
+                    : "No apps here yet"
+                }
+                description={
+                  hasActiveFilters
+                    ? "Try adjusting your search or filters."
+                    : "Create an app to get started."
+                }
+                onClearFilters={hasActiveFilters ? clearFilters : undefined}
+              />
+            ) : (
+              <div className="space-y-6">
+                <AppPinnedTiles
+                  apps={pinnedApps}
+                  onOpenSettings={openSettings}
+                />
+                <AppSection
+                  title="All apps"
+                  apps={unpinnedApps}
+                  onOpenSettings={openSettings}
+                />
+              </div>
+            )}
+          </LoadingWrapper>
 
-        {settingsApp ? (
-          <AppSettingsDialog
-            appId={settingsApp.id}
-            open={!!settingsApp}
-            onOpenChange={(open) => {
-              if (!open) closeSettings();
-            }}
-          />
-        ) : null}
-      </TableCardView>
+          <AppCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+          {settingsApp ? (
+            <AppSettingsDialog
+              appId={settingsApp.id}
+              open={!!settingsApp}
+              onOpenChange={(open) => {
+                if (!open) closeSettings();
+              }}
+            />
+          ) : null}
+        </BulkRangeSelectionScope>
+      </BulkActionsScope>
     </PageLayout>
   );
 }
 
-// Mirrors the Projects page's ProjectSection: an uppercase header over the
-// card grid (or table, in table view). Renders nothing when the group is
-// empty, so only sections with entries appear.
 /**
  * One key's row in the label filter popover. Values are fetched lazily, only
  * once its sub-popover opens.
@@ -322,6 +313,8 @@ function AppLabelKeyRow({
   );
 }
 
+// Mirrors the Projects page's ProjectSection: an uppercase header over the
+// table and its bulk actions. Renders nothing when there is nothing to list.
 export function AppSection({
   title,
   apps,
@@ -353,14 +346,6 @@ export function AppSection({
     canSelect,
     filterSignature: `${title}:${apps.map(getAppRowKey).join(",")}`,
     matchDescription: "were built here",
-  });
-  const cardSelection = useBulkCardSelection({
-    rows: apps,
-    getRowId: getAppRowKey,
-    rowSelection,
-    setRowSelection,
-    canSelect,
-    rangeSelection,
   });
   const selectedOwnedApps = selected.filter(
     (app): app is OwnedApp => app.source === "owned",
@@ -406,34 +391,13 @@ export function AppSection({
           <span>Delete</span>
         </PermissionButton>
       </BulkActions>
-      <TableCardViewContent
-        table={
-          <AppsTable
-            apps={apps}
-            onOpenSettings={onOpenSettings}
-            rowSelection={rowSelection}
-            setRowSelection={setRowSelection}
-            onPageRowIdsChange={onPageRowIdsChange}
-            rangeSelection={rangeSelection}
-          />
-        }
-        cards={
-          <TableCardSelectionScope
-            rowIds={apps.filter(canSelect).map(getAppRowKey)}
-            onVisibleRowIdsChange={onPageRowIdsChange}
-          >
-            <TableCardGrid>
-              {apps.map((app) => (
-                <AppCard
-                  key={getAppRowKey(app)}
-                  app={app}
-                  onOpenSettings={onOpenSettings}
-                  selection={app.source === "owned" ? cardSelection(app) : null}
-                />
-              ))}
-            </TableCardGrid>
-          </TableCardSelectionScope>
-        }
+      <AppsTable
+        apps={apps}
+        onOpenSettings={onOpenSettings}
+        rowSelection={rowSelection}
+        setRowSelection={setRowSelection}
+        onPageRowIdsChange={onPageRowIdsChange}
+        rangeSelection={rangeSelection}
       />
 
       {bulkDeleteOpen && (

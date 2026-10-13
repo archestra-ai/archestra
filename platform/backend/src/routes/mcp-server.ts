@@ -15,7 +15,6 @@ import mcpClient, {
   McpServerConnectionTimeoutError,
   McpServerNotReadyError,
 } from "@/clients/mcp-client";
-import config from "@/config";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1013,7 +1012,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Clone reconciliation: if this catalog has provisional cloned
                 // tools (first install of a clone), confirm the ones the server
                 // actually exposes and drop the rest. Genuinely-new tools were
-                // just created above with default policies (+ configurator).
+                // just created above.
                 const provisionalCount =
                   await ToolModel.countProvisionalForCatalog(capturedCatalogId);
                 let confirmedClonedToolIds: string[] = [];
@@ -1186,7 +1185,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // Clone reconciliation: if this catalog has provisional cloned
         // tools (first install of a clone), confirm the ones the server
         // actually exposes and drop the rest. Genuinely-new tools were
-        // just created above with default policies (+ configurator).
+        // just created above.
         const provisionalCount = await ToolModel.countProvisionalForCatalog(
           catalogItem.id,
         );
@@ -2210,22 +2209,21 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
-   * Reinstall an MCP server without losing tool assignments and policies.
+   * Reinstall an MCP server without losing tool assignments.
    *
    * Unlike delete + install, this endpoint:
    * 1. Keeps the MCP server record (and its ID)
    * 2. Updates secrets if new environment values are provided
    * 3. Restarts the K8s deployment (for local servers)
    * 4. Syncs tools (updates existing, creates new) instead of deleting
-   * 5. Preserves tool_invocation_policies, trusted_data_policies, and agent_tools
+   * 5. Preserves agent_tools
    */
   fastify.post(
     "/api/mcp_server/:id/reinstall",
     {
       schema: {
         operationId: RouteId.ReinstallMcpServer,
-        description:
-          "Reinstall an MCP server without losing tool assignments and policies",
+        description: "Reinstall an MCP server without losing tool assignments",
         tags: ["MCP Server"],
         params: z.object({
           id: UuidIdSchema,
@@ -2934,8 +2932,8 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Re-discover an MCP server's tools from the LIVE upstream server and
    * reconcile the stored tool snapshot — no pod restart, no reinstall.
    * Adds newly-advertised tools, updates changed descriptions/input schemas,
-   * and removes tools the server no longer exposes, preserving policies and
-   * agent assignments. Tools are shared per catalog item, so the refresh
+   * and removes tools the server no longer exposes, preserving agent
+   * assignments. Tools are shared per catalog item, so the refresh
    * applies to every install of the same server.
    */
   fastify.post(

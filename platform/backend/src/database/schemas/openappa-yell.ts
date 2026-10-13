@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import conversationsTable from "./conversation";
 import organizationsTable from "./organization";
 
 const bytea = customType<{ data: Buffer; driverParam: Buffer }>({
@@ -34,6 +35,10 @@ export const openappaYellsTable = pgTable(
     reportFailed: boolean("report_failed").notNull().default(false),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     resolvedBy: text("resolved_by"),
+    conversationId: uuid("conversation_id").references(
+      () => conversationsTable.id,
+      { onDelete: "set null" },
+    ),
   },
   (table) => [
     uniqueIndex("openappa_yells_call_idx").on(
@@ -48,5 +53,6 @@ export const openappaYellsTable = pgTable(
       table.createdAt,
       table.id,
     ),
+    index("openappa_yells_conversation_id_idx").on(table.conversationId),
   ],
 );

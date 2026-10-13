@@ -169,6 +169,7 @@ describe("navigation data reuse", () => {
 
   it("does not report an Apps request cancelled during navigation", async () => {
     const { client, wrapper } = setup();
+    client.setQueryData(authQueryKeys.session(), { user: { id: "user-1" } });
     client.setQueryData(authQueryKeys.userPermissions(), { app: ["read"] });
     let markStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {

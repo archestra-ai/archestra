@@ -32,7 +32,6 @@ import {
   readNotice,
   readRemedyExecution,
 } from "./notice";
-import type { OfferJws } from "./offer-claims";
 import { appendSessionReceipt, stripSessionReceipts } from "./session-token";
 import {
   parseTrajectoryStamp,
@@ -91,32 +90,6 @@ export function providerWire(
     appaWireFamily(interactionType) ??
     OTHER_STAMP_WIRES[interactionType as SupportedProviderDiscriminator]
   );
-}
-
-/**
- * Collects signed offer claims from notice calls in request history.
- * When `currentTurnOnly` is set, considers only notices issued since the last user message.
- */
-export function collectSignedOfferClaims(params: {
-  family: AppaWireFamily;
-  body: unknown;
-  isNoticeTool: (name: string, namespace?: string) => boolean;
-  mayBeNoticeTool: (name: string) => boolean;
-  currentTurnOnly?: boolean;
-}): OfferJws[] {
-  const claims: OfferJws[] = [];
-  const calls = toolCallSites({
-    family: params.family,
-    body: params.currentTurnOnly ? currentTurnBody(params) : params.body,
-    match: (name, namespace) =>
-      params.isNoticeTool(name, namespace) || params.mayBeNoticeTool(name),
-  });
-  for (const call of calls) {
-    const notice = readNotice({ callId: call.id, arguments: call.arguments });
-    if (!notice?.offers) continue;
-    claims.push(...notice.offers);
-  }
-  return claims;
 }
 
 /**
@@ -478,13 +451,22 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
   body: unknown;
 }): AppaChildTrajectoryReceipt[] {
   const receipts: AppaChildTrajectoryReceipt[] = [];
+  // A receipt returned by a tool belongs to its callee, never to the caller.
+  for (const site of toolResultTextSites(params.family, params.body)) {
+    site.set(stripChildTrajectoryReceipts(site.get()).text);
+  }
   for (const site of historyTextSites(params.family, params.body)) {
-    const text = site.get();
+    // SDK reminders and summaries can wrap notifications in prose. Strip the
+    // nested return's receipts first so only the caller's own context remains.
+    const text = site
+      .get()
+      .replace(
+        /<(task-notification|subagent_notification|teammate-message)\b[^>]*>[\s\S]*?<\/\1>/giu,
+        (envelope) => stripChildTrajectoryReceipts(envelope).text,
+      );
     const stripped = stripChildTrajectoryReceipts(text);
     site.set(stripped.text);
-    if (!isChildReturnEnvelopeSite(text)) {
-      receipts.push(...stripped.receipts);
-    }
+    receipts.push(...stripped.receipts);
   }
   return receipts;
 }
@@ -574,15 +556,6 @@ export function stripAppaTools(params: {
 }
 
 /**
- * Every tool this request declares, in every container and namespace.
- *
- * Codex groups an MCP server's tools under one `namespace` declaration and
- * calls a member by its own name, so a namespace's members are returned under
- * those names, each with the namespace that declares it: the name alone does
- * not say which server a member belongs to.
- */
-
-/**
  * Tool name → the namespace this request declares it in, for the tools Codex
  * declares inside a `namespace` block. The provider expects a call to such a
  * tool to name its namespace, so a notice records it for restoration.
@@ -603,6 +576,58 @@ export function declaredToolNamespaces(body: unknown): Map<string, string> {
     }
   }
   return namespaces;
+}
+
+/**
+ * Takes the `tool_reference` blocks that name a removed declaration out of
+ * Anthropic tool results and provider-run search results. The provider
+ * requires every reference to have a definition in `tools` and rejects the
+ * request otherwise ("Tool reference ... not found in available tools"), and
+ * the reference would stay in history for every later request. A client tool
+ * result left with nothing in it says so in text.
+ */
+export function stripToolReferences(params: {
+  body: unknown;
+  tools: readonly DeclaredToolSpelling[];
+}): void {
+  if (params.tools.length === 0) return;
+  const names = new Set(params.tools.map((tool) => tool.name));
+  const messages = asRecord(params.body)?.messages;
+  if (!Array.isArray(messages)) return;
+  const isRemoved = (part: unknown) => {
+    const reference = asRecord(part);
+    return (
+      reference?.type === "tool_reference" &&
+      typeof reference.tool_name === "string" &&
+      names.has(reference.tool_name)
+    );
+  };
+  for (const message of messages) {
+    const content = asRecord(message)?.content;
+    if (!Array.isArray(content)) continue;
+    for (const block of content) {
+      const record = asRecord(block);
+      if (record?.type === "tool_result" && Array.isArray(record.content)) {
+        const kept = record.content.filter((part) => !isRemoved(part));
+        if (kept.length === record.content.length) continue;
+        record.content =
+          kept.length > 0
+            ? kept
+            : [{ type: "text", text: "[appa] No tools were loaded." }];
+      }
+      // The provider-run search keeps its references in an object, and an
+      // empty list is a valid search result.
+      const search = asRecord(record?.content);
+      if (
+        record?.type === "tool_search_tool_result" &&
+        Array.isArray(search?.tool_references)
+      ) {
+        search.tool_references = search.tool_references.filter(
+          (part) => !isRemoved(part),
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -903,7 +928,7 @@ const HOSTED_TOOL_TYPES = new Set([
   "image_generation",
 ]);
 const HOSTED_TOOL_TYPE_PATTERN =
-  /^(?:advisor|web_search|web_fetch|code_execution)_\d{8}$/;
+  /^(?:advisor|web_search|web_fetch|code_execution)_\d{8}$|^tool_search_tool_(?:regex|bm25)_\d{8}$/;
 
 /** Adjusts tool call IDs to match expected provider prefixes (fc_, ctc_). */
 function itemIdOfKind(id: string, type: keyof typeof ITEM_ID_PREFIXES): string {
@@ -1022,25 +1047,6 @@ function endsWithUserTurn(params: {
     );
   }
   return isUserAuthored(params.family, history.at(-1));
-}
-
-/**
- * The body cut down to the current turn: the history after the last message
- * the user wrote. A shallow copy, for reading; the request is left untouched.
- */
-function currentTurnBody(params: {
-  family: AppaWireFamily;
-  body: unknown;
-}): unknown {
-  const history = historyEntries(params);
-  if (!history) return params.body;
-  const lastUserMessage = history.findLastIndex((entry) =>
-    isUserAuthored(params.family, entry),
-  );
-  return {
-    ...asRecord(params.body),
-    [historyKey(params.family)]: history.slice(lastUserMessage + 1),
-  };
 }
 
 function historyKey(family: AppaWireFamily): "input" | "messages" {
@@ -1580,20 +1586,6 @@ function toolResultTextSites(
     }
   }
   return sites;
-}
-
-/**
- * Identifies child-return notifications across message roles.
- * Proofs inside return envelopes are transport metadata, not conversation lineage.
- */
-function isChildReturnEnvelopeSite(text: string): boolean {
-  const trimmed = text.trim();
-  return (
-    (trimmed.startsWith("<task-notification>") &&
-      trimmed.endsWith("</task-notification>")) ||
-    (trimmed.startsWith("<subagent_notification>") &&
-      trimmed.endsWith("</subagent_notification>"))
-  );
 }
 
 /** Text parts the proxy may return as model-visible assistant content. */

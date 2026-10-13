@@ -20,6 +20,14 @@ export const MCPGatewayAuthMethodSchema = z.enum([
 export type MCPGatewayAuthMethod = z.infer<typeof MCPGatewayAuthMethodSchema>;
 
 /**
+ * Who sent a call over the HTTP gateway: any outside agent ("api"), or the
+ * built-in chat's loopback client ("chat"), which marks itself with the
+ * X-Archestra-Source header.
+ */
+export const McpGatewayCallSourceSchema = z.enum(["api", "chat"]);
+export type McpGatewayCallSource = z.infer<typeof McpGatewayCallSourceSchema>;
+
+/**
  * Select schema for MCP tool calls (includes joined userName from users table)
  * Note: toolResult structure varies by method type:
  * - tools/call: { id, content, isError, error? }
@@ -42,6 +50,7 @@ export const SelectMcpToolCallSchema = createSelectSchema(
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable(),
+    source: McpGatewayCallSourceSchema.nullable(),
   },
 )
   // Server-side plumbing telling the read path which key the row is under.
@@ -69,6 +78,7 @@ export const InsertMcpToolCallSchema = createInsertSchema(
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable().optional(),
+    source: McpGatewayCallSourceSchema.nullable().optional(),
   },
 )
   .extend({

@@ -81,7 +81,8 @@ locked-down or air-gapped hosts.
   inside Archestra's Kubernetes-backed runtime.
 - **Hooks** for `SessionStart`/`PreToolUse`/`PostToolUse` become native Archestra lifecycle hooks (the
   payload is Claude-compatible, so scripts port near-1:1) — minus the `matcher`, with sandbox `cwd` and
-  no command env/argv. A simple guard can instead become a tool policy when its target tool exists.
+  no command env/argv. Org-wide tool-call rules belong in the OpenAPPA guardrails policy, which this
+  kit does not write.
 - **Hooks for other events, openclaw config, and unknown files** are reported for manual follow-up.
 - **Secrets inside migrated prose/code** are left intact as part of the artifact; discovery warns so
   you can review before sharing the inventory.

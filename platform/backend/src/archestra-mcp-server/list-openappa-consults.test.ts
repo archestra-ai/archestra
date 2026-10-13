@@ -180,6 +180,54 @@ describe("list_openappa_consults", () => {
     expect(consult.rawResponseTruncated).toBe(true);
   });
 
+  test("nextCursor reads the older consults past the first page", async () => {
+    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const names = await seedNewestFirst(
+      { organizationId, callerId: `user:${context.userId}` },
+      55,
+    );
+
+    const first = await list(context);
+    const second = await list(context, { cursor: first.nextCursor });
+
+    expect(first.hasMore).toBe(true);
+    expect(second.hasMore).toBe(false);
+    expect(second.nextCursor).toBeNull();
+    expect(
+      [...first.consults, ...second.consults].map(
+        (consult) => consult.externalName,
+      ),
+    ).toEqual(names);
+  });
+
+  test("large consults are paged under the result budget without a gap or repeat", async () => {
+    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    const names = await seedNewestFirst(
+      { organizationId, callerId: `user:${context.userId}` },
+      30,
+      {
+        diagnostics: `"ж"\n`.repeat(1000),
+        rawResponse: `"ж"\n`.repeat(1000),
+      },
+    );
+
+    const seen: string[] = [];
+    let cursor: string | null | undefined;
+    let pages = 0;
+    do {
+      const page = await list(context, cursor ? { cursor } : {});
+      expect(
+        Buffer.byteLength(JSON.stringify(JSON.stringify(page)), "utf8"),
+      ).toBeLessThan(64 * 1024);
+      seen.push(...page.consults.map((consult) => consult.externalName));
+      cursor = page.nextCursor;
+      pages++;
+    } while (cursor);
+
+    expect(pages).toBeGreaterThan(1);
+    expect(seen).toEqual(names);
+  });
+
   test("does not fall back to the session the call runs in", async () => {
     const context = await callerWith({ openappaDiagnostics: ["read"] });
     await seedConsult({
@@ -238,6 +286,7 @@ async function list(
   sessionId: string;
   ownSessionsOnly: boolean;
   hasMore: boolean;
+  nextCursor: string | null;
   consults: ConsultSummary[];
 }> {
   const outcome = await executeArchestraTool(
@@ -266,8 +315,27 @@ async function failure(
   return JSON.stringify(outcome);
 }
 
+/** `count` consults a second apart, returning their names newest first. */
+async function seedNewestFirst(
+  owner: { organizationId: string; callerId: string },
+  count: number,
+  texts: { diagnostics?: string; rawResponse?: string } = {},
+): Promise<string[]> {
+  const newest = Date.now();
+  const names = Array.from({ length: count }, (_, index) => `consult-${index}`);
+  for (const [index, externalName] of names.entries())
+    await seedConsult({
+      ...owner,
+      externalName,
+      createdAt: new Date(newest - index * 1000),
+      ...texts,
+    });
+  return names;
+}
+
 async function seedConsult(params: {
   organizationId: string;
+  createdAt?: Date;
   callerId: string;
   sessionId?: string;
   externalName?: string;
@@ -277,7 +345,7 @@ async function seedConsult(params: {
   diagnostics?: string;
   rawResponse?: string;
 }): Promise<void> {
-  const now = new Date();
+  const now = params.createdAt ?? new Date();
   await db.insert(schema.openappaExternalConsultsTable).values({
     id: randomUUID(),
     organizationId: params.organizationId,

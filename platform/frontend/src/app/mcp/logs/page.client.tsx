@@ -37,7 +37,10 @@ import {
   formatCallerIdentity,
   useMcpToolCalls,
 } from "@/lib/mcp/mcp-tool-call.query";
-import { resolveMcpToolCallStatus } from "@/lib/mcp-logs/tool-call-status";
+import {
+  canShowMcpToolCallStatus,
+  resolveMcpToolCallStatus,
+} from "@/lib/mcp-logs/tool-call-status";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
@@ -423,7 +426,10 @@ function McpToolCallsTable({
         // The status lives inside the result, so an encrypted-chat row has none to
         // report. Falling through to the "Success" badge below would assert an
         // outcome the row does not record.
-        if (isEncryptedChatUnavailableContent(result)) {
+        if (
+          isEncryptedChatUnavailableContent(result) &&
+          !canShowMcpToolCallStatus(method, result)
+        ) {
           return <EncryptedChatContentUnavailableLabel value={result} />;
         }
 

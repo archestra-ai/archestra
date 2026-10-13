@@ -3,7 +3,6 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   ManagedResourceSchema,
-  type PermissionSubject,
   type ResourcePermissionGrant,
   type ScopedResource,
 } from "@archestra/shared";
@@ -13,10 +12,7 @@ import { reportBulkOutcome, runBulkAction } from "./bulk-action";
 import { handleApiError, throwOnApiError, toApiError } from "./utils";
 
 export type ResourcePermissions =
-  archestraApiTypes.GetResourcePermissionsResponses["200"] & {
-    /** MSW-only actor identity for the proposed safeguards; not an API contract. */
-    previewActorSubjects?: PermissionSubject[];
-  };
+  archestraApiTypes.GetResourcePermissionsResponses["200"];
 export type PermissionRecipient =
   archestraApiTypes.SearchResourcePermissionSubjectsResponses["200"][number];
 
@@ -34,14 +30,7 @@ export function useResourcePermissions(
       });
       throwOnApiError(error, { toastOnError: false });
       if (!data) throw new Error("Permissions response is missing");
-      return {
-        ...data,
-        previewActorSubjects:
-          process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
-          process.env.NODE_ENV !== "production"
-            ? (data as ResourcePermissions).previewActorSubjects
-            : undefined,
-      };
+      return data;
     },
   });
 }
@@ -115,6 +104,9 @@ export function useUpdateResourcePermissions(
         client.invalidateQueries({ queryKey: ["agent-runs"] }),
         client.invalidateQueries({ queryKey: ["llm-models"] }),
         client.invalidateQueries({ queryKey: ["models-with-api-keys"] }),
+        client.invalidateQueries({ queryKey: ["runtime-credentials"] }),
+        client.invalidateQueries({ queryKey: ["github-app-configs"] }),
+        client.invalidateQueries({ queryKey: ["github-pats"] }),
       ]);
       toast.success("Permissions saved");
     },

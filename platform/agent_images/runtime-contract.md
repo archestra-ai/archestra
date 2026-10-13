@@ -165,7 +165,7 @@ Send these headers on every LLM proxy and MCP gateway request. The maintained ca
 | `X-Appa-Session-ID` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Names the OpenAPPA session that holds the conversation's trust restrictions and pending calls. |
 | `X-Archestra-Runtime-Binding` | `ARCHESTRA_AGENT_RUNTIME_BINDING` | Authenticates the workspace and current run independently of the virtual key. Required with Guardrails v2. |
 
-The workspace ID stays the same for follow-ups, so a resumed conversation keeps its log session and its OpenAPPA restrictions. Send the same value in both session headers. A client that sends no session ID shares one fallback OpenAPPA session with every other run of the same user on the Agent.
+The workspace ID stays the same for follow-ups, so a resumed conversation keeps its log session and its OpenAPPA restrictions. Send the same value in both session headers.
 
 With Guardrails v2, the platform rejects a runtime credential that names a different workspace or turn. The launcher binds delegated runs to their authenticated parent before staging inputs or starting the client. The proxy and gateway restore that stored relationship; a client header cannot select another parent. Team and organization runs keep a workspace principal when the platform rotates their virtual keys.
 
@@ -185,6 +185,8 @@ Guardrails failures:
 | --- | --- | --- |
 | HTTP 500, `x-should-retry: false` | The organization's guardrails policy is invalid. The message ends with a trace reference. | Do not retry. An administrator must fix the policy. |
 | HTTP 503, `Retry-After: 5` | The policy runtime or its database is unavailable. | Retry after the delay. |
+| HTTP 400, the message names `X-Archestra-Runtime-Binding` | A model request carried no binding header while Guardrails v2 was on. | Send the header on every request. Rebuild an image derived from a maintained image on a current tag. Then start a new run. |
+| HTTP 400, `OpenAPPA runtime binding does not match this run` | The binding is malformed, expired, or issued for another workspace or turn. | Read `ARCHESTRA_AGENT_RUNTIME_BINDING` each time the client starts. Do not reuse a saved copy. |
 
 A blocked tool call is not an HTTP error. The proxy and gateway report it inside the normal response.
 

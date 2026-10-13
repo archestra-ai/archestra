@@ -13,6 +13,7 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { guardrailsPolicyQueryKey } from "@/lib/openappa-policy-views";
 import { OverviewTab } from "./overview-tab";
 
 vi.mock("@/lib/auth/auth.query");
@@ -71,20 +72,26 @@ function show() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  render(
     <QueryClientProvider client={client}>
       <OverviewTab />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 test("a fresh instance hides coverage", async () => {
-  show();
-  await waitFor(() =>
-    expect(screen.queryByText("Coverage charts")).not.toBeInTheDocument(),
-  );
+  const client = show();
+  await waitFor(() => {
+    expect(client.getQueryState(["guardrails-deployment"])?.status).toBe(
+      "success",
+    );
+    expect(client.getQueryState(guardrailsPolicyQueryKey)?.status).toBe(
+      "success",
+    );
+  });
+  expect(screen.queryByText("Coverage charts")).not.toBeInTheDocument();
   expect(screen.queryByText("Entities table")).not.toBeInTheDocument();
-  expect(screen.queryByText("Client coverage")).not.toBeInTheDocument();
 });
 
 test.each([

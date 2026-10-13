@@ -3,7 +3,6 @@ import { spawnSync } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TOOL_RUN_TOOL_FULL_NAME } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
   serializerCompiler,
@@ -23,7 +22,7 @@ import {
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { scopedSessionId } from "@/openappa/actor";
-import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
+import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   issueRuntimeBinding,
   RUNTIME_BINDING_HEADER,
@@ -31,10 +30,6 @@ import {
   stampRuntimeBinding,
   workloadPrincipal,
 } from "@/services/agent-runtime/runtime-identity";
-import {
-  CONNECTION_SETUP_CONTEXT_PARAM,
-  issueConnectionSetupContext,
-} from "@/services/connection-setup-context";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
 const RUNTIME_BINDING_ENV = "ARCHESTRA_AGENT_RUNTIME_BINDING";
@@ -70,7 +65,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
 
   beforeEach(async () => {
     openappa = config.openappa;
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -86,229 +81,6 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     config.openappa = openappa;
     vi.restoreAllMocks();
     await app.close();
-  });
-
-  describe("signed installer context", () => {
-    const secret = "test-offer-signing-secret-32chars";
-    let agentId: string;
-    let organizationId: string;
-    let userId: string;
-    let userToken: string;
-    let toolName: string;
-    let runToolAgentId: string;
-
-    beforeEach(
-      async ({
-        makeAgent,
-        makeAgentTool,
-        makeInternalMcpCatalog,
-        makeMember,
-        makeMcpServer,
-        makeTool,
-        makeToolPolicy,
-        makeUser,
-      }) => {
-        config.openappa = { ...config.openappa, offerSigningSecret: secret };
-        const agent = await makeAgent({ agentType: "mcp_gateway" });
-        const user = await makeUser();
-        await makeMember(user.id, agent.organizationId, { role: "admin" });
-        userToken = (await UserTokenModel.create(user.id, agent.organizationId))
-          .value;
-        const catalog = await makeInternalMcpCatalog({
-          organizationId: agent.organizationId,
-        });
-        await makeMcpServer({
-          catalogId: catalog.id,
-          ownerId: user.id,
-          scope: "personal",
-        });
-        const tool = await makeTool({
-          catalogId: catalog.id,
-          name: `connection_policy_${crypto.randomUUID().slice(0, 8)}`,
-        });
-        await makeAgentTool(agent.id, tool.id);
-        await makeToolPolicy(tool.id, {
-          action: "block_always",
-          reason: "Outside setup",
-          conditions: [
-            { key: "recipient", operator: "equal", value: "external" },
-          ],
-        });
-        const runToolAgent = await makeAgent({
-          organizationId: agent.organizationId,
-          agentType: "mcp_gateway",
-          toolExposureMode: "search_and_run_only",
-        });
-        await makeAgentTool(runToolAgent.id, tool.id);
-        agentId = agent.id;
-        organizationId = agent.organizationId;
-        userId = user.id;
-        toolName = tool.name;
-        runToolAgentId = runToolAgent.id;
-      },
-    );
-
-    function gatewayUrl(profileId: string, setupContext?: string) {
-      const url = new URL(`http://localhost/v1/mcp/${profileId}`);
-      if (setupContext) {
-        url.searchParams.set(CONNECTION_SETUP_CONTEXT_PARAM, setupContext);
-      }
-      return `${url.pathname}${url.search}`;
-    }
-
-    function issue(params: {
-      userId?: string;
-      organizationId?: string;
-      gatewayId?: string;
-    }) {
-      return issueConnectionSetupContext({
-        userId: params.userId ?? userId,
-        organizationId: params.organizationId ?? organizationId,
-        gatewayId: params.gatewayId ?? agentId,
-        setupId: crypto.randomUUID(),
-        secret,
-      });
-    }
-
-    function call(params: {
-      profileId?: string;
-      token?: string;
-      setupContext?: string;
-      sessionId?: string;
-      viaRunTool?: boolean;
-    }) {
-      return app.inject({
-        method: "POST",
-        url: gatewayUrl(params.profileId ?? agentId, params.setupContext),
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-          authorization: `Bearer ${params.token ?? userToken}`,
-          ...(params.sessionId
-            ? { "x-appa-session-id": params.sessionId }
-            : {}),
-        },
-        payload: {
-          jsonrpc: "2.0",
-          method: "tools/call",
-          params: params.viaRunTool
-            ? {
-                name: TOOL_RUN_TOOL_FULL_NAME,
-                arguments: {
-                  tool_name: toolName,
-                  tool_args: { recipient: "external" },
-                },
-              }
-            : { name: toolName, arguments: { recipient: "external" } },
-          id: 1,
-        },
-      });
-    }
-
-    test("bypasses the block for a signed URL and matching user token with no session header", async () => {
-      const allowed = await call({ setupContext: issue({}) });
-      expect(allowed.statusCode, allowed.body).toBe(200);
-      expect(allowed.body).not.toContain("Outside setup");
-
-      const nested = await call({
-        profileId: runToolAgentId,
-        setupContext: issue({ gatewayId: runToolAgentId }),
-        viaRunTool: true,
-      });
-      expect(nested.statusCode, nested.body).toBe(200);
-      expect(nested.body).not.toContain("Outside setup");
-    });
-
-    test("blocks the same user on an unmarked URL", async () => {
-      const blocked = await call({});
-      expect(blocked.statusCode, blocked.body).toBe(200);
-      expect(blocked.body).toContain("Outside setup");
-      expect(
-        (await call({ profileId: runToolAgentId, viaRunTool: true })).body,
-      ).toContain("Outside setup");
-    });
-
-    test("blocks a different user, organization, or gateway", async ({
-      makeMember,
-      makeUser,
-    }) => {
-      const other = await makeUser();
-      await makeMember(other.id, organizationId);
-      const { value: otherToken } = await UserTokenModel.create(
-        other.id,
-        organizationId,
-      );
-      const signed = issue({});
-      expect(
-        (await call({ token: otherToken, setupContext: signed })).body,
-      ).toContain("Outside setup");
-      expect(
-        (
-          await call({
-            setupContext: issue({ organizationId: crypto.randomUUID() }),
-          })
-        ).body,
-      ).toContain("Outside setup");
-      expect(
-        (
-          await call({
-            setupContext: issue({ gatewayId: runToolAgentId }),
-          })
-        ).body,
-      ).toContain("Outside setup");
-      expect(
-        (
-          await call({
-            profileId: runToolAgentId,
-            setupContext: signed,
-            viaRunTool: true,
-          })
-        ).body,
-      ).toContain("Outside setup");
-    });
-
-    test("blocks a tampered signed context", async () => {
-      const signed = issue({});
-      const tampered = `${signed.slice(0, -1)}${signed.endsWith("A") ? "B" : "A"}`;
-      const blocked = await call({ setupContext: tampered });
-      expect(blocked.statusCode, blocked.body).toBe(200);
-      expect(blocked.body).toContain("Outside setup");
-    });
-
-    test("rejects a signed context presented as Authorization", async () => {
-      const response = await app.inject({
-        method: "POST",
-        url: `/v1/mcp/${agentId}`,
-        headers: {
-          "content-type": "application/json",
-          accept: "application/json, text/event-stream",
-          authorization: `Bearer ${issue({})}`,
-        },
-        payload: {
-          jsonrpc: "2.0",
-          method: "tools/call",
-          params: { name: toolName, arguments: { recipient: "external" } },
-          id: 1,
-        },
-      });
-      expect(response.statusCode, response.body).toBe(401);
-    });
-
-    test("does not bypass for a client session header alone", async () => {
-      const sessionId = crypto.randomUUID();
-      const blocked = await call({ sessionId });
-      expect(blocked.statusCode, blocked.body).toBe(200);
-      expect(blocked.body).toContain("Outside setup");
-      expect(
-        (
-          await call({
-            profileId: runToolAgentId,
-            sessionId,
-            viaRunTool: true,
-          })
-        ).body,
-      ).toContain("Outside setup");
-    });
   });
 
   test("uses bounded logical metadata for an external remedy receipt", async ({
@@ -367,7 +139,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
-  test("hands the runtime the dispatch tool a signed offer names", async ({
+  test("hands the runtime the stamped child trajectory despite the gateway header", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -379,20 +151,8 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       user.id,
       agent.organizationId,
     );
-    const secret = "test-offer-signing-secret-32chars";
-    config.openappa = { ...config.openappa, offerSigningSecret: secret };
-    const jws = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: agent.organizationId,
-        sessionId: "conversation",
-        callerId: `user:${user.id}`,
-        offerId: "offer-1",
-        tool: "archestra__whoami",
-        spelling: "archestra__whoami",
-        dispatch: "my_gateway_archestra__run_tool",
-      }),
-      secret,
-    );
+    const childId = "virtual-key:vk-1|parent-session:child-agent";
+    const parentId = "virtual-key:vk-1|parent-session";
     native.executeRemedyByOffer.mockResolvedValue(
       JSON.stringify({
         decision: "mcp_result",
@@ -401,33 +161,54 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       }),
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/mcp/${agent.id}`,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${token}`,
-      },
-      payload: {
-        jsonrpc: "2.0",
-        method: "tools/call",
-        params: {
-          name: "archestra__execute_remedy_plan",
-          arguments: { offer_id: "offer-1", ...jws },
-          _meta: { "com.archestra/logicalToolCallId": "logical-remedy-1" },
+    for (const gatewayHeader of ["absent", "parent"] as const) {
+      native.executeRemedyByOffer.mockClear();
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token}`,
+          ...(gatewayHeader === "parent"
+            ? { "x-appa-session-id": "parent-session" }
+            : {}),
         },
-        id: "remedy-1",
-      },
-    });
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-1",
+              protected: "e30",
+              payload: "{}",
+              signature: "sig",
+              trajectory: currentTrajectory({
+                session_id: childId,
+                parent_id: parentId,
+              }),
+            },
+            _meta: { "com.archestra/logicalToolCallId": "logical-remedy-1" },
+          },
+          id: "remedy-1",
+        },
+      });
 
-    expect(response.statusCode, response.body).toBe(200);
-    expect(
-      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({
-      tool: "archestra__whoami",
-      dispatch: "my_gateway_archestra__run_tool",
-    });
+      expect(response.statusCode, response.body).toBe(200);
+      const sent = JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]);
+      expect(sent.trajectory?.session_id ?? sent.session_id).toBe(childId);
+      expect(sent.trajectory?.parent_id ?? sent.parent_id).toBe(parentId);
+      expect(sent.caller_id).toBe(`user:${user.id}`);
+      expect(sent.organization_id).toBe(agent.organizationId);
+      expect(sent).not.toHaveProperty("tool");
+      expect(sent).not.toHaveProperty("dispatch");
+      expect(sent).not.toHaveProperty("owner_caller_id");
+      expect(sent).not.toHaveProperty("spelling");
+      expect(sent.session_id ?? sent.trajectory?.session_id).not.toBe(
+        `user:${user.id}|parent-session`,
+      );
+    }
   });
 
   test("uses untracked mode when an anonymous-token remedy has no logical id", async ({
@@ -610,15 +391,9 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       teamId: null,
       isOrganizationToken: true,
     });
-    const jws = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: org.id,
-        sessionId: scopedSessionId(principal, workloadName),
-        callerId: principal,
-        offerId: "offer-runtime",
-      }),
-      secret,
-    );
+    const trajectory = currentTrajectory({
+      session_id: scopedSessionId(principal, workloadName),
+    });
     native.executeRemedyByOffer.mockResolvedValue(
       JSON.stringify({
         decision: "mcp_result",
@@ -639,7 +414,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       method: "tools/call",
       params: {
         name: "archestra__execute_remedy_plan",
-        arguments: { offer_id: "offer-runtime", plan: "keep", ...jws },
+        arguments: { offer_id: "offer-runtime", plan: "keep", trajectory },
       },
       id: "runtime-remedy",
     };
@@ -653,7 +428,10 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(accepted.statusCode, accepted.body).toBe(200);
     expect(
       JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({ caller_id: principal, owner_caller_id: principal });
+    ).toMatchObject({ caller_id: principal, trajectory });
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
+    ).not.toHaveProperty("owner_caller_id");
 
     native.executeRemedyByOffer.mockClear();
     const sibling = await app.inject({
@@ -759,15 +537,9 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       }),
     );
     const principal = workloadPrincipal(first.workspace.id);
-    const jws = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: org.id,
-        sessionId: scopedSessionId(principal, first.workspace.workloadName),
-        callerId: principal,
-        offerId: "offer-stamped",
-      }),
-      secret,
-    );
+    const trajectory = currentTrajectory({
+      session_id: scopedSessionId(principal, first.workspace.workloadName),
+    });
     const headers = {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
@@ -781,7 +553,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       method: "tools/call",
       params: {
         name: "archestra__execute_remedy_plan",
-        arguments: { offer_id: "offer-stamped", plan: "keep", ...jws },
+        arguments: { offer_id: "offer-stamped", plan: "keep", trajectory },
       },
       id: "stamped-remedy",
     };
@@ -887,18 +659,12 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
           arguments: {
             offer_id: "offer-system",
             plan: "keep",
-            ...signOfferClaims(
-              unsignedOfferClaims({
-                organizationId: org.id,
-                sessionId: scopedSessionId(
-                  systemPrincipal,
-                  systemRun.workspace.workloadName,
-                ),
-                callerId: systemPrincipal,
-                offerId: "offer-system",
-              }),
-              secret,
-            ),
+            trajectory: currentTrajectory({
+              session_id: scopedSessionId(
+                systemPrincipal,
+                systemRun.workspace.workloadName,
+              ),
+            }),
           },
         },
       },

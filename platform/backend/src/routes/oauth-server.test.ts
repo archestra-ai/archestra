@@ -6,10 +6,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config, { parseTrustProxy } from "@/config";
-import {
-  CONNECTION_SETUP_CONTEXT_PARAM,
-  issueConnectionSetupContext,
-} from "@/services/connection-setup-context";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
@@ -98,7 +94,7 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       );
     });
 
-    test("strips a setup query from resource and resolves an external IdP by profile slug", async ({
+    test("strips a query string from resource and resolves an external IdP by profile slug", async ({
       makeAgent,
       makeIdentityProvider,
       makeOrganization,
@@ -111,20 +107,10 @@ describe("OAuth Server - Well-Known Endpoints", () => {
         agentType: "mcp_gateway",
         identityProviderId: identityProvider.id,
       });
-      const setupContext = issueConnectionSetupContext({
-        userId: crypto.randomUUID(),
-        organizationId: org.id,
-        gatewayId: agent.id,
-        setupId: crypto.randomUUID(),
-        secret: "test-setup-signing-key",
-      });
       const metadataUrl = new URL(
         `http://localhost:9000/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}`,
       );
-      metadataUrl.searchParams.set(
-        CONNECTION_SETUP_CONTEXT_PARAM,
-        setupContext,
-      );
+      metadataUrl.searchParams.set("client_hint", "query-secret-value");
 
       const response = await app.inject({
         method: "GET",
@@ -135,9 +121,8 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body.resource).toBe(`http://localhost:9000/v1/mcp/${agent.slug}`);
-      expect(body.resource).not.toContain("cs1_");
       expect(body.resource).not.toContain("?");
-      expect(JSON.stringify(body)).not.toContain("cs1_");
+      expect(JSON.stringify(body)).not.toContain("query-secret-value");
       expect(body.authorization_servers).toEqual([
         config.frontendBaseUrl,
         issuer,

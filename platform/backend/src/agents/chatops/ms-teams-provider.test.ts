@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { ChatThreadMessageFile, ThreadFileOutcome } from "@/types";
-import MSTeamsProvider from "./ms-teams-provider";
+import MSTeamsProvider, {
+  buildApprovalDecisionCard,
+} from "./ms-teams-provider";
 
 /**
  * Tests for bot @mention detection (wasBotMentioned).
@@ -286,6 +288,64 @@ describe("MSTeamsProvider.parseWebhookNotification is mention-agnostic", () => {
 
     expect(result).not.toBeNull();
     expect(result?.text).toBe(text);
+  });
+});
+
+describe("MSTeamsProvider conversation sessions", () => {
+  test("1:1 and group chats keep their history server-side; channel threads read Graph", async () => {
+    const provider = createProvider();
+    const channel = await provider.parseWebhookNotification(
+      makeActivity({ replyToId: "root-1" }),
+      {},
+    );
+    const personal = await provider.parseWebhookNotification(
+      makeActivity({
+        conversation: { id: "a:b", conversationType: "personal" },
+        channelData: { tenant: { id: "tenant-1" } },
+      }),
+      {},
+    );
+    const group = await provider.parseWebhookNotification(
+      makeActivity({
+        conversation: {
+          id: "19:meeting_abc@thread.v2",
+          conversationType: "groupChat",
+        },
+        channelData: { tenant: { id: "tenant-1" } },
+      }),
+      {},
+    );
+    if (!channel || !personal || !group) throw new Error("not parsed");
+
+    expect(provider.usesServerSideSessionsFor(channel)).toBe(false);
+    expect(provider.usesServerSideSessionsFor(personal)).toBe(true);
+    expect(provider.usesServerSideSessionsFor(group)).toBe(true);
+  });
+
+  test("a quoted reply in a 1:1 chat stays in the chat's single conversation", async () => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        conversation: { id: "a:b", conversationType: "personal" },
+        replyToId: "quoted-message-id",
+        channelData: { tenant: { id: "tenant-1" } },
+      }),
+      {},
+    );
+
+    expect(result?.threadId).toBeUndefined();
+    expect(result?.isThreadReply).toBe(false);
+  });
+
+  test("a channel reply keeps its thread", async () => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeActivity({ replyToId: "root-1" }),
+      {},
+    );
+
+    expect(result?.threadId).toBe("root-1");
+    expect(result?.isThreadReply).toBe(true);
   });
 });
 
@@ -1143,12 +1203,24 @@ describe("MSTeamsProvider.sendReply", () => {
 });
 
 describe("MSTeamsProvider.addApprovalRequestForm", () => {
+  type Card = {
+    fallbackText?: string;
+    body: Array<Record<string, unknown>>;
+  };
+  type Action = {
+    type: string;
+    title: string;
+    data?: Record<string, unknown>;
+    targetElements?: string[];
+  };
+
   // Drives the form through the conversationReference branch (no live
   // turnContext) and captures the Adaptive Card sent to the channel.
   async function captureApprovalCard(options: {
     toolName: string;
     toolArgs?: Record<string, unknown>;
-  }): Promise<{ body: Array<Record<string, unknown>> }> {
+    reviewText?: string;
+  }): Promise<Card> {
     const provider = createProvider();
     const sendActivity = vi.fn().mockResolvedValue(undefined);
     const continueConversationAsync = vi.fn(
@@ -1172,6 +1244,7 @@ describe("MSTeamsProvider.addApprovalRequestForm", () => {
       taskId: "task-1",
       toolName: options.toolName,
       toolArgs: options.toolArgs,
+      reviewText: options.reviewText,
       originalMessage: {
         messageId: "msg-1",
         channelId: "19:abc@thread.tacv2",
@@ -1188,33 +1261,155 @@ describe("MSTeamsProvider.addApprovalRequestForm", () => {
     });
 
     const activity = sendActivity.mock.calls[0][0];
-    return activity.attachments[0].content as {
-      body: Array<Record<string, unknown>>;
-    };
+    return activity.attachments[0].content as Card;
   }
 
-  test("renders the tool's arguments as a monospace block when provided", async () => {
+  const actionSets = (card: Card) =>
+    card.body.filter((b) => b.type === "ActionSet") as Array<{
+      id?: string;
+      isVisible?: boolean;
+      actions: Action[];
+    }>;
+
+  test("shows the tool, a review line, and Approve/Deny submit actions", async () => {
     const card = await captureApprovalCard({
-      toolName: "github__create_issue",
-      toolArgs: { repo: "octo/repo", title: "Bug" },
+      toolName: "context7__query-docs",
+      toolArgs: { libraryId: "/vercel/next.js" },
     });
 
-    const textBlocks = card.body.filter((b) => b.type === "TextBlock");
-    expect(textBlocks[0].text).toBe("`github__create_issue`");
-    const argsBlock = textBlocks.find((b) => b.fontType === "Monospace");
-    expect(argsBlock).toBeDefined();
-    expect(argsBlock?.text).toContain('"repo": "octo/repo"');
-    expect(argsBlock?.text).toContain('"title": "Bug"');
+    const texts = card.body.filter((b) => b.type === "TextBlock");
+    expect(texts.map((b) => b.text)).toEqual([
+      "Approval required",
+      "context7__query-docs",
+      "Review this tool call before it can continue.",
+    ]);
+    expect(texts[1].fontType).toBe("Monospace");
+
+    const [visibleSet] = actionSets(card);
+    const submits = visibleSet.actions.filter(
+      (a) => a.type === "Action.Submit",
+    );
+    expect(submits.map((a) => a.title)).toEqual(["Approve", "Deny"]);
+    expect(submits.map((a) => a.data?.approved)).toEqual([true, false]);
+    expect(submits[1].data).toMatchObject({
+      action: "approvalDecision",
+      approvalId: "appr-1",
+      taskId: "task-1",
+      toolName: "context7__query-docs",
+      toolLabel: "context7__query-docs",
+    });
   });
 
-  test("omits the arguments block when there are no arguments", async () => {
+  test("keeps arguments in a hidden fact set behind a Show/Hide toggle", async () => {
+    const card = await captureApprovalCard({
+      toolName: "github__create_issue",
+      toolArgs: {
+        repo: "octo/repo",
+        labels: ["bug"],
+        body: "x".repeat(600),
+      },
+    });
+
+    const container = card.body.find((b) => b.type === "Container") as {
+      id: string;
+      isVisible: boolean;
+      items: Array<{ type: string; facts: { title: string; value: string }[] }>;
+    };
+    expect(container.isVisible).toBe(false);
+    const facts = container.items[0].facts;
+    expect(facts.map((f) => f.title)).toEqual(["repo", "labels", "body"]);
+    expect(facts[0].value).toBe("octo/repo");
+    expect(facts[1].value).toBe('["bug"]');
+    expect(facts[2].value.length).toBeLessThan(600);
+    expect(facts[2].value).toContain("(truncated)");
+
+    const [showSet, hideSet] = actionSets(card);
+    expect(showSet.isVisible).not.toBe(false);
+    expect(hideSet.isVisible).toBe(false);
+    const toggleOf = (set: { actions: Action[] }) =>
+      set.actions.find((a) => a.type === "Action.ToggleVisibility");
+    expect(toggleOf(showSet)?.title).toBe("Show arguments");
+    expect(toggleOf(hideSet)?.title).toBe("Hide arguments");
+    // Each toggle flips the arguments and both action sets, so the label
+    // swaps along with the arguments.
+    for (const set of [showSet, hideSet]) {
+      expect(toggleOf(set)?.targetElements?.sort()).toEqual(
+        [container.id, showSet.id, hideSet.id].sort(),
+      );
+    }
+  });
+
+  test("omits the toggle and arguments when there are none", async () => {
     const card = await captureApprovalCard({
       toolName: "dangerous_tool",
       toolArgs: {},
     });
 
-    const textBlocks = card.body.filter((b) => b.type === "TextBlock");
-    expect(textBlocks[0].text).toBe("`dangerous_tool`");
-    expect(textBlocks.some((b) => b.fontType === "Monospace")).toBe(false);
+    expect(card.body.some((b) => b.type === "Container")).toBe(false);
+    const sets = actionSets(card);
+    expect(sets).toHaveLength(1);
+    expect(sets[0].actions.map((a) => a.title)).toEqual(["Approve", "Deny"]);
+  });
+
+  test("falls back to the review text when there is no structured tool", async () => {
+    const card = await captureApprovalCard({
+      toolName: "execute_remedy_plan",
+      reviewText: "Send a Slack message to #general",
+    });
+
+    const texts = card.body.filter((b) => b.type === "TextBlock");
+    expect(texts.map((b) => b.text)).toEqual([
+      "Approval required",
+      "Send a Slack message to #general",
+    ]);
+    expect(texts[1].fontType).toBe("Monospace");
+    const [set] = actionSets(card);
+    expect(set.actions.map((a) => a.title)).toEqual(["Approve", "Deny"]);
+    expect(set.actions[0].data?.toolLabel).toBeUndefined();
+  });
+});
+
+describe("buildApprovalDecisionCard", () => {
+  test("approved: tool and a bold green 'Approved by' line, no actions", () => {
+    const card = buildApprovalDecisionCard({
+      toolLabel: "context7__query-docs",
+      approved: true,
+      deciderName: "Alice",
+    }) as { body: Array<Record<string, unknown>> };
+
+    expect(card.body).toEqual([
+      expect.objectContaining({
+        text: "context7__query-docs",
+        fontType: "Monospace",
+      }),
+      expect.objectContaining({
+        text: "Approved by Alice",
+        color: "Good",
+        weight: "Bolder",
+      }),
+    ]);
+    expect(card.body.some((b) => b.type === "ActionSet")).toBe(false);
+  });
+
+  test("denied: red 'Denied by' line", () => {
+    const card = buildApprovalDecisionCard({
+      toolLabel: "context7__query-docs",
+      approved: false,
+      deciderName: "Bob",
+    }) as { body: Array<Record<string, unknown>> };
+
+    expect(card.body[1]).toMatchObject({
+      text: "Denied by Bob",
+      color: "Attention",
+    });
+  });
+
+  test("drops the decider and tool when they are unknown", () => {
+    const card = buildApprovalDecisionCard({ approved: false }) as {
+      body: Array<Record<string, unknown>>;
+    };
+
+    expect(card.body).toHaveLength(1);
+    expect(card.body[0].text).toBe("Denied");
   });
 });

@@ -52,6 +52,7 @@ for (const width of [1280, 390]) {
           reportFailed: false,
           resolvedAt: null,
           resolvedBy: null,
+          conversation: null,
         };
         const resolvedYell = {
           ...yell,
@@ -163,7 +164,7 @@ for (const width of [1280, 390]) {
         }
         await expect(
           page.getByText(
-            "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed.",
+            "Yells are agent reports of blocks it could not make sense of or get past. Investigate them in chat and mark them resolved once fixed.",
           ),
         ).toBeVisible();
         const table = page.getByRole("table");
@@ -334,6 +335,7 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
             reportFailed: false,
             resolvedAt: null,
             resolvedBy: null,
+            conversation: null,
           },
         ],
         pagination: { limit: 20, hasNext: false, nextCursor: null },

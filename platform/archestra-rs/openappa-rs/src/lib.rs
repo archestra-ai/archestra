@@ -1,18 +1,23 @@
 //! Archestra's host boundary. Policy evaluation and event serialization live in
 //! OpenAPPA; identity, call correlation and durable processing receipts live here.
+// Clippy's deeper trait analysis overflows the default solver recursion on the
+// napi-bound dispatch futures; plain rustc stays within it.
+#![recursion_limit = "256"]
 
 mod adapter;
 mod batteries;
 mod consults;
 mod declarations;
 mod deployments;
+mod lease;
 #[allow(dead_code)]
 mod peer;
 mod policy;
+mod replay;
 
 use appa_eventlog::{
     Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
-    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, SessionScope,
+    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError, SessionScope,
     postgres::{LeasedPostgres, PostgresError},
 };
 use appa_runtime::{
@@ -91,15 +96,14 @@ fn state_mutex() -> &'static Mutex<Option<State>> {
     STATE.get_or_init(|| Mutex::new(None))
 }
 
-/// Identity context associated with a denial offer for cross-replica routing.
+/// Route resolved from the proxy-stamped trajectory and the session row, plus
+/// the original call's retry text recovered from that call's stored context.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OfferOwner {
     pub organization_id: String,
-    pub caller_id: Option<String>,
     pub session_id: String,
     pub parent_id: Option<String>,
     pub root: String,
-    pub arguments: Option<String>,
     pub tool: Option<String>,
     pub spelling: Option<String>,
     /// Client spelling of the dispatch tool (`run_tool`) used for this call.
@@ -111,31 +115,14 @@ pub struct OfferOwner {
 #[serde(transparent)]
 pub struct OfferId(pub String);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Principal {
-    User(String),
-    App(String),
-    VirtualKey(String),
-    Opaque(String),
-}
-
-impl Principal {
-    fn parse(value: &str) -> napi::Result<Self> {
-        let parsed = if let Some(id) = value.strip_prefix("user:") {
-            Self::User(id.to_owned())
-        } else if let Some(id) = value.strip_prefix("app:") {
-            Self::App(id.to_owned())
-        } else if let Some(id) = value.strip_prefix("virtual-key:") {
-            Self::VirtualKey(id.to_owned())
-        } else {
-            Self::Opaque(value.to_owned())
-        };
-        if matches!(&parsed, Self::User(id) | Self::App(id) | Self::VirtualKey(id) if id.is_empty())
-        {
-            return Err(error("invalid caller identity"));
-        }
-        Ok(parsed)
-    }
+/// The current trajectory the proxy stamps on a remedy. Not a client claim.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrajectoryStamp {
+    v: u8,
+    session_id: String,
+    #[serde(default)]
+    parent_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -150,21 +137,11 @@ pub enum RulingInput {
 #[serde(deny_unknown_fields)]
 struct OfferInput {
     organization_id: String,
-    /// Authenticated caller identity.
+    /// Authenticated spender, recorded on a caller-bound receipt. Absent for an
+    /// anonymous organization token; never compared to an offer owner.
     #[serde(default)]
     caller_id: Option<String>,
-    session_id: String,
-    #[serde(default)]
-    parent_id: Option<String>,
-    /// Principal that minted the offer, from verified host claims.
-    #[serde(default)]
-    owner_caller_id: Option<String>,
-    #[serde(default)]
-    tool: Option<String>,
-    #[serde(default)]
-    spelling: Option<String>,
-    #[serde(default)]
-    dispatch: Option<String>,
+    trajectory: TrajectoryStamp,
     /// Client tool call ID for binding durable remedy receipts.
     #[serde(default)]
     tool_call_id: Option<String>,
@@ -180,6 +157,9 @@ struct OfferInput {
     /// Recorded as the remedy result.
     #[serde(default)]
     precheck_refusal: Option<String>,
+    /// As on [`Input`]: a remedy's consults are recorded like any dispatch's.
+    #[serde(default)]
+    withhold_consult_content: bool,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -272,6 +252,10 @@ struct Input {
     ruling: Option<RulingInput>,
     #[serde(default)]
     precheck_refusal: Option<String>,
+    /// The host's Log Content mode is Metadata only: this dispatch's consult
+    /// rows keep no content.
+    #[serde(default)]
+    withhold_consult_content: bool,
 }
 
 /// Maximum byte length for precheck refusal text.
@@ -325,10 +309,64 @@ struct RecordedCall {
     spawn: bool,
     #[serde(default)]
     presentation: Option<PresentationInput>,
+    /// Host retry text. Absent on rows written before it was stored. Not part
+    /// of the call the runtime judges, so a result does not read them; they
+    /// are accepted so a stored context still decodes.
+    #[serde(default)]
+    #[allow(dead_code)]
+    spelling: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    dispatch: Option<String>,
 }
 
 fn error(message: impl ToString) -> napi::Error {
     napi::Error::from_reason(message.to_string())
+}
+
+/// The host retries: the dispatch that took the family over answers it.
+fn lease_lost() -> napi::Error {
+    error("OpenAPPA lost its lease on this operation; retry the request")
+}
+
+/// The upstream pin and host replay boundary version stored with each run.
+#[napi(js_name = "getOpenappaReplayEngineVersion")]
+pub fn get_openappa_replay_engine_version() -> String {
+    replay::ENGINE_VERSION.to_string()
+}
+
+/// Parse scenario files into tools and assertion counts without loading a policy
+/// or evaluating any call.
+#[napi(js_name = "inspectOpenappaPolicyTests")]
+pub async fn inspect_openappa_policy_tests(input: String) -> napi::Result<String> {
+    AssertUnwindSafe(async move {
+        let response = replay::inspect(&input).map_err(error)?;
+        serde_json::to_string(&response).map_err(error)
+    })
+    .catch_unwind()
+    .await
+    .map_err(|_| error("OpenAPPA scenario inspection failed unexpectedly"))?
+}
+
+/// Evaluate bounded `.appa` scenarios against the supplied effective policy. The
+/// replay core answers consults through an in-process stand-in, never a live party,
+/// and keeps every trajectory in memory.
+#[napi(js_name = "replayOpenappaPolicy")]
+pub async fn replay_openappa_policy(input: String) -> napi::Result<String> {
+    static REPLAY_SLOT: Semaphore = Semaphore::const_new(1);
+    AssertUnwindSafe(async move {
+        let _permit = REPLAY_SLOT
+            .try_acquire()
+            .map_err(|_| error("An OpenAPPA replay is already running; retry later"))?;
+        let request = replay::Request::parse(&input).map_err(error)?;
+        let response = tokio::time::timeout(Duration::from_secs(15), replay::run(request))
+            .await
+            .map_err(|_| error("OpenAPPA replay exceeded its 15 second limit"))?;
+        serde_json::to_string(&response).map_err(error)
+    })
+    .catch_unwind()
+    .await
+    .map_err(|_| error("OpenAPPA replay failed unexpectedly"))?
 }
 fn required<'a>(value: &'a Option<String>, name: &str) -> napi::Result<&'a str> {
     value
@@ -337,7 +375,15 @@ fn required<'a>(value: &'a Option<String>, name: &str) -> napi::Result<&'a str> 
         .ok_or_else(|| error(format!("missing {name}")))
 }
 fn wire(decision: &HookDecision) -> napi::Result<Value> {
+    require_decision(decision)?;
     serde_json::to_value(WireDecision::of(decision)).map_err(error)
+}
+
+fn require_decision(decision: &HookDecision) -> napi::Result<()> {
+    if let HookDecision::Refuse { detail } = decision {
+        return Err(error(format!("OpenAPPA processing interrupted: {detail}")));
+    }
+    Ok(())
 }
 
 fn session_scope(input: &Input) -> SessionScope {
@@ -366,6 +412,39 @@ fn processed_result_key(input: &Input, tool_call_id: String) -> ProcessedResultK
         session: session_scope(input),
         caller_id: input.caller_id.clone(),
         tool_call_id,
+    }
+}
+
+/// The receipts this event's dispatch may claim, for the lease's settle: its
+/// operation receipt, and the processed-result receipt of the call it answers.
+/// The call's own operation receipt is never listed: an earlier dispatch
+/// claimed it, and releasing it here on an unrelated failure could strand a
+/// committed decision behind a terminal unreleased-call answer. It recovers
+/// when the call is resubmitted, or when a later report re-drives it.
+fn own_receipts(input: &Input) -> lease::OwnReceipts {
+    let mut operations = Vec::new();
+    let mut results = Vec::new();
+    match input.event {
+        HookEventKind::SessionStart => {}
+        HookEventKind::ToolResult => {
+            results.extend(input.tool_call_id.clone());
+        }
+        HookEventKind::CancelCall => {
+            if let Some(id) = &input.tool_call_id {
+                operations.push(cancellation_operation(id));
+                results.push(id.clone());
+            }
+        }
+        HookEventKind::Remedy => {
+            operations.extend(remedy_operation(input).ok());
+            results.extend(input.tool_call_id.clone());
+        }
+        _ => operations.extend(input.operation_id.clone()),
+    }
+    lease::OwnReceipts {
+        session_id: input.session_id.clone(),
+        operations,
+        results,
     }
 }
 
@@ -627,6 +706,14 @@ pub struct CredentialDeclaration {
     pub line: u32,
 }
 
+/// A root external or profile naming a `token_env`; `reader` is its `externals`
+/// path.
+#[napi(object)]
+pub struct TokenEnvReader {
+    pub variable: String,
+    pub reader: String,
+}
+
 #[napi(object)]
 pub struct PolicyDeclarations {
     pub include: Vec<IncludeDeclaration>,
@@ -638,6 +725,8 @@ pub struct PolicyDeclarations {
     /// or profile of the document names them as its `token_env`. A dispatch carries
     /// their values in `DispatchPolicy.credentials`.
     pub runtime_credentials: Vec<String>,
+    /// Every root external or profile naming a `token_env`, bound or not.
+    pub token_env_readers: Vec<TokenEnvReader>,
     /// A shape the reader could not make sense of, naming the key and its line. An
     /// unparsable document is one error and no declarations.
     pub errors: Vec<String>,
@@ -679,6 +768,14 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                     .collect(),
                 routed_annotators: parsed.routed_annotators,
                 runtime_credentials: parsed.runtime_credentials,
+                token_env_readers: parsed
+                    .token_env_readers
+                    .into_iter()
+                    .map(|reader| TokenEnvReader {
+                        variable: reader.variable,
+                        reader: reader.reader,
+                    })
+                    .collect(),
                 errors: parsed.errors,
             })
             .map_err(|_| error("OpenAPPA declaration parsing failed"))
@@ -775,6 +872,7 @@ pub struct BatteryPackage {
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
     pub externals: Vec<BatteryExternal>,
+    pub benefit: Option<String>,
     pub setup: Option<String>,
     pub files: Vec<BatteryFileInput>,
 }
@@ -800,6 +898,7 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
                     token_env: external.token_env.clone(),
                 })
                 .collect(),
+            benefit: info.benefit.clone(),
             setup: info.setup.clone(),
             files: info
                 .files
@@ -990,7 +1089,6 @@ fn validate(input: &Input) -> napi::Result<()> {
                 serde_json::from_str(required_arguments(input)?).map_err(error)?;
         }
         HookEventKind::Remedy => {
-            required(&input.caller_id, "caller_id")?;
             let _: ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(input)?).map_err(error)?;
         }
@@ -1052,7 +1150,8 @@ async fn initialized() -> napi::Result<State> {
         .ok_or_else(|| error("OpenAPPA is not initialized"))
 }
 
-/// Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL.
+/// Executes a remedy for the proxy-stamped trajectory, resolving that session
+/// from PostgreSQL. The caller, when present, is the receipt spender.
 #[napi(js_name = "executeRemedyByOffer")]
 pub async fn execute_remedy_by_offer(
     input: String,
@@ -1065,12 +1164,7 @@ pub async fn execute_remedy_by_offer(
     {
         return Err(error("invalid organization identity"));
     }
-    if input.session_id.is_empty()
-        || input.session_id.len() > 1024
-        || input.session_id.chars().any(char::is_control)
-    {
-        return Err(error("invalid session identity"));
-    }
+    validate_trajectory(&input.trajectory)?;
     match (input.execution_mode, &input.tool_call_id) {
         (ExecutionMode::Tracked, Some(tool_call_id))
             if !tool_call_id.is_empty()
@@ -1085,19 +1179,10 @@ pub async fn execute_remedy_by_offer(
     let visible_arguments = object_raw(&input.arguments, "remedy arguments")?;
     let original_arguments = original_arguments_raw(&input.original_arguments)?;
     let _: ExecuteRemedyPlanArgs = serde_json::from_str(visible_arguments.get()).map_err(error)?;
-    let caller = input
-        .caller_id
-        .as_deref()
-        .map(Principal::parse)
-        .transpose()?;
     let state = initialized().await?;
     let owner = {
         let leased = state.lease().await?;
-        routing_owner(
-            postgres_store(&leased.state.store)?,
-            &input,
-            caller.as_ref(),
-        )?
+        routing_owner(postgres_store(&leased.state.store)?, &input)?
     };
     let Some(owner) = owner else {
         return Ok(
@@ -1107,7 +1192,8 @@ pub async fn execute_remedy_by_offer(
     let input = Input {
         yell_receiver: None,
         organization_id: owner.organization_id,
-        // Scopes receipt to the authenticated spender to prevent replay.
+        // Scopes a caller-bound receipt to the authenticated spender. Absent
+        // for an anonymous organization token.
         caller_id: input.caller_id.clone(),
         session_id: owner.session_id,
         parent_id: owner.parent_id,
@@ -1116,7 +1202,7 @@ pub async fn execute_remedy_by_offer(
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
-        tool: owner.tool.clone(),
+        tool: None,
         arguments: Some(visible_arguments),
         original_arguments: Some(original_arguments),
         spawn: false,
@@ -1126,11 +1212,12 @@ pub async fn execute_remedy_by_offer(
         child_native_id: None,
         outcome: None,
         owner_root: Some(owner.root),
-        spelling: owner.spelling,
-        dispatch: owner.dispatch,
+        spelling: None,
+        dispatch: None,
         presentation: Some(input.presentation),
         ruling: input.ruling,
         precheck_refusal: input.precheck_refusal,
+        withhold_consult_content: input.withhold_consult_content,
     };
     validate(&input)?;
     let response: Value = serde_json::from_str(&run(input, policy.into()).await?).map_err(error)?;
@@ -1152,7 +1239,7 @@ pub struct OfferReviewOutput {
 }
 
 /// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
-/// Session routing comes from the verified offer claims; no offer-owner lookup.
+/// Session routing comes from the proxy-stamped current trajectory; no offer-owner lookup.
 #[napi(js_name = "loadOfferReview")]
 pub async fn load_offer_review(
     organization_id: String,
@@ -1776,6 +1863,7 @@ impl State {
             organization_id: input.organization_id.clone(),
             session_id: input.session_id.clone(),
             caller_id: input.caller_id.clone(),
+            withhold_content: input.withhold_consult_content,
         };
         let result = leased.state.dispatch_on_lease(input, root, key).await;
         // On the dispatch's own connection, after its session lock is released.
@@ -1814,25 +1902,12 @@ impl State {
     ) -> napi::Result<Value> {
         let pg = postgres_store(&self.store)?;
         let _lock = SessionLock::acquire(pg, root.clone())?;
-        // Check every member of the family: continuing a parent while a child's
-        // result is interrupted could otherwise bypass inherited restrictions.
-        let interrupted = self
-            .store
-            .has_pending_receipts(&TrajectoryId::new(root.as_str()))
-            .map_err(error)?;
-        if interrupted {
-            return Err(error(
-                "OpenAPPA session has interrupted processing; operator recovery is required",
-            ));
-        }
+        // Holding the family's lock, this dispatch knows no other one is still
+        // working on a receipt it finds pending: the lock ends with its owner's
+        // connection. A pending receipt is recovered when its operation is
+        // resubmitted (`claim_operation`), never by closing the family.
 
-        let actor = Actor {
-            root: TrajectoryId(root.clone()),
-            child: input
-                .parent_id
-                .is_some()
-                .then(|| TrajectoryId(key.actor.clone())),
-        };
+        let actor = expected_actor(&root, &input.session_id, input.parent_id.as_deref());
         let lookup = key.clone();
         let existing = pg
             .with_client(move |client| {
@@ -1880,6 +1955,8 @@ impl State {
                     principal: input.principal.clone(),
                     address: None,
                     title: None,
+                    start: None,
+                    launch: None,
                 }
             };
             let decision = hooks::handle(&self.runtime, start).await;
@@ -1917,6 +1994,33 @@ impl State {
             }).map_err(error)?;
         }
 
+        // Taken after the session's own start events, so the lease records
+        // where the log ends before this dispatch claims anything. A remedy
+        // takes it too: its receipts recover like any operation's.
+        let own = own_receipts(&input);
+        let lease = lease::DispatchLease::take(pg, &root).map_err(error)?;
+        let work = self.handle_event(pg, input, root, key, actor);
+        match lease.hold(pg, work).await {
+            lease::Guarded::Finished(result) => {
+                // A lease that cannot be settled stays for the next dispatch,
+                // which recovers what this one left.
+                let _ = lease.settle(pg, result.is_ok(), &own);
+                result
+            }
+            lease::Guarded::Lost => Err(lease_lost()),
+        }
+    }
+
+    /// The part of a dispatch that claims and completes receipts. It runs under
+    /// the family's lock and lease.
+    async fn handle_event(
+        &self,
+        pg: &LeasedPostgres,
+        input: Input,
+        root: String,
+        key: SessionKey,
+        actor: Actor,
+    ) -> napi::Result<Value> {
         if input.event == HookEventKind::SessionStart {
             return pg
                 .with_client(move |client| {
@@ -1938,9 +2042,11 @@ impl State {
         if input.event == HookEventKind::Remedy {
             let operation = remedy_operation(&input)?;
             let request = remedy_request(&input)?;
-            let binding = ReceiptBinding::Caller {
-                caller_id: required(&input.caller_id, "caller_id")?.to_owned(),
-            };
+            let binding = remedy_binding(&input.caller_id);
+            let result_key = input
+                .tool_call_id
+                .clone()
+                .map(|tool_call_id| processed_result_key(&input, tool_call_id));
             if let Some(decision) = claim_operation(
                 &self.store,
                 &input,
@@ -1950,23 +2056,31 @@ impl State {
                 binding.clone(),
                 None,
             )? {
+                // The remedy's answer is saved. A dispatch stopped between its
+                // two completions leaves the tracked result pending; it takes
+                // exactly this answer, so finish that receipt from it now. An
+                // absent or identical result receipt is no repair at all.
+                if let Some(result_key) = result_key {
+                    let approved = decision_text(&decision)?;
+                    match self.store.complete_processed_result(
+                        result_key,
+                        approved,
+                        decision.clone(),
+                    ) {
+                        Ok(()) | Err(ReceiptError::NotPending) => {}
+                        Err(reason) => return Err(error(reason)),
+                    }
+                }
                 return Ok(decision);
             }
-            let result_key = input
-                .tool_call_id
-                .clone()
-                .map(|tool_call_id| processed_result_key(&input, tool_call_id));
             if let Some(result_key) = &result_key {
-                match self
-                    .store
-                    .claim_processed_result(ProcessedResultRequest {
-                        key: result_key.clone(),
-                        root: TrajectoryId::new(root.as_str()),
-                    })
-                    .map_err(error)?
-                {
-                    ProcessedResultClaim::Claimed => {}
-                    ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
+                match self.store.claim_processed_result(ProcessedResultRequest {
+                    key: result_key.clone(),
+                    root: TrajectoryId::new(root.as_str()),
+                }) {
+                    Ok(ProcessedResultClaim::Claimed) | Err(ReceiptError::Pending) => {}
+                    Ok(ProcessedResultClaim::Complete { decision, .. }) => return Ok(decision),
+                    Err(reason) => return Err(error(reason)),
                 }
             }
             if let Some(refusal) = &input.precheck_refusal {
@@ -2011,6 +2125,7 @@ impl State {
                 },
             )
             .await;
+            require_decision(&gate)?;
             if !matches!(gate, HookDecision::PassControl) {
                 let text = match gate {
                     HookDecision::DenyCall { feedback, .. } => feedback,
@@ -2028,20 +2143,26 @@ impl State {
                     response,
                 );
             }
+            // Before the runtime spends the offer. A missing row is empty
+            // presentation, not an error, so an old call still redeems.
+            let recorded = recorded_call_presentation(
+                pg,
+                &input.organization_id,
+                &input.session_id,
+                &offer_id,
+            )?;
             let outcome = self
                 .runtime
                 .execute_embedded_remedy_with_options(&actor, args, presentation_options(&input))
                 .await;
             let owner = OfferOwner {
                 organization_id: input.organization_id.clone(),
-                caller_id: input.caller_id.clone(),
                 session_id: input.session_id.clone(),
                 parent_id: input.parent_id.clone(),
                 root: root.clone(),
-                arguments: None,
-                tool: input.tool.clone(),
-                spelling: input.spelling.clone(),
-                dispatch: input.dispatch.clone(),
+                tool: recorded.tool,
+                spelling: recorded.spelling,
+                dispatch: recorded.dispatch,
             };
             let response = render_remedy_outcome(
                 outcome,
@@ -2073,15 +2194,8 @@ impl State {
                 return Ok(decision);
             }
         }
-        let mut request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output, "spawn_call_id": input.spawn_call_id, "child_native_id": input.child_native_id });
-        let context = (input.event == HookEventKind::ToolCall).then(|| {
-            json!({
-                "tool": input.tool,
-                "arguments": input.arguments,
-                "spawn": input.spawn,
-                "presentation": input.presentation,
-            })
-        });
+        let mut request = operation_semantic(&input);
+        let context = (input.event == HookEventKind::ToolCall).then(|| tool_call_context(&input));
         if input.event == HookEventKind::ToolCall {
             // The receipt key is also the host call identity. Results reconstruct
             // the same namespace from the provider's tool-call ID.
@@ -2091,6 +2205,24 @@ impl State {
             // Retained so the child's side can find what its parent addressed to it.
             request["spawned_id"] = json!(input.spawned_id);
         }
+        // Reject host configuration and malformed reporting input before
+        // claiming a durable operation. No effect has started yet, so these
+        // refusals must not leave a pending receipt fencing the whole family.
+        let report = if input.event == HookEventKind::Yell {
+            let reporting = self
+                .reporting
+                .as_ref()
+                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
+            let args: YellArguments =
+                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+            let endpoint = match &input.yell_receiver {
+                Some(receiver) => receiver.endpoint()?,
+                None => reporting.endpoint.clone(),
+            };
+            Some((reporting, args, endpoint))
+        } else {
+            None
+        };
         if let Some(decision) = claim_operation(
             &self.store,
             &input,
@@ -2102,22 +2234,13 @@ impl State {
         )? {
             return Ok(decision);
         }
-        let decision = if input.event == HookEventKind::Yell {
-            let reporting = self
-                .reporting
-                .as_ref()
-                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
-            let args: YellArguments =
-                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+        let decision = if let Some((reporting, args, endpoint)) = report {
             let result = appa_runtime::yell::embedded::send(
                 &self.runtime,
                 appa_runtime::yell::embedded::Request {
                     actor: actor.clone(),
                     harness: adapter::harness(),
-                    endpoint: match &input.yell_receiver {
-                        Some(receiver) => receiver.endpoint()?,
-                        None => reporting.endpoint.clone(),
-                    },
+                    endpoint,
                     hostname: reporting.hostname.clone(),
                     message: args.message,
                     with_trajectory: args.with_trajectory,
@@ -2278,28 +2401,42 @@ impl State {
             return Ok(withheld);
         }
         let key = processed_result_key(input, call_id.clone());
-        match self
-            .store
-            .claim_processed_result(ProcessedResultRequest {
-                key: key.clone(),
-                root: actor.root.clone(),
-            })
-            .map_err(error)?
-        {
-            ProcessedResultClaim::Claimed => {}
-            ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
+        match self.store.claim_processed_result(ProcessedResultRequest {
+            key: key.clone(),
+            root: actor.root.clone(),
+        }) {
+            // A pending receipt is this same result, claimed by a dispatch
+            // that stopped mid-processing. Drive it again and complete it.
+            Ok(ProcessedResultClaim::Claimed) | Err(ReceiptError::Pending) => {}
+            Ok(ProcessedResultClaim::Complete { decision, .. }) => return Ok(decision),
+            Err(reason) => return Err(error(reason)),
         }
         let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
-        let Some(released) = read_completed_operation(pg, &operation)? else {
-            // A fork replays the history of the session it forks: a result from before the
-            // fork comes back as that session processed it, never as an unknown call.
-            let response =
-                inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
-            let approved = decision_text(&response)?;
-            self.store
-                .complete_processed_result(key, approved, response.clone())
-                .map_err(error)?;
-            return Ok(response);
+        let released = match read_operation_state(pg, &operation)? {
+            OperationState::Complete(completed) => completed,
+            OperationState::Pending {
+                input: recorded,
+                context,
+            } => {
+                // The call's own dispatch was interrupted after its claim.
+                // Re-drive the recorded call — the runtime replays a committed
+                // decision and decides one it never recorded — and complete
+                // its receipt, so this result is processed against exactly the
+                // answer the host was owed.
+                self.recover_call(input, actor, &operation, recorded, context)
+                    .await?
+            }
+            OperationState::Absent => {
+                // A fork replays the history of the session it forks: a result from before the
+                // fork comes back as that session processed it, never as an unknown call.
+                let response =
+                    inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
+                let approved = decision_text(&response)?;
+                self.store
+                    .complete_processed_result(key, approved, response.clone())
+                    .map_err(error)?;
+                return Ok(response);
+            }
         };
         let allowed = matches!(
             released.decision.get("decision").and_then(Value::as_str),
@@ -2433,13 +2570,76 @@ impl State {
                 )?;
             }
         }
-        let approved = decision_text(&response)?;
+        let approved = stored_approved_output(&decision_text(&response)?, &response);
         self.store
             .complete_processed_result(key, approved, response.clone())
             .map_err(error)?;
         Ok(response)
     }
+
+    /// Re-drives a call whose receipt an interrupted dispatch left pending,
+    /// then completes that receipt with the answer. The runtime replays a
+    /// decision it committed and decides afresh one it never recorded, so the
+    /// completed receipt holds exactly the answer the first dispatch owed.
+    async fn recover_call(
+        &self,
+        input: &Input,
+        actor: &Actor,
+        operation: &OperationKey,
+        recorded: Value,
+        context: Option<Value>,
+    ) -> napi::Result<CompletedOperation> {
+        let call = recorded_call(context.clone(), recorded.clone())?;
+        let event = HookEvent::ToolCall {
+            actor: actor.clone(),
+            call: proposed_recorded_call(&call)?,
+            call_id: Some(operation.operation_id.clone()),
+            spawn: call.spawn.then_some(SpawnKind::Single),
+            prompt: None,
+            ruling: None,
+        };
+        let outcome = hooks::handle_embedded_with_options(
+            &self.runtime,
+            event,
+            result_presentation_options(input, &call),
+        )
+        .await;
+        let decision = wire(&outcome.decision)?;
+        self.store
+            .complete_operation(operation.clone(), decision.clone())
+            .map_err(error)?;
+        Ok(CompletedOperation {
+            input: recorded,
+            context,
+            decision,
+        })
+    }
 }
+
+/// The `approved_output` column of a completed tool result, which holds the text a second
+/// time when the stored decision already carries it (`approved_output`, set by
+/// [`with_approved_output`]). A long text is stored in the decision alone, and the column
+/// holds `sha256:<hex>` of it.
+///
+/// Contract, checked at the pinned OpenAPPA revision and by the base commit's own code:
+/// nothing reads the column as content. A replay answers from the decision
+/// (`ProcessedResultClaim::Complete { decision, .. }` here and in `peer.rs`,
+/// `inherited_result` selects `decision`), `resolve_result_claim` only requires the column
+/// non-null, and `resolve_result_completion` compares it with the value a second completion
+/// of a complete row passes, which no path in this crate or the base commit makes after a
+/// claim answered `Complete`. Re-check all three when the OpenAPPA pin moves, and before
+/// anything reads the column. No schema changes: the column stays non-null text.
+fn stored_approved_output(approved: &str, decision: &Value) -> String {
+    let carried = decision.get("approved_output").and_then(Value::as_str) == Some(approved);
+    if carried && approved.len() > REFERENCE_FROM_BYTES {
+        format!("sha256:{}", sha256_hex(approved.as_bytes()))
+    } else {
+        approved.to_owned()
+    }
+}
+
+/// Texts up to this size stay readable in the column.
+const REFERENCE_FROM_BYTES: usize = 1024;
 
 #[derive(Serialize)]
 struct ApprovedOutput<'a, T> {
@@ -2483,16 +2683,6 @@ struct HostMcpResult {
 enum OutputSource {
     Runtime,
     Tool,
-}
-
-#[derive(Serialize)]
-struct RenderedRemedy {
-    decision: &'static str,
-    approved_output: String,
-    output_source: OutputSource,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<&'static str>,
-    result: HostToolResult,
 }
 
 #[derive(Serialize)]
@@ -2623,7 +2813,21 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             false,
             render_human_denial(&presentation, act).unwrap_or(presentation.feedback),
         ),
-        RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, false, feedback),
+        RemedyOutcome::NoAnswer { feedback } => {
+            return Err(error(format!(
+                "OpenAPPA remedy awaiting an answer: {feedback}"
+            )));
+        }
+        RemedyOutcome::Refused {
+            reason: appa_runtime::api::RemedyRefusal::Runtime { detail },
+        } => return Err(error(format!("OpenAPPA remedy interrupted: {detail}"))),
+        RemedyOutcome::Refused {
+            reason: appa_runtime::api::RemedyRefusal::AlreadyExecuting,
+        } => {
+            return Err(error(
+                "OpenAPPA remedy is still executing; retry the request",
+            ));
+        }
         RemedyOutcome::Refused { reason } => (
             OutputSource::Runtime,
             unknown_control_reason(&reason),
@@ -2631,7 +2835,7 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             reason.detail().to_owned(),
         ),
     };
-    serde_json::to_value(RenderedRemedy {
+    serde_json::to_value(HostMcpResult {
         decision: "mcp_result",
         approved_output: text.clone(),
         output_source,
@@ -2904,38 +3108,35 @@ fn cancellation_operation(call_id: &str) -> String {
 }
 
 struct CompletedOperation {
-    #[allow(dead_code)]
-    root: String,
     input: Value,
     context: Option<Value>,
     decision: Value,
 }
 
-fn read_completed_operation(
-    pg: &LeasedPostgres,
-    key: &OperationKey,
-) -> napi::Result<Option<CompletedOperation>> {
+/// The operation receipt's state: absent, claimed but never completed (its
+/// dispatch was interrupted mid-operation), or completed with its decision.
+enum OperationState {
+    Absent,
+    Pending {
+        input: Value,
+        context: Option<Value>,
+    },
+    Complete(CompletedOperation),
+}
+
+fn read_operation_state(pg: &LeasedPostgres, key: &OperationKey) -> napi::Result<OperationState> {
     let session_id = key.session.session_id.clone();
     let operation_id = key.operation_id.clone();
     let organization_id = key.session.organization_id.clone();
     pg.with_client(move |client| {
         let row = client.query_opt(
-            "SELECT root, input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
+            "SELECT input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
             &[&session_id, &operation_id, &organization_id],
         )?;
         let Some(row) = row else {
-            return Ok(None);
+            return Ok(OperationState::Absent);
         };
-        let status: String = row.get("status");
-        if status != "complete" {
-            return Ok(None);
-        }
-        let root: String = row.get("root");
         let input: Value = row.get("input");
-        let decision: Option<Value> = row.get("decision");
-        let Some(decision) = decision else {
-            return Ok(None);
-        };
         let (actual_input, context) = if let Some(obj) = input.as_object() {
             if let Some(semantic) = obj.get("semantic") {
                 (semantic.clone(), obj.get("context").cloned())
@@ -2947,14 +3148,34 @@ fn read_completed_operation(
         } else {
             (input, None)
         };
-        Ok(Some(CompletedOperation {
-            root,
+        let status: String = row.get("status");
+        if status != "complete" {
+            return Ok(OperationState::Pending {
+                input: actual_input,
+                context,
+            });
+        }
+        let decision: Option<Value> = row.get("decision");
+        let Some(decision) = decision else {
+            return Ok(OperationState::Absent);
+        };
+        Ok(OperationState::Complete(CompletedOperation {
             input: actual_input,
             context,
             decision,
         }))
     })
     .map_err(error)
+}
+
+fn read_completed_operation(
+    pg: &LeasedPostgres,
+    key: &OperationKey,
+) -> napi::Result<Option<CompletedOperation>> {
+    Ok(match read_operation_state(pg, key)? {
+        OperationState::Complete(completed) => Some(completed),
+        OperationState::Absent | OperationState::Pending { .. } => None,
+    })
 }
 
 fn cancelled_call(
@@ -3010,53 +3231,209 @@ fn spelled_tool(canonical: &str) -> String {
         .unwrap_or_else(|| canonical.to_owned())
 }
 
-fn routing_owner(
-    pg: &LeasedPostgres,
-    input: &OfferInput,
-    spender: Option<&Principal>,
-) -> napi::Result<Option<OfferOwner>> {
-    if !owner_can_be_spent_by(input.owner_caller_id.as_deref(), spender) {
-        return Ok(None);
+fn validate_trajectory(trajectory: &TrajectoryStamp) -> napi::Result<()> {
+    if trajectory.v != 1 {
+        return Err(error("invalid trajectory"));
     }
-    let key = SessionKey::new(&input.organization_id, &input.session_id);
-    let root = pg
+    if trajectory.session_id.is_empty()
+        || trajectory.session_id.len() > 1024
+        || trajectory.session_id.chars().any(char::is_control)
+    {
+        return Err(error("invalid session identity"));
+    }
+    if let Some(parent) = &trajectory.parent_id
+        && (parent.is_empty() || parent.len() > 1024 || parent.chars().any(char::is_control))
+    {
+        return Err(error("invalid parent identity"));
+    }
+    Ok(())
+}
+
+/// The actor the runtime must match. A child stamp names this session; a root
+/// stamp does not.
+fn expected_actor(root: &str, session_id: &str, parent_id: Option<&str>) -> Actor {
+    Actor {
+        root: TrajectoryId(root.to_owned()),
+        child: parent_id
+            .is_some()
+            .then(|| TrajectoryId(session_actor(session_id))),
+    }
+}
+
+/// A present caller is the receipt spender. An anonymous token has no user id,
+/// so its receipt is session-bound and still not an owner match.
+fn remedy_binding(caller_id: &Option<String>) -> ReceiptBinding {
+    match caller_id {
+        Some(caller_id) => ReceiptBinding::Caller {
+            caller_id: caller_id.clone(),
+        },
+        None => ReceiptBinding::Session { caller_id: None },
+    }
+}
+
+fn operation_semantic(input: &Input) -> Value {
+    json!({
+        "event": input.event,
+        "tool": input.tool,
+        "arguments": input.arguments,
+        "spawn": input.spawn,
+        "output": input.output,
+        "spawn_call_id": input.spawn_call_id,
+        "child_native_id": input.child_native_id,
+    })
+}
+
+/// Host retry text lives beside the call, not in the idempotency key. Absent
+/// fields are omitted so an old row and a call without them stay the same shape.
+fn tool_call_context(input: &Input) -> Value {
+    let mut context = json!({
+        "tool": input.tool,
+        "arguments": input.arguments,
+        "spawn": input.spawn,
+        "presentation": input.presentation,
+    });
+    if let Some(spelling) = &input.spelling {
+        context["spelling"] = Value::String(spelling.clone());
+    }
+    if let Some(dispatch) = &input.dispatch {
+        context["dispatch"] = Value::String(dispatch.clone());
+    }
+    context
+}
+
+#[derive(Default)]
+struct CallPresentation {
+    tool: Option<String>,
+    spelling: Option<String>,
+    dispatch: Option<String>,
+}
+
+fn presentation_from_context(context: Option<&Value>) -> CallPresentation {
+    let Some(context) = context else {
+        return CallPresentation::default();
+    };
+    CallPresentation {
+        tool: json_string(context, "tool"),
+        spelling: json_string(context, "spelling"),
+        dispatch: json_string(context, "dispatch"),
+    }
+}
+
+fn presentation_from_row(context: Option<&Value>, tool: Option<String>) -> CallPresentation {
+    let mut presentation = presentation_from_context(context);
+    if presentation.tool.is_none() {
+        presentation.tool = present(tool);
+    }
+    presentation
+}
+
+fn presentation_from_receipt(
+    context: Option<&Value>,
+    tool: Option<String>,
+    event: Option<&str>,
+) -> CallPresentation {
+    let mut presentation = presentation_from_row(context, tool);
+    if presentation.spelling.is_none() && event == Some("peer_read_notice") {
+        presentation.spelling = presentation.tool.clone();
+    }
+    presentation
+}
+
+fn json_string(value: &Value, key: &str) -> Option<String> {
+    present(value.get(key).and_then(Value::as_str).map(str::to_owned))
+}
+
+fn present(value: Option<String>) -> Option<String> {
+    value.filter(|text| !text.is_empty())
+}
+
+/// The original call's retry text. A missing row or missing fields is an empty
+/// presentation, not a refusal: the runtime still decides whether the offer is
+/// live, and old rows fall back to the canonical tool spelling.
+fn recorded_call_presentation(
+    pg: &LeasedPostgres,
+    organization_id: &str,
+    session_id: &str,
+    offer_id: &str,
+) -> napi::Result<CallPresentation> {
+    let (organization_id, session_id, offer_id) = (
+        organization_id.to_owned(),
+        session_id.to_owned(),
+        offer_id.to_owned(),
+    );
+    let row = pg
         .with_client(move |client| {
             Ok(client
                 .query_opt(
-                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                    &[&key.organization_id, &key.actor],
+                    "SELECT o.input->'context' AS context, \
+                     COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool', o.input->>'tool') AS tool, \
+                     COALESCE(o.input->'semantic'->>'event', o.input->>'event') AS event \
+                     FROM openappa_operations o \
+                     WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                     AND ( \
+                       EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(o.decision->'offers', '[]'::jsonb)) AS offer \
+                         WHERE offer->>'offer_id' = $3) \
+                       OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(o.decision->'review', '[]'::jsonb)) AS entry \
+                         WHERE entry->>'offer_id' = $3) \
+                     ) \
+                     ORDER BY o.created_at DESC \
+                     LIMIT 1",
+                    &[&organization_id, &session_id, &offer_id],
                 )?
-                .map(|row| row.get::<_, String>(0)))
+                .map(|row| {
+                    (
+                        row.get::<_, Option<Value>>("context"),
+                        row.get::<_, Option<String>>("tool"),
+                        row.get::<_, Option<String>>("event"),
+                    )
+                }))
         })
         .map_err(error)?;
-    Ok(root.map(|root| OfferOwner {
+    Ok(match row {
+        Some((context, tool, event)) => {
+            presentation_from_receipt(context.as_ref(), tool, event.as_deref())
+        }
+        None => CallPresentation::default(),
+    })
+}
+
+fn routing_owner(pg: &LeasedPostgres, input: &OfferInput) -> napi::Result<Option<OfferOwner>> {
+    let key = SessionKey::new(&input.organization_id, &input.trajectory.session_id);
+    let stamped_parent = input.trajectory.parent_id.clone();
+    let row = pg
+        .with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT root, parent_id FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                    &[&key.organization_id, &key.actor],
+                )?
+                .map(|row| (row.get::<_, String>(0), row.get::<_, Option<String>>(1))))
+        })
+        .map_err(error)?;
+    let Some((root, recorded_parent)) = row else {
+        return Ok(None);
+    };
+    if recorded_parent != stamped_parent {
+        return Ok(None);
+    }
+    Ok(Some(OfferOwner {
         organization_id: input.organization_id.clone(),
-        caller_id: input.owner_caller_id.clone(),
-        session_id: input.session_id.clone(),
-        parent_id: input.parent_id.clone(),
+        session_id: input.trajectory.session_id.clone(),
+        parent_id: stamped_parent,
         root,
-        arguments: None,
-        tool: input.tool.clone(),
-        spelling: input.spelling.clone(),
-        dispatch: input.dispatch.clone(),
+        tool: None,
+        spelling: None,
+        dispatch: None,
     }))
 }
 
-fn owner_can_be_spent_by(owner: Option<&str>, spender: Option<&Principal>) -> bool {
-    let Some(spender) = spender else {
-        return false;
-    };
-    match owner.map(Principal::parse).transpose() {
-        Ok(Some(Principal::User(owner))) => {
-            matches!(spender, Principal::User(actual) if actual == &owner)
-        }
-        // Credential owners are organization scoped. The caller has already
-        // authenticated into the organization selected by the owner lookup.
-        Ok(Some(Principal::App(_) | Principal::VirtualKey(_) | Principal::Opaque(_))) => true,
-        Ok(None) | Err(_) => false,
-    }
-}
-
+/// Claims the operation's receipt. `None` means the dispatch does the work:
+/// the receipt was just claimed, or it was left pending by a dispatch that
+/// stopped mid-operation. The store answers `Pending` only for the identical
+/// input of the same scope, so proceeding re-drives exactly this operation:
+/// the runtime answers from its committed facts where it kept them and runs
+/// the operation afresh where it kept nothing, and the finish completes the
+/// pending receipt with that answer. A mismatched retry still fails closed.
 fn claim_operation(
     store: &LogStore,
     input: &Input,
@@ -3066,17 +3443,15 @@ fn claim_operation(
     binding: ReceiptBinding,
     context: Option<Value>,
 ) -> napi::Result<Option<Value>> {
-    match store
-        .claim_operation(OperationRequest {
-            key: operation_key(input, binding, operation.to_owned()),
-            root: TrajectoryId::new(root),
-            input: request.clone(),
-            context,
-        })
-        .map_err(error)?
-    {
-        OperationClaim::Claimed => Ok(None),
-        OperationClaim::Complete { decision } => Ok(Some(decision)),
+    match store.claim_operation(OperationRequest {
+        key: operation_key(input, binding, operation.to_owned()),
+        root: TrajectoryId::new(root),
+        input: request.clone(),
+        context,
+    }) {
+        Ok(OperationClaim::Claimed) | Err(ReceiptError::Pending) => Ok(None),
+        Ok(OperationClaim::Complete { decision }) => Ok(Some(decision)),
+        Err(reason) => Err(error(reason)),
     }
 }
 
@@ -3187,7 +3562,7 @@ mod root_lock_tests {
 mod typed_tests {
     use super::{
         OfferId, OfferOwner, RemedyAct, RemedyOutcome, RemedyPresentation,
-        authoritative_unexecuted_response, owner_can_be_spent_by, presentation_offer_ids,
+        authoritative_unexecuted_response, presentation_from_context, presentation_offer_ids,
         render_released_call, render_remedy_outcome, unknown_result_response,
     };
     use appa_runtime_api::OfferedRemedy;
@@ -3276,30 +3651,211 @@ mod typed_tests {
     }
 
     #[test]
-    fn only_the_personal_owner_may_spend_a_personal_offer() {
-        let owner = super::Principal::parse("user:owner").unwrap();
-        let stranger = super::Principal::parse("user:stranger").unwrap();
-        let credential = super::Principal::parse("virtual-key:credential").unwrap();
+    fn a_remedy_takes_a_stamped_trajectory_and_rejects_owner_claims() {
+        let accepted = serde_json::from_str::<super::OfferInput>(
+            r#"{
+                "organization_id": "organization",
+                "caller_id": "user:spender",
+                "trajectory": {"v": 1, "session_id": "session"},
+                "arguments": {"offer_id": "0123456789abcdef"},
+                "execution_mode": "untracked",
+                "original_arguments": "{}",
+                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
+            }"#,
+        );
+        assert!(accepted.is_ok());
+        assert_eq!(accepted.unwrap().caller_id.as_deref(), Some("user:spender"));
 
-        assert!(owner_can_be_spent_by(Some("user:owner"), Some(&owner)));
-        assert!(!owner_can_be_spent_by(Some("user:owner"), Some(&stranger)));
-        assert!(owner_can_be_spent_by(
-            Some("virtual-key:credential"),
-            Some(&stranger)
-        ));
-        assert!(!owner_can_be_spent_by(Some("virtual-key:credential"), None));
-        assert!(matches!(credential, super::Principal::VirtualKey(_)));
+        for claimed in [
+            r#""owner_caller_id": "user:owner""#,
+            r#""session_id": "session""#,
+            r#""tool": "read_untrusted""#,
+            r#""spelling": "client_tool""#,
+            r#""dispatch": "run_tool""#,
+            r#""protected": "header""#,
+        ] {
+            let payload = format!(
+                r#"{{
+                    "organization_id": "organization",
+                    {claimed},
+                    "trajectory": {{"v": 1, "session_id": "session"}},
+                    "arguments": {{"offer_id": "0123456789abcdef"}},
+                    "execution_mode": "untracked",
+                    "original_arguments": "{{}}",
+                    "presentation": {{"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}}
+                }}"#
+            );
+            assert!(
+                serde_json::from_str::<super::OfferInput>(&payload).is_err(),
+                "{claimed} must not select a route"
+            );
+        }
+    }
+
+    #[test]
+    fn an_anonymous_remedy_omits_the_spender_and_a_foreign_version_is_invalid() {
+        let anonymous = serde_json::from_str::<super::OfferInput>(
+            r#"{
+                "organization_id": "organization",
+                "trajectory": {"v": 1, "session_id": "session", "parent_id": null},
+                "arguments": {"offer_id": "0123456789abcdef"},
+                "execution_mode": "untracked",
+                "original_arguments": "{}",
+                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
+            }"#,
+        )
+        .unwrap();
+        assert!(anonymous.caller_id.is_none());
+        assert!(anonymous.trajectory.parent_id.is_none());
+        assert!(super::validate_trajectory(&anonymous.trajectory).is_ok());
+
+        let foreign = super::TrajectoryStamp {
+            v: 2,
+            session_id: "session".to_owned(),
+            parent_id: None,
+        };
+        assert_eq!(
+            super::validate_trajectory(&foreign).unwrap_err().reason,
+            "invalid trajectory"
+        );
+    }
+
+    #[test]
+    fn a_child_stamp_is_the_expected_actor_and_a_root_stamp_is_not() {
+        let child = super::expected_actor("recorded-root", "child-session", Some("parent"));
+        let child_actor = super::session_actor("child-session");
+        assert_eq!(child.root.0, "recorded-root");
+        assert_eq!(
+            child.child.as_ref().map(|id| id.0.as_str()),
+            Some(child_actor.as_str())
+        );
+        assert!(
+            super::expected_actor("recorded-root", "session", None)
+                .child
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn retry_text_comes_from_recorded_context_and_old_rows_fall_back() {
+        let recorded = presentation_from_context(Some(&serde_json::json!({
+            "tool": "archestra__whoami",
+            "arguments": {"verbose": true},
+            "spawn": false,
+            "spelling": "client_whoami",
+            "dispatch": "my_gateway_archestra__run_tool"
+        })));
+        let call = appa_runtime_api::ProposedCall {
+            tool: "mcp/archestra/whoami".to_owned(),
+            arguments: serde_json::value::to_raw_value(&serde_json::json!({ "verbose": true }))
+                .unwrap(),
+            cwd: None,
+        };
+        let hint = render_released_call("Authorized", &call, Some(&owner_from(recorded)));
+        let (prefix, arguments) = hint.split_once("exactly these arguments: ").unwrap();
+        assert_eq!(
+            prefix,
+            "[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with "
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(arguments).unwrap(),
+            serde_json::json!({ "tool_name": "archestra__whoami", "tool_args": { "verbose": true } })
+        );
+
+        let legacy = presentation_from_context(Some(&serde_json::json!({
+            "tool": "read_untrusted",
+            "arguments": {"path": "report.txt"},
+            "spawn": false
+        })));
+        assert!(legacy.spelling.is_none());
+        assert!(legacy.dispatch.is_none());
+        let direct = render_released_call(
+            "Authorized",
+            &appa_runtime_api::ProposedCall {
+                tool: "read_untrusted".to_owned(),
+                arguments: serde_json::value::to_raw_value(
+                    &serde_json::json!({ "path": "report.txt" }),
+                )
+                .unwrap(),
+                cwd: None,
+            },
+            Some(&owner_from(legacy)),
+        );
+        assert!(direct.contains("Call the read_untrusted tool again"));
+        assert!(!direct.contains("run_tool"));
+        assert!(presentation_from_context(None).tool.is_none());
+    }
+
+    #[test]
+    fn a_peer_read_notice_uses_its_stored_tool_as_retry_spelling() {
+        let peer = super::presentation_from_receipt(
+            None,
+            Some("acme__read_peer_message".to_owned()),
+            Some("peer_read_notice"),
+        );
+        assert_eq!(peer.spelling.as_deref(), Some("acme__read_peer_message"));
+        let ordinary = super::presentation_from_receipt(
+            None,
+            Some("read_untrusted".to_owned()),
+            Some("tool_call"),
+        );
+        assert!(ordinary.spelling.is_none());
+        assert_eq!(ordinary.tool.as_deref(), Some("read_untrusted"));
+    }
+
+    #[test]
+    fn retry_fields_stay_in_context_and_out_of_the_idempotency_key() {
+        let input: super::Input = serde_json::from_value(serde_json::json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "tool_call",
+            "tool": "read_untrusted",
+            "arguments": {"path": "report.txt"},
+            "spelling": "client.read_untrusted",
+            "dispatch": "my_gateway_archestra__run_tool"
+        }))
+        .unwrap();
+        let semantic = super::operation_semantic(&input);
+        assert!(semantic.get("spelling").is_none());
+        assert!(semantic.get("dispatch").is_none());
+        let context = super::tool_call_context(&input);
+        assert_eq!(context["spelling"], "client.read_untrusted");
+        assert_eq!(context["dispatch"], "my_gateway_archestra__run_tool");
+
+        let legacy: super::Input = serde_json::from_value(serde_json::json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "tool_call",
+            "tool": "read_untrusted",
+            "arguments": {}
+        }))
+        .unwrap();
+        let old = super::tool_call_context(&legacy);
+        assert!(old.get("spelling").is_none());
+        assert!(old.get("dispatch").is_none());
+        assert!(super::recorded_call(Some(context), serde_json::json!({})).is_ok());
+        assert!(super::recorded_call(Some(old), serde_json::json!({})).is_ok());
+    }
+
+    fn owner_from(presentation: super::CallPresentation) -> OfferOwner {
+        OfferOwner {
+            organization_id: "organization".to_owned(),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            tool: presentation.tool,
+            spelling: presentation.spelling,
+            dispatch: presentation.dispatch,
+        }
     }
 
     #[test]
     fn released_call_uses_saved_spelling_and_reports_the_accepted_plan() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
             tool: Some("canonical_tool".to_owned()),
             spelling: Some("client_tool".to_owned()),
             dispatch: None,
@@ -3320,7 +3876,7 @@ mod typed_tests {
 
     #[test]
     fn a_blocked_result_repeats_the_ruling_and_steers_the_model() {
-        let ruling = "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
+        let ruling = "[appa] Blocked: read_secret cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
         let response = authoritative_unexecuted_response(serde_json::json!({
             "decision": "deny_call",
             "feedback": ruling,
@@ -3367,11 +3923,9 @@ mod typed_tests {
     fn authorized_remedy_uses_released_arguments_and_saved_spelling() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
             tool: Some("canonical_tool".to_owned()),
             spelling: Some("client_tool".to_owned()),
             dispatch: None,
@@ -3448,11 +4002,9 @@ mod typed_tests {
     fn a_dispatched_call_is_retried_through_the_dispatch_tool() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: None,
             tool: Some("archestra__whoami".to_owned()),
             spelling: Some("archestra__whoami".to_owned()),
             dispatch: Some("my_gateway_archestra__run_tool".to_owned()),
@@ -3498,16 +4050,14 @@ mod remedy_tests {
     // The runtime's re-rendered block after a denial: the operator plan is
     // filtered out, so no Continue section remains.
     const DENIED_BLOCK: &str =
-        "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - requires attention: signoff";
+        "[appa] Blocked: send_mail cannot run yet.\n\nWhy:\n  - requires attention: signoff";
 
     fn owner(spelling: Option<&str>) -> OfferOwner {
         OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: None,
             tool: Some("archestra__todo_write".to_owned()),
             spelling: spelling.map(str::to_owned),
             dispatch: None,
@@ -3669,9 +4219,10 @@ mod remedy_tests {
     }
 
     #[test]
-    fn a_remedy_requires_a_caller() {
-        assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_err());
+    fn a_remedy_accepts_an_anonymous_spender() {
+        assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_ok());
         assert!(validate(&remedy_input(json!({}))).is_ok());
+        assert!(validate(&remedy_input(json!({ "caller_id": "" }))).is_err());
     }
 }
 
@@ -3983,6 +4534,8 @@ mod runtime_child_tests {
             principal: None,
             address: None,
             title: None,
+            start: None,
+            launch: None,
         }
     }
 
@@ -4158,6 +4711,47 @@ mod runtime_child_tests {
         assert!(
             matches!(later, HookDecision::AllowCall { .. }),
             "a later call still runs after the crossing, got {later:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod stored_approved_output_tests {
+    use super::{OutputSource, stored_approved_output, with_approved_output};
+    use serde_json::json;
+
+    fn decision(text: &str) -> serde_json::Value {
+        with_approved_output(
+            &json!({"decision": "ack"}),
+            text.to_owned(),
+            OutputSource::Tool,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_long_text_the_decision_carries_is_stored_once_as_a_reference() {
+        let text = "x".repeat(5000);
+        let stored = stored_approved_output(&text, &decision(&text));
+        assert_eq!(
+            stored,
+            format!("sha256:{}", super::sha256_hex(text.as_bytes()))
+        );
+        assert_eq!(stored, stored_approved_output(&text, &decision(&text)));
+    }
+
+    #[test]
+    fn a_short_text_or_one_the_decision_lacks_stays_in_the_column() {
+        let short = "ok".repeat(100);
+        assert_eq!(stored_approved_output(&short, &decision(&short)), short);
+        let long = "y".repeat(5000);
+        assert_eq!(
+            stored_approved_output(&long, &json!({"decision": "ack"})),
+            long
+        );
+        assert_eq!(
+            stored_approved_output(&long, &decision("another text")),
+            long
         );
     }
 }

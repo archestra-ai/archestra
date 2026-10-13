@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { AgentPinModel } from "@/models";
@@ -78,10 +78,131 @@ describe("GET /api/agent-catalog", () => {
             agentCard: makeAgentCard("none", { name }),
           },
           auth: { type: "none" },
-          scope: "org",
+          initialGrants: [
+            {
+              subject: { type: "organization", id: "*" },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
     }
+  });
+
+  test("adds the built-in agents to an access-filtered list on request", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, { role: "member" });
+    const suffix = crypto.randomUUID().slice(0, 8);
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Mine ${suffix}`,
+      access: "personal",
+      authorId: ctx.user.id,
+    });
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Theirs ${suffix}`,
+      access: "personal",
+      authorId: otherUser.id,
+    });
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Compaction ${suffix}`,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+    });
+
+    const list = async (query: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agent-catalog?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}&${query}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      return {
+        names: body.data
+          .map((row: { value: { name: string } }) =>
+            row.value.name.replace(` ${suffix}`, ""),
+          )
+          .sort(),
+        total: body.pagination.total,
+      };
+    };
+
+    expect(await list("access=mine")).toEqual({ names: ["Mine"], total: 1 });
+    // Built-in agents have no author, so the access filter does not apply to
+    // them; the flag adds them on top of the selection.
+    expect(await list("access=mine&includeBuiltIn=true")).toEqual({
+      names: ["Compaction", "Mine"],
+      total: 2,
+    });
+    expect(await list("access=others&includeBuiltIn=true")).toEqual({
+      names: ["Compaction", "Theirs"],
+      total: 2,
+    });
+    // The older origin filter still lists the built-in agents alone.
+    expect(await list("scope=built_in")).toEqual({
+      names: ["Compaction"],
+      total: 1,
+    });
+  });
+
+  test("splits external agents by how the caller reaches them, from their grants", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, { role: "member" });
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const createExternal = (name: string, authorId?: string) =>
+      createA2aRemoteAgent({
+        organizationId: ctx.organizationId,
+        authorId,
+        input: {
+          name: `${name} ${suffix}`,
+          source: { type: "inline_card", agentCard: makeAgentCard() },
+          auth: { type: "none" },
+        },
+      });
+    // An authored external agent starts personal; one without an author is
+    // shared with the organization.
+    await createExternal("Mine", ctx.user.id);
+    await createExternal("Theirs", otherUser.id);
+    await createExternal("Org");
+
+    const list = async (access: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agent-catalog?limit=50&offset=0&name=${suffix}&access=${access}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .data.map((row: { value: { name: string } }) =>
+          row.value.name.replace(` ${suffix}`, ""),
+        )
+        .sort();
+    };
+
+    // The admin reads every external agent through a `*` grant, which must
+    // not count as "shared".
+    expect(await list("mine")).toEqual(["Mine"]);
+    expect(await list("org")).toEqual(["Org"]);
+    expect(await list("shared")).toEqual([]);
+    expect(await list("others")).toEqual(["Theirs"]);
+    expect(await list("mine,shared,org")).toEqual(["Mine", "Org"]);
   });
 
   test("keeps external agents out of regular-only filtered views", async ({
@@ -106,7 +227,12 @@ describe("GET /api/agent-catalog", () => {
           agentCard: makeAgentCard(),
         },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -151,7 +277,12 @@ describe("GET /api/agent-catalog", () => {
         name: "External agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -196,6 +327,36 @@ describe("GET /api/agent-catalog", () => {
       totals: { agents: 1, externalAgents: 1 },
     });
 
+    // The viewer's automatic pins show as tiles, so the table leaves them out
+    // of its rows, its count and its "select all".
+    const withoutAutomaticPins = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agent-catalog?pinned=false&excludeIds=${bravo.id}&sortBy=name&sortDirection=asc&limit=20&offset=0`,
+    });
+    expect(withoutAutomaticPins.statusCode, withoutAutomaticPins.body).toBe(
+      200,
+    );
+    expect(withoutAutomaticPins.json()).toMatchObject({
+      data: [{ type: "external", value: { id: external.id } }],
+      pagination: { total: 1 },
+      totals: { agents: 0, externalAgents: 1 },
+    });
+
+    // ...and reads those pins as list rows of their own.
+    const automaticPins = await ctx.app.inject({
+      method: "GET",
+      url: `/api/agent-catalog?ids=${bravo.id},${zulu.id}&sortBy=name&sortDirection=asc&limit=20&offset=0`,
+    });
+    expect(automaticPins.statusCode, automaticPins.body).toBe(200);
+    expect(automaticPins.json()).toMatchObject({
+      data: [
+        { type: "agent", value: { id: bravo.id } },
+        { type: "agent", value: { id: zulu.id } },
+      ],
+      pagination: { total: 2 },
+      totals: { agents: 2, externalAgents: 0 },
+    });
+
     async function setPinnedAt(agentId: string, value: string) {
       await db
         .update(schema.agentPinsTable)
@@ -209,10 +370,95 @@ describe("GET /api/agent-catalog", () => {
     }
   });
 
+  test("sorts by the tools, subagents and last-use values the rows show", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInteraction,
+    makeMember,
+    makeTool,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const all = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Every tool",
+      accessAllTools: true,
+      accessAllSubagents: false,
+    });
+    const two = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "Two tools",
+      accessAllTools: false,
+      accessAllSubagents: true,
+    });
+    const none = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: "No tools",
+      accessAllTools: false,
+      accessAllSubagents: false,
+    });
+    for (const tool of [await makeTool(), await makeTool()]) {
+      await makeAgentTool(two.id, tool.id);
+    }
+    const external = await createA2aRemoteAgent({
+      organizationId: ctx.organizationId,
+      authorId: ctx.user.id,
+      input: {
+        name: "External agent",
+        source: { type: "inline_card", agentCard: makeAgentCard() },
+        auth: { type: "none" },
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
+      },
+    });
+
+    const idsSortedBy = async (sortBy: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agent-catalog?sortBy=${sortBy}&sortDirection=desc&limit=20&offset=0`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .data.map((row: { value: { id: string } }) => row.value.id);
+    };
+
+    // "All" outranks any count; an external agent has neither.
+    expect(await idsSortedBy("toolsCount")).toEqual([
+      all.id,
+      two.id,
+      none.id,
+      external.id,
+    ]);
+    expect(await idsSortedBy("subagentsCount")).toEqual([
+      two.id,
+      all.id,
+      none.id,
+      external.id,
+    ]);
+    // Used beats never used; the never-used rest tie and fall back to name.
+    await makeInteraction(none.id);
+    expect(await idsSortedBy("lastUsedAt")).toEqual([
+      none.id,
+      all.id,
+      external.id,
+      two.id,
+    ]);
+  });
+
   test("returns only rows the caller can bulk-select when requested", async ({
     makeAgent,
     makeCustomRole,
     makeMember,
+    makeUser,
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
       permission: { agent: ["read"] },
@@ -223,14 +469,22 @@ describe("GET /api/agent-catalog", () => {
       agentType: "agent",
       name: "Selectable regular agent",
     });
+    // Someone else owns it, so the caller can use it but not delete it.
+    const owner = await makeUser();
+    await makeMember(owner.id, ctx.organizationId);
     await createA2aRemoteAgent({
       organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
+      authorId: owner.id,
       input: {
         name: "Visible but unselectable external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -246,17 +500,14 @@ describe("GET /api/agent-catalog", () => {
     });
   });
 
-  test("scopes the personal-owner filter to external agents for non-agent-admin managers", async ({
+  test("scopes the personal-owner filter to external agents for non-agent-admins", async ({
     makeAgent,
     makeCustomRole,
     makeMember,
     makeUser,
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
-      permission: {
-        agent: ["read"],
-        organizationSettings: ["update"],
-      },
+      permission: { agent: ["read"] },
     });
     await makeMember(ctx.user.id, ctx.organizationId, { role: role.role });
     const otherUser = await makeUser();
@@ -296,7 +547,6 @@ describe("GET /api/agent-catalog", () => {
         name: "Own external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
     await createA2aRemoteAgent({
@@ -306,7 +556,6 @@ describe("GET /api/agent-catalog", () => {
         name: "Other external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
 

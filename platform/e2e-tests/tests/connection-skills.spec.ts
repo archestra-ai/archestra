@@ -55,9 +55,7 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
       expect.arrayContaining([expect.objectContaining({ id: skill.id })]),
     );
     await page.getByRole("button", { name: "Choose what to include" }).click();
-    await expect(
-      page.getByRole("switch", { name: "Include skills" }),
-    ).toBeChecked();
+    await expect(page.getByRole("switch", { name: /^Skills/ })).toBeChecked();
     await page.keyboard.press("Escape");
     await expect(
       page.getByRole("link", { name: "Download installer" }),

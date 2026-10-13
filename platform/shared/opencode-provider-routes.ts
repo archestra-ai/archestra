@@ -1,4 +1,18 @@
-import type { SupportedProvider } from "./model-constants";
+import {
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  type SupportedProvider,
+} from "./model-constants";
+
+/**
+ * Virtual keys also support providers translated by the Model Router. Microsoft
+ * 365 Copilot is left out: its proxy adapter rejects every request that carries
+ * tools, and OpenCode sends tools on each agent turn.
+ */
+export const OPENCODE_PRIMARY_PROVIDERS: readonly SupportedProvider[] = [
+  ...MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  "kimi",
+  "archestra",
+];
 
 export interface OpenCodeProviderRoute {
   provider: SupportedProvider;

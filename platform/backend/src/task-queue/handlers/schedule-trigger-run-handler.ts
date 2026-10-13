@@ -120,12 +120,7 @@ export async function handleScheduleTriggerRunExecution(
       throw new Error("Scheduled trigger target must be an internal agent");
     }
 
-    if (triggerAgent.runtime) {
-      if (!resolveAgentRuntime(triggerAgent)) {
-        throw new Error(
-          "Agent Runtime is disabled. Enable it before running this scheduled agent.",
-        );
-      }
+    if (resolveAgentRuntime(triggerAgent)) {
       await startDetachedAgentTask({
         actor: {
           kind: "user",

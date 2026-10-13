@@ -2316,55 +2316,28 @@ describe("AgentModel", () => {
   describe("getBuiltInAgent", () => {
     test("returns null when no built-in agent exists", async () => {
       const result = await AgentModel.getBuiltInAgent(
-        BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       );
       expect(result).toBeNull();
     });
 
     test("returns the built-in agent by config name", async ({ makeAgent }) => {
       await makeAgent({
-        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
         agentType: "agent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: false,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
 
       const result = await AgentModel.getBuiltInAgent(
-        BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       );
       expect(result).not.toBeNull();
-      expect(result?.name).toBe(BUILT_IN_AGENT_NAMES.POLICY_CONFIG);
+      expect(result?.name).toBe(BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION);
       expect(result?.builtInAgentConfig).toEqual(
         expect.objectContaining({
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: false,
-        }),
-      );
-    });
-
-    test("supports dual LLM built-in config variants", async ({
-      makeAgent,
-    }) => {
-      await makeAgent({
-        name: BUILT_IN_AGENT_NAMES.DUAL_LLM_MAIN,
-        agentType: "agent",
-        builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-          maxRounds: 7,
-        },
-      });
-
-      const result = await AgentModel.getBuiltInAgent(
-        BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-      );
-
-      expect(result).not.toBeNull();
-      expect(result?.builtInAgentConfig).toEqual(
-        expect.objectContaining({
-          name: BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-          maxRounds: 7,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         }),
       );
     });
@@ -2378,7 +2351,7 @@ describe("AgentModel", () => {
       });
 
       const result = await AgentModel.getBuiltInAgent(
-        BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       );
       expect(result).toBeNull();
     });
@@ -2393,11 +2366,10 @@ describe("AgentModel", () => {
         agentType: "agent",
       });
       await makeAgent({
-        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
         agentType: "agent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: false,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
 
@@ -2418,11 +2390,10 @@ describe("AgentModel", () => {
       makeAgent,
     }) => {
       await makeAgent({
-        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
         agentType: "agent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: false,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
 
@@ -2441,11 +2412,10 @@ describe("AgentModel", () => {
         agentType: "agent",
       });
       await makeAgent({
-        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
         agentType: "agent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: false,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
 
@@ -2480,11 +2450,10 @@ describe("AgentModel", () => {
       });
       await makeAgent({
         organizationId: org.id,
-        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
         agentType: "agent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: false,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
 
@@ -2509,7 +2478,7 @@ describe("AgentModel", () => {
       );
       expect(builtInResults.data).toHaveLength(1);
       expect(builtInResults.data[0].name).toBe(
-        BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
       );
 
       // Non-admin cannot see built-in agents
@@ -2583,11 +2552,10 @@ describe("AgentModel", () => {
         agentType: "agent",
       });
       await makeAgent({
-        name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+        name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
         agentType: "agent",
         builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: false,
+          name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
         },
       });
 

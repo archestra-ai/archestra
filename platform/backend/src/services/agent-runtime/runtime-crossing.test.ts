@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Readable } from "node:stream";
 import {
   TOOL_GET_RUN_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
   TOOL_STEER_RUN_FULL_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
@@ -22,6 +23,7 @@ import {
   ModelModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { openappaActor } from "@/openappa/actor";
 import { signRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as openappa from "@/openappa/service";
@@ -35,6 +37,7 @@ import { drainBackgroundWork } from "@/utils/background-work";
 import { runTaskInAgentRuntime } from "./pod-run";
 import { crossRuntimeFile, crossRuntimeOutput } from "./runtime-crossing";
 import { runtimeOpenAppaSession } from "./runtime-identity";
+import * as startTask from "./start-task";
 import { workspaceTransferTickets } from "./workspace-transfers";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
@@ -55,12 +58,10 @@ const OTHER = "user:parent|other-session";
 
 describe("runtime crossing", () => {
   const originalBaseUrl = config.agentRuntime.platformBaseUrl;
-  const originalRuntime = config.agentRuntime.enabled;
   const originalOpenappa = config.openappa.enabled;
 
   beforeEach(async () => {
     config.agentRuntime.platformBaseUrl = "http://platform.test";
-    config.agentRuntime.enabled = true;
     config.openappa.enabled = true;
     await GuardrailsDeploymentModel.setEnabled(true);
     vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
@@ -253,55 +254,153 @@ describe("runtime crossing", () => {
   afterEach(async () => {
     await drainBackgroundWork();
     config.agentRuntime.platformBaseUrl = originalBaseUrl;
-    config.agentRuntime.enabled = originalRuntime;
     config.openappa.enabled = originalOpenappa;
   });
 });
 
 describe("model-facing runtime tools", () => {
   beforeEach(async () => {
+    vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
     config.openappa.enabled = true;
-    config.agentRuntime.enabled = true;
     await GuardrailsDeploymentModel.setEnabled(true);
   });
 
-  test("no proof refuses a runtime start", async ({
+  test("no proof starts an unbound run when unrecognized clients are allowed", async ({
     makeAgent,
     makeMember,
     makeOrganization,
     makeUser,
     seedAndAssignArchestraTools,
   }) => {
-    const actor = await makeUser();
-    const org = await makeOrganization();
-    await makeMember(actor.id, org.id, { role: "member" });
-    const agent = await makeAgent({
-      organizationId: org.id,
-      authorId: actor.id,
-      runtime: runtimeConfig(),
+    const started = await startWithoutProof({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
     });
-    await seedAndAssignArchestraTools(agent.id);
-    const launch = vi.spyOn(backend, "launch");
 
-    const result = await executeArchestraTool(
-      TOOL_START_RUN_FULL_NAME,
-      { agent_id: agent.id, message: "Do the work" },
-      {
-        agent: { id: agent.id, name: agent.name },
-        agentId: agent.id,
-        userId: actor.id,
-        organizationId: org.id,
-      },
+    expect(started.result.isError).not.toBe(true);
+    expect(started.result.structuredContent).toMatchObject({
+      runtime: "dedicated",
+      session_id: started.task.id,
+    });
+    expect(started.starts).toHaveLength(1);
+    expect(started.starts[0].systemParams).not.toHaveProperty(
+      "runtimeCrossing",
+    );
+  });
+
+  test("no proof starts nothing when unrecognized clients are blocked", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
+
+    const started = await startWithoutProof({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+
+    expect(started.result.isError).toBe(true);
+    expect(JSON.stringify(started.result.content)).toContain(
+      "ask an administrator to allow unrecognized clients",
+    );
+    expect(started.starts).toHaveLength(0);
+  });
+
+  test("no proof reads and steers a run that has no parent", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+      parentId: null,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "RAW ARTIFACT" }],
+    });
+    const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+    const context = { ...seeded.context, openappaRuntimeCall: undefined };
+
+    const read = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: seeded.task.id },
+      context,
+    );
+    const steered = await executeArchestraTool(
+      TOOL_STEER_RUN_FULL_NAME,
+      { task_id: seeded.task.id, message: "Carry on" },
+      context,
     );
 
-    expect(result.isError).toBe(true);
-    expect(result.content).toEqual([
-      {
-        type: "text",
-        text: "Error: This runtime crossing has no verified source. The request was not sent.",
-      },
-    ]);
-    expect(launch).not.toHaveBeenCalled();
+    expect(read.isError).not.toBe(true);
+    expect(read.structuredContent).toMatchObject({ output: "RAW ARTIFACT" });
+    expect(steered.isError).not.toBe(true);
+    expect(steer).toHaveBeenCalledOnce();
+  });
+
+  test("no proof does not read, steer or write a run bound to a parent", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    await db.insert(schema.a2aArtifactsTable).values({
+      taskId: seeded.task.id,
+      name: "agent-response",
+      parts: [{ text: "RAW ARTIFACT" }],
+    });
+    const steer = vi.spyOn(backend, "steer").mockResolvedValue();
+    const write = vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile");
+    const context = { ...seeded.context, openappaRuntimeCall: undefined };
+
+    const read = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { task_id: seeded.task.id },
+      context,
+    );
+    const steered = await executeArchestraTool(
+      TOOL_STEER_RUN_FULL_NAME,
+      { task_id: seeded.task.id, message: "SECRET STEER" },
+      context,
+    );
+    const written = await executeArchestraTool(
+      TOOL_WRITE_WORKSPACE_FILE_FULL_NAME,
+      { task_id: seeded.task.id, path: "note.txt", content: "SECRET FILE" },
+      context,
+    );
+
+    for (const result of [read, steered, written]) {
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain("bound to a different session");
+    }
+    expect(JSON.stringify(read)).not.toContain("RAW ARTIFACT");
+    expect(steer).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
   });
 
   test("a classified spawn that resolves in-process is refused", async ({
@@ -317,6 +416,8 @@ describe("model-facing runtime tools", () => {
       organizationId: org.id,
       authorId: actor.id,
     });
+
+    await releasedSpawn(org.id);
 
     const result = await startDelegatedTask({
       agentId: agent.id,
@@ -337,6 +438,113 @@ describe("model-facing runtime tools", () => {
     expect(JSON.stringify(result.content)).toContain(
       "no longer the resolved target",
     );
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "refused",
+    });
+  });
+
+  // The proxy tells the model what the gateway recorded for the call, so the
+  // record must exist before the client gets the result.
+  test("records the run that a released launch started", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const actor = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(actor.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: actor.id,
+      runtime: runtimeConfig(),
+    });
+    await releasedSpawn(org.id);
+    // The launch itself is not under test, and a real one would outlive it.
+    const a2aContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: actor.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: a2aContext.id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    vi.spyOn(startTask, "startDetachedAgentTask").mockResolvedValue(task);
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: actor.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).not.toBe(true);
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "launched",
+      session_id: task.id,
+      state: "submitted",
+    });
+  });
+
+  test("records that a launch needs credentials, with the setup link", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const actor = await makeUser();
+    const org = await makeOrganization();
+    await makeMember(actor.id, org.id, { role: "member" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      authorId: actor.id,
+      runtime: {
+        ...runtimeConfig(),
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            label: "GitHub token",
+            scope: "per_user",
+            required: true,
+          },
+        ],
+      },
+    });
+    await releasedSpawn(org.id);
+
+    const result = await startDelegatedTask({
+      agentId: agent.id,
+      message: "Do the work",
+      context: {
+        agent: { id: agent.id, name: agent.name },
+        userId: actor.id,
+        organizationId: org.id,
+        openappaRuntimeCall: {
+          session: proofSession(org.id),
+          toolCallId: "call-1",
+          spawn: true,
+        },
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(await recordedLaunch(org.id)).toEqual({
+      kind: "failed",
+      reason: "credentials_needed",
+      setup_url: expect.stringContaining(
+        `/agents/${agent.id}?setup=credentials&keys=GITHUB_TOKEN`,
+      ),
+    });
   });
 
   test("a parent gets only the exact admitted turn value", async ({
@@ -611,6 +819,47 @@ function proofSession(organizationId: string) {
   };
 }
 
+/** The released `call-1` spawn of the proof session, as the proxy leaves it. */
+async function releasedSpawn(organizationId: string) {
+  const session = proofSession(organizationId);
+  await db.insert(schema.openappaSessionsTable).values({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    actor: openappaActor(session.session_id),
+    root: openappaActor(session.session_id),
+    parentId: null,
+    startDecision: { decision: "ack" },
+  });
+  await db.insert(schema.openappaOperationsTable).values({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    operationId: "call:call-1",
+    root: openappaActor(session.session_id),
+    status: "complete",
+    input: {
+      semantic: {
+        event: "tool_call",
+        tool: "archestra__start_run",
+        spawn: true,
+      },
+    },
+    decision: { decision: "allow_call" },
+  });
+}
+
+async function recordedLaunch(organizationId: string) {
+  const session = proofSession(organizationId);
+  const launches = await OpenAppaSpawnCorrelationModel.runtimeLaunches({
+    organizationId,
+    callerId: session.caller_id,
+    sessionId: session.session_id,
+    toolCallIds: ["call-1"],
+  });
+  return launches.get("call-1");
+}
+
 function runtimeConfig() {
   return {
     image: "runtime:test",
@@ -751,7 +1000,12 @@ test("an oversized protected export reads no bytes and issues no ticket", async 
   );
 });
 
-test("a signed released get_run proof executes once and replay cannot read the runtime again", async ({
+// The gateway lists only some runtime tools, so a connected client reaches the
+// others through `run_tool`, with the proof inside `tool_args`.
+test.for([
+  false,
+  true,
+])("a signed released get_run proof executes once and replay cannot read the runtime again (wrapped=%s)", async (wrapped, {
   makeAgent,
   makeMember,
   makeOrganization,
@@ -760,7 +1014,6 @@ test("a signed released get_run proof executes once and replay cannot read the r
 }) => {
   await GuardrailsDeploymentModel.setEnabled(true);
   config.openappa.enabled = true;
-  config.agentRuntime.enabled = true;
   const seeded = await seededRun({
     makeAgent,
     makeMember,
@@ -819,17 +1072,18 @@ test("a signed released get_run proof executes once and replay cannot read the r
       },
     ]);
     const context = { ...seeded.context, openappaRuntimeCall: undefined };
-    const first = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { ...args, runtime_proof: proof },
-      context,
-    );
+    const signed = { ...args, runtime_proof: proof };
+    const dispatch = () =>
+      wrapped
+        ? executeArchestraTool(
+            TOOL_RUN_TOOL_FULL_NAME,
+            { tool_name: TOOL_GET_RUN_FULL_NAME, tool_args: signed },
+            context,
+          )
+        : executeArchestraTool(TOOL_GET_RUN_FULL_NAME, signed, context);
+    const first = await dispatch();
     expect(JSON.stringify(first.content)).toContain("checked answer");
-    const replay = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { ...args, runtime_proof: proof },
-      context,
-    );
+    const replay = await dispatch();
     expect(replay.isError).toBe(true);
     expect(JSON.stringify(replay.content)).toContain("already claimed");
     expect(read).toHaveBeenCalledOnce();
@@ -1024,6 +1278,8 @@ async function seededRun(params: {
   makeOrganization: () => Promise<{ id: string }>;
   makeUser: () => Promise<{ id: string }>;
   seedAndAssignArchestraTools: (agentId: string) => Promise<unknown>;
+  /** The session the run is bound to; null leaves it without a parent. */
+  parentId?: string | null;
 }) {
   // This fixture fakes execution I/O; availability must not depend on a host kubeconfig.
   vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
@@ -1078,15 +1334,18 @@ async function seededRun(params: {
     actorKind: "user",
     actorId: actor.id,
   });
-  await db.insert(schema.openappaSessionsTable).values({
-    actor: openappaActor(child.session_id),
-    root: openappaActor(PARENT),
-    organizationId: org.id,
-    callerId: child.caller_id,
-    sessionId: child.session_id,
-    parentId: PARENT,
-    startDecision: { decision: "ack" },
-  });
+  const parentId = params.parentId === undefined ? PARENT : params.parentId;
+  if (parentId) {
+    await db.insert(schema.openappaSessionsTable).values({
+      actor: openappaActor(child.session_id),
+      root: openappaActor(parentId),
+      organizationId: org.id,
+      callerId: child.caller_id,
+      sessionId: child.session_id,
+      parentId,
+      startDecision: { decision: "ack" },
+    });
+  }
   return {
     task,
     child,
@@ -1103,4 +1362,54 @@ async function seededRun(params: {
       },
     },
   };
+}
+
+/** Calls start_run with no proof; the launch seam is replaced, not the gate. */
+async function startWithoutProof(params: {
+  makeAgent: (overrides: Record<string, unknown>) => Promise<Agent>;
+  makeMember: (
+    userId: string,
+    organizationId: string,
+    role: { role: "member" },
+  ) => Promise<unknown>;
+  makeOrganization: () => Promise<{ id: string }>;
+  makeUser: () => Promise<{ id: string }>;
+  seedAndAssignArchestraTools: (agentId: string) => Promise<unknown>;
+}) {
+  const actor = await params.makeUser();
+  const org = await params.makeOrganization();
+  await params.makeMember(actor.id, org.id, { role: "member" });
+  const agent = await params.makeAgent({
+    organizationId: org.id,
+    authorId: actor.id,
+    runtime: runtimeConfig(),
+  });
+  await params.seedAndAssignArchestraTools(agent.id);
+  const contextRow = await A2AContextModel.create({
+    actorKind: "user",
+    actorId: actor.id,
+  });
+  const task = await A2ATaskModel.createForRun({
+    contextId: contextRow.id,
+    agentId: agent.id,
+  });
+  const start = vi
+    .spyOn(startTask, "startDetachedAgentTask")
+    .mockResolvedValue(task);
+  try {
+    const result = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      { agent_id: agent.id, message: "Do the work" },
+      {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        userId: actor.id,
+        organizationId: org.id,
+      },
+    );
+    return { result, task, starts: start.mock.calls.map(([call]) => call) };
+  } finally {
+    // The shared setup clears calls but keeps implementations.
+    start.mockRestore();
+  }
 }

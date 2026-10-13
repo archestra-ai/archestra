@@ -58,6 +58,7 @@ export function ChannelDetailsDialog({
   readOnly,
   isSaving,
   saveLabel = "Save channel details",
+  slackBot,
   onOpenChange,
   onSave,
 }: {
@@ -67,6 +68,19 @@ export function ChannelDetailsDialog({
   readOnly: boolean;
   isSaving: boolean;
   saveLabel?: string;
+  /**
+   * Opened from an agent's Slack bot. Several bots can share a channel, and
+   * only one of them replies to every message, so the dialog speaks for this
+   * bot: whether it replies to all, who does instead, and the channel's own
+   * Slack description.
+   */
+  slackBot?: {
+    handle: string;
+    description: string | null;
+    repliesToAll: boolean;
+    /** Another agent whose bot replies to every message here. */
+    repliesToAllElsewhere: string | null;
+  };
   onOpenChange: (open: boolean) => void;
   onSave: (values: {
     channelInstructions: string | null;
@@ -85,8 +99,10 @@ export function ChannelDetailsDialog({
     if (!binding || initializedBindingIdRef.current === binding.id) return;
     initializedBindingIdRef.current = binding.id;
     setInstructions(binding.channelInstructions ?? "");
-    setAnswerAllMessages(!!binding.answerAllMessages);
-  }, [binding, open]);
+    setAnswerAllMessages(
+      slackBot ? slackBot.repliesToAll : !!binding.answerAllMessages,
+    );
+  }, [binding, open, slackBot]);
 
   const provider = binding?.provider as
     | "ms-teams"
@@ -99,7 +115,8 @@ export function ChannelDetailsDialog({
     !!binding &&
     ((instructions.trim() || null) !== (binding.channelInstructions ?? null) ||
       (canEditReplyBehavior &&
-        answerAllMessages !== !!binding.answerAllMessages));
+        answerAllMessages !==
+          (slackBot ? slackBot.repliesToAll : !!binding.answerAllMessages)));
   const overLimit = instructions.length > CHANNEL_INSTRUCTIONS_MAX_LENGTH;
   const closeGuard = useUnsavedChangesGuard({
     isDirty: !readOnly && changed,
@@ -134,39 +151,71 @@ export function ChannelDetailsDialog({
           </DialogHeader>
 
           <DialogBody className="space-y-5">
-            <dl className="grid gap-x-6 gap-y-4 border-y py-4 sm:grid-cols-2">
-              <ChannelFact label={binding.isDm ? "Chat ID" : "Channel ID"}>
-                <code className="break-all text-xs">{binding.channelId}</code>
-              </ChannelFact>
-              <ChannelFact label="Assigned agent">
-                {assignedAgent ? (
-                  <Link
-                    href={`/agents/${assignedAgent.id}`}
-                    className="inline-flex min-w-0 items-center gap-1.5 font-medium hover:underline"
-                  >
-                    <AgentIcon icon={assignedAgent.icon} size={16} />
-                    <span className="truncate">{assignedAgent.name}</span>
-                  </Link>
+            {slackBot ? (
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium">Channel description</p>
+                {slackBot.description ? (
+                  <p className="whitespace-pre-wrap break-words rounded-md border border-dashed bg-muted/40 px-3 py-2 text-sm">
+                    {slackBot.description}
+                  </p>
                 ) : (
-                  <span>None</span>
+                  <p className="text-sm text-muted-foreground">None yet.</p>
                 )}
-              </ChannelFact>
-            </dl>
+                <p className="text-xs text-muted-foreground">
+                  Set in Slack. Bots read it to know what the channel is about.
+                </p>
+              </div>
+            ) : (
+              <dl className="grid gap-x-6 gap-y-4 border-y py-4 sm:grid-cols-2">
+                <ChannelFact label={binding.isDm ? "Chat ID" : "Channel ID"}>
+                  <code className="break-all text-xs">{binding.channelId}</code>
+                </ChannelFact>
+                <ChannelFact label="Assigned agent">
+                  {assignedAgent ? (
+                    <Link
+                      href={`/agents/${assignedAgent.id}`}
+                      className="inline-flex min-w-0 items-center gap-1.5 font-medium hover:underline"
+                    >
+                      <AgentIcon icon={assignedAgent.icon} size={16} />
+                      <span className="truncate">{assignedAgent.name}</span>
+                    </Link>
+                  ) : (
+                    <span>None</span>
+                  )}
+                </ChannelFact>
+              </dl>
+            )}
 
             {canEditReplyBehavior && (
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm font-medium">Answer all messages</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    When off, this agent answers only mentions.
-                  </p>
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium">
+                      {slackBot
+                        ? "Reply to all messages"
+                        : "Answer all messages"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {slackBot
+                        ? "No @mention needed. Only one bot per channel can do this."
+                        : "When off, this agent answers only mentions."}
+                    </p>
+                  </div>
+                  <Switch
+                    aria-label={
+                      slackBot ? "Reply to all messages" : "Answer all messages"
+                    }
+                    checked={answerAllMessages}
+                    disabled={readOnly || isSaving}
+                    onCheckedChange={setAnswerAllMessages}
+                  />
                 </div>
-                <Switch
-                  aria-label="Answer all messages"
-                  checked={answerAllMessages}
-                  disabled={readOnly || isSaving}
-                  onCheckedChange={setAnswerAllMessages}
-                />
+                {slackBot?.repliesToAllElsewhere && answerAllMessages && (
+                  <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                    {slackBot.repliesToAllElsewhere} does this now. Saving
+                    switches it to @{slackBot.handle}.
+                  </p>
+                )}
               </div>
             )}
 
@@ -184,8 +233,9 @@ export function ChannelDetailsDialog({
                 minHeight={180}
               />
               <p className="text-xs text-muted-foreground">
-                These instructions take priority over the agent system prompt
-                for messages from this {noun}.
+                {slackBot
+                  ? "Every bot in this channel follows these."
+                  : `These instructions take priority over the agent system prompt for messages from this ${noun}.`}
               </p>
               <p
                 className={cn(

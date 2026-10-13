@@ -150,6 +150,15 @@ export const A2AArchestraApprovalRequestSchema = z.object({
   toolInput: z.record(z.string(), z.unknown()).optional(),
   approved: z.boolean(),
   resolved: z.boolean(),
+  // Set when the paused call is the remedy for an OpenAPPA offer that needs
+  // human review: the text to show, and when the review expires.
+  openappaReview: z
+    .object({
+      offerId: z.string(),
+      text: z.string(),
+      expiresAt: z.string(),
+    })
+    .optional(),
 });
 export type A2AArchestraApprovalRequest = z.infer<
   typeof A2AArchestraApprovalRequestSchema

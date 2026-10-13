@@ -52,11 +52,10 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "delete"],
   mcpOauthClient: ["read", "create"],
-  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
-  credential: ["read", "create", "update", "delete"],
+  credential: ["read", "create"],
 
   // OpenAPPA
   openappaPolicy: ["read", "update"],
@@ -112,11 +111,10 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "delete"],
   mcpOauthClient: ["read", "create"],
-  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
-  credential: ["read", "create", "update", "delete"],
+  credential: ["read", "create"],
 
   // OpenAPPA
   openappaPolicy: ["read", "update"],
@@ -176,12 +174,11 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "delete"],
   mcpOauthClient: ["read"],
-  toolPolicy: ["read"],
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   environment: ["read"],
-  // minting installation tokens from a stored App credential is privileged;
-  // default members get no access — editors and admins manage/use App configs
+  // Opening the Credentials page. Which credentials a member sees, connects
+  // or changes is decided by grants on each one.
   credential: ["read"],
 
   // OpenAPPA
@@ -326,6 +323,7 @@ const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
     knowledgeConnector: "knowledgeSource",
     knowledgeFile: "knowledgeSource",
     mcpGateway: "mcpGateway",
+    externalAgent: "agent",
   };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -377,12 +375,6 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpGateway:delete": "Open the trash of deleted MCP gateways",
   "mcpOauthClient:read": "Open MCP OAuth client registrations",
   "mcpOauthClient:create": "Create MCP OAuth client registrations",
-  "toolPolicy:read":
-    "View tools, tool invocation policies, and trusted data policies",
-  "toolPolicy:create": "Register tools and create security policies",
-  "toolPolicy:update":
-    "Modify tools, tool configuration, and security policies",
-  "toolPolicy:delete": "Remove tools and security policies",
   "mcpRegistry:read": "Open the MCP registry and use its built-in servers",
   "mcpRegistry:create": "Add servers to the MCP registry",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
@@ -395,10 +387,8 @@ export const permissionDescriptions: Record<string, string> = {
   "environment:update":
     "Modify deployment environments, including the org default environment",
   "environment:delete": "Delete deployment environments",
-  "credential:read": "View saved credentials",
+  "credential:read": "Open Credentials",
   "credential:create": "Create saved credentials",
-  "credential:update": "Modify saved credentials",
-  "credential:delete": "Delete saved credentials",
 
   // LLM
   "llmProxy:read": "View the LLM Proxy and its connection details",
@@ -493,6 +483,12 @@ export const requiredEndpointPermissionsMap: Partial<
 > = {
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
+  [RouteId.GetOpenAppaPolicyTests]: { openappaPolicy: ["read"] },
+  [RouteId.InspectOpenAppaPolicyTests]: { openappaPolicy: ["read"] },
+  [RouteId.UpdateOpenAppaPolicyTests]: { openappaPolicy: ["update"] },
+  [RouteId.RunOpenAppaPolicyTests]: { openappaPolicy: ["update"] },
+  [RouteId.PreviewOpenAppaPolicyTest]: { openappaPolicy: ["update"] },
+  [RouteId.GetOpenAppaPolicyTestRuns]: { openappaPolicy: ["read"] },
   [RouteId.GetGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.UpdateGuardrailsPolicy]: { openappaPolicy: ["update"] },
@@ -502,13 +498,14 @@ export const requiredEndpointPermissionsMap: Partial<
   // visibility-filtered unless the caller can update Agent settings. Run
   // history includes caller and conversation identifiers, so it requires
   // Agent-settings read and intentionally permits organization-wide access.
-  [RouteId.InspectA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.InspectA2aRemoteAgent]: { agent: ["create"] },
   [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
   [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
-  [RouteId.ListA2aRemoteAgentRuns]: { organizationSettings: ["read"] },
-  [RouteId.CreateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.UpdateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.DeleteA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { agent: ["read"] },
+  [RouteId.CreateA2aRemoteAgent]: { agent: ["create"] },
+  // Each external agent's own permission policy decides who may change it.
+  [RouteId.UpdateA2aRemoteAgent]: { agent: ["read"] },
+  [RouteId.DeleteA2aRemoteAgent]: { agent: ["read"] },
 
   /**
    * Getting basic info about the organization requires the user to be
@@ -519,6 +516,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes
   // additionally enforce Agent update + scope ownership inside the route.
+  // Saved credentials: the routes below without a role action check the
+  // caller's grant on the one credential they name.
   [RouteId.GetAgentRuntimePreflight]: {},
   [RouteId.GetClaudeCodeAccount]: {},
   [RouteId.StartClaudeCodeSignIn]: {},
@@ -528,20 +527,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetAgentRuntimeCredential]: {},
   [RouteId.DeleteAgentRuntimeCredential]: {},
   [RouteId.ListRuntimeCredentials]: { credential: ["read"] },
-  [RouteId.StartGitHubUserConnection]: { credential: ["read"] },
+  [RouteId.StartGitHubUserConnection]: {},
   [RouteId.CompleteGitHubUserConnection]: { credential: ["read"] },
   [RouteId.CreateRuntimeCredential]: { credential: ["create"] },
-  [RouteId.GetRuntimeCredentialUsage]: { credential: ["read"] },
-  [RouteId.UpdateRuntimeCredential]: { credential: ["update"] },
-  [RouteId.DeleteRuntimeCredential]: { credential: ["delete"] },
-  [RouteId.SetPersonalRuntimeCredentialConnection]: { credential: ["read"] },
-  [RouteId.DeletePersonalRuntimeCredentialConnection]: { credential: ["read"] },
-  [RouteId.SetOrganizationRuntimeCredentialConnection]: {
-    credential: ["update"],
-  },
-  [RouteId.DeleteOrganizationRuntimeCredentialConnection]: {
-    credential: ["update"],
-  },
+  [RouteId.GetRuntimeCredentialUsage]: {},
+  [RouteId.UpdateRuntimeCredential]: {},
+  [RouteId.DeleteRuntimeCredential]: {},
+  [RouteId.SetPersonalRuntimeCredentialConnection]: {},
+  [RouteId.DeletePersonalRuntimeCredentialConnection]: {},
+  [RouteId.SetOrganizationRuntimeCredentialConnection]: {},
+  [RouteId.DeleteOrganizationRuntimeCredentialConnection]: {},
   [RouteId.GetAgentRuns]: {},
   [RouteId.StartAgentRun]: {},
   [RouteId.GetMyAgentRuns]: {},
@@ -576,7 +571,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DecideClientConnection]: {},
   [RouteId.CreateConnectionSetup]: {},
   // A signed-in member may start a short connection window for their own user.
-  [RouteId.BeginConnectionPromptSession]: {},
   // Reports whether a pre-built VAF Add On package exists for this
   // installation, so the connector form can offer a download link that is
   // never a known 404. Reads nothing protected — the answer is the same for
@@ -593,12 +587,20 @@ export const requiredEndpointPermissionsMap: Partial<
   // A signed-in member lists and disconnects only their own connected clients.
   [RouteId.GetConnectedClients]: {},
   [RouteId.DisconnectConnectedClient]: {},
+  // Who connected which agent is per-employee activity, so the org-wide log
+  // of it takes org-wide log visibility (admin tier) plus reading members.
+  [RouteId.GetConnectedClientLog]: { log: ["admin"], member: ["read"] },
+  // The same per-employee activity, summarized per member.
+  [RouteId.GetAgentAdoption]: { log: ["admin"], member: ["read"] },
+  [RouteId.GetAgentAdoptionUsage]: { log: ["admin"], member: ["read"] },
   /**
    * Existence check for a connected remote, used by the Claude Code startup
    * guard on machines with no session. Returns only ok/missing.
    * Note: Auth is skipped in middleware for this route.
    */
   [RouteId.GetConnectionHealth]: {},
+  // Installation credential and live access are checked by the refresh handler.
+  [RouteId.GetConnectionInstructions]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
@@ -607,6 +609,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAllAgents]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
+  // Agent read access is checked in the handler (requireReadableAgent).
+  [RouteId.GetAgentDefaultSuggestedPrompts]: {},
   // Agent type and instance visibility are dynamic and checked by PinAgent's
   // handler. Unpin is deliberately ungated beyond authentication so a stale
   // pin can be cleared after access is lost.
@@ -621,7 +625,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.TransferProjectOwnership]: { project: ["update"] },
   [RouteId.TransferAppOwnership]: {},
   [RouteId.TransferMcpCatalogOwnership]: {},
-  [RouteId.TransferRemoteAgentOwnership]: { organizationSettings: ["update"] },
+  // The external agent's own permission policy decides who may transfer it.
+  [RouteId.TransferRemoteAgentOwnership]: { agent: ["read"] },
   [RouteId.TransferAgentOwnership]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.BulkDeleteAgents]: {},
@@ -635,8 +640,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // Export/Import: agent-type permission checked dynamically in handler
   [RouteId.ExportAgent]: {},
   [RouteId.ImportAgent]: {},
-  // Tool exclusions: agent-type read/update permission checked dynamically in handler
+  // Tool previews/exclusions: agent-type read/update permission checked in handler
   [RouteId.GetAgentToolExclusions]: {},
+  [RouteId.GetAgentMcpToolPreview]: {},
   [RouteId.UpdateAgentToolExclusions]: {},
   // Subagent (delegation-target) exclusions: agent-type read/update permission checked dynamically in handler
   [RouteId.GetAgentSubagentExclusions]: {},
@@ -677,24 +683,14 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Agent-tool routes: agent-type and scope checks are handled dynamically in the route handlers
   [RouteId.GetAgentTools]: {},
-  [RouteId.GetAllAgentTools]: {
-    toolPolicy: ["read"],
-  },
+  [RouteId.GetAllAgentTools]: {},
   [RouteId.GetAgentAvailableTokens]: {},
-  [RouteId.GetUnassignedTools]: {
-    toolPolicy: ["read"],
-  },
   // Tool-assignment routes: agent-type update checked dynamically in handler
   [RouteId.AssignToolToAgent]: {},
   [RouteId.BulkAssignTools]: {},
   [RouteId.BulkUpdateAgentTools]: {},
-  [RouteId.AutoConfigureAgentToolPolicies]: {
-    toolPolicy: ["update"],
-  },
   [RouteId.UnassignToolFromAgent]: {},
-  [RouteId.UpdateAgentTool]: {
-    toolPolicy: ["update"],
-  },
+  [RouteId.UpdateAgentTool]: {},
   // Labels are cross-type — any agent-type read permission suffices (checked in handler)
   [RouteId.GetLabelKeys]: {},
   [RouteId.GetLabelValues]: {},
@@ -707,20 +703,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RotateToken]: {
     team: ["read"],
   },
-  [RouteId.GetTool]: {
-    toolPolicy: ["read"],
-  },
   [RouteId.GetTools]: {
-    toolPolicy: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.GetToolsWithAssignments]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.GetToolObservers]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.DeleteTool]: {
-    toolPolicy: ["delete"],
+    mcpRegistry: ["read"],
   },
   [RouteId.GetInteractions]: {
     log: ["read"],
@@ -743,50 +730,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetInteractionSessionLineage]: {
     log: ["read"],
   },
-  [RouteId.GetOperators]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.GetToolInvocationPolicies]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.CreateToolInvocationPolicy]: {
-    toolPolicy: ["create"],
-  },
-  [RouteId.GetToolInvocationPolicy]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.UpdateToolInvocationPolicy]: {
-    toolPolicy: ["update"],
-  },
-  [RouteId.DeleteToolInvocationPolicy]: {
-    toolPolicy: ["delete"],
-  },
-  [RouteId.BulkUpsertDefaultCallPolicy]: {
-    toolPolicy: ["update"],
-  },
-  [RouteId.GetTrustedDataPolicies]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.CreateTrustedDataPolicy]: {
-    toolPolicy: ["create"],
-  },
-  [RouteId.GetTrustedDataPolicy]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.UpdateTrustedDataPolicy]: {
-    toolPolicy: ["update"],
-  },
-  [RouteId.DeleteTrustedDataPolicy]: {
-    toolPolicy: ["delete"],
-  },
-  [RouteId.BulkUpsertDefaultResultPolicy]: {
-    toolPolicy: ["update"],
-  },
   [RouteId.GetInternalMcpCatalog]: {},
   [RouteId.CreateInternalMcpCatalogItem]: {
     mcpRegistry: ["create"],
   },
   [RouteId.GetInternalMcpCatalogItem]: {},
+  [RouteId.GetInternalMcpCatalogCredentialPreflight]: {},
   [RouteId.GetInternalMcpCatalogTools]: {},
   [RouteId.GetInternalMcpCatalogToolsBatch]: {},
   // These handlers authorize the action against the resolved catalog object.
@@ -1290,18 +1239,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListGithubAppConfigs]: {
     credential: ["read"],
   },
-  [RouteId.GetGithubAppConfig]: {
-    credential: ["read"],
-  },
+  [RouteId.GetGithubAppConfig]: {},
   [RouteId.CreateGithubAppConfig]: {
     credential: ["create"],
   },
-  [RouteId.UpdateGithubAppConfig]: {
-    credential: ["update"],
-  },
-  [RouteId.DeleteGithubAppConfig]: {
-    credential: ["delete"],
-  },
+  [RouteId.UpdateGithubAppConfig]: {},
+  [RouteId.DeleteGithubAppConfig]: {},
   // stored PATs share the githubAppConfig resource: both are org GitHub
   // credentials managed on the same settings page by the same audience
   [RouteId.ListGithubPats]: {
@@ -1310,12 +1253,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateGithubPat]: {
     credential: ["create"],
   },
-  [RouteId.UpdateGithubPat]: {
-    credential: ["update"],
-  },
-  [RouteId.DeleteGithubPat]: {
-    credential: ["delete"],
-  },
+  [RouteId.UpdateGithubPat]: {},
+  [RouteId.DeleteGithubPat]: {},
   [RouteId.UpdateKnowledgeSettings]: {
     organizationSettings: ["update"],
   },
@@ -1530,6 +1469,33 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     organizationSettings: ["update"],
   },
+  [RouteId.ListSlackAgentBots]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.UpdateSlackAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.DeleteSlackAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.UpdateSlackAppConfigToken]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.CreateSlackAgentBotApp]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.MigrateSlackApps]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ConvertSlackAppToAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ListSlackAgentBotChannels]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.JoinSlackAgentBotChannel]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.UpdateTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
   },
@@ -1679,11 +1645,22 @@ export const requiredEndpointPermissionsMap: Partial<
   // you past the trash.
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: {},
-  [RouteId.GetGuardrailsDeployment]: { organizationSettings: ["read"] },
+  // Any member: the Connect page shows whether guardrails apply to their
+  // agent. It reveals only the on/off switch and the unrecognized-client
+  // action, not the policy.
+  [RouteId.GetGuardrailsDeployment]: {},
   [RouteId.UpdateGuardrailsDeployment]: { organizationSettings: ["update"] },
   [RouteId.GetAppaGithubSync]: { organizationSettings: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
+  [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.CompleteAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.GetPendingAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.DiscardAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.InstallAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.GetAppaGithubAppAccounts]: { credential: ["read"] },
+  [RouteId.GetAppaGithubAppRepositories]: { organizationSettings: ["update"] },
+  [RouteId.GetAppaGithubRepositoryStatus]: { organizationSettings: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.GetOpenappaBatteries]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { openappaPolicy: ["read"] },
@@ -1695,10 +1672,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteOpenappaBatteryInclude]: { openappaPolicy: ["update"] },
   [RouteId.UploadOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
+  // Binding hands an organization credential's value to helper code, so the
+  // route also requires `use` on that credential.
+  [RouteId.SetOpenappaCredentialBinding]: {
+    openappaPolicy: ["update"],
+  },
   [RouteId.GetOpenappaPolicyDeclarations]: { openappaPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
   [RouteId.AcceptHeldAppaGithubPull]: { openappaPolicy: ["update"] },
+  [RouteId.GetHeldAppaGithubPull]: { openappaPolicy: ["read"] },
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
@@ -1717,6 +1700,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaCoverageTools]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageSummary]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaTrustAudience]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaRemedies]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaRemediesActivity]: { openappaPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
@@ -1890,6 +1875,8 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
+  // Bundles the signed-in user's own startup reads; each part is self-scoped.
+  [RouteId.GetBootstrap]: {},
 
   // Site Notification Routes
   // Every signed-in user sees the active banner.
@@ -2018,8 +2005,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/gateways": { mcpGateway: ["read"] },
   "/mcp/gateways/new": { mcpGateway: ["create"] },
 
-  "/mcp/tool-policies": { toolPolicy: ["read"] },
-  "/mcp/tool-guardrails": { toolPolicy: ["read"] },
   "/openappa": { openappaPolicy: ["read"] },
   "/openappa/policy": { openappaPolicy: ["read"] },
   "/openappa/batteries": { openappaPolicy: ["read"] },
@@ -2030,6 +2015,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
   "/consults/logs": { openappaDiagnostics: ["read"] },
+  "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },
@@ -2056,7 +2042,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/messaging-channels/telegram": { organizationSettings: ["read"] },
   "/settings/messaging-channels/email": { organizationSettings: ["read"] },
   "/settings/apps": { organizationSettings: ["read"] },
-  "/settings/security": { organizationSettings: ["read"] },
   "/settings/environments": { environment: ["update"] },
   "/settings/knowledge": { organizationSettings: ["read"] },
   "/settings/users": { member: ["read"] },
@@ -2067,7 +2052,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { organizationSettings: ["read"] },
   "/settings/credentials": { credential: ["read"] },
-  "/settings/openappa": { organizationSettings: ["read"] },
+  "/settings/guardrails": { organizationSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

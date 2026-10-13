@@ -23,6 +23,14 @@ describe("getAskUserOutcome", () => {
     ).toEqual({ status: "timed-out" });
   });
 
+  it("keeps a typed answer", () => {
+    expect(
+      outcomeOf({
+        structuredContent: { action: "accept", selected: [], text: "acme" },
+      }),
+    ).toEqual({ status: "answered", selected: [], text: "acme" });
+  });
+
   it("is waiting before the result arrives", () => {
     expect(
       getAskUserOutcome({

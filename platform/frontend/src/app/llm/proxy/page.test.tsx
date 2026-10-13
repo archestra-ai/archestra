@@ -238,9 +238,15 @@ describe("LlmProxyPage connect steps", () => {
     expect(
       await within(dialog).findByText("Jev · TypeSafe"),
     ).toBeInTheDocument();
+    // Both keys are offered, but a virtual key maps only one per provider.
+    await user.click(within(dialog).getByRole("button", { name: "Change" }));
+    await user.click(within(dialog).getByRole("combobox", { name: "Jev key" }));
     expect(
-      within(dialog).queryByText("Via OpenRouter"),
-    ).not.toBeInTheDocument();
+      await screen.findByRole("option", { name: /^TypeSafe/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("option", { name: /^Via OpenRouter/ }),
+    ).toHaveAttribute("aria-selected", "false");
   });
 
   it("fills a key created here into the request", async () => {
@@ -271,6 +277,7 @@ describe("LlmProxyPage connect steps", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "New virtual key for Jev",
     });
+    // Defaults are enough: walk Key and Budget, then create from Review.
     await user.click(
       within(dialog).getByRole("button", { name: "Create key" }),
     );
@@ -289,6 +296,39 @@ describe("LlmProxyPage connect steps", () => {
         "Authorization: Bearer arch_fresh_secret_value",
       );
     });
+  });
+
+  it("lists and picks the reader's own keys before anyone else's", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([JEV_PROVIDER_KEY]),
+      ),
+      http.get(`${API_ORIGIN}/api/llm-virtual-keys`, () =>
+        HttpResponse.json(
+          page([
+            JUDGE_KEY,
+            {
+              ...JUDGE_KEY,
+              id: "vk-mine",
+              name: "My key",
+              tokenStart: "arch_me",
+              authorId: "user-1",
+            },
+          ]),
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await selectJev(user);
+
+    // Picked by default, so it can be revealed.
+    expect(await screen.findByText("arch_me••••••••••••")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Virtual key" }));
+    const options = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["My key", "Judge pipeline"]);
+    expect(screen.getByText("Your keys")).toBeInTheDocument();
+    expect(screen.getByText("Other keys")).toBeInTheDocument();
   });
 
   it("reveals the reader's own key in the request on demand", async () => {

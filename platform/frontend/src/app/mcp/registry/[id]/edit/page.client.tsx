@@ -43,12 +43,14 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
     <PageLayout
       maxWidth="wizard"
       contentOverflowX="clip"
+      icon={
+        item ? (
+          <McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />
+        ) : undefined
+      }
       title={
         item ? (
-          <span className="flex min-w-0 items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-              <McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />
-            </span>
+          <span className="flex min-w-0 items-center gap-2">
             <span className="min-w-0 truncate">Edit {item.name}</span>
             <Badge variant="secondary" className="capitalize font-normal">
               {item.serverType}

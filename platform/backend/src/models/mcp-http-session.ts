@@ -1,4 +1,4 @@
-import { eq, like, lt, or } from "drizzle-orm";
+import { and, eq, like, lt, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 
@@ -77,15 +77,28 @@ class McpHttpSessionModel {
   }
 
   /**
-   * Delete stale session and log a warning.
-   * Called when a stored session ID is no longer valid (e.g. Playwright pod restarted).
+   * Delete only the session that failed, never a replacement persisted by a
+   * concurrent recovery on this or another backend pod.
    */
-  static async deleteStaleSession(connectionKey: string): Promise<void> {
-    await McpHttpSessionModel.deleteByConnectionKey(connectionKey);
-    logger.warn(
-      { connectionKey },
-      "Deleted stale MCP HTTP session (server likely restarted)",
-    );
+  static async deleteStaleSession(
+    connectionKey: string,
+    expectedSessionId: string,
+  ): Promise<void> {
+    const deleted = await db
+      .delete(schema.mcpHttpSessionsTable)
+      .where(
+        and(
+          eq(schema.mcpHttpSessionsTable.connectionKey, connectionKey),
+          eq(schema.mcpHttpSessionsTable.sessionId, expectedSessionId),
+        ),
+      )
+      .returning({ connectionKey: schema.mcpHttpSessionsTable.connectionKey });
+    if (deleted.length > 0) {
+      logger.warn(
+        { connectionKey },
+        "Deleted stale MCP HTTP session (server likely restarted)",
+      );
+    }
   }
 
   /**

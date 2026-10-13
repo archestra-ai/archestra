@@ -1,4 +1,4 @@
-import type { Server } from "node:http";
+import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 // The dependency-free E2E fixture intentionally ships as plain JavaScript.
 // @ts-expect-error -- no declaration file is needed outside these route tests.
@@ -66,6 +66,35 @@ export function makeAgentCard(
     skills: [],
     ...security,
     ...overrides,
+  };
+}
+
+/** Serve one fixed Agent Card at the well-known path, whatever it advertises. */
+export async function serveAgentCard(card: Record<string, unknown>): Promise<{
+  baseUrl: string;
+  close: () => Promise<void>;
+}> {
+  const server = createServer((request, response) => {
+    if (request.url !== "/.well-known/agent-card.json") {
+      response.writeHead(404).end();
+      return;
+    }
+    response
+      .writeHead(200, { "content-type": "application/json" })
+      .end(JSON.stringify(card));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
   };
 }
 

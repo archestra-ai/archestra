@@ -6,20 +6,12 @@ import type {
   OnChangeFn,
   RowSelectionState,
 } from "@tanstack/react-table";
-import {
-  ArchiveRestore,
-  FolderKanban,
-  Pencil,
-  Pin,
-  PinOff,
-  Trash2,
-} from "lucide-react";
+import { ArchiveRestore, FolderKanban, Pencil, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { AgentIcon } from "@/components/agent-icon";
-import { LabelTags } from "@/components/label-tags";
+import { AgentNameCell } from "@/components/agent-name-cell";
 import { permanentDeleteRowAction } from "@/components/permanent-delete";
-import { projectVisibilityToScope } from "@/components/projects/project-visibility";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
+import { RowPinButton } from "@/components/row-pin-button";
 import {
   type TableRowAction,
   TableRowActions,
@@ -38,9 +30,8 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 type ProjectListItem = archestraApiTypes.GetProjectsResponses["200"][number];
 
-// Table variant of one projects section (the caller keeps the same Pinned /
-// All projects grouping as the card view). Mirrors the card actions:
-// pin/unpin, edit details, delete.
+// The projects table under the pinned tiles. Row actions: pin/unpin, edit
+// details, delete.
 export function ProjectsTable({
   projects,
   onTogglePin,
@@ -83,30 +74,31 @@ export function ProjectsTable({
       cell: ({ row }) => {
         const project = row.original;
         return (
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="shrink-0">
-                <AgentIcon
-                  icon={project.icon}
-                  fallbackType="project"
-                  size={16}
-                />
-              </span>
-              <span className="truncate font-medium">{project.name}</span>
-              <LabelTags labels={project.labels} />
-            </div>
-            {project.description && (
-              <div className="truncate text-xs text-muted-foreground">
-                {project.description}
-              </div>
-            )}
-          </div>
+          <AgentNameCell
+            name={project.name}
+            href={`/projects/${project.id}`}
+            icon={
+              <AgentIcon icon={project.icon} fallbackType="project" size={16} />
+            }
+            labels={project.labels}
+            description={project.description}
+            extraBadges={
+              // Someone else's project, reached through project oversight.
+              project.viewerRole === "admin" && project.visibility === null ? (
+                <Badge variant="secondary" className="shrink-0">
+                  {project.ownerName
+                    ? `Owned by ${project.ownerName}`
+                    : "Other user"}
+                </Badge>
+              ) : undefined
+            }
+          />
         );
       },
     },
     {
       id: "actions",
-      size: 112,
+      size: 136,
       header: () => <div className="text-right">Actions</div>,
       cell: ({ row }) => {
         const project = row.original;
@@ -120,19 +112,6 @@ export function ProjectsTable({
           isProjectAdmin: !!isProjectAdmin,
         });
         const actions: TableRowAction[] = [
-          ...(canPin
-            ? [
-                {
-                  icon: project.pinnedAt ? (
-                    <PinOff className="h-4 w-4" />
-                  ) : (
-                    <Pin className="h-4 w-4" />
-                  ),
-                  label: project.pinnedAt ? "Unpin" : "Pin",
-                  onClick: () => onTogglePin(project),
-                } satisfies TableRowAction,
-              ]
-            : []),
           ...(canManage
             ? [
                 {
@@ -154,7 +133,14 @@ export function ProjectsTable({
             : []),
         ];
         return (
-          <div className="flex justify-end">
+          <div className="flex items-center justify-end gap-1.5">
+            {canPin && (
+              <RowPinButton
+                name={project.name}
+                pinned={Boolean(project.pinnedAt)}
+                onToggle={() => onTogglePin(project)}
+              />
+            )}
             <ProjectTableActions project={project} actions={actions} />
           </div>
         );
@@ -176,7 +162,8 @@ export function ProjectsTable({
       emptyIcon={FolderKanban}
       emptyMessage="No projects yet"
       hidePaginationWhenSinglePage
-      fixedWidthColumnIds={["sharing"]}
+      tableClassName="table-fixed"
+      fixedWidthColumnIds={["actions"]}
       flexibleColumnIds={["name"]}
     />
   );
@@ -278,6 +265,59 @@ export function DeletedProjectsTable({
   );
 }
 
+/**
+ * A pinned project's "More actions" menu: what its row offers besides the
+ * pin, which the tile shows on its own.
+ */
+export function ProjectActionsMenu({
+  project,
+  onEdit,
+  onDelete,
+}: {
+  project: ProjectListItem;
+  onEdit: (project: ProjectListItem) => void;
+  onDelete: (project: ProjectListItem) => void;
+}) {
+  const { data: isProjectAdmin } = useHasPermissions(
+    { project: ["update"] },
+    "*",
+  );
+  const canManage = canManageProject(project.viewerRole, !!isProjectAdmin);
+  const canDelete = canDeleteProject({
+    viewerRole: project.viewerRole,
+    isProjectAdmin: !!isProjectAdmin,
+  });
+  const dropdownActions: TableRowAction[] = [
+    ...(canManage
+      ? [
+          {
+            icon: <Pencil className="h-4 w-4" />,
+            label: "Edit details",
+            onClick: () => onEdit(project),
+          } satisfies TableRowAction,
+        ]
+      : []),
+    ...(canManage && canDelete
+      ? [
+          {
+            icon: <Trash2 className="h-4 w-4" />,
+            label: "Delete",
+            variant: "destructive",
+            onClick: () => onDelete(project),
+          } satisfies TableRowAction,
+        ]
+      : []),
+  ];
+  if (dropdownActions.length === 0) return null;
+  return (
+    <TableRowActions
+      itemName={project.name}
+      actions={[]}
+      dropdownActions={dropdownActions}
+    />
+  );
+}
+
 function ProjectTableActions({
   project,
   actions,
@@ -286,14 +326,7 @@ function ProjectTableActions({
   actions: TableRowAction[];
 }) {
   return (
-    <ResourceTableRowActions
-      kind="project"
-      resource={{
-        id: project.id,
-        name: project.name,
-        authorId: project.createdBy?.id ?? null,
-        scope: projectVisibilityToScope(project.visibility),
-      }}
+    <TableRowActions
       itemName={project.name}
       actions={actions.filter((action) => action.variant !== "destructive")}
       dropdownActions={actions.filter(

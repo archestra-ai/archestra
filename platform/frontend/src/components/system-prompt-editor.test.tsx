@@ -1,4 +1,3 @@
-import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -78,33 +77,18 @@ describe("SystemPromptEditor", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("includes only the variables available to the selected agent", async () => {
+  it("lists the template variables and examples available to agents", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(
-      <SystemPromptEditor value="" onChange={vi.fn()} />,
-    );
+    render(<SystemPromptEditor value="" onChange={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "More info" }));
     const table = screen.getByRole("table", {
       name: "Template variables and helpers",
     });
+    expect(within(table).getByText("{{user.name}}")).toBeVisible();
     expect(within(table).queryByText("{{tool.name}}")).not.toBeInTheDocument();
     const examples = screen.getByRole("region", { name: "Examples" });
     expect(examples).toHaveTextContent("{{user.name}}");
-
-    rerender(
-      <SystemPromptEditor
-        value=""
-        onChange={vi.fn()}
-        builtInAgentId={BUILT_IN_AGENT_IDS.POLICY_CONFIG}
-      />,
-    );
-    expect(within(table).getByText("{{tool.name}}")).toBeVisible();
-    expect(within(table).getByText("{{mcpServerName}}")).toBeVisible();
-    expect(within(table).queryByText("{{user.name}}")).not.toBeInTheDocument();
-    expect(within(table).getByText("{{currentDate}}")).toBeVisible();
-    expect(examples).toHaveTextContent("{{tool.name}}");
-    expect(examples).not.toHaveTextContent("{{user.name}}");
-    expect(examples).not.toHaveTextContent("user.teams");
+    expect(examples).toHaveTextContent("user.teams");
   });
 
   it("keeps literal instructions editable without advertising or validating templates", async () => {

@@ -6,6 +6,7 @@ const userId = "user-1";
 
 function makeAgent(
   overrides: Partial<{
+    builtIn: boolean;
     id: string;
     name: string;
     scope: "personal" | "team" | "org";
@@ -24,10 +25,38 @@ function makeAgent(
     icon: overrides.icon ?? null,
     systemPrompt: overrides.systemPrompt ?? null,
     runtime: null,
+    builtIn: overrides.builtIn ?? false,
   };
 }
 
 describe("filterAndSortInitialAgents", () => {
+  it("hides built-ins even when selected or matched by search", () => {
+    const agents = [
+      makeAgent({ id: "builtin", name: "APPAdvisor", builtIn: true }),
+      makeAgent({
+        id: "personal",
+        name: "My Assistant",
+        scope: "personal",
+        authorId: userId,
+      }),
+    ];
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: agents,
+        currentAgentId: "builtin",
+        search: "",
+        userId,
+      }).map((agent) => agent.id),
+    ).toEqual(["personal"]);
+    expect(
+      filterAndSortInitialAgents({
+        allAgents: agents,
+        currentAgentId: "builtin",
+        search: "APPAdvisor",
+        userId,
+      }),
+    ).toEqual([]);
+  });
   it("shows only the current user's personal agents", () => {
     const agents = [
       makeAgent({

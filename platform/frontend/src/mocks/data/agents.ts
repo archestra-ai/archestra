@@ -1,4 +1,8 @@
 import type { archestraApiTypes } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  BUILT_IN_AGENT_NAMES,
+} from "@archestra/shared/built-in-agents";
 
 type AgentsList = archestraApiTypes.GetAgentsResponses["200"];
 type Agent = AgentsList["data"][number];
@@ -20,7 +24,6 @@ export function makeAgent(overrides: Partial<Agent> = {}): Agent {
     isDefault: false,
     isPersonalGateway: false,
     isPersonalProxy: false,
-    considerContextUntrusted: false,
     agentType: "agent",
     systemPrompt: null,
     description: null,
@@ -116,7 +119,6 @@ export function makeExternalAgent(
     lastDiscoveredAt: "2026-09-08T12:00:00.000Z",
     createdAt: "2026-09-08T12:00:00.000Z",
     updatedAt: "2026-09-08T12:00:00.000Z",
-    scope: "org",
     authorId: "user-1",
     createdByServiceAccountId: null,
     authorName: "Test User",
@@ -126,8 +128,6 @@ export function makeExternalAgent(
       name: "Test User",
       email: "test@example.com",
     },
-    teams: [],
-    users: [],
     connection: {
       id: "connection-1",
       remoteAgentId: "external-agent",
@@ -151,6 +151,19 @@ export function makeExternalAgent(
     ...overrides,
   };
 }
+
+export const builtInAgentsSeed = Object.entries(BUILT_IN_AGENT_IDS).map(
+  ([key, name]) =>
+    makeAgent({
+      id: name,
+      name: BUILT_IN_AGENT_NAMES[key as keyof typeof BUILT_IN_AGENT_NAMES],
+      authorId: null,
+      authorName: null,
+      scope: "org",
+      builtIn: true,
+      builtInAgentConfig: { name },
+    }),
+);
 
 export const agentsSeed = makeAgentsList();
 

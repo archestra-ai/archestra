@@ -39,7 +39,7 @@ for (const viewport of [
       await page.setViewportSize(viewport);
       await goToPage(page, `${family.path}/new`);
       const fromScratch = page.getByRole("button", {
-        name: /start from scratch/i,
+        name: /^New .* agent/,
       });
       const nameField = page.getByRole("textbox", { name: /^Name\b/ });
       await expect(nameField.or(fromScratch)).toBeVisible();
@@ -169,8 +169,9 @@ for (const viewport of [
           ).toBeVisible();
         }
 
+        // An agent edits on its own page; a gateway in its Settings tab.
         const editPath = `${family.path}/${createdId}${
-          family.title === "MCP Gateway" ? "?section=settings" : ""
+          family.title === "MCP Gateway" ? "?section=settings" : "/edit"
         }`;
         await goToPage(page, editPath);
         await expect(nameField).toHaveValue(name);

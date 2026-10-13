@@ -42,6 +42,22 @@ export function buildAzureV1DeploymentsUrl(baseUrl: string): string | null {
   }
 }
 
+/**
+ * The resource's data-plane deployment listing, for a Foundry base URL of any
+ * surface (`…/anthropic`, `…/openai/v1`). Foundry serves no model list on its
+ * Anthropic surface, so this is how Claude deployments are discovered.
+ */
+export function buildAzureFoundryDeploymentsUrl(
+  baseUrl: string,
+): string | null {
+  try {
+    const url = new URL(baseUrl);
+    return `${url.origin}/openai/deployments?api-version=${AZURE_DEPLOYMENTS_API_VERSION}`;
+  } catch {
+    return null;
+  }
+}
+
 export function buildAzureOpenAiV1ModelsUrl(baseUrl: string): string | null {
   try {
     const url = new URL(baseUrl);

@@ -514,7 +514,7 @@ describe("LlmProxyPluginRegistry", () => {
     });
   });
 
-  test("validates prepared transport arguments before a finalizer can reserve calls", async () => {
+  test("prepares transport arguments before a finalizer can reserve calls", async () => {
     const registry = new LlmProxyPluginRegistry();
     const phases: string[] = [];
     registry.register({
@@ -542,18 +542,11 @@ describe("LlmProxyPluginRegistry", () => {
     const context = requestContext();
     await registry.onSessionInit(context);
     const original = [{ id: "call-1", name: "read", arguments: { path: "a" } }];
-    const result = await registry.onToolCalls(
-      { ...context, toolCalls: original },
-      async (calls) => {
-        phases.push("validate");
-        expect(calls[0].arguments).toEqual({
-          path: "a",
-          execution: "transport-record",
-        });
-        return null;
-      },
-    );
-    expect(phases).toEqual(["prepare", "validate", "reserve"]);
+    const result = await registry.onToolCalls({
+      ...context,
+      toolCalls: original,
+    });
+    expect(phases).toEqual(["prepare", "reserve"]);
     expect(result).toMatchObject({ decision: "allow" });
     if (result.decision !== "allow") throw new Error("expected allowed calls");
     expect(result.toolCalls).not.toBe(original);
@@ -888,13 +881,7 @@ describe("runtime proof attachments", () => {
     });
     const context = requestContext();
     await registry.onSessionInit(context);
-    const validate = vi.fn(async () => null);
-    const outcome = await registry.onToolCalls(
-      { ...context, toolCalls: [incoming] },
-      validate,
-    );
-    expect(validate).toHaveBeenCalledWith([incoming]);
-    return outcome;
+    return registry.onToolCalls({ ...context, toolCalls: [incoming] });
   }
 
   test.each([

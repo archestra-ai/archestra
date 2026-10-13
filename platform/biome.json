@@ -2,7 +2,8 @@
   "$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
   "plugins": [
     "./biome-plugins/icon-button-aria-label.grit",
-    "./biome-plugins/no-conditional-bare-jsx-text.grit"
+    "./biome-plugins/no-conditional-bare-jsx-text.grit",
+    "./biome-plugins/design-arena.grit"
   ],
   "vcs": {
     "enabled": true,
@@ -18,12 +19,16 @@
       "shared/**/*.ts",
       "standalone-scripts/**/*.ts",
       "benchmarks/**/*.mjs",
-      "!node_modules",
-      "!.next",
-      "!**/dist",
-      "!build",
+      "!!**/node_modules",
+      "!!**/.next",
+      "!!**/.next-*",
+      "!!**/.turbo",
+      "!!**/target",
+      "!!**/dist",
+      "!!**/build",
       "!helm/**/*",
       "!**/*.gen.ts",
+      "!**/*.generated.ts",
       "!**/sandbox-rs/index.d.ts",
       "!**/app-runtime-rs/index.d.ts",
       "!**/openappa-rs/index.d.ts"

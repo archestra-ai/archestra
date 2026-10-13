@@ -45,7 +45,6 @@ import { FileDropZone } from "@/components/files/file-drop-zone";
 import { FormDialog } from "@/components/form-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
-import { projectVisibilityToScope } from "@/components/projects/project-visibility";
 import { QueryLoadError } from "@/components/query-load-error";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +56,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useStartAgentRun } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCreateConversation } from "@/lib/chat/chat.query";
@@ -100,17 +98,6 @@ function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data: project, isPending, isLoadingError, refetch } = useProject(id);
-  const ownership = useResourceOwnershipTransfer({
-    kind: "project",
-    resource: project
-      ? {
-          ...project,
-          authorId: project.createdBy?.id ?? null,
-          scope: projectVisibilityToScope(project.visibility),
-        }
-      : null,
-    onTransferred: () => router.push("/projects"),
-  });
   // Chats are hidden from admin oversight, so don't even fetch them there.
   const { data: conversations } = useProjectConversations(id, {
     enabled: !!project && project.viewerRole !== "admin",
@@ -182,12 +169,10 @@ function ProjectDetail() {
     <div className="flex h-full w-full min-h-0">
       <div className="min-w-0 flex-1 overflow-y-auto">
         <PageLayout
-          title={
-            <span className="flex items-center gap-2">
-              <AgentIcon icon={project.icon} fallbackType="project" size={22} />
-              <span className="min-w-0 truncate">{project.name}</span>
-            </span>
+          icon={
+            <AgentIcon icon={project.icon} fallbackType="project" size={24} />
           }
+          title={<span className="block min-w-0 truncate">{project.name}</span>}
           description={project.description ?? ""}
           actionButton={
             <div className="flex items-center gap-2">
@@ -240,7 +225,6 @@ function ProjectDetail() {
                       Edit details
                     </DropdownMenuItem>
                   )}
-                  {ownership.menuItem}
                   {canManage && canDelete && (
                     <DropdownMenuItem
                       variant="destructive"
@@ -252,7 +236,6 @@ function ProjectDetail() {
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              {ownership.dialog}
             </div>
           }
         >
@@ -661,8 +644,6 @@ function ProjectFilesSidebar({
       name: f.filename,
       mimeType: f.mimeType,
       contentUrl: sandboxArtifactUrl(f.downloadRef),
-      // The real row id (null for a rowless hand-placed object) — gates editing.
-      rowId: f.id,
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
@@ -670,12 +651,12 @@ function ProjectFilesSidebar({
   const detailName = instructionsSelected
     ? PROJECT_INSTRUCTIONS_FILENAME
     : (selected?.name ?? "");
-  // Editable only for a row-backed .md/.txt file when the viewer has real project
-  // access (the admin-oversight view is read-only, so `canEditFiles` is false).
+  // Editable for a .md/.txt file — row-backed or hand-placed — when the viewer has
+  // real project access (the admin-oversight view is read-only, so
+  // `canEditFiles` is false).
   const selectedEditable =
     selected != null &&
     canEditFiles &&
-    selected.rowId != null &&
     isEditableTextFile({
       filename: selected.name,
       mimeType: selected.mimeType,
@@ -689,7 +670,6 @@ function ProjectFilesSidebar({
         ? canManageProject
         : !!file &&
             canEditFiles &&
-            !!file.rowId &&
             isEditableTextFile({
               filename: file.name,
               mimeType: file.mimeType,
@@ -828,7 +808,6 @@ function ProjectFilesSidebar({
                   onEdit={openFile}
                   canEdit={(file) =>
                     canEditFiles &&
-                    !!file.rowId &&
                     isEditableTextFile({
                       filename: file.name,
                       mimeType: file.mimeType,
@@ -870,9 +849,9 @@ function ProjectFilesSidebar({
               key={selected.id}
               file={selected}
               onClose={deselect}
-              // Only row-backed files are editable; a rowless (obj_) object has
-              // no `rowId`, so `selectedEditable` is false and Edit stays hidden.
-              fileId={selected.rowId ?? undefined}
+              // The row id, or the `obj_` ref of a hand-placed object; the
+              // content route edits either in place.
+              fileId={selected.id}
               editing={editing && selectedEditable}
               onExitEdit={deselect}
             />

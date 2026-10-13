@@ -89,6 +89,38 @@ it("exports JSONL with the current filters", async () => {
   expect(exportRequest?.searchParams.has("cursor")).toBe(false);
 });
 
+it("opens a metadata-only consult without its withheld content", async () => {
+  const notStored = { __redacted: "log_content_policy" };
+  server.use(
+    http.get(consultsUrl, () =>
+      HttpResponse.json({
+        data: [
+          {
+            ...CONSULT,
+            request: {
+              ...notStored,
+              kind: "annotation",
+              artifact: {
+                args: { name: "fetch", arguments: notStored },
+              },
+            },
+            answer: null,
+            diagnostics: null,
+          },
+        ],
+        pagination: { limit: 20, nextCursor: null, hasNext: false },
+      }),
+    ),
+  );
+  renderTable();
+
+  fireEvent.click(await screen.findByText("fetch"));
+
+  expect(await screen.findByText("Content not stored")).toBeInTheDocument();
+  expect(screen.getByText("Tool: fetch")).toBeInTheDocument();
+  expect(screen.queryByText("No answer.")).not.toBeInTheDocument();
+});
+
 function renderTable() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },

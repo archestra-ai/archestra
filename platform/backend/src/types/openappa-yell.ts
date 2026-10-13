@@ -4,8 +4,18 @@ import { z } from "zod";
 import { openappaYellsTable } from "@/database/schemas/openappa-yell";
 
 export const OpenAppaYellSchema = createSelectSchema(openappaYellsTable)
-  .omit({ archive: true })
-  .extend({ hasArchive: z.boolean(), caller: CreatedByNullableSchema });
+  .omit({ archive: true, conversationId: true })
+  .extend({
+    hasArchive: z.boolean(),
+    caller: CreatedByNullableSchema,
+    conversation: z
+      .object({
+        id: z.uuid(),
+        title: z.string().nullable(),
+        createdAt: z.date(),
+      })
+      .nullable(),
+  });
 export const InsertOpenAppaYellSchema = createInsertSchema(
   openappaYellsTable,
 ).pick({

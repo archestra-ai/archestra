@@ -5,6 +5,7 @@ import {
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
+  isCodeRuntimeArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isSkillTool,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
@@ -97,10 +98,6 @@ import {
   tools as pluginTools,
 } from "./plugins";
 import {
-  toolEntries as policyToolEntries,
-  tools as policyTools,
-} from "./policies";
-import {
   toolEntries as projectToolEntries,
   tools as projectTools,
 } from "./projects";
@@ -189,7 +186,6 @@ function getToolEntries(): Partial<
       ...mcpServerToolEntries,
       ...teamToolEntries,
       ...limitToolEntries,
-      ...policyToolEntries,
       ...toolAssignmentToolEntries,
       ...knowledgeManagementToolEntries,
       ...chatToolEntries,
@@ -228,7 +224,6 @@ function getAllTools(): (typeof identityTools)[number][] {
       ...mcpServerTools,
       ...teamTools,
       ...limitTools,
-      ...policyTools,
       ...toolAssignmentTools,
       ...knowledgeManagementTools,
       ...chatTools,
@@ -248,14 +243,6 @@ function getAllTools(): (typeof identityTools)[number][] {
     ];
   }
   return allToolsCache;
-}
-
-let sandboxToolNamesCache: ReadonlySet<string> | undefined;
-function getSandboxToolNames(): ReadonlySet<string> {
-  if (!sandboxToolNamesCache) {
-    sandboxToolNamesCache = new Set(sandboxTools.map((tool) => tool.name));
-  }
-  return sandboxToolNamesCache;
 }
 
 let hookToolNamesCache: ReadonlySet<string> | undefined;
@@ -390,7 +377,9 @@ export async function executeArchestraTool(
     archestraMcpBranding.getToolShortName(toolName) === "yell" &&
     (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
   ) {
-    throw { code: -32601, message: "OpenAPPA reporting is disabled" };
+    // An unavailable feedback tool is a recoverable tool refusal, not a
+    // failed agent run. Keep the result with the agent so it can continue.
+    return errorResult("OpenAPPA reporting is disabled");
   }
   // A child runs outside APPA and must not execute remedies on the parent's
   // shared logging session. Direct calls also respect the feature flag.
@@ -406,7 +395,8 @@ export async function executeArchestraTool(
   }
   if (
     (!openappaEnabled() ||
-      isAppaDelegatedRun(context.agent.id, context.delegationChain)) &&
+      (!context.openappaSubagent &&
+        isAppaDelegatedRun(context.agent.id, context.delegationChain))) &&
     isOpenappaTool(archestraMcpBranding.getToolShortName(toolName))
   ) {
     throw {
@@ -541,19 +531,20 @@ export async function preflightArchestraToolCall(params: {
 }
 
 /**
- * Whether a built-in's runtime is configured on this deployment. Sandbox tools
- * materialize a Dagger container and lifecycle hooks execute inside that same
- * sandbox, so both are unusable without the code runtime and advertising them
- * would promise the model a capability the call cannot deliver. Plugin tools
- * follow the plugins beta flag for the same reason: the REST surface they
- * mirror is a 404 while the flag is off.
+ * Whether a built-in's runtime is configured on this deployment. The code
+ * runtime tools (run_command/upload_file/download_file) materialize a Dagger
+ * container and lifecycle hooks execute inside that same sandbox, so both are
+ * unusable without the code runtime and advertising them would promise the
+ * model a capability the call cannot deliver. The persistent-file tools only
+ * touch the file store, so they stay on. Plugin tools follow the plugins beta
+ * flag for the same reason: the REST surface they mirror is a 404 while the
+ * flag is off.
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
-  if (archestraMcpBranding.getToolShortName(canonicalName) === "yell")
-    return openappaYellEnabled();
-  if (isOpenappaTool(archestraMcpBranding.getToolShortName(canonicalName)))
-    return openappaEnabled();
-  if (getSandboxToolNames().has(canonicalName))
+  const shortName = archestraMcpBranding.getToolShortName(canonicalName);
+  if (shortName === "yell") return openappaYellEnabled();
+  if (isOpenappaTool(shortName)) return openappaEnabled();
+  if (shortName && isCodeRuntimeArchestraToolShortName(shortName))
     return config.skillsSandbox.enabled;
   if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;
   if (getPluginToolNames().has(canonicalName)) return config.plugins.enabled;

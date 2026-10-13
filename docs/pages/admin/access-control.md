@@ -2,7 +2,7 @@
 title: Access Control
 description: Assign roles and share resources with users, teams, and service accounts
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-12
 ---
 
 Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
@@ -27,7 +27,7 @@ Organization roles assigned to teams are separate from [team membership roles](#
 
 You can grant only permissions you already hold. This applies when changing roles, inviting members, assigning roles to teams or service accounts, and changing team membership or hierarchy. Role pickers disable roles beyond your authority.
 
-[SSO role mapping](/docs/admin/identity/sso-role-mapping) is configured by the identity provider and can assign roles independently of the signing-in user's permissions.
+[SSO role mapping](/docs/admin/identity/sso#role-mapping) is configured by the identity provider and can assign roles independently of the signing-in user's permissions.
 
 ### Service Account Creators
 
@@ -39,35 +39,62 @@ Look up every role action in the [permission reference](/docs/reference/permissi
 
 ## Granular Access Control
 
-A resource grant names a recipient and the actions they can perform. Recipients can be users, teams, service accounts, roles, or **Everyone in the organization**. A service account's access is independent of its creator; disabling the account prevents it from using its grants.
+A resource grant names a recipient and the actions they can perform. Recipients can be users, teams, service accounts, roles, or **Everyone in the organization**. A service account's access is independent of its creator. Disabling the account prevents it from using its grants.
 
-Granular access control is an Enterprise feature, including the [small-team allowance](/docs/get-started#licensing). When entitlement ends, existing grants remain enforced. You can revoke or reduce grants; adding or expanding them requires entitlement.
+Granular access control is an Enterprise feature, including the [small-team allowance](/docs/get-started/pricing-model). When entitlement ends, existing grants remain enforced. You can revoke or reduce grants. Adding or expanding them requires entitlement.
 
-To share a resource:
-
-1. Open its **Permissions** tab or the **Permissions** section of its settings dialog.
-2. Add a recipient and choose **Can view**, **Can use**, **Can edit**, or **Full access**.
-3. Click **Save permissions**. Confirm the recipient appears with the intended access.
+To share a resource, add recipients in its permissions, next to its other settings. One field adds everyone in the organization, a role, a team, a person, or a service account. Each recipient gets its own level: **Can view**, **Can use**, **Can edit**, or **Full access**. A new recipient starts at **Can use** when you may grant it. Save, then confirm the recipient appears with the intended level.
 
 For grants covering every object of a kind, open the resource list's **More actions** menu beside **Create** or **Add**, then choose **Permissions**. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
+
+At least one recipient must keep **Full access** in the permissions for every object of a kind. Without it, nobody can edit, delete, or share objects that other people created, so **Save** stays off until one recipient has it.
 
 ### Actions And Scopes
 
 **Can view** permits reading. **Can use** permits execution. **Can edit** permits configuration changes. **Full access** also includes deletion and permission management. Editing does not imply execution or sharing.
 
-MCP registry entries add **Full access + deployment**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default; the creator's ordinary Full access does not include deployment changes. OAuth client registrations have no **Can use** preset.
+MCP registry entries add **Full access + deploy**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. OAuth client registrations have no **Can use** preset.
 
 A grant applies to one resource or to `*`: every current and future resource of that kind in the organization. Actions and scopes stay paired. Giving someone read access to all entries and edit access to one entry lets them edit only that entry.
 
+### Sharing Level
+
+Every shared resource shows how far it reaches: **Personal**, **Team-wide**, or **Org-wide**. A typical resource starts Personal while you build it, becomes Team-wide when you add a team, and Org-wide when you add everyone. The level follows the resource's own grants that include **Can view** or more:
+
+| Level | Set by |
+| --- | --- |
+| **Org-wide** | A grant to everyone, or to any role |
+| **Team-wide** | A grant to any team |
+| **Personal** | Neither of the above |
+
+What to know:
+
+- Grants to people and service accounts do not change the level.
+- Organization-wide grants on every resource of a kind do not count, such as Admin's full access.
+
+### Find Resources by Access
+
+Lists of shared resources filter by how you reach each item. These lists have the filters: agents, MCP gateways, Knowledge Bases, connectors, Knowledge Files, apps, plugins, projects, skills, the MCP registry, LLM provider credentials, virtual keys, models, and OAuth clients.
+
+- **Access:** **Mine** for items you own. **Shared with me** for items shared with you, your team, your role, or everyone. **Admin access** for items nobody shared with you, visible through an organization-wide grant.
+- **Shared with:** everyone, a role, a team, a person, or a service account. Shown while **Admin access** is on.
+- **Owner:** one or more owners.
+
+Models have no owner, so their list has no **Mine** option and no **Owner** filter. On Knowledge Files, the filters narrow documents. Directories always show. The filters combine. The list API takes the same filters as `access`, `sharedWith`, and `owner` query parameters. `sharedWith` takes comma-separated `org`, `role:<id>`, `team:<id>`, `user:<id>`, or `serviceAccount:<id>`. `org` matches only grants to everyone. `owner` takes comma-separated user IDs.
+
 ### Inheritance And Revocation
 
-Access combines direct grants, team grants, effective-role grants, and organization-wide grants. A team grant reaches every member regardless of membership role, including descendant teams. Removing a direct grant does not remove inherited access; change that grant at its source.
+Access combines direct grants, team grants, effective-role grants, and organization-wide grants. A team grant reaches every member regardless of membership role, including descendant teams. Removing a direct grant does not remove inherited access. Change that grant at its source.
 
 The Permissions editor displays inherited grants separately. A read grant on all chats reaches chats in projects the recipient can open, never private chats.
 
 ### Delegation And Concurrent Edits
 
 You can share only actions you hold. Team administration can change membership, but does not authorize editing the resources or grants shared with the team.
+
+Assigning a role, or adding someone to a team, shares every grant the role or team carries, so you must hold those grants and `manage-permissions` on each object. Grants that members put on their own chats, agent runs, and personal provider keys do not count: only their owner holds those. [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) skips this check, so it can assign any role or team.
+
+When the check refuses an assignment, the form lists each object you cannot share. Hover over an object to see the actions you lack on it.
 
 If another administrator saves first, the editor preserves your draft and asks you to reload. Review the latest permissions before saving again. Permission changes appear in the audit log.
 
@@ -91,7 +118,19 @@ Use the service account ID, not an API-key ID. `PUT` replaces all direct grants:
 
 ## Scoped Resources
 
-Creation requires the kind's organization-level create permission. Most resources give their creator full direct access; that grant can be revoked. Ownership does not override revocation.
+Creation requires the kind's organization-level create permission. Most resources give their creator full direct access. That grant can be revoked. Ownership does not override revocation.
+
+### Ownership
+
+The owner is the person who created the resource. **Mine** and the **Owner** filter use it. The owner's grant shows as Full access and cannot be removed from the list.
+
+To hand a resource to another person, use **Make owner** on their row:
+
+- The new owner gets Full access.
+- The previous owner keeps Full access. Remove them as a separate change.
+- Other grants do not change.
+
+Only someone with edit and Full access on the resource can make another person the owner. Plugins require edit access to every plugin.
 
 ### Team Roles
 
@@ -101,7 +140,7 @@ A team **member** receives shared access. A team **admin** can manage its member
 
 Members inherit resource grants and organization roles from ancestor teams. Access does not flow from a child to its parent or to siblings. Team administrator roles are not inherited. Deleting a parent moves its direct children to the root.
 
-[SSO Team Sync](/docs/admin/identity/sso-team-sync) creates direct membership in mapped teams; normal inheritance then applies.
+[SSO Team Sync](/docs/admin/identity/sso#team-sync) creates direct membership in mapped teams. Normal inheritance then applies.
 
 ### Environments
 
@@ -109,15 +148,19 @@ Deploying into an [environment](/docs/admin/environments#deploy-permissions) req
 
 ### OAuth Clients
 
-MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management; tokens reach only what the client configuration allows.
+MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management. Tokens reach only what the client configuration allows.
 
 ### Visibility-Scoped Credentials
 
-Provider keys and virtual keys can have personal, team, or organization scope. Personal records are limited to their owner. Team records require membership; team admins can manage their team's records. Organization records require an update grant on `*` for that kind.
+Provider keys and virtual keys can have personal, team, or organization scope. Personal records are limited to their owner. Team records require membership. Team admins can manage their team's records. Organization records require an update grant on `*` for that kind.
+
+### Saved Credentials
+
+[Credentials](/docs/admin/security/credentials#who-can-manage-a-credential) take grants like any other resource. **Can use** lets a person connect their own value or bind the credential to a guardrails battery. Editing or deleting a credential needs **Can edit** or **Full access** on it, not a role permission.
 
 ### Models
 
-Read grants control model discovery; use grants control invocation through the LLM Proxy. A wildcard use grant covers future models and uncatalogued model IDs. Refreshing the catalog preserves grants and revocations.
+Read grants control model discovery. Use grants control invocation through the LLM Proxy. A wildcard use grant covers future models and uncatalogued model IDs. Refreshing the catalog preserves grants and revocations.
 
 ### Chat Access And Optional UI Controls
 
@@ -135,13 +178,16 @@ Team grants reach direct members and descendant-team members. An empty direct-gr
 
 ### Agent Access vs MCP Server Access
 
-In **Custom** tool mode, sharing an agent shares its assigned tools even if the server is not shared with the caller. [Credential resolution](/docs/mcp/authentication/servers#credential-resolution) determines which connection serves the call.
+Sharing an agent does not share its MCP servers. A person who can use an agent gets only the tools from servers they can access, in both [tool modes](/docs/agents#tool-access-modes). A tool assigned from any other server is hidden from them, and a call to it is refused.
 
-In **Auto** mode, callers discover tools from servers they can access, plus tools explicitly assigned to the agent. See [Tool Access Modes](/docs/agents#tool-access-modes).
+What to know:
+
+- Team tokens, organization tokens, and service accounts keep every tool assigned to the agent.
+- [Credential resolution](/docs/mcp/authentication/servers#credential-resolution) picks the connection for a tool the person can use, including a connection pinned to the tool.
 
 ## Log Visibility
 
-[`log:read`](/docs/reference/permissions#log:read) shows your LLM and MCP logs; add [`log:admin`](/docs/reference/permissions#log:admin) for organization-wide logs. Audit events use [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin). Guardrail consult logs use [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) and [`openappaDiagnostics:admin`](/docs/reference/permissions#openappaDiagnostics:admin). Resource sharing does not determine log visibility.
+[`log:read`](/docs/reference/permissions#log:read) shows your LLM and MCP logs. Add [`log:admin`](/docs/reference/permissions#log:admin) for organization-wide logs. Audit events use [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin). Guardrail consult logs use [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) and [`openappaDiagnostics:admin`](/docs/reference/permissions#openappaDiagnostics:admin). Resource sharing does not determine log visibility.
 
 ## LLM API Permissions
 

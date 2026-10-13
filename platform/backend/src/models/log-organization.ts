@@ -1,4 +1,13 @@
-import { and, eq, exists, isNull, or, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  inArray,
+  isNull,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 
 /**
@@ -7,44 +16,30 @@ import db, { schema } from "@/database";
  * or app is the tenant boundary.
  */
 export function interactionBelongsToOrganization(organizationId: string): SQL {
-  const agentBelongsToOrganization = exists(
+  // Uncorrelated membership sets let PostgreSQL build each owner set once,
+  // rather than probing owner tables for every row in the interaction log.
+  const agentBelongsToOrganization = inArray(
+    schema.interactionsTable.profileId,
     db
-      .select({ value: sql`1` })
+      .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.id, schema.interactionsTable.profileId),
-          eq(schema.agentsTable.organizationId, organizationId),
-        ),
-      ),
+      .where(eq(schema.agentsTable.organizationId, organizationId)),
   );
-  const connectorBelongsToOrganization = exists(
+  const connectorBelongsToOrganization = inArray(
+    schema.interactionsTable.connectorId,
     db
-      .select({ value: sql`1` })
+      .select({ id: schema.knowledgeBaseConnectorsTable.id })
       .from(schema.knowledgeBaseConnectorsTable)
       .where(
-        and(
-          eq(
-            schema.knowledgeBaseConnectorsTable.id,
-            schema.interactionsTable.connectorId,
-          ),
-          eq(
-            schema.knowledgeBaseConnectorsTable.organizationId,
-            organizationId,
-          ),
-        ),
+        eq(schema.knowledgeBaseConnectorsTable.organizationId, organizationId),
       ),
   );
-  const appBelongsToOrganization = exists(
+  const appBelongsToOrganization = inArray(
+    schema.interactionsTable.appId,
     db
-      .select({ value: sql`1` })
+      .select({ id: schema.appsTable.id })
       .from(schema.appsTable)
-      .where(
-        and(
-          eq(schema.appsTable.id, schema.interactionsTable.appId),
-          eq(schema.appsTable.organizationId, organizationId),
-        ),
-      ),
+      .where(eq(schema.appsTable.organizationId, organizationId)),
   );
 
   return and(

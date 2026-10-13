@@ -27,7 +27,7 @@ With the quickstart or the Helm chart, there is nothing to set up. Go straight t
 Pull from a private registry, add memory, or mount a volume, from the server's Edit page. Most servers need none of it.
 
 - **Private image:** add an image pull secret, or the registry's credentials.
-- **Memory, CPU, volumes, or node rules:** edit the **K8s YAML** tab. You need **Full access + deployment** on the server.
+- **Memory, CPU, volumes, or node rules:** edit the **K8s YAML** tab. You need **Full access + deploy** on the server.
 - A credential on each call, such as the caller's [identity provider token](/docs/mcp/authentication/servers#identity-provider-token-exchange): set **Transport** to **streamable-http**. A **stdio** server gets credentials only at start.
 
 <span id="logs-and-recovery"></span>
@@ -50,7 +50,7 @@ Find the symptom, then open the server in MCP Registry to fix it. Its **Logs**, 
 
 :::beta:::
 
-Servers nobody uses sleep, so they free their share of the cluster. The next tool call wakes them. It is an [Enterprise feature](/docs/get-started#licensing). Turn it on in **Settings → MCP**.
+Servers nobody uses sleep, so they free their share of the cluster. The next tool call wakes them. It is an [Enterprise feature](/docs/get-started/pricing-model). Turn it on in **Settings → MCP**.
 
 A server sleeps after 30 minutes with no calls. To change that, set [`ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS).
 

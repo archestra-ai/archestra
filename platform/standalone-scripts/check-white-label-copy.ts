@@ -151,9 +151,10 @@ function walk(dir: string): string[] {
       continue;
     }
     if (!/\.tsx?$/.test(entry)) continue;
-    // Tests and generated clients assert on or mirror the default brand.
+    // Tests and generated clients assert on or mirror the default brand;
+    // *.generated.ts snapshots external files (the OpenAPPA template) verbatim.
     if (/\.(test|spec)\.tsx?$/.test(entry)) continue;
-    if (/\.gen\.ts$/.test(entry)) continue;
+    if (/\.gen(erated)?\.ts$/.test(entry)) continue;
     files.push(full);
   }
   return files;

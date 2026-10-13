@@ -1,12 +1,27 @@
 import { posix } from "node:path";
 import { APPA_PARENT_HEADER, APPA_SESSION_HEADER } from "@archestra/shared";
 import { childSessionId } from "@/openappa/actor";
-import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import {
+  type AppaChildTrajectoryReceipt,
+  verifyChildTrajectoryReceipt,
+} from "@/openappa/child-trajectory-receipt";
 import { verifyDelegatedPrompt } from "@/openappa/delegation";
 import { isWellFormedAppaId } from "@/openappa/service";
 import { ApiError } from "@/types";
 import type { AppaChildTrajectory, AppaMatchContext } from "../types";
 import { readHeader, withCallerScope, withoutCallerScope } from "../utils";
+
+/** Validates opaque native IDs before any fallback or minted child binding. */
+export function nativeId(
+  value: unknown,
+  description = "child trajectory id",
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (!isWellFormedAppaId(value)) {
+    throw correlationError(`OpenAPPA requires a well-formed ${description}`);
+  }
+  return value;
+}
 
 /** Recognizes native transcript paths even when their child id is a glob. */
 export function referencesChildTranscriptPath(params: {
@@ -77,11 +92,13 @@ export function namesChildrenFromArguments(params: {
 /**
  * Binds a child under verified trajectory evidence or trusted native metadata.
  * The signed child ID stays stable when native metadata appears after compaction.
- * An actual native child ID is optional correlation metadata.
+ * Native metadata may arrive after minting; it is not an expected sealed claim.
+ * If the receipt already seals a native identity, that identity must agree.
  */
 export function bindMintedChildTrajectory(params: {
   context: AppaMatchContext;
   parentNativeId: string | undefined;
+  /** Trusted client metadata, which may be assigned after the receipt's birth. */
   childNativeId: string | undefined;
 }): AppaChildTrajectory | undefined {
   const claims = claimedIds(params.context);
@@ -296,9 +313,9 @@ function recordedNativeParent(params: {
         organizationId: trusted.session.organization_id,
         callerId: trusted.session.caller_id,
         spawnerNativeId,
-        childNativeId: params.childNativeId,
       })
     ) {
+      assertReceiptNativeCorrelation(receipt, params.childNativeId);
       return spawnerNativeId;
     }
   }
@@ -329,13 +346,19 @@ function recordedChild(params: {
         organizationId: trusted.session.organization_id,
         callerId: trusted.session.caller_id,
         spawnerNativeId: params.parentNativeId,
-        childNativeId: params.childNativeId,
       })
     ) {
       continue;
     }
-    if (params.expectedParentId && receipt.parentId !== params.expectedParentId)
-      continue;
+    assertReceiptNativeCorrelation(receipt, params.childNativeId);
+    if (
+      params.expectedParentId &&
+      receipt.parentId !== params.expectedParentId
+    ) {
+      throw correlationError(
+        "OpenAPPA signed child lineage does not match the delegated parent",
+      );
+    }
     return {
       parentId: receipt.parentId,
       childId: receipt.childId,
@@ -349,6 +372,24 @@ function recordedChild(params: {
     };
   }
   return undefined;
+}
+
+/** Called only after verifying receipt ownership, never to waive verification. */
+function assertReceiptNativeCorrelation(
+  receipt: AppaChildTrajectoryReceipt,
+  observedChildNativeId: string | undefined,
+): void {
+  // Birth receipts can precede native ID assignment. Their stable child scope
+  // is signed; late trusted client metadata correlates it, not attests to it.
+  if (
+    receipt.childNativeId !== undefined &&
+    observedChildNativeId !== undefined &&
+    receipt.childNativeId !== observedChildNativeId
+  ) {
+    throw correlationError(
+      "OpenAPPA signed child lineage does not match the native child id",
+    );
+  }
 }
 
 /**
@@ -510,20 +551,6 @@ function claimedIds(context: AppaMatchContext): {
         : readHeader(context.headers, APPA_PARENT_HEADER),
     ),
   };
-}
-
-function nativeId(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined;
-  if (
-    value.length === 0 ||
-    Buffer.byteLength(value, "utf8") > 512 ||
-    /\p{Cc}/u.test(value)
-  ) {
-    throw correlationError(
-      "OpenAPPA requires a well-formed child trajectory id",
-    );
-  }
-  return value;
 }
 
 function correlationError(message: string): ApiError {

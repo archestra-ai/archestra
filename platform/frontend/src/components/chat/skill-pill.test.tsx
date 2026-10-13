@@ -57,10 +57,13 @@ describe("SkillPill", () => {
   it("preserves the standalone Skill search and edit deep link", () => {
     render(<SkillPill skillName="Build App" />);
 
-    expect(screen.getByRole("link", { name: "Build App" })).toHaveAttribute(
+    const link = screen.getByRole("link", { name: "Build App" });
+    expect(link).toHaveAttribute(
       "href",
       "/skills?search=Build%20App&openEdit=Build%20App",
     );
+    // Opening the Skill keeps the conversation in place.
+    expect(link).toHaveAttribute("target", "_blank");
   });
 
   it("uses a plain loading label before the tool input is available", () => {

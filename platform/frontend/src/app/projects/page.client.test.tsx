@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useInternalAgents } from "@/lib/agent.query";
@@ -48,7 +54,7 @@ type ProjectFixture = {
 vi.mock("next/navigation");
 
 // The edit dialog's Permissions page loads and saves the project's own policy.
-// This suite is about the card menus and the General page, so it is stubbed
+// This suite is about the row actions and the General page, so it is stubbed
 // rather than wiring the permission queries into every case.
 vi.mock("@/components/resource-access-section", () => ({
   ResourceAccessSection: () => <div>permissions</div>,
@@ -199,6 +205,13 @@ vi.mock("@/components/ui/button", () => ({
   ),
 }));
 
+// The access filter is a real dropdown, which this file stubs flat.
+vi.mock("@/components/resource-access-filter", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/resource-access-filter")
+  >()),
+  ResourceAccessFilter: () => null,
+}));
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
@@ -212,11 +225,19 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuItem: ({
     children,
     onSelect,
+    onClick,
   }: {
     children: React.ReactNode;
-    onSelect?: () => void;
+    onSelect?: (event: Event) => void;
+    onClick?: (event: React.MouseEvent) => void;
   }) => (
-    <button type="button" onClick={onSelect}>
+    <button
+      type="button"
+      onClick={(event) => {
+        onSelect?.(event.nativeEvent);
+        onClick?.(event);
+      }}
+    >
       {children}
     </button>
   ),
@@ -346,26 +367,48 @@ describe("ProjectsPageClient", () => {
     window.localStorage.clear();
   });
 
-  it("shows the pinned section only when pinned projects exist", () => {
+  it("shows pinned projects as tiles and the rest in the table", () => {
     mockProjects = [
+      makeProject({ id: "plain", name: "Plain project" }),
       makeProject({
         id: "pinned",
         name: "Pinned project",
+        description: "Quarterly planning",
+        conversationCount: 3,
         pinnedAt: "2026-01-03T00:00:00.000Z",
       }),
-      makeProject({ id: "plain", name: "Plain project" }),
     ];
 
     render(<ProjectsPageClient />);
 
-    expect(screen.getByText("Pinned")).toBeInTheDocument();
+    const tiles = screen.getByRole("region", { name: "Pinned" });
+    expect(
+      within(tiles).getByRole("link", { name: "Pinned project" }),
+    ).toHaveAttribute("href", "/projects/pinned");
+    expect(
+      within(tiles).getByText("3 chats · Quarterly planning"),
+    ).toBeInTheDocument();
+    // The tile's one action starts a chat in the project.
+    expect(
+      within(tiles).getByRole("link", { name: "New chat" }),
+    ).toHaveAttribute("href", "/chat?project=pinned");
+    expect(within(tiles).queryByText("Plain project")).not.toBeInTheDocument();
+
     expect(screen.getByText("All projects")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Pinned project")).not.toBeInTheDocument();
-    expect(screen.getByText("Pinned project")).toBeInTheDocument();
-    expect(screen.getByText("Plain project")).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Plain project")).toBeInTheDocument();
+    expect(within(table).queryByText("Pinned project")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(tiles).getByRole("button", { name: "Unpin Pinned project" }),
+    );
+    expect(mockPinMutate).toHaveBeenCalledWith({
+      id: "pinned",
+      pinned: false,
+    });
   });
 
-  it("omits the pinned section when no projects are pinned", () => {
+  it("shows no pinned tiles when no projects are pinned", () => {
     mockProjects = [
       makeProject({ id: "plain", name: "Plain project" }),
       makeProject({ id: "other", name: "Other project" }),
@@ -373,23 +416,27 @@ describe("ProjectsPageClient", () => {
 
     render(<ProjectsPageClient />);
 
-    expect(screen.queryByText("Pinned")).not.toBeInTheDocument();
-    expect(screen.queryByText("All projects")).not.toBeInTheDocument();
-    expect(screen.getByText("Plain project")).toBeInTheDocument();
-    expect(screen.getByText("Other project")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Pinned" }),
+    ).not.toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Plain project")).toBeInTheDocument();
+    expect(within(table).getByText("Other project")).toBeInTheDocument();
   });
 
-  it("shows pin, edit details, and delete in owner card menus", () => {
+  it("offers pin, edit details, and delete on an owner's row", () => {
     mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
 
     render(<ProjectsPageClient />);
 
-    expect(screen.getByText("Pin")).toBeInTheDocument();
-    expect(screen.getByText("Edit details")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
-    expect(screen.queryByText("Unpin")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Edit details Owner project" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Unpin Owner project" }),
+    ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Pin"));
+    fireEvent.click(screen.getByRole("button", { name: "Pin Owner project" }));
     expect(mockPinMutate).toHaveBeenCalledWith({
       id: "owner",
       pinned: true,
@@ -399,13 +446,12 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Delete Owner project?")).toBeInTheDocument();
   });
 
-  it("creates a project with a label from Advanced", async () => {
+  it("creates a project with a label", async () => {
     render(<ProjectsPageClient />);
     fireEvent.click(screen.getByRole("button", { name: "New project" }));
     fireEvent.change(screen.getByLabelText("Name *"), {
       target: { value: "Labelled project" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.change(screen.getByLabelText("Label key"), {
       target: { value: "stage" },
     });
@@ -424,11 +470,12 @@ describe("ProjectsPageClient", () => {
     );
   });
 
-  it("edits project labels from Advanced", async () => {
+  it("edits project labels", async () => {
     mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
     render(<ProjectsPageClient />);
-    fireEvent.click(screen.getByText("Edit details"));
-    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit details Owner project" }),
+    );
     fireEvent.change(screen.getByLabelText("Label key"), {
       target: { value: "stage" },
     });
@@ -451,7 +498,9 @@ describe("ProjectsPageClient", () => {
     mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
 
     render(<ProjectsPageClient />);
-    fireEvent.click(screen.getByText("Edit details"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit details Owner project" }),
+    );
 
     // An empty picker would read as "this org has no agents" rather than
     // "not yours to set".
@@ -469,7 +518,9 @@ describe("ProjectsPageClient", () => {
     mockProjects = [makeProject({ id: "owner", name: "Owner project" })];
 
     render(<ProjectsPageClient />);
-    fireEvent.click(screen.getByText("Edit details"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit details Owner project" }),
+    );
 
     expect(screen.getByText("Default agent")).toBeInTheDocument();
     expect(useInternalAgents).toHaveBeenCalledWith({ enabled: true });
@@ -499,7 +550,9 @@ describe("ProjectsPageClient", () => {
       } as unknown as ReturnType<typeof useInternalAgents>);
 
       render(<ProjectsPageClient />);
-      fireEvent.click(screen.getByText("Edit details"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Edit details Owner project" }),
+      );
 
       expect(screen.getByText("Pinned Agent")).toBeInTheDocument();
     });
@@ -513,7 +566,9 @@ describe("ProjectsPageClient", () => {
       } as unknown as ReturnType<typeof useInternalAgents>);
 
       render(<ProjectsPageClient />);
-      fireEvent.click(screen.getByText("Edit details"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Edit details Owner project" }),
+      );
 
       expect(screen.queryByText("Default")).not.toBeInTheDocument();
     });
@@ -525,15 +580,17 @@ describe("ProjectsPageClient", () => {
       } as unknown as ReturnType<typeof useInternalAgents>);
 
       render(<ProjectsPageClient />);
-      fireEvent.click(screen.getByText("Edit details"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Edit details Owner project" }),
+      );
       fireEvent.change(screen.getByLabelText("Name *"), {
         target: { value: "Renamed project" },
       });
       fireEvent.click(screen.getByText("Save"));
 
       await waitFor(() => expect(mockUpdateMutateAsync).toHaveBeenCalled());
-      // Sharing is a permission policy now, saved by the Permissions page
-      // itself. The legacy columns this form used to write are read by nothing.
+      // Sharing is a permission policy now, saved through the permissions
+      // block. The legacy columns this form used to write are read by nothing.
       const body = mockUpdateMutateAsync.mock.calls[0][0];
       expect(body).toEqual(
         expect.objectContaining({ id: "owner", name: "Renamed project" }),
@@ -545,10 +602,13 @@ describe("ProjectsPageClient", () => {
 
     it("no longer offers the legacy sharing control", () => {
       render(<ProjectsPageClient />);
-      fireEvent.click(screen.getByText("Edit details"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Edit details Owner project" }),
+      );
 
       expect(screen.queryByText("Sharing")).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
+      // Access is edited in place, below the project's own fields.
+      expect(screen.getByText("permissions")).toBeVisible();
     });
   });
 
@@ -607,45 +667,8 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Plain project")).toBeInTheDocument();
   });
 
-  it("switches to a table view and persists the choice", () => {
-    mockProjects = [
-      makeProject({
-        id: "pinned",
-        name: "Pinned project",
-        pinnedAt: "2026-01-03T00:00:00.000Z",
-      }),
-      makeProject({ id: "plain", name: "Plain project" }),
-    ];
-
-    render(<ProjectsPageClient />);
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText("View as table"));
-
-    // The Pinned / All projects sections survive the switch, each rendering
-    // its own table; both projects stay visible.
-    expect(screen.getAllByRole("table")).toHaveLength(2);
-    expect(screen.getByText("Pinned")).toBeInTheDocument();
-    expect(screen.getByText("All projects")).toBeInTheDocument();
-    expect(screen.getByText("Pinned project")).toBeInTheDocument();
-    expect(screen.getByText("Plain project")).toBeInTheDocument();
-    expect(window.localStorage.getItem("archestra-projects-view")).toBe(
-      "table",
-    );
-  });
-
-  it("restores the stored table view preference on mount", () => {
-    window.localStorage.setItem("archestra-projects-view", "table");
-    mockProjects = [makeProject({ id: "plain", name: "Plain project" })];
-
-    render(<ProjectsPageClient />);
-
-    expect(screen.getByRole("table")).toBeInTheDocument();
-    expect(screen.getByText("Plain project")).toBeInTheDocument();
-  });
-
   it("offers restore and permanent delete in the trash view", () => {
-    // ?status=deleted is the trash. A deleted project has no card view and no
+    // ?status=deleted is the trash. A deleted project has no pin and no
     // route to navigate to, so it renders as a table of Restore + Delete
     // permanently and nothing else.
     // The trash is served to overseers of every project (`update` at `*`),
@@ -725,25 +748,7 @@ describe("ProjectsPageClient", () => {
     expect(screen.getByText("Plain project")).toBeInTheDocument();
   });
 
-  it("shows unpin in pinned project card menus", () => {
-    mockProjects = [
-      makeProject({
-        id: "pinned-owner",
-        name: "Pinned owner project",
-        pinnedAt: "2026-01-03T00:00:00.000Z",
-      }),
-    ];
-
-    render(<ProjectsPageClient />);
-
-    fireEvent.click(screen.getByText("Unpin"));
-    expect(mockPinMutate).toHaveBeenCalledWith({
-      id: "pinned-owner",
-      pinned: false,
-    });
-  });
-
-  it("shows card bulk actions and targets the selected project", async () => {
+  it("shows bulk actions and targets the selected project", async () => {
     vi.mocked(useHasPermissions).mockImplementation(
       (permissions) =>
         ({

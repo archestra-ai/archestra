@@ -4,6 +4,8 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSyncExternalStore } from "react";
 import {
   afterAll,
   afterEach,
@@ -48,6 +50,36 @@ const credentials: RuntimeCredentialDefinition[] = Array.from(
   }),
 );
 
+/**
+ * The page's query string, which the router mock writes and `useSearchParams`
+ * reads back, so a search or filter survives the navigation it causes.
+ */
+let url = new URLSearchParams();
+const urlListeners = new Set<() => void>();
+const navigate = (href: string) => {
+  url = new URLSearchParams(href.split("?")[1] ?? "");
+  for (const listener of urlListeners) listener();
+};
+const useUrl = () =>
+  useSyncExternalStore(
+    (listener) => {
+      urlListeners.add(listener);
+      return () => urlListeners.delete(listener);
+    },
+    () => url,
+  );
+const mockUrlNavigation = () => {
+  url = new URLSearchParams();
+  vi.mocked(usePathname).mockReturnValue("/settings/credentials");
+  vi.mocked(useRouter).mockReturnValue({
+    replace: vi.fn(navigate),
+    push: vi.fn(navigate),
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(useSearchParams).mockImplementation(
+    () => useUrl() as ReturnType<typeof useSearchParams>,
+  );
+};
+
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterAll(() => {
   server.close();
@@ -55,6 +87,7 @@ afterAll(() => {
 });
 afterEach(() => server.resetHandlers());
 beforeEach(() => {
+  mockUrlNavigation();
   archestraApiClient.setConfig({ baseUrl: origin });
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions

@@ -1,5 +1,4 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { DUAL_LLM_ANALYSIS_PART_TYPE } from "@archestra/shared";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -178,19 +177,6 @@ describe("useStreamStall", () => {
         toolCallId: "call-1",
         state: "input-available",
         input: {},
-      },
-    ],
-    [
-      "a dual LLM analysis block",
-      {
-        type: DUAL_LLM_ANALYSIS_PART_TYPE,
-        id: "call-1",
-        data: {
-          toolCallId: "call-1",
-          toolName: "search",
-          status: "analyzing",
-          rounds: [],
-        },
       },
     ],
   ])("treats %s as rendered output", (_label, part) => {

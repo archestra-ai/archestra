@@ -21,6 +21,8 @@ export async function listGithubPats(
 
 export async function createGithubPat(params: {
   organizationId: string;
+  /** Becomes the credential's author, who is granted full access to it. */
+  userId?: string;
   data: CreateGithubPatRequest;
 }): Promise<PublicGithubPat> {
   const { organizationId, data } = params;
@@ -29,11 +31,14 @@ export async function createGithubPat(params: {
     `github-pat-${data.name}`,
   );
 
-  const pat = await GithubPatModel.create({
-    organizationId,
-    name: data.name,
-    secretId: secret.id,
-  });
+  const pat = await GithubPatModel.create(
+    {
+      organizationId,
+      name: data.name,
+      secretId: secret.id,
+    },
+    params.userId,
+  );
 
   return toPublicGithubPat(pat);
 }

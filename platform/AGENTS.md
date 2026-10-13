@@ -126,7 +126,7 @@ tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an upda
 
 **Single-Tenant Organization Model**: Archestra currently provisions exactly one organization per deployment. Better Auth's organization plugin supplies the organization-scoped data model and RBAC primitives, but the product does not support creating or operating multiple organizations in one deployment today. Preserve organization scoping in code for consistency and possible future multi-organization support; do not design current runtime topology or user flows around multiple organizations unless that support is explicitly introduced.
 
-**Key Features**: MCP tool execution, dual LLM security pattern, tool invocation policies, trusted data policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control
+**Key Features**: MCP tool execution, OpenAPPA guardrails policies, MCP response modifiers (Handlebars.js), team-based access control (profiles and MCP servers), K8s-based MCP server runtime with stdio and streamable-http transport support, white-labeling (themes, logos, fonts), profile-based chat with MCP tools, comprehensive built-in Archestra MCP tools, profile chat visibility control
 
 **Workspaces**:
 
@@ -144,7 +144,7 @@ tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an upda
 3. Send tool results back to LLM proxy
 4. Receive final answer
 
-Tool invocation policies and trusted data policies are still enforced by the proxy.
+OpenAPPA guardrails policies are still enforced by the proxy.
 
 ## Authentication
 
@@ -399,7 +399,6 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Implementation: `backend/src/archestra-mcp-server/` (modular directory with one file per tool group)
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`
 - Security:
-  - **Trusted (policy bypass)**: Archestra tools bypass tool invocation policies and trusted data policies — they are always allowed to execute without policy evaluation
   - **RBAC (user permissions) still enforced**: Every tool is mapped to a `{ resource, action }` permission in `TOOL_PERMISSIONS` (`archestra-mcp-server/rbac.ts`). The `tools/list` endpoint dynamically filters tools so users only see tools they have permission to use. `executeArchestraTool` performs a centralized RBAC check before executing any tool. When adding new tools, add the corresponding entry to `TOOL_PERMISSIONS` (the `Record<ArchestraToolShortName, ...>` type will cause a compile error if a tool is missing).
 
 **Skill Sandbox Runtime** (gated behind the sandbox feature flag):
@@ -420,7 +419,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - **Database-free test imports**: `*.unit.test.ts` files must keep their runtime import graph free of database, config, model, server, and fixture modules. Import Vitest APIs from `vitest` and shared values/types from focused `@archestra/shared/*` exports, not the shared root barrel. `pnpm --dir backend check:test-imports` and Biome enforce these boundaries; inspect imports of the code under test before moving a file to the database-free project.
 - **Test What Matters**: Prefer behavior-focused tests over implementation-detail tests. Do not add tests that only assert class names, prop plumbing, or incidental markup unless that detail is itself the contract.
 - **E2E Tests**: Load the `archestra-dev-e2e` skill for Playwright tests, fixtures, WireMock setup, local/CI behavior, and locator guidance.
-- **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeToolPolicy`, `makeTrustedDataPolicy`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`, `seedAndAssignArchestraTools`
+- **Backend Test Fixtures**: Import from `@/test` to access Vitest context with fixture functions. Available fixtures: `makeUser`, `makeAdmin`, `makeOrganization`, `makeTeam`, `makeAgent`, `makeTool`, `makeAgentTool`, `makeCustomRole`, `makeMember`, `makeMcpServer`, `makeInternalMcpCatalog`, `makeInvitation`, `seedAndAssignArchestraTools`
 
 **Backend Test Fixtures Usage**:
 

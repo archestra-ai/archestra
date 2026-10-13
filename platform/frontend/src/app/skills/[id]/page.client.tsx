@@ -32,13 +32,13 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { WizardFooter } from "@/components/wizard-footer";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import {
   backToListLabel,
   notYoursToChange,
 } from "@/lib/design/resource-lexicon";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
 import { useSkillAccess } from "@/lib/skills/use-skill-access";
@@ -75,6 +75,7 @@ import {
   SkillNotFound,
   SkillPageLoading,
 } from "../_parts/skill-page-shell";
+import { SkillSourceGlyph } from "../_parts/skill-source-glyph";
 import { SkillUsagePanel } from "../_parts/skill-usage-panel";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
 
@@ -206,12 +207,6 @@ function SkillDetailView({
   const visibleSections = SKILL_DETAIL_SECTIONS;
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const isDirty = isSkillDraftDirty(draft, base.draft) || permissionsDirty;
-  const ownership = useResourceOwnershipTransfer({
-    kind: "skill",
-    resource: skill,
-    disabledReason: isDirty ? "Save or discard your changes first" : undefined,
-    onTransferred: () => router.push("/skills"),
-  });
 
   // Adopt a read only when there is nothing to lose and it is not older than
   // what this page has already written. Both guards earn their keep:
@@ -240,6 +235,7 @@ function SkillDetailView({
 
   const isSynced = isSyncedGithubSkill(skill);
   const isGithubSkill = skill.sourceType === "github";
+  const appIconLogo = useAppIconLogo();
   const githubSourceRepo = skillGithubSourceRepo(skill);
 
   const parsed = useMemo(
@@ -307,6 +303,7 @@ function SkillDetailView({
 
   return (
     <PageLayout
+      icon={<SkillSourceGlyph skill={skill} appIconLogo={appIconLogo} />}
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{skill.name}</span>
@@ -376,7 +373,6 @@ function SkillDetailView({
                 <History className="h-4 w-4" />
                 {historyAction.label}
               </DropdownMenuItem>
-              {ownership.menuItem}
               <DropdownMenuSeparator />
               {/* `aria-disabled` rather than Radix's `disabled`, so the item
                   keeps its place in the menu's roving focus and the reason
@@ -418,7 +414,6 @@ function SkillDetailView({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {ownership.dialog}
         </div>
       }
     >

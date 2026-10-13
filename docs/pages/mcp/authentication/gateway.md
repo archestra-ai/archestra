@@ -62,7 +62,7 @@ The gateway's **Connect** tab also shows your tokens, ready to copy.
 
 ## Identity Provider JWT
 
-Already signed in to Okta or Entra ID? Send that token. Nobody needs an Archestra token. Use it for an internal app or agent platform that signs people in through your company's single sign-on. Identity providers are an Enterprise feature. See [Licensing](/docs/get-started#licensing).
+Already signed in to Okta or Entra ID? Send that token. Nobody needs an Archestra token. Use it for an internal app or agent platform that signs people in through your company's single sign-on. Identity providers are an Enterprise feature. See [Pricing Model](/docs/get-started/pricing-model).
 
 The call acts as the person in the token. So it can use their own server accounts, and Archestra can [exchange their identity](/docs/mcp/authentication/servers#identity-provider-token-exchange) for a token each MCP server accepts.
 

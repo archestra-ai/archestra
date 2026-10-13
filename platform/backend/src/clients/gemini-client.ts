@@ -20,7 +20,7 @@ export const VERTEX_GLOBAL_LOCATION = "global";
  * - User credentials from `gcloud auth application-default login` (for local dev)
  *
  * @param apiKey - API key (optional when Vertex AI is enabled)
- * @param logPrefix - Prefix for log messages (e.g., "[GeminiProxy]", "[dualLlmClient]")
+ * @param logPrefix - Prefix for log messages (e.g., "[GeminiProxy]")
  * @param baseUrlOverride - Base URL override (API key mode only)
  * @param modelId - Model the client will be used for, so Vertex AI mode can
  *   pick the location that actually serves it (see {@link resolveVertexLocation}).

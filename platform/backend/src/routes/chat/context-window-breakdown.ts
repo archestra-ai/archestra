@@ -35,13 +35,27 @@ export function estimateToolsTokens(params: {
   model: string;
   tools: Record<string, unknown>;
 }): number {
+  return Object.values(estimateEachToolTokens(params)).reduce(
+    (total, tokens) => total + tokens,
+    0,
+  );
+}
+
+/** Per-tool context cost of the tool definitions, keyed by tool name. */
+export function estimateEachToolTokens(params: {
+  provider: SupportedProvider;
+  model?: string | null;
+  tools: Record<string, unknown>;
+}): Record<string, number> {
   const tokenizer = getTokenizer(params.provider, params.model);
-  return Object.entries(params.tools).reduce((total, [name, tool]) => {
+  const result: Record<string, number> = {};
+  for (const [name, tool] of Object.entries(params.tools)) {
     const serialized = serializeToolForEstimate(name, tool);
-    return serialized
-      ? total + estimateTextTokens(tokenizer, serialized)
-      : total;
-  }, 0);
+    if (serialized) {
+      result[name] = estimateTextTokens(tokenizer, serialized);
+    }
+  }
+  return result;
 }
 
 // Keep the streamed payload bounded: ship the biggest contributors per category

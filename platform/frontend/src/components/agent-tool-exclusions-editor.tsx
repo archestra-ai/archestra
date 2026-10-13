@@ -111,6 +111,8 @@ interface AgentToolExclusionsEditorProps {
    * Custom, so an editor that has already loaded stays initialized.
    */
   active?: boolean;
+  /** Personal MCP gateways keep the runtime handoff tools out of the seed. */
+  isPersonalGateway?: boolean;
 }
 
 /**
@@ -132,6 +134,7 @@ export const AgentToolExclusionsEditor = forwardRef<
     pendingAssignedToolIds,
     onStateChange,
     active = true,
+    isPersonalGateway,
   },
   ref,
 ) {
@@ -240,6 +243,7 @@ export const AgentToolExclusionsEditor = forwardRef<
     return computeDefaultExclusionToolIds({
       builtInTools: toolsByCatalog.get(ARCHESTRA_MCP_CATALOG_ID) ?? [],
       assignedToolIds,
+      isPersonalGateway,
       // New agent: the backend auto-assigns the creation-default set; protect it
       // by short name until the live selection reports those tool ids.
       ...(agentId
@@ -260,6 +264,7 @@ export const AgentToolExclusionsEditor = forwardRef<
     agentId,
     assignedTools,
     pendingAssignedToolIds,
+    isPersonalGateway,
     skillToolsEnabled,
     sandboxEnabled,
     openappaEnabled,

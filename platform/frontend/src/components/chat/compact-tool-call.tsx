@@ -6,10 +6,11 @@ import {
   parseFullToolName,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon, WebhookIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Tool,
   ToolContent,
@@ -37,7 +38,12 @@ import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils/tailwind";
 import { useApps } from "./apps-context";
 import {
+  BatteryCredentialsTool,
+  parseBatteryCredentialRequest,
+} from "./battery-credentials-tool";
+import {
   type AppEntryRender,
+  getToolCardTitle,
   resolveAppEntryRender,
   resolveRunToolTargetName,
 } from "./chat-messages.utils";
@@ -50,14 +56,17 @@ import {
   useElapsedSince,
 } from "./mcp-task-status";
 import {
+  getOpenAppaSaveResult,
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
+  OpenAppaValidationCompletion,
 } from "./openappa-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { RuntimeCredentialSetupTool } from "./runtime-credential-setup-tool";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
+import type { ToolIconMap } from "./tool-icon-map";
 import { ToolStatusRow } from "./tool-status-row";
 
 type CompactToolEntry = {
@@ -158,7 +167,10 @@ function CompactCircle({
           : state === "denied"
             ? " (denied)"
             : "";
-  const accessibleName = `${parseFullToolName(toolName).toolName.replace(/_/g, " ")}${stateSuffix}`;
+  const label =
+    getToolCardTitle(toolName) ??
+    parseFullToolName(toolName).toolName.replace(/_/g, " ");
+  const accessibleName = `${label}${stateSuffix}`;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -202,7 +214,7 @@ function CompactCircle({
           </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          <span>{parseFullToolName(toolName).toolName.replace(/_/g, " ")}</span>
+          <span>{label}</span>
           {isCancelled ? (
             <span>{" (cancelled)"}</span>
           ) : isBackground ? (
@@ -248,29 +260,32 @@ function ToolCallSkillPill({
     return target;
   })();
 
+  const pill = (
+    <SkillPill
+      skillName={skillName}
+      data-tool-name={toolName}
+      role="status"
+      aria-label={tooltipLabel}
+      tabIndex={display.source ? 0 : undefined}
+      showNativeTitle={false}
+    >
+      {state === "running" || state === "error" ? (
+        <span
+          className={cn(
+            "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+            state === "running" && "bg-blue-500 animate-pulse",
+            state === "error" && "bg-destructive",
+          )}
+        />
+      ) : null}
+    </SkillPill>
+  );
+  // The pill already shows the name; a tooltip only helps when it says more.
+  if (tooltipLabel === display.name) return pill;
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <SkillPill
-            skillName={skillName}
-            data-tool-name={toolName}
-            role="status"
-            aria-label={tooltipLabel}
-            tabIndex={display.source ? 0 : undefined}
-            showNativeTitle={false}
-          >
-            {state === "running" || state === "error" ? (
-              <span
-                className={cn(
-                  "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
-                  state === "running" && "bg-blue-500 animate-pulse",
-                  state === "error" && "bg-destructive",
-                )}
-              />
-            ) : null}
-          </SkillPill>
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{pill}</TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {tooltipLabel}
         </TooltipContent>
@@ -345,11 +360,6 @@ function HookCircle({
   );
 }
 
-export type ToolIconMap = Map<
-  string,
-  { icon?: string | null; catalogId?: string }
->;
-
 export function CompactToolGroup({
   tools,
   toolIconMap,
@@ -370,9 +380,35 @@ export function CompactToolGroup({
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const { isToolName, getToolShortName } = useArchestraMcpIdentity();
   const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
+  // A saved guardrails change opens its circle once, so its result shows
+  // without a click; a circle the user picked is left alone.
+  const userToggledRef = useRef(false);
+  const autoOpenedRef = useRef(new Set<string>());
+  const savedChangeKey = canExpandToolCalls
+    ? tools.findLast(
+        (entry) =>
+          entry.kind !== "hook" &&
+          !entry.errorText &&
+          !autoOpenedRef.current.has(entry.key) &&
+          getOpenAppaSaveResult({
+            shortName: getToolShortName(
+              resolveRunToolTargetName(entry.part, entry.toolName, {
+                getToolShortName,
+              }),
+            ),
+            output: entry.toolResultPart?.output ?? entry.part.output,
+          }) !== null,
+      )?.key
+    : undefined;
+  useEffect(() => {
+    if (!savedChangeKey) return;
+    autoOpenedRef.current.add(savedChangeKey);
+    if (!userToggledRef.current) setExpandedKey(savedChangeKey);
+  }, [savedChangeKey]);
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
+    userToggledRef.current = true;
     // Expanding a tool card collapses any inline app open in this row — the
     // mirror of an app pill collapsing an expanded tool card, so only one
     // thing unfolds under the row at a time. Panel-hosted apps are untouched
@@ -550,19 +586,6 @@ export function CompactToolGroup({
         const name = resolveRunToolTargetName(entry.part, entry.toolName, {
           getToolShortName,
         });
-        if (getToolShortName(name) !== "update_guardrails_policy") return null;
-        return (
-          <OpenAppaPolicyCompletion
-            key={entry.key}
-            output={entry.toolResultPart?.output ?? entry.part.output}
-          />
-        );
-      })}
-      {tools.map((entry) => {
-        if (entry.kind === "hook" || entry.errorText) return null;
-        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
-          getToolShortName,
-        });
         if (
           getToolShortName(name) !== "request_runtime_credential_setup" ||
           (entry.part.state !== "output-available" && !entry.toolResultPart)
@@ -572,6 +595,27 @@ export function CompactToolGroup({
           <RuntimeCredentialSetupTool
             key={entry.key}
             ready
+            toolCallId={entry.part.toolCallId}
+            onSendMessage={appContext?.onSendMessage}
+          />
+        );
+      })}
+      {tools.map((entry) => {
+        if (entry.kind === "hook" || entry.errorText) return null;
+        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
+          getToolShortName,
+        });
+        const request =
+          getToolShortName(name) === TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME
+            ? parseBatteryCredentialRequest(
+                entry.toolResultPart?.output ?? entry.part.output,
+              )
+            : null;
+        if (!request) return null;
+        return (
+          <BatteryCredentialsTool
+            key={entry.key}
+            request={request}
             toolCallId={entry.part.toolCallId}
             onSendMessage={appContext?.onSendMessage}
           />
@@ -658,15 +702,31 @@ function ExpandedToolCard({
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const toolShortName = getToolShortName(toolName);
   const policyOutput = toolResultPart?.output ?? part.output;
+  const resolvedPolicyToolName = resolveRunToolTargetName(part, toolName, {
+    getToolShortName,
+  });
+  const policyToolName = parseFullToolName(resolvedPolicyToolName).toolName;
+  const validationChange = [
+    "preview_openappa_validation_change",
+    "publish_openappa_validation_change",
+  ].includes(getToolShortName(resolvedPolicyToolName) ?? "");
+  // A save reports its result in one line, not the diff it saved.
+  const saveResult = errorText
+    ? null
+    : getOpenAppaSaveResult({
+        shortName: getToolShortName(resolvedPolicyToolName),
+        output: policyOutput,
+      });
   const policyChange =
-    ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
-      parseFullToolName(
-        resolveRunToolTargetName(part, toolName, { getToolShortName }),
-      ).toolName,
-    ) &&
+    !saveResult &&
+    (validationChange ||
+      ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
+        policyToolName,
+      )) &&
     !errorText &&
-    isOpenAppaPolicyChange(policyOutput);
+    isOpenAppaPolicyChange(policyOutput, validationChange);
   const input = withoutProxyTransportArguments({
+    toolName,
     shortName: toolShortName,
     input:
       toolShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME
@@ -698,18 +758,21 @@ function ExpandedToolCard({
     <Tool open>
       <ToolHeader
         type={`tool-${toolName}`}
+        title={getToolCardTitle(toolName)}
         state={headerState}
         statusLabel={humanRuling?.label}
         isCollapsible={false}
         actionButton={logsButton}
         identityBadge={
-          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            Called as
-            <ExecutedAsBadge
-              executedAs={executedAs}
-              meUserId={session?.user?.id}
-            />
-          </span>
+          executedAs ? (
+            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              Called as
+              <ExecutedAsBadge
+                executedAs={executedAs}
+                meUserId={session?.user?.id}
+              />
+            </span>
+          ) : undefined
         }
       />
       <ToolContent>
@@ -720,7 +783,9 @@ function ExpandedToolCard({
             isCancelling={isCancellingTask}
           />
         ) : null}
-        {hasInput ? <ToolInput input={input} defaultOpen /> : null}
+        {hasInput && !policyChange && !saveResult ? (
+          <ToolInput input={input} defaultOpen />
+        ) : null}
         {nestedToolCalls}
         {isApprovalRequested &&
           onToolApprovalResponse &&
@@ -757,21 +822,34 @@ function ExpandedToolCard({
             />
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
-        {policyChange && <OpenAppaPolicyChange output={policyOutput} />}
-        {toolResultPart && !policyChange && (
+        {policyChange && (
+          <OpenAppaPolicyChange
+            output={policyOutput}
+            validationChange={validationChange}
+          />
+        )}
+        {saveResult === "validation" ? (
+          <OpenAppaValidationCompletion output={policyOutput} />
+        ) : saveResult === "policy" ? (
+          <OpenAppaPolicyCompletion output={policyOutput} />
+        ) : null}
+        {toolResultPart && !policyChange && !saveResult && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
           />
         )}
-        {!toolResultPart && !policyChange && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
-        )}
+        {!toolResultPart &&
+          !policyChange &&
+          !saveResult &&
+          Boolean(part.output) && (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={part.output}
+              errorText={errorText}
+            />
+          )}
       </ToolContent>
     </Tool>
   );

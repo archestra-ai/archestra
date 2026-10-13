@@ -34,6 +34,7 @@ pub(crate) struct BatteryInfo {
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
     pub externals: Vec<HelperExternal>,
+    pub benefit: Option<String>,
     pub setup: Option<String>,
     pub files: Vec<BatteryFile>,
 }
@@ -144,6 +145,7 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
         policy,
         helpers: battery.helpers.iter().map(ToString::to_string).collect(),
         credentials: battery.credentials.clone(),
+        benefit: battery.benefit.clone(),
         setup: (!battery.setup.is_empty()).then(|| battery.setup.join("\n")),
         files: files.to_vec(),
     })

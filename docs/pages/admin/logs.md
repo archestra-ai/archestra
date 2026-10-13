@@ -2,7 +2,7 @@
 title: Logs and Auditing
 description: See every model request, tool call, and admin change, and choose who can read them and how long they stay
 order: 5
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,6 +25,14 @@ Open **Logs** in the sidebar to answer questions such as:
 | **Audit** | Change: who, what, when, and if it succeeded | The values before and after, the source IP, and any admin acting as someone else |
 | **Guardrail consults** | [Guardrails](/docs/agents/guardrails) decision: tool, outcome | Why the call was allowed or blocked |
 
+## Keep Prompts Out of the Logs
+
+Keep the cost and audit trail without storing what people sent. Set [`ARCHESTRA_LOGS_CONTENT_MODE=metadata_only`](/docs/reference/configuration#ARCHESTRA_LOGS_CONTENT_MODE) and restart Archestra. Each row still shows the agent, the model or tool, the account used, tokens, cost, and whether the call failed. Opening it shows **Content not stored** instead of the prompt, response, arguments, or result.
+
+- Rows already stored keep their content.
+- Traces leave the content out too, even when content capture is on.
+- Chat history is not affected.
+
 ## Who Can Read Them
 
 One permission shows your own logs. An admin permission shows everyone's. The audit log has no "own" view.
@@ -39,6 +47,6 @@ Sharing an agent or a gateway with someone does not let them read its logs.
 
 ## What to Know
 
-- Logs stay forever by default. To delete old records, set a retention window. Retention is an [Enterprise feature](/docs/get-started#licensing). See [Data Retention](/docs/reference/configuration#data-retention).
+- Logs stay forever by default. To delete old records, set a retention window. Retention is an [Enterprise feature](/docs/get-started/pricing-model). See [Data Retention](/docs/reference/configuration#data-retention).
 - Behind a load balancer, set [`ARCHESTRA_TRUST_PROXY`](/docs/reference/configuration#ARCHESTRA_TRUST_PROXY). Otherwise audit records show the load balancer's IP, not the client's.
 - To send data to your own tools, use [metrics](/docs/admin/observability/metrics) and [traces](/docs/admin/observability/tracing).

@@ -5,6 +5,7 @@ import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
 import db from "@/database";
 import logger from "@/logging";
+import CacheEntryModel from "@/models/cache-entry";
 
 export { LRUCacheManager } from "@/in-memory-lru-cache";
 
@@ -21,6 +22,8 @@ export const CacheKey = {
   ModelsDevSync: "models-dev-sync",
   /** MCP tools for chat feature */
   ChatMcpTools: "chat-mcp-tools",
+  /** Last verified provider tool-token count, bounded to one slot per gateway. */
+  McpToolTokenCount: "mcp-tool-token-count",
   /** Deduplication for processed emails */
   ProcessedEmail: "processed-email",
   /** Rate limiting for webhooks */
@@ -51,10 +54,16 @@ export const CacheKey = {
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** Per-call server-issued review status, for history only; never a ruling. */
+  OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
   /** Pending OpenAPPA review indexed by a verified runtime workspace */
   OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
   /** Sessions already told once to resend a request that lacked the gateway remedy tools */
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
+  /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
+  OpenAppaNotLoadedRuling: "openappa-not-loaded-ruling",
+  /** Sessions whose client already waited once for the gateway remedy tools to load */
+  OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
@@ -65,8 +74,6 @@ export const CacheKey = {
   VirtualKeyRateLimit: "virtual-key-rate-limit",
   /** Connection-setup script token brute-force rate limiting per IP */
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
-  /** Short-lived browser intent and bound native session for /connection. */
-  ConnectionPromptSession: "connection-prompt-session",
   /** Archestra VAF Add On package proxy rate limiting per IP */
   MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
   /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */
@@ -89,6 +96,7 @@ export const CacheKey = {
   RumIngestRateLimit: "rum-ingest-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
+  SlackAppInstallState: "slack-app-install-state",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
   /** Per-user group-token resolution for auto-sync-permissions KB connectors */
@@ -117,10 +125,6 @@ export const CacheKey = {
   TeamsTeamAadGroupId: "teams-team-aad-group-id",
   /** MS Teams teams that have delivered an un-mentioned channel message — proof the RSC consent for reading channel messages exists */
   TeamsUnmentionedChannelTraffic: "teams-unmentioned-channel-traffic",
-  /** Dual LLM sanitized tool results, keyed by tool call + content hash */
-  DualLlmSanitizedResult: "dual-llm-sanitized-result",
-  /** Completed Q&A rounds of a dual LLM analysis that failed mid-flight, keyed by content hash so a retry resumes instead of re-interrogating */
-  DualLlmPartialTranscript: "dual-llm-partial-transcript",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
@@ -133,6 +137,8 @@ export const CacheKey = {
    * read an old boolean and mistake it for "not an encrypted chat".
    */
   EncryptedChatSession: "encrypted-chat-session-v2",
+  /** Arguments behind a Slack approval's "View arguments" button (a button value is capped at 2,000 chars) */
+  SlackApprovalArguments: "chatops-slack-approval-arguments",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
@@ -148,6 +154,11 @@ export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
 export type AllowedCacheKey =
   | `${CacheKeyPrefix}`
   | `${CacheKeyPrefix}-${string}`;
+
+type TransactionalCache = Pick<
+  CacheManager,
+  "get" | "set" | "delete" | "getAndDelete" | "getAndDeleteMany"
+>;
 
 /**
  * PostgreSQL-based cache manager for distributed caching using Keyv.
@@ -394,6 +405,61 @@ class CacheManager {
       }
     }
     return entries;
+  }
+
+  /** All participants must use the same scope and this transaction's cache methods. */
+  async withLock<T>(
+    scope: AllowedCacheKey,
+    callback: (cache: TransactionalCache) => Promise<T>,
+  ): Promise<T> {
+    const keyv = this.keyv;
+    if (!keyv) throw new Error("CacheManager: Not started");
+    // KeyvPostgres creates its table asynchronously; await that before direct SQL.
+    if (keyv.opts.store instanceof KeyvPostgres) {
+      await keyv.opts.store.query("SELECT 1");
+    }
+    return CacheEntryModel.withLock(scope, async (entries) => {
+      const decode = async <V>(
+        raw: string | undefined,
+      ): Promise<V | undefined> => {
+        if (raw === undefined) return undefined;
+        const data = await keyv.deserializeData<V>(raw);
+        return data && (!data.expires || data.expires > Date.now())
+          ? data.value
+          : undefined;
+      };
+      const take = async <V>(keys: AllowedCacheKey[]) => {
+        const rows = await entries.take(keys.map((key) => `keyv:${key}`));
+        const values: Array<{ key: AllowedCacheKey; value: V }> = [];
+        for (const row of rows) {
+          const value = await decode<V>(row.value);
+          if (value !== undefined)
+            values.push({ key: row.key.slice(5) as AllowedCacheKey, value });
+        }
+        return values;
+      };
+      return callback({
+        get: async <V>(key: AllowedCacheKey) =>
+          decode<V>(await entries.get(`keyv:${key}`)),
+        set: async <V>(key: AllowedCacheKey, value: V, ttl?: number) => {
+          const lifetime = ttl ?? this.defaultTtl;
+          const payload = await keyv.serializeData({
+            value,
+            expires: lifetime === 0 ? undefined : Date.now() + lifetime,
+          });
+          await entries.set(
+            `keyv:${key}`,
+            typeof payload === "string" ? payload : JSON.stringify(payload),
+          );
+          return value;
+        },
+        delete: async (key: AllowedCacheKey) =>
+          (await entries.take([`keyv:${key}`])).length > 0,
+        getAndDelete: async <V>(key: AllowedCacheKey) =>
+          (await take<V>([key]))[0]?.value,
+        getAndDeleteMany: take,
+      });
+    });
   }
 
   /**

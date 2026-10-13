@@ -30,6 +30,13 @@ pub(crate) struct CredentialDeclaration {
     pub line: u32,
 }
 
+/// One root external or profile that names a `token_env`: the variable and the
+/// reader's `externals` path.
+pub(crate) struct TokenEnvReader {
+    pub variable: String,
+    pub reader: String,
+}
+
 /// What a root document declares, plus what it declares badly. A shape this reader
 /// cannot make sense of is one error naming the key and its line, and the entries
 /// around it are still read: the panel shows a document it cannot fully parse.
@@ -44,6 +51,9 @@ pub(crate) struct Declarations {
     /// or a profile of the document names them as its `token_env`; the host answers
     /// them per dispatch. A helper's own variables reach only its sandbox.
     pub runtime_credentials: Vec<String>,
+    /// Every root external or profile naming a `token_env`, whether or not
+    /// `[credentials]` binds its variable.
+    pub token_env_readers: Vec<TokenEnvReader>,
     pub errors: Vec<String>,
 }
 
@@ -65,9 +75,11 @@ pub(crate) fn parse(content: &str) -> Declarations {
     read_credentials(content, &document, &mut declarations);
     if let Ok(table) = toml::from_str::<toml::Table>(content) {
         declarations.routed_annotators = crate::policy::routed_annotators(&table);
-        let named: std::collections::BTreeSet<&str> = crate::policy::external_bindings(&table)
-            .into_iter()
-            .filter_map(|(_, _, binding)| binding.get("token_env")?.as_str())
+        declarations.token_env_readers = token_env_readers(&table);
+        let named: std::collections::BTreeSet<&str> = declarations
+            .token_env_readers
+            .iter()
+            .map(|reader| reader.variable.as_str())
             .collect();
         declarations.runtime_credentials = declarations
             .credentials
@@ -78,6 +90,27 @@ pub(crate) fn parse(content: &str) -> Declarations {
             .collect();
     }
     declarations
+}
+
+fn token_env_readers(table: &toml::Table) -> Vec<TokenEnvReader> {
+    let key = |name: &str| toml_edit::Key::new(name).display_repr().into_owned();
+    crate::policy::external_bindings(table)
+        .into_iter()
+        .filter_map(|(section, name, binding)| {
+            let variable = binding.get("token_env")?.as_str()?.to_owned();
+            let profile = table
+                .get("externals")
+                .and_then(|externals| externals.get(section))
+                .and_then(toml::Value::as_table)
+                .is_some_and(|whole| std::ptr::eq(whole, binding));
+            let reader = if profile {
+                format!("externals.{}", key(section))
+            } else {
+                format!("externals.{}.{}", key(section), key(name))
+            };
+            Some(TokenEnvReader { variable, reader })
+        })
+        .collect()
 }
 
 fn read_include(content: &str, document: &Document<&str>, declarations: &mut Declarations) {
@@ -363,6 +396,27 @@ version = 2
         assert!(declarations.server_aliases.is_empty());
         assert!(declarations.credentials.is_empty());
         assert!(declarations.routed_annotators.is_empty());
+    }
+
+    #[test]
+    fn names_every_token_env_reader_by_its_path() {
+        let declarations = parse(
+            "[policy]\nversion = 2\n[externals.jev]\ntoken_env = \"A\"\n[externals.authorities.\"a.b\"]\nurl = \"https://one.example\"\ntoken_env = \"B\"\n",
+        );
+        let readers: Vec<_> = declarations
+            .token_env_readers
+            .iter()
+            .map(|reader| (reader.variable.as_str(), reader.reader.as_str()))
+            .collect();
+        assert_eq!(
+            readers,
+            [
+                ("B", r#"externals.authorities."a.b""#),
+                ("A", "externals.jev"),
+            ]
+        );
+        // A reader is named whether or not `[credentials]` binds its variable.
+        assert!(declarations.runtime_credentials.is_empty());
     }
 
     #[test]

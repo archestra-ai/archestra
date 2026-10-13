@@ -1,5 +1,7 @@
 "use client";
 
+import { ASK_USER_OTHER_ANSWER_FIELD } from "@archestra/shared";
+import { ArrowRightIcon, PencilIcon } from "lucide-react";
 import { z } from "zod";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -14,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -91,27 +94,69 @@ export function getElicitationFields(schema: unknown): ElicitationField[] {
     }));
 }
 
-function isChoiceForm(fields: ElicitationField[]) {
+/**
+ * `ask_user`'s "Type something" field: a typed answer instead of a pick. Only the
+ * property it names counts; another server's optional text field is its own
+ * question, and its form keeps the dialog.
+ */
+export function isOtherTextField(field: ElicitationField) {
   return (
-    fields.length > 0 &&
-    fields.every((field) => {
-      const options = field.schema.enum;
-      return (
-        field.schema.type === "boolean" ||
-        (!!options?.length &&
-          options.every((option) => typeof option === "string"))
-      );
-    })
+    field.name === ASK_USER_OTHER_ANSWER_FIELD &&
+    field.schema.type === "string" &&
+    !field.schema.enum?.length &&
+    !field.required
+  );
+}
+
+function isChoiceForm(fields: ElicitationField[]) {
+  const choices = fields.filter(isChoiceField);
+  return (
+    choices.length > 0 &&
+    fields.length - choices.length <= 1 &&
+    fields.every((field) => isChoiceField(field) || isOtherTextField(field))
   );
 }
 
 /** One enum field: picking an option answers the whole question. */
 export function isSingleChoiceForm(fields: ElicitationField[]) {
+  const choices = fields.filter((field) => !isOtherTextField(field));
   return (
-    fields.length === 1 &&
-    fields[0].schema.type !== "boolean" &&
-    (fields[0].schema.enum?.length ?? 0) > 0
+    choices.length === 1 &&
+    choices[0].schema.type !== "boolean" &&
+    (choices[0].schema.enum?.length ?? 0) > 0
   );
+}
+
+/**
+ * The answer a chat message gives the open question. With one question
+ * waiting, and it a single pick that takes a typed answer, the composer is
+ * that typed answer: the card shows no text box of its own.
+ */
+export function getComposerAnswer({
+  requests,
+  text,
+}: {
+  requests: ChatMcpElicitationRequest[];
+  text: string;
+}): ElicitationResponse | null {
+  const typed = text.trim();
+  if (requests.length !== 1 || !typed) {
+    return null;
+  }
+  const [request] = requests;
+  const fields = getElicitationFields(request.requestedSchema);
+  const other = fields.find(isOtherTextField);
+  if (!other || !isSingleChoiceForm(fields)) {
+    return null;
+  }
+  return {
+    id: request.id,
+    action: "accept",
+    content: normalizeValues(fields, {
+      ...Object.fromEntries(fields.map((field) => [field.name, ""])),
+      [other.name]: typed,
+    }),
+  };
 }
 
 export function getDefaultValues(fields: ElicitationField[]) {
@@ -176,13 +221,24 @@ export function validateValues(
 
 /**
  * Checks whether a choice form has required selections before submitting.
- * Required fields must have a value. An all-optional form is complete even with nothing selected.
+ * Required fields must have a value. An all-optional form is complete even with
+ * nothing selected, unless it offers "Type something": then it needs a pick or text.
  */
 export function hasChoiceSelection(
   fields: ElicitationField[],
   values: Record<string, unknown>,
 ) {
-  return Object.keys(validateValues(fields, values)).length === 0;
+  if (Object.keys(validateValues(fields, values)).length > 0) return false;
+  // With an "Type something" field, a pick or a typed answer is what answers it.
+  return (
+    !fields.some(isOtherTextField) ||
+    fields.some((field) => {
+      const value = values[field.name];
+      return field.schema.type === "boolean"
+        ? value === true
+        : typeof value === "string" && value.trim() !== "";
+    })
+  );
 }
 
 export function normalizeValues(
@@ -236,6 +292,9 @@ export function ElicitationFieldInput({
   disabled = false,
   onChange,
   onPick,
+  onFocus,
+  other,
+  submitsOnPick = false,
 }: {
   /** Keeps control ids unique when several requests render at once. */
   idPrefix: string;
@@ -256,6 +315,15 @@ export function ElicitationFieldInput({
    * which changes nothing and so never reaches `onChange`.
    */
   onPick?: (value: string) => void;
+  /** Focus on a text field; choice controls ignore it. */
+  onFocus?: () => void;
+  /** Adds an "Type something" option to a single pick, for a typed answer instead. */
+  other?: { selected: boolean; onSelect: () => void };
+  /**
+   * Options are buttons that answer on activation, not radios that only
+   * select: a radio promises a pick that something else submits.
+   */
+  submitsOnPick?: boolean;
 }) {
   const id = `mcp-elicitation-${idPrefix}-${field.name}`;
   const errorId = `${id}-error`;
@@ -311,6 +379,53 @@ export function ElicitationFieldInput({
     );
   }
 
+  if (enumValues?.length && choiceStyle && submitsOnPick) {
+    return (
+      <fieldset
+        aria-labelledby={labelledBy}
+        aria-label={labelledBy ? undefined : field.label}
+        className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0"
+      >
+        {enumValues.map((option, index) => {
+          const description =
+            typeof enumDescriptions?.[index] === "string" &&
+            enumDescriptions[index].length > 0
+              ? enumDescriptions[index]
+              : undefined;
+          return (
+            <OptionButton
+              key={option}
+              selected={value === option}
+              disabled={disabled}
+              onClick={() => {
+                onChange(option);
+                onPick?.(option);
+              }}
+            >
+              <span className="text-sm font-medium leading-5">{option}</span>
+              {description ? (
+                <FieldDescription className="group-hover:text-primary-foreground/80 group-focus-visible:text-primary-foreground/80">
+                  {description}
+                </FieldDescription>
+              ) : null}
+            </OptionButton>
+          );
+        })}
+        {other ? (
+          <OptionButton
+            selected={other.selected}
+            aria-expanded={other.selected}
+            disabled={disabled}
+            onClick={other.onSelect}
+            icon={<PencilIcon className="size-4" aria-hidden />}
+          >
+            <span className="text-sm leading-5">Type something…</span>
+          </OptionButton>
+        ) : null}
+      </fieldset>
+    );
+  }
+
   if (enumValues?.length && choiceStyle) {
     return (
       <div className="flex flex-col gap-1">
@@ -323,14 +438,16 @@ export function ElicitationFieldInput({
           </p>
         )}
         <RadioGroup
-          value={String(value ?? "")}
+          value={other?.selected ? OTHER_OPTION_VALUE : String(value ?? "")}
           disabled={disabled}
-          onValueChange={onChange}
+          onValueChange={(picked) =>
+            picked === OTHER_OPTION_VALUE ? other?.onSelect() : onChange(picked)
+          }
           aria-labelledby={labelledBy ?? (hideLabel ? undefined : labelId)}
           aria-label={!labelledBy && hideLabel ? field.label : undefined}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
-          className="flex flex-col gap-1"
+          className="flex flex-col gap-1.5"
         >
           {enumValues.map((option, index) => {
             const optionId = `${id}-${index}`;
@@ -361,6 +478,20 @@ export function ElicitationFieldInput({
               </OptionRow>
             );
           })}
+          {other ? (
+            <OptionRow
+              htmlFor={`${id}-other`}
+              selected={other.selected}
+              error={Boolean(error)}
+            >
+              <RadioGroupItem
+                id={`${id}-other`}
+                value={OTHER_OPTION_VALUE}
+                className="mt-0.5"
+              />
+              <span className="text-sm leading-5">Type something</span>
+            </OptionRow>
+          ) : null}
         </RadioGroup>
         {error ? (
           <p id={errorId} className="text-xs text-destructive">
@@ -376,7 +507,7 @@ export function ElicitationFieldInput({
 
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>
+      <Label htmlFor={id} className={hideLabel ? "sr-only" : undefined}>
         {field.label}
         {field.required ? <span className="text-destructive">*</span> : null}
       </Label>
@@ -405,6 +536,7 @@ export function ElicitationFieldInput({
           value={String(value ?? "")}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
+          onFocus={onFocus}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
           className={String(value ?? "").length > 120 ? "min-h-24" : "min-h-10"}
@@ -438,6 +570,16 @@ export function ElicitationFieldInput({
 
 // === Internal helpers ===
 
+const OTHER_OPTION_VALUE = ASK_USER_OTHER_ANSWER_FIELD;
+
+function isChoiceField(field: ElicitationField) {
+  const options = field.schema.enum;
+  return (
+    field.schema.type === "boolean" ||
+    (!!options?.length && options.every((option) => typeof option === "string"))
+  );
+}
+
 type FieldSchema = {
   title?: string;
   description?: string;
@@ -448,9 +590,51 @@ type FieldSchema = {
 };
 
 /**
- * One selectable option row. Clicking anywhere on the row selects it.
- * Selected and hover states share the muted background.
- * The border appears only when the row is selected.
+ * An option that answers when pressed. A bordered tile that fills with the
+ * primary color on hover, with an arrow, so it reads as an action rather
+ * than a pick that something else submits. With `icon` it opens a typed
+ * answer instead: a quieter tile with the icon in front and no arrow.
+ */
+function OptionButton({
+  selected = false,
+  icon,
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"button"> & {
+  selected?: boolean;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <UnstyledButton
+      className={cn(
+        "group flex min-h-11 w-full items-center gap-3 rounded-md border bg-card px-3 py-2 text-left shadow-xs transition-colors outline-none",
+        "hover:border-primary hover:bg-primary hover:text-primary-foreground",
+        "focus-visible:border-primary focus-visible:bg-primary focus-visible:text-primary-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "disabled:pointer-events-none disabled:opacity-50",
+        icon ? "text-muted-foreground" : null,
+        selected ? "border-primary" : "border-border",
+        className,
+      )}
+      {...props}
+    >
+      {icon}
+      <span className="flex min-w-0 flex-1 flex-col">{children}</span>
+      {icon ? null : (
+        <ArrowRightIcon
+          className="size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+          aria-hidden
+        />
+      )}
+    </UnstyledButton>
+  );
+}
+
+/**
+ * One selectable option: a bordered tile like `OptionButton`, but it keeps
+ * its radio or checkbox, because picking here only selects and Next or
+ * Submit sends. Clicking anywhere on the tile selects it; the picked tile
+ * takes the primary border.
  */
 function OptionRow({
   htmlFor,
@@ -467,10 +651,12 @@ function OptionRow({
     <label
       htmlFor={htmlFor}
       className={cn(
-        "-mx-1 flex cursor-pointer items-start gap-2 rounded-md border px-3 py-1.5 transition-colors",
-        "hover:bg-muted/60 has-[:focus-visible]:bg-muted/60 has-[:focus-visible]:ring-1 has-[:focus-visible]:ring-ring/50",
-        selected ? "border-border bg-muted" : "border-transparent",
-        error && !selected ? "border-destructive/40" : null,
+        "flex min-h-11 cursor-pointer items-start gap-3 rounded-md border bg-card px-3 py-2.5 shadow-xs transition-colors",
+        "hover:bg-muted/60 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50",
+        selected
+          ? "border-primary bg-primary/5 ring-1 ring-primary ring-inset"
+          : "border-border",
+        error && !selected ? "border-destructive/60" : null,
       )}
     >
       {children}

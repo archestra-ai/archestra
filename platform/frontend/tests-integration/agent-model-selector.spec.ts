@@ -86,7 +86,7 @@ test("switches between a personal subscription and provider key while creating a
   });
 
   await page.goto("/agents/new");
-  await page.getByRole("button", { name: /Start from scratch/ }).click();
+  await page.getByRole("button", { name: /^New .* agent/ }).click();
 
   for (let index = 0; index < 10; index++) {
     await page

@@ -57,6 +57,7 @@ const {
 });
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE: "remote_server_url_not_allowed",
   CATALOG_NAME_CONFLICT_CODE: "catalog_name_conflict",
   getCatalogMutationErrorCode: () => undefined,
@@ -493,7 +494,6 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(
       screen.queryByTestId("mcp-registry-attention-row-internal-tools"),
     ).toBeNull();
-    expect(screen.getByText("Installed")).toBeInTheDocument();
   });
 
   it("repairs the selected connection inline without opening a dialog", async () => {
@@ -653,11 +653,13 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByText("Installed")).toBeNull();
   });
 
-  it("says a remote server is installed, since it has no pod to be running", () => {
+  it("shows no status beside an installed remote server, which has no pod", () => {
     installedWithNoDeploymentEntry();
     renderPage({ serverType: "remote", localConfig: null });
 
-    expect(screen.getByText("Installed")).toBeInTheDocument();
+    expect(screen.queryByText("Installed")).toBeNull();
+    expect(screen.queryByText("Status unavailable")).toBeNull();
+    expect(screen.queryByText("Not installed")).toBeNull();
   });
 
   it("says it is still checking while the deployment feed is loading", () => {

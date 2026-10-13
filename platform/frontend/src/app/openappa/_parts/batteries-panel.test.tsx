@@ -416,15 +416,18 @@ test("an uploaded entry names the package bytes it is pinned to", async () => {
   );
 });
 
-test("a held pull naming only dropped batteries is accepted with policy permissions", async () => {
+test("a held pull reads as one approval notice, not a sync failure, and approves with policy permissions", async () => {
   let accepted = false;
   declarations = emptyDeclarations({
+    managedInGithub: true,
     heldPull: {
       contentHash: "b".repeat(64),
       sourceCommit: "c".repeat(40),
       reasons: ["drops_batteries"],
+      message: "The repository's policy removes batteries added here: github.",
     },
   });
+  // Policy access alone: the hold comes from the policy, not sync settings.
   grantOnly("openappaPolicy");
   server.use(
     http.post(`${baseUrl}/api/openappa/github-sync/accept-held`, () => {
@@ -441,17 +444,26 @@ test("a held pull naming only dropped batteries is accepted with policy permissi
     }),
   );
   show();
-  fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+  expect(
+    await screen.findByText("A change from the repository needs approval"),
+  ).toBeVisible();
+  expect(
+    screen.getByText(/removes batteries added here: github\./),
+  ).toBeVisible();
+  expect(screen.queryByText("GitHub sync failed")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
   await waitFor(() => expect(accepted).toBe(true));
 });
 
 test("a held pull that moves credentials needs the credential permission", async () => {
   declarations = emptyDeclarations({
+    managedInGithub: true,
     batteries: [declaredGithub()],
     heldPull: {
       contentHash: "b".repeat(64),
       sourceCommit: "c".repeat(40),
       reasons: ["drops_batteries", "changes_credentials"],
+      message: null,
     },
   });
   grantOnly("openappaPolicy");

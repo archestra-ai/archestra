@@ -330755,12 +330755,17 @@
                               "changes_credentials"
                             ]
                           }
+                        },
+                        "message": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
                         "contentHash",
                         "sourceCommit",
-                        "reasons"
+                        "reasons",
+                        "message"
                       ],
                       "additionalProperties": false
                     },
@@ -333658,12 +333663,17 @@
                               "changes_credentials"
                             ]
                           }
+                        },
+                        "message": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
                         "contentHash",
                         "sourceCommit",
-                        "reasons"
+                        "reasons",
+                        "message"
                       ],
                       "additionalProperties": false
                     },

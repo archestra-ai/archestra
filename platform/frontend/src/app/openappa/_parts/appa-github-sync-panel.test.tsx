@@ -160,7 +160,7 @@ test("a held pull waits for approval, not a failure, and approves in place", asy
   show();
   expect(await screen.findByText("Needs approval")).toBeVisible();
   expect(screen.queryByText("Sync failed")).not.toBeInTheDocument();
-  expect(screen.getByText("Repository changes need approval")).toBeVisible();
+  expect(screen.getByText("A change from GitHub needs approval")).toBeVisible();
   expect(screen.getByText(new RegExp(message))).toBeVisible();
   expect(screen.getByRole("link", { name: "See batteries" })).toHaveAttribute(
     "href",
@@ -189,7 +189,7 @@ test("only someone who may bind credentials can approve a credential change", as
   };
   show();
   expect(
-    await screen.findByText("Repository changes need approval"),
+    await screen.findByText("A change from GitHub needs approval"),
   ).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Approve" }),

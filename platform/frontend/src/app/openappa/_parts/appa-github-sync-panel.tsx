@@ -6,10 +6,8 @@ import {
   ExternalLink,
   GitBranch,
   Github,
-  GitPullRequestArrow,
   RefreshCw,
 } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -41,7 +39,6 @@ import {
 } from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAcceptHeldPull } from "@/lib/openappa-batteries.query";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
@@ -52,6 +49,7 @@ import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import { HeldPullNotice } from "./held-pull-notice";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -68,15 +66,6 @@ export function AppaGithubSyncPanel() {
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
-  // Approving a held pull performs what it was held for, as on the batteries page.
-  const { data: canEditPolicy } = useHasPermissions({
-    openappaPolicy: ["update"],
-  });
-  const { data: canBindCredentials } = useHasPermissions({
-    openappaPolicy: ["update"],
-    credential: ["update"],
-  });
-  const acceptHeld = useAcceptHeldPull();
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -111,10 +100,7 @@ export function AppaGithubSyncPanel() {
       : "Automatic updates stopped";
   const connected = !!source?.interval;
   // A held pull is not a failure: it waits for someone here to approve it.
-  const held = !!source?.heldReasons.length;
-  const mayApprove = source?.heldReasons.includes("changes_credentials")
-    ? canBindCredentials === true
-    : canEditPolicy === true;
+  const held = !!source?.heldReasons?.length;
   const status = !enabled
     ? "Disabled"
     : held
@@ -276,33 +262,13 @@ export function AppaGithubSyncPanel() {
                 )}
                 {held ? (
                   <div className="px-4 pb-4">
-                    <InlineNotice variant="warning">
-                      <GitPullRequestArrow className="size-4 shrink-0" />
-                      <span className="font-medium">
-                        Repository changes need approval
-                      </span>
-                      <InlineNoticeText className="flex-1">
-                        {source.lastSyncError} Your current policy stays active
-                        until you approve.{" "}
-                        <Link
-                          href="/openappa/batteries"
-                          className="font-medium underline underline-offset-4"
-                        >
-                          See batteries
-                        </Link>
-                      </InlineNoticeText>
-                      {mayApprove && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="ml-auto"
-                          disabled={acceptHeld.isPending}
-                          onClick={() => acceptHeld.mutate()}
-                        >
-                          <span>Approve</span>
-                        </Button>
-                      )}
-                    </InlineNotice>
+                    <HeldPullNotice
+                      batteriesLink
+                      held={{
+                        reasons: source.heldReasons,
+                        message: source.lastSyncError,
+                      }}
+                    />
                   </div>
                 ) : source.lastSyncError ? (
                   <div className="px-4 pb-4">

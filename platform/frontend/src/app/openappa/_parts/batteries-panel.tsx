@@ -8,7 +8,6 @@ import {
   BatteryCharging,
   ExternalLink,
   Eye,
-  GitPullRequestArrow,
   KeyRound,
   Loader2,
   Pencil,
@@ -77,8 +76,6 @@ import {
   type BatterySummary,
   batteryMatchesQueryKey,
   type PolicyBattery,
-  type PolicyDeclarations,
-  useAcceptHeldPull,
   useBatteries,
   useBatteryMatches,
   useCreateBatteryInstall,
@@ -376,14 +373,7 @@ export function BatteriesPanel() {
           <InlineNoticeText>{lastError}</InlineNoticeText>
         </InlineNotice>
       )}
-      {managedInGithub && <GithubManagedPolicyNotice />}
-      {heldPull !== null && (
-        <HeldPullNotice
-          heldPull={heldPull}
-          canManage={canManage === true}
-          canBind={canBind === true}
-        />
-      )}
+      {managedInGithub && <GithubManagedPolicyNotice held={heldPull} />}
       {writable && servers.data?.length === 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>
@@ -509,45 +499,6 @@ type BatteryTableRow = {
 };
 
 const UNBOUND = "__unbound__";
-
-function HeldPullNotice({
-  heldPull,
-  canManage,
-  canBind,
-}: {
-  heldPull: NonNullable<PolicyDeclarations["heldPull"]>;
-  canManage: boolean;
-  canBind: boolean;
-}) {
-  const accept = useAcceptHeldPull();
-  // Publishing the held text performs what it was held for: dropping an entry
-  // is a policy edit, rebinding a variable hands a credential to other code.
-  const mayAccept = heldPull.reasons.includes("changes_credentials")
-    ? canBind
-    : canManage;
-  return (
-    <InlineNotice variant="warning">
-      <GitPullRequestArrow />
-      <span className="font-medium">Repository changes need approval</span>
-      <InlineNoticeText>
-        {heldPull.reasons.map((reason) => (
-          <div key={reason}>{HELD_PULL_REASONS[reason]}</div>
-        ))}
-      </InlineNoticeText>
-      {mayAccept && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto"
-          disabled={accept.isPending}
-          onClick={() => accept.mutate()}
-        >
-          <span>Approve</span>
-        </Button>
-      )}
-    </InlineNotice>
-  );
-}
 
 /** A row's mark, as the shared battery icon resolves it. */
 function RowBatteryIcon({
@@ -1461,15 +1412,6 @@ function UploadPackageDialog({
     </StandardFormDialog>
   );
 }
-
-const HELD_PULL_REASONS: Record<
-  NonNullable<PolicyDeclarations["heldPull"]>["reasons"][number],
-  string
-> = {
-  drops_batteries: "The repository's policy removes batteries added here.",
-  changes_credentials:
-    "The repository's policy gives batteries credentials. Approve to let them read those keys.",
-};
 
 /** Package files keyed by their path inside the picked folder. */
 async function readPackage(files: File[]) {

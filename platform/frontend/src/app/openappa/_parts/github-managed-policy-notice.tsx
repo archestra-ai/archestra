@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { type HeldPull, HeldPullNotice } from "./held-pull-notice";
 
 type AppaGithubSyncStatus = NonNullable<
   ReturnType<typeof useAppaGithubSync>["data"]
@@ -16,8 +17,11 @@ type AppaGithubSyncStatus = NonNullable<
 
 export function GithubManagedPolicyNotice({
   validationDirectory,
+  held: heldFromPolicy,
 }: {
   validationDirectory?: string;
+  /** The hold as the policy reports it, for viewers who can't read sync settings. */
+  held?: HeldPull | null;
 } = {}) {
   const { data } = useAppaGithubSync();
   const source = data?.source;
@@ -27,6 +31,13 @@ export function GithubManagedPolicyNotice({
     validations && source?.repo
       ? `${data?.githubWebUrl}/${source.repo}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
       : githubPolicyFileUrl(data, "blob");
+
+  // A pull waiting for approval is not a failure: say what it waits for.
+  const held: HeldPull | null = source?.heldReasons?.length
+    ? { reasons: source.heldReasons, message: source.lastSyncError }
+    : (heldFromPolicy ?? null);
+  if (held?.reasons.length)
+    return <HeldPullNotice held={held} batteriesLink={!heldFromPolicy} />;
 
   // Setup isn't finished until its pull request merges: ask for that instead.
   if (!failed && source?.repo && source.setupPullRequestNumber)

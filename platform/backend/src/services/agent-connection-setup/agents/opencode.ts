@@ -460,12 +460,21 @@ $archPrimaryCatalog = ${psq(JSON.stringify({ providers, nativeProviders, appName
 $archPrimaryScript = @'
 ${OPENCODE_PRIMARY_CONFIG_SCRIPT}
 '@
-try { $archNotices = $archPrimaryCatalog | & node -e $archPrimaryScript; if ($LASTEXITCODE -ne 0) { throw 'Could not configure model providers' }
+# Run the script from a file: Windows PowerShell 5.1 drops the double quotes
+# inside a native command argument, so node -e would get broken code.
+$archPrimaryFile = Join-Path ([IO.Path]::GetTempPath()) ('archestra-opencode-primary-' + [guid]::NewGuid().ToString('N') + '.cjs')
+try {
+  [IO.File]::WriteAllText($archPrimaryFile, $archPrimaryScript)
+  $archNotices = $archPrimaryCatalog | & node $archPrimaryFile; if ($LASTEXITCODE -ne 0) { throw 'Could not configure model providers' }
   foreach ($archNotice in @($archNotices)) {
     $archLine = [string]$archNotice
     if ($archLine.StartsWith('info:')) { Ok $archLine.Substring(5) } elseif ($archLine.StartsWith('warn:')) { Warn $archLine.Substring(5) }
-  } }
-finally { Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHESTRA_OC_MAJOR -ErrorAction SilentlyContinue }
+  }
+}
+finally {
+  Remove-Item -Force -ErrorAction SilentlyContinue $archPrimaryFile
+  Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHESTRA_OC_MAJOR -ErrorAction SilentlyContinue
+}
 ${opencodeRoutingPluginPowerShell({ routes, headers: opencodeProxyHeaders(ctx.proxy) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const headers = opencodeProxyHeaders(ctx.proxy);

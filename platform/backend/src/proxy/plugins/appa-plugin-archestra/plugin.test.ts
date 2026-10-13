@@ -4264,6 +4264,7 @@ describe("rendering runtime text for this client", () => {
         }),
       ).toBeUndefined();
       for (const outcome of [
+        "review_declined",
         "review_unanswered",
         "review_cancelled",
         "review_unavailable",

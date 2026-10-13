@@ -52,7 +52,9 @@ import {
   getHitlReviewResult,
   type HitlReviewOutcome,
   hitlReviewAskedInForm,
+  isHitlReviewOutcome,
   recordHitlRuling,
+  sealHitlClosure,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
@@ -147,6 +149,8 @@ import {
   type AppaRelayMessage,
   type AppaTrustedContext,
   type AskUserArguments,
+  type NativeQuestionNoAnswer,
+  type NativeQuestionReading,
 } from "./types";
 import { withCallerScope, withoutCallerScope } from "./utils";
 
@@ -4550,7 +4554,8 @@ async function recordNativeHitlRulings(params: {
       : "none";
     if (reading === "unrecognized") {
       // A client version may word its answer differently. Nothing is read
-      // from it; a client with forms is asked again there.
+      // from it; a client with forms is asked again there. A known no-answer
+      // does not take this path.
       logger.warn(
         {
           client: params.binding.adapter?.id,
@@ -4571,7 +4576,33 @@ async function recordNativeHitlRulings(params: {
         continue;
       }
     }
-    const ruling = reading === "unrecognized" ? "none" : reading;
+    if (
+      isNativeNoAnswer(reading) ||
+      reading === "unrecognized" ||
+      reading === "none"
+    ) {
+      for (const offerId of claim.offerIds) {
+        const review = await getHitlReview({
+          session: params.binding.session,
+          offerId,
+        });
+        const sealed = await sealHitlClosure({
+          session: params.binding.session,
+          offerId,
+          ...(isNativeNoAnswer(reading) ? { closure: reading } : {}),
+        });
+        const ruling =
+          sealed === "approve" || sealed === "deny" ? sealed : "none";
+        recorded.push({
+          offerId,
+          ruling,
+          ...(review?.tool ? { reviewedTool: review.tool } : {}),
+          ...(review?.arguments ? { reviewedArguments: review.arguments } : {}),
+        });
+      }
+      continue;
+    }
+    const ruling = reading;
     logger.debug(
       {
         ruling,
@@ -4773,18 +4804,7 @@ async function pendingReviewResult(
     ok: false,
     outcome,
     offer_id: offerId,
-    instruction: {
-      review_required:
-        "Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with Approve and Deny choices. Call execute_remedy_plan again only after the user approves.",
-      review_unanswered:
-        "The approval review expired without an answer. The protected call remains blocked; no ruling was granted. Do not retry this expired review.",
-      review_cancelled:
-        "The user cancelled the approval review. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
-      review_unavailable:
-        "The approval review could not be delivered in this session. The protected call remains blocked; no ruling was granted.",
-      review_invalid:
-        "The approval review did not receive a valid decision. The protected call remains blocked; no ruling was granted.",
-    }[outcome],
+    instruction: reviewStatusInstruction(outcome),
   });
 }
 
@@ -4953,6 +4973,35 @@ async function hasRemedyOfferResult(params: {
   return true;
 }
 
+function reviewStatusInstruction(outcome: HitlReviewOutcome): string {
+  const instructions = {
+    review_required:
+      "Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with Approve and Deny choices. Call execute_remedy_plan again only after the user approves.",
+    review_declined:
+      "The client declined the approval review. That is not a human denial. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
+    review_unanswered:
+      "The approval review expired without an answer. The protected call remains blocked; no ruling was granted. Do not retry this expired review.",
+    review_cancelled:
+      "The client canceled the approval review. That does not show a person saw it. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
+    review_unavailable:
+      "The approval review could not be delivered in this session. The protected call remains blocked; no ruling was granted.",
+    review_invalid:
+      "The approval review did not receive a valid decision. The protected call remains blocked; no ruling was granted.",
+  } satisfies Record<HitlReviewOutcome, string>;
+  return instructions[outcome];
+}
+
+function isNativeNoAnswer(
+  reading: NativeQuestionReading,
+): reading is NativeQuestionNoAnswer {
+  return (
+    reading === "declined" ||
+    reading === "cancelled" ||
+    reading === "unanswered" ||
+    reading === "unavailable"
+  );
+}
+
 function reviewRequiredOfferId(value: unknown, depth: number): string | null {
   const status = reviewResultStatus(value, depth);
   return status?.outcome === "review_required" ? status.offerId : null;
@@ -4989,11 +5038,7 @@ function reviewResultStatus(
   }
   if (!isRecord(value)) return null;
   if (
-    (value.outcome === "review_required" ||
-      value.outcome === "review_unanswered" ||
-      value.outcome === "review_cancelled" ||
-      value.outcome === "review_unavailable" ||
-      value.outcome === "review_invalid") &&
+    isHitlReviewOutcome(value.outcome) &&
     typeof value.offer_id === "string" &&
     value.offer_id.length > 0
   ) {

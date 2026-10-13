@@ -133,7 +133,7 @@ export type AppaClientAdapter = {
     /**
      * The client also shows the gateway's MCP form (elicitation), which
      * returns the choice as data. An answer in a wording the proxy does not
-     * know is then asked once more there, instead of counting as no answer.
+     * know is then asked once more there. A known no-answer is not asked again.
      */
     formFallback?: boolean;
   };
@@ -352,8 +352,19 @@ export type NativeQuestionResult = {
 
 export type NativeQuestionRuling = "approve" | "deny" | "none";
 
+/** A known terminal no-answer. It is not a human ruling and is not asked again. */
+export type NativeQuestionNoAnswer =
+  | "declined"
+  | "cancelled"
+  | "unanswered"
+  | "unavailable";
+
 /**
- * A ruling, or "unrecognized" for an answer in a wording the adapter does not
- * know. An unrecognized answer is never read as a choice.
+ * A ruling, a known no-answer, or "unrecognized" for a wording the adapter
+ * does not know. An unrecognized answer is never read as a choice. Only that
+ * unrecognized wording may fall back to a form; a known no-answer may not.
  */
-export type NativeQuestionReading = NativeQuestionRuling | "unrecognized";
+export type NativeQuestionReading =
+  | NativeQuestionRuling
+  | NativeQuestionNoAnswer
+  | "unrecognized";

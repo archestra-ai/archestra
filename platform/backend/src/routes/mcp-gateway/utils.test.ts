@@ -3948,6 +3948,22 @@ describe("createAgentServer tools/list", () => {
       noPerson: true,
     },
     {
+      case: "accepted by its automatic reviewer",
+      callMeta: {},
+      answer: {
+        action: "accept",
+        content: { choice: "One" },
+        _meta: { approvals_reviewer: "auto_review" },
+      },
+      noPerson: true,
+    },
+    {
+      case: "accepted in a run no person drives",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
+      answer: { action: "accept", content: { choice: "One" } },
+      noPerson: true,
+    },
+    {
       // `codex exec` declares forms, then declines each one itself.
       case: "in a run no person drives",
       callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
@@ -3969,7 +3985,7 @@ describe("createAgentServer tools/list", () => {
       answer: { action: "decline" },
       noPerson: false,
     },
-  ])("ask_user reads a Codex form decline $case", async ({
+  ])("ask_user treats a Codex form answer $case as unanswered when no person gave it", async ({
     callMeta,
     answer,
     noPerson,

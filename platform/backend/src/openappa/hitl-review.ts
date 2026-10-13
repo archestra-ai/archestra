@@ -14,12 +14,84 @@ import type { OpenAppaSession } from "./service";
 
 type HitlRuling = "approve" | "deny" | "none";
 
+type HitlClosureReason =
+  | "declined"
+  | "cancelled"
+  | "unanswered"
+  | "unavailable";
+
 export type HitlReviewOutcome =
   | "review_required"
+  | "review_declined"
   | "review_unanswered"
   | "review_cancelled"
   | "review_unavailable"
   | "review_invalid";
+
+const HITL_REVIEW_OUTCOMES = [
+  "review_required",
+  "review_declined",
+  "review_unanswered",
+  "review_cancelled",
+  "review_unavailable",
+  "review_invalid",
+] as const satisfies readonly HitlReviewOutcome[];
+
+const HITL_CLOSURE_REASONS = [
+  "declined",
+  "cancelled",
+  "unanswered",
+  "unavailable",
+] as const satisfies readonly HitlClosureReason[];
+
+export function isHitlReviewOutcome(
+  value: unknown,
+): value is HitlReviewOutcome {
+  return (
+    typeof value === "string" &&
+    (HITL_REVIEW_OUTCOMES as readonly string[]).includes(value)
+  );
+}
+
+function isHitlClosureReason(value: unknown): value is HitlClosureReason {
+  return (
+    typeof value === "string" &&
+    (HITL_CLOSURE_REASONS as readonly string[]).includes(value)
+  );
+}
+
+/** A stored none without a closure is an old in-flight record, not a denial. */
+export function reviewOutcomeFromClosure(
+  closure: HitlClosureReason | undefined,
+): Exclude<HitlReviewOutcome, "review_required"> {
+  switch (closure) {
+    case "declined":
+      return "review_declined";
+    case "cancelled":
+      return "review_cancelled";
+    case "unanswered":
+      return "review_unanswered";
+    case "unavailable":
+      return "review_unavailable";
+    default:
+      return "review_invalid";
+  }
+}
+
+export function closureFromReviewOutcome(
+  outcome: Exclude<HitlReviewOutcome, "review_required" | "review_invalid">,
+): HitlClosureReason {
+  switch (outcome) {
+    case "review_declined":
+      return "declined";
+    case "review_cancelled":
+      return "cancelled";
+    case "review_unanswered":
+      return "unanswered";
+    case "review_unavailable":
+      return "unavailable";
+  }
+}
 
 type PendingHitlReview = {
   offerId: string;
@@ -93,10 +165,33 @@ export async function stageHitlReview(params: {
   session: OpenAppaSession;
   review: PendingHitlReview;
   callId?: string;
-}): Promise<void> {
-  await cacheManager.withLock(
+}): Promise<
+  | { status: "staged" }
+  | { status: "approve" | "deny" }
+  | {
+      status: "none";
+      closure?: "declined" | "cancelled" | "unanswered" | "unavailable";
+    }
+> {
+  const staged = await cacheManager.withLock(
     stagePresenceKey(params.session, params.review.offerId),
     async (cache) => {
+      const existing = await readLockedRulings(
+        cache,
+        params.session,
+        params.review.offerId,
+      );
+      // A stored decision is immutable. Recreating the stage would let a late
+      // approval replace a sealed closure or denial.
+      if (existing.deny) return { status: "deny" as const };
+      if (existing.approve) return { status: "approve" as const };
+      if (existing.none) {
+        const closure = closureOf(existing.none);
+        return {
+          status: "none" as const,
+          ...(closure ? { closure } : {}),
+        };
+      }
       await cache.set(
         stagePresenceKey(params.session, params.review.offerId),
         params.review,
@@ -107,9 +202,10 @@ export async function stageHitlReview(params: {
         params.review,
         HITL_REVIEW_TTL_MS,
       );
+      return { status: "staged" as const };
     },
   );
-  if (params.callId) {
+  if (staged.status === "staged" && params.callId) {
     await recordHitlReviewResult({
       session: params.session,
       callId: params.callId,
@@ -117,6 +213,7 @@ export async function stageHitlReview(params: {
       outcome: "review_required",
     });
   }
+  return staged;
 }
 
 /** A history fact only: it neither stages a live review nor grants a ruling. */
@@ -178,20 +275,36 @@ export async function getHitlReview(params: {
   return approved?.offerId === params.offerId ? approved : undefined;
 }
 
+type HitlDecision = {
+  ruling: HitlRuling;
+  closure?: HitlClosureReason;
+};
+
 /** Observe a human ruling without spending the remedy's one-time approval. */
 export async function peekHitlRuling(params: {
   session: OpenAppaSession;
   offerId: string;
 }): Promise<HitlRuling | undefined> {
-  for (const ruling of ["deny", "none", "approve"] as const) {
-    const entry = await cacheManager.get<{
-      offerId: string;
-      ruling: HitlRuling;
-    }>(rulingKey(params.session, params.offerId, ruling), {
-      throwOnError: true,
-    });
-    if (entry?.offerId === params.offerId && entry.ruling === ruling)
-      return ruling;
+  return (await peekHitlDecision(params))?.ruling;
+}
+
+/**
+ * Observe the stored decision, including a non-ruling closure.
+ * Priority is deny, then approve, then none. A none entry written before this
+ * change has no closure; that absence is not a denial.
+ */
+export async function peekHitlDecision(params: {
+  session: OpenAppaSession;
+  offerId: string;
+}): Promise<HitlDecision | undefined> {
+  for (const ruling of ["deny", "approve", "none"] as const) {
+    const entry = await cacheManager.get<StoredRuling>(
+      rulingKey(params.session, params.offerId, ruling),
+      { throwOnError: true },
+    );
+    if (entry?.offerId !== params.offerId || entry.ruling !== ruling) continue;
+    const closure = closureOf(entry);
+    return closure ? { ruling, closure } : { ruling };
   }
   return undefined;
 }
@@ -253,6 +366,7 @@ export async function recordHitlRuling(params: {
   session: OpenAppaSession;
   offerId: string;
   ruling: HitlRuling;
+  closure?: HitlClosureReason;
 }): Promise<boolean> {
   const recorded = await cacheManager.withLock(
     stagePresenceKey(params.session, params.offerId),
@@ -262,21 +376,51 @@ export async function recordHitlRuling(params: {
         stagePresenceKey(params.session, params.offerId),
       );
       if (issued?.offerId !== params.offerId) return false;
+      const existing = await readLockedRulings(
+        cache,
+        params.session,
+        params.offerId,
+      );
+      // deny > approve > none. A closure cannot erase either human ruling.
+      if (params.ruling === "none" && (existing.deny || existing.approve)) {
+        return false;
+      }
+      if (params.ruling === "approve" && (existing.deny || existing.approve)) {
+        return false;
+      }
       const pending = await cache.getAndDelete<PendingHitlReview>(
         reviewKey(params.session, params.offerId),
       );
-      // A genuine later denial can revoke an unspent approval; a timeout cannot.
-      if (pending?.offerId !== params.offerId && params.ruling !== "deny")
+      const pendingOk = pending?.offerId === params.offerId;
+      // A genuine later denial can revoke an unspent approval. An approval can
+      // replace a closure that has not been sealed. A closure cannot.
+      if (
+        !pendingOk &&
+        params.ruling !== "deny" &&
+        !(params.ruling === "approve" && existing.none && !existing.deny)
+      ) {
         return false;
+      }
+      const closure =
+        params.ruling === "none"
+          ? (params.closure ?? closureOf(existing.none))
+          : undefined;
       await cache.set(
         rulingKey(params.session, params.offerId, params.ruling),
-        { offerId: params.offerId, ruling: params.ruling },
+        {
+          offerId: params.offerId,
+          ruling: params.ruling,
+          ...(closure ? { closure } : {}),
+        },
         HITL_REVIEW_TTL_MS,
       );
-      if (params.ruling !== "approve") {
+      if (params.ruling === "deny") {
         await cache.delete(
           rulingKey(params.session, params.offerId, "approve"),
         );
+        await cache.delete(rulingKey(params.session, params.offerId, "none"));
+      } else if (params.ruling === "approve") {
+        await cache.delete(rulingKey(params.session, params.offerId, "none"));
       }
       return true;
     },
@@ -287,10 +431,61 @@ export async function recordHitlRuling(params: {
       sessionId: params.session.session_id,
       callerId: params.session.caller_id,
       ruling: params.ruling,
+      ...(params.closure ? { closure: params.closure } : {}),
     },
-    "OpenAPPA human-review ruling recorded",
+    params.ruling === "none"
+      ? "OpenAPPA review closed without a human ruling"
+      : "OpenAPPA human-review ruling recorded",
   );
   return true;
+}
+
+/**
+ * Record a terminal non-ruling and drop the live stage so the next remedy
+ * call cannot open another question. A human ruling already in the lock wins
+ * and is left in place.
+ */
+export async function sealHitlClosure(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  closure?: HitlClosureReason;
+}): Promise<"approve" | "deny" | "sealed"> {
+  const sealed = await cacheManager.withLock(
+    stagePresenceKey(params.session, params.offerId),
+    async (cache) => {
+      const existing = await readLockedRulings(
+        cache,
+        params.session,
+        params.offerId,
+      );
+      if (existing.deny) return "deny" as const;
+      if (existing.approve) return "approve" as const;
+      const closure = params.closure ?? closureOf(existing.none);
+      await cache.set(
+        rulingKey(params.session, params.offerId, "none"),
+        {
+          offerId: params.offerId,
+          ruling: "none" as const,
+          ...(closure ? { closure } : {}),
+        },
+        HITL_REVIEW_TTL_MS,
+      );
+      await cache.delete(reviewKey(params.session, params.offerId));
+      await cache.delete(stagePresenceKey(params.session, params.offerId));
+      return "sealed" as const;
+    },
+  );
+  if (sealed === "sealed") {
+    logger.info(
+      {
+        sessionId: params.session.session_id,
+        callerId: params.session.caller_id,
+        closure: params.closure,
+      },
+      "OpenAPPA review closed without a human ruling",
+    );
+  }
+  return sealed;
 }
 
 export async function consumeHitlRuling(params: {
@@ -319,14 +514,28 @@ export async function consumeHitlRuling(params: {
       });
       const selected = recorded.includes("deny")
         ? "deny"
-        : recorded.includes("none")
-          ? "none"
-          : recorded.includes("approve")
-            ? "approve"
+        : recorded.includes("approve")
+          ? "approve"
+          : recorded.includes("none")
+            ? "none"
             : undefined;
       if (!selected) return undefined;
       await cache.delete(reviewKey(params.session, params.offerId));
       await cache.delete(stagePresenceKey(params.session, params.offerId));
+      // A closure is not spent. Put it back so the next remedy call still
+      // fails closed instead of opening another question.
+      if (selected === "none") {
+        const entry = entries.get(
+          rulingKey(params.session, params.offerId, "none"),
+        );
+        if (entry) {
+          await cache.set(
+            rulingKey(params.session, params.offerId, "none"),
+            entry,
+            HITL_REVIEW_TTL_MS,
+          );
+        }
+      }
       return selected;
     },
   );
@@ -470,6 +679,44 @@ function formatReviewQuestion(text: string): string {
 const PIXEL_REVIEW_HEADING =
   "\u2584\u2588\u2584\u2584\u2584\u2588\u2584  \u2580\u2580\u2588  Approve this call?\n" +
   "\u2588\u2588\u2584\u2588\u2584\u2588\u2588   \u2584   ";
+
+type StoredRuling = {
+  offerId?: unknown;
+  ruling?: unknown;
+  closure?: unknown;
+};
+
+type LockedCache = Parameters<Parameters<typeof cacheManager.withLock>[1]>[0];
+
+function closureOf(
+  entry: StoredRuling | undefined,
+): HitlClosureReason | undefined {
+  return isHitlClosureReason(entry?.closure) ? entry.closure : undefined;
+}
+
+async function readLockedRulings(
+  cache: LockedCache,
+  session: OpenAppaSession,
+  offerId: string,
+): Promise<{
+  deny?: StoredRuling;
+  approve?: StoredRuling;
+  none?: StoredRuling;
+}> {
+  const read = async (ruling: HitlRuling) => {
+    const entry = await cache.get<StoredRuling>(
+      rulingKey(session, offerId, ruling),
+    );
+    return entry?.offerId === offerId && entry.ruling === ruling
+      ? entry
+      : undefined;
+  };
+  return {
+    deny: await read("deny"),
+    approve: await read("approve"),
+    none: await read("none"),
+  };
+}
 
 function stagePresenceKey(
   session: OpenAppaSession,

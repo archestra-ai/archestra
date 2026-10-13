@@ -93,7 +93,7 @@ What to know:
 
 - Setting up sync needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update). Creating a new GitHub App also needs [`credential:create`](/docs/reference/permissions#credential:create).
 - The GitHub App needs only the policy repository, with **Read & write** on Contents and Pull requests. On GitHub Enterprise Server, an App created in setup also gets Workflows **Read & write**.
-- A pull request that changes a battery credential waits until someone with [`credential:update`](/docs/reference/permissions#credential:update) clicks **Accept repository text** on **Batteries**.
+- A merged change that gives a battery a credential waits for approval. Click **Review** in **Settings > Guardrails** or on **Batteries** to see each battery and its credential, then **Approve**, which needs [`credential:update`](/docs/reference/permissions#credential:update). To reject it, undo the change in GitHub.
 
 ## Validations
 

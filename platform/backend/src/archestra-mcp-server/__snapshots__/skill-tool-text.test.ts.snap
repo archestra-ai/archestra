@@ -295,7 +295,7 @@ exports[`skill and sandbox tool text > archestra__create_skill 1`] = `
 
 exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
 {
-  "description": "Permanently delete a persistent file, identified by \`id\` (from search_files / save_file) or by \`filename\`. Pass project_id to delete a project's file when working outside a chat.",
+  "description": "Permanently delete a persistent file, identified by \`id\` (the \`id\` or \`ref\` from search_files, or a fileId from save_file) or by \`filename\`. Pass project_id to delete a project's file when working outside a chat.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -306,7 +306,7 @@ exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
         "type": "string",
       },
       "id": {
-        "description": "Id of the file to delete (from search_files / save_file).",
+        "description": "Id of the file to delete — the \`id\` or \`ref\` from search_files, or a fileId from save_file.",
         "type": "string",
       },
       "project_id": {
@@ -372,7 +372,7 @@ exports[`skill and sandbox tool text > archestra__download_file 1`] = `
 
 exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
 {
-  "description": "Edit an existing persistent file by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find (read the file first with read_file) and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Identify the file by \`id\` (from search_files / save_file) or by \`filename\`. Text files only — to replace a binary file, use save_file with overwrite for inline content, or download_file with overwrite for a file in the sandbox. Pass project_id to edit a project's file when working outside a chat.",
+  "description": "Edit an existing persistent file by replacing a snippet, keeping its id and filename. Give the exact \`old_string\` to find (read the file first with read_file) and the \`new_string\` to put in its place; set \`replace_all\` to change every occurrence. Identify the file by \`id\` (the \`id\` or \`ref\` from search_files, or a fileId from save_file) or by \`filename\`. Text files only — to replace a binary file, use save_file with overwrite for inline content, or download_file with overwrite for a file in the sandbox. Pass project_id to edit a project's file when working outside a chat.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
@@ -383,7 +383,7 @@ exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
         "type": "string",
       },
       "id": {
-        "description": "Id of the file to edit (from search_files / save_file).",
+        "description": "Id of the file to edit — the \`id\` or \`ref\` from search_files, or a fileId from save_file.",
         "type": "string",
       },
       "new_string": {

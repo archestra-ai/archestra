@@ -191,8 +191,9 @@ export function ChatSidebarSection({
   });
 
   // Conversations whose title should play the typing animation (shared via chat
-  // context); getSession drives the live "generating" spinner.
-  const { animatingTitleIds, markTitleAnimating, getSession } = useGlobalChat();
+  // context); generatingConversationIds drives the live "generating" spinner.
+  const { animatingTitleIds, markTitleAnimating, generatingConversationIds } =
+    useGlobalChat();
 
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -458,9 +459,7 @@ export function ChatSidebarSection({
       );
     }
     const isCurrentConversation = currentConversationId === conv.id;
-    const sessionStatus = getSession(conv.id)?.status;
-    const isGenerating =
-      sessionStatus === "submitted" || sessionStatus === "streaming";
+    const isGenerating = generatingConversationIds.has(conv.id);
     // `unread` is server-derived (lastMessageAt > lastReadAt). Suppressed on the
     // chat you're viewing (its read marker is being updated) and while it is
     // actively generating (the spinner wins).

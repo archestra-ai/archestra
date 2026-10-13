@@ -2,7 +2,7 @@
 title: Claude Desktop
 description: Route Claude Desktop's inference and tools through Archestra
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,7 +23,7 @@ Open **Connect** and select **Claude Desktop**. **Customize setup** lets you cha
 
 The **Advanced: terminal setup** option requires Python 3.9+ and Claude Code for subscription sign-in. It remains available for existing third-party profiles that cannot install Desktop extensions.
 
-The installer checks inference before changing your configuration. It backs up changed files, preserves manually created profiles, and restarts Desktop. Rerunning setup replaces the installer-managed connection, including its gateway and skills settings. Installing from another deployment replaces the previous managed connection. If macOS rejects automatic quitting, the installer waits for you to quit from Desktop’s menu. You do not download or import a profile manually. Keep the download and generated command private; they contain an expiring setup ticket. Installation redeems the ticket once. The installer expires after 15 minutes; click **Regenerate** on **Connect** for a new one.
+The installer checks inference before changing your configuration. It backs up changed files, preserves manually created profiles, and restarts Desktop. Rerunning setup replaces the installer-managed connection, including its gateway, skills, and plugins. Installing from another deployment replaces the previous managed connection. If macOS rejects automatic quitting, the installer waits for you to quit from Desktop’s menu. You do not download or import a profile manually. Keep the download and generated command private; they contain an expiring setup ticket. Installation redeems the ticket once. The installer expires after 15 minutes; click **Regenerate** on **Connect** for a new one.
 
 ## Subscription Inference
 
@@ -35,11 +35,13 @@ Model access and usage limits depend on your Anthropic account. Send a message a
 
 Open **Customize setup** and choose **API key** in the authentication settings. Archestra provisions a personal virtual key backed by your configured Anthropic key. The installer applies it without a Claude subscription sign-in.
 
-## Tools And Skills
+<span id="tools-and-skills"></span>
+
+## Tools, Skills, and Plugins
 
 After Desktop restarts, open **Settings → Connectors**, select **archestra**, and sign in. In each conversation, enable it under **+ → Connectors**. A connected checkmark in Settings confirms the connection, not its selection for your conversation. Ask Claude to list the gateway's tools to verify availability.
 
-The skills selected on **Connect** install automatically after Desktop restarts. Setup pins the selected snapshot; rerun **Connect** to install an updated snapshot.
+The skills and [plugins](/docs/agents/plugins) selected on **Connect** install automatically after Desktop restarts, and plugins show under **Customize → Plugins**. Setup pins the selected snapshot; rerun **Connect** to install an updated snapshot.
 
 ## Import Conversations
 

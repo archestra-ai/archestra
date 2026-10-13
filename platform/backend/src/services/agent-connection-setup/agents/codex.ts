@@ -127,9 +127,11 @@ mkdir -p "$(dirname "$CONFIG")"
 umask 077
 if [ -f "$CONFIG" ]; then
   # Drop the previous managed block and any top-level provider selection.
-  awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} '
+  # Keep a table that Codex itself added inside the block.
+  awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} -v own=${sh(`[model_providers.${ctx.proxy.proxyName}]`)} -v own_headers=${sh(`[model_providers.${ctx.proxy.proxyName}.http_headers]`)} '
     $0 == start {skip=1; next}
     $0 == end {skip=0; next}
+    skip && /^\\[/ && $0 != own && $0 != own_headers {skip=0}
     !skip {
       if ($0 ~ /^\\[/) in_table=1
       if (!in_table && $0 ~ /^[[:space:]]*model_provider[[:space:]]*=/) next
@@ -235,11 +237,14 @@ if (Test-Path $arch_config) {
   # Drop any previous archestra-managed block for this provider (idempotent).
   $arch_start = ${psq(`# >>> ${marker} >>>`)}
   $arch_end = ${psq(`# <<< ${marker} <<<`)}
+  $arch_own = @(${psq(`[model_providers.${ctx.proxy.proxyName}]`)}, ${psq(`[model_providers.${ctx.proxy.proxyName}.http_headers]`)})
   $arch_skip = $false
   $arch_in_table = $false
   foreach ($arch_line in (Get-Content -Path $arch_config)) {
     if ($arch_line -eq $arch_start) { $arch_skip = $true; continue }
     if ($arch_line -eq $arch_end) { $arch_skip = $false; continue }
+    # Keep a table that Codex itself added inside the block.
+    if ($arch_skip -and $arch_line -match '^\\[' -and $arch_own -notcontains $arch_line) { $arch_skip = $false }
     if ($arch_skip) { continue }
     if ($arch_line -match '^\\[') { $arch_in_table = $true }
     if (-not $arch_in_table -and $arch_line -match '^\\s*model_provider\\s*=') { continue }

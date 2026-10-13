@@ -157,9 +157,11 @@ function codexProxyDisconnect(ctx: StartupGuardContext): string {
         /^[[:space:]]*model_provider[[:space:]]*=/ {print; exit}
       ' "$CONFIG.archestra-backup")
     fi
-    awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} -v selected=${sh(selectedProvider)} -v previous="$PREVIOUS_PROVIDER" '
+    # Keep a table that Codex itself added inside the block.
+    awk -v start=${sh(`# >>> ${marker} >>>`)} -v end=${sh(`# <<< ${marker} <<<`)} -v own=${sh(`[model_providers.${ctx.proxy?.proxyName ?? ""}]`)} -v own_headers=${sh(`[model_providers.${ctx.proxy?.proxyName ?? ""}.http_headers]`)} -v selected=${sh(selectedProvider)} -v previous="$PREVIOUS_PROVIDER" '
       $0 == start {skip=1; next}
       $0 == end {skip=0; next}
+      skip && /^\\[/ && $0 != own && $0 != own_headers {skip=0}
       !skip {
         if ($0 ~ /^\\[/) in_table=1
         if (!in_table && $0 == selected) {
@@ -246,12 +248,15 @@ function codexWindowsProxyDisconnect(ctx: StartupGuardContext): string {
         if ($original -match '^\\s*model_provider\\s*=') { $previous = $original; break }
       }
     }
+    $own = @(${psq(`[model_providers.${ctx.proxy?.proxyName ?? ""}]`)}, ${psq(`[model_providers.${ctx.proxy?.proxyName ?? ""}.http_headers]`)})
     $kept = New-Object System.Collections.Generic.List[string]
     $skip = $false
     $inTable = $false
     foreach ($ln in (Get-Content -Path $path)) {
       if ($ln -eq $start) { $skip = $true; continue }
       if ($ln -eq $end) { $skip = $false; continue }
+      # Keep a table that Codex itself added inside the block.
+      if ($skip -and $ln -match '^\\[' -and $own -notcontains $ln) { $skip = $false }
       if ($skip) { continue }
       if ($ln -match '^\\[') { $inTable = $true }
       if (-not $inTable -and $ln -eq $selected) {

@@ -217,8 +217,16 @@ function restoreManagedConfig(original) {
   for (const block of ['root', 'features', 'tools']) {
     const start = '# >>> archestra:codex-direct:' + block + ' >>>';
     const end = '# <<< archestra:codex-direct:' + block + ' <<<';
-    content = content.replace(new RegExp('^' + start + '[\\s\\S]*?^' + end + '\\r?\\n?', 'gm'), match =>
-      match.split(/\r?\n/).filter(line => line.startsWith('# original: ')).map(line => line.slice(12) + newline).join(''));
+    content = content.replace(new RegExp('^' + start + '[\\s\\S]*?^' + end + '\\r?\\n?', 'gm'), match => {
+      const lines = match.split(/\r?\n/).slice(1);
+      // Codex adds a new table before the comments at the end of the file, so
+      // a table that Codex added later can be inside this block. Keep it.
+      const foreign = lines.findIndex(line => /^\s*\[/.test(line) && !/^\s*\[features\]\s*$/.test(line));
+      const managed = foreign < 0 ? lines : lines.slice(0, foreign);
+      const kept = foreign < 0 ? [] : lines.slice(foreign).filter(line => line !== end);
+      return managed.filter(line => line.startsWith('# original: ')).map(line => line.slice(12) + newline).join('')
+        + kept.map(line => line + newline).join('').replace(/(\r?\n)+$/, newline);
+    });
   }
   return content;
 }

@@ -42,6 +42,7 @@ const mockDisableBasicAuth = vi.hoisted(() => ({ value: false }));
 vi.mock("@/config", async (importOriginal) => {
   const actual = await importOriginal<typeof originalConfigModule>();
   return {
+    ...actual,
     default: {
       ...actual.default,
       enterpriseFeatures: { ...actual.default.enterpriseFeatures, core: true },

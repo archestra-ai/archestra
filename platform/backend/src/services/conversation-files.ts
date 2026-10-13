@@ -2,6 +2,7 @@ import { PROJECT_INSTRUCTIONS_FILENAME } from "@archestra/shared";
 import ConversationModel from "@/models/conversation";
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import FileModel from "@/models/file";
+import { fileStore } from "@/skills-sandbox/file-store";
 import {
   type ProjectFileScope,
   resolveProjectFileScope,
@@ -177,12 +178,26 @@ class ConversationFilesService {
       return { files: [], projectId: null, projectName: null };
     }
 
-    const files = await FileModel.listByProject({
+    // The store, not the files table: with an external file store a project
+    // folder can also hold hand-placed objects (no row). The project page lists
+    // them, so the chat panel must too — addressed by their `obj_` ref, which the
+    // byte and delete endpoints both accept.
+    const files = await fileStore.search({
       organizationId: params.organizationId,
-      projectId: scope.projectId,
+      userId: params.requestingUserId,
+      scope: {
+        kind: "project",
+        projectId: scope.projectId,
+        projectName: scope.projectName,
+      },
     });
     return {
-      files,
+      files: files.map((f) => ({
+        id: f.downloadRef,
+        filename: f.filename,
+        mimeType: f.mimeType,
+        createdAt: f.createdAt,
+      })),
       projectId: scope.projectId,
       projectName: scope.projectName,
     };

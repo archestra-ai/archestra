@@ -732,19 +732,19 @@ class FileStore {
   }
 
   /**
-   * Overwrite a row-backed text file's content from the browser editor.
-   * Authorizes with the same author-or-project-access rule as {@link get} and
-   * {@link delete} (via {@link authorizedFile}), then replaces the bytes in place
-   * through {@link update}, preserving the filename and stored MIME (a text edit
-   * never changes type). Restricted to Markdown/plain-text rows; the project
+   * Overwrite a text file's content from the browser editor: a row, or a
+   * project's hand-placed object (`obj_` ref, no row) — the Files panel lists
+   * both. Authorizes with the same author-or-project-access rule as {@link get}
+   * and {@link delete}, then replaces the bytes in place (a row through
+   * {@link update}, keeping its stored MIME; an object at its same key, so it
+   * stays rowless). Restricted to Markdown/plain-text files; the project
    * instructions file keeps its own owner/admin-only route and is refused here so
-   * the generic project-access rule can't rewrite project guidance. Returns the
-   * updated row, or a discriminated error the route maps to a status code.
+   * the generic project-access rule can't rewrite project guidance.
    *
    * Oversight `project:admin` never reaches a write here: this uses
-   * `authorizedFile`, not the `getProjectScopedForAdmin` fallback, so an
-   * overseeing admin who is not the author / not a project member gets
-   * `not_found`.
+   * `authorizedFile` / `updateObject`, not the `getProjectScopedForAdmin`
+   * fallback, so an overseeing admin who is not the author / not a project
+   * member gets `not_found`.
    */
   async updateTextFileContent(params: {
     ref: string;
@@ -752,28 +752,35 @@ class FileStore {
     userId: string;
     content: string;
   }): Promise<
-    | PersistedFile
+    | { id: string; filename: string; mimeType: string; sizeBytes: number }
     | { error: "not_found" | "reserved" | "not_editable" | "too_large" }
   > {
-    // Row-backed files only: `authorizedFile` returns null for a non-UUID/`obj_`
-    // ref (a rowless object has no row to update) and for "not yours".
+    const data = Buffer.from(params.content, "utf8");
+    const parsed = parseObjectRef(params.ref);
+    if (parsed) {
+      if (parsed.scope.kind !== "project") return { error: "not_found" };
+      const filename = keyName(parsed.key);
+      const mimeType = mimeFromExtension(filename);
+      const refused = refuseTextEdit({
+        projectScoped: true,
+        filename,
+        mimeType,
+        data,
+      });
+      if (refused) return refused;
+      const written = await this.updateObject({ ...params, data });
+      if (!written) return { error: "not_found" };
+      return { id: params.ref, filename, mimeType, sizeBytes: data.byteLength };
+    }
     const file = await this.authorizedFile(params);
     if (!file) return { error: "not_found" };
-    // The instructions file is editable only through its own owner/admin-gated
-    // route (its content is injected into every chat's system prompt); refuse it
-    // here so the generic project-access rule can't rewrite project guidance.
-    if (file.projectId && file.filename === PROJECT_INSTRUCTIONS_FILENAME) {
-      return { error: "reserved" };
-    }
-    if (
-      !isEditableTextFile({ filename: file.filename, mimeType: file.mimeType })
-    ) {
-      return { error: "not_editable" };
-    }
-    const data = Buffer.from(params.content, "utf8");
-    if (data.byteLength > EDITABLE_TEXT_FILE_MAX_BYTES) {
-      return { error: "too_large" };
-    }
+    const refused = refuseTextEdit({
+      projectScoped: file.projectId !== null,
+      filename: file.filename,
+      mimeType: file.mimeType,
+      data,
+    });
+    if (refused) return refused;
     // Preserve the stored MIME — a content edit of a text file never changes its
     // type (mirrors the edit_file tool).
     const updated = await this.update({
@@ -1331,4 +1338,35 @@ function parseObjectRef(ref: string): { scope: RefScope; key: string } | null {
 /** The basename of an object key (its display filename). */
 function keyName(key: string): string {
   return key.split("/").pop() ?? key;
+}
+
+/**
+ * Why the browser editor refuses a file, or null when it may be written. The
+ * instructions file is edited only through its own owner/admin-gated route (it
+ * is injected into every chat's system prompt).
+ */
+function refuseTextEdit(params: {
+  projectScoped: boolean;
+  filename: string;
+  mimeType: string;
+  data: Buffer;
+}): { error: "reserved" | "not_editable" | "too_large" } | null {
+  if (
+    params.projectScoped &&
+    params.filename === PROJECT_INSTRUCTIONS_FILENAME
+  ) {
+    return { error: "reserved" };
+  }
+  if (
+    !isEditableTextFile({
+      filename: params.filename,
+      mimeType: params.mimeType,
+    })
+  ) {
+    return { error: "not_editable" };
+  }
+  if (params.data.byteLength > EDITABLE_TEXT_FILE_MAX_BYTES) {
+    return { error: "too_large" };
+  }
+  return null;
 }

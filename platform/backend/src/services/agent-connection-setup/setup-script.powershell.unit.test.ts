@@ -442,6 +442,141 @@ exit 0
   },
 );
 
+describe.skipIf(!powershellAvailable)(
+  "PowerShell Codex gateway registration",
+  () => {
+    test("approves the guardrail helpers once, under the gateway's own entry", async () => {
+      const root = await mkdtemp(
+        path.join(tmpdir(), "archestra-codex-approvals-powershell-"),
+      );
+      const home = path.join(root, "home");
+      const bin = path.join(root, "bin");
+      const codexHome = path.join(home, ".codex");
+      const setupPath = path.join(root, "setup.ps1");
+      const driverPath = path.join(root, "driver.ps1");
+      const server = createServer((_request, response) => {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ mcp: "ok", llm: "ok" }));
+      });
+      try {
+        await Promise.all(
+          [bin, codexHome].map((dir) => mkdir(dir, { recursive: true })),
+        );
+        await new Promise<void>((resolve) =>
+          server.listen(0, "127.0.0.1", resolve),
+        );
+        const address = server.address();
+        if (!address || typeof address === "string")
+          throw new Error("Missing HTTP port");
+        const mcp = {
+          serverName: "test_gateway",
+          toolPrefix: "archestra__",
+          url: `http://127.0.0.1:${address.port}/v1/mcp/test-gateway`,
+        };
+        // A config the person already had: it stays as it is.
+        await writeFile(
+          path.join(codexHome, "config.toml"),
+          'model = "gpt-5"\n\n[mcp_servers.docs]\nurl = "https://docs.example.com/mcp"\n',
+        );
+        // Edits config.toml the way the real `codex mcp add` and `remove` do:
+        // add appends the server's table, remove drops it with its sub-tables.
+        await writeFile(
+          path.join(bin, "codex"),
+          `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const [command, action, name, , url] = process.argv.slice(2);
+const file = path.join(process.env.USERPROFILE, ".codex", "config.toml");
+if (command === "mcp" && action === "remove") {
+  let skip = false;
+  const kept = fs.readFileSync(file, "utf8").split(/\\r?\\n/).filter((line) => {
+    if (line.startsWith("[")) skip = line === "[mcp_servers." + name + "]" || line.startsWith("[mcp_servers." + name + ".") || line.startsWith('[mcp_servers."' + name + '".');
+    return !skip;
+  });
+  fs.writeFileSync(file, kept.join("\\n"));
+} else if (command === "mcp" && action === "add") {
+  fs.appendFileSync(file, "\\n[mcp_servers." + name + "]\\nurl = " + JSON.stringify(url) + "\\n");
+} else if (command === "debug") {
+  process.stdout.write(JSON.stringify({ models: [] }));
+}
+`,
+        );
+        await chmod(path.join(bin, "codex"), 0o755);
+        await writeFile(
+          setupPath,
+          renderSetupScript({
+            clientId: "codex",
+            platform: "windows",
+            appName: "Archestra",
+            mcp,
+            proxy: null,
+            skills: null,
+          }),
+        );
+        // A rerun of setup must not define the tables twice.
+        await writeFile(
+          driverPath,
+          `$ErrorActionPreference = 'Stop'
+$setup = Get-Content -Raw $env:ARCHESTRA_TEST_SETUP_PATH
+Invoke-Expression $setup
+Invoke-Expression $setup
+exit 0
+`,
+        );
+        await execFileAsync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driverPath],
+          {
+            cwd: home,
+            env: {
+              HOME: home,
+              USERPROFILE: home,
+              PATH: `${bin}:${process.env.PATH}`,
+              NO_COLOR: "1",
+              ARCHESTRA_TEST_SETUP_PATH: setupPath,
+            },
+            timeout: 30_000,
+          },
+        );
+
+        const config = parseToml(
+          await readFile(path.join(codexHome, "config.toml"), "utf8"),
+        ) as {
+          model: string;
+          mcp_servers: Record<
+            string,
+            { url: string; tools?: Record<string, { approval_mode: string }> }
+          >;
+        };
+        expect(config.model).toBe("gpt-5");
+        expect(config.mcp_servers.docs).toEqual({
+          url: "https://docs.example.com/mcp",
+        });
+        expect(config.mcp_servers[mcp.serverName]).toEqual({
+          url: mcp.url,
+          // The tool runner and other gateway tools keep Codex's question.
+          tools: Object.fromEntries(
+            [
+              "get_remedy_plans",
+              "execute_remedy_plan",
+              "list_peer_messages",
+              "read_peer_message",
+              "yell",
+              "ask_user",
+            ].map((name) => [
+              `${mcp.toolPrefix}${name}`,
+              { approval_mode: "approve" },
+            ]),
+          ),
+        });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  },
+);
+
 type ClaudeSettings = {
   env: Record<string, unknown>;
   permissions?: { allow: string[] };

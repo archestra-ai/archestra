@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -62,7 +62,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 - **Codex:** if you skipped the sign-in, run `codex mcp login <gateway>`.
 - **Cursor:** sign in to the gateway under **Customize → MCPs** in Cursor, then reload Cursor to load the skills. Cursor keeps its own models unless you set up the proxy. To do that, find **Cursor model settings (manual step)** in the installer output. Enter the proxy URL and key it shows under **Settings → Models → API Keys**. Turn on **Use OpenAI API Key** and **Override OpenAI Base URL**. A Cursor subscription cannot be the key.
 - **Copilot CLI:** setup saves your provider settings and available key in `providers.json` and selects the model in `settings.json`. If setup reports a missing key, add it to `providers.json`. The environment variables printed at the end are optional.
-- **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`.
+- **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`. If setup adds Archestra model providers to OpenCode, it changes a `model` or `small_model` you set to the same model on Archestra. If Archestra does not offer that model, setup removes the setting. Disconnect restores your setting.
 
 <span id="startup-guard"></span>
 
@@ -72,6 +72,8 @@ Some clients need one more step. The installer prints any other steps under **Go
 
 - **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, or OpenCode starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, or `ARCHESTRA_OPENCODE_GUARD=0`.
 - **Backups:** setup saves each config file it changes as a `.archestra-backup` file next to the original.
+- **Guardrail helpers in Codex:** setup lets Codex run the guardrail helper tools, such as [`ask_user`](/docs/reference/archestra-mcp-server#ask_user) and [`yell`](/docs/reference/archestra-mcp-server#yell), without a prompt each time. A call that needs your approval still shows the approval form. To get the prompts back, delete the `tools` tables under the gateway's entry in `~/.codex/config.toml`.
+- **Setup reference:** if an agent runs the installer, Guardrails do not apply to that agent's conversation for ten minutes, so it can finish the setup. The setup reference the installer prints marks that conversation. Every other session follows your Guardrails policy from its first request.
 - **Setup failed or expired:** run it again. Approval requests expire after ten minutes. Only approve a request you started.
 
 **Next:** [See it work](/docs/get-started/see-it-work).

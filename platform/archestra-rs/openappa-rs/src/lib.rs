@@ -3876,7 +3876,7 @@ mod typed_tests {
 
     #[test]
     fn a_blocked_result_repeats_the_ruling_and_steers_the_model() {
-        let ruling = "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
+        let ruling = "[appa] Blocked: read_secret cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
         let response = authoritative_unexecuted_response(serde_json::json!({
             "decision": "deny_call",
             "feedback": ruling,
@@ -4050,7 +4050,7 @@ mod remedy_tests {
     // The runtime's re-rendered block after a denial: the operator plan is
     // filtered out, so no Continue section remains.
     const DENIED_BLOCK: &str =
-        "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - requires attention: signoff";
+        "[appa] Blocked: send_mail cannot run yet.\n\nWhy:\n  - requires attention: signoff";
 
     fn owner(spelling: Option<&str>) -> OfferOwner {
         OfferOwner {

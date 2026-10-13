@@ -2310,6 +2310,103 @@ ${script.slice(start, end)}
     );
   });
 
+  test("codex: approves the guardrail helpers once, under the gateway's own entry", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "archestra-codex-approvals-"),
+    );
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const codexHome = path.join(home, ".codex");
+    const scriptPath = path.join(root, "setup.sh");
+    try {
+      await Promise.all(
+        [bin, codexHome].map((dir) => mkdir(dir, { recursive: true })),
+      );
+      // A config the person already had: it stays as it is.
+      await writeFile(
+        path.join(codexHome, "config.toml"),
+        'model = "gpt-5"\n\n[mcp_servers.docs]\nurl = "https://docs.example.com/mcp"\n',
+      );
+      // Edits config.toml the way the real `codex mcp add` and `remove` do:
+      // add appends the server's table, remove drops it with its sub-tables.
+      await writeFile(
+        path.join(bin, "codex"),
+        `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const [command, action, name, , url] = process.argv.slice(2);
+const file = path.join(process.env.HOME, ".codex", "config.toml");
+if (command === "mcp" && action === "remove") {
+  let skip = false;
+  const kept = fs.readFileSync(file, "utf8").split("\\n").filter((line) => {
+    if (line.startsWith("[")) skip = line === "[mcp_servers." + name + "]" || line.startsWith("[mcp_servers." + name + ".") || line.startsWith('[mcp_servers."' + name + '".');
+    return !skip;
+  });
+  fs.writeFileSync(file, kept.join("\\n"));
+} else if (command === "mcp" && action === "add") {
+  fs.appendFileSync(file, "\\n[mcp_servers." + name + "]\\nurl = " + JSON.stringify(url) + "\\n");
+} else if (command === "debug") {
+  process.stdout.write(JSON.stringify({ models: [] }));
+}
+`,
+      );
+      await chmod(path.join(bin, "codex"), 0o755);
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("codex", "linux"),
+          proxy: null,
+          skills: null,
+        }),
+      );
+      // A rerun of setup must not define the tables twice.
+      for (let run = 0; run < 2; run++) {
+        await execFileAsync("bash", [scriptPath], {
+          env: {
+            HOME: home,
+            SHELL: "/bin/bash",
+            PATH: `${bin}:${process.env.PATH}`,
+            NO_COLOR: "1",
+          },
+          cwd: home,
+        });
+      }
+
+      const config = parseToml(
+        await readFile(path.join(codexHome, "config.toml"), "utf8"),
+      ) as {
+        model: string;
+        mcp_servers: Record<
+          string,
+          { url: string; tools?: Record<string, { approval_mode: string }> }
+        >;
+      };
+      expect(config.model).toBe("gpt-5");
+      expect(config.mcp_servers.docs).toEqual({
+        url: "https://docs.example.com/mcp",
+      });
+      expect(config.mcp_servers[MCP.serverName]).toEqual({
+        url: MCP.url,
+        // The tool runner and other gateway tools keep Codex's question.
+        tools: Object.fromEntries(
+          [
+            "get_remedy_plans",
+            "execute_remedy_plan",
+            "list_peer_messages",
+            "read_peer_message",
+            "yell",
+            "ask_user",
+          ].map((name) => [
+            `${MCP.toolPrefix}${name}`,
+            { approval_mode: "approve" },
+          ]),
+        ),
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("codex passthrough: attributes user + client via config.toml http_headers", () => {
     const script = renderSetupScript({
       ...fullContext("codex"),

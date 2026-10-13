@@ -1,6 +1,7 @@
 "use client";
 
 import type { Ref } from "react";
+import { AdvancedSection } from "@/components/advanced-section";
 import {
   ProfileLabels,
   type ProfileLabelsRef,
@@ -85,11 +86,17 @@ export function PluginForm({
 
           <SettingsSection>
             <fieldset disabled={readOnly}>
-              <ProfileLabels
-                ref={labelsRef}
-                labels={draft.labels}
-                onLabelsChange={(labels) => onChange({ labels })}
-              />
+              {/* Labels only organize the list, so they wait under Advanced unless set. */}
+              <AdvancedSection
+                defaultOpen={draft.labels.length > 0}
+                className="border-t-0 pt-0"
+              >
+                <ProfileLabels
+                  ref={labelsRef}
+                  labels={draft.labels}
+                  onLabelsChange={(labels) => onChange({ labels })}
+                />
+              </AdvancedSection>
             </fieldset>
           </SettingsSection>
         </SettingsSectionGroup>

@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
+import { AdvancedSection } from "@/components/advanced-section";
 import {
   ProfileLabels,
   type ProfileLabelsRef,
@@ -38,11 +39,14 @@ export const SkillAccessFields = forwardRef<
         hideWhenOnlyDefault
         helpText="Restrict this skill to specific environments. Leave empty to make it available to agents in every environment."
       />
-      <ProfileLabels
-        ref={ref}
-        labels={draft.labels}
-        onLabelsChange={(labels) => onChange({ labels })}
-      />
+      {/* Labels only organize the list, so they wait under Advanced unless set. */}
+      <AdvancedSection defaultOpen={draft.labels.length > 0}>
+        <ProfileLabels
+          ref={ref}
+          labels={draft.labels}
+          onLabelsChange={(labels) => onChange({ labels })}
+        />
+      </AdvancedSection>
     </div>
   );
 });

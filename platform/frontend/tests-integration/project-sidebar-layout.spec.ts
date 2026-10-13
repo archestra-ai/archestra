@@ -1,4 +1,6 @@
 import type { APIRequestContext, Page } from "@playwright/test";
+import { makeAgent } from "../src/mocks/data/agents";
+import { makeLlmProviderApiKey } from "../src/mocks/data/llm-keys";
 import { expect, test } from "./fixtures";
 import type { MswControl } from "./helpers/msw-control";
 
@@ -80,6 +82,71 @@ test("separates the empty files state from the schedules divider", async ({
   }
   const gap = sectionBox.y + sectionBox.height - (emptyBox.y + emptyBox.height);
   expect(gap).toBeGreaterThanOrEqual(12);
+});
+
+test("sends the opening prompt after navigating from a project to its new chat", async ({
+  page,
+  mswControl,
+  request,
+}) => {
+  await mockProject(mswControl, request, { instructions: "", fileCount: 0 });
+  const agent = makeAgent();
+  const key = makeLlmProviderApiKey();
+  const model = {
+    dbId: "test-model",
+    id: "claude-sonnet-4-5",
+    displayName: "Claude Sonnet 4.5",
+    provider: key.provider,
+    isBest: true,
+  };
+  const conversation = {
+    id: "6d9a3c1e-7b42-4f0a-9c6e-2a8b1d4e6f70",
+    title: "New chat",
+    userId: "test-user-admin",
+    agentId: agent.id,
+    agent,
+    projectId: PROJECT_ID,
+    modelId: model.dbId,
+    chatApiKeyId: key.id,
+    messages: [],
+  };
+  const chatPath = `/api/chat/conversations/${conversation.id}`;
+  await mswControl.registerMany([
+    { method: "get", url: "/api/agents/all", body: [agent] },
+    { method: "get", url: "/api/agents/credential-readiness", body: [] },
+    { method: "get", url: "/api/llm-provider-api-keys", body: [key] },
+    { method: "get", url: "/api/llm-models/available", body: [model] },
+    {
+      method: "get",
+      url: "/api/members/default-model",
+      body: { modelId: model.dbId, chatApiKeyId: key.id },
+    },
+    { method: "post", url: "/api/chat/conversations", body: conversation },
+    { method: "get", url: chatPath, body: conversation },
+    { method: "get", url: `${chatPath}/files`, body: [] },
+    {
+      method: "post",
+      url: "/api/chat",
+      status: 400,
+      body: { error: { message: "Test provider unavailable" } },
+    },
+  ]);
+
+  await page.goto(`/projects/${PROJECT_ID}`);
+  const prompt = "Summarize the release rules";
+  await page.getByRole("textbox").fill(prompt);
+  const sent = page.waitForRequest(
+    (req) =>
+      new URL(req.url()).pathname === "/api/chat" && req.method() === "POST",
+    { timeout: 60_000 },
+  );
+  await page.getByRole("textbox").press("Enter");
+  await expect(page).toHaveURL(`/chat/${conversation.id}`);
+  expect((await sent).postDataJSON()).toMatchObject({
+    id: conversation.id,
+    messages: [{ role: "user", parts: [{ type: "text", text: prompt }] }],
+  });
+  await expect(page.getByText(prompt, { exact: true })).toBeVisible();
 });
 
 function projectSidebar(page: Page) {

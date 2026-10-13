@@ -22,13 +22,13 @@ import {
 import {
   createContext,
   type ReactNode,
-  startTransition,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { toast } from "sonner";
 import { filterOptimisticToolCalls } from "@/components/chat/chat-messages.utils";
@@ -1789,28 +1789,17 @@ export function useChatSession(params: {
 }
 
 /**
- * The latest snapshot of a conversation's chat session, re-rendering as it
- * changes. Snapshots change on every streamed chunk, so those re-renders run as
- * transitions: a keystroke in the composer interrupts an in-progress transcript
- * render instead of queueing behind it.
+ * Subscribe synchronously so session readiness triggers deferred initial sends.
  */
 export function useChatSessionSnapshot(
   conversationId: string | undefined,
 ): ChatSession | null {
   const { getSession, subscribeSessionUpdates } = useGlobalChat();
-  const [, setVersion] = useState(0);
-
-  useEffect(
-    () =>
-      subscribeSessionUpdates(() => {
-        startTransition(() => {
-          setVersion((version) => version + 1);
-        });
-      }),
-    [subscribeSessionUpdates],
+  return useSyncExternalStore(
+    subscribeSessionUpdates,
+    () => (conversationId ? (getSession(conversationId) ?? null) : null),
+    () => null,
   );
-
-  return conversationId ? (getSession(conversationId) ?? null) : null;
 }
 
 function setConversationGenerating(

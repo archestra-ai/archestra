@@ -4,16 +4,16 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
+import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
-  filterControlClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfilesPaginated } from "@/lib/agent.query";
 import { useApps } from "@/lib/app.query";
@@ -170,6 +170,22 @@ export function AuditLogTable() {
       [cursorPagination.goNewest, updateUrlParams],
     ),
   });
+  // Every log page keeps its time range in the header's top-right corner.
+  const timeRangePicker = useMemo(
+    () => (
+      <TimeRangePicker
+        value={dateTimePicker.range}
+        onChange={dateTimePicker.setRange}
+        onClear={dateTimePicker.clearDateRange}
+      />
+    ),
+    [
+      dateTimePicker.range,
+      dateTimePicker.setRange,
+      dateTimePicker.clearDateRange,
+    ],
+  );
+  useLogsHeaderAction(timeRangePicker);
 
   const handleActionChange = useCallback(
     (value: string) => {
@@ -649,22 +665,6 @@ export function AuditLogTable() {
             placeholder="Filter by outcome"
             items={outcomeOptions}
             inactiveValue={ALL_VALUE}
-          />
-          <DateTimeRangePicker
-            startDate={dateTimePicker.startDate}
-            endDate={dateTimePicker.endDate}
-            isDialogOpen={dateTimePicker.isDateDialogOpen}
-            tempStartDate={dateTimePicker.tempStartDate}
-            tempEndDate={dateTimePicker.tempEndDate}
-            displayText={dateTimePicker.getDateRangeDisplay()}
-            onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-            onTempStartDateChange={dateTimePicker.setTempStartDate}
-            onTempEndDateChange={dateTimePicker.setTempEndDate}
-            onOpenDialog={dateTimePicker.openDateDialog}
-            onApply={dateTimePicker.handleApplyDateRange}
-            className={filterControlClass({
-              active: dateTimePicker.startDate !== undefined,
-            })}
           />
         </FilterBar>
       </CollectionFilters>

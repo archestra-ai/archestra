@@ -47,6 +47,7 @@ import {
   UpdateAgentToolSchema,
   UuidIdSchema,
 } from "@/types";
+import { isUuid } from "@/utils/uuid";
 
 const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
@@ -566,10 +567,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      const allTools = await ToolModel.getToolsByAgent(agentId);
-      const tools = catalogId
-        ? allTools.filter((tool) => tool.catalogId === catalogId)
-        : allTools;
+      // A catalog id that is not a uuid matches no tool; the column would
+      // reject it.
+      const tools =
+        catalogId && !isUuid(catalogId)
+          ? []
+          : await ToolModel.getToolsByAgent(agentId, catalogId);
 
       // A user who can only use the agent sees the tools the gateway would
       // serve them: an assigned tool whose MCP server they cannot access is

@@ -115,9 +115,7 @@ export default function OpenAppaGithubAppSetupReturn() {
             <>
               <Button onClick={() => window.close()}>Close this tab</Button>
               <Button variant="ghost" asChild>
-                <Link href="/settings/guardrails">
-                  Open GitHub sync settings
-                </Link>
+                <Link href="/settings/guardrails">Open Git sync settings</Link>
               </Button>
             </>
           )}

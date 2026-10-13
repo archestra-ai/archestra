@@ -7,7 +7,9 @@ import { joinBaseUrl } from "@/utils/base-url";
 import { fetchModelsWithBearerAuth } from "./openai-compatible";
 import type { FetchedModelCapabilities, ModelInfo } from "./types";
 
-const OpenRouterGenerationModelsResponseSchema = z.object({
+// `/models` (generation) and `/embeddings/models` share one shape, pricing
+// included, so both are read the same way.
+const OpenRouterModelsResponseSchema = z.object({
   data: z.array(
     z.object({
       id: z.string(),
@@ -35,21 +37,8 @@ const OpenRouterGenerationModelsResponseSchema = z.object({
   ),
 });
 
-const OpenRouterEmbeddingModelsResponseSchema = z.object({
-  data: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string().optional(),
-      created: z.number().optional(),
-    }),
-  ),
-});
-
-type OpenRouterGenerationModel = z.infer<
-  typeof OpenRouterGenerationModelsResponseSchema
->["data"][number];
-type OpenRouterEmbeddingModel = z.infer<
-  typeof OpenRouterEmbeddingModelsResponseSchema
+type OpenRouterModel = z.infer<
+  typeof OpenRouterModelsResponseSchema
 >["data"][number];
 
 export async function fetchOpenrouterModels(
@@ -64,14 +53,14 @@ export async function fetchOpenrouterModels(
       apiKey,
       errorLabel: "OpenRouter models",
       extraHeaders: openRouterAttributionHeaders(extraHeaders),
-      schema: OpenRouterGenerationModelsResponseSchema,
+      schema: OpenRouterModelsResponseSchema,
     }),
     fetchModelsWithBearerAuth({
       url: joinBaseUrl(baseUrl, "/embeddings/models"),
       apiKey,
       errorLabel: "OpenRouter embedding models",
       extraHeaders: openRouterAttributionHeaders(extraHeaders),
-      schema: OpenRouterEmbeddingModelsResponseSchema,
+      schema: OpenRouterModelsResponseSchema,
     }),
   ]);
 
@@ -82,12 +71,12 @@ export async function fetchOpenrouterModels(
   // Embedding models override generation models on id collision (last write wins).
   const modelsById = new Map<string, ModelInfo>();
   for (const model of generationResult.value.data) {
-    modelsById.set(model.id, toGenerationModelInfo(model));
+    modelsById.set(model.id, toModelInfo(model));
   }
 
   if (embeddingResult.status === "fulfilled") {
     for (const model of embeddingResult.value.data) {
-      modelsById.set(model.id, toEmbeddingModelInfo(model));
+      modelsById.set(model.id, toModelInfo(model));
     }
   } else {
     logger.warn(
@@ -104,7 +93,7 @@ export async function fetchOpenrouterModels(
   return Array.from(modelsById.values());
 }
 
-function toGenerationModelInfo(model: OpenRouterGenerationModel): ModelInfo {
+function toModelInfo(model: OpenRouterModel): ModelInfo {
   return {
     id: model.id,
     displayName: model.name ?? model.id,
@@ -116,24 +105,13 @@ function toGenerationModelInfo(model: OpenRouterGenerationModel): ModelInfo {
   };
 }
 
-function toEmbeddingModelInfo(model: OpenRouterEmbeddingModel): ModelInfo {
-  return {
-    id: model.id,
-    displayName: model.name ?? model.id,
-    provider: "openrouter",
-    createdAt: model.created
-      ? new Date(model.created * 1000).toISOString()
-      : undefined,
-  };
-}
-
 /**
  * Map OpenRouter's per-model metadata into the generic fetcher capability shape.
  * OpenRouter already reports pricing as per-token USD strings. Returns undefined
  * when the response carries no metadata, so models.dev enrichment still applies.
  */
 function toFetchedCapabilities(
-  model: OpenRouterGenerationModel,
+  model: OpenRouterModel,
 ): FetchedModelCapabilities | undefined {
   if (
     model.pricing == null &&

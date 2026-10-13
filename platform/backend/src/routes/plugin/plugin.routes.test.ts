@@ -118,6 +118,32 @@ describe("plugin routes", () => {
     ).toBe(HOOKS_BYTES);
   });
 
+  test("keeps an icon across edits that leave it out, and clears it on null", async () => {
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/plugins",
+      payload: { ...createPayload(), icon: "🧩" },
+    });
+    expect(created.json().icon).toBe("🧩");
+    const id = created.json().id;
+
+    const renamed = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${id}`,
+      payload: { displayName: "Renamed" },
+    });
+    expect(renamed.json()).toMatchObject({
+      displayName: "Renamed",
+      icon: "🧩",
+    });
+    const cleared = await ctx.app.inject({
+      method: "PUT",
+      url: `/api/plugins/${id}`,
+      payload: { icon: null },
+    });
+    expect(cleared.json().icon).toBeNull();
+  });
+
   test("atomically replaces files and records a new approved content hash", async () => {
     const created = await ctx.app.inject({
       method: "POST",

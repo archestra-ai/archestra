@@ -120,11 +120,11 @@ export function AccessAudienceHeader({
   );
 }
 
-// One step darker per step wider: dashed outline, tinted fill, solid fill.
+// One step stronger per step wider: dashed outline, neutral fill, brand tint.
 const AUDIENCE_STYLES: Record<ResourceVisibilityScope, string> = {
   personal: "border-dashed border-muted-foreground/50 text-foreground",
   team: "border-transparent bg-muted text-foreground",
-  org: "border-transparent bg-primary text-primary-foreground",
+  org: "border-primary/20 bg-primary/10 text-primary",
 };
 
 // The owner's avatar sits on the chip's own fill, so it takes a contrasting
@@ -133,7 +133,7 @@ const AUDIENCE_STYLES: Record<ResourceVisibilityScope, string> = {
 const OWNER_AVATAR_STYLES: Record<ResourceVisibilityScope, string> = {
   personal: "bg-muted text-foreground",
   team: "bg-background text-foreground",
-  org: "bg-primary-foreground text-primary",
+  org: "bg-primary/15 text-primary",
 };
 
 const AUDIENCE_LABELS: Record<ResourceVisibilityScope, string> = {

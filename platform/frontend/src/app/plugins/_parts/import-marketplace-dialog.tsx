@@ -1,12 +1,13 @@
 "use client";
 
-import { PLUGIN_MARKETPLACE_IMPORT_LIMIT } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  PLUGIN_MARKETPLACE_IMPORT_LIMIT,
+} from "@archestra/shared";
 import type { RowSelectionState } from "@tanstack/react-table";
 import {
   AlertTriangle,
-  ArrowLeft,
   CheckCircle2,
-  ChevronRight,
   Eye,
   Loader2,
   PackageSearch,
@@ -20,11 +21,18 @@ import {
   type ConnectPlatformOption,
 } from "@/app/connection/platform.utils";
 import { ConnectionPlatformMultiSelect } from "@/app/connection/platform-select";
+import { RepositoryBar, SetupStepper } from "@/components/git/git-setup-chrome";
 import {
-  GithubAuthConfigFields,
-  type GithubAuthMethod,
-} from "@/components/github-auth-config-fields";
-import { GithubPatFields } from "@/components/github-pat-fields";
+  gitAuthFields,
+  resolveGitRepository,
+} from "@/components/git/git-source";
+import {
+  GitSourceStepBody,
+  GitSourceStepFooter,
+  gitSourceStepDescription,
+  gitSourceStepLabels,
+  useGitSourceSteps,
+} from "@/components/git/git-source-steps";
 import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SearchInput } from "@/components/search-input";
@@ -34,11 +42,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -47,7 +50,6 @@ import {
 } from "@/components/ui/empty";
 import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -57,8 +59,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
-import { useGithubAppConfigs } from "@/lib/github-app-config.query";
-import { useCreateGithubPat, useGithubPats } from "@/lib/github-pat.query";
 import {
   type GithubPluginMarketplace,
   useDiscoverGithubPluginMarketplace,
@@ -71,6 +71,8 @@ import { PluginClientIcon } from "./plugin-client-icon";
 import { PluginPreviewDialog } from "./plugin-preview-dialog";
 
 type MarketplaceEntry = GithubPluginMarketplace["entries"][number];
+type ImportMarketplaceBody =
+  archestraApiTypes.ImportGithubPluginMarketplaceData["body"];
 
 const CLIENT_LABELS: Record<string, string> = {
   "claude-code": "Claude Code",
@@ -80,11 +82,10 @@ const CLIENT_LABELS: Record<string, string> = {
 };
 
 /**
- * The marketplace import dialog: point at a GitHub repository with a plugin
- * marketplace manifest, pick which of its plugins to add, and import them all
- * pinned to the reviewed commit. Mirrors the skills import dialog — repository
- * URL, pull schedule and visibility up front, authentication and the tracked
- * ref behind the fold; discovery swaps the form for a selectable entry list.
+ * The marketplace import dialog: pick a GitHub or GitLab repository through
+ * the shared host → access → repository steps, then choose which of its
+ * plugins to add and import them pinned to the reviewed commit. A repository
+ * without a marketplace manifest lists its plugin folders instead.
  */
 export function ImportMarketplaceDialog({
   open,
@@ -101,19 +102,10 @@ export function ImportMarketplaceDialog({
 }) {
   const discover = useDiscoverGithubPluginMarketplace();
   const importMarketplace = useImportGithubPluginMarketplace();
-  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
-  const { data: githubPats = [] } = useGithubPats();
-  const createPat = useCreateGithubPat();
+  const source = useGitSourceSteps();
   const previewPlugin = usePreviewGithubPlugin();
   const { data: existingPlugins = [] } = usePlugins();
 
-  const [repoUrl, setRepoUrl] = useState(initialRepoUrl);
-  const [ref, setRef] = useState("");
-  const [authMethod, setAuthMethod] = useState<GithubAuthMethod>("pat");
-  const [githubToken, setGithubToken] = useState("");
-  // "" = paste a one-time token; otherwise the id of a saved token
-  const [githubPatId, setGithubPatId] = useState("");
-  const [githubAppConfigId, setGithubAppConfigId] = useState("");
   const [marketplace, setMarketplace] =
     useState<GithubPluginMarketplace | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -134,23 +126,17 @@ export function ImportMarketplaceDialog({
     ...CONNECT_PLATFORM_OPTIONS,
   ]);
   const [clients, setClients] = useState<ConnectClient[]>([]);
-  // name under which a newly pasted token is saved (Settings → Credentials)
-  const [newTokenName, setNewTokenName] = useState("");
-  // ref + authentication live behind this fold; opened automatically when a
-  // discover failure looks like a missing-auth problem.
-  const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // auth methods are mutually exclusive; the backend rejects combinations
-  const githubAuthFields =
-    authMethod === "github_app"
-      ? githubAppConfigId
-        ? { githubAppConfigId }
-        : {}
-      : githubPatId
-        ? { githubPatId }
-        : githubToken.trim()
-          ? { githubToken: githubToken.trim() }
-          : {};
+  // What the routes read: the repository, the branch to track, and the
+  // provider with its credential.
+  const resolved = source.resolved;
+  const repositoryFields = resolved.ok
+    ? {
+        repoUrl: resolved.repoUrl,
+        ...(resolved.ref && { ref: resolved.ref }),
+        ...source.auth,
+      }
+    : null;
 
   const importedMarketplacePlugins = useMemo(
     () =>
@@ -170,12 +156,7 @@ export function ImportMarketplaceDialog({
   );
 
   const reset = () => {
-    setRepoUrl("");
-    setRef("");
-    setAuthMethod("pat");
-    setGithubToken("");
-    setGithubPatId("");
-    setGithubAppConfigId("");
+    source.reset();
     setMarketplace(null);
     setSelected(new Set());
     setSearch("");
@@ -186,8 +167,6 @@ export function ImportMarketplaceDialog({
     setSyncInterval("1d");
     setPlatforms([...CONNECT_PLATFORM_OPTIONS]);
     setClients([]);
-    setNewTokenName("");
-    setAdvancedOpen(false);
   };
 
   const backToDiscover = () => {
@@ -202,24 +181,11 @@ export function ImportMarketplaceDialog({
     onOpenChange(isOpen);
   };
 
-  const handleAuthMethodChange = (value: GithubAuthMethod) => {
-    setAuthMethod(value);
-    if (value === "pat") {
-      setGithubAppConfigId("");
-    } else {
-      setGithubPatId("");
-      setGithubToken("");
-      setNewTokenName("");
-    }
-  };
-
-  const handleDiscover = async (overrideRepoUrl?: string) => {
+  const handleDiscover = async (
+    fields: NonNullable<typeof repositoryFields>,
+  ) => {
     setDiscoverError(null);
-    const { data, errorMessage } = await discover.mutateAsync({
-      repoUrl: overrideRepoUrl ?? repoUrl,
-      ...(ref.trim() && { ref: ref.trim() }),
-      ...githubAuthFields,
-    });
+    const { data, errorMessage } = await discover.mutateAsync(fields);
     if (data && !data.reason) {
       setMarketplace(data);
       setPlatforms([...CONNECT_PLATFORM_OPTIONS]);
@@ -240,60 +206,41 @@ export function ImportMarketplaceDialog({
       );
     } else {
       const message = errorMessage ?? data?.reason ?? null;
-      if (message) {
-        setDiscoverError(message);
-        // a private repo without credentials is the most common failure — put
-        // the auth fields in front of the user
-        if (!hasGithubAuth) setAdvancedOpen(true);
-      }
+      if (message) setDiscoverError(message);
     }
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: only fire on open
   useEffect(() => {
-    if (!open) return;
-    setRepoUrl(initialRepoUrl);
-    if (autoDiscover && initialRepoUrl) handleDiscover(initialRepoUrl);
+    if (!open || !initialRepoUrl) return;
+    // The marketplace list holds public github.com repositories: skip straight
+    // past the host and access steps.
+    source.startOnPublicGithub(initialRepoUrl);
+    if (!autoDiscover) return;
+    const initial = resolveGitRepository({
+      provider: "github",
+      access: { kind: "public" },
+      input: initialRepoUrl,
+    });
+    handleDiscover({
+      repoUrl: initial.ok ? initial.repoUrl : initialRepoUrl,
+      ...gitAuthFields({ provider: "github", access: { kind: "public" } }),
+    });
   }, [open]);
 
   const handleImport = async () => {
-    if (!marketplace?.marketplacePath) return;
-    // a pasted token is saved as a stored credential first, so the periodic
-    // checks it backs stay authenticated (transient tokens are never stored)
-    let patId = githubPatId;
-    if (authMethod === "pat" && !patId && githubToken.trim()) {
-      const created = await createPat.mutateAsync({
-        name:
-          newTokenName.trim() ||
-          `${repoSlug?.split("/").pop() || "GitHub"} token`,
-        token: githubToken.trim(),
-      });
-      if (!created) return;
-      patId = created.id;
-      setGithubPatId(created.id);
-    }
-
+    if (!marketplace || !repositoryFields) return;
     const entries = marketplace.entries.filter(
       (entry) => selected.has(entry.name) && entry.supported,
     );
     const result = await importMarketplace.mutateAsync({
-      repoUrl,
-      ...(ref.trim() && { ref: ref.trim() }),
-      marketplacePath: marketplace.marketplacePath as
-        | ".claude-plugin/marketplace.json"
-        | ".github/plugin/marketplace.json"
-        | ".agents/plugins/marketplace.json"
-        | ".cursor-plugin/marketplace.json"
-        | "marketplace.json",
+      ...repositoryFields,
+      // null imports the plugin folders of a repository without a manifest.
+      // The route takes null, but the generated type drops it from the enum.
+      marketplacePath:
+        marketplace.marketplacePath as ImportMarketplaceBody["marketplacePath"],
       approvedCommitSha: marketplace.commitSha,
       trackingRef: marketplace.ref,
-      ...(authMethod === "github_app"
-        ? githubAppConfigId
-          ? { githubAppConfigId }
-          : {}
-        : patId
-          ? { githubPatId: patId }
-          : {}),
       selected: entries.map((entry) => ({
         name: entry.name,
         displayName: entry.name,
@@ -379,7 +326,7 @@ export function ImportMarketplaceDialog({
       ref: entry.sourceCommitSha,
       subdir: entry.sourceSubdir,
       exclude: [],
-      ...githubAuthFields,
+      ...source.auth,
     });
   };
 
@@ -406,10 +353,18 @@ export function ImportMarketplaceDialog({
         (entry) =>
           entry.supported &&
           !importedMarketplacePlugins.has(
-            marketplaceEntryKey(marketplace?.repoUrl ?? repoUrl, entry.name),
+            marketplaceEntryKey(
+              marketplace?.repoUrl ?? source.repository.input,
+              entry.name,
+            ),
           ),
       ),
-    [filteredEntries, importedMarketplacePlugins, marketplace, repoUrl],
+    [
+      filteredEntries,
+      importedMarketplacePlugins,
+      marketplace,
+      source.repository.input,
+    ],
   );
 
   const allFilteredSelected =
@@ -447,31 +402,14 @@ export function ImportMarketplaceDialog({
 
   const isSelectStep = marketplace !== null;
   const isAutoDiscovering = autoDiscover && !isSelectStep && !discoverError;
-  const hasGithubAuth =
-    authMethod === "github_app"
-      ? githubAppConfigId.length > 0
-      : githubPatId.length > 0 || githubToken.trim().length > 0;
-
-  // what the collapsed Advanced fold is configured with, e.g. "saved token, ref"
-  const advancedSummary = [
-    authMethod === "github_app" && githubAppConfigId
-      ? "GitHub App"
-      : githubPatId
-        ? "saved token"
-        : githubToken.trim()
-          ? "one-time token"
-          : null,
-    ref.trim() ? "ref" : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  const repoSlug = repoUrl
-    .replace(/^https?:\/\//, "")
-    .replace(/^github\.com\//, "")
-    .replace(/\.git$/, "")
-    .replace(/\/$/, "");
-  const repoOwner = repoSlug.split("/")[0];
+  const repositoryBar = (
+    <RepositoryBar
+      provider={source.provider}
+      label={resolved.ok ? resolved.label : source.repository.input}
+      avatarUrl={resolved.ok ? resolved.avatarUrl : null}
+      onChange={autoDiscover ? undefined : backToDiscover}
+    />
+  );
 
   const totalImportable =
     marketplace?.entries.filter(
@@ -495,51 +433,40 @@ export function ImportMarketplaceDialog({
       open={open}
       onOpenChange={handleClose}
       title={
-        isAutoDiscovering ? (
-          "Scanning repository"
-        ) : isSelectStep ? (
-          autoDiscover ? (
-            <span>Select plugins to import</span>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={backToDiscover}
-                aria-label="Go back"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <span>Select plugins to import</span>
-            </div>
-          )
-        ) : (
-          "Import plugins from GitHub"
-        )
+        isAutoDiscovering
+          ? "Scanning repository"
+          : isSelectStep
+            ? "Select plugins to import"
+            : "Import plugins"
       }
       description={
         isAutoDiscovering
-          ? "Looking for a marketplace manifest."
+          ? "Looking for plugins."
           : isSelectStep
-            ? "Choose which plugins to import."
-            : "Paste a GitHub marketplace URL."
+            ? marketplace.marketplacePath
+              ? "Choose which plugins to import."
+              : "No marketplace file. These are its plugin folders."
+            : gitSourceStepDescription({
+                step: source.step,
+                provider: source.provider,
+              })
       }
       size="medium"
       bodyClassName={isSelectStep ? "p-0" : undefined}
       footer={
         isAutoDiscovering ? (
           <Button variant="outline" onClick={() => handleClose(false)}>
-            Cancel
+            <span>Cancel</span>
           </Button>
         ) : isSelectStep ? (
           <>
             {autoDiscover ? (
               <Button variant="outline" onClick={() => handleClose(false)}>
-                Cancel
+                <span>Cancel</span>
               </Button>
             ) : (
               <Button variant="outline" onClick={backToDiscover}>
-                Back
+                <span>Back</span>
               </Button>
             )}
             <Button
@@ -550,23 +477,24 @@ export function ImportMarketplaceDialog({
                 importMarketplace.isPending
               }
             >
-              {importMarketplace.isPending
-                ? "Importing..."
-                : `Import ${selected.size > 0 ? `(${selected.size})` : ""}`}
+              {importMarketplace.isPending ? (
+                <Loader2 className="animate-spin" />
+              ) : null}
+              <span>
+                {importMarketplace.isPending
+                  ? "Importing…"
+                  : `Import${selected.size > 0 ? ` (${selected.size})` : ""}`}
+              </span>
             </Button>
           </>
         ) : (
-          <>
-            <Button variant="outline" onClick={() => handleClose(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => handleDiscover()}
-              disabled={!repoUrl.trim() || discover.isPending}
-            >
-              {discover.isPending ? "Discovering..." : "Discover"}
-            </Button>
-          </>
+          <GitSourceStepFooter
+            source={source}
+            onCancel={() => handleClose(false)}
+            findLabel="Find plugins"
+            finding={discover.isPending}
+            onFind={() => repositoryFields && handleDiscover(repositoryFields)}
+          />
         )
       }
     >
@@ -574,7 +502,11 @@ export function ImportMarketplaceDialog({
         <div className="flex flex-col items-center justify-center gap-4 py-10">
           <Avatar className="size-14">
             <AvatarImage
-              src={`https://github.com/${repoOwner}.png?size=128`}
+              src={
+                resolved.ok && resolved.avatarUrl
+                  ? `${resolved.avatarUrl}?size=128`
+                  : undefined
+              }
               alt=""
             />
             <AvatarFallback>
@@ -583,19 +515,27 @@ export function ImportMarketplaceDialog({
           </Avatar>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />
-            <span className="font-mono text-foreground">{repoSlug}</span>
+            <span className="font-mono text-foreground">
+              {resolved.ok ? resolved.label : initialRepoUrl}
+            </span>
           </div>
         </div>
       ) : isSelectStep ? (
         <div className="flex flex-col">
+          {autoDiscover ? null : (
+            <div className="px-4 pt-4 pb-3">
+              <SetupStepper
+                steps={gitSourceStepLabels({
+                  provider: source.provider,
+                  last: "Plugins",
+                })}
+                current={3}
+              />
+            </div>
+          )}
           {marketplace.entries.length === 0 ? (
             <>
-              <MarketplaceRepoHeader
-                repoOwner={repoOwner}
-                repoSlug={repoSlug}
-                autoDiscover={autoDiscover}
-                onChangeSource={backToDiscover}
-              />
+              {repositoryBar}
               <div className="px-4 py-8">
                 <Empty>
                   <EmptyHeader>
@@ -604,8 +544,8 @@ export function ImportMarketplaceDialog({
                     </EmptyMedia>
                     <EmptyTitle>No plugins found</EmptyTitle>
                     <EmptyDescription>
-                      This repository doesn’t contain a recognized plugin
-                      marketplace manifest. Try a different repository or ref.
+                      No marketplace file or plugin folders. Try another
+                      repository or branch.
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -614,12 +554,7 @@ export function ImportMarketplaceDialog({
           ) : (
             <>
               <div className="sticky top-0 z-10 border-b bg-background">
-                <MarketplaceRepoHeader
-                  repoOwner={repoOwner}
-                  repoSlug={repoSlug}
-                  autoDiscover={autoDiscover}
-                  onChangeSource={backToDiscover}
-                />
+                {repositoryBar}
                 <div className="space-y-3 px-4 py-3">
                   {totalImportable > 0 && (
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -756,146 +691,55 @@ export function ImportMarketplaceDialog({
               )}
             </>
           )}
+          {marketplace.entries.length > 0 ? (
+            <div className="space-y-5 border-t px-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="marketplace-sync-interval">Keep in sync</Label>
+                <FieldDescription>
+                  New commits wait for your review.
+                </FieldDescription>
+                <Select
+                  value={syncInterval}
+                  onValueChange={(value) =>
+                    setSyncInterval(value as typeof syncInterval)
+                  }
+                >
+                  <SelectTrigger
+                    id="marketplace-sync-interval"
+                    className="w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15m">Every 15 minutes</SelectItem>
+                    <SelectItem value="1h">Every hour</SelectItem>
+                    <SelectItem value="1d">Once a day</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <ResourceAccessSection
+                resource="plugin"
+                grants={initialGrants}
+                onGrantsChange={setInitialGrants}
+              />
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="marketplace-repo-url">Repository URL</Label>
-            <FieldDescription>
-              A marketplace manifest lists every importable plugin in the
-              repository.
-            </FieldDescription>
-            <Input
-              id="marketplace-repo-url"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              placeholder="github.com/owner/repo"
-              autoFocus
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="marketplace-sync-interval">Keep in sync</Label>
-            <FieldDescription>
-              Checked against the repository on this schedule; new commits
-              become review candidates and never replace approved plugin bytes
-              automatically.
-            </FieldDescription>
-            <Select
-              value={syncInterval}
-              onValueChange={(value) =>
-                setSyncInterval(value as typeof syncInterval)
-              }
-            >
-              <SelectTrigger id="marketplace-sync-interval" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="15m">Every 15 minutes</SelectItem>
-                <SelectItem value="1h">Every hour</SelectItem>
-                <SelectItem value="1d">Once a day</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <ResourceAccessSection
-            resource="plugin"
-            grants={initialGrants}
-            onGrantsChange={setInitialGrants}
-          />
-          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 shrink-0 transition-transform",
-                  advancedOpen && "rotate-90",
-                )}
-              />
-              Authentication & ref
-              {!advancedOpen && advancedSummary && (
-                <span className="font-normal text-xs">· {advancedSummary}</span>
-              )}
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-5 pt-4">
-              <GithubAuthConfigFields
-                authMethod={authMethod}
-                onAuthMethodChange={handleAuthMethodChange}
-                githubAppConfigId={githubAppConfigId}
-                onGithubAppConfigIdChange={setGithubAppConfigId}
-                githubAppConfigs={githubAppConfigs}
-                authLabel="Authentication"
-                authOptional
-                authDescription={null}
-                configuredDescription={
-                  <>
-                    Mints a short-lived installation token for this import.
-                    Manage configurations in
-                  </>
-                }
-                patFields={
-                  <GithubPatFields
-                    idPrefix="marketplace"
-                    pats={githubPats}
-                    patId={githubPatId}
-                    onPatIdChange={(patId) => {
-                      setGithubPatId(patId);
-                      if (patId) {
-                        setGithubToken("");
-                        setNewTokenName("");
-                      }
-                    }}
-                    token={githubToken}
-                    onTokenChange={setGithubToken}
-                    tokenName={newTokenName}
-                    onTokenNameChange={setNewTokenName}
-                    repoLabel={repoSlug}
-                    purpose="scheduled checks"
-                  />
-                }
-              />
-              <div className="space-y-2">
-                <Label htmlFor="marketplace-ref">
-                  Branch, tag, or commit
-                  <span className="text-muted-foreground font-normal">
-                    {" "}
-                    (optional)
-                  </span>
-                </Label>
-                <FieldDescription>
-                  Discover and track a specific ref instead of the repository’s
-                  default branch.
-                </FieldDescription>
-                <Input
-                  id="marketplace-ref"
-                  value={ref}
-                  onChange={(e) => setRef(e.target.value)}
-                  placeholder="Default branch"
-                  autoComplete="off"
-                  data-1p-ignore
-                  data-lpignore="true"
-                />
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-          {discoverError && (
+          <GitSourceStepBody source={source} lastLabel="Plugins" />
+          {discoverError && source.step === "repo" ? (
             <InlineNotice variant="error">
               <AlertTriangle />
-              <span className="font-medium">
-                Couldn’t reach that repository
-              </span>
+              <span className="font-medium">Couldn’t read that repository</span>
               <InlineNoticeText>
-                {discoverError}
-                {!hasGithubAuth && (
-                  <span>
-                    {" "}
-                    If the repository is private, add GitHub authentication
-                    above and try again.
-                  </span>
-                )}
+                <span>{discoverError}</span>
+                {source.access?.kind === "public" ? (
+                  <span> Private? Change the access above.</span>
+                ) : null}
               </InlineNoticeText>
             </InlineNotice>
-          )}
+          ) : null}
         </div>
       )}
       <PluginPreviewDialog
@@ -912,46 +756,6 @@ export function ImportMarketplaceDialog({
         }}
       />
     </StandardDialog>
-  );
-}
-
-function MarketplaceRepoHeader({
-  repoOwner,
-  repoSlug,
-  autoDiscover,
-  onChangeSource,
-}: {
-  repoOwner: string;
-  repoSlug: string;
-  autoDiscover: boolean;
-  onChangeSource: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-2.5">
-      <Avatar className="size-7 shrink-0">
-        <AvatarImage
-          src={`https://github.com/${repoOwner}.png?size=64`}
-          alt=""
-        />
-        <AvatarFallback className="text-xs">
-          {repoOwner.slice(0, 2).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1 truncate font-mono text-sm font-medium">
-        {repoSlug}
-      </div>
-      {!autoDiscover && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onChangeSource}
-          className="shrink-0"
-        >
-          Change source
-        </Button>
-      )}
-    </div>
   );
 }
 
@@ -1103,14 +907,16 @@ function marketplaceClientOptions(
   );
 }
 
+/** `owner/repo` or `group/sub/project`, whatever host or form it came in. */
 function normalizeRepository(value: string): string {
-  return value
+  const path = value
     .trim()
     .toLowerCase()
     .replace(/^https?:\/\//, "")
-    .replace(/^github\.com\//, "")
     .replace(/\/+$/, "")
     .replace(/\.git$/, "");
+  const [first, ...rest] = path.split("/");
+  return first.includes(".") || first.includes(":") ? rest.join("/") : path;
 }
 
 function toRowSelectionState(selected: Set<string>): RowSelectionState {

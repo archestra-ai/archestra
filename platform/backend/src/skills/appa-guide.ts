@@ -57,7 +57,7 @@ The first two rows depend on the policy's \`revision\` and \`delivery\`: read th
 |---|---|
 | Set up a starting policy, or \`init\`, while the policy is an unsaved local starter (revision 0, local delivery) | \`references/first-policy.md\` |
 | Set up a starting policy, or \`init\`, otherwise | \`references/init.md\` |
-| Add batteries or their credentials; set up or continue GitHub sync | \`references/first-policy.md\` |
+| Add batteries or their credentials; set up or continue Git sync | \`references/first-policy.md\` |
 | Change the policy, pick a numbered suggestion, or a maintenance goal such as a health audit, agent protection, or a runtime upgrade | \`references/adjust.md\` |
 | Explain the policy or the security label; review coverage, risky tools, batteries, or one target; investigate a yell | \`references/requests.md\` |
 | A general goal on a saved policy, such as "make our agents safe" | **Review** in \`references/requests.md\` |
@@ -110,7 +110,7 @@ This replaces the summary in the shared **Publish and finish**.
 
 1. Call \`archestra__update_guardrails_policy\` with the same \`edits\` or \`content\` and \`expectedRevision\` you previewed, also for an unchanged revision-0 starter. Do not preview again first: publishing validates the change and refuses it when the policy changed since that revision. Give a GitHub PR a clear \`title\` and \`summary\`.
 2. On a conflict, at preview or publish, read the policy again, tell the operator in one sentence what changed since your read, re-apply your change as \`edits\` on the new text, preview, and ask again if the behavior changes. Never just increase the revision and retry the old draft.
-3. A pull request: give its URL and say the change is not enforced until it merges and the repository syncs. Check it with \`archestra__get_guardrails_policy_change_status\` only when asked, and never for a local revision. If GitHub sync lacks a ready credential or the source changed upstream, do not claim a policy update; fix or sync the source first.
+3. A pull request: give its URL and say the change is not enforced until it merges and the repository syncs. Check it with \`archestra__get_guardrails_policy_change_status\` only when asked, and never for a local revision. If Git sync lacks a ready credential or the source changed upstream, do not claim a policy update; fix or sync the source first.
 4. A local revision: read back the policy and report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` keeps the last composition that opened, if one did; do not claim the new text is enforced. The publish result's \`enforcement\` is the evidence for the switch; composition alone proves nothing. For a healthy, enabled save the result banner is the completion: add no summary, revision number, or link, overriding the summary in **Publish and finish**; only **Add batteries** adds a short summary, and a first policy its one-sentence next step. If enforcement is off or confirmation failed, say which revision was saved, what is not active and why, and link [OpenAPPA Policy](/openappa/policy). Never claim Guardrails v2 switched off or that an unsaved draft is active. Later saves leave the enforcement switch unchanged.
 5. If a response fails, read the current state before any retry. Never duplicate a successful write or claim success without evidence.
 

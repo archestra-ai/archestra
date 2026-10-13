@@ -42,6 +42,8 @@ interface KbInteractionData {
   outputTokens: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** USD the provider reports it billed; recorded instead of the price-table estimate. */
+  reportedCost?: number;
 }
 
 interface KbObservabilityParams<T> {
@@ -108,6 +110,7 @@ export async function withKbObservability<T>(
         }
 
         const cost = await calculateKbCost({
+          reportedCost: interaction.reportedCost,
           model: interaction.model,
           provider: params.provider,
           inputTokens: interaction.inputTokens,
@@ -178,7 +181,7 @@ export function buildEmbeddingInteraction(params: {
     object: string;
     data: Array<{ object: string; embedding: number[]; index: number }>;
     model: string;
-    usage: { prompt_tokens: number; total_tokens: number };
+    usage: { prompt_tokens: number; total_tokens: number; cost?: number };
   };
 }): KbInteractionData {
   const { response } = params;
@@ -213,12 +216,14 @@ export function buildEmbeddingInteraction(params: {
     model: response.model,
     inputTokens: response.usage.prompt_tokens,
     outputTokens: 0,
+    reportedCost: response.usage.cost,
   };
 }
 
 // ===== Internal helpers =====
 
 async function calculateKbCost(params: {
+  reportedCost: number | undefined;
   model: string;
   provider: SupportedProvider;
   inputTokens: number;
@@ -226,6 +231,9 @@ async function calculateKbCost(params: {
   cacheReadTokens: number;
   cacheWriteTokens: number;
 }): Promise<number | undefined> {
+  if (params.reportedCost !== undefined) {
+    return params.reportedCost;
+  }
   try {
     return await calculateCost(
       params.model,

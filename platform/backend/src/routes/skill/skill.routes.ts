@@ -2,6 +2,8 @@ import {
   CreatedByNullableSchema,
   calculatePaginationMeta,
   createPaginatedResponseSchema,
+  type GitProvider,
+  gitHostFromUrl,
   MAX_BULK_IDS,
   PaginationQuerySchema,
   parseLabelsParam,
@@ -22,6 +24,10 @@ import {
   type SkillPermissionChecker,
 } from "@/auth/skill-permissions";
 import { isGlobalAdmin, userHasPermission } from "@/auth/utils";
+import {
+  type GitAccess,
+  resolveGitCredentialAccess,
+} from "@/git-hosts/git-access";
 import logger from "@/logging";
 import {
   AgentActivationSkillRuleModel,
@@ -55,16 +61,11 @@ import {
   findBuiltInSkillBySourceRef,
 } from "@/skills/built-in-skills";
 import {
-  resolveGithubPatToken,
-  resolveGithubSkillAppCredentials,
-} from "@/skills/github-app-token";
-import {
   discoverSkills,
   importSkills,
   MAX_FILES_PER_SKILL,
   SkillImportError,
 } from "@/skills/github-import";
-import type { GithubSkillSource } from "@/skills/github-source";
 import {
   normalizeAllowedTools,
   parseSkillManifest,
@@ -98,6 +99,7 @@ import {
   SkillWithFilesSchema,
   UuidIdSchema,
 } from "@/types";
+import { GitProviderSchema } from "@/types/git-host";
 import {
   isForeignKeyConstraintError,
   isUniqueConstraintError,
@@ -105,28 +107,38 @@ import {
 import { registerEntityLabelRoutes } from "../entity-labels";
 
 /**
- * Shared fields identifying a GitHub skill source. Authentication is optional
- * and at most one method may be supplied: a transient one-time PAT
- * (`githubToken`, never stored), a stored PAT (`githubPatId`, managed at
- * /settings/credentials), or a stored GitHub App config (`githubAppConfigId`).
+ * Shared fields identifying a skill repository on GitHub or GitLab.
+ * Authentication is optional (public cloud repositories) and at most one
+ * method may be supplied: a stored GitHub App (`githubAppConfigId`), a stored
+ * GitLab token (`gitlabTokenId`), a legacy stored GitHub PAT (`githubPatId`),
+ * or a transient GitHub PAT (`githubToken`, never stored). A credential
+ * decides the host, so self-hosted GitHub and GitLab need one.
  */
 const githubSkillSourceShape = {
   repoUrl: z.string().min(1),
   path: z.string().optional(),
+  provider: GitProviderSchema.optional().describe(
+    "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+  ),
   githubToken: z.string().optional(),
   githubAppConfigId: z.string().uuid().optional(),
   githubPatId: z.string().uuid().optional(),
+  gitlabTokenId: z.string().uuid().optional(),
 };
 
 function hasSingleGithubAuth(source: {
   githubToken?: string;
   githubAppConfigId?: string;
   githubPatId?: string;
+  gitlabTokenId?: string;
 }): boolean {
   return (
-    [source.githubToken, source.githubAppConfigId, source.githubPatId].filter(
-      Boolean,
-    ).length <= 1
+    [
+      source.githubToken,
+      source.githubAppConfigId,
+      source.githubPatId,
+      source.gitlabTokenId,
+    ].filter(Boolean).length <= 1
   );
 }
 
@@ -135,7 +147,7 @@ const USAGE_STATISTICS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 const singleGithubAuthError = {
   message:
-    "Provide at most one of githubToken, githubPatId, or githubAppConfigId",
+    "Provide at most one of githubToken, githubPatId, githubAppConfigId, or gitlabTokenId",
   path: ["githubAppConfigId"],
 };
 
@@ -212,6 +224,14 @@ const SkillCatalogResultSchema = z.object({
  */
 const SkillManifestFieldsSchema = z.object({
   content: SkillManifestContentSchema,
+  icon: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "Emoji or base64 image data URL shown with the name. Omit to leave it " +
+        "untouched; null clears it.",
+    ),
   files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
   environmentIds: z
     .array(UuidIdSchema)
@@ -751,6 +771,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorId: user.id,
             allowedTools: resolveAllowedTools(body, parsed),
             sourceType: "manual",
+            icon: body.icon ?? null,
           },
           files: toSkillFiles(body.files ?? []),
           environmentIds,
@@ -954,6 +975,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skill: {
               ...toSkillInsertFields(parsed),
               allowedTools: resolveAllowedTools(body, parsed),
+              // Presentation only: never forks a version, and stays editable
+              // on a Git-synced skill.
+              ...(body.icon !== undefined && { icon: body.icon }),
             },
             files:
               body.files === undefined ? undefined : toSkillFiles(body.files),
@@ -993,7 +1017,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetSkillSourceRepos,
         description:
-          "List distinct GitHub repositories that skills in this organization were imported from",
+          "List distinct GitHub and GitLab repositories that skills in this organization were imported from",
         tags: ["Skills"],
         response: constructResponseSchema(
           z.object({ repos: z.array(z.string()) }),
@@ -1304,8 +1328,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSkillGithubSync,
         description:
-          "Manage a GitHub-synced skill: change its pull frequency, trigger " +
-          "an immediate pull, or disconnect it from the GitHub source " +
+          "Manage a Git-synced skill: change its pull frequency or its " +
+          "source (repository, branch, folder, credential), trigger " +
+          "an immediate pull, or disconnect it from the Git source " +
           "(interval null) — a disconnected skill keeps its content and " +
           "provenance and becomes editable in the app.",
         tags: ["Skills"],
@@ -1315,6 +1340,30 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             interval: SkillGithubSyncIntervalSchema.optional().describe(
               "New pull frequency.",
             ),
+            source: z
+              .object({
+                ...githubSkillSourceShape,
+                skillPath: z
+                  .string()
+                  .describe(
+                    "The skill's folder from the repository root; empty when the skill is the repository.",
+                  ),
+              })
+              .strict()
+              .refine(hasSingleGithubAuth, singleGithubAuthError)
+              .refine((source) => !source.githubToken, {
+                message:
+                  "A transient token is never stored, so scheduled pulls " +
+                  "could not authenticate. Use a saved credential, or a " +
+                  "public repository.",
+                path: ["githubToken"],
+              })
+              .optional()
+              .describe(
+                "Pull the skill from another repository, branch, folder, or " +
+                  "credential. It is fetched before anything changes, so a " +
+                  "location without the skill is refused.",
+              ),
             syncNow: z
               .literal(true)
               .optional()
@@ -1330,13 +1379,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .refine(
             (body) =>
               [
-                body.interval !== undefined,
+                body.interval !== undefined || body.source !== undefined,
                 body.syncNow ?? false,
                 body.disconnect ?? false,
               ].filter(Boolean).length === 1,
             {
               message:
-                "Pass exactly one of `interval`, `syncNow`, or `disconnect`",
+                "Pass `interval` and/or `source`, or exactly one of `syncNow` or `disconnect`",
               path: ["interval"],
             },
           ),
@@ -1373,6 +1422,70 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         return reply.send(await loadSkillDetail(skill));
       }
 
+      if (body.source) {
+        // A new source can bring in a new online skill, so it follows the
+        // catalog switch the import does.
+        await assertOnlineSkillCatalogEnabled(organizationId);
+        const source = body.source;
+        const credentials = await resolveGithubImportCredentials({
+          githubAppConfigId: source.githubAppConfigId,
+          githubPatId: source.githubPatId,
+          gitlabTokenId: source.gitlabTokenId,
+          provider: source.provider,
+          organizationId,
+          userId: user.id,
+        });
+        const [item] = await runImport(() =>
+          importSkills({
+            repoUrl: source.repoUrl,
+            ...credentials,
+            skillPaths: [source.skillPath],
+            fresh: true,
+          }),
+        );
+        if (!item) {
+          throw new ApiError(
+            400,
+            `No skill found at ${source.skillPath || "the repository root"}`,
+          );
+        }
+        try {
+          await SkillModel.updateWithFiles({
+            id,
+            skill: {
+              ...toSkillInsertFields(item.parsed),
+              sourceRef: item.sourceRef,
+              sourceCommit: item.sourceCommit,
+            },
+            files: item.files,
+            versionSourceCommit: item.sourceCommit,
+          });
+        } catch (error) {
+          if (isSkillNameConflict(error)) {
+            throw new ApiError(
+              409,
+              `The skill there is named "${item.parsed.name}", and a skill with that name already exists`,
+            );
+          }
+          throw error;
+        }
+        const moved = await SkillModel.setGitSource(id, {
+          sourceOrigin: item.sourceOrigin,
+          sourceProvider: item.sourceProvider,
+          githubSyncRef: item.requestedRef,
+          githubSyncInterval: body.interval ?? skill.githubSyncInterval ?? "1d",
+          githubAppConfigId: source.githubAppConfigId ?? null,
+          githubPatId: source.githubPatId ?? null,
+          gitlabTokenId: source.gitlabTokenId ?? null,
+        });
+        if (!moved) throw new ApiError(404, "Skill not found");
+        logger.info(
+          { skillId: id, organizationId, sourceRef: item.sourceRef },
+          "[Skills] Git source changed",
+        );
+        return reply.send(await loadSkillDetail(moved));
+      }
+
       const updated = await SkillModel.setGithubSync(
         id,
         body.disconnect ? null : { interval: body.interval ?? "1d" },
@@ -1385,7 +1498,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { skillId: id, organizationId, interval: body.interval ?? null },
         body.disconnect
           ? "[Skills] Skill disconnected from GitHub source"
-          : "[Skills] GitHub sync frequency changed",
+          : "[Skills] Git sync frequency changed",
       );
       return reply.send(await loadSkillDetail(updated));
     },
@@ -1460,7 +1573,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DiscoverGithubSkills,
-        description: "Discover skills in a GitHub repository",
+        description: "Discover skills in a GitHub or GitLab repository",
         tags: ["Skills"],
         body: GithubSkillSourceSchema,
         response: constructResponseSchema(
@@ -1480,6 +1593,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
         githubPatId: body.githubPatId,
+        gitlabTokenId: body.gitlabTokenId,
+        provider: body.provider,
         organizationId,
         userId: user.id,
       });
@@ -1518,7 +1633,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.PreviewGithubSkill,
         description:
-          "Fetch a single skill's manifest and files from GitHub without persisting it.",
+          "Fetch a single skill's manifest and files from GitHub or GitLab without persisting it.",
         tags: ["Skills"],
         body: z
           .object({ ...githubSkillSourceShape, skillPath: z.string() })
@@ -1559,6 +1674,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
         githubPatId: body.githubPatId,
+        gitlabTokenId: body.gitlabTokenId,
+        provider: body.provider,
         organizationId,
         userId: user.id,
       });
@@ -1588,7 +1705,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.ImportGithubSkills,
-        description: "Import selected skills from a GitHub repository",
+        description:
+          "Import selected skills from a GitHub or GitLab repository",
         tags: ["Skills"],
         body: z
           .object({
@@ -1662,6 +1780,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         githubToken: body.githubToken,
         githubAppConfigId: body.githubAppConfigId,
         githubPatId: body.githubPatId,
+        gitlabTokenId: body.gitlabTokenId,
+        provider: body.provider,
         organizationId,
         userId: user.id,
       });
@@ -1695,6 +1815,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
               githubSyncRef: item.requestedRef,
               githubAppConfigId: body.githubAppConfigId ?? null,
               githubPatId: body.githubPatId ?? null,
+              gitlabTokenId: body.gitlabTokenId ?? null,
+              sourceProvider: item.sourceProvider,
             },
             files: item.files,
             initialPermissionGrants: body.initialGrants ?? [],
@@ -1765,7 +1887,7 @@ async function assertOnlineSkillCatalogEnabled(
       403,
       "The online skill catalog is disabled for this organization. Skills " +
         "can still be written by hand, but they cannot be discovered or " +
-        "imported from GitHub.",
+        "imported from GitHub or GitLab.",
     );
   }
 }
@@ -1797,48 +1919,52 @@ async function assertSkillEnvironmentsAssignable(params: {
 }
 
 /**
- * Keep the configured GitHub host with App credentials through every import
- * request. PAT and anonymous imports retain their github.com destination.
+ * The host and token an import reads with. A stored credential carries its
+ * own host (self-hosted GitHub and GitLab); otherwise the provider's cloud,
+ * with a transient token when one is given.
  */
 async function resolveGithubImportCredentials(params: {
   githubToken?: string;
   githubAppConfigId?: string;
   githubPatId?: string;
+  gitlabTokenId?: string;
+  provider?: GitProvider;
   organizationId: string;
   userId: string;
-}): Promise<{ githubToken?: string; githubSource?: GithubSkillSource }> {
-  const {
-    githubToken,
-    githubAppConfigId,
-    githubPatId,
-    organizationId,
-    userId,
-  } = params;
-  if (!githubAppConfigId && !githubPatId) {
-    return { githubToken };
+}): Promise<{ access?: GitAccess }> {
+  const credentialId =
+    params.githubAppConfigId ?? params.githubPatId ?? params.gitlabTokenId;
+  if (!credentialId) {
+    if (params.githubToken)
+      return {
+        access: {
+          host: gitHostFromUrl({ provider: "github" }),
+          token: params.githubToken,
+        },
+      };
+    return params.provider === "gitlab"
+      ? { access: { host: gitHostFromUrl({ provider: "gitlab" }) } }
+      : {};
   }
 
-  // using a stored credential requires read access to GitHub credentials
+  // using a stored credential requires read access to credentials
   const allowed = await userHasPermission(
-    userId,
-    organizationId,
+    params.userId,
+    params.organizationId,
     "credential",
     "read",
   );
   if (!allowed) {
-    throw new ApiError(403, "You do not have access to GitHub credentials");
+    throw new ApiError(403, "You do not have access to Git credentials");
   }
-
-  if (githubPatId) {
-    return {
-      githubToken: await resolveGithubPatToken({ githubPatId, organizationId }),
-    };
-  }
-  return resolveGithubSkillAppCredentials({
-    // hasSingleGithubAuth guarantees exactly one stored-credential id here
-    githubAppConfigId: githubAppConfigId as string,
-    organizationId,
+  const access = await resolveGitCredentialAccess({
+    organizationId: params.organizationId,
+    credentialId,
   });
+  const expected = params.gitlabTokenId ? "gitlab" : "github";
+  if (access.host.provider !== expected)
+    throw new ApiError(400, "That credential is for a different Git provider");
+  return { access };
 }
 
 /**

@@ -410155,7 +410155,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Manage a Git-synced skill: change its pull frequency, trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Manage a Git-synced skill: change its pull frequency or its source (repository, branch, folder, credential), trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -410171,6 +410171,54 @@
                       "1h",
                       "1d"
                     ]
+                  },
+                  "source": {
+                    "description": "Pull the skill from another repository, branch, folder, or credential. It is fetched before anything changes, so a location without the skill is refused.",
+                    "type": "object",
+                    "properties": {
+                      "repoUrl": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                        "type": "string",
+                        "enum": [
+                          "github",
+                          "gitlab"
+                        ]
+                      },
+                      "githubToken": {
+                        "type": "string"
+                      },
+                      "githubAppConfigId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "githubPatId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "gitlabTokenId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "skillPath": {
+                        "type": "string",
+                        "description": "The skill's folder from the repository root; empty when the skill is the repository."
+                      }
+                    },
+                    "required": [
+                      "repoUrl",
+                      "skillPath"
+                    ],
+                    "additionalProperties": false
                   },
                   "syncNow": {
                     "description": "Trigger an immediate pull from the source repo.",

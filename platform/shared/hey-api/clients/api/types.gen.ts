@@ -108396,6 +108396,25 @@ export type UpdateSkillGithubSyncData = {
          */
         interval?: '15m' | '1h' | '1d';
         /**
+         * Pull the skill from another repository, branch, folder, or credential. It is fetched before anything changes, so a location without the skill is refused.
+         */
+        source?: {
+            repoUrl: string;
+            path?: string;
+            /**
+             * Git host of a public repository; defaults to github. Ignored when a credential is given.
+             */
+            provider?: 'github' | 'gitlab';
+            githubToken?: string;
+            githubAppConfigId?: string;
+            githubPatId?: string;
+            gitlabTokenId?: string;
+            /**
+             * The skill's folder from the repository root; empty when the skill is the repository.
+             */
+            skillPath: string;
+        };
+        /**
          * Trigger an immediate pull from the source repo.
          */
         syncNow?: true;

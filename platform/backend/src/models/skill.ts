@@ -1268,9 +1268,35 @@ class SkillModel {
               githubSyncRef: null,
               githubAppConfigId: null,
               githubPatId: null,
+              gitlabTokenId: null,
               lastSyncError: null,
             },
       )
+      .where(and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)))
+      .returning();
+    return updated ?? null;
+  }
+
+  /**
+   * Point a synced skill at another repository, branch, folder, or credential.
+   * The caller has already fetched the skill from there, so the pull it stands
+   * for has just succeeded.
+   */
+  static async setGitSource(
+    id: string,
+    source: {
+      sourceOrigin: string | null;
+      sourceProvider: GitProvider;
+      githubSyncRef: string | null;
+      githubSyncInterval: SkillGithubSyncInterval;
+      githubAppConfigId: string | null;
+      githubPatId: string | null;
+      gitlabTokenId: string | null;
+    },
+  ): Promise<Skill | null> {
+    const [updated] = await db
+      .update(schema.skillsTable)
+      .set({ ...source, lastSyncedAt: new Date(), lastSyncError: null })
       .where(and(eq(schema.skillsTable.id, id), notDeleted(schema.skillsTable)))
       .returning();
     return updated ?? null;

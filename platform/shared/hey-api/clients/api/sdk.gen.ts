@@ -10833,7 +10833,7 @@ export const permanentlyDeleteSkill = <ThrowOnError extends boolean = false>(opt
 export const resetSkill = <ThrowOnError extends boolean = false>(options: Options<ResetSkillData, ThrowOnError>) => (options.client ?? client).post<ResetSkillResponses, ResetSkillErrors, ThrowOnError>({ url: '/api/skills/{id}/reset', ...options });
 
 /**
- * Manage a Git-synced skill: change its pull frequency, trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.
+ * Manage a Git-synced skill: change its pull frequency or its source (repository, branch, folder, credential), trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.
  *
  * Authentication:
  *

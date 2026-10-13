@@ -724,7 +724,9 @@ export function useUpdateSkillGithubSync() {
       } else if (variables.body.disconnect) {
         toast.success("Sync stopped — the skill is now editable");
       } else {
-        toast.success("Sync frequency updated");
+        toast.success(
+          variables.body.source ? "Source updated" : "Sync frequency updated",
+        );
       }
     },
   });

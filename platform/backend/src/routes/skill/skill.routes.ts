@@ -1316,7 +1316,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSkillGithubSync,
         description:
-          "Manage a Git-synced skill: change its pull frequency, trigger " +
+          "Manage a Git-synced skill: change its pull frequency or its " +
+          "source (repository, branch, folder, credential), trigger " +
           "an immediate pull, or disconnect it from the Git source " +
           "(interval null) — a disconnected skill keeps its content and " +
           "provenance and becomes editable in the app.",
@@ -1327,6 +1328,30 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             interval: SkillGithubSyncIntervalSchema.optional().describe(
               "New pull frequency.",
             ),
+            source: z
+              .object({
+                ...githubSkillSourceShape,
+                skillPath: z
+                  .string()
+                  .describe(
+                    "The skill's folder from the repository root; empty when the skill is the repository.",
+                  ),
+              })
+              .strict()
+              .refine(hasSingleGithubAuth, singleGithubAuthError)
+              .refine((source) => !source.githubToken, {
+                message:
+                  "A transient token is never stored, so scheduled pulls " +
+                  "could not authenticate. Use a saved credential, or a " +
+                  "public repository.",
+                path: ["githubToken"],
+              })
+              .optional()
+              .describe(
+                "Pull the skill from another repository, branch, folder, or " +
+                  "credential. It is fetched before anything changes, so a " +
+                  "location without the skill is refused.",
+              ),
             syncNow: z
               .literal(true)
               .optional()
@@ -1342,13 +1367,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .refine(
             (body) =>
               [
-                body.interval !== undefined,
+                body.interval !== undefined || body.source !== undefined,
                 body.syncNow ?? false,
                 body.disconnect ?? false,
               ].filter(Boolean).length === 1,
             {
               message:
-                "Pass exactly one of `interval`, `syncNow`, or `disconnect`",
+                "Pass `interval` and/or `source`, or exactly one of `syncNow` or `disconnect`",
               path: ["interval"],
             },
           ),
@@ -1383,6 +1408,70 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
         return reply.send(await loadSkillDetail(skill));
+      }
+
+      if (body.source) {
+        // A new source can bring in a new online skill, so it follows the
+        // catalog switch the import does.
+        await assertOnlineSkillCatalogEnabled(organizationId);
+        const source = body.source;
+        const credentials = await resolveGithubImportCredentials({
+          githubAppConfigId: source.githubAppConfigId,
+          githubPatId: source.githubPatId,
+          gitlabTokenId: source.gitlabTokenId,
+          provider: source.provider,
+          organizationId,
+          userId: user.id,
+        });
+        const [item] = await runImport(() =>
+          importSkills({
+            repoUrl: source.repoUrl,
+            ...credentials,
+            skillPaths: [source.skillPath],
+            fresh: true,
+          }),
+        );
+        if (!item) {
+          throw new ApiError(
+            400,
+            `No skill found at ${source.skillPath || "the repository root"}`,
+          );
+        }
+        try {
+          await SkillModel.updateWithFiles({
+            id,
+            skill: {
+              ...toSkillInsertFields(item.parsed),
+              sourceRef: item.sourceRef,
+              sourceCommit: item.sourceCommit,
+            },
+            files: item.files,
+            versionSourceCommit: item.sourceCommit,
+          });
+        } catch (error) {
+          if (isSkillNameConflict(error)) {
+            throw new ApiError(
+              409,
+              `The skill there is named "${item.parsed.name}", and a skill with that name already exists`,
+            );
+          }
+          throw error;
+        }
+        const moved = await SkillModel.setGitSource(id, {
+          sourceOrigin: item.sourceOrigin,
+          sourceProvider: item.sourceProvider,
+          githubSyncRef: item.requestedRef,
+          githubSyncInterval: body.interval ?? skill.githubSyncInterval ?? "1d",
+          githubAppConfigId: source.githubAppConfigId ?? null,
+          githubPatId: source.githubPatId ?? null,
+          gitlabTokenId: source.gitlabTokenId ?? null,
+        });
+        if (!moved) throw new ApiError(404, "Skill not found");
+        logger.info(
+          { skillId: id, organizationId, sourceRef: item.sourceRef },
+          "[Skills] Git source changed",
+        );
+        return reply.send(await loadSkillDetail(moved));
       }
 
       const updated = await SkillModel.setGithubSync(

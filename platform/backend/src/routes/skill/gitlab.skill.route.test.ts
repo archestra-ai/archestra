@@ -114,6 +114,88 @@ describe("GitLab skill import", () => {
     );
   });
 
+  test("moves a synced skill to another project and folder, and refuses a location without it", async ({
+    makeMember,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const gitlab = new FakeGitlab(GITLAB, TOKEN);
+    server.use(...gitlab.handlers());
+    gitlab.addProject({
+      path: "platform/skill-hub",
+      files: {
+        "skills/style-guide/SKILL.md": stubSkillManifest("style-guide"),
+      },
+    });
+    const moved = gitlab.addProject({
+      path: "docs/writing",
+      files: {
+        "guides/style-guide/SKILL.md": `${stubSkillManifest("style-guide")}\n\nNew home`,
+      },
+    });
+    const credential = await createGitlabToken({
+      organizationId: ctx.organizationId,
+      data: { name: "Skill hub", gitlabUrl: GITLAB, token: TOKEN },
+    });
+    const imported = await ctx.app.inject({
+      method: "POST",
+      url: "/api/skills/github/import",
+      payload: {
+        repoUrl: `${GITLAB}/platform/skill-hub`,
+        provider: "gitlab",
+        gitlabTokenId: credential.id,
+        skillPaths: ["skills/style-guide"],
+      },
+    });
+    const [skill] = imported.json().created;
+    const editSource = (source: Record<string, unknown>) =>
+      ctx.app.inject({
+        method: "PATCH",
+        url: `/api/skills/${skill.id}/github-sync`,
+        payload: {
+          interval: "1h",
+          source: {
+            repoUrl: `${GITLAB}/docs/writing`,
+            provider: "gitlab",
+            gitlabTokenId: credential.id,
+            ...source,
+          },
+        },
+      });
+
+    // Nothing there: refused, and the skill keeps its source.
+    const missing = await editSource({ skillPath: "guides/nope" });
+    expect(missing.statusCode).toBe(400);
+    expect(await SkillModel.findById(skill.id)).toMatchObject({
+      sourceRef: expect.stringMatching(/^platform\/skill-hub@/),
+      githubSyncInterval: "1d",
+    });
+
+    const response = await editSource({ skillPath: "guides/style-guide" });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(await SkillModel.findById(skill.id)).toMatchObject({
+      sourceRef: `docs/writing@${moved.branches.get("main")}:guides/style-guide`,
+      sourceOrigin: GITLAB,
+      gitlabTokenId: credential.id,
+      githubSyncInterval: "1h",
+      lastSyncError: null,
+      latestVersion: 2,
+      content: expect.stringContaining("New home"),
+    });
+
+    // Stopping the sync drops the stored GitLab token with the rest.
+    await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/skills/${skill.id}/github-sync`,
+      payload: { disconnect: true },
+    });
+    expect(await SkillModel.findById(skill.id)).toMatchObject({
+      githubSyncInterval: null,
+      gitlabTokenId: null,
+    });
+  });
+
   test("refuses a self-managed GitLab without a saved token before any request", async () => {
     const gitlab = new FakeGitlab(GITLAB, TOKEN);
     server.use(...gitlab.handlers());

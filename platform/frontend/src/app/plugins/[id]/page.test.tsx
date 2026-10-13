@@ -254,15 +254,20 @@ describe("PluginDetailPage", () => {
     expect(screen.getByRole("link", { name: /acme\/hooks/ })).toBeVisible();
     expect(screen.queryByLabelText("Repository")).not.toBeInTheDocument();
 
+    // The same steps that set it up, opened on the repository it reads.
     await user.click(screen.getByRole("button", { name: "Edit source" }));
     const dialog = screen.getByRole("dialog", { name: "Edit source" });
-    expect(screen.getByLabelText("Repository")).toHaveValue("acme/hooks");
-    await user.type(screen.getByLabelText("Branch"), "release");
+    expect(within(dialog).getByText("Public repository")).toBeVisible();
+    expect(within(dialog).getByLabelText("Repository")).toHaveValue(
+      "https://github.com/acme/hooks",
+    );
+    await user.click(within(dialog).getByRole("button", { name: /Advanced/ }));
+    await user.type(within(dialog).getByLabelText("Branch"), "release");
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
     // The dialog saves the source alone; the page draft is untouched.
     expect(updateMutateAsync).toHaveBeenCalledWith({
       githubSource: {
-        repoUrl: "acme/hooks",
+        repoUrl: "https://github.com/acme/hooks",
         ref: "release",
         syncInterval: "1d",
       },

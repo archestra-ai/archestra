@@ -64,6 +64,24 @@ export function useGitSourceSteps() {
     setStep("repo");
   }, []);
 
+  /**
+   * Open an existing source to edit: its host stays, its access and
+   * repository are filled in. Without a known access it starts there.
+   */
+  const startEditing = useCallback(
+    (params: {
+      provider: GitProvider;
+      access: GitAccess | null;
+      repository: GitRepositoryValue;
+    }) => {
+      setProvider(params.provider);
+      setAccess(params.access);
+      setRepository(params.repository);
+      setStep(params.access ? "repo" : "access");
+    },
+    [],
+  );
+
   const reset = useCallback(() => {
     setStep("provider");
     setProvider("github");
@@ -85,6 +103,7 @@ export function useGitSourceSteps() {
     auth: access ? gitAuthFields({ provider, access }) : { provider },
     back: () => setStep(step === "repo" ? "access" : "provider"),
     startOnPublicGithub,
+    startEditing,
     reset,
   };
 }

@@ -45,7 +45,6 @@ import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
-import { useGitCredentials } from "@/lib/git-credentials.query";
 import {
   type PluginDetail,
   useDeletePlugin,
@@ -173,12 +172,6 @@ function PluginDetailView({
   const { data: canUpdate } = useHasPermissions({ plugin: ["update"] }, "*");
   const isReadOnly = canUpdate === false;
   const updatePlugin = useUpdatePlugin(plugin.id);
-  const { data: canReadCredentials } = useHasPermissions({
-    credential: ["read"],
-  });
-  const { data: gitCredentials = [] } = useGitCredentials(
-    canReadCredentials === true,
-  );
 
   const isGithubPlugin = plugin.sourceKind === "github";
   const actionModel = getPluginActionModel({
@@ -276,27 +269,6 @@ function PluginDetailView({
   );
   useGuardedInAppNavigation({ isDirty, onRequestNavigate: requestNavigate });
 
-  // The credentials the source can be read with: those on its host's
-  // provider, plus the one it uses now even when this reader can't list it
-  // (a legacy saved GitHub token stays selectable, but is no longer offered).
-  const gitProvider = plugin.sourceProvider ?? "github";
-  const gitCredentialOptions = gitCredentials
-    .filter((credential) => credential.provider === gitProvider)
-    .map((credential) => ({
-      value: `${credential.kind}:${credential.id}`,
-      label: credential.name,
-    }));
-  if (
-    seed.gitCredential &&
-    !gitCredentialOptions.some((option) => option.value === seed.gitCredential)
-  )
-    gitCredentialOptions.unshift({
-      value: seed.gitCredential,
-      label: seed.gitCredential.startsWith("pat:")
-        ? "Saved GitHub token"
-        : "Current credential",
-    });
-
   const [deleteRequested, setDeleteRequested] = useState(false);
   const [updatesOpen, setUpdatesOpen] = useState(false);
   const [installOpen, setInstallOpen] = useState(false);
@@ -312,7 +284,7 @@ function PluginDetailView({
       icon={
         isGithubPlugin ? (
           <GitSourceTooltip
-            label={`${plugin.githubSyncInterval ? "Checked against" : "Imported from"} ${GIT_PROVIDER_LABELS[gitProvider]}`}
+            label={`${plugin.githubSyncInterval ? "Checked against" : "Imported from"} ${GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"]}`}
             detail={plugin.sourceRepo}
           >
             <PluginSourceGlyph plugin={plugin} />
@@ -480,10 +452,6 @@ function PluginDetailView({
         {isGithubPlugin && activeSection === "general" && (
           <PluginGitSourceCard
             plugin={plugin}
-            source={{
-              provider: gitProvider,
-              credentials: gitCredentialOptions,
-            }}
             canEdit={!isReadOnly}
             onReview={() => setUpdatesOpen(true)}
           />

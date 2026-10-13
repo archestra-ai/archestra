@@ -6,41 +6,26 @@ import {
   gitHostFromUrl,
   gitWebUrls,
 } from "@archestra/shared";
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { GitProviderLogo } from "@/components/git/git-setup-chrome";
+import { gitRepositoryUrlWithRef } from "@/components/git/git-source";
 import {
   GitSourceBranch,
   GitSourceCard,
   GitSourceError,
 } from "@/components/git/git-source-card";
-import { StandardFormDialog } from "@/components/standard-dialog";
-import { Button } from "@/components/ui/button";
-import { FieldDescription } from "@/components/ui/field-description";
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { useGitCredentials } from "@/lib/git-credentials.query";
-import { useGithubPats } from "@/lib/github-pat.query";
+  GIT_SYNC_INTERVAL_LABELS,
+  GitSourceEditDialog,
+} from "@/components/git/git-source-edit-dialog";
+import { Button } from "@/components/ui/button";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useUpdateSkillGithubSync } from "@/lib/skills/skill.query";
 import { skillSourcePath } from "@/lib/skills/skill-source";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 
 export type SkillDetail = archestraApiTypes.GetSkillResponses["200"];
-
-// lowercase: these render mid-sentence ("Checks every hour.")
-const SYNC_INTERVAL_LABELS: Record<string, string> = {
-  "15m": "every 15 minutes",
-  "1h": "every hour",
-  "1d": "once a day",
-};
 
 /** A Git skill imported once and never pulled again. */
 export function GithubSnapshotNotice({
@@ -121,7 +106,7 @@ export function GithubSyncPanel({
           onClick: () =>
             updateGithubSync.mutate({ id: skill.id, body: { syncNow: true } }),
           pending: syncing,
-          tooltip: `Checks ${SYNC_INTERVAL_LABELS[skill.githubSyncInterval ?? "1d"]}. ${lastSynced}.`,
+          tooltip: `Syncs ${GIT_SYNC_INTERVAL_LABELS[skill.githubSyncInterval ?? "1d"].toLowerCase()}. ${lastSynced}.`,
         }}
         footer={`Content is read-only here. Stop syncing to edit it in ${appName}.`}
         actions={
@@ -132,7 +117,7 @@ export function GithubSyncPanel({
               size="xs"
               onClick={() => setEditing(true)}
             >
-              Edit sync
+              Edit source
             </Button>
             <Button
               type="button"
@@ -153,11 +138,47 @@ export function GithubSyncPanel({
         )}
       </GitSourceCard>
       {editing && (
-        <SkillSyncDialog
-          skill={skill}
-          repo={repoPath ?? providerLabel}
-          href={href}
-          folder={folder}
+        <GitSourceEditDialog
+          name={skill.name}
+          current={{
+            provider,
+            origin: skill.sourceOrigin,
+            repo: repoPath ?? "",
+            ref: skill.githubSyncRef,
+            subpath: folder,
+            credentialId:
+              skill.gitlabTokenId ??
+              skill.githubAppConfigId ??
+              skill.githubPatId,
+            interval: skill.githubSyncInterval,
+          }}
+          withSubpath
+          subpathPlaceholder="skills/my-skill"
+          syncDescription="New commits replace the skill’s content when they’re pulled."
+          saving={updateGithubSync.isPending}
+          onSave={async ({ auth, repository, interval }) => {
+            // Only a moved source is fetched again; a new schedule alone is not.
+            const moved =
+              repository.path !== repoPath ||
+              (repository.ref ?? null) !== (skill.githubSyncRef ?? null) ||
+              repository.subpath !== folder ||
+              (auth.gitlabTokenId ?? auth.githubAppConfigId ?? null) !==
+                (skill.gitlabTokenId ?? skill.githubAppConfigId ?? null);
+            const saved = await updateGithubSync.mutateAsync({
+              id: skill.id,
+              body: {
+                interval: interval ?? "1d",
+                ...(moved && {
+                  source: {
+                    ...auth,
+                    repoUrl: gitRepositoryUrlWithRef(repository),
+                    skillPath: repository.subpath,
+                  },
+                }),
+              },
+            });
+            return !!saved;
+          }}
           onOpenChange={setEditing}
         />
       )}
@@ -183,124 +204,3 @@ export function GithubSyncPanel({
 
 /** Existing skills only (edit/preview with an id) — a skill being created has
  * no id to start a chat with yet. */
-
-// === Internal helpers ===
-
-/** Where the skill syncs from, and how often. Only the schedule can change. */
-function SkillSyncDialog({
-  skill,
-  repo,
-  href,
-  folder,
-  onOpenChange,
-}: {
-  skill: SkillDetail;
-  repo: string;
-  href?: string;
-  folder: string;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const updateGithubSync = useUpdateSkillGithubSync();
-  const current = skill.githubSyncInterval ?? "1d";
-  const [interval, setInterval] = useState(current);
-  const provider = skill.sourceProvider ?? "github";
-  const { data: githubPats = [] } = useGithubPats();
-  const { data: gitCredentials = [] } = useGitCredentials();
-  const credentialId = skill.gitlabTokenId ?? skill.githubAppConfigId;
-  const credentialName = skill.githubPatId
-    ? githubPats.find((pat) => pat.id === skill.githubPatId)?.name
-    : credentialId
-      ? gitCredentials.find((entry) => entry.id === credentialId)?.name
-      : undefined;
-  const signIn = skill.githubPatId
-    ? `Saved token${credentialName ? ` “${credentialName}”` : ""}`
-    : skill.gitlabTokenId
-      ? `GitLab token${credentialName ? ` “${credentialName}”` : ""}`
-      : skill.githubAppConfigId
-        ? `GitHub App${credentialName ? ` “${credentialName}”` : ""}`
-        : `None (public ${provider === "gitlab" ? "project" : "repository"})`;
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    updateGithubSync.mutate(
-      { id: skill.id, body: { interval: interval as "15m" | "1h" | "1d" } },
-      { onSuccess: () => onOpenChange(false) },
-    );
-  };
-  return (
-    <StandardFormDialog
-      open
-      onOpenChange={onOpenChange}
-      isDirty={interval !== current}
-      title="Sync settings"
-      description={`Where ${skill.name} comes from, and how often it checks for changes.`}
-      size="medium"
-      className="w-[calc(100%-2rem)] sm:max-w-lg"
-      bodyClassName="space-y-5"
-      onSubmit={submit}
-      footer={
-        <>
-          <DialogCancelButton disabled={updateGithubSync.isPending} />
-          <Button
-            type="submit"
-            disabled={updateGithubSync.isPending || interval === current}
-          >
-            {updateGithubSync.isPending ? "Saving…" : "Save"}
-          </Button>
-        </>
-      }
-    >
-      <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-md border bg-muted/30 px-4 py-3 text-sm">
-        <dt className="text-muted-foreground">
-          {provider === "gitlab" ? "Project" : "Repository"}
-        </dt>
-        <dd className="min-w-0 truncate">
-          {href ? (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="underline-offset-4 hover:underline"
-            >
-              {repo}
-            </a>
-          ) : (
-            repo
-          )}
-        </dd>
-        <dt className="text-muted-foreground">Branch</dt>
-        <dd>{skill.githubSyncRef || "Default branch"}</dd>
-        {folder && (
-          <>
-            <dt className="text-muted-foreground">Folder</dt>
-            <dd className="min-w-0 truncate font-mono text-xs leading-5">
-              {folder}
-            </dd>
-          </>
-        )}
-        <dt className="text-muted-foreground">Sign-in</dt>
-        <dd className="min-w-0 truncate">{signIn}</dd>
-      </dl>
-      <div className="space-y-2">
-        <Label htmlFor="skill-sync-interval">Check for changes</Label>
-        <Select
-          value={interval}
-          onValueChange={(value) => setInterval(value as typeof current)}
-        >
-          <SelectTrigger id="skill-sync-interval" className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(SYNC_INTERVAL_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label.charAt(0).toUpperCase() + label.slice(1)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <FieldDescription>
-          New commits replace the skill’s content when they’re pulled.
-        </FieldDescription>
-      </div>
-    </StandardFormDialog>
-  );
-}

@@ -613,6 +613,19 @@ function CatalogItemDetails({
             />
 
             <SettingsSectionGroup>
+              {/* A built-in server has no deployment, environment or
+                  connections, which left its Overview blank. */}
+              {item.serverType === "builtin" && (
+                <OverviewSummary
+                  facts={[
+                    { label: "Hosting", value: "Built into Archestra" },
+                    {
+                      label: "Tools",
+                      value: `${item.toolCount ?? 0} available`,
+                    },
+                  ]}
+                />
+              )}
               {item.serverType !== "builtin" && (
                 <OverviewSummary
                   facts={[
@@ -778,8 +791,10 @@ function useMcpServerOverviewFacts(item: CatalogItem): MaybeOverviewFact[] {
   if (item.serverType === "local") {
     facts.push({
       label: "Transport",
+      // The runtime treats an unset transport as stdio, so only an explicit
+      // streamable-http shows the HTTP label.
       value:
-        local?.transportType === "stdio" ? (
+        local?.transportType !== "streamable-http" ? (
           <span>stdio</span>
         ) : (
           <span>

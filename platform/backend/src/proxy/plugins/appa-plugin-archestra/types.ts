@@ -52,6 +52,13 @@ export type AppaTrustedContext = {
    * switch, so a change between requests does not land mid-stream.
    */
   enforcement?: "active" | "inactive";
+  /**
+   * The provider-thread step of this request, when it carries one. A continue
+   * is a delta: the thread already holds the system prompt, so guidance that
+   * is fixed for the session is not repeated and per-turn guidance travels in
+   * the new user turn.
+   */
+  thread?: "create" | "continue";
 };
 
 export type AppaMatchContext = {

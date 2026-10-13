@@ -446,6 +446,141 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  describe("guidance on a provider-thread continue", () => {
+    const FIXED = "The organization's guardrails policy can block a tool call";
+    const PER_TURN = [
+      "The platform could not read the answer to the last approval question",
+      "The policy needs the user's approval for the last execute_remedy_plan result.",
+      "The ruling above offers a remedy plan for the blocked call.",
+      "Question tools collect the user's decisions.",
+    ];
+    type Pending = {
+      unreadNativeAnswerOfferIds: string[];
+      pendingHitlReviewOfferIds: string[];
+      requiresRemedyContinuation: boolean;
+      requiresQuestionContinuation: boolean;
+      threadContinue: boolean;
+    };
+
+    /** One governed request with every kind of guidance pending. */
+    async function guided(params: {
+      organizationId: string;
+      thread: "create" | "continue";
+      pending: boolean;
+    }) {
+      const plugin = new AppaPluginArchestra([]);
+      const context = requestContext({
+        sessionId: `guidance-${params.thread}-${params.pending}`,
+        organizationId: params.organizationId,
+      });
+      const trusted = trustedOf(context);
+      trusted.thread = params.thread;
+      trusted.request = {
+        tools: {
+          control: { name: "archestra__execute_remedy_plan" },
+          notice: { name: "archestra__get_remedy_plans" },
+          askUser: { name: "archestra__ask_user" },
+          platformToolNames: new Set(),
+          namespaces: new Map(),
+        },
+        customTools: new Set(),
+        declaredTools: [{ name: "archestra__execute_remedy_plan" }],
+        session: {},
+      };
+      await plugin.onSessionInit(context);
+      const binding = (
+        plugin as unknown as { bindings: Map<object, Pending> }
+      ).bindings.get(context.resources);
+      if (params.pending && binding) {
+        binding.unreadNativeAnswerOfferIds = ["offer-2"];
+        binding.pendingHitlReviewOfferIds = ["offer-1"];
+        binding.requiresRemedyContinuation = true;
+        binding.requiresQuestionContinuation = true;
+      }
+      const system = [{ type: "text", text: "client system" }];
+      const request = {
+        system,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "toolu_1", content: "done" },
+            ],
+          },
+        ],
+      };
+      await plugin.onBeforeModel({ ...context, request });
+      await plugin.onCleanup(context);
+      return {
+        binding,
+        system: JSON.stringify(request.system),
+        turn: JSON.stringify(request.messages.at(-1)),
+        systemUntouched: request.system === system && system.length === 1,
+      };
+    }
+
+    test("a continue puts per-turn guidance in the new user turn, not in system, and skips fixed guidance", async ({
+      makeOrganization,
+    }) => {
+      config.openappa.enabled = true;
+      const { id } = await makeOrganization();
+
+      const result = await guided({
+        organizationId: id,
+        thread: "continue",
+        pending: true,
+      });
+
+      expect(result.binding?.threadContinue).toBe(true);
+      expect(result.systemUntouched).toBe(true);
+      for (const text of PER_TURN) {
+        expect(result.turn).toContain(text);
+        expect(result.system).not.toContain(text);
+      }
+      expect(result.turn).not.toContain(FIXED);
+      expect(result.system).not.toContain(FIXED);
+    });
+
+    test("a later continue with nothing pending adds nothing", async ({
+      makeOrganization,
+    }) => {
+      config.openappa.enabled = true;
+      const { id } = await makeOrganization();
+
+      const result = await guided({
+        organizationId: id,
+        thread: "continue",
+        pending: false,
+      });
+
+      expect(result.systemUntouched).toBe(true);
+      for (const text of [...PER_TURN, FIXED]) {
+        expect(result.turn).not.toContain(text);
+        expect(result.system).not.toContain(text);
+      }
+    });
+
+    test("a create still puts the guidance in system", async ({
+      makeOrganization,
+    }) => {
+      config.openappa.enabled = true;
+      const { id } = await makeOrganization();
+
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+      });
+
+      expect(result.binding?.threadContinue).toBe(false);
+      expect(result.system).toContain(FIXED);
+      for (const text of PER_TURN) {
+        expect(result.system).toContain(text);
+        expect(result.turn).not.toContain(text);
+      }
+    });
+  });
+
   test("forces Codex to execute an offered remedy instead of asking in prose", async ({
     makeOrganization,
   }) => {
@@ -2680,7 +2815,8 @@ describe("rendering runtime text for this client", () => {
       const message = (outcome as { refusal: { contentMessage: string } })
         .refusal.contentMessage;
       expect(message).toContain("[appa] Refused: tool builtin:exec");
-      expect(message).toContain("declared no tools");
+      expect(message).toContain("This request listed no tools");
+      expect(message).not.toContain("This client");
       expect(message).toContain("code_mode_host = false");
       const reports = await OpenAppaYellModel.list({
         organizationId,

@@ -150,6 +150,8 @@ import {
 import { withCallerScope, withoutCallerScope } from "./utils";
 
 type AppaPluginBinding = {
+  /** The request continues a provider thread that holds the system prompt. */
+  threadContinue: boolean;
   session: OpenAppaSession;
   identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
@@ -269,6 +271,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       completedHandbackReturn: undefined,
       chat,
       compaction: trustedContext.compaction === true,
+      threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
       requiresQuestionContinuation: false,
       requiresRemedyContinuation: false,
@@ -561,7 +564,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = started.contract ?? binding.returnContract;
         binding.sessionInitialized = true;
       }
-      if (binding.returnContract) {
+      if (binding.returnContract && !binding.threadContinue) {
         deliverReturnContract({
           request: context.request,
           interactionType: context.interactionType,
@@ -584,6 +587,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           request: context.request,
           interactionType: context.interactionType,
           guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+          onContinue: binding.threadContinue ? "skip" : undefined,
         });
       }
       const askUser = binding.request.tools?.askUser;
@@ -602,6 +606,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             askUserToolName: askUserTool,
             nativeQuestionToolName: nativeQuestion,
           }),
+          onContinue: binding.threadContinue ? "skip" : undefined,
         });
       }
     }
@@ -612,6 +617,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: unreadNativeAnswerGuidance(offerIds),
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
     }
@@ -622,6 +628,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: hitlQuestionGuidance(offerIds),
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
     }
@@ -631,6 +638,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: REMEDY_OFFER_CONTINUATION_GUIDANCE,
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
     }
@@ -641,6 +649,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: hitlDecisionGuidance(rulings),
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       if (rulings.some((entry) => entry.ruling === "approve")) {
         requireCodexToolCall({ binding, context });
@@ -650,6 +659,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       appendQuestionContinuation({
         request: context.request,
         interactionType: context.interactionType,
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
     }
     if (!binding || (!binding.request.tools && !binding.session.parent_id))
@@ -1346,7 +1356,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : binding.request.defersTools
               ? `${decision.feedback}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
               : binding.request.declaredTools.length === 0
-                ? `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`
+                ? `${decision.feedback}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
                 : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
         return {
           decision: "refuse",
@@ -5105,9 +5115,20 @@ function appendQuestionContinuation(params: {
   request: unknown;
   interactionType: string;
   guidance?: string;
+  /**
+   * On a provider-thread continue: `skip` guidance the thread already holds
+   * (fixed for the session), or deliver `turn` guidance in the new user turn,
+   * which the thread keeps, instead of the system prompt it owns.
+   */
+  onContinue?: "skip" | "turn";
 }): void {
   const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
   if (!isRecord(params.request)) return;
+  if (params.onContinue === "skip") return;
+  if (params.onContinue === "turn") {
+    appendToLastUserTurn(params.request, guidance);
+    return;
+  }
   if (params.interactionType === "openai:responses") {
     let input: unknown[];
     if (typeof params.request.input === "string") {
@@ -5183,6 +5204,26 @@ function appendQuestionContinuation(params: {
     }
     appendInstruction(params.request, "system", guidance);
   }
+}
+
+/** Adds a text block to the newest user message of a Messages request. */
+function appendToLastUserTurn(
+  request: Record<string, unknown>,
+  text: string,
+): void {
+  const messages = request.messages;
+  if (!Array.isArray(messages)) return;
+  const last = messages.findLast(
+    (message) => isRecord(message) && message.role === "user",
+  );
+  if (!isRecord(last)) return;
+  if (typeof last.content === "string")
+    last.content = [
+      { type: "text", text: last.content },
+      { type: "text", text },
+    ];
+  else if (Array.isArray(last.content))
+    last.content.push({ type: "text", text });
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

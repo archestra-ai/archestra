@@ -5127,6 +5127,8 @@ function insertRequestGuidance(params: {
   request: unknown;
   interactionType: string;
   guidance: string;
+  /** A provider-thread continue: the thread already holds this guidance. */
+  onContinue?: "skip";
 }): void {
   const { request, interactionType, guidance } = params;
   if (

@@ -11,10 +11,10 @@ crate-type = ["cdylib"]
 [dependencies]
 # OpenAPPA #637: row locks instead of advisory locks, leased receipts and
 # incremental family views.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4105f7d446d002f9262097f839656860db2abb57", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4105f7d446d002f9262097f839656860db2abb57" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4105f7d446d002f9262097f839656860db2abb57", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4105f7d446d002f9262097f839656860db2abb57" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d3490532c492d955340e525d7df4ac1ec0288117", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d3490532c492d955340e525d7df4ac1ec0288117" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d3490532c492d955340e525d7df4ac1ec0288117", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d3490532c492d955340e525d7df4ac1ec0288117" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

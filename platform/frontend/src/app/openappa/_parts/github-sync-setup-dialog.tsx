@@ -547,6 +547,7 @@ export function GithubSyncSetupDialog({
             // the old repository means nothing there.
             const sameHost = editing?.provider === picked;
             setRepo(sameHost ? editing.repo : "");
+            setOwnerInput(sameHost ? editing.repo.split("/")[0] : "");
             setRef(sameHost ? (editing.ref ?? "") : "");
             setOrigin(sameHost ? "existing" : null);
             setProjectMode(sameHost ? "existing" : "create");

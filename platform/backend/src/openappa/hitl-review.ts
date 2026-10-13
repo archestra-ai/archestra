@@ -576,6 +576,8 @@ function wrapCode(text: string, diffLines = false): string {
     .split("\n")
     .flatMap((line) => {
       const lead = (diffLines ? /^[+-]?\s*/ : /^\s*/).exec(line)?.[0] ?? "";
+      // Past half the pane, the indent would leave too little room for the
+      // value; such a line continues four spaces in from the margin instead.
       const continuation =
         lead.length + 4 <= PREVIEW_WIDTH / 2
           ? `${lead}    `

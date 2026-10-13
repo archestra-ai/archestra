@@ -10,7 +10,7 @@ import {
   subscriptionKindForProvider,
   type ThinkingEffortSetting,
 } from "@archestra/shared";
-import { MoreVerticalIcon, PaperclipIcon, XIcon } from "lucide-react";
+import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
 import { memo, useCallback, useEffect } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
@@ -20,13 +20,13 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
 import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-recommendation-notice";
-import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
 import { ModelSelector } from "@/components/chat/model-selector";
+import { ModelSourceIndicator } from "@/components/chat/model-source-indicator";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
 import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -237,18 +237,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           : "subscription"
       }`;
 
-  // Label for the model-source badge. A custom model is a "chat override" when
-  // it is scoped to an existing conversation, and a "user override" otherwise
-  // (the new-chat case, where it reflects the user's own default).
-  const modelSourceLabel =
-    modelSource === "agent"
-      ? "agent"
-      : modelSource === "organization"
-        ? "org"
-        : conversationId
-          ? "chat override"
-          : "user override";
-
   // Any file type can be attached: a file the model can't read is still stored
   // and surfaced in the conversation's Files panel (and staged into the
   // sandbox when one is available), so the only gate is the org-level toggle.
@@ -407,19 +395,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   <>
                     {modelSource && !subscriptionConnectRequired && (
                       <div className="flex items-center gap-1.5">
-                        <ComposerBadge>
-                          {modelSourceLabel}
-                          {modelSource === "user" && onResetModelOverride && (
-                            <UnstyledButton
-                              type="button"
-                              onClick={onResetModelOverride}
-                              className="text-muted-foreground hover:text-foreground transition-colors"
-                              title="Reset to default"
-                            >
-                              <XIcon className="size-3" />
-                            </UnstyledButton>
-                          )}
-                        </ComposerBadge>
+                        <ModelSourceIndicator
+                          source={modelSource}
+                          inConversation={!!conversationId}
+                          onReset={onResetModelOverride}
+                        />
                       </div>
                     )}
                     {toolsUnavailable && (
@@ -789,19 +769,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 />
               )}
               {modelSource && !subscriptionConnectRequired && (
-                <ComposerBadge className="ml-1 mr-2">
-                  {modelSourceLabel}
-                  {modelSource === "user" && onResetModelOverride && (
-                    <UnstyledButton
-                      type="button"
-                      onClick={onResetModelOverride}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                      title="Reset to default"
-                    >
-                      <XIcon className="size-3" />
-                    </UnstyledButton>
-                  )}
-                </ComposerBadge>
+                <ModelSourceIndicator
+                  source={modelSource}
+                  inConversation={!!conversationId}
+                  onReset={onResetModelOverride}
+                />
               )}
             </div>
           )}

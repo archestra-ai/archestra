@@ -10,7 +10,11 @@ use appa_runtime::{
     api::Runtime,
     config::{ArchestraEndpoint, Config, HostDefaults, HostedBattery, IncludeResolution},
 };
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+    time::Duration,
+};
 
 /// The consult budget every external of a hosted policy gets. Fixed for v0: the
 /// helper bridge derives its own deadline from it.
@@ -129,6 +133,7 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         .iter()
         .map(|battery| Ok((battery, bind_helpers(battery)?)))
         .collect::<Result<Vec<_>, String>>()?;
+    let root = &with_member_rosters(root, &document, &bound)?;
     let hosted: Vec<(&ResolvedBattery, &BoundBattery, Vec<&str>)> = bound
         .iter()
         .map(|(battery, bound)| {
@@ -161,6 +166,59 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         content,
         credentials,
     })
+}
+
+/// The root with a readers table for every member roster a deployed target sends its
+/// audience lookups to and nothing composed declares. The host owns these rosters;
+/// each is empty until the host knows its readers, so every lookup through it denies.
+fn with_member_rosters(
+    root: &str,
+    document: &toml::Table,
+    bound: &[(&ResolvedBattery, BoundBattery)],
+) -> Result<String, String> {
+    let parse = |text: &str| toml::from_str::<toml::Table>(text).map_err(|error| error.to_string());
+    let mut composed = vec![document.clone()];
+    let mut targets = Vec::new();
+    for (_, battery) in bound {
+        composed.push(parse(&battery.base)?);
+        if let Some(target) = &battery.target {
+            let target = parse(target)?;
+            targets.push(target.clone());
+            composed.push(target);
+        }
+    }
+    let rosters: BTreeSet<&str> = targets
+        .iter()
+        .flat_map(audience_entries)
+        .filter_map(|(_, entry)| entry.get("lookup")?.as_str())
+        .filter(|roster| {
+            !composed
+                .iter()
+                .any(|document| audience_entries(document).any(|(name, _)| name == *roster))
+        })
+        .collect();
+    if rosters.is_empty() {
+        return Ok(root.to_owned());
+    }
+    let mut edited = root
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|error| format!("root policy: {error}"))?;
+    for roster in rosters {
+        edited["externals"]["audience"][roster]["readers"] =
+            toml_edit::value(toml_edit::InlineTable::new());
+    }
+    Ok(edited.to_string())
+}
+
+/// Every `[externals.audience.<name>]` entry a document declares.
+fn audience_entries(document: &toml::Table) -> impl Iterator<Item = (&str, &toml::Table)> {
+    document
+        .get("externals")
+        .and_then(|externals| externals.get("audience"))
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flatten()
+        .filter_map(|(name, entry)| Some((name.as_str(), entry.as_table()?)))
 }
 
 /// The composed text is stored and compiled again at every dispatch, and that compile
@@ -860,6 +918,54 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             ..battery()
         };
         assert!(compose(&root, &[unbound]).is_err());
+    }
+
+    #[test]
+    fn the_host_declares_the_member_roster_a_deployed_target_looks_people_up_in() {
+        // SAFETY: as above.
+        unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
+        let github = crate::batteries::bundled()
+            .unwrap()
+            .iter()
+            .find(|battery| battery.name == "github")
+            .unwrap();
+        let target = github.multi_user.as_ref().unwrap();
+        let battery = |target: Option<String>| ResolvedBattery {
+            entry: GITHUB_ENTRY.into(),
+            name: "github".into(),
+            policy: github.base.clone(),
+            target,
+            helpers: Some(HelperBinding {
+                url_base: "http://127.0.0.1:9000/api/openappa/helpers/install-1".into(),
+                token_env: BRIDGE_TOKEN_ENV.into(),
+            }),
+        };
+        let root = format!(
+            "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
+        );
+        let roster = |content: &str| {
+            let document: toml::Table = toml::from_str(content).unwrap();
+            audience_entries(&document)
+                .find(|(name, _)| *name == "host-members")
+                .map(|(_, entry)| entry.clone())
+        };
+        let multi_user = compose(&root, &[battery(Some(target.policy.clone()))]).unwrap();
+        assert_eq!(
+            roster(&multi_user.content).and_then(|entry| entry.get("readers").cloned()),
+            Some(toml::Value::Table(toml::Table::new()))
+        );
+        // A roster the root declares is its own.
+        let declared = format!(
+            "{root}[externals.audience.host-members]\nreaders = {{ \"github:1\" = \"ana@corp.example\" }}\n"
+        );
+        let kept = compose(&declared, &[battery(Some(target.policy.clone()))]).unwrap();
+        assert_eq!(
+            roster(&kept.content).and_then(|entry| entry.get("readers")?.get("github:1").cloned()),
+            Some(toml::Value::String("ana@corp.example".into()))
+        );
+        // The base alone looks nobody up, so no roster is written.
+        let base_only = compose(&root, &[battery(None)]).unwrap();
+        assert_eq!(roster(&base_only.content), None);
     }
 
     #[test]

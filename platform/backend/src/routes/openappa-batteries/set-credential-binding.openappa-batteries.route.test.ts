@@ -49,9 +49,11 @@ describe("binding a battery credential", () => {
     registerRoutePermissions(app);
     await app.register(routes);
   });
+  const sandbox = config.daggerRuntime.enabled;
   afterEach(async () => {
     await app.close();
     vi.restoreAllMocks();
+    config.daggerRuntime.enabled = sandbox;
   });
 
   /** An organization credential with a value, which a binding may name. */
@@ -156,6 +158,8 @@ describe("binding a battery credential", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
+    // Helpers run in the sandbox; only there does github deploy its multi-user target.
+    config.daggerRuntime.enabled = true;
     const created = await includeGithub(makeInternalMcpCatalog, makeTool);
     expect(created.json()).toMatchObject({ status: "missing_credentials" });
     await connectGithubToken();

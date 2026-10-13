@@ -40,7 +40,10 @@ export interface BatteryPackage {
  */
 export interface BatteryTargetView {
   policy: string
+  /** Every variable the target and its base read. */
   credentials: Array<string>
+  /** The variables the target policy itself reads, without the base's. */
+  targetCredentials: Array<string>
   externals: Array<BatteryExternal>
   annotators: Array<string>
   routedAnnotators: Array<string>

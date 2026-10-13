@@ -23,6 +23,7 @@ const external = (command: string): BatteryExternal => ({
 const multiUser: BatteryTargetView = {
   policy: "multi-user policy",
   credentials: [TOKEN, REGION],
+  targetCredentials: [TOKEN],
   externals: [external("visibility-multi-user.py")],
   annotators: ["acme.visibility"],
   routedAnnotators: ["acme.visibility"],
@@ -95,8 +96,8 @@ describe("deployBattery", () => {
       sandboxEnabled: true,
     },
     {
-      case: "when its multi-user target reads no credential",
-      battery: battery({ credentials: [] }),
+      case: "when its multi-user target reads no credential of its own",
+      battery: battery({ targetCredentials: [] }),
       isBound: everyBound,
       sandboxEnabled: true,
     },

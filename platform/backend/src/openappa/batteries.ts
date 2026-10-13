@@ -46,7 +46,14 @@ import type {
   UploadedBatteryPackage,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
-import { declaredCredentials, deployBattery } from "./battery-target";
+import {
+  type DeployedFile,
+  declaredCredentials,
+  deployBattery,
+  deployedFiles,
+  deployedSource,
+  prospectiveDeployment,
+} from "./battery-target";
 import {
   addedGrants,
   bundledEntry,
@@ -109,14 +116,20 @@ class OpenAppaBatteriesService {
   ): Promise<Map<string, BatterySetup>> {
     const available = await this.availableBatteries(organizationId);
     return new Map(
-      [...available].map(([name, { package: battery }]) => [
-        name,
-        {
-          benefit: battery.benefit ?? null,
-          setup: batterySetupSteps(battery),
-          credentials: declaredCredentials(battery),
-        },
-      ]),
+      [...available].map(([name, { package: battery }]) => {
+        const deployment = prospectiveDeployment(
+          battery,
+          sandboxRuntimeService.isEnabled,
+        );
+        return [
+          name,
+          {
+            benefit: battery.benefit ?? null,
+            setup: deployment.setup,
+            credentials: deployment.credentials,
+          },
+        ];
+      }),
     );
   }
 
@@ -155,7 +168,10 @@ class OpenAppaBatteriesService {
       const catalog = catalogs.get(catalogId);
       const match = catalog && matchBatteries(catalog, availableNames)[0];
       const found = match && available.get(match.battery);
-      if (match && found)
+      const deployment =
+        found &&
+        prospectiveDeployment(found.package, sandboxRuntimeService.isEnabled);
+      if (match && found && deployment)
         result.set(catalogId, {
           battery: match.battery,
           status: "available",
@@ -169,10 +185,10 @@ class OpenAppaBatteriesService {
                 }),
           description: found.package.description,
           namespaces: found.package.namespaces,
-          credentials: declaredCredentials(found.package),
+          credentials: deployment.credentials,
           benefit: found.package.benefit ?? null,
-          setup: batterySetupSteps(found.package),
-          policy: found.package.base,
+          setup: deployment.setup,
+          files: deployedFiles(deployment),
         });
     }
     return result;
@@ -244,15 +260,17 @@ class OpenAppaBatteriesService {
     rootContent: string;
     resolution: PolicyResolution;
     batteries: PolicyBatteryView[];
+    viewed: DeployedEntries;
     rootRevision: number;
     lastError: string | null;
   }> {
-    const { root, resolution, batteries, policy } =
-      await this.current(organizationId);
+    const current = await this.current(organizationId);
+    const { root, resolution, batteries, policy } = current;
     return {
       rootContent: root.content,
       resolution,
       batteries,
+      viewed: viewedEntries(current),
       rootRevision: policy.rootRevision,
       lastError: policy.lastError,
     };
@@ -260,18 +278,17 @@ class OpenAppaBatteriesService {
 
   /** Show the exact policy bytes an include currently resolves to. */
   async policySource(organizationId: string, entry: string) {
-    const root = await guardrailsPolicyService.get(organizationId);
-    const resolution = await openappaDeclarations.resolve({
-      organizationId,
-      content: root.content,
-    });
-    const included = resolution.entries.find((item) => item.entry === entry);
-    if (!included?.battery)
+    const current = await this.current(organizationId);
+    const included = current.resolution.entries.find(
+      (item) => item.entry === entry,
+    );
+    const deployed = viewedEntries(current).get(entry);
+    if (!included || !deployed)
       throw new ApiError(404, "This battery policy is no longer included");
     return {
       entry: included.entry,
       name: included.name,
-      content: included.battery.base,
+      content: deployedSource(deployed),
     };
   }
 
@@ -1261,6 +1278,7 @@ class OpenAppaBatteriesService {
           batteryName: entry.name,
           catalogId,
           status,
+          target: deployed.get(entry.entry)?.target?.name ?? null,
           packageHash: entry.packageHash,
           lastError: null,
           credentialBindings: bindings,
@@ -1675,7 +1693,8 @@ function rowsSettled(params: {
   return rows.every((row) => {
     const seen = stored.get(rowKey(row));
     if (!seen || !seen.enabled) return false;
-    if (seen.packageHash !== row.packageHash) return false;
+    if (seen.packageHash !== row.packageHash || seen.target !== row.target)
+      return false;
     if (
       JSON.stringify(sortedBindings(seen.credentialBindings)) !==
       JSON.stringify(sortedBindings(row.credentialBindings))
@@ -1758,7 +1777,8 @@ type CatalogBattery =
       credentials: string[];
       benefit: string | null;
       setup: string[];
-      policy: string;
+      /** Its policy files in compose order, the target before its base. */
+      files: DeployedFile[];
     };
 
 type CatalogPrefixes = {
@@ -1901,8 +1921,9 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 }
 
 // Recompose legacy documents that froze an unstated 64 KiB body limit before
-// explicit policy limits took precedence over the host default.
-const COMPOSITION_VERSION = "v2:";
+// explicit policy limits took precedence over the host default (v2), and rows
+// derived before they recorded the target each battery deploys as (v3).
+const COMPOSITION_VERSION = "v3:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential
@@ -1928,9 +1949,28 @@ function compositionFingerprint(params: {
   );
 }
 
-/** The native package joins its one-line setup steps with newlines. */
-function batterySetupSteps(battery: NativeBatteryPackage): string[] {
-  return battery.setup?.split("\n") ?? [];
+/**
+ * What the views read for each included battery: what it composes as, or, for
+ * one held back for want of a credential, what it composes as once bound.
+ */
+function viewedEntries(planned: PlannedComposition): DeployedEntries {
+  return new Map(
+    planned.resolution.entries.flatMap(({ entry, battery }) => {
+      const deployed = planned.deployed.get(entry);
+      if (!battery || !deployed) return [];
+      const held = planned.batteries.some(
+        (view) => view.entry === entry && view.status === "missing_credentials",
+      );
+      return [
+        [
+          entry,
+          held
+            ? prospectiveDeployment(battery, sandboxRuntimeService.isEnabled)
+            : deployed,
+        ] as const,
+      ];
+    }),
+  );
 }
 
 /**

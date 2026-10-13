@@ -1,7 +1,5 @@
 import type { BatteryExternal, BatteryPackage } from "@archestra/openappa-rs";
-
-/** The only target a hosted deployment composes; it never deploys single-user. */
-type BatteryTargetName = "multi-user";
+import type { BatteryTargetName } from "@/types/openappa-batteries";
 
 /** A battery as this deployment composes it: its base, and the target before it. */
 export type DeployedBattery = {
@@ -16,9 +14,9 @@ export type DeployedBattery = {
 };
 
 /**
- * The target a battery deploys as: multi-user when it declares one, the
- * deployment can run its helpers, and every credential it reads is bound;
- * otherwise its base alone.
+ * The target a battery deploys as: multi-user when it declares one that reads
+ * a credential of its own, the deployment can run its helpers, and every
+ * credential it reads is bound; otherwise its base alone.
  */
 export function deployBattery(params: {
   battery: BatteryPackage;
@@ -30,7 +28,7 @@ export function deployBattery(params: {
   const deploysMultiUser =
     multiUser !== undefined &&
     sandboxEnabled &&
-    multiUser.credentials.length > 0 &&
+    multiUser.targetCredentials.length > 0 &&
     multiUser.credentials.every(isBound);
   return deployedFromRow(battery, deploysMultiUser ? "multi-user" : null);
 }
@@ -38,6 +36,49 @@ export function deployBattery(params: {
 /** Every credential a deployment of the battery may read, whichever target it takes. */
 export function declaredCredentials(battery: BatteryPackage): string[] {
   return battery.multiUser?.credentials ?? battery.credentials;
+}
+
+/** What the battery deploys as here once every credential it reads is bound. */
+export function prospectiveDeployment(
+  battery: BatteryPackage,
+  sandboxEnabled: boolean,
+): DeployedBattery {
+  return deployBattery({ battery, isBound: () => true, sandboxEnabled });
+}
+
+export type DeployedFile = { text: string; firstLine: number };
+
+/** A line of one deployed file, as a line of the deployment's shown text. */
+export function shownLine(
+  file: Pick<DeployedFile, "firstLine">,
+  line: number | null | undefined,
+): number | null {
+  return line == null ? null : file.firstLine - 1 + line;
+}
+
+/**
+ * The policy files a deployment composes, target first, each with the line it
+ * starts at in the one text the host shows for it (`deployedSource`).
+ */
+export function deployedFiles(deployed: DeployedBattery): DeployedFile[] {
+  const texts = deployed.target
+    ? [deployed.target.policy, deployed.basePolicy]
+    : [deployed.basePolicy];
+  let firstLine = 1;
+  return texts.map((text) => {
+    const file = { text, firstLine };
+    firstLine += terminated(text).split("\n").length - 1;
+    return file;
+  });
+}
+
+/** The text the host shows for a deployment: its policy files in compose order. */
+export function deployedSource(deployed: DeployedBattery): string {
+  return deployed.target
+    ? deployedFiles(deployed)
+        .map((file) => terminated(file.text))
+        .join("")
+    : deployed.basePolicy;
 }
 
 /** The battery as it deploys for a target already chosen; one it lacks deploys its base. */
@@ -65,6 +106,10 @@ export function deployedFromRow(
     routedAnnotators: multiUser.routedAnnotators,
     setup: setupSteps(multiUser.setup),
   };
+}
+
+function terminated(text: string): string {
+  return text.endsWith("\n") ? text : `${text}\n`;
 }
 
 /** The native package joins its one-line setup steps with newlines. */

@@ -110,9 +110,8 @@ class OpenAppaHelperBridge {
       name: install.batteryName,
       packageHash: install.packageHash,
     });
-    // Helpers run only where the sandbox does, and there a battery with targets
-    // composes helpers only as its multi-user target.
-    const deployed = battery && deployedFromRow(battery, "multi-user");
+    // The row records the target the composition deployed, whose helpers it serves.
+    const deployed = battery && deployedFromRow(battery, install.target);
     const matches =
       deployed?.externals.filter(
         (candidate) => candidate.name === params.externalName,

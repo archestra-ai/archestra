@@ -903,7 +903,10 @@ pub struct BatteryPackage {
 #[napi(object)]
 pub struct BatteryTargetView {
     pub policy: String,
+    /// Every variable the target and its base read.
     pub credentials: Vec<String>,
+    /// The variables the target policy itself reads, without the base's.
+    pub target_credentials: Vec<String>,
     pub externals: Vec<BatteryExternal>,
     pub annotators: Vec<String>,
     pub routed_annotators: Vec<String>,
@@ -947,6 +950,7 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
             multi_user: info.multi_user.as_ref().map(|target| BatteryTargetView {
                 policy: target.policy.clone(),
                 credentials: target.credentials.clone(),
+                target_credentials: target.target_credentials.clone(),
                 externals: battery_externals(&target.externals),
                 annotators: target.annotators.clone(),
                 routed_annotators: target.routed_annotators.clone(),

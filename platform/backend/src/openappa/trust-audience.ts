@@ -8,6 +8,7 @@ import type {
 } from "@/types/openappa-trust-audience";
 import { archestraAudience } from "./archestra-audience";
 import { openappaBatteriesService } from "./batteries";
+import { type DeployedFile, deployedFiles, shownLine } from "./battery-target";
 import {
   asRecord,
   assignsKey,
@@ -27,29 +28,29 @@ class OpenAppaTrustAudienceService {
     organizationId: string;
     userId: string;
   }): Promise<TrustAudienceView> {
-    const [{ rootContent, resolution }, canSeeAllConsults] = await Promise.all([
-      openappaBatteriesService.coverageSnapshot(params.organizationId),
-      // Consults are recorded per session; an org-wide status needs the
-      // permission that shows every session's consults.
-      userHasPermission(
-        params.userId,
-        params.organizationId,
-        "openappaDiagnostics",
-        "admin",
-      ),
-    ]);
-    const batteries = resolution.entries.flatMap((included) =>
-      included.battery
-        ? [
-            {
-              name: included.name,
-              entry: included.entry,
-              packageHash: included.packageHash,
-              text: included.battery.base,
-            },
-          ]
-        : [],
-    );
+    const [{ rootContent, resolution, viewed }, canSeeAllConsults] =
+      await Promise.all([
+        openappaBatteriesService.coverageSnapshot(params.organizationId),
+        // Consults are recorded per session; an org-wide status needs the
+        // permission that shows every session's consults.
+        userHasPermission(
+          params.userId,
+          params.organizationId,
+          "openappaDiagnostics",
+          "admin",
+        ),
+      ]);
+    const batteries = resolution.entries.flatMap((included) => {
+      const deployed = viewed.get(included.entry);
+      return deployed
+        ? deployedFiles(deployed).map((file) => ({
+            name: included.name,
+            entry: included.entry,
+            packageHash: included.packageHash,
+            ...file,
+          }))
+        : [];
+    });
     const policy = asRecord(parsePolicyToml(rootContent)?.policy);
     const declared = declaredSources(batteries);
     const named = audiencesNamedByRules([
@@ -148,11 +149,12 @@ const DEFAULT_TRUST_CHAIN = ["suspicious", "trusted"];
 const CHAIN_AUDIENCES = ["public", "internal", "self"];
 
 type PolicyFile = { entry: string | null; text: string };
-type IncludedBattery = PolicyFile & {
-  entry: string;
-  name: string;
-  packageHash: string | null;
-};
+type IncludedBattery = PolicyFile &
+  DeployedFile & {
+    entry: string;
+    name: string;
+    packageHash: string | null;
+  };
 type DeclaredSource = {
   name: string;
   battery: string;
@@ -185,7 +187,7 @@ function declaredSources(batteries: IncludedBattery[]): DeclaredSource[] {
         name,
         battery: battery.name,
         entry: battery.entry,
-        line: tableHeaderLine(battery.text, table),
+        line: shownLine(battery, tableHeaderLine(battery.text, table)),
         runBy: archestraAudience.serves({
           batteryName: battery.name,
           packageHash: battery.packageHash,
@@ -195,14 +197,17 @@ function declaredSources(batteries: IncludedBattery[]): DeclaredSource[] {
           : ("helper" as const),
         templates,
         templateLines: templates.map((template) =>
-          lineInTable({
-            text: battery.text,
-            table,
-            matches: (line) =>
-              new RegExp(`template\\s*=\\s*"${escapeRegExp(template)}"`).test(
-                line,
-              ),
-          }),
+          shownLine(
+            battery,
+            lineInTable({
+              text: battery.text,
+              table,
+              matches: (line) =>
+                new RegExp(`template\\s*=\\s*"${escapeRegExp(template)}"`).test(
+                  line,
+                ),
+            }),
+          ),
         ),
       };
     });

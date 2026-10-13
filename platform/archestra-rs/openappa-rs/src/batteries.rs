@@ -48,6 +48,8 @@ pub(crate) struct BatteryInfo {
 pub(crate) struct BatteryTargetInfo {
     pub policy: String,
     pub credentials: Vec<String>,
+    /// The variables the target policy itself reads, without the base's.
+    pub target_credentials: Vec<String>,
     pub externals: Vec<HelperExternal>,
     pub annotators: Vec<String>,
     pub routed_annotators: Vec<String>,
@@ -172,6 +174,11 @@ pub(crate) fn inspect(files: &[BatteryFile]) -> Result<BatteryInfo, String> {
     let multi_user = match target {
         None => None,
         Some((policy, target)) => Some(BatteryTargetInfo {
+            target_credentials: battery
+                .targets
+                .as_ref()
+                .map(|targets| targets.multi_user.credentials.clone())
+                .unwrap_or_default(),
             externals: [helper_externals(&target)?, externals.clone()].concat(),
             annotators: [annotator_names(&target), annotator_names(&document)].concat(),
             routed_annotators: [routed_annotators(&target), routed_annotators(&document)]

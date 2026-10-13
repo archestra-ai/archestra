@@ -64,6 +64,10 @@ export const BatteryInstallStatusSchema = z.enum([
 ]);
 export type BatteryInstallStatus = z.infer<typeof BatteryInstallStatusSchema>;
 
+/** The target a battery deploys as here; a hosted deployment never takes single-user. */
+export const BatteryTargetNameSchema = z.enum(["multi-user"]);
+export type BatteryTargetName = z.infer<typeof BatteryTargetNameSchema>;
+
 /**
  * What a battery governs: the servers its namespaces' aliases point at, or the
  * whole organization for a battery made of annotators alone, which a policy rule
@@ -76,6 +80,7 @@ export const BatteryInstallSchema = createSelectSchema(
   openappaBatteryInstallsTable,
 ).extend({
   status: BatteryInstallStatusSchema,
+  target: BatteryTargetNameSchema.nullable(),
   credentialBindings: BatteryCredentialBindingsSchema,
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -90,6 +95,8 @@ export const BatteryInstallRowSchema = z.strictObject({
   batteryName: z.string().min(1).max(100),
   catalogId: z.string().uuid().nullable(),
   status: BatteryInstallStatusSchema,
+  /** Null when the battery deploys as its base alone. */
+  target: BatteryTargetNameSchema.nullable(),
   packageHash: z.string().nullable(),
   lastError: z.string().nullable(),
   credentialBindings: BatteryCredentialBindingsSchema,

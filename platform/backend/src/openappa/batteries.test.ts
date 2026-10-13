@@ -831,29 +831,9 @@ describe("a battery with targets", () => {
       deploysTarget: false,
     });
 
-    await RuntimeCredentialDefinitionModel.create({
+    await bindOrganizationCredential({
       organizationId,
-      createdBy: userId,
-      definition: {
-        key: "acme-token",
-        name: "Acme token",
-        kind: "secret",
-        description: "",
-        icon: null,
-        allowPersonal: false,
-        allowOrganization: true,
-      },
-    });
-    await RuntimeCredentialConnectionModel.upsert({
-      organizationId,
-      scope: "organization",
-      userId: null,
-      credentialId: "acme-token",
-      value: "acme-token-value",
-    });
-    await openappaBatteriesService.setCredentialBinding({
       userId,
-      organizationId,
       variable: ACME_TOKEN,
       key: "acme-token",
     });
@@ -862,7 +842,102 @@ describe("a battery with targets", () => {
     config.daggerRuntime.enabled = false;
     expect(await acme()).toEqual({ status: "active", deploysTarget: false });
   });
+
+  test("a deployed target's member roster is declared by the host until the root declares its own", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_prod__get_issue",
+      rawName: "get_issue",
+    });
+    config.daggerRuntime.enabled = true;
+    const content = `include = ["batteries/github/appa.toml"]
+
+[server_aliases]
+github = ["github_prod"]
+
+[policy]
+version = 2
+`;
+    await declare({ organizationId, userId, content });
+    const roster = async () => {
+      const policy = await openappaBatteriesService.recompile(organizationId);
+      expect(policy.lastError).toBeNull();
+      const externals = parsePolicyToml(policy.content)?.externals as
+        | { audience?: Record<string, { readers?: unknown }> }
+        | undefined;
+      return externals?.audience?.["host-members"]?.readers;
+    };
+    // Held back for its token, github composes nothing that looks a member up.
+    expect(await roster()).toBeUndefined();
+
+    await bindOrganizationCredential({
+      organizationId,
+      userId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      key: "github-token",
+    });
+    expect(await roster()).toEqual({});
+
+    await declare({
+      organizationId,
+      userId,
+      content: `${content}
+[externals.audience.host-members]
+readers = { "github:1" = "ana@corp.example" }
+`,
+    });
+    expect(await roster()).toEqual({ "github:1": "ana@corp.example" });
+  });
 });
+
+/** An organization credential with a value, bound to a battery variable. */
+async function bindOrganizationCredential(params: {
+  organizationId: string;
+  userId: string;
+  variable: string;
+  key: string;
+}) {
+  const { organizationId, userId, variable, key } = params;
+  await RuntimeCredentialDefinitionModel.create({
+    organizationId,
+    createdBy: userId,
+    definition: {
+      key,
+      name: key,
+      kind: "secret",
+      description: "",
+      icon: null,
+      allowPersonal: false,
+      allowOrganization: true,
+    },
+  });
+  await RuntimeCredentialConnectionModel.upsert({
+    organizationId,
+    scope: "organization",
+    userId: null,
+    credentialId: key,
+    value: `${key}-value`,
+  });
+  await openappaBatteriesService.setCredentialBinding({
+    userId,
+    organizationId,
+    variable,
+    key,
+  });
+}
 
 const ACME_TOKEN = "APPA_PROVIDER_ACME_TOKEN";
 

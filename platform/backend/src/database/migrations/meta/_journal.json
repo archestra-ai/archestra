@@ -3802,6 +3802,13 @@
       "when": 1791971504679,
       "tag": "0542_tricky_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 543,
+      "version": "7",
+      "when": 1791985031985,
+      "tag": "0543_low_raider",
+      "breakpoints": true
     }
   ]
 }

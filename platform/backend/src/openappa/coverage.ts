@@ -25,6 +25,7 @@ import type {
   CoverageToolsQuery,
 } from "@/types/openappa-coverage";
 import { openappaBatteriesService } from "./batteries";
+import { type DeployedFile, deployedFiles } from "./battery-target";
 import {
   asRecord,
   type ToolEntry,
@@ -202,7 +203,7 @@ class OpenAppaCoverageService {
     for (const [catalogId, serverTools] of toolsByCatalog) {
       const battery = fitting.get(catalogId);
       if (battery?.status !== "available") continue;
-      const tools = wouldGovern(battery.policy, serverTools);
+      const tools = wouldGovern(battery.files, serverTools);
       if (tools === 0) continue;
       const entry = available.get(battery.battery) ?? {
         name: battery.battery,
@@ -259,8 +260,8 @@ class OpenAppaCoverageService {
         credentials: battery.credentials,
         benefit: battery.benefit,
         setup: battery.setup,
-        newlyCovered: wouldGovern(battery.policy, serverTools),
-        rules: batteryRules(battery.policy, serverTools),
+        newlyCovered: wouldGovern(battery.files, serverTools),
+        rules: batteryRules(battery.files, serverTools),
       });
     }
     return fits.sort(
@@ -336,9 +337,9 @@ async function listedTools(
  * their server: an install binds every namespace the battery declares to the
  * server, so a rule `mcp/<namespace>/<tool>` names the server's `<tool>`.
  */
-function wouldGovern(policy: string, tools: CoverageTool[]): number {
+function wouldGovern(files: DeployedFile[], tools: CoverageTool[]): number {
   const named = new Set(
-    toolEntries(policy).flatMap((entry) => {
+    deployedRules(files).flatMap(({ entry }) => {
       const spelled = splitSelector(entry.name);
       const canonical =
         spelled.selector === null && CANONICAL_RULE_NAME.exec(spelled.base);
@@ -355,11 +356,11 @@ function wouldGovern(policy: string, tools: CoverageTool[]): number {
  * installed on it, read as the tools table reads it.
  */
 function batteryRules(
-  policy: string,
+  files: DeployedFile[],
   tools: CoverageTool[],
 ): CoverageBatteryFit["rules"] {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
-  return toolEntries(policy).flatMap((entry) => {
+  return deployedRules(files).flatMap(({ entry }) => {
     const spelled = splitSelector(entry.name);
     const canonical = CANONICAL_RULE_NAME.exec(spelled.base);
     const tool = canonical && byName.get(canonical[2]);
@@ -391,6 +392,28 @@ function batteryRules(
             : (tool.rule?.source ?? null),
       },
     ];
+  });
+}
+
+/**
+ * A deployment's tool rules in compose order, each with the line it starts at
+ * in the deployment's shown text; a target's rule shadows its base's.
+ */
+function deployedRules(
+  files: DeployedFile[],
+): Array<{ entry: ToolEntry; line: number | null }> {
+  const seen = new Set<string>();
+  return files.flatMap(({ text, firstLine }) => {
+    const entries = toolEntries(text);
+    const lines = toolHeaderLines(text);
+    return entries.flatMap((entry, index) => {
+      if (seen.has(entry.name)) return [];
+      seen.add(entry.name);
+      const line = lines.length === entries.length ? lines[index] : undefined;
+      return [
+        { entry, line: line === undefined ? null : firstLine - 1 + line },
+      ];
+    });
   });
 }
 
@@ -477,7 +500,7 @@ async function buildReport(
       catalogId,
     }),
   ]);
-  const { resolution, rootContent } = snapshot;
+  const { resolution, rootContent, viewed } = snapshot;
   const refused = snapshot.lastError !== null;
   const statusOf = new Map<string, BatteryInstallStatus>(
     snapshot.batteries.map((battery) => [
@@ -536,9 +559,9 @@ async function buildReport(
   for (const included of resolution.entries) {
     if (!included.battery) continue;
     const status = statusOf.get(included.name) ?? "unavailable";
-    const batteryEntries = toolEntries(included.battery.base);
-    const batteryHeaderLines = toolHeaderLines(included.battery.base);
-    for (const [index, entry] of batteryEntries.entries()) {
+    const deployed = viewed.get(included.entry);
+    if (!deployed) continue;
+    for (const { entry, line } of deployedRules(deployedFiles(deployed))) {
       const spelled = splitSelector(entry.name);
       const canonical = CANONICAL_RULE_NAME.exec(spelled.base);
       if (!canonical) continue;
@@ -554,10 +577,7 @@ async function buildReport(
               battery: included.name,
               batteryEntry: included.entry,
               batteryStatus: status,
-              line:
-                batteryHeaderLines.length === batteryEntries.length
-                  ? (batteryHeaderLines[index] ?? null)
-                  : null,
+              line,
             },
             enforced: !refused && status === "active",
           }),

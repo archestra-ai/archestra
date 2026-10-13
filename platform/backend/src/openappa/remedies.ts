@@ -13,6 +13,7 @@ import type {
   SanitizerPermits,
 } from "@/types/openappa-remedies";
 import { openappaBatteriesService } from "./batteries";
+import { type DeployedFile, deployedFiles, shownLine } from "./battery-target";
 import {
   arrayHeaderLines,
   asRecord,
@@ -31,30 +32,30 @@ class OpenAppaRemediesService {
     organizationId: string;
     userId: string;
   }): Promise<RemediesView> {
-    const [{ rootContent, resolution }, canSeeAllConsults] = await Promise.all([
-      openappaBatteriesService.coverageSnapshot(params.organizationId),
-      // Consults are recorded per session; an org-wide status needs the
-      // permission that shows every session's consults.
-      userHasPermission(
-        params.userId,
-        params.organizationId,
-        "openappaDiagnostics",
-        "admin",
-      ),
-    ]);
+    const [{ rootContent, resolution, viewed }, canSeeAllConsults] =
+      await Promise.all([
+        openappaBatteriesService.coverageSnapshot(params.organizationId),
+        // Consults are recorded per session; an org-wide status needs the
+        // permission that shows every session's consults.
+        userHasPermission(
+          params.userId,
+          params.organizationId,
+          "openappaDiagnostics",
+          "admin",
+        ),
+      ]);
     const files: PolicyFile[] = [
-      { entry: null, battery: null, text: rootContent },
-      ...resolution.entries.flatMap((included) =>
-        included.battery
-          ? [
-              {
-                entry: included.name === included.entry ? null : included.entry,
-                battery: included.name,
-                text: included.battery.base,
-              },
-            ]
-          : [],
-      ),
+      { entry: null, battery: null, text: rootContent, firstLine: 1 },
+      ...resolution.entries.flatMap((included) => {
+        const deployed = viewed.get(included.entry);
+        return deployed
+          ? deployedFiles(deployed).map((file) => ({
+              entry: included.name === included.entry ? null : included.entry,
+              battery: included.name,
+              ...file,
+            }))
+          : [];
+      }),
     ];
     const externals = declaredExternals(files);
     const authorities = files.flatMap((file) =>
@@ -116,10 +117,9 @@ export const openappaRemediesService = new OpenAppaRemediesService();
 /** The activity window the overview shows. */
 const ACTIVITY_DAYS = 7;
 
-type PolicyFile = {
+type PolicyFile = DeployedFile & {
   entry: string | null;
   battery: string | null;
-  text: string;
 };
 type LatestConsult = Pick<ExternalConsult, "outcome" | "createdAt">;
 type Externals = {
@@ -220,7 +220,7 @@ function declaredAuthorities(
     source: {
       entry: file.entry,
       battery: file.battery,
-      line: lines[index] ?? null,
+      line: shownLine(file, lines[index]),
     },
     implementation: wired.get(entry.name) ?? null,
     tags: strings(entry.tags) ?? [],
@@ -239,7 +239,7 @@ function declaredSanitizers(
     source: {
       entry: file.entry,
       battery: file.battery,
-      line: lines[index] ?? null,
+      line: shownLine(file, lines[index]),
     },
     implementation:
       wired.get(entry.name) ??

@@ -539,6 +539,67 @@ test("creates a private GitLab project in a group with the saved token", async (
   expect(await screen.findByText("GitLab sync")).toBeVisible();
 });
 
+test("moving a GitHub sync to a new GitLab project starts GitLab fresh and replaces the running sync", async () => {
+  const tokenId = "33333333-3333-4333-8333-333333333333";
+  let created: unknown = null;
+  state = { ...state, source: { ...source, githubAppConfigId: appId } };
+  serveApps([[appId, "Policy App"]]);
+  serveRepositories({ [appId]: ["example/policies"] });
+  server.use(
+    http.get(`${githubApp}/repository`, () =>
+      HttpResponse.json({ status: "policy", validations: true }),
+    ),
+    http.get("http://localhost:9000/api/git-credentials", () =>
+      HttpResponse.json([
+        {
+          id: tokenId,
+          name: "Policy token",
+          provider: "gitlab",
+          kind: "gitlab_token",
+          webUrl: "https://gitlab.example.com",
+          createdAt: "2026-10-01T00:00:00Z",
+        },
+      ]),
+    ),
+    http.get(
+      `http://localhost:9000/api/git-credentials/${tokenId}/namespaces`,
+      () => HttpResponse.json(["", "platform"]),
+    ),
+    http.post(`${url}/repository`, async ({ request }) => {
+      created = await request.json();
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
+  expect(await screen.findByText("Edit GitHub sync")).toBeVisible();
+  // Back to the host step, then over to GitLab.
+  while (!screen.queryByRole("button", { name: /^GitLab/ }))
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  fireEvent.click(screen.getByRole("button", { name: /^GitLab/ }));
+  expect(
+    await screen.findByRole("radio", { name: /Policy token/ }),
+  ).toBeChecked();
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  // The GitHub repository means nothing on GitLab: a new project is offered instead.
+  await waitFor(() =>
+    expect(screen.getByLabelText("Group")).toHaveTextContent("platform"),
+  );
+  expect(
+    within(screen.getByRole("dialog")).queryByText("example/policies"),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() =>
+    expect(created).toMatchObject({
+      owner: "platform",
+      name: "openappa-policy",
+      gitlabTokenId: tokenId,
+      existing: false,
+      replace: true,
+    }),
+  );
+});
+
 test("a link with ?setup=github-sync opens setup once and drops the parameter", async () => {
   navigation.search = new URLSearchParams("setup=github-sync");
   state = { ...state, source: null };

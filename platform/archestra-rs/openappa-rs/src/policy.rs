@@ -150,7 +150,7 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
     .map_err(|error| error.to_string())?;
     let content = String::from_utf8(config.policy_file().bytes().to_vec())
         .map_err(|error| error.to_string())?;
-    let content = omit_unstated_result_cap(&document, content)?;
+    let content = strip_default_result_cap(&document, content)?;
     let credentials = config.credentials().clone();
     Runtime::check_hosted(config, None, crate::adapter::adapter())
         .map_err(|error| error.to_string())?;
@@ -164,7 +164,7 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
 /// gives a text that leaves `max_body_bytes` out the host's current default. A default
 /// the composition materialised would freeze the value of the day it was composed, so a
 /// root that states none leaves it out of the stored text. A stated value stays.
-fn omit_unstated_result_cap(root: &toml::Table, content: String) -> Result<String, String> {
+fn strip_default_result_cap(root: &toml::Table, content: String) -> Result<String, String> {
     let stated = root
         .get("externals")
         .and_then(toml::Value::as_table)
@@ -358,7 +358,7 @@ mod tests {
     fn reloaded_without_result_cap(content: &str) -> String {
         let reloaded =
             String::from_utf8(compile(content).unwrap().policy_file().bytes().to_vec()).unwrap();
-        omit_unstated_result_cap(&toml::Table::new(), reloaded).unwrap()
+        strip_default_result_cap(&toml::Table::new(), reloaded).unwrap()
     }
 
     /// A compilation no organization's values reach, as a composition's is.

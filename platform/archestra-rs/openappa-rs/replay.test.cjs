@@ -64,7 +64,12 @@ annotator = "noop"
 [externals.annotators.noop]
 url = "${url}"
 `;
-  for (const [limit, expected] of [[undefined, "passed"], [responseBytes, "passed"], [responseBytes - 1, "cannot_run"]]) {
+  const cases = [
+    [undefined, "passed"],
+    [responseBytes, "passed"],
+    [responseBytes - 1, "cannot_run"],
+  ];
+  for (const [limit, expected] of cases) {
     const capped = limit === undefined ? policy : `${policy}[externals]\nmax_body_bytes = ${limit}\n`;
     const result = JSON.parse(await replayOpenappaPolicy(JSON.stringify({
       content: capped,

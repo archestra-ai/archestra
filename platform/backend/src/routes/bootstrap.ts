@@ -4,6 +4,7 @@ import {
   ResourcePermissionActionSchema,
   ResourcePermissionScopeSchema,
   RouteId,
+  withoutWildcardCoveredGrants,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -56,7 +57,10 @@ const bootstrapRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          ResourcePermissions.resolveAll({ userId: user.id, organizationId }),
+          ResourcePermissions.resolveAll({
+            userId: user.id,
+            organizationId,
+          }).then(withoutWildcardCoveredGrants),
           // SPDX-SnippetEnd
           OrganizationModel.getById(organizationId),
         ],

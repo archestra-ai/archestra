@@ -13,6 +13,7 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
+import { getOpenRouterReportedCost } from "@/clients/openrouter-reported-cost";
 import { applyResponseHealing } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import { metrics } from "@/observability";
@@ -461,25 +462,11 @@ function assertOpenrouterStreamChunkHasOutput(
   throwEmptyOpenrouterResponseError();
 }
 
-// OpenRouter reports what it billed on every response (usage accounting is
-// always on). Prices vary by the upstream provider OpenRouter routed to, so
-// this is the real spend; the synced $/MTok list price is only an estimate.
-// Under BYOK `cost` is just OpenRouter's fee and the upstream provider's charge
-// to the user's own key comes back separately.
-// @see https://openrouter.ai/docs/use-cases/usage-accounting
 function withReportedCost(usage: UsageView, rawUsage: unknown): UsageView {
-  const cost = get(rawUsage, "cost");
-  if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) {
-    return usage;
-  }
-  const upstreamCost = get(rawUsage, "cost_details.upstream_inference_cost");
-  const providerReportedCost =
-    get(rawUsage, "is_byok") === true &&
-    typeof upstreamCost === "number" &&
-    Number.isFinite(upstreamCost)
-      ? cost + upstreamCost
-      : cost;
-  return { ...usage, providerReportedCost };
+  const providerReportedCost = getOpenRouterReportedCost(rawUsage);
+  return providerReportedCost === undefined
+    ? usage
+    : { ...usage, providerReportedCost };
 }
 
 function hasText(content: string | null | undefined): boolean {

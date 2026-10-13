@@ -11,6 +11,8 @@ export type AskUserOutcome =
 export type AskUserGroupMember = {
   toolCallId: string;
   question: string | undefined;
+  /** Labels of the options the agent offered, in its order. */
+  options: string[];
   outcome: AskUserOutcome | null;
 };
 
@@ -44,6 +46,13 @@ export function getAskUserQuestion(input: unknown): string | undefined {
   return isRecord(input) && typeof input.question === "string"
     ? input.question
     : undefined;
+}
+
+export function getAskUserOptions(input: unknown): string[] {
+  if (!isRecord(input) || !Array.isArray(input.options)) return [];
+  return input.options.flatMap((option) =>
+    isRecord(option) && typeof option.label === "string" ? [option.label] : [],
+  );
 }
 
 // === Internal helpers ===

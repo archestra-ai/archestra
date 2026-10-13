@@ -35,7 +35,7 @@ export function RuntimeCredentialSetupTool({
 
   return (
     <>
-      <InlineNotice variant="neutral" className="my-2 w-full max-w-2xl">
+      <InlineNotice variant="neutral" className="my-2 w-full">
         <GithubIcon aria-hidden />
         <span className="font-medium">GitHub sync</span>
         <InlineNoticeText className="flex-1">

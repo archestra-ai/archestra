@@ -1697,15 +1697,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const parsed = parseAskUserArguments(call.arguments);
     if (!parsed) return call;
     if (parsed.allowMultiple && native.supportsMultiple === false) return call;
-    // The reply shows only a call this server holds. Text a model put in
+    // A preview shows only a call this server holds. Text a model put in
     // these fields of its own question could pass for a review's call.
     const {
-      callText: _callText,
+      callPreview: _callPreview,
       shortQuestion: _shortQuestion,
       ...asked
     } = parsed;
     const args = review ? parsed : asked;
-    const leadingText = native.leadingText?.(args);
     return {
       id: call.id,
       name: native.toolName,
@@ -1713,7 +1712,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // the gateway namespace from the ask_user call this local tool replaces.
       namespace: "",
       arguments: JSON.stringify(native.fromAskUser(args)),
-      ...(leadingText ? { leadingText } : {}),
     };
   }
 

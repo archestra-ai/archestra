@@ -320,7 +320,7 @@ async function askedAbout(
   return getHitlAskUserArguments({ session: active, offerIds: ["offer-1"] });
 }
 
-test("asks Claude Code in one line and shows the call in the reply above it", async () => {
+test("asks Claude Code one line and previews the call in full", async () => {
   expect(
     await askedAbout("reply-review", "mcp/slack/send_message", {
       channel: "#general",
@@ -329,7 +329,7 @@ test("asks Claude Code in one line and shows the call in the reply above it", as
   ).toEqual({
     question: "Full review text.",
     shortQuestion: "Approve the slack__send_message call?",
-    callText: [
+    callPreview: [
       "**slack\\_\\_send\\_message call**",
       "```yaml\nchannel: '#general'\ntext: Hello\n```",
     ].join("\n\n"),
@@ -351,7 +351,7 @@ test("shows a command exactly as it runs, then its description", async () => {
     timeout: 60000,
   });
   expect(asked?.shortQuestion).toBe("Approve the Bash command?");
-  expect(asked?.callText).toBe(
+  expect(asked?.callPreview).toBe(
     [
       "**Bash command**",
       // Unwrapped: a line break in a command reads as a second command.
@@ -368,7 +368,7 @@ test("shows a file write as the file's content", async () => {
     file_path: "src/answer.ts",
     content,
   });
-  expect(asked?.callText).toBe(
+  expect(asked?.callPreview).toBe(
     [
       "**Write call**",
       "File: src/answer.ts",
@@ -384,7 +384,7 @@ test("shows an edit as a diff, one per edit", async () => {
     new_string: "const answer = 42;\nconst ready = true;",
     replace_all: false,
   });
-  expect(edit?.callText).toBe(
+  expect(edit?.callPreview).toBe(
     [
       "**Edit call**",
       "File: src/answer.ts",
@@ -400,7 +400,7 @@ test("shows an edit as a diff, one per edit", async () => {
       { old_string: "b = 1", new_string: "b = 2" },
     ],
   });
-  expect(multi?.callText).toBe(
+  expect(multi?.callPreview).toBe(
     [
       "**MultiEdit call**",
       "File: a.py",
@@ -418,7 +418,7 @@ test("shows any other call's arguments in full as YAML", async () => {
     labels: ["bug", "ui"],
     assignee: { login: "octocat" },
   });
-  const block = asked?.callText?.split("```yaml\n")[1] ?? "";
+  const block = asked?.callPreview?.split("```yaml\n")[1] ?? "";
   // Long lines stay whole; multi-line text keeps its lines.
   expect(block).toContain(
     `title: ${Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ")}\n`,
@@ -453,7 +453,7 @@ test.each([
   });
   expect(question?.question).toBe("Full review text.");
   expect(question?.shortQuestion).toBe("Approve the local_tool call?");
-  expect(question?.callText).toBe(
+  expect(question?.callPreview).toBe(
     "**local\\_tool call**\n\nThis call has no arguments.",
   );
 });
@@ -515,7 +515,7 @@ test.each([
   });
   expect(question?.question).toBe(expected);
   expect(question?.shortQuestion).toBe("Approve the send_report call?");
-  expect(question?.callText).toBe(
+  expect(question?.callPreview).toBe(
     `**send\\_report call**\n\n\`\`\`yaml\nto: finance@example.com\n\`\`\`${expectedAccepted}`,
   );
 });
@@ -541,7 +541,7 @@ test("shows a command once although the proxy reviews it under both spellings", 
     session: active,
     offerIds: ["offer-1"],
   });
-  expect(question?.callText).toBe(
+  expect(question?.callPreview).toBe(
     "**Bash command**\n\n```sh\ngit push -u origin feature\n```\n\nDescription: Push the branch\n\nApproving also accepts:\n- the readers must be the public audience",
   );
   expect(question?.question).toBe(
@@ -554,7 +554,7 @@ test("keeps both arguments when a command tool's cmd and command differ", async 
     cmd: "ls",
     command: "rm -rf build",
   });
-  expect(asked?.callText).toBe(
+  expect(asked?.callPreview).toBe(
     "**exec\\_command command**\n\n```sh\nrm -rf build\n```\n\n```yaml\ncmd: ls\n```",
   );
 });

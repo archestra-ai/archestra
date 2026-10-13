@@ -1401,7 +1401,7 @@ describe("asking through the client's own question tool", () => {
     const askUser = {
       question: "Which branch should I push?",
       shortQuestion: "Approve the Bash command?",
-      callText: "**Bash command**\n\n```sh\ngit status\n```",
+      callPreview: "**Bash command**\n\n```sh\ngit status\n```",
       options: [{ label: "main" }, { label: "feature" }],
     };
 
@@ -1421,10 +1421,9 @@ describe("asking through the client's own question tool", () => {
         throw new Error("expected a native question");
       const [released] = outcome.toolCalls;
       expect(released.name).toBe("AskUserQuestion");
-      expect(released.leadingText).toBeUndefined();
-      expect(
-        JSON.parse(released.arguments as string).questions[0].question,
-      ).toBe(askUser.question);
+      const [question] = JSON.parse(released.arguments as string).questions;
+      expect(question.question).toBe(askUser.question);
+      expect(JSON.stringify(question.options)).not.toContain("preview");
     } finally {
       await plugin.onCleanup(context);
     }
@@ -2126,8 +2125,8 @@ describe("asking through the client's own question tool", () => {
       expect(question.name).toBe(nativeName);
       expect(question.namespace).toBe("");
       if (client === "Claude Code") {
-        // Claude Code shows the reviewed call in the reply and asks one line
-        // naming it below, with no previews.
+        // Claude Code asks one line and previews the reviewed call in full
+        // in each option.
         expect(JSON.parse(question.arguments as string)).toEqual({
           questions: [
             {
@@ -2137,21 +2136,21 @@ describe("asking through the client's own question tool", () => {
                 {
                   label: "Approve",
                   description: "Allow this exact tool call.",
+                  preview:
+                    "**archestra\\_\\_whoami call**\n\nThis call has no arguments.",
                 },
                 {
                   label: "Deny",
                   description: "Keep this tool call blocked.",
+                  preview:
+                    "**archestra\\_\\_whoami call**\n\nThis call has no arguments.",
                 },
               ],
               multiSelect: false,
             },
           ],
         });
-        expect(question.leadingText).toBe(
-          "**archestra\\_\\_whoami call**\n\nThis call has no arguments.",
-        );
       } else {
-        expect(question.leadingText).toBeUndefined();
         expect(question.arguments).toContain("Canonical HITL review.");
         expect(question.arguments).not.toContain("preview");
       }

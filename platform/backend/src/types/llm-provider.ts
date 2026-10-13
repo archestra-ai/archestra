@@ -284,8 +284,6 @@ export interface LLMResponseAdapter<TResponse> {
       arguments: string;
       /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
       wireId?: string;
-      /** Markdown written just before this call (Anthropic only). */
-      leadingText?: string;
     }>,
   ): TResponse;
 
@@ -348,8 +346,6 @@ export interface StreamAccumulatorState {
     namespace?: string;
     /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
     wireId?: string;
-    /** Markdown written to the client just before this call (Anthropic only). */
-    leadingText?: string;
   }>;
   /** Raw tool call events stored for replay after policy approval */
   rawToolCallEvents: unknown[];

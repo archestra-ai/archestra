@@ -32,10 +32,10 @@ type PendingHitlReview = {
 
 type HitlAskUserArguments = {
   question: string;
-  /** The question for hosts that show the call in the reply (Claude Code). */
+  /** The one-line question for hosts with option previews (Claude Code). */
   shortQuestion?: string;
-  /** Markdown the proxy shows in the reply, just above the short question. */
-  callText?: string;
+  /** The call in full, as markdown, for each option's preview. */
+  callPreview?: string;
   header: string;
   options: Array<{ label: string; description: string }>;
   allowMultiple: false;
@@ -222,9 +222,9 @@ export async function getHitlAskUserArguments(params: {
       remedy_offer_ids: [offerId],
     };
   }
-  // Claude Code shows the call in the reply and asks a one-line question below
-  // it, so its form stays one column. Forms and other hosts ask the same call
-  // in one text. Both keep what an approval accepts besides the call.
+  // Claude Code shows the call in full in each option's preview and asks one
+  // line about it. Forms and other hosts ask the same call in one text. Both
+  // keep what an approval accepts besides the call.
   const args = withoutCommandAlias(
     review.tool,
     parseReviewedArguments(review.arguments) ?? {},
@@ -236,7 +236,7 @@ export async function getHitlAskUserArguments(params: {
       approvalQuestion({ tool: review.tool, args, accepted }) ??
       formatReviewQuestion(review.text),
     shortQuestion: `Approve the ${preview.subject}?`,
-    callText: reviewCallText({ preview, accepted }),
+    callPreview: previewText({ preview, accepted }),
     header: "Approval",
     options,
     allowMultiple: false,
@@ -455,10 +455,11 @@ function reviewCoverage(text: string): string[] | undefined {
 const COVERAGE_HEADING = "What this ruling would cover:";
 
 /**
- * The reviewed call as Claude Code shows it in the reply: a title naming the
- * call, the call in full, and what an approval also accepts.
+ * The reviewed call as Claude Code previews it: a title naming the call, the
+ * call in full, and what an approval also accepts. The preview has its own
+ * code blocks, so Claude Code renders it as markdown.
  */
-function reviewCallText(params: {
+function previewText(params: {
   preview: CallPreview;
   accepted: string[] | undefined;
 }): string {
@@ -604,7 +605,7 @@ function escapeMarkdown(text: string): string {
 }
 
 /**
- * The text as a fenced block. Claude Code renders replies as markdown, so
+ * The text as a fenced block. Claude Code renders previews as markdown, so
  * outside a block it would drop the `**`, `__` and backticks of a reviewed
  * command. The fence is longer than any backtick run in the text, so the
  * text cannot end the block early.

@@ -19,7 +19,7 @@ function review(note: string): AskUserArguments {
   return {
     question: `[OpenAPPA] Approve this call?\nsend_report {"note":"${note}"}`,
     shortQuestion: SHORT_QUESTION,
-    callText: `**send\\_report call**\n\n\`\`\`yaml\nnote: ${note}\n\`\`\``,
+    callPreview: `**send\\_report call**\n\n\`\`\`yaml\nnote: ${note}\n\`\`\``,
     header: "Approval",
     options: ["Approve", "Deny"].map((label) => ({
       label,
@@ -36,7 +36,7 @@ function review(note: string): AskUserArguments {
  * quotes the call's arguments.
  */
 function textReview(note: string): AskUserArguments {
-  const { shortQuestion: _, callText: _callText, ...rest } = review(note);
+  const { shortQuestion: _, callPreview: _preview, ...rest } = review(note);
   return rest;
 }
 
@@ -59,7 +59,7 @@ function openCodeAnswer(question: string, answer: string): string {
 describe("Claude Code approval questions", () => {
   const native = new AppaClaudeCodeAdapter().nativeQuestion;
 
-  test("asks one line with no previews and shows the call in the reply", () => {
+  test("asks one line and previews the call in full in each option", () => {
     const asked = review("send the Q3 report");
     expect(native.fromAskUser(asked)).toEqual({
       questions: [
@@ -67,22 +67,27 @@ describe("Claude Code approval questions", () => {
           question: SHORT_QUESTION,
           header: "Approval",
           options: [
-            { label: "Approve", description: "Approve" },
-            { label: "Deny", description: "Deny" },
+            {
+              label: "Approve",
+              description: "Approve",
+              preview: asked.callPreview,
+            },
+            { label: "Deny", description: "Deny", preview: asked.callPreview },
           ],
           multiSelect: false,
         },
       ],
     });
-    expect(native.leadingText(asked)).toBe(asked.callText);
   });
 
-  test("asks the full review text when the reply cannot show the call", () => {
+  test("asks the full review text when it has no call preview", () => {
     const asked = textReview("send the Q3 report");
-    expect(native.fromAskUser(asked).questions[0].question).toBe(
-      asked.question,
-    );
-    expect(native.leadingText(asked)).toBeUndefined();
+    const [question] = native.fromAskUser(asked).questions as Array<{
+      question: string;
+      options: Array<Record<string, unknown>>;
+    }>;
+    expect(question.question).toBe(asked.question);
+    expect(question.options.some((option) => "preview" in option)).toBe(false);
   });
 });
 

@@ -492,7 +492,7 @@ describe("chat tool execution", () => {
       session,
       offerIds: [offerId],
     });
-    expect(rewritten?.callText).toContain("```yaml\nvalue: 1\n```");
+    expect(rewritten?.callPreview).toContain("```yaml\nvalue: 1\n```");
     const requests: Array<{ message: string }> = [];
     mockContext = {
       ...mockContext,

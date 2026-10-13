@@ -84,7 +84,8 @@ describe("native local tool identities", () => {
   const shownReview: AskUserArguments = {
     question: "Full review text.",
     shortQuestion: "Approve the slack__send_message call?",
-    callText: "**slack\\_\\_send\\_message call**\n\n```yaml\ntext: Hello\n```",
+    callPreview:
+      "**slack\\_\\_send\\_message call**\n\n```yaml\ntext: Hello\n```",
     header: "Approval",
     options: [
       { label: "Approve", description: "Allow this exact tool call." },
@@ -93,19 +94,22 @@ describe("native local tool identities", () => {
     allowMultiple: false,
   };
 
-  test("asks Claude Code the one-line question below the call it shows", () => {
-    const native = new AppaClaudeCodeAdapter().nativeQuestion;
-    expect(native.fromAskUser(shownReview)).toEqual({
+  test("asks Claude Code one line and previews the call in each option", () => {
+    expect(
+      new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(shownReview),
+    ).toEqual({
       questions: [
         {
           question: "Approve the slack__send_message call?",
           header: "Approval",
-          options: shownReview.options,
+          options: shownReview.options.map((option) => ({
+            ...option,
+            preview: shownReview.callPreview,
+          })),
           multiSelect: false,
         },
       ],
     });
-    expect(native.leadingText(shownReview)).toBe(shownReview.callText);
   });
 
   test("other native question tools ask the full review text", () => {

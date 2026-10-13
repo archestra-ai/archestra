@@ -173,8 +173,7 @@ describe("audit row content funnel", () => {
         {
           request,
           response: null,
-          dualLlmAnalyses: null,
-          unsafeContextBoundary: undefined,
+          processedRequest: undefined,
         },
         audit,
       ) as Record<string, unknown>;
@@ -182,8 +181,7 @@ describe("audit row content funnel", () => {
       // An envelope over null would be indistinguishable from real content on
       // the read side, and would show as locked instead of empty.
       expect(values.response).toBeNull();
-      expect(values.dualLlmAnalyses).toBeNull();
-      expect(values.unsafeContextBoundary).toBeUndefined();
+      expect(values.processedRequest).toBeUndefined();
       expect(isContentEnvelope(values.request)).toBe(true);
 
       const toolValues = encryptMcpToolCallContent(

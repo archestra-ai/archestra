@@ -75,11 +75,11 @@ class AgentLabelModel {
 
       // Get or create keys/values and insert new labels within the same transaction
       if (labels.length > 0) {
-        const labelInserts: {
-          agentId: string;
-          keyId: string;
-          valueId: string;
-        }[] = [];
+        // One value per key: a repeated key keeps its last value.
+        const labelInserts = new Map<
+          string,
+          { agentId: string; keyId: string; valueId: string }
+        >();
 
         for (const label of labels) {
           const keyId = await AgentLabelModel.getOrCreateKey(label.key, tx);
@@ -87,10 +87,12 @@ class AgentLabelModel {
             label.value,
             tx,
           );
-          labelInserts.push({ agentId, keyId, valueId });
+          labelInserts.set(keyId, { agentId, keyId, valueId });
         }
 
-        await tx.insert(schema.agentLabelsTable).values(labelInserts);
+        await tx
+          .insert(schema.agentLabelsTable)
+          .values([...labelInserts.values()]);
       }
     });
 

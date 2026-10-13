@@ -5,10 +5,11 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
+import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ClientIcon } from "@/app/connection/client-icon";
-import { CONNECT_CLIENTS } from "@/app/connection/clients";
+import { CONNECT_CLIENTS, orderedClients } from "@/app/connection/clients";
 import {
   applyDefaultBaseUrl,
   applyVisibility,
@@ -25,9 +26,9 @@ import {
   SettingsSaveBar,
   SettingsSectionStack,
 } from "@/components/settings/settings-block";
+import { InlineNotice } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
@@ -42,10 +43,20 @@ import {
   useUpdateConnectionSettings,
 } from "@/lib/organization.query";
 
+import { AvailableAgentsList } from "./available-agents-list";
+
 const DEFAULT_VALUE = "__default__";
 // "Any client" is always visible on the connection page; admins cannot hide it.
 const FILTERABLE_CLIENTS = CONNECT_CLIENTS.filter((c) => c.id !== "generic");
 const ALL_CLIENT_IDS = FILTERABLE_CLIENTS.map((c) => c.id);
+const DEFAULT_CLIENT_ORDER = [
+  ...INSTALLER_CLIENT_IDS,
+  ...FILTERABLE_CLIENTS.filter(
+    (client) => !INSTALLER_CLIENT_IDS.some((id) => id === client.id),
+  )
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map((client) => client.id),
+];
 const NO_DEFAULT_URL = "__none__";
 
 export function ConnectionSettingsForm() {
@@ -59,6 +70,8 @@ export function ConnectionSettingsForm() {
   // UI stores the set of visible clients/providers; null in DB = show all.
   const [shownClientIds, setShownClientIds] =
     useState<string[]>(ALL_CLIENT_IDS);
+  const [clientOrder, setClientOrder] =
+    useState<string[]>(DEFAULT_CLIENT_ORDER);
   const [baseUrlMeta, setBaseUrlMeta] = useState<
     Record<
       string,
@@ -89,6 +102,11 @@ export function ConnectionSettingsForm() {
     setGatewayId(organization.connectionDefaultMcpGatewayId ?? null);
     setDefaultClientId(organization.connectionDefaultClientId ?? null);
     setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
+    setClientOrder(
+      orderedClients(organization.connectionClientOrder ?? DEFAULT_CLIENT_ORDER)
+        .filter((c) => c.id !== "generic")
+        .map((c) => c.id),
+    );
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
     setDefaultProviderKeys(
       (organization.connectionDefaultProviderKeys ?? {}) as Record<
@@ -120,6 +138,22 @@ export function ConnectionSettingsForm() {
   )
     .slice()
     .sort();
+  const serverClientOrder = orderedClients(
+    organization?.connectionClientOrder ?? DEFAULT_CLIENT_ORDER,
+  )
+    .filter((c) => c.id !== "generic")
+    .map((c) => c.id);
+  const clientsInOrder = orderedClients(clientOrder).filter(
+    (c) => c.id !== "generic",
+  );
+  const selectedClientOrder = clientsInOrder
+    .filter((c) => shownClientIds.includes(c.id))
+    .map((c) => c.id);
+  const clientOrderDirty =
+    JSON.stringify(selectedClientOrder) !==
+    JSON.stringify(
+      serverClientOrder.filter((id) => serverShownClients.includes(id)),
+    );
   const serverBaseUrlMeta = useMemo(
     () => buildBaseUrlMeta(organization?.connectionBaseUrls ?? null),
     [organization?.connectionBaseUrls],
@@ -161,6 +195,7 @@ export function ConnectionSettingsForm() {
     defaultClientId !== serverDefaultClientId ||
     JSON.stringify([...shownClientIds].sort()) !==
       JSON.stringify(serverShownClients) ||
+    clientOrderDirty ||
     skillsEnabled !== serverSkillsEnabled ||
     llmProxyEnabled !== serverLlmProxyEnabled ||
     runtimeHandoffEnabled !== serverRuntimeHandoffEnabled ||
@@ -188,6 +223,9 @@ export function ConnectionSettingsForm() {
           ? null
           : runtimeHandoffInstructions.trim(),
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
+      ...(clientOrderDirty
+        ? { connectionClientOrder: selectedClientOrder }
+        : {}),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
       connectionDefaultProviderKeys:
         Object.keys(defaultProviderKeys).length > 0
@@ -209,6 +247,7 @@ export function ConnectionSettingsForm() {
     setGatewayId(serverGatewayId);
     setDefaultClientId(serverDefaultClientId);
     setShownClientIds(serverShownClients);
+    setClientOrder(serverClientOrder);
     setBaseUrlMeta(serverBaseUrlMeta);
     setDefaultProviderKeys(serverDefaultProviderKeys);
     setSkillsEnabled(serverSkillsEnabled);
@@ -235,7 +274,12 @@ export function ConnectionSettingsForm() {
 
   const currentDefaultUrl = resolveDefaultBaseUrl(envBaseUrls, baseUrlMeta);
 
-  const gatewayItems = mcpGateways ?? [];
+  // One member's personal gateway is no default for everyone; the sentinel
+  // already offers each user their own. A saved one stays listed until
+  // replaced, so the selector can still name it.
+  const gatewayItems = (mcpGateways ?? []).filter(
+    (gateway) => !gateway.isPersonalGateway || gateway.id === gatewayId,
+  );
 
   const providerKeysByProvider = useMemo(() => {
     const grouped = new Map<string, { id: string; name: string }[]>();
@@ -258,33 +302,49 @@ export function ConnectionSettingsForm() {
           <>
             <SettingsSectionStack>
               <SettingsBlock
-                title="Suggest runtime handoff"
-                description="Let your coding agent suggest moving work to Agent Runtime."
+                title="Managed instructions"
+                description="When users connect an agent through the Connect page, these managed instructions are appended to its system prompt."
                 control={
                   <Switch
                     checked={runtimeHandoffEnabled}
                     onCheckedChange={setRuntimeHandoffEnabled}
                     disabled={locked}
-                    aria-label="Suggest runtime handoff"
+                    aria-label="Enable managed instructions"
                   />
                 }
               >
-                <Textarea
-                  aria-label="Runtime handoff instructions"
-                  value={runtimeHandoffInstructions}
-                  onChange={(event) =>
-                    setRuntimeHandoffInstructions(event.target.value)
-                  }
-                  rows={8}
-                  maxLength={20000}
-                  disabled={locked || !runtimeHandoffEnabled}
-                />
-                {runtimeHandoffEnabled &&
-                  !runtimeHandoffInstructions.trim() && (
-                    <p role="alert" className="mt-2 text-sm text-destructive">
-                      Enter instructions.
-                    </p>
-                  )}
+                <div className="space-y-2">
+                  <Label htmlFor="managed-instructions">
+                    Instructions for connected agents
+                  </Label>
+                  <Textarea
+                    id="managed-instructions"
+                    value={runtimeHandoffInstructions}
+                    onChange={(event) =>
+                      setRuntimeHandoffInstructions(event.target.value)
+                    }
+                    rows={2}
+                    maxLength={20000}
+                    disabled={locked || !runtimeHandoffEnabled}
+                    className="font-mono text-xs leading-relaxed"
+                  />
+                  <div className="flex justify-between gap-4 text-xs text-muted-foreground">
+                    <span>
+                      Supported agents receive updates on next launch; other
+                      clients need setup or manual copying.
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {runtimeHandoffInstructions.length.toLocaleString()} /
+                      20,000
+                    </span>
+                  </div>
+                  {runtimeHandoffEnabled &&
+                    !runtimeHandoffInstructions.trim() && (
+                      <InlineNotice variant="error">
+                        Enter instructions.
+                      </InlineNotice>
+                    )}
+                </div>
               </SettingsBlock>
 
               <SettingRow
@@ -532,19 +592,14 @@ export function ConnectionSettingsForm() {
               )}
 
               <SettingSection
-                title="Available clients"
-                description="Which clients this deployment offers setup instructions for. “Any client” is always shown."
+                title="Available agents"
+                description="Choose which agents are available on Connect, and in what order."
               >
-                <MultiSelectCombobox
-                  options={FILTERABLE_CLIENTS.map((c) => ({
-                    value: c.id,
-                    label: c.label,
-                    icon: <ClientIcon client={c} size={18} />,
-                  }))}
-                  value={shownClientIds}
-                  onChange={setShownClientIds}
-                  placeholder="Select clients…"
-                  emptyMessage="No clients found."
+                <AvailableAgentsList
+                  clients={clientsInOrder}
+                  shownClientIds={shownClientIds}
+                  onShownClientIdsChange={setShownClientIds}
+                  onOrderChange={setClientOrder}
                   disabled={locked}
                 />
               </SettingSection>

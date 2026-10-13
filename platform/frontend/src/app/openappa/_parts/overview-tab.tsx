@@ -2,7 +2,9 @@
 
 import { CoverageCharts } from "./coverage-charts";
 import { EntitiesTable } from "./entities-table";
+import { OpenAppaChatStrip } from "./openappa-chat-strip";
 import { OverviewSetupCards } from "./overview-setup-cards";
+import { RemediesPanels } from "./remedies-panels";
 import { TrustAudienceCard } from "./trust-audience-card";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
@@ -15,7 +17,11 @@ export function OverviewTab() {
       <OverviewSetupCards />
       {isFresh === false && (
         <>
-          <TrustAudienceCard />
+          <OpenAppaChatStrip />
+          <div className="grid gap-4 xl:grid-cols-5">
+            <TrustAudienceCard className="xl:col-span-2" />
+            <RemediesPanels />
+          </div>
           <section
             aria-labelledby="overview-policy-coverage"
             className="space-y-3"
@@ -34,16 +40,15 @@ export function OverviewTab() {
             </div>
             <CoverageCharts />
           </section>
-          <section
-            aria-labelledby="overview-servers-and-gateways"
-            className="space-y-3"
-          >
-            <h2
-              id="overview-servers-and-gateways"
-              className="text-base font-semibold"
-            >
-              Servers and gateways
-            </h2>
+          <section aria-labelledby="overview-mcp-servers" className="space-y-3">
+            <div className="space-y-1">
+              <h2 id="overview-mcp-servers" className="text-base font-semibold">
+                MCP servers
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Review and configure the rules for each MCP server
+              </p>
+            </div>
             <EntitiesTable />
           </section>
         </>

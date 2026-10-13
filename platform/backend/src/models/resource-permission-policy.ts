@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
+  grantsAudience,
   isResourcePermissionPreset,
   ManagedResourceSchema,
   type PermissionSubject,
+  RESOURCE_ACCESS_RELATIONS,
+  type ResourceAccessRelation,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
   type ResourcePermissionScope,
@@ -11,7 +14,10 @@ import {
   topResourcePermissionPreset,
   widenToPreset,
 } from "@archestra/shared";
-import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
+import {
+  predefinedRolesWithReadAccess,
+  roleActionResourceFor,
+} from "@archestra/shared/access-control";
 import {
   and,
   eq,
@@ -187,6 +193,20 @@ export default class ResourcePermissionPolicyModel {
               // Editors could always deploy into a restricted environment, back
               // when that was a `deploy-to-restricted` action on each kind of
               // thing deployed. `use` on every environment is that same reach.
+              // Editors managed every credential. Everyone else reaches a
+              // credential through its own policy, which shares it with the
+              // organization unless its creator says otherwise, so a
+              // credential can be kept to a team.
+              ...(resource === "credential"
+                ? [
+                    {
+                      subject: { type: "role" as const, id: "editor" },
+                      actions: [
+                        ...topResourcePermissionPreset(resource).actions,
+                      ],
+                    },
+                  ]
+                : []),
               ...(resource === "environment"
                 ? [
                     {
@@ -329,7 +349,7 @@ export default class ResourcePermissionPolicyModel {
                 schema.organizationRolesTable.organizationId,
                 params.organizationId,
               ),
-              sql`coalesce(${schema.organizationRolesTable.permission}::jsonb -> ${params.resource}, '[]'::jsonb) ? 'read'`,
+              sql`coalesce(${schema.organizationRolesTable.permission}::jsonb -> ${roleActionResourceFor(params.resource)}, '[]'::jsonb) ? 'read'`,
             ),
           ),
       ]);
@@ -527,17 +547,94 @@ export default class ResourcePermissionPolicyModel {
     scopeColumn: SQLWrapper;
     teamIds: string[];
   }) {
-    if (params.teamIds.length === 0) return sql<boolean>`false`;
+    return ResourcePermissionPolicyModel.grantsReadToAnySubject({
+      ...params,
+      subjects: params.teamIds.map((id) => ({ type: "team" as const, id })),
+    });
+  }
+
+  /**
+   * Whether an object's own policy grants read to any of `subjects`, matched
+   * literally by type and id: a role grant matches only that role, and the
+   * organization subject only a grant to everyone. Inherited `*` grants are
+   * not the object's sharing, so they are left out.
+   */
+  static grantsReadToAnySubject(params: {
+    organizationId: string | SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+    subjects: PermissionSubject[];
+  }) {
+    const idsByType = new Map<PermissionSubject["type"], string[]>();
+    for (const subject of params.subjects) {
+      idsByType.set(subject.type, [
+        ...(idsByType.get(subject.type) ?? []),
+        subject.id,
+      ]);
+    }
+    if (idsByType.size === 0) return sql<boolean>`false`;
+    const matches = [...idsByType].map(
+      ([type, ids]) =>
+        sql`(subject_entry->'subject'->>'type' = ${type} AND ${inArray(sql`subject_entry->'subject'->>'id'`, ids)})`,
+    );
     return sql<boolean>`EXISTS (
-      SELECT 1 FROM resource_permission_policies team_policy,
-        jsonb_array_elements(team_policy.grants) team_entry
-      WHERE team_policy.organization_id = ${params.organizationId}
-        AND team_policy.resource = ${params.resource}
-        AND team_policy.scope = ${params.scopeColumn}::text
-        AND (team_entry->'actions') ? 'read'
-        AND team_entry->'subject'->>'type' = 'team'
-        AND ${inArray(sql`team_entry->'subject'->>'id'`, params.teamIds)}
+      SELECT 1 FROM resource_permission_policies subject_policy,
+        jsonb_array_elements(subject_policy.grants) subject_entry
+      WHERE subject_policy.organization_id = ${params.organizationId}
+        AND subject_policy.resource = ${params.resource}
+        AND subject_policy.scope = ${params.scopeColumn}::text
+        AND (subject_entry->'actions') ? 'read'
+        AND (${sql.join(matches, sql` OR `)})
     )`;
+  }
+
+  /**
+   * The predicate behind every list's "Show" filter and its "Shared with" and
+   * "Owner" narrowing, each optional and ANDed together:
+   *
+   * - `relations`: the object is in any of them for the caller. Selecting
+   *   every relation filters nothing.
+   * - `ownerIds`: the object's owner is one of them.
+   * - `sharedWith`: the object's own policy grants read to one of them, see
+   *   {@link grantsReadToAnySubject}.
+   *
+   * Undefined when nothing filters.
+   *
+   * Only the object's OWN policy counts. A grant at `*` reaches every object
+   * of the type, so counting it would put every row in `shared` or `org` for
+   * an administrator, and the filter could never hide other people's
+   * personal objects. Role grants count as `org`, the same reading as
+   * {@link sharedAudience}. A grant to the author's own user is `mine`, not
+   * `shared`.
+   */
+  static accessRelationCondition(params: {
+    organizationId: string | SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+    ownerColumn: SQLWrapper;
+    userId: string;
+    /** The caller's subjects, e.g. from `resolvePrincipal(s)`. */
+    subjects: PermissionSubject[];
+    relations?: ResourceAccessRelation[];
+    sharedWith?: PermissionSubject[];
+    ownerIds?: string[];
+  }): SQL<boolean> | undefined {
+    const conditions: SQL<boolean>[] = [];
+    const relations = relationCondition(params);
+    if (relations) conditions.push(relations);
+    if (params.ownerIds?.length)
+      conditions.push(
+        sql<boolean>`coalesce(${inArray(sql`${params.ownerColumn}::text`, params.ownerIds)}, false)`,
+      );
+    if (params.sharedWith?.length)
+      conditions.push(
+        ResourcePermissionPolicyModel.grantsReadToAnySubject({
+          ...params,
+          subjects: params.sharedWith,
+        }),
+      );
+    if (conditions.length === 0) return undefined;
+    return sql<boolean>`(${sql.join(conditions, sql` AND `)})`;
   }
 
   /**
@@ -878,7 +975,9 @@ export default class ResourcePermissionPolicyModel {
         and(
           eq(table.organizationId, params.organizationId),
           eq(table.resource, params.resource),
-          inArray(table.scope, [...params.scopes, "*"]),
+          // Bind the scopes as one array so large lists cannot exhaust the
+          // PostgreSQL protocol's parameter limit.
+          sql`${table.scope} = ANY(${sql.param([...params.scopes, "*"])}::text[])`,
         ),
       );
   }
@@ -923,11 +1022,12 @@ export default class ResourcePermissionPolicyModel {
   }
 
   /**
-   * Move one subject's direct grant to another subject, unioning any actions
-   * the recipient already holds. Ownership transfer uses this so the previous
-   * owner's creator grant follows the record; unrelated grants are untouched.
+   * Give another subject the actions of one subject's direct grant, unioned
+   * with any actions the recipient already holds. The source keeps its grant.
+   * Ownership transfer uses this so the new owner gets the creator grant and
+   * the previous owner keeps theirs; unrelated grants are untouched.
    */
-  static async transferSubjectGrant(
+  static async copySubjectGrant(
     params: PolicyKey & {
       from: PermissionSubject;
       to: PermissionSubject;
@@ -958,9 +1058,7 @@ export default class ResourcePermissionPolicyModel {
     ).sort();
     const grants: ResourcePermissionGrant[] = [
       ...policy.grants.filter(
-        (grant) =>
-          !sameSubject(grant.subject, params.from) &&
-          !sameSubject(grant.subject, params.to),
+        (grant) => !sameSubject(grant.subject, params.to),
       ),
       { subject: params.to, actions },
     ];
@@ -1000,15 +1098,7 @@ function audienceOf(
   const teamIds = readers
     .filter((grant) => grant.subject.type === "team")
     .map((grant) => grant.subject.id);
-  const audience = readers.some(
-    (grant) =>
-      grant.subject.type === "organization" || grant.subject.type === "role",
-  )
-    ? "org"
-    : teamIds.length > 0
-      ? "team"
-      : "personal";
-  return { audience, teamIds };
+  return { audience: grantsAudience(readers), teamIds };
 }
 
 type PolicyKey = {
@@ -1058,3 +1148,81 @@ const USE_UNGATED_BY_ROLE = new Set<ScopedResource>([
   // only for the right to create the thing deployed.
   "environment",
 ]);
+
+/**
+ * Whether an object's own policy grants read to one of the caller's teams, or
+ * to the caller by name when the caller is not its author.
+ */
+/**
+ * The `relations` part of
+ * {@link ResourcePermissionPolicyModel.accessRelationCondition}. Undefined
+ * when no relation is selected or every one is, because then nothing is
+ * filtered.
+ */
+function relationCondition(params: {
+  organizationId: string | SQLWrapper;
+  resource: ScopedResource;
+  scopeColumn: SQLWrapper;
+  ownerColumn: SQLWrapper;
+  userId: string;
+  subjects: PermissionSubject[];
+  relations?: ResourceAccessRelation[];
+}): SQL<boolean> | undefined {
+  const selected = new Set(params.relations ?? RESOURCE_ACCESS_RELATIONS);
+  if (
+    selected.size === 0 ||
+    RESOURCE_ACCESS_RELATIONS.every((relation) => selected.has(relation))
+  )
+    return undefined;
+
+  const mine = sql<boolean>`coalesce(${params.ownerColumn}::text = ${params.userId}, false)`;
+  const shared = sharedWithCallerCondition(params);
+  const org = ResourcePermissionPolicyModel.audienceIs({
+    ...params,
+    audience: "org",
+  });
+  const byRelation: Record<ResourceAccessRelation, SQL<boolean>> = {
+    mine,
+    shared,
+    org,
+    others: sql<boolean>`NOT (${mine} OR ${shared} OR ${org})`,
+  };
+  const kept = [...selected].map((relation) => byRelation[relation]);
+  return sql<boolean>`(${sql.join(kept, sql` OR `)})`;
+}
+
+function sharedWithCallerCondition(params: {
+  organizationId: string | SQLWrapper;
+  resource: ScopedResource;
+  scopeColumn: SQLWrapper;
+  ownerColumn: SQLWrapper;
+  subjects: PermissionSubject[];
+}): SQL<boolean> {
+  const teamIds = params.subjects
+    .filter((subject) => subject.type === "team")
+    .map((subject) => subject.id);
+  const selfIds = params.subjects
+    .filter(
+      (subject) => subject.type === "user" || subject.type === "serviceAccount",
+    )
+    .map((subject) => subject.id);
+  const reaches: SQL[] = [];
+  if (teamIds.length > 0)
+    reaches.push(
+      sql`(shared_entry->'subject'->>'type' = 'team' AND ${inArray(sql`shared_entry->'subject'->>'id'`, teamIds)})`,
+    );
+  if (selfIds.length > 0)
+    reaches.push(
+      sql`(shared_entry->'subject'->>'type' IN ('user', 'serviceAccount') AND ${inArray(sql`shared_entry->'subject'->>'id'`, selfIds)} AND shared_entry->'subject'->>'id' IS DISTINCT FROM ${params.ownerColumn}::text)`,
+    );
+  if (reaches.length === 0) return sql<boolean>`false`;
+  return sql<boolean>`EXISTS (
+    SELECT 1 FROM resource_permission_policies shared_policy,
+      jsonb_array_elements(shared_policy.grants) shared_entry
+    WHERE shared_policy.organization_id = ${params.organizationId}
+      AND shared_policy.resource = ${params.resource}
+      AND shared_policy.scope = ${params.scopeColumn}::text
+      AND (shared_entry->'actions') ? 'read'
+      AND (${sql.join(reaches, sql` OR `)})
+  )`;
+}

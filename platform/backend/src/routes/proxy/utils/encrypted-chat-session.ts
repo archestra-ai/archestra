@@ -162,8 +162,6 @@ export function redactEncryptedChatInteraction(
     request: ENCRYPTED_CHAT_REDACTED_MARKER as unknown as InteractionRequest,
     processedRequest: null,
     response: ENCRYPTED_CHAT_REDACTED_MARKER as unknown as InteractionResponse,
-    dualLlmAnalyses: null,
-    unsafeContextBoundary: null,
   };
 }
 

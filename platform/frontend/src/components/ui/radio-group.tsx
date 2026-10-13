@@ -42,4 +42,34 @@ function RadioGroupItem({
   );
 }
 
-export { RadioGroup, RadioGroupItem };
+/**
+ * Surface and state styling for a selectable option card (a "radio card"):
+ * a raised card on the page, a 2px primary edge when selected, a
+ * flat dashed card when unavailable. Callers keep their own layout (flex,
+ * padding, radius).
+ *
+ * State comes from the radio inside the card (`data-state`, `disabled`), so a
+ * `Label` wrapping a `RadioGroupItem` needs no props. Cards that are not radios
+ * (a button tile) pass `checked` / `disabled` instead.
+ */
+function radioCardClass({
+  checked,
+  disabled,
+}: {
+  checked?: boolean;
+  disabled?: boolean;
+} = {}) {
+  return cn(
+    "border border-border bg-raised transition-colors hover:border-primary/40",
+    "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+    // Selected: a 2px primary edge (border + 1px ring, so nothing shifts) on
+    // the same white fill. A tint read as greyed out next to white cards.
+    "has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:ring-1 has-[[data-state=checked]]:ring-primary has-[[data-state=checked]]:hover:border-primary",
+    "has-[:disabled]:cursor-not-allowed has-[:disabled]:border-dashed has-[:disabled]:bg-transparent has-[:disabled]:text-muted-foreground has-[:disabled]:hover:border-border",
+    checked && "border-primary ring-1 ring-primary hover:border-primary",
+    disabled &&
+      "cursor-not-allowed border-dashed bg-transparent text-muted-foreground hover:border-border",
+  );
+}
+
+export { RadioGroup, RadioGroupItem, radioCardClass };

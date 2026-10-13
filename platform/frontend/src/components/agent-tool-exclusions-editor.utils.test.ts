@@ -192,6 +192,27 @@ describe("computeDefaultExclusionToolIds", () => {
     ).toEqual([]);
   });
 
+  it("keeps the runtime handoff tools enabled only on a personal gateway", () => {
+    const tools = [
+      { id: "t-start-run", name: "acme__start_run" },
+      { id: "t-list-agents", name: "archestra__list_agents" },
+      { id: "t-read-ws", name: "archestra__read_workspace_file" },
+      { id: "t-create-agent", name: "archestra__create_agent" },
+    ];
+    expect(
+      computeDefaultExclusionToolIds({
+        builtInTools: tools,
+        isPersonalGateway: true,
+      }),
+    ).toEqual(["t-create-agent"]);
+    expect(computeDefaultExclusionToolIds({ builtInTools: tools })).toEqual([
+      "t-start-run",
+      "t-list-agents",
+      "t-read-ws",
+      "t-create-agent",
+    ]);
+  });
+
   it("skips tools assigned by id (existing agent's saved assignments)", () => {
     expect(
       computeDefaultExclusionToolIds({

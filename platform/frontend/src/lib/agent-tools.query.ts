@@ -15,7 +15,6 @@ import {
 
 const {
   assignToolToAgent,
-  autoConfigureAgentToolPolicies,
   bulkAssignTools,
   bulkUpdateAgentTools,
   getAgentTools,
@@ -399,43 +398,6 @@ export function useProfileToolPatchMutation() {
       // Invalidate all chat MCP tools queries (we don't know which agent was affected)
       queryClient.invalidateQueries({
         queryKey: ["chat", "agents"],
-      });
-    },
-  });
-}
-
-export function useAutoConfigurePolicies() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (toolIds: string[]) => {
-      const result = await autoConfigureAgentToolPolicies({
-        body: { toolIds },
-      });
-
-      if (result.error) {
-        handleApiError(result.error);
-        return null;
-      }
-
-      return result.data;
-    },
-    onSuccess: () => {
-      // Invalidate queries to refetch with new policies
-      queryClient.invalidateQueries({
-        queryKey: ["agent-tools"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["tools"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["tools-with-assignments"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["tool-invocation-policies"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["tool-result-policies"],
       });
     },
   });

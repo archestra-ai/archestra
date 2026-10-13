@@ -63,10 +63,13 @@ vi.mock("./use-openappa-setup-state", () => ({
 }));
 
 test.each([
-  ["/openappa", "Overview"],
-  ["/openappa/batteries", "Batteries"],
-  ["/openappa/policy", "Policy"],
-])("selects %s as the %s tab", async (pathname, tabName) => {
+  ["/openappa", "Overview", "Guardrails"],
+  ["/openappa/batteries", "Batteries", "Batteries"],
+  ["/openappa/policy", "Policy", "Policy"],
+  ["/openappa/validation", "Validations", "Validations"],
+  ["/openappa/validation/new", "Validations", "Add validation"],
+  ["/openappa/validation/history", "Validations", "Validation run history"],
+])("selects %s as the %s tab", async (pathname, tabName, title) => {
   setupState.isFresh = false;
   vi.mocked(usePathname).mockReturnValue(pathname);
   vi.mocked(useSearchParams).mockReturnValue(
@@ -85,7 +88,7 @@ test.each([
   expect(
     screen.getByRole("heading", {
       level: 1,
-      name: `${pathname === "/openappa" ? "Guardrails" : tabName} Alpha`,
+      name: `${title} Alpha`,
     }),
   ).toBeVisible();
   expect(

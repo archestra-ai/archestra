@@ -17,6 +17,7 @@ const { serverCanAccessPageMock, serverHasPermissionsMock } = vi.hoisted(
 );
 
 vi.mock("@archestra/shared", () => ({
+  DEFAULT_RESOURCE_ACCESS_RELATIONS: ["mine", "shared", "org"],
   archestraApiSdk: {
     getAgentCatalog: getAgentCatalogMock,
     getTeams: getTeamsMock,

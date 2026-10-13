@@ -1,7 +1,7 @@
 /**
  * `references/archestra.md` of the built-in appa-guide skill: what an OpenAPPA
  * policy looks like in Archestra. OpenAPPA's own semantics live in the
- * verbatim `references/contracts.md`; this file holds only what Archestra adds.
+ * `references/contracts/` parts; this file holds only what Archestra adds.
  */
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const ARCHESTRA_REFERENCE = `# OpenAPPA in Archestra
@@ -14,7 +14,7 @@ Archestra stores one root policy per organization, \`organization.appa.toml\`. W
 
 The document's \`[policy] version = 2\` names the format. The API \`revision\` is a separate save number that prevents overwriting concurrent edits. Change a saved policy with \`edits\` that name only the text you replace; send the complete text only for a first policy or a full rewrite. Merge rules into the existing document and never add a second \`[policy]\` header.
 
-The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations.
+The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations. Archestra sets the body size limit from its LLM proxy body limit, so \`max_body_bytes\` in \`[externals]\` has no effect; do not add it.
 
 ## Tool names
 
@@ -42,25 +42,28 @@ annotator = "noop"
 
 Keep the existing \`[externals.annotators.noop]\` URL. It also declares the \`archestra.run-command\` annotator (\`builtin = "archestra"\`) and routes \`archestra__run_command\` to it, so the organization's default model ranks each sandbox command \`suspicious\` or \`trusted\`. Explicit rules take precedence over the catch-all, and the first matching rule for a tool applies, so put a narrow rule with an argument selector before the broad rule for the same tool.
 
-Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
+A rule declares either \`annotator\` or static fields such as \`requires\`, never both. To block \`archestra__run_command\` outright, replace its annotator rule with \`delta = {}\` and \`requires = { attention = ["blocked"] }\`; to block only some commands, put a selector rule with \`requires\` before the annotated rule.
+
+Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, \`mcp/appa/yell\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
 
 ## Batteries
 
-A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[server_aliases]\` points each battery namespace at an installed server's tool prefixes, and \`[credentials]\` binds each credential variable to a runtime credential key. The value never appears in the policy, only the key:
+A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[server_aliases]\` points each battery namespace at an installed server's tool prefixes:
 
 \`\`\`toml
 include = ["batteries/github/appa.toml"]
 
 [server_aliases]
 github = ["github_prod"]
-
-[credentials]
-APPA_PROVIDER_GITHUB_TOKEN = "github-token"
 \`\`\`
+
+Each credential variable a battery reads is bound to a runtime credential key with \`archestra__bind_guardrails_credential\`, for example \`{ "variable": "APPA_PROVIDER_GITHUB_TOKEN", "key": "github-token" }\`. The binding lives outside the policy text and never holds the value, only the key. A \`[credentials]\` line in the text overrides the binding and locks it in the Batteries dialog; do not add one.
 
 A battery governs calls only when \`effective.batteries\` marks it \`active\`. Removing its \`include\` entry turns it off.
 
 ## Approvals and remedies
+
+The default \`hitl\` authority covers only \`human-approval\`. Require that mark for potentially destructive actions or publishing/sharing outside the company; do not add it to every tool call.
 
 An approval needs an authority whose permits cover the requirement, and a review channel. Do not invent an authority. When a ruling offers a remedy, call \`archestra__execute_remedy_plan\` with the exact \`offer_id\`; it requests the review itself when the policy requires one, or returns the review to ask with \`archestra__ask_user\`.
 
@@ -74,7 +77,7 @@ This protection is for native CLI subagents. Loading a skill runs in the current
 
 ## Provider-hosted tools
 
-Known provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them but cannot check each call before it executes. Unknown tool types and client-run types without a call gate are refused instead of assumed hosted. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Azure Responses hosted web search is refused because its result cannot be withheld. Deferred \`tool_search\` declarations, including versioned Anthropic types and \`defer_loading\` tools, are refused because their client-callable tools are not on the wire.
+Known provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them but cannot check each call before it executes. Unknown tool types and client-run types without a call gate are refused instead of assumed hosted. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Azure Responses hosted web search is refused because its result cannot be withheld. Deferred tools are governed: \`tool_search\` declarations, Anthropic's provider-run tool-search types and \`defer_loading\` tools are accepted. A call to a tool the request does not declare, because the client has not loaded it, is refused with the instruction to search for it and call it again.
 
 No policy setting refuses all provider-hosted declarations with a signed offer to call a client-side counterpart. A hosted declaration arrives before the provider chooses a call or its arguments, so a tool rule cannot provide that substitute. If the operator requires this boundary, identify the client and provider tools and report it as unsupported. Do not add a rule that claims to protect provider-side execution.
 

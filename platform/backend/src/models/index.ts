@@ -10,8 +10,6 @@ export {
   A2aConnectionModel,
   default as A2aRemoteAgentModel,
 } from "./a2a-remote-agent";
-export { default as A2aRemoteAgentTeamModel } from "./a2a-remote-agent-team";
-export { default as A2aRemoteAgentUserModel } from "./a2a-remote-agent-user";
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentActivationSkillRuleModel } from "./agent-activation-skill-rule";
@@ -122,6 +120,7 @@ export { default as OAuthAccessTokenModel } from "./oauth-access-token";
 export { default as OAuthClientModel } from "./oauth-client";
 export { default as OAuthRefreshTokenModel } from "./oauth-refresh-token";
 export { default as OpenappaExternalConsultModel } from "./openappa-external-consult";
+export { default as OpenAppaOperationModel } from "./openappa-operation";
 export { default as OpenAppaSessionModel } from "./openappa-session";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";
@@ -170,9 +169,7 @@ export { default as TeamModel } from "./team";
 export { default as TeamLabelModel } from "./team-label";
 export { default as TeamTokenModel } from "./team-token";
 export { default as ToolModel } from "./tool";
-export { default as ToolInvocationPolicyModel } from "./tool-invocation-policy";
 export { default as ToolObservationModel } from "./tool-observation";
-export { default as TrustedDataPolicyModel } from "./trusted-data-policy";
 export { default as UserModel } from "./user";
 export { default as UserCredentialModel } from "./user-credential";
 export { default as UserOnboardingSeenItemModel } from "./user-onboarding-seen-item";

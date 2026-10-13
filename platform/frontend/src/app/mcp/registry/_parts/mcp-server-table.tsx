@@ -28,8 +28,8 @@ import { useRouter } from "next/navigation";
 import { memo, useState } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { ResourceTableRowActions } from "@/components/resource-table-row-actions";
 import type { TableRowAction } from "@/components/table-row-actions";
+import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { DataTable } from "@/components/ui/data-table";
@@ -61,6 +61,11 @@ import type { DismissAlertTarget } from "./dismiss-alert-dialog";
 import { DismissAlertDialog } from "./dismiss-alert-dialog";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
 import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
+import {
+  InstallBlockedTooltip,
+  installBlockedSummary,
+  useMcpInstallBlockers,
+} from "./mcp-credential-blockers";
 import {
   getMcpServerActionModel,
   mcpServerAction,
@@ -435,6 +440,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
   onCancelInstallation?: (serverId: string) => void;
 }) {
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const installBlockers = useMcpInstallBlockers(item);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
@@ -645,11 +651,17 @@ const McpServerRowActions = memo(function McpServerRowActions({
         ),
         label: "Install",
         permissions: { mcpServerInstallation: ["create"] },
-        disabled: isLocal && !isLocalMcpEnabled,
+        disabled: (isLocal && !isLocalMcpEnabled) || installBlockers.length > 0,
         disabledTooltip:
           isLocal && !isLocalMcpEnabled
             ? LOCAL_MCP_DISABLED_TOOLTIP
-            : undefined,
+            : installBlockers.length > 0
+              ? installBlockedSummary(installBlockers)
+              : undefined,
+        disabledTooltipContent:
+          installBlockers.length > 0 && !(isLocal && !isLocalMcpEnabled) ? (
+            <InstallBlockedTooltip blockers={installBlockers} />
+          ) : undefined,
         onClick: () => onInstall(item),
       });
     }
@@ -707,9 +719,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
   return (
     <>
       <div className="flex justify-end">
-        <ResourceTableRowActions
-          kind="catalog"
-          resource={item}
+        <TableRowActions
           itemName={item.name}
           actions={inlineActions}
           dropdownActions={dropdownActions}

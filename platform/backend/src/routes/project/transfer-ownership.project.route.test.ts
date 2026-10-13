@@ -80,19 +80,24 @@ describe("POST /api/projects/:id/transfer-ownership", () => {
         ),
       );
     expect(unchanged(after)).toEqual(unchanged(before));
-    // The transfer moves the owner's grant, like any scoped object: the
-    // previous owner keeps no direct grant, so the project reads as unshared
-    // before and after.
+    // The transfer gives the new owner the owner's grant, like any scoped
+    // object, and the previous owner keeps theirs.
     expect(before).toMatchObject({ visibility: null, shareUserIds: [] });
-    expect(after).toMatchObject({ visibility: null, shareUserIds: [] });
     const policy = await ResourcePermissionPolicyModel.find({
       organizationId,
       resource: "project",
       scope: resource.id,
     });
-    expect(policy?.grants.map((grant) => grant.subject.id) ?? []).not.toContain(
-      originalOwner.id,
-    );
+    expect(policy?.grants).toContainEqual({
+      subject: { type: "user", id: originalOwner.id },
+      actions: expect.arrayContaining([
+        "delete",
+        "manage-permissions",
+        "read",
+        "update",
+        "use",
+      ]),
+    });
     expect(policy?.grants).toContainEqual({
       subject: { type: "user", id: recipient.id },
       actions: ["delete", "manage-permissions", "read", "update", "use"],
@@ -163,7 +168,7 @@ describe("POST /api/projects/:id/transfer-ownership", () => {
     expect(await snapshot(resource.id)).toMatchObject({ userId: recipient.id });
   });
 
-  test("a personal owner can hand off and loses ownership rights", async ({
+  test("a personal owner can hand off and keeps full access", async ({
     makeUser,
     makeMember,
   }) => {
@@ -171,7 +176,7 @@ describe("POST /api/projects/:id/transfer-ownership", () => {
     await makeMember(user.id, organizationId, { role: MEMBER_ROLE_NAME });
     const resource = await create();
     expect((await transfer(resource.id)).statusCode).toBe(200);
-    expect((await transfer(resource.id, user.id)).statusCode).toBe(403);
+    expect((await transfer(resource.id, user.id)).statusCode).toBe(200);
   });
 
   test("rejects a recipient name collision without changing the resource", async () => {

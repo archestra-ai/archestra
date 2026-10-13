@@ -49,11 +49,10 @@ const docsGroupOrder: Record<ArchestraToolGroupId, number> = {
   mcp_servers: 11,
   mcp_gateways: 12,
   tool_assignment: 13,
-  policies: 14,
-  openappa: 15,
-  limits: 16,
-  teams: 17,
-  plugins: 18,
+  openappa: 14,
+  limits: 15,
+  teams: 16,
+  plugins: 17,
 };
 const docsGroupLabelOverrides: Partial<Record<ArchestraToolGroupId, string>> = {
   meta: "Tool Discovery",
@@ -127,10 +126,6 @@ const CODE_RUNTIME_PREREQUISITE =
 
 const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
   skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/agents#code-sandbox) page covers what the runtime is and how an agent uses it.`,
-  // Same gate as the sandbox, since these tools ship from the same module —
-  // but they read and write saved files rather than entering a container, so
-  // the note says what they are instead of pointing at the runtime page.
-  files: `These tools are ${CODE_RUNTIME_PREREQUISITE} They operate on the conversation's persistent files, not inside the sandbox container.`,
 };
 
 const HOOK_RUNTIME_NOTE =
@@ -327,10 +322,7 @@ The Archestra MCP Server is built into every deployment and needs no installatio
 
 In Custom tool mode, assign the tools to the agent or MCP Gateway the client connects through. Auto mode uses [tool discovery](/docs/mcp/gateway#load-tools-when-needed) to reach tools the user can access. New agents include ${preInstalledList}; enabled features add their own default tools. ${formatToolLink("query_knowledge_sources")} appears only when the agent or gateway has at least one [knowledge base or connector](/docs/knowledge) attached.
 
-Two checks apply to every call:
-
-- **Permissions.** Each tool requires the RBAC permission in the last column of its table. \`tools/list\` shows a user only the tools their role allows; a user without \`knowledgeSource:create\`, for example, does not see ${formatToolLink("create_knowledge_base")}. A tool marked † has an extra condition, described in its entry.
-- **Guardrails.** Built-in tools are trusted: [tool invocation and trusted data policies](/docs/agents/guardrails) do not evaluate them. ${formatToolLink("query_knowledge_sources")} is the exception: invocation policies evaluate the call, and trusted data policies evaluate its results as sensitive data.
+Every call is permission-checked. Each tool requires the RBAC permission in the last column of its table. \`tools/list\` shows a user only the tools their role allows; a user without \`knowledgeSource:create\`, for example, does not see ${formatToolLink("create_knowledge_base")}. A tool marked † has an extra condition, described in its entry. [Guardrails](/docs/agents/guardrails) policies apply on top of these permissions.
 
 ## Tools Reference
 

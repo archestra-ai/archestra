@@ -3,12 +3,20 @@
 import {
   DEFAULT_MODELS,
   DocsPage,
+  OPENCODE_PRIMARY_PROVIDERS,
+  PROVIDERS_REQUIRING_BASE_URL,
   providerRequiresPerUserCredential,
   resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
 import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
-import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
+import {
+  Download,
+  KeyRound,
+  Layers,
+  RotateCcw,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -39,7 +47,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -80,7 +90,7 @@ import {
   FINISH_OAUTH_FLOW_TITLE,
   type InstallerClientId,
 } from "./clients";
-import type { ConnectionBaseUrl } from "./connection-flow.utils";
+import { ConnectionConsentOptions } from "./connection-consent-options";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
@@ -100,7 +110,6 @@ import { TerminalBlock } from "./terminal-block";
 
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
 type EditableRow =
-  | "endpoint"
   | "gateway"
   | "proxy"
   | "model"
@@ -152,7 +161,7 @@ export function useConnectSkills(enabled: boolean): {
 interface ConnectCommandPanelProps {
   client: ConnectClient;
   /** null when the user can't read MCP gateways. */
-  mcpGateways: AgentSelectorAgent[] | null;
+  mcpGateways: (AgentSelectorAgent & { slug?: string | null })[] | null;
   mcpGatewayId: string | null;
   onMcpGatewaySelect: (id: string) => void;
   /** The org's single LLM Proxy id; null when the user can't read it (or it hasn't loaded). */
@@ -163,15 +172,14 @@ interface ConnectCommandPanelProps {
   urlProvider: SupportedProvider | null;
   onProviderSelect: (provider: SupportedProvider) => void;
   baseUrl: string;
-  candidateBaseUrls: readonly string[];
-  baseUrlMetadata: readonly ConnectionBaseUrl[] | null | undefined;
-  onBaseUrlChange: (url: string) => void;
   /** When false, shared skills are not offered in the setup. */
   skillsEnabled?: boolean;
   /** When false, plugins are not offered in the setup. */
   pluginsEnabled?: boolean;
-  /** Parts the user left out on the Connect page; they stay off. */
+  /** Optional parts initially left out on the Connect page; editable here. */
   exclude?: readonly ConnectSetupPart[];
+  /** Plugins the user kept on the Connect page, by slug; omitted = all. */
+  pluginSlugs?: readonly string[];
   /**
    * "download": only the Claude Desktop installer download, for the Connect
    * page's band. The full review flow is what the approval page shows.
@@ -196,20 +204,16 @@ export function ConnectCommandPanel({
   urlProvider,
   onProviderSelect,
   baseUrl,
-  candidateBaseUrls,
-  baseUrlMetadata,
-  onBaseUrlChange,
   skillsEnabled = true,
   pluginsEnabled = true,
   exclude,
+  pluginSlugs,
   variant = "full",
 }: ConnectCommandPanelProps) {
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
-  // The gateway and the LLM Proxy join the setup unless the prompt flow's
-  // review step switched them off (only the approval page can be told that).
-  const [includeGateway, setIncludeGateway] = useState(true);
+  // Optional portions start from the Connect page choices and remain editable.
   const [includeProxy, setIncludeProxy] = useState(true);
   const activeLlmProxyId = includeProxy ? llmProxyId : null;
   const showSetupSummary = !connectRequest && client.id !== "claude-desktop";
@@ -274,7 +278,17 @@ export function ConnectCommandPanel({
 
   // Toggle one skill, snapshotting the current selection into an explicit set
   // on first interaction (null → all ids, then add/remove the toggled one).
-  const [proxyAuth, setProxyAuth] = useState<ConnectProxyAuth>("provider-key");
+  const [proxyAuthByClient, setProxyAuthByClient] = useState<
+    Record<string, ConnectProxyAuth>
+  >({});
+  const [openCodeUseAllProviders, setOpenCodeUseAllProviders] = useState(true);
+  const proxyAuth =
+    proxyAuthByClient[client.id] ??
+    (client.id === "opencode" ? "primary-providers" : "provider-key");
+  const setProxyAuth = (value: ConnectProxyAuth) =>
+    setProxyAuthByClient((current) => ({ ...current, [client.id]: value }));
+  const allPrimaryProviders =
+    client.id === "opencode" && proxyAuth === "primary-providers";
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
   // user can override it in the review step.
@@ -288,8 +302,8 @@ export function ConnectCommandPanel({
         : toPlatformOption(detectPlatform()),
     );
   }, [requestedPlatform]);
-  // Parts the copied prompt left out. The deployment won't approve a setup
-  // that includes one, so they start off here and stay off.
+  // Exclusions seed the optional choices; they do not restrict customization.
+  // Legacy tools exclusions cannot remove the required gateway.
   const { data: connection } = useClientConnection(connectRequest ?? "");
   const excludeKey = (connection?.exclude ?? exclude ?? []).join(",");
   const excluded = useMemo(
@@ -297,7 +311,6 @@ export function ConnectCommandPanel({
     [excludeKey],
   );
   useEffect(() => {
-    if (excluded.has("tools")) setIncludeGateway(false);
     if (excluded.has("proxy")) setIncludeProxy(false);
     if (excluded.has("skills")) setSelectedSkillIds(new Set());
     if (excluded.has("plugins")) {
@@ -307,6 +320,48 @@ export function ConnectCommandPanel({
     }
     if (excluded.size > 0) setCustomizing(true);
   }, [excluded, client.id]);
+  // A gateway and plugins picked on the Connect page start selected, once
+  // each list has loaded; after that the selection is the user's.
+  const presetGateway = connection?.gateway ?? null;
+  const presetPluginsKey = (connection?.plugins ?? pluginSlugs ?? null)?.join(
+    ",",
+  );
+  const appliedPresets = useRef({ gateway: false, plugins: false });
+  useEffect(() => {
+    // An empty list is one still loading on the approval page.
+    if (
+      !presetGateway ||
+      !mcpGateways?.length ||
+      appliedPresets.current.gateway
+    )
+      return;
+    appliedPresets.current.gateway = true;
+    const picked = mcpGateways.find(
+      (g) => g.slug === presetGateway || g.id === presetGateway,
+    );
+    if (picked && picked.id !== mcpGatewayId) onMcpGatewaySelect(picked.id);
+    setCustomizing(true);
+  }, [presetGateway, mcpGateways, mcpGatewayId, onMcpGatewaySelect]);
+  useEffect(() => {
+    if (
+      presetPluginsKey === undefined ||
+      pluginsLoading ||
+      excluded.has("plugins") ||
+      appliedPresets.current.plugins
+    )
+      return;
+    appliedPresets.current.plugins = true;
+    const slugs = new Set(presetPluginsKey.split(","));
+    setPluginSelections((current) =>
+      new Map(current).set(
+        client.id,
+        new Set(
+          plugins.filter((p) => slugs.has(p.pluginSlug)).map((p) => p.id),
+        ),
+      ),
+    );
+    setCustomizing(true);
+  }, [presetPluginsKey, pluginsLoading, excluded, plugins, client.id]);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
@@ -315,33 +370,88 @@ export function ConnectCommandPanel({
   // Providers that have an API key the current user can resolve. Virtual-key
   // setups can only be provisioned for these — passthrough doesn't need them.
   const { data: availableKeys } = useAvailableLlmProviderApiKeys();
-  const configuredProviders = useMemo(
-    () => new Set((availableKeys ?? []).map((k) => k.provider)),
+  const usableOpenCodeKeys = useMemo(
+    () =>
+      (availableKeys ?? []).filter(
+        (key) =>
+          !key.requiresReauthentication &&
+          (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+            Boolean(key.baseUrl?.trim())),
+      ),
     [availableKeys],
+  );
+  const configuredProviders = useMemo(
+    () =>
+      new Set(
+        (client.id === "opencode"
+          ? usableOpenCodeKeys
+          : (availableKeys ?? [])
+        ).map((key) => key.provider),
+      ),
+    [client.id, availableKeys, usableOpenCodeKeys],
   );
 
   // Providers this client can be wired to at all, narrowed by the admin
   // allow-list (independent of auth mode — used to explain the empty state).
   const supportedProviders = useMemo(() => {
     const supported =
-      client.proxy.kind === "custom" ? client.proxy.supportedProviders : [];
+      client.id === "opencode" && proxyAuth !== "provider-key"
+        ? [...OPENCODE_PRIMARY_PROVIDERS]
+        : client.proxy.kind === "custom"
+          ? client.proxy.supportedProviders
+          : [];
     const shown = shownProviders ? new Set(shownProviders) : null;
-    return shown ? supported.filter((p) => shown.has(p)) : supported;
-  }, [client.proxy, shownProviders]);
+    return shown && !allPrimaryProviders
+      ? supported.filter((p) => shown.has(p))
+      : supported;
+  }, [client.id, client.proxy, shownProviders, allPrimaryProviders, proxyAuth]);
+
+  const singleVirtualKeyProviders = useMemo(() => {
+    const supported =
+      client.id === "opencode"
+        ? [...OPENCODE_PRIMARY_PROVIDERS]
+        : client.proxy.kind === "custom"
+          ? client.proxy.supportedProviders
+          : [];
+    return supported.filter(
+      (p) =>
+        (!shownProviders || shownProviders.includes(p)) &&
+        (configuredProviders.has(p) ||
+          (client.id !== "opencode" && providerRequiresPerUserCredential(p))),
+    );
+  }, [client.id, client.proxy, shownProviders, configuredProviders]);
 
   // In virtual-key mode we further restrict to providers the user actually has
   // a key for — a virtual key can only be minted against a configured key — so
   // the tabs never offer a provider the command would fail on. Passthrough
   // needs no key (the user brings their own at runtime).
   const providers = useMemo(() => {
+    if (allPrimaryProviders) {
+      const primaryProviders = new Set(
+        usableOpenCodeKeys
+          .filter((key) => key.isPrimary)
+          .map((key) => key.provider),
+      );
+      return supportedProviders.filter((provider) =>
+        primaryProviders.has(provider),
+      );
+    }
     if (proxyAuth !== "virtual-key") return supportedProviders;
-    // Per-user providers (GitHub Copilot) stay selectable even without a key:
-    // the user connects their own account inline, after which a personal
-    // virtual key is minted. Other providers need a pre-existing key.
+    // OpenCode only offers configured credentials. Other clients can connect
+    // per-user providers inline before minting a personal virtual key.
     return supportedProviders.filter(
-      (p) => configuredProviders.has(p) || providerRequiresPerUserCredential(p),
+      (p) =>
+        configuredProviders.has(p) ||
+        (client.id !== "opencode" && providerRequiresPerUserCredential(p)),
     );
-  }, [supportedProviders, proxyAuth, configuredProviders]);
+  }, [
+    supportedProviders,
+    proxyAuth,
+    configuredProviders,
+    allPrimaryProviders,
+    usableOpenCodeKeys,
+    client.id,
+  ]);
   const provider =
     urlProvider && providers.includes(urlProvider)
       ? urlProvider
@@ -351,7 +461,9 @@ export function ConnectCommandPanel({
   // never the passthrough device flow, and the user must connect their own
   // account before a command can be generated.
   const providerIsPerUser =
-    !!provider && providerRequiresPerUserCredential(provider);
+    !allPrimaryProviders &&
+    !!provider &&
+    providerRequiresPerUserCredential(provider);
   const needsPerUserConnect =
     !!activeLlmProxyId &&
     providerIsPerUser &&
@@ -393,9 +505,7 @@ export function ConnectCommandPanel({
   const openCodeProviderPassthrough =
     client.id === "opencode" && effectiveProxyAuth === "provider-key";
 
-  const gateway = includeGateway
-    ? (mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null)
-    : null;
+  const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The LLM Proxy may be available without a usable provider (e.g. virtual-key
   // mode with no configured providers); keep it for the row/editor, but it
   // only joins the command when a provider is also resolved.
@@ -407,7 +517,9 @@ export function ConnectCommandPanel({
   // proxy, so — like the per-user connect gate — step 3 gates on adding a key
   // instead of shipping a half-configured command.
   const virtualKeyUnbacked =
-    hasProxy && !provider && proxyAuth === "virtual-key";
+    hasProxy &&
+    !provider &&
+    (proxyAuth === "virtual-key" || allPrimaryProviders);
   const requiredPluginPlatform = platform === "windows" ? "windows" : "posix";
   // The selection follows the client across OS changes. Compatibility is a
   // filter, not permission to re-add something the user explicitly removed.
@@ -486,6 +598,8 @@ export function ConnectCommandPanel({
   const { data: canAttribute } = useHasPermissions({
     llmVirtualKey: ["create"],
   });
+  const primaryRoutingBlocked =
+    hasProxy && allPrimaryProviders && canAttribute !== true;
   const passthroughAttributes =
     canAttribute === true &&
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
@@ -526,6 +640,12 @@ export function ConnectCommandPanel({
     proxyId: proxyActive ? activeLlmProxyId : null,
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? effectiveProxyAuth : null,
+    primaryKeyIds: allPrimaryProviders
+      ? (availableKeys ?? [])
+          .filter((key) => key.isPrimary)
+          .map((key) => key.id)
+          .sort()
+      : null,
     model: proxyActive ? effectiveModel : null,
     // Sorted so reorderings of the same selection don't regenerate.
     skillIds: includeSkills ? selectedSkills.map((s) => s.id).sort() : null,
@@ -574,7 +694,10 @@ export function ConnectCommandPanel({
         baseUrl: inputs.baseUrl,
         mcpGatewayId: inputs.gatewayId ?? undefined,
         llmProxyId: inputs.proxyId ?? undefined,
-        provider: inputs.provider ?? undefined,
+        provider:
+          inputs.proxyAuth === "primary-providers"
+            ? undefined
+            : (inputs.provider ?? undefined),
         proxyAuth: inputs.proxyAuth ?? undefined,
         model: inputs.model ?? undefined,
         skills,
@@ -599,7 +722,8 @@ export function ConnectCommandPanel({
       skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
-      virtualKeyUnbacked
+      virtualKeyUnbacked ||
+      primaryRoutingBlocked
     ) {
       return;
     }
@@ -614,6 +738,7 @@ export function ConnectCommandPanel({
     pluginsLoading,
     needsPerUserConnect,
     virtualKeyUnbacked,
+    primaryRoutingBlocked,
     runGeneration,
   ]);
 
@@ -639,20 +764,6 @@ export function ConnectCommandPanel({
       )}
     </div>
   ) : null;
-
-  // The endpoint (base URL) is shared by both the MCP gateway and the LLM
-  // proxy, so it gets its own line/setting rather than living under either.
-  const showEndpoint = candidateBaseUrls.length > 1;
-  const endpointEditor = (
-    <EditorField label="Endpoint">
-      <BaseUrlSelect
-        candidateUrls={candidateBaseUrls}
-        metadata={baseUrlMetadata}
-        value={baseUrl}
-        onChange={onBaseUrlChange}
-      />
-    </EditorField>
-  );
 
   const platformEditor = (
     <EditorField label="Platform">
@@ -697,7 +808,12 @@ export function ConnectCommandPanel({
   // key and appear to do nothing. Move to the first passthrough-capable provider
   // as well, so the toggle can never strand the user in the per-user state.
   const handleProxyAuthChange = (value: string) => {
-    const next = value as ConnectProxyAuth;
+    const next =
+      client.id === "opencode" &&
+      value === "virtual-key" &&
+      openCodeUseAllProviders
+        ? "primary-providers"
+        : (value as ConnectProxyAuth);
     setProxyAuth(next);
     if (next === "provider-key" && providerIsPerUser) {
       const firstPassthrough = supportedProviders.find(
@@ -709,28 +825,31 @@ export function ConnectCommandPanel({
 
   const proxyEditor = hasProxy ? (
     <div className="grid gap-3">
-      {providers.length > 1 && !openCodeProviderPassthrough && (
-        <EditorField label="Provider">
-          <Select
-            value={provider ?? undefined}
-            onValueChange={onProviderSelect}
-          >
-            <SelectTrigger aria-label="Provider">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <LlmProviderSelectItems
-                options={providers.map((provider) => ({
-                  value: provider,
-                  name: providerCatalog.label(provider),
-                  icon: PROVIDER_CONFIG[provider].icon,
-                }))}
-              />
-            </SelectContent>
-          </Select>
-        </EditorField>
-      )}
-      <EditorField label="Auth">
+      {client.id !== "opencode" &&
+        providers.length > 1 &&
+        !openCodeProviderPassthrough &&
+        !allPrimaryProviders && (
+          <EditorField label="Provider">
+            <Select
+              value={provider ?? undefined}
+              onValueChange={onProviderSelect}
+            >
+              <SelectTrigger aria-label="Provider">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <LlmProviderSelectItems
+                  options={providers.map((provider) => ({
+                    value: provider,
+                    name: providerCatalog.label(provider),
+                    icon: PROVIDER_CONFIG[provider].icon,
+                  }))}
+                />
+              </SelectContent>
+            </Select>
+          </EditorField>
+        )}
+      <EditorField label={client.id === "opencode" ? "Model routing" : "Auth"}>
         <div className="grid gap-1.5">
           {/* The toggle stays visible even for a per-user provider (GitHub
               Copilot), which forces virtual-key auth. Hiding it there stranded
@@ -738,22 +857,65 @@ export function ConnectCommandPanel({
               handleProxyAuthChange moves off the per-user provider when
               switching to passthrough, so the choice sticks. */}
           <Tabs
-            value={effectiveProxyAuth}
+            value={allPrimaryProviders ? "virtual-key" : effectiveProxyAuth}
             onValueChange={handleProxyAuthChange}
           >
             <TabsList size="sm">
+              {client.id === "opencode" && (
+                <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
+              )}
               <TabsTrigger value="provider-key">
                 {client.id === "claude-desktop"
                   ? "Claude subscription"
                   : "Your provider key"}
               </TabsTrigger>
-              <TabsTrigger value="virtual-key">
-                {client.id === "claude-desktop" ? "API key" : "Virtual key"}
-              </TabsTrigger>
+              {client.id !== "opencode" && (
+                <TabsTrigger value="virtual-key">
+                  {client.id === "claude-desktop" ? "API key" : "Virtual key"}
+                </TabsTrigger>
+              )}
             </TabsList>
           </Tabs>
+          {client.id === "opencode" && !openCodeProviderPassthrough && (
+            <Select
+              value={
+                allPrimaryProviders ? "all-primary" : (provider ?? undefined)
+              }
+              onValueChange={(value) => {
+                const all = value === "all-primary";
+                setOpenCodeUseAllProviders(all);
+                setProxyAuth(all ? "primary-providers" : "virtual-key");
+                if (!all) onProviderSelect(value as SupportedProvider);
+              }}
+            >
+              <SelectTrigger aria-label="Model provider">
+                <SelectValue placeholder="Select model provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all-primary">
+                  <span className="flex items-center gap-2">
+                    <Layers className="size-4" aria-hidden="true" />
+                    <span>All model providers</span>
+                  </span>
+                </SelectItem>
+                <LlmProviderSelectItems
+                  options={singleVirtualKeyProviders.map((provider) => ({
+                    value: provider,
+                    name: providerCatalog.label(provider),
+                    icon: PROVIDER_CONFIG[provider].icon,
+                  }))}
+                />
+              </SelectContent>
+            </Select>
+          )}
           <p className="text-xs text-muted-foreground">
-            {effectiveProxyAuth === "provider-key" ? (
+            {allPrimaryProviders ? (
+              <span>
+                {providers.length
+                  ? "Create a personal virtual key for all primary model providers you can access, and make their models available in OpenCode."
+                  : "No usable primary model providers are available. Mark a compatible model provider key as primary, or choose another routing option."}
+              </span>
+            ) : effectiveProxyAuth === "provider-key" ? (
               client.id === "claude-desktop" ? (
                 <span>
                   The installer opens Claude subscription sign-in and configures
@@ -821,21 +983,16 @@ export function ConnectCommandPanel({
       <div className="grid gap-1.5">
         <EditorField label="Model">
           {modelOptions.length > 1 ? (
-            <Select
-              value={effectiveModel ?? undefined}
+            <SearchableSelect
+              value={effectiveModel ?? ""}
               onValueChange={setModelChoice}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {modelOptions.map((id) => (
-                  <SelectItem key={id} value={id}>
-                    {id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              items={modelOptions.map((id) => ({ value: id, label: id }))}
+              ariaLabel="Model"
+              placeholder="Select model"
+              searchPlaceholder="Search models..."
+              emptyMessage="No models found."
+              className="w-full"
+            />
           ) : (
             <Input
               value={effectiveModel ?? ""}
@@ -863,7 +1020,6 @@ export function ConnectCommandPanel({
       >
         <Checkbox
           id="connect-include-skills"
-          disabled={excluded.has("skills")}
           // All or nothing: the shared marketplace URL has no per-skill knob,
           // so "all" (null) and "none" (empty set) are the only honest states.
           checked={selectedSkills.length > 0}
@@ -889,7 +1045,6 @@ export function ConnectCommandPanel({
         >
           <Checkbox
             id="connect-include-plugins"
-            disabled={excluded.has("plugins")}
             checked={
               selectedPlugins.length === compatiblePlugins.length
                 ? true
@@ -917,7 +1072,6 @@ export function ConnectCommandPanel({
               >
                 <Checkbox
                   id={`connect-plugin-${plugin.id}`}
-                  disabled={excluded.has("plugins")}
                   checked={
                     selectedPluginIds === null ||
                     selectedPluginIds.has(plugin.id)
@@ -934,8 +1088,9 @@ export function ConnectCommandPanel({
       </div>
     ) : null;
 
-  const noVirtualKeyMessage =
-    supportedNames.length === 1
+  const noVirtualKeyMessage = allPrimaryProviders
+    ? "No usable primary model providers are available. Mark a compatible model provider key as primary, or choose another routing option."
+    : supportedNames.length === 1
       ? `${client.label} only routes ${supportedNames[0]}, which has no key configured for a virtual key — switch to your provider key.`
       : `None of ${client.label}'s providers have a key configured for a virtual key — switch to your provider key.`;
   const pluginCountLabel =
@@ -947,7 +1102,9 @@ export function ConnectCommandPanel({
     : needsPerUserConnect
       ? `Connect ${provider ? providerCatalog.label(provider) : "your provider"} to generate the setup command`
       : virtualKeyUnbacked
-        ? "Add a provider key to generate the setup command"
+        ? allPrimaryProviders
+          ? "Set a usable primary provider to generate the setup command"
+          : "Add a provider key to generate the setup command"
         : failed
           ? "Setup command generation failed"
           : result
@@ -1025,7 +1182,13 @@ export function ConnectCommandPanel({
                 editor={proxyEditor}
                 changeTestId="connect-change-proxy"
               >
-                {!provider ? (
+                {allPrimaryProviders ? (
+                  <span>
+                    {providers.length
+                      ? `Route all primary model providers (${providers.length}) through the LLM Proxy using a virtual key`
+                      : "No usable primary model providers available for OpenCode"}
+                  </span>
+                ) : !provider ? (
                   noVirtualKeyMessage
                 ) : client.id === "cursor" ? (
                   <span>
@@ -1161,18 +1324,6 @@ export function ConnectCommandPanel({
                 )}
               </SetupSummaryRow>
             )}
-            {showEndpoint && (
-              <SetupSummaryRow
-                editable
-                isEditing={editing === "endpoint"}
-                onToggle={() => toggleEdit("endpoint")}
-                editor={endpointEditor}
-                changeTestId="connect-change-endpoint"
-              >
-                Reach the gateway and proxy at{" "}
-                <span className="font-medium text-foreground">{baseUrl}</span>
-              </SetupSummaryRow>
-            )}
             <SetupSummaryRow
               editable
               isEditing={editing === "platform"}
@@ -1202,7 +1353,54 @@ export function ConnectCommandPanel({
         }
         last={!showOAuthStep && !showDesktopGatewayStep}
       >
-        {!showSetupSummary && (
+        {!showSetupSummary && connectRequest && (
+          <ConnectionConsentOptions
+            open={customizing}
+            onOpenChange={setCustomizing}
+            gateway={
+              mcpGatewayId && mcpGateways !== null ? (
+                <>
+                  <IncludeCheckbox
+                    id="connect-include-gateway"
+                    disabled
+                    checked
+                  >
+                    Connect the MCP gateway (required)
+                  </IncludeCheckbox>
+                  {gatewayEditor}
+                </>
+              ) : null
+            }
+            proxy={
+              llmProxyId ? (
+                <>
+                  <IncludeCheckbox
+                    id="connect-include-proxy"
+                    checked={includeProxy}
+                    onCheckedChange={setIncludeProxy}
+                  >
+                    Route model requests through the LLM Proxy
+                  </IncludeCheckbox>
+                  {proxyEditor}
+                  {proxyActive && modelEditor}
+                </>
+              ) : null
+            }
+            skills={skillsEligible ? skillsEditor : null}
+            plugins={pluginsEnabled ? pluginsEditor : null}
+            platform={
+              <div className="max-[360px]:[&_[data-slot=tabs-list]]:h-auto max-[360px]:[&_[data-slot=tabs-list]]:max-w-full max-[360px]:[&_[data-slot=tabs-list]]:flex-wrap">
+                <ConnectionPlatformToggle
+                  value={platform}
+                  onValueChange={setPlatform}
+                  ariaLabel="Select a platform"
+                  dataTestId="connect-platform-select"
+                />
+              </div>
+            }
+          />
+        )}
+        {!showSetupSummary && !connectRequest && (
           <Collapsible
             open={customizing}
             onOpenChange={setCustomizing}
@@ -1219,27 +1417,10 @@ export function ConnectCommandPanel({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 grid max-w-lg gap-4">
-              {excluded.size > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Your prompt left some parts out. They stay off for this
-                  connection.
-                </p>
-              )}
-              {connectRequest && mcpGatewayId && mcpGateways !== null && (
-                <IncludeCheckbox
-                  id="connect-include-gateway"
-                  disabled={excluded.has("tools")}
-                  checked={includeGateway}
-                  onCheckedChange={setIncludeGateway}
-                >
-                  Connect the MCP gateway
-                </IncludeCheckbox>
-              )}
               {gatewayEditor}
-              {connectRequest && llmProxyId && (
+              {llmProxyId && (
                 <IncludeCheckbox
                   id="connect-include-proxy"
-                  disabled={excluded.has("proxy")}
                   checked={includeProxy}
                   onCheckedChange={setIncludeProxy}
                 >
@@ -1250,7 +1431,6 @@ export function ConnectCommandPanel({
               {proxyActive && modelEditor}
               {skillsEligible && skillsEditor}
               {pluginsEnabled && pluginsEditor}
-              {showEndpoint && endpointEditor}
               {platformEditor}
             </CollapsibleContent>
           </Collapsible>
@@ -1349,7 +1529,7 @@ export function ConnectCommandPanel({
               "overflow-hidden rounded-xl border",
               connectRequest || client.id === "claude-desktop"
                 ? "bg-card"
-                : "border-terminal-edge bg-terminal shadow-lg",
+                : "border-terminal-edge bg-terminal shadow-sm dark:shadow-lg",
             )}
           >
             {!hasRunnableAnything ? (
@@ -1375,6 +1555,18 @@ export function ConnectCommandPanel({
                   }
                 }}
               />
+            ) : primaryRoutingBlocked ? (
+              <InlineNotice variant="info">
+                <InlineNoticeText>
+                  {canAttribute === false
+                    ? "You need permission to create virtual keys to use all primary providers. Choose Your provider key to use local credentials."
+                    : "Checking virtual-key permissions…"}
+                </InlineNoticeText>
+              </InlineNotice>
+            ) : virtualKeyUnbacked && allPrimaryProviders ? (
+              <InlineNotice variant="info">
+                <InlineNoticeText>{noVirtualKeyMessage}</InlineNoticeText>
+              </InlineNotice>
             ) : virtualKeyUnbacked ? (
               <ProviderKeyGate
                 reason={noVirtualKeyReason}
@@ -1393,7 +1585,10 @@ export function ConnectCommandPanel({
                 gatewaySelected={!!gateway}
                 gatewayName={oauthServerName}
                 proxySelected={proxyActive}
-                proxyUsesVirtualKey={effectiveProxyAuth === "virtual-key"}
+                proxyUsesVirtualKey={
+                  effectiveProxyAuth === "virtual-key" ||
+                  effectiveProxyAuth === "primary-providers"
+                }
                 skillsSelected={skillsEligible && includeSkills}
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (
@@ -1554,48 +1749,61 @@ function DesktopDownload({
 }) {
   if (gate)
     return <p className="mt-2 px-1 text-sm text-muted-foreground">{gate}</p>;
+  // Same shape as the Connect page's prompt row, so picking Claude Desktop
+  // doesn't make the page taller.
   return (
-    <div className="mt-2 space-y-3 px-1">
-      <p className="text-xs text-muted-foreground">
-        Open it in Claude Desktop and confirm Install. Your browser guides you
-        through subscription sign-in and restarting Desktop. Finish active
-        Desktop tasks first.
+    <div className="mt-2">
+      <p className="px-1 text-xs text-muted-foreground">
+        Open it in Claude Desktop and confirm Install; your browser guides you
+        through sign-in and the restart. Finish active Desktop tasks first.
         {proxyActive && (
           <span>
             {" "}
-            Model routing switches Desktop to third-party mode, with its own
-            conversation history; Settings, Import brings your Claude.ai
-            conversations over.
+            With the LLM proxy, Desktop switches to third-party mode with its
+            own history; Settings, Import brings your Claude.ai conversations
+            over.
           </span>
         )}
       </p>
-      {failed ? (
-        <div role="alert" className="flex items-center gap-3 text-sm">
-          <span>Could not prepare the installer.</span>
-          <Button variant="outline" size="sm" onClick={onRetry}>
+      <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
+        <Download className="size-4 shrink-0 text-muted-foreground" />
+        {failed ? (
+          <span role="alert" className="min-w-0 flex-1 truncate text-sm">
+            Could not prepare the installer.
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+            {pending
+              ? "Preparing your installer"
+              : "Your installer, ready for 15 minutes"}
+          </span>
+        )}
+        {failed ? (
+          <Button variant="outline" size="lg" onClick={onRetry}>
             <span>Try again</span>
           </Button>
-        </div>
-      ) : installerUrl ? (
-        <Button asChild size="lg" className="h-12 rounded-xl px-6 text-base">
-          <a href={installerUrl} download>
+        ) : installerUrl ? (
+          <Button asChild size="lg" className="h-12 rounded-xl px-6">
+            <a href={installerUrl} download>
+              <Download />
+              <span>Download installer</span>
+            </a>
+          </Button>
+        ) : (
+          <Button size="lg" disabled className="h-12 rounded-xl px-6">
             <Download />
-            <span>Download installer</span>
-          </a>
-        </Button>
-      ) : (
-        <Button size="lg" disabled className="h-12 rounded-xl px-6 text-base">
-          <Download />
-          <span>{pending ? "Preparing installer" : "Download installer"}</span>
-        </Button>
-      )}
-      <p className="text-xs text-muted-foreground">
-        The installer expires in 15 minutes. Already using a third-party Desktop
-        profile? Use the terminal option.
-      </p>
+            <span>
+              {pending ? "Preparing installer" : "Download installer"}
+            </span>
+          </Button>
+        )}
+      </div>
       {command && (
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Advanced: terminal setup</summary>
+        <details className="mt-2 px-1 text-xs text-muted-foreground">
+          <summary className="cursor-pointer">
+            Advanced: terminal setup, for a Desktop already on a third-party
+            profile
+          </summary>
           <p className="mt-2">
             The terminal option requires Python 3.9+ and Claude Code for
             subscription sign-in.
@@ -1803,7 +2011,7 @@ function IncludeCheckbox({
   id: string;
   disabled?: boolean;
   checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  onCheckedChange?: (checked: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
@@ -1812,48 +2020,10 @@ function IncludeCheckbox({
         id={id}
         disabled={disabled}
         checked={checked}
-        onCheckedChange={(value) => onCheckedChange(value === true)}
+        onCheckedChange={(value) => onCheckedChange?.(value === true)}
       />
       {children}
     </label>
-  );
-}
-
-function BaseUrlSelect({
-  candidateUrls,
-  metadata,
-  value,
-  onChange,
-}: {
-  candidateUrls: readonly string[];
-  metadata: readonly ConnectionBaseUrl[] | null | undefined;
-  value: string;
-  onChange: (url: string) => void;
-}) {
-  const metaByUrl = new Map((metadata ?? []).map((m) => [m.url, m] as const));
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label="Select an endpoint" className="w-full">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent className="min-w-[var(--radix-select-trigger-width)]">
-        {candidateUrls.map((url) => {
-          const description = metaByUrl.get(url)?.description ?? "";
-          return (
-            <SelectItem key={url} value={url}>
-              <span className="flex min-w-0 items-center gap-2">
-                <code className="shrink-0 font-mono text-xs">{url}</code>
-                {description && (
-                  <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    {description}
-                  </span>
-                )}
-              </span>
-            </SelectItem>
-          );
-        })}
-      </SelectContent>
-    </Select>
   );
 }
 

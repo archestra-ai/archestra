@@ -9,13 +9,19 @@ import {
   PaginationQuerySchema,
   PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   TextSearchLanguageSchema,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { RuntimeCredentialDefinitionModel } from "@/models";
+import ResourcePermissionSubjectModel, {
+  resourceAccessSelection,
+} from "@/models/resource-permission-subject";
 import {
   canAccessKnowledgeBase,
   findAccessibleKnowledgeBase,
@@ -313,6 +319,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),
@@ -321,7 +330,17 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { limit, offset, search, status, labels, ...scopeFilters },
+        query: {
+          limit,
+          offset,
+          search,
+          status,
+          labels,
+          access: relations,
+          sharedWith,
+          owner,
+          ...scopeFilters
+        },
         organizationId,
         user,
       },
@@ -338,6 +357,12 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userId: user.id,
           organizationId,
         });
+
+      const accessSelection = resourceAccessSelection({
+        access: relations,
+        sharedWith,
+        owner,
+      });
 
       // Resolved once so the page query and the count agree, and so a filter
       // that matches nothing short circuits both.
@@ -358,6 +383,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           viewerTeamIds: access.teamIds,
           viewerUserId: user.id,
           ...scopeFilters,
+          access: accessSelection,
         }),
         KnowledgeBaseModel.countByOrganization({
           organizationId,
@@ -368,6 +394,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           viewerTeamIds: access.teamIds,
           viewerUserId: user.id,
           ...scopeFilters,
+          access: accessSelection,
         }),
       ]);
 
@@ -851,6 +878,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by lifecycle status. `deleted` lists soft-deleted connectors and requires `knowledgeSource:delete`.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseConnectorListItemSchema),
@@ -866,6 +896,9 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search,
           connectorType,
           status,
+          access: relations,
+          sharedWith,
+          owner,
         },
         organizationId,
         user,
@@ -934,6 +967,13 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             viewerTeamIds: access.teamIds,
             viewerUserId: access.userId,
             status,
+            access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+              userId: user.id,
+              organizationId,
+              relations,
+              sharedWith,
+              ownerIds: owner,
+            }),
           });
         data = result.data;
         total = result.total;
@@ -1643,6 +1683,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
         id,
         organizationId,
         userId: user.id,
+        action: "update",
       });
 
       if (body.environmentId !== undefined) {
@@ -1992,6 +2033,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
               id,
               organizationId,
               userId: user.id,
+              action: "update",
             }).catch(() => null);
             if (connector) found.set(id, connector);
           }
@@ -3500,6 +3542,7 @@ async function findConnectorOrThrow(params: {
   id: string;
   organizationId: string;
   userId: string;
+  action?: "read" | "update";
 }) {
   const connector = await KnowledgeBaseConnectorModel.findById(params.id);
   if (!connector || connector.organizationId !== params.organizationId) {
@@ -3510,9 +3553,17 @@ async function findConnectorOrThrow(params: {
       userId: params.userId,
       organizationId: params.organizationId,
     });
-  if (
-    !knowledgeSourceAccessControlService.canAccessConnector(access, connector)
-  ) {
+  const permitted =
+    params.action === "update"
+      ? knowledgeSourceAccessControlService.canUpdateConnector(
+          access,
+          connector,
+        )
+      : knowledgeSourceAccessControlService.canAccessConnector(
+          access,
+          connector,
+        );
+  if (!permitted) {
     throw new ApiError(404, "Connector not found");
   }
   return connector;

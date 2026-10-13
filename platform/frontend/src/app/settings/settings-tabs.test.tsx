@@ -102,7 +102,6 @@ describe("useSettingsTabs", () => {
       const labels = getTabLabels(result.current);
       expect(labels).toContain("Service Accounts");
       expect(labels).toContain("Agents");
-      expect(labels).toContain("Security");
       expect(labels).toContain("LLM");
       expect(labels).toContain("Users");
       expect(labels).toContain("Teams");
@@ -110,18 +109,6 @@ describe("useSettingsTabs", () => {
       expect(labels).toContain("Appearance");
       expect(labels).toContain("Auth");
     });
-  });
-
-  it("hides legacy Security settings when OpenAPPA is enabled", async () => {
-    mockOpenAppaEnabled = true;
-    mockPermissions = { organizationSettings: ["read"] };
-    const { result } = renderHook(() => useSettingsTabs(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() =>
-      expect(getTabLabels(result.current)).not.toContain("Security"),
-    );
   });
 
   it("opens every organization settings tab with organizationSettings:read alone", async () => {
@@ -385,7 +372,6 @@ describe("useSettingsTabs", () => {
         "Connect Page",
         "Apps",
         "Skills",
-        "Security",
         "Knowledge",
         "Users",
         "Teams",

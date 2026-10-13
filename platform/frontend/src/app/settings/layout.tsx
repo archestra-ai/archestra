@@ -9,6 +9,7 @@ import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { SectionNav } from "@/components/section-nav";
 import { useDisableInvitations } from "@/lib/config/config.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSecretsType } from "@/lib/secrets.query";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
@@ -37,14 +38,9 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
     title: "Apps",
     description: "How apps behave when an agent creates one.",
   },
-  "/settings/security": {
-    title: "Security",
-    description:
-      "Organization-wide security defaults for tools your agents use.",
-  },
-  "/settings/openappa": {
-    title: "OpenAPPA settings",
-    description: "Sync the OpenAPPA policy from a GitHub repository.",
+  "/settings/guardrails": {
+    title: "Guardrails",
+    description: <GuardrailsDescription />,
   },
   "/settings/credentials": {
     title: "Credentials",
@@ -238,6 +234,23 @@ export default function SettingsLayout({
         </div>
       </PageLayout>
     </SettingsLayoutContext.Provider>
+  );
+}
+
+function GuardrailsDescription() {
+  const appName = useAppName();
+  return (
+    <>
+      {`How ${appName} enforces your `}
+      <ExternalDocsLink
+        href="https://www.openappa.com"
+        showIcon={false}
+        className="text-primary underline underline-offset-2 hover:text-primary/80"
+      >
+        OpenAPPA
+      </ExternalDocsLink>{" "}
+      policy on tool calls, and where the policy lives.
+    </>
   );
 }
 

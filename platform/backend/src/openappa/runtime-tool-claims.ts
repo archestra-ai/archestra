@@ -101,43 +101,38 @@ export function verifyRuntimeToolProof(params: {
 
 /** The provider sees the original arguments, never reusable host credentials. */
 export function stripRuntimeToolProofs(request: unknown): void {
-  const pending: unknown[] = [request];
   const visited = new WeakSet<object>();
-  while (pending.length > 0) {
-    const value = pending.pop();
-    if (!value || typeof value !== "object" || visited.has(value)) continue;
+  function strip(value: unknown, depth: number): boolean {
+    if (!value || typeof value !== "object" || visited.has(value)) return false;
+    if (depth > 64) throw new Error("Runtime tool history is too deep");
     visited.add(value);
     const record = value as Record<string, unknown>;
+    let changed = Object.hasOwn(record, RUNTIME_TOOL_PROOF_ARGUMENT);
     delete record[RUNTIME_TOOL_PROOF_ARGUMENT];
     for (const [key, nested] of Object.entries(record)) {
-      if (key === "arguments" && typeof nested === "string") {
+      if (
+        (key === "arguments" || key === "tool_args") &&
+        typeof nested === "string"
+      ) {
+        let parsed: unknown;
         try {
-          const parsed: unknown = JSON.parse(nested);
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            const args = parsed as Record<string, unknown>;
-            const target = args.tool_args;
-            let changed = Object.hasOwn(args, RUNTIME_TOOL_PROOF_ARGUMENT);
-            delete args[RUNTIME_TOOL_PROOF_ARGUMENT];
-            if (
-              target &&
-              typeof target === "object" &&
-              !Array.isArray(target)
-            ) {
-              changed ||= Object.hasOwn(target, RUNTIME_TOOL_PROOF_ARGUMENT);
-              delete (target as Record<string, unknown>)[
-                RUNTIME_TOOL_PROOF_ARGUMENT
-              ];
-            }
-            if (changed) record[key] = JSON.stringify(args);
-          }
+          parsed = JSON.parse(nested);
         } catch {
           // Custom tools may carry non-JSON arguments; preserve them verbatim.
+          continue;
+        }
+        if (strip(parsed, depth + 1)) {
+          record[key] = JSON.stringify(parsed);
+          changed = true;
         }
       } else {
-        pending.push(nested);
+        // Do not short-circuit: siblings may independently contain a proof.
+        changed = strip(nested, depth + 1) || changed;
       }
     }
+    return changed;
   }
+  strip(request, 0);
 }
 
 const ClaimsSchema = z

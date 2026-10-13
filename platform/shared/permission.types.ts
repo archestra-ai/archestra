@@ -29,7 +29,6 @@ export const resources = [
   "mcpGateway",
   "mcpOauthClient",
   "llmProxy",
-  "toolPolicy",
   "openappaPolicy",
   "openappaDiagnostics",
   "log",
@@ -82,7 +81,6 @@ export const resourceLabels: Record<Resource, string> = {
   mcpGateway: "MCP Gateways",
   mcpOauthClient: "MCP OAuth Clients",
   llmProxy: "LLM Proxy",
-  toolPolicy: "Tools & Policies",
   log: "LLM & MCP Logs",
   openappaPolicy: "OpenAPPA Policy",
   openappaDiagnostics: "OpenAPPA Diagnostics",
@@ -122,7 +120,6 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpOauthClient:
     "OAuth clients (service accounts) authorized to call MCP gateways",
   llmProxy: "The LLM Proxy endpoint with security policies and observability",
-  toolPolicy: "Tools, tool invocation policies, and trusted data policies",
   openappaPolicy: "OpenAPPA policy, batteries, and coverage",
   openappaDiagnostics: "Agent yells and OpenAPPA consult logs",
   log: "LLM proxy and MCP tool-call logs, with separate own and organization-wide visibility",
@@ -141,7 +138,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpServerInstallation: "Installed MCP servers and their runtime",
   environment: "Deployment environments (namespace) for catalog items",
   credential:
-    "Reusable custom secrets, GitHub tokens, and GitHub Apps across the platform",
+    "Reusable custom secrets, GitHub tokens, and GitHub Apps across the platform. Who can view, connect, edit and delete each one is granted per credential, on its Permissions tab.",
   member:
     "People in the organization: inviting them, changing their roles, and removing them",
   ac: "Custom RBAC roles",
@@ -172,13 +169,7 @@ export const internalResources: Resource[] = ["organization", "invitation"];
  */
 export const resourceCategories: Record<string, Resource[]> = {
   Agents: ["agent", "skill", "plugin", "app", "scheduledTask"],
-  MCP: [
-    "mcpGateway",
-    "mcpOauthClient",
-    "toolPolicy",
-    "mcpRegistry",
-    "mcpServerInstallation",
-  ],
+  MCP: ["mcpGateway", "mcpOauthClient", "mcpRegistry", "mcpServerInstallation"],
   LLM: [
     "llmProxy",
     "llmProviderApiKey",

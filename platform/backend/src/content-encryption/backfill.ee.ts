@@ -145,11 +145,6 @@ const INTERACTION_COLUMNS: Array<{
   { column: "request", context: "interactions.request" },
   { column: "processed_request", context: "interactions.processed_request" },
   { column: "response", context: "interactions.response" },
-  { column: "dual_llm_analyses", context: "interactions.dual_llm_analyses" },
-  {
-    column: "unsafe_context_boundary",
-    context: "interactions.unsafe_context_boundary",
-  },
 ];
 
 /** A stored value the sweep must rewrite: plaintext, or under the old key. */
@@ -195,8 +190,7 @@ async function sweepInteractionsBatch(
   let rewritten = 0;
   for (const { id } of page.rows) {
     const payload = await db.execute<Record<string, unknown>>(sql`
-      SELECT request, processed_request, response, dual_llm_analyses,
-             unsafe_context_boundary
+      SELECT request, processed_request, response
       FROM ${schema.interactionsTable}
       WHERE id = ${id}::uuid
     `);

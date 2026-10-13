@@ -158,8 +158,8 @@ export function assignedToolsSummary(count: number): string {
 
 /** Auto mode for subagents, as a sentence. */
 export function excludedSubagentsSummary(count: number): string {
-  if (count === 0) return "Every local agent, with no exceptions.";
-  return `Every local agent, except ${count}.`;
+  if (count === 0) return "All local agents are subagents.";
+  return `All local agents are subagents, except ${count} excluded.`;
 }
 
 /** Custom mode for subagents, as a sentence. Empty at zero, as above. */

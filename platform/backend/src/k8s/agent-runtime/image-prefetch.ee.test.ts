@@ -8,6 +8,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import config from "@/config";
 import { useMswServer } from "@/test/msw";
 import { agentImagePrefetcher } from "./image-prefetch.ee";
+import { agentSandboxApi } from "./sandbox-api";
 
 vi.mock("@/k8s/shared", async (original) => ({
   ...(await original<typeof import("@/k8s/shared")>()),
@@ -29,7 +30,7 @@ const API =
 let fleet: Map<string, V1DaemonSet>;
 let writes: number;
 beforeEach(() => {
-  config.agentRuntime.enabled = true;
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
   config.enterpriseFeatures.core = true;
   config.agentRuntime.catalogImages = getAgentCatalogImages({
     registry: "registry.example.test",
@@ -155,8 +156,8 @@ test("refreshes floating catalog images when the stable platform version advance
   }
 });
 
-test("does no cluster work when Agent Runtime is disabled", async () => {
-  config.agentRuntime.enabled = false;
+test("does no cluster work until the Agent Sandbox controller is installed", async () => {
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
   await agentImagePrefetcher.reconcile();
   expect(writes).toBe(0);
 });

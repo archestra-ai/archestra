@@ -330,6 +330,7 @@ export function makeGeminiOpenaiAdapterFactory(
 > {
   return {
     ...geminiAdapterFactory,
+    translatesWireFormat: true,
     extractApiKey(headers) {
       const authorization = (headers as Record<string, unknown>).authorization;
       if (typeof authorization === "string") {

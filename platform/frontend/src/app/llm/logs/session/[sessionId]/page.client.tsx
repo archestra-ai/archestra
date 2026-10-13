@@ -162,9 +162,7 @@ export default function SessionDetailPage({
     ? new DynamicInteraction(lastMainRequest)
     : null;
   const conversationMessages = lastMainInteraction
-    ? lastMainInteraction.mapToUiMessages(
-        lastMainRequest?.dualLlmAnalyses ?? [],
-      )
+    ? lastMainInteraction.mapToUiMessages()
     : [];
   const conversationChatErrors = lastMainRequest?.chatErrors ?? [];
 
@@ -435,10 +433,8 @@ export default function SessionDetailPage({
                   conversationId={lastMainRequest.sessionId ?? undefined}
                   containerClassName="h-auto"
                   hideDivider
-                  profileId={lastMainRequest.profileId ?? undefined}
                   agentName={profileName ?? undefined}
                   selectedModel={lastMainInteraction?.modelName}
-                  unsafeContextBoundary={lastMainRequest.unsafeContextBoundary}
                 />
               </div>
             </div>
@@ -614,7 +610,6 @@ const AUXILIARY_SOURCES = new Set<InteractionSource>([
   "chat:tool_call_repair",
   "a2a:tool_call_repair",
   "skill:description_generation",
-  "guardrail:dual_llm",
   "guardrail:annotator",
   "knowledge:embedding",
   "knowledge:reranker",

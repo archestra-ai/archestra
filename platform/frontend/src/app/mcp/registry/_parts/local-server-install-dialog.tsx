@@ -35,6 +35,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
+import { useMcpCatalogCredentialPreflight } from "@/lib/mcp/internal-mcp-catalog.query";
 import { MCP_CONFIG_AUTOCOMPLETE } from "@/lib/mcp/mcp-form-autocomplete";
 import { useDefaultEnvironment } from "@/lib/organization.query";
 import { useTeamsWithVaultFolders } from "@/lib/teams/team.query";
@@ -45,6 +46,7 @@ import {
 } from "./environment-validation-helpers";
 import { InlineCredentialFormShell } from "./inline-credential-form-shell";
 import { getLocalInstallationCopy } from "./local-installation-copy";
+import { McpCredentialBlockers } from "./mcp-credential-blockers";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -208,6 +210,20 @@ export function LocalServerInstallDialog({
   const personalOnly =
     personalOnlyProp ||
     (catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false);
+  // Saved credentials the server is configured with and this person cannot
+  // supply. Install would fail on them, so the dialog says why up front.
+  const credentialBlockers =
+    useMcpCatalogCredentialPreflight({
+      catalogId: catalogItem?.id,
+      scope: personalOnly ? "personal" : scope,
+      enabled: isOpen && !isReauth,
+    }).data ?? [];
+  // Only a personal-only credential is cured by picking another owner; any
+  // other blocker stands at every scope, so the owner picker and the config
+  // fields have nothing to offer.
+  const blockedAtEveryScope = credentialBlockers.some(
+    (blocker) => blocker.reason !== "personal_only",
+  );
   const hasPromptedConfiguration =
     promptedEnvVars.length > 0 || Object.keys(promptableUserConfig).length > 0;
   const nonSecretEnvVars = promptedEnvVars.filter(
@@ -556,9 +572,10 @@ export function LocalServerInstallDialog({
           </div>
         ) : undefined
       }
-      size="medium"
-      className="max-w-2xl max-h-[80vh]"
-      bodyClassName="space-y-6 px-6"
+      size={
+        blockedAtEveryScope || !hasPromptedConfiguration ? "small" : "medium"
+      }
+      bodyClassName="space-y-4"
       onSubmit={handleInstall}
       footer={
         canInstall ? (
@@ -576,6 +593,7 @@ export function LocalServerInstallDialog({
               disabled={
                 !(isValid && isUserConfigValid) ||
                 hasRegexErrors ||
+                credentialBlockers.length > 0 ||
                 isInstalling
               }
             >
@@ -606,31 +624,38 @@ export function LocalServerInstallDialog({
         </InlineNotice>
       )}
 
-      {!isReauth && personalOnly && !hasPromptedConfiguration && (
-        <p className="text-sm text-muted-foreground">
-          This server needs no credentials or configuration.{" "}
-          {
-            getLocalInstallationCopy(catalogItem?.multitenant === true)
-              .installForMe
-          }
-        </p>
+      {!isReauth &&
+        personalOnly &&
+        !hasPromptedConfiguration &&
+        credentialBlockers.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            This server needs no credentials or configuration.{" "}
+            {
+              getLocalInstallationCopy(catalogItem?.multitenant === true)
+                .installForMe
+            }
+          </p>
+        )}
+
+      {!isReauth && <McpCredentialBlockers blockers={credentialBlockers} />}
+
+      {!blockedAtEveryScope && (
+        <SelectMcpServerCredentialTypeAndTeams
+          onTeamChange={setSelectedTeamId}
+          catalogId={isReinstall || isReauth ? undefined : catalogItem?.id}
+          onScopeChange={setScope}
+          onCanInstallChange={setCanInstall}
+          isReinstall={isReinstall}
+          isReauth={isReauth}
+          existingTeamId={existingTeamId}
+          existingScope={existingScope}
+          personalOnly={personalOnly}
+          orgOnly={orgOnly}
+          preselectedTeamId={preselectedTeamId}
+        />
       )}
 
-      <SelectMcpServerCredentialTypeAndTeams
-        onTeamChange={setSelectedTeamId}
-        catalogId={isReinstall || isReauth ? undefined : catalogItem?.id}
-        onScopeChange={setScope}
-        onCanInstallChange={setCanInstall}
-        isReinstall={isReinstall}
-        isReauth={isReauth}
-        existingTeamId={existingTeamId}
-        existingScope={existingScope}
-        personalOnly={personalOnly}
-        orgOnly={orgOnly}
-        preselectedTeamId={preselectedTeamId}
-      />
-
-      {useVaultSecrets && scope !== "team" && (
+      {useVaultSecrets && scope !== "team" && !blockedAtEveryScope && (
         <div className="space-y-2">
           <Label>Pull Vault secrets from:</Label>
           <FieldDescription>
@@ -654,7 +679,7 @@ export function LocalServerInstallDialog({
         </div>
       )}
 
-      {canInstall && (
+      {canInstall && !blockedAtEveryScope && (
         <div className="space-y-6">
           {/* Non-secret Environment Variables (always editable) */}
           {nonSecretEnvVars.length > 0 && (

@@ -25,11 +25,6 @@ import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import { ModelModel } from "@/models";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
-import {
-  type OfferJws,
-  signOfferClaims,
-  unsignedOfferClaims,
-} from "@/openappa/offer-claims";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createGeminiTestClient } from "@/test/llm-provider-stubs";
 import { ApiError } from "@/types";
@@ -963,26 +958,24 @@ describe("Gemini countTokens passthrough", () => {
     );
   });
 
-  test("takes OpenAPPA's signed offers and remedy receipts out of a wrapped request", async () => {
+  test("takes OpenAPPA's call-bound notices, legacy offers and remedy receipts out of a wrapped request", async () => {
     const secret = "test-offer-signing-secret-32chars";
     config.openappa.offerSigningSecret = secret;
-    const offer = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: "org-count-tokens",
-        callerId: "user:count-tokens",
-        sessionId: "user:count-tokens|count-tokens-session",
-        offerId: "offer-weather",
-      }),
-      secret,
-    );
-    const notice = (offers?: OfferJws[]) =>
-      buildNoticeArguments({
+    // Leftover offer material from persisted history. Not minted, and not a route.
+    const offer = {
+      protected: "eyJhbGciOiJIUzI1NiJ9",
+      payload: JSON.stringify({ session_id: "historical-offer-session" }),
+      signature: "historical-offer",
+    };
+    const notice = (offers?: Array<typeof offer>) => ({
+      ...buildNoticeArguments({
         id: "call_weather",
         tool: "get_weather",
         arguments: { location: "SF" },
         result: "[appa] get_weather is blocked until a plan is approved.",
-        ...(offers ? { offers } : {}),
-      });
+      }),
+      ...(offers ? { offers } : {}),
+    });
     const remedy = { offer_id: "offer-weather", plan: "approve" };
     const execution = {
       v: 1,
@@ -991,8 +984,9 @@ describe("Gemini countTokens passthrough", () => {
       tool_name: "archestra__execute_remedy_plan",
       original_arguments: JSON.stringify(remedy),
     } satisfies RemedyExecution;
-    // Gemini calls carry no ids here, so nothing names its own call: only
-    // what this deployment signed proves a member is the proxy's.
+    // Gemini supports optional call/response IDs. Both transport records name
+    // their own calls; the catch-all has no resolved gateway identity.
+    // Legacy offer fields are removed without verifying or routing them.
     const contents = (noticeArgs: object, remedyArgs: object) => [
       { role: "user", parts: [{ text: "What's the weather in SF?" }] },
       {
@@ -1000,6 +994,7 @@ describe("Gemini countTokens passthrough", () => {
         parts: [
           {
             functionCall: {
+              id: "call_weather",
               name: "archestra__get_remedy_plans",
               args: noticeArgs,
             },
@@ -1011,6 +1006,7 @@ describe("Gemini countTokens passthrough", () => {
         parts: [
           {
             functionResponse: {
+              id: "call_weather",
               name: "archestra__get_remedy_plans",
               response: { result: "rendered for the user" },
             },
@@ -1022,6 +1018,7 @@ describe("Gemini countTokens passthrough", () => {
         parts: [
           {
             functionCall: {
+              id: "call_remedy",
               name: "archestra__execute_remedy_plan",
               args: remedyArgs,
             },
@@ -1033,6 +1030,7 @@ describe("Gemini countTokens passthrough", () => {
         parts: [
           {
             functionResponse: {
+              id: "call_remedy",
               name: "archestra__execute_remedy_plan",
               response: { result: "Plan authorized." },
             },
@@ -1067,11 +1065,73 @@ describe("Gemini countTokens passthrough", () => {
     }
     expect(forwardedBodies).toHaveLength(1);
     expect(forwardedBodies[0]).not.toMatch(
-      /"offers"|"execution"|"protected"|"signature"/,
+      /"notice"|"offers"|"execution"|"protected"|"payload"|"signature"/,
     );
+    const { notice: _notice, ...publicNotice } = notice();
     expect(JSON.parse(forwardedBodies[0])).toEqual({
-      generateContentRequest: { contents: contents(notice(), remedy) },
+      generateContentRequest: { contents: contents(publicNotice, remedy) },
     });
+  });
+
+  test("preserves an unowned Gemini lookalike's application fields in a wrapped request", async () => {
+    const names = [
+      "archestra__get_remedy_plans",
+      "archestra__execute_remedy_plan",
+      "archestra__ask_user",
+    ];
+    const args = {
+      ...buildNoticeArguments({
+        id: "call_application",
+        tool: "get_weather",
+        arguments: { location: "SF" },
+        result: "An application's own ruling.",
+      }),
+      offers: [{ offer_id: "application-offer" }],
+      remedy_offers: [{ offer_id: "application-remedy" }],
+      trajectory: { stage: "application-workflow" },
+      execution: { kind: "application-record" },
+      protected: "application-header",
+      payload: "application-payload",
+      signature: "application-signature",
+    };
+    // Neither unmarked declarations nor same-leaf names and field presence
+    // bind these ID-less application calls to platform transport records.
+    const payload = {
+      generateContentRequest: {
+        tools: [
+          {
+            functionDeclarations: names.map((name) => ({
+              name,
+              description: "An application's own tool.",
+            })),
+          },
+        ],
+        contents: [
+          {
+            role: "model",
+            parts: names.map((name) => ({ functionCall: { name, args } })),
+          },
+        ],
+      },
+    };
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(geminiProxyRoutes);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/gemini/v1beta/models/gemini-2.5-pro:countTokens",
+        headers: { "content-type": "application/json" },
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+    expect(forwardedBodies).toEqual([JSON.stringify(payload)]);
+    expect(JSON.parse(forwardedBodies[0])).toEqual(payload);
   });
 });
 

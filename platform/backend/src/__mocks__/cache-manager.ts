@@ -67,6 +67,14 @@ class FakeCacheManager {
     return entries;
   }
 
+  /** Non-concurrency tests only; locking tests use setupTestCacheManager's real DB. */
+  async withLock<T>(
+    _scope: string,
+    callback: (cache: FakeCacheManager) => Promise<T>,
+  ): Promise<T> {
+    return callback(this);
+  }
+
   async getMany<T>(keys: string[]): Promise<Map<string, T>> {
     const entries = new Map<string, T>();
     for (const key of keys) {

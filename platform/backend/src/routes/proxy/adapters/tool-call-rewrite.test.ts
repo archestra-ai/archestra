@@ -331,6 +331,57 @@ describe("Anthropic formatToolCallsSSE", () => {
       name: "AskUserQuestion",
     });
   });
+
+  // Upstream data the proxy relays without knowing its shape (auto mode's
+  // `safeguard_results`) names calls by the provider's id. A client that was
+  // given a rewritten id must find its call under that id.
+  test("names rewritten calls by their wire id in relayed upstream data", () => {
+    const calls = [
+      {
+        id: "toolu_provider",
+        wireId: "toolu_wire",
+        name: "Bash",
+        arguments: '{"command":"ls"}',
+      },
+    ];
+    const verdicts = [{ tool_use_id: "toolu_provider", verdict: "allow" }];
+
+    const stream = anthropicAdapterFactory.createStreamAdapter();
+    stream.formatToolCallsSSE?.(calls);
+    stream.processChunk({
+      type: "message_delta",
+      delta: { stop_reason: "tool_use", stop_sequence: null },
+      usage: { output_tokens: 1 },
+      safeguard_results: verdicts,
+    } as never);
+    const messageDelta = sseData<{
+      type: string;
+      safeguard_results?: unknown;
+    }>([stream.formatEndSSE()]).find((e) => e.type === "message_delta");
+    expect(messageDelta?.safeguard_results).toEqual([
+      { tool_use_id: "toolu_wire", verdict: "allow" },
+    ]);
+
+    const response = anthropicAdapterFactory.createResponseAdapter({
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      model: "model",
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      content: [
+        { type: "tool_use", id: "toolu_provider", name: "Bash", input: {} },
+      ],
+      usage: { input_tokens: 1, output_tokens: 1 },
+      safeguard_results: verdicts,
+    } as never);
+    const rewritten = response.withRewrittenToolCalls?.(calls) as
+      | { safeguard_results?: unknown }
+      | undefined;
+    expect(rewritten?.safeguard_results).toEqual([
+      { tool_use_id: "toolu_wire", verdict: "allow" },
+    ]);
+  });
 });
 
 describe("ZhipuAI formatToolCallsSSE", () => {

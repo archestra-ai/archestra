@@ -28,6 +28,7 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
@@ -42,9 +43,6 @@ import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
 import TeamTokenModel from "@/models/team-token";
-import ToolModel from "@/models/tool";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
@@ -236,13 +234,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
         userId,
         clientId: String(routeParams?.clientId),
       }),
-  },
-  // Sole audited child of the denylisted /api/connection-setups prefix.
-  // Installer tickets stay unaudited; this window grant records no secrets.
-  "/api/connection-setups/prompt-session": {
-    resourceType: "connectionPromptSession",
-    action: "connectionPromptSession.created",
-    resourceIdSource: "organizationContext",
   },
   "/api/hooks": {
     resourceType: "hook",
@@ -559,30 +550,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       LlmProviderApiKeyModel.findByIdForAudit(id, orgId),
   },
 
-  // Tool Invocation Policies
-  "/api/autonomy-policies/tool-invocation": {
-    resourceType: "toolInvocationPolicy",
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  "/api/autonomy-policies/tool-invocation/:id": {
-    resourceType: "toolInvocationPolicy",
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-
-  // Trusted Data Policies
-  "/api/trusted-data-policies": {
-    resourceType: "trustedDataPolicy",
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-  "/api/trusted-data-policies/:id": {
-    resourceType: "trustedDataPolicy",
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-
   // Knowledge Bases
   "/api/knowledge-bases": {
     resourceType: "knowledgeBase",
@@ -847,6 +814,22 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
   },
+  // Creating and installing the App only touch GitHub and a short-lived setup
+  // record; the stored credential is audited when installation completes.
+  "/api/openappa/github-app/manifest": {
+    resourceType: "credential",
+    action: "credential.created",
+  },
+  "/api/openappa/github-app/manifest/complete": {
+    resourceType: "credential",
+    action: "credential.created",
+  },
+  "/api/openappa/github-app/install": {
+    resourceType: "credential",
+    action: "credential.created",
+    fetchById: (id, orgId) =>
+      RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
+  },
   // A POST walk-up is discarded, so the accept action registers its own path.
   "/api/openappa/github-sync/accept-held": {
     resourceType: "organization",
@@ -873,6 +856,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     actionByMethod: { PUT: "openappaBatteryPackage.updated" },
     fetchById: (name, orgId) =>
       OpenAppaBatteryPackageModel.findNewestByNameForAudit(name, orgId),
+  },
+  "/api/openappa/credential-bindings/:variable": {
+    resourceType: "openappaCredentialBinding",
+    resourceIdParam: "variable",
+    fetchById: (variable, orgId) =>
+      OpenAppaCredentialBindingModel.findByIdForAudit(variable, orgId),
   },
   "/api/openappa/battery-packages/:contentHash": {
     resourceType: "openappaBatteryPackage",
@@ -1063,12 +1052,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       InternalMcpCatalogModel.findByNameForAudit(name, orgId),
   },
 
-  // Tools (delete discovered tools)
-  "/api/tools/:id": {
-    resourceType: "tool",
-    fetchById: (id, orgId) => ToolModel.findByIdForAudit(id, orgId),
-  },
-
   // ChatOps
   "/api/chatops/bindings": {
     resourceType: "chatOpsBinding",
@@ -1110,6 +1093,43 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (_id, _orgId) =>
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
   },
+  "/api/chatops/config/slack/convert-app": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/slack/apps/migrate": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/slack/app-config-token": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  "/api/chatops/config/slack/agents/:agentId/app": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
+  // Joining a channel claims its binding for the bot's agent when unowned.
+  "/api/chatops/config/slack/agents/:agentId/channels/:channelId/join": {
+    resourceType: "chatOpsBinding",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
+  },
+  "/api/chatops/config/slack/agents/:agentId": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
   "/api/chatops/config/ngrok": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",
@@ -1125,23 +1145,7 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
   },
 
-  // Autonomy policy bulk defaults (org-scoped tool footprint)
-  "/api/tool-invocation/bulk-default": {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.bulk_defaulted",
-    resourceIdSource: "organizationContext",
-    fetchById: (id, _orgId) =>
-      ToolInvocationPolicyModel.findDefaultPoliciesSnapshotForOrganization(id),
-  },
-  "/api/trusted-data-policies/bulk-default": {
-    resourceType: "trustedDataPolicy",
-    action: "trustedDataPolicy.bulk_defaulted",
-    resourceIdSource: "organizationContext",
-    fetchById: (id, _orgId) =>
-      TrustedDataPolicyModel.findDefaultPoliciesSnapshotForOrganization(id),
-  },
-
-  // Agent tool bulk / auto-policy (assignment counts + default policy maps)
+  // Agent tool bulk assignment (assignment counts)
   "/api/agents/tools/bulk-assign": {
     resourceType: "agentTool",
     action: "agentTool.bulk_assigned",
@@ -1158,22 +1162,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "agentTool",
     action: "agentTool.bulk_updated",
     resourceIdSource: "organizationContext",
-  },
-  "/api/agent-tools/auto-configure-policies": {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.auto_configured",
-    resourceIdSource: "organizationContext",
-    fetchById: async (orgId, _orgId) => {
-      const [tip, tdp] = await Promise.all([
-        ToolInvocationPolicyModel.findDefaultPoliciesSnapshotForOrganization(
-          orgId,
-        ),
-        TrustedDataPolicyModel.findDefaultPoliciesSnapshotForOrganization(
-          orgId,
-        ),
-      ]);
-      return { ...tip, ...tdp };
-    },
   },
 
   // Enterprise: team vault folder (same snapshot model as teams)

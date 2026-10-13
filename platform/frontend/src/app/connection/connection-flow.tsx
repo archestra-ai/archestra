@@ -16,7 +16,6 @@ import {
   resolveInitialClientId,
   useConnectionBaseUrl,
 } from "./connection-flow.utils";
-import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import {
@@ -97,11 +96,7 @@ export function ConnectionFlow({
 
   // Connection base URL — chosen once for the whole page, threaded into each
   // instruction panel below.
-  const {
-    baseUrls: candidateBaseUrls,
-    baseUrl,
-    selectBaseUrl: setUserBaseUrl,
-  } = useConnectionBaseUrl(connectionBaseUrls);
+  const baseUrl = useConnectionBaseUrl(connectionBaseUrls);
 
   const handleMcpSelect = (id: string) => {
     setSelectedMcpId(id);
@@ -137,21 +132,6 @@ export function ConnectionFlow({
     content: ReactNode;
   }[] = [];
   if (manualClient) {
-    if (candidateBaseUrls.length > 1) {
-      manualSteps.push({
-        key: "endpoint",
-        title: "Select an endpoint",
-        content: (
-          <ConnectionUrlStep
-            bare
-            candidateUrls={candidateBaseUrls}
-            metadata={connectionBaseUrls}
-            value={baseUrl}
-            onChange={setUserBaseUrl}
-          />
-        ),
-      });
-    }
     if (canReadMcpGateway) {
       manualSteps.push({
         key: "mcp",
@@ -225,9 +205,6 @@ export function ConnectionFlow({
             urlProvider={urlProvider}
             onProviderSelect={(p) => updateUrlParams({ providerId: p })}
             baseUrl={baseUrl}
-            candidateBaseUrls={candidateBaseUrls}
-            baseUrlMetadata={connectionBaseUrls}
-            onBaseUrlChange={setUserBaseUrl}
             skillsEnabled={skillsEnabled}
             pluginsEnabled={pluginsEnabled}
           />

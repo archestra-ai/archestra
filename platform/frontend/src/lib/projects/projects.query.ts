@@ -62,6 +62,9 @@ export function useProjects(
   const teamIds = options?.teamIds;
   const authorIds = options?.authorIds;
   const excludeAuthorIds = options?.excludeAuthorIds;
+  const access = options?.access;
+  const sharedWith = options?.sharedWith;
+  const owner = options?.owner;
   const status = options?.status;
   const labels = options?.labels;
   const toastOnError = options?.toastOnError;
@@ -78,6 +81,9 @@ export function useProjects(
         teamIds: teamIds ?? null,
         authorIds: authorIds ?? null,
         excludeAuthorIds: excludeAuthorIds ?? null,
+        access: access ?? null,
+        sharedWith: sharedWith ?? null,
+        owner: owner ?? null,
         status: status ?? null,
         labels: labels ?? null,
       },
@@ -91,6 +97,9 @@ export function useProjects(
           teamIds,
           authorIds,
           excludeAuthorIds,
+          access,
+          sharedWith,
+          owner,
           status,
           labels,
         },

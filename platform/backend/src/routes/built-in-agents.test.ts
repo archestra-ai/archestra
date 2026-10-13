@@ -1,8 +1,7 @@
 import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { AgentModel, EnvironmentModel } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { AgentModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -17,18 +16,16 @@ describe("built-in agents routes", () => {
     organizationId = organization.id;
     await makeMember(user.id, organizationId, { role: "admin" });
 
-    // Seed the built-in policy config agent for this organization
+    // Seed a built-in agent for this organization
     await AgentModel.create({
-      name: BUILT_IN_AGENT_NAMES.POLICY_CONFIG,
+      name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
       organizationId,
       agentType: "agent",
       scope: "org",
-      description:
-        "Analyzes tool metadata with AI to generate deterministic security policies",
-      systemPrompt: "You are a policy configuration subagent.",
+      description: "Summarizes older chat context",
+      systemPrompt: "You compact chat history.",
       builtInAgentConfig: {
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolDiscovery: false,
+        name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       },
       teams: [],
       labels: [],
@@ -62,16 +59,16 @@ describe("built-in agents routes", () => {
     const agents = result.data ?? result;
     const builtIn = agents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     );
 
     expect(builtIn).toBeTruthy();
     expect(builtIn.builtInAgentConfig).toEqual(
       expect.objectContaining({
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       }),
     );
-    expect(builtIn.name).toBe(BUILT_IN_AGENT_NAMES.POLICY_CONFIG);
+    expect(builtIn.name).toBe(BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION);
     expect(builtIn.agentType).toBe("agent");
   });
 
@@ -85,7 +82,7 @@ describe("built-in agents routes", () => {
     const agents = listResult.data ?? listResult;
     const builtIn = agents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     );
     expect(builtIn).toBeTruthy();
 
@@ -119,7 +116,7 @@ describe("built-in agents routes", () => {
     const agents = listResult.data ?? listResult;
     const builtIn = agents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     );
     expect(builtIn).toBeTruthy();
 
@@ -131,107 +128,6 @@ describe("built-in agents routes", () => {
     expect(deleteResponse.statusCode).toBe(403);
   });
 
-  test("the advisor rejects environment changes and retired sharing fields, and accepts prompt edits", async ({
-    makeTeam,
-  }) => {
-    const advisor = await AgentModel.create({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      organizationId,
-      agentType: "agent",
-      scope: "org",
-      systemPrompt: "You are the advisor.",
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-      teams: [],
-      labels: [],
-      knowledgeBaseIds: [],
-      connectorIds: [],
-    });
-    const team = await makeTeam(organizationId, user.id);
-
-    // Who reaches an agent is its grants, not the update body: the retired
-    // scope and team fields are refused, and the advisor's audience stays as
-    // it was.
-    const policyKey = {
-      organizationId,
-      resource: "agent" as const,
-      scope: advisor.id,
-    };
-    const grantsBefore = (await ResourcePermissionPolicyModel.find(policyKey))
-      ?.grants;
-    const scopeResponse = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${advisor.id}`,
-      payload: { scope: "team", teams: [team.id] },
-    });
-    expect(scopeResponse.statusCode).toBe(400);
-    expect(
-      (await ResourcePermissionPolicyModel.find(policyKey))?.grants,
-    ).toEqual(grantsBefore);
-
-    // One org-wide advisor serves every environment's agents through
-    // delegation, so narrowing it to an environment is rejected outright
-    // rather than silently dropped.
-
-    const environment = await EnvironmentModel.create({
-      organizationId,
-      name: "Staging",
-    });
-    const envResponse = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${advisor.id}`,
-      payload: { environmentId: environment.id },
-    });
-    expect(envResponse.statusCode).toBe(400);
-
-    const promptResponse = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${advisor.id}`,
-      payload: { systemPrompt: "Updated advisor prompt" },
-    });
-    expect(promptResponse.statusCode).toBe(200);
-    expect(promptResponse.json().systemPrompt).toBe("Updated advisor prompt");
-    expect(promptResponse.json().environmentId).toBeNull();
-  });
-
-  test("can update builtInAgentConfig", async () => {
-    const listResponse = await app.inject({
-      method: "GET",
-      url: "/api/agents?agentTypes=agent&scope=built_in&limit=100",
-    });
-    const listResult = listResponse.json();
-    const agents = listResult.data ?? listResult;
-    const builtIn = agents.find(
-      (a: { builtInAgentConfig?: { name: string } }) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-    );
-    expect(builtIn).toBeTruthy();
-
-    const originalAutoConfig =
-      builtIn.builtInAgentConfig?.autoConfigureOnToolDiscovery ?? false;
-    const newAutoConfig = !originalAutoConfig;
-
-    const updateResponse = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${builtIn.id}`,
-      payload: {
-        builtInAgentConfig: {
-          name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-          autoConfigureOnToolDiscovery: newAutoConfig,
-        },
-      },
-    });
-
-    expect(updateResponse.statusCode).toBe(200);
-    const updated = updateResponse.json();
-
-    expect(updated.builtInAgentConfig).toEqual(
-      expect.objectContaining({
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolDiscovery: newAutoConfig,
-      }),
-    );
-  });
-
   test("can update systemPrompt of built-in agent", async () => {
     const listResponse = await app.inject({
       method: "GET",
@@ -241,11 +137,11 @@ describe("built-in agents routes", () => {
     const agents = listResult.data ?? listResult;
     const builtIn = agents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     );
     expect(builtIn).toBeTruthy();
 
-    const newPrompt = "Custom system prompt for policy config agent";
+    const newPrompt = "Custom system prompt for the compaction agent";
     const updateResponse = await app.inject({
       method: "PUT",
       url: `/api/agents/${builtIn.id}`,
@@ -270,7 +166,7 @@ describe("built-in agents routes", () => {
 
     const builtIn = agents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     );
     expect(builtIn).toBeUndefined();
   });
@@ -286,7 +182,7 @@ describe("built-in agents routes", () => {
 
     const builtIn = agents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     );
     expect(builtIn).toBeTruthy();
   });
@@ -301,7 +197,7 @@ describe("built-in agents routes", () => {
     const defaultAgents = defaultResult.data ?? defaultResult;
     const excluded = defaultAgents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     );
     expect(excluded).toBeUndefined();
 
@@ -314,11 +210,11 @@ describe("built-in agents routes", () => {
     const builtInAgents = builtInResult.data ?? builtInResult;
     const included = builtInAgents.find(
       (a: { builtInAgentConfig?: { name: string } }) =>
-        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+        a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     );
     expect(included).toBeTruthy();
     expect(included.builtInAgentConfig?.name).toBe(
-      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
     );
   });
 });

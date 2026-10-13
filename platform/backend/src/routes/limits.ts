@@ -2,6 +2,7 @@ import { MAX_BULK_IDS, parseLabelsParam, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { LimitLabelModel, LimitModel } from "@/models";
+import { createLimit } from "@/services/limit";
 import {
   ApiError,
   CreateLimitSchema,
@@ -118,7 +119,7 @@ const limitsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, `${body.entityType} not found`);
       }
 
-      return reply.send(await LimitModel.create(body));
+      return reply.send(await createLimit(body));
     },
   );
 

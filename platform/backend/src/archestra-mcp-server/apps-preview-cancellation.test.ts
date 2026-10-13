@@ -36,7 +36,6 @@ describe("preview_app_tool cancellation", () => {
       agent: { id: agent.id, name: agent.name },
       organizationId: agent.organizationId,
       userId: user.id,
-      approvalRequiredPoliciesHandled: true,
     };
 
     const catalog = await InternalMcpCatalogModel.create(

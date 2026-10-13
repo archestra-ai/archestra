@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -46,6 +47,7 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   createOpenAiCodexPassthroughResponsesClient,
   createOpenAiCodexResponsesClient,
@@ -83,6 +85,18 @@ type OpenAiFunctionToolDefinition = {
   description?: string | null;
   parameters?: Record<string, unknown> | null;
 };
+
+export class ResponsesStreamIncompleteError extends Error {
+  readonly code = "proxy_stream_incomplete";
+  readonly status = 502;
+
+  constructor() {
+    super(
+      "Proxy detected an OpenAI Responses stream ending without a terminal event",
+    );
+    this.name = "ResponsesStreamIncompleteError";
+  }
+}
 
 export const openAiResponsesAdapterFactory: LLMProvider<
   OpenAiResponsesRequest,
@@ -207,10 +221,34 @@ export const openAiResponsesAdapterFactory: LLMProvider<
   ): Promise<AsyncIterable<OpenAiResponsesStreamChunk>> {
     const openaiClient = client as OpenAIProvider;
 
-    return (await openaiClient.responses.create({
+    const stream = (await openaiClient.responses.create({
       ...request,
       stream: true,
     } as ResponseCreateParamsStreaming)) as AsyncIterable<OpenAiResponsesStreamChunk>;
+    // Spread-factory aliases keep their own transport contracts. Native compact
+    // requests have a separate executeStream implementation below.
+    if (
+      this.provider !== "openai" ||
+      this.interactionType !== "openai:responses"
+    ) {
+      return stream;
+    }
+    return {
+      async *[Symbol.asyncIterator]() {
+        let terminalSeen = false;
+        for await (const chunk of stream) {
+          if (
+            chunk.type === "response.completed" ||
+            chunk.type === "response.failed" ||
+            chunk.type === "response.incomplete"
+          ) {
+            terminalSeen = true;
+          }
+          yield chunk;
+        }
+        if (!terminalSeen) throw new ResponsesStreamIncompleteError();
+      },
+    };
   },
 
   extractInternalCode(error: unknown): ArchestraInternalErrorCode | undefined {
@@ -302,10 +340,9 @@ class OpenAiResponsesRequestAdapter
     }
 
     // Pair function_call_output items with their function_call by call_id so
-    // tool results surface as CommonMessage.toolCalls — the shape trusted-data
-    // / Dual LLM policy evaluation reads. Without the pairing, Responses-routed
-    // conversations look tool-free to the evaluator and sanitization is
-    // silently bypassed.
+    // tool results surface as CommonMessage.toolCalls. Without the pairing,
+    // Responses-routed conversations look tool-free to anything that reads
+    // the common format.
     const toolCallsByCallId = getToolCallsByCallId(this.request.input);
 
     return this.request.input.flatMap((item) =>
@@ -333,7 +370,10 @@ class OpenAiResponsesRequestAdapter
           ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
-          isError: false,
+          structured: typeof item.output !== "string",
+          // Compatible clients may extend tool outputs with a boolean status;
+          // native Responses has no is_error field. Do not infer it from output.
+          isError: "is_error" in item && item.is_error === true,
         },
       ];
     });
@@ -410,6 +450,10 @@ class OpenAiResponsesRequestAdapter
         // hand the model exactly what was withheld.
         const updatedOutput = this.toolResultUpdates[item.call_id];
         if (updatedOutput === undefined) {
+          return item;
+        }
+        // Kept as sent: the output's parts (input_image, input_text) stay.
+        if (isApprovedAsSent({ sent: item.output, approved: updatedOutput })) {
           return item;
         }
 
@@ -572,6 +616,12 @@ class OpenAiResponsesResponseAdapter
   }
 
   getFinishReasons(): string[] {
+    if (
+      this.response.status === "failed" ||
+      this.response.status === "incomplete"
+    ) {
+      return [this.response.status];
+    }
     if (this.hasToolCalls()) {
       return ["tool_calls"];
     }
@@ -589,7 +639,10 @@ class OpenAiResponsesResponseAdapter
   ): OpenAiResponsesResponse {
     return {
       ...this.response,
-      output: rewriteResponsesOutput(this.response.output, toolCalls),
+      output: rewriteResponsesOutput(
+        withoutOmittedToolCalls(this.response.output, toolCalls),
+        toolCalls,
+      ),
     } as unknown as OpenAiResponsesResponse;
   }
 
@@ -606,9 +659,17 @@ class OpenAiResponsesResponseAdapter
       wireId?: string;
     }>,
   ): OpenAiResponsesResponse {
+    const output = holdResponsesHostedOutput(this.response.output, notices);
     return {
       ...this.response,
-      output: holdResponsesHostedOutput(this.response.output, notices),
+      output,
+      ...("output_text" in this.response
+        ? {
+            output_text: responseOutputText(
+              output as OpenAiResponsesResponse["output"],
+            ),
+          }
+        : {}),
     } as unknown as OpenAiResponsesResponse;
   }
 
@@ -624,7 +685,7 @@ class OpenAiResponsesResponseAdapter
       status: "completed",
       output: [
         {
-          id: `msg_${Date.now()}`,
+          id: `msg_${randomUUID()}`,
           type: "message",
           role: "assistant",
           status: "completed",
@@ -653,7 +714,7 @@ class OpenAiResponsesResponseAdapter
       output_text: text,
       output: [
         {
-          id: `msg_${Date.now()}`,
+          id: `msg_${randomUUID()}`,
           type: "message",
           role: "assistant",
           status: "completed",
@@ -712,13 +773,38 @@ class OpenAiResponsesCompactResponseAdapter
   }
 }
 
+/** A failed generation has admitted neither hosted output nor executable calls. */
+export function discardUnadmittedResponsesOutput(
+  response: OpenAiResponsesResponse,
+): OpenAiResponsesResponse {
+  // Final item order cannot prove when a message's text was generated: a
+  // message started before a hosted call can contain a later continuation.
+  const output =
+    firstHostedOutputIndex(response.output) === -1 ? response.output : [];
+  const retained = output.filter(
+    (item) => item.type !== "function_call" && item.type !== "custom_tool_call",
+  );
+  return {
+    ...response,
+    output: retained,
+    ...("output_text" in response
+      ? { output_text: responseOutputText(retained) }
+      : {}),
+  } as OpenAiResponsesResponse;
+}
+
 class OpenAiResponsesStreamAdapter
   implements
     LLMStreamAdapter<OpenAiResponsesStreamChunk, OpenAiResponsesResponse>
 {
   readonly provider = "openai" as const;
   readonly state = createStreamAccumulatorState();
-  private completedResponse: OpenAiResponsesResponse | null = null;
+  private terminalResponse: OpenAiResponsesResponse | null = null;
+  private observedResponse: OpenAiResponsesResponse | null = null;
+  private outputItemsByIndex = new Map<
+    number,
+    OpenAiResponsesResponse["output"][number]
+  >();
   private compactionProof: string | null = null;
   private getTextSuffix: ((completedText: string) => string) | null = null;
   private textPrefixIssued = false;
@@ -746,6 +832,11 @@ class OpenAiResponsesStreamAdapter
     { id: string; name: string; arguments: string; namespace?: string }
   >();
   private withholdsHosted = false;
+  // Date.now() ids and sequence numbers collide when several frames are built
+  // in the same millisecond. Ids are random instead; sequence numbers come
+  // from a counter seeded once per adapter, strictly increasing however fast
+  // frames are emitted.
+  private syntheticSequence = Date.now();
   /**
    * Namespaces declared on this request, by tool name, when that name belongs
    * to exactly one namespace. Codex Responses Lite puts these in an
@@ -764,6 +855,7 @@ class OpenAiResponsesStreamAdapter
    */
   private hosted: {
     textBefore: string;
+    outputBefore: OpenAiResponsesResponse["output"];
     events: OpenAiResponsesStreamChunk[];
     items: Map<string, { type?: string }>;
   } | null = null;
@@ -787,6 +879,7 @@ class OpenAiResponsesStreamAdapter
     }
 
     if ("response" in chunk) {
+      this.observedResponse = chunk.response;
       this.state.responseId = chunk.response.id;
       this.state.model = chunk.response.model;
       if (chunk.response.usage) {
@@ -794,8 +887,28 @@ class OpenAiResponsesStreamAdapter
       }
     }
 
-    const originalCompletedResponse =
-      chunk.type === "response.completed" ? chunk.response : null;
+    const terminal =
+      chunk.type === "response.completed" ||
+      chunk.type === "response.failed" ||
+      chunk.type === "response.incomplete"
+        ? chunk
+        : null;
+    if (terminal) {
+      // Capture before adding client-only compaction context, including failures.
+      this.terminalResponse =
+        terminal.response as unknown as OpenAiResponsesResponse;
+      this.state.stopReason =
+        terminal.type === "response.completed"
+          ? this.state.toolCalls.length > 0
+            ? "tool_calls"
+            : "stop"
+          : terminal.type === "response.failed"
+            ? "error"
+            : (terminal.response.incomplete_details?.reason ?? "incomplete");
+    }
+    if (chunk.type === "response.output_item.done") {
+      this.outputItemsByIndex.set(chunk.output_index, chunk.item);
+    }
     chunk = this.withCompactionContext(chunk);
 
     if (
@@ -806,18 +919,32 @@ class OpenAiResponsesStreamAdapter
     ) {
       this.hosted = {
         textBefore: this.state.text,
+        outputBefore: structuredClone(
+          (terminal
+            ? []
+            : holdResponsesHostedOutput(this.toProviderResponse().output, [])
+          ).filter(
+            (item) =>
+              item.type !== "function_call" && item.type !== "custom_tool_call",
+          ),
+        ),
         events: [],
         items: new Map(),
       };
     }
+    // Record starts after freezing the pre-hosted snapshot so the first hosted
+    // item cannot displace text already forwarded from an unfinished message.
+    // Only messages are tracked here: tool-call items keep accumulating input
+    // through captureToolCallChunk, and their incomplete `added` snapshot would
+    // displace the accumulated call in toProviderResponse.
+    if (
+      chunk.type === "response.output_item.added" &&
+      chunk.item.type === "message"
+    ) {
+      this.outputItemsByIndex.set(chunk.output_index, chunk.item);
+    }
     if (this.hosted) {
-      const result = this.withholdChunk(chunk, this.hosted);
-      if (originalCompletedResponse) {
-        // Compaction context is a client-wire carrier, not persisted provider output.
-        this.completedResponse =
-          originalCompletedResponse as unknown as OpenAiResponsesResponse;
-      }
-      return result;
+      return this.withholdChunk(chunk, this.hosted);
     }
 
     if (chunk.type === "response.output_text.delta") {
@@ -888,11 +1015,7 @@ class OpenAiResponsesStreamAdapter
       };
     }
 
-    if (chunk.type === "response.completed") {
-      this.completedResponse =
-        originalCompletedResponse as unknown as OpenAiResponsesResponse;
-      this.state.stopReason =
-        this.state.toolCalls.length > 0 ? "tool_calls" : "stop";
+    if (terminal && "response" in chunk) {
       const pending = this.drainPendingTextTerminalEvents();
 
       // A Responses client treats this envelope as the end of the turn. When
@@ -900,7 +1023,10 @@ class OpenAiResponsesStreamAdapter
       // `response.completed` now makes the client exit before the approved
       // calls are released. Buffer the terminal envelope with those fragments
       // so the client observes function calls first and completion last.
-      if (this.state.toolCalls.length > 0) {
+      if (
+        this.state.toolCalls.length > 0 ||
+        terminal.type !== "response.completed"
+      ) {
         this.state.rawToolCallEvents.push(chunk);
         return {
           sseData: pending || null,
@@ -925,18 +1051,6 @@ class OpenAiResponsesStreamAdapter
       };
     }
 
-    if (
-      chunk.type === "response.failed" ||
-      chunk.type === "response.incomplete"
-    ) {
-      this.state.stopReason = "length";
-      return {
-        sseData: `${this.drainPendingTextTerminalEvents()}${toSse(chunk)}`,
-        isToolCallChunk: false,
-        isFinal: true,
-      };
-    }
-
     return {
       sseData: `${this.drainPendingTextTerminalEvents()}${toSse(chunk)}`,
       isToolCallChunk: false,
@@ -956,14 +1070,14 @@ class OpenAiResponsesStreamAdapter
   }
 
   formatTextDeltaSSE(text: string): string {
-    const responseId = this.state.responseId || `resp_${Date.now()}`;
-    const itemId = `msg_${Date.now()}`;
+    const responseId = this.state.responseId || `resp_${randomUUID()}`;
+    const itemId = `msg_${randomUUID()}`;
 
     return [
       toSse({
         type: "response.output_item.added",
         output_index: 0,
-        sequence_number: Date.now(),
+        sequence_number: this.nextSequenceNumber(),
         item: {
           id: itemId,
           type: "message",
@@ -977,7 +1091,7 @@ class OpenAiResponsesStreamAdapter
         item_id: itemId,
         output_index: 0,
         content_index: 0,
-        sequence_number: Date.now() + 1,
+        sequence_number: this.nextSequenceNumber(),
         part: {
           type: "output_text",
           text: "",
@@ -989,7 +1103,7 @@ class OpenAiResponsesStreamAdapter
         item_id: itemId,
         output_index: 0,
         content_index: 0,
-        sequence_number: Date.now() + 2,
+        sequence_number: this.nextSequenceNumber(),
         delta: text,
         logprobs: [],
       }),
@@ -998,7 +1112,7 @@ class OpenAiResponsesStreamAdapter
         item_id: itemId,
         output_index: 0,
         content_index: 0,
-        sequence_number: Date.now() + 3,
+        sequence_number: this.nextSequenceNumber(),
         text,
         logprobs: [],
       }),
@@ -1007,7 +1121,7 @@ class OpenAiResponsesStreamAdapter
         item_id: itemId,
         output_index: 0,
         content_index: 0,
-        sequence_number: Date.now() + 4,
+        sequence_number: this.nextSequenceNumber(),
         part: {
           type: "output_text",
           text,
@@ -1017,7 +1131,7 @@ class OpenAiResponsesStreamAdapter
       toSse({
         type: "response.output_item.done",
         output_index: 0,
-        sequence_number: Date.now() + 5,
+        sequence_number: this.nextSequenceNumber(),
         item: {
           id: itemId,
           type: "message",
@@ -1034,7 +1148,7 @@ class OpenAiResponsesStreamAdapter
       }),
       toSse({
         type: "response.completed",
-        sequence_number: Date.now() + 6,
+        sequence_number: this.nextSequenceNumber(),
         response: {
           id: responseId,
           object: "response",
@@ -1080,7 +1194,11 @@ class OpenAiResponsesStreamAdapter
   formatHeldHostedToolCallsSSE(
     notices: StreamAccumulatorState["toolCalls"],
   ): string[] {
-    const upstream = this.completedResponse;
+    const upstream = this.terminalResponse;
+    // Keep the observed envelope before clearing private output state. Only
+    // the output rebuilt below is approved for the replacement turn.
+    const envelope = upstream ?? this.toProviderResponse();
+    const outputBefore = this.hosted?.outputBefore;
     this.state.text = this.hosted?.textBefore ?? this.state.text;
     this.state.rawToolCallEvents = [];
     this.state.toolCalls = [...notices];
@@ -1088,33 +1206,42 @@ class OpenAiResponsesStreamAdapter
     this.toolCallsByItemId.clear();
     this.customCallIds.clear();
     this.hosted = null;
-    this.completedResponse = null;
-    const base =
-      upstream && Array.isArray(upstream.output)
-        ? {
-            ...upstream,
-            output: holdResponsesHostedOutput(upstream.output, notices),
-          }
-        : this.toProviderResponse();
+    this.terminalResponse = null;
+    this.observedResponse = null;
+    this.outputItemsByIndex.clear();
+    // A terminal message can extend a pre-hosted item with unadmitted text,
+    // or omit it entirely. Only the frozen pre-hosted output is authoritative.
+    const output = outputBefore
+      ? holdResponsesHostedOutput(outputBefore, notices)
+      : this.toProviderResponse().output;
+    const base = {
+      ...envelope,
+      output,
+      ...("output_text" in envelope
+        ? { output_text: responseOutputText(output) }
+        : {}),
+    };
     const held = {
       ...base,
+      status: "completed",
+      error: null,
+      incomplete_details: null,
       usage: base.usage ?? toResponsesUsage(this.state.usage),
     } as unknown as OpenAiResponsesResponse;
     const completedResponse = this.issuedPrefix
       ? prependPrefixToResponse(held, this.issuedPrefix)
       : held;
-    this.completedResponse = completedResponse;
-    let sequence = Date.now();
+    this.terminalResponse = completedResponse;
     const frames = formatResponsesFunctionCallFrames({
       toolCalls: notices,
       firstOutputIndex: completedResponse.output.length - notices.length,
-      nextSequenceNumber: () => sequence++,
+      nextSequenceNumber: () => this.nextSequenceNumber(),
     });
     frames.push(
       toSse(
         this.withCompactionContext({
           type: "response.completed",
-          sequence_number: sequence++,
+          sequence_number: this.nextSequenceNumber(),
           response: completedResponse,
         } as OpenAiResponsesStreamChunk),
       ),
@@ -1129,7 +1256,9 @@ class OpenAiResponsesStreamAdapter
     this.state.rawToolCallEvents = [];
     this.customCallIds.clear();
     this.hosted = null;
-    this.completedResponse = null;
+    this.terminalResponse = null;
+    this.observedResponse = null;
+    this.outputItemsByIndex.clear();
   }
 
   formatCompleteTextSSE(text: string): string[] {
@@ -1138,13 +1267,25 @@ class OpenAiResponsesStreamAdapter
   }
 
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
-    // The upstream `response.completed` envelope has already been streamed and
-    // it names the calls the model made directly. The client keeps the LAST
-    // completed envelope, so the repair ends by re-issuing one that names the
-    // rewritten calls — the same trick the refusal path relies on. That
-    // envelope also becomes the persisted one, so the interaction log matches
-    // what the client reconstructs.
-    const base = this.completedResponse ?? this.toProviderResponse();
+    // Rewrites calls without turning an upstream failure into a completion.
+    // The final envelope also becomes the persisted one.
+    let base = this.toProviderResponse();
+    const failed = base.status === "incomplete" || base.status === "failed";
+    if (failed) {
+      // Terminal snapshots can extend an earlier message with hosted-derived
+      // text. Use the frozen pre-hosted snapshot, not only output item order.
+      base = this.hosted
+        ? {
+            ...base,
+            output: this.hosted.outputBefore,
+            ...("output_text" in base
+              ? { output_text: responseOutputText(this.hosted.outputBefore) }
+              : {}),
+          }
+        : discardUnadmittedResponsesOutput(base);
+      this.state.text = this.hosted?.textBefore ?? this.state.text;
+      toolCalls = [];
+    }
     const upstreamOutput = Array.isArray(base.output) ? base.output : [];
     // Removes omitted calls before rebuilding completion envelopes.
     // This makes sure response.completed matches frames sent to the client.
@@ -1186,12 +1327,15 @@ class OpenAiResponsesStreamAdapter
     const rewritten = {
       ...base,
       output: rewriteResponsesOutput(finalOutput, toolCalls),
-      usage: base.usage ?? toResponsesUsage(this.state.usage),
+      usage:
+        base.status === "incomplete" || base.status === "failed"
+          ? base.usage
+          : (base.usage ?? toResponsesUsage(this.state.usage)),
     } as unknown as OpenAiResponsesResponse;
     const completedResponse = this.issuedPrefix
       ? prependPrefixToResponse(rewritten, this.issuedPrefix)
       : rewritten;
-    this.completedResponse = completedResponse;
+    this.terminalResponse = completedResponse;
     // Both function calls and custom tool calls are counted.
     // This places rewritten frames at indexes that match the completed envelope.
     // The completed output also includes any synthesized prefix message.
@@ -1199,14 +1343,15 @@ class OpenAiResponsesStreamAdapter
       (item) =>
         item.type !== "function_call" && item.type !== "custom_tool_call",
     ).length;
-    let sequence = Date.now();
     // Released with the turn: what was withheld beside the calls goes first.
-    const frames = (this.hosted?.events ?? []).map((event) => toSse(event));
+    const frames = (failed ? [] : (this.hosted?.events ?? [])).map((event) =>
+      toSse(event),
+    );
     frames.push(
       ...formatResponsesFunctionCallFrames({
         toolCalls,
         firstOutputIndex,
-        nextSequenceNumber: () => sequence++,
+        nextSequenceNumber: () => this.nextSequenceNumber(),
         itemIdByCallId,
         // Codex routes a namespaced call by the namespace its item names.
         namespaceByCallId: namespacesByCallId({
@@ -1219,12 +1364,22 @@ class OpenAiResponsesStreamAdapter
     frames.push(
       toSse(
         this.withCompactionContext({
-          type: "response.completed",
-          sequence_number: sequence++,
+          type:
+            completedResponse.status === "incomplete"
+              ? "response.incomplete"
+              : completedResponse.status === "failed"
+                ? "response.failed"
+                : "response.completed",
+          sequence_number: this.nextSequenceNumber(),
           response: completedResponse,
         } as OpenAiResponsesStreamChunk),
       ),
     );
+    // A later persistence read must not restore omitted executable fragments.
+    this.state.toolCalls = [...toolCalls];
+    this.state.rawToolCallEvents = [];
+    this.outputItemsByIndex.clear();
+    this.hosted = null;
     return frames;
   }
 
@@ -1234,6 +1389,12 @@ class OpenAiResponsesStreamAdapter
 
   toProviderResponse(): OpenAiResponsesResponse {
     const outputItems: OpenAiResponsesResponse["output"] = [];
+    const outputStatus: "completed" | "incomplete" =
+      this.replacedText === null &&
+      this.terminalResponse &&
+      this.terminalResponse.status !== "completed"
+        ? "incomplete"
+        : "completed";
 
     // A refusal does not erase what the model already said: its text streamed
     // as it arrived and the refusal was appended after it, so the client holds
@@ -1250,10 +1411,10 @@ class OpenAiResponsesStreamAdapter
         : `${this.state.text}${this.replacedText}`;
     if (messageText) {
       outputItems.push({
-        id: `msg_${Date.now()}`,
+        id: this.firstTextDelta?.itemId ?? `msg_${randomUUID()}`,
         type: "message",
         role: "assistant",
-        status: "completed",
+        status: outputStatus,
         content: [
           {
             type: "output_text",
@@ -1275,7 +1436,7 @@ class OpenAiResponsesStreamAdapter
                 name: toolCall.name,
                 input: customToolInput(toolCall.arguments) ?? "",
                 ...this.namespaceFields(toolCall),
-                status: "completed" as const,
+                status: outputStatus,
               } as OpenAiResponsesResponse["output"][number])
             : {
                 id: toolCall.id,
@@ -1284,42 +1445,104 @@ class OpenAiResponsesStreamAdapter
                 name: toolCall.name,
                 arguments: toolCall.arguments,
                 ...this.namespaceFields(toolCall),
-                status: "completed" as const,
+                status: outputStatus,
               },
         ),
       );
     }
 
-    // The upstream `response.completed` envelope is the richest record (it
+    // The upstream terminal envelope is the richest record (it
     // echoes tools, reasoning config and the real ids), so it wins — but only
     // when it actually carries the turn. Reasoning turns finish with an empty
     // `output` even though the text arrived in `response.output_text.delta`
     // chunks; persisting that verbatim lost the whole assistant side of the
     // interaction, leaving LLM Logs with nothing to render. Keep the envelope
     // and restore the items we accumulated.
-    if (this.replacedText === null && this.completedResponse) {
-      const upstreamOutput = this.completedResponse.output;
-      if (
-        (Array.isArray(upstreamOutput) && upstreamOutput.length > 0) ||
-        outputItems.length === 0
-      ) {
-        return this.stampResponseOutput(this.completedResponse);
-      }
-      return this.stampResponseOutput({
-        ...this.completedResponse,
-        output: outputItems,
-      });
-    }
-
-    return {
-      id: this.state.responseId || `resp_${Date.now()}`,
+    const fallbackResponse = {
+      ...(this.replacedText === null ? (this.observedResponse ?? {}) : {}),
+      id: this.state.responseId || `resp_${randomUUID()}`,
       object: "response",
-      created_at: Math.floor(Date.now() / 1000),
+      created_at:
+        this.observedResponse?.created_at ?? Math.floor(Date.now() / 1000),
       model: this.state.model,
       status: "completed",
       output: outputItems,
-      usage: this.state.usage ? toResponsesUsage(this.state.usage) : undefined,
+      usage: this.observedResponse
+        ? this.observedResponse.usage
+        : this.state.usage
+          ? toResponsesUsage(this.state.usage)
+          : undefined,
     } as unknown as OpenAiResponsesResponse;
+    if (this.replacedText === null) {
+      const upstreamOutput = this.terminalResponse?.output ?? [];
+      if (
+        this.terminalResponse?.status === "completed" &&
+        Array.isArray(upstreamOutput) &&
+        upstreamOutput.length > 0
+      ) {
+        return this.stampResponseOutput(this.terminalResponse);
+      }
+      // A failure envelope can omit items that have already streamed.
+      const streamed = [...this.outputItemsByIndex.entries()]
+        .sort(([left], [right]) => left - right)
+        .map(([outputIndex, item]) => {
+          if (item.type !== "message") return item;
+          const content = [...item.content];
+          for (const [key, text] of this.textByPart) {
+            const [itemId, partOutputIndex, contentIndex] = key.split("\u0000");
+            if (itemId === item.id && Number(partOutputIndex) === outputIndex) {
+              const index = Number(contentIndex);
+              const part = content[index];
+              content[index] = {
+                ...(part?.type === "output_text" ? part : {}),
+                type: "output_text",
+                text,
+                annotations:
+                  part?.type === "output_text" ? part.annotations : [],
+              };
+            }
+          }
+          return { ...item, content };
+        });
+      const terminalOutput = Array.isArray(upstreamOutput)
+        ? upstreamOutput
+        : [];
+      const accumulated = [
+        ...streamed.map(
+          (item) =>
+            terminalOutput.find(
+              (candidate) => item.id && candidate.id === item.id,
+            ) ?? item,
+        ),
+        ...terminalOutput.filter(
+          (item) =>
+            !streamed.some((candidate) => item.id && candidate.id === item.id),
+        ),
+      ];
+      const restoredOutput = [
+        ...accumulated,
+        ...outputItems.filter((item) => {
+          if (item.type === "message") {
+            return !accumulated.some(
+              (candidate) => candidate.type === "message",
+            );
+          }
+          if ("call_id" in item) {
+            return !accumulated.some(
+              (candidate) =>
+                "call_id" in candidate && candidate.call_id === item.call_id,
+            );
+          }
+          return true;
+        }),
+      ];
+      return this.stampResponseOutput({
+        ...(this.terminalResponse ?? fallbackResponse),
+        output: restoredOutput,
+      });
+    }
+
+    return fallbackResponse;
   }
 
   private resolveTextPrefix(firstText: string): string {
@@ -1327,6 +1550,10 @@ class OpenAiResponsesStreamAdapter
       return "";
     }
     return this.getTextSuffix(firstText);
+  }
+
+  private nextSequenceNumber(): number {
+    return this.syntheticSequence++;
   }
 
   private withCompactionContext(
@@ -1419,14 +1646,6 @@ class OpenAiResponsesStreamAdapter
       chunk.type === "response.completed" ||
       chunk.type === "response.failed" ||
       chunk.type === "response.incomplete";
-    if (chunk.type === "response.completed") {
-      this.completedResponse =
-        chunk.response as unknown as OpenAiResponsesResponse;
-      this.state.stopReason =
-        this.state.toolCalls.length > 0 ? "tool_calls" : "stop";
-    } else if (isFinal) {
-      this.state.stopReason = "length";
-    }
     // Calls stay where the release path reads them; the terminal frame joins
     // them so it still reaches the client last.
     if (isResponsesToolCallChunk(chunk)) {
@@ -1782,6 +2001,18 @@ function declaredMemberName(tool: unknown): string | undefined {
   return undefined;
 }
 
+function responseOutputText(output: OpenAiResponsesResponse["output"]): string {
+  return output
+    .flatMap((item) =>
+      item.type === "message"
+        ? item.content.flatMap((part) =>
+            part.type === "output_text" ? [part.text] : [],
+          )
+        : [],
+    )
+    .join("");
+}
+
 function withoutOmittedToolCalls<TItem extends { type?: string }>(
   output: readonly TItem[],
   toolCalls: readonly { id: string }[],
@@ -1812,8 +2043,8 @@ function toCommonMessages(
 ): CommonMessage[] {
   // "easy input message" items carry role/content and omit `type` (it defaults
   // to "message"); the AI SDK emits this shape. Without handling it here,
-  // getMessages() drops the user's prompt and trusted-data / Dual LLM policy
-  // evaluation (llm-proxy-handler) silently sees an empty conversation.
+  // getMessages() drops the user's prompt and every common-format reader
+  // silently sees an empty conversation.
   if ((item.type === "message" || item.type === undefined) && "role" in item) {
     return [
       {
@@ -1836,9 +2067,9 @@ function toCommonMessages(
       {
         role: "tool",
         content,
-        // An output whose function_call was pruned from the input still
-        // carries untrusted data — surface it under the "unknown" name so
-        // default trusted-data policies apply rather than nothing.
+        // An output whose function_call was pruned from the input is still a
+        // tool result — surface it under the "unknown" name rather than drop
+        // it.
         toolCalls: [
           {
             id: item.call_id,
@@ -1846,7 +2077,7 @@ function toCommonMessages(
             ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
             arguments: toolCall?.arguments,
             content,
-            isError: false,
+            isError: "is_error" in item && item.is_error === true,
           },
         ],
       },

@@ -295,7 +295,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: Bedrock.API.InvokeRequestSchema,
         headers: Bedrock.API.ConverseHeadersSchema,
-        response: constructResponseSchema(Bedrock.API.InvokeResponseSchema),
+        response: constructResponseSchema(Bedrock.API.InvokeResponseWireSchema),
       },
     },
     async (request, reply) => {
@@ -331,7 +331,7 @@ const bedrockProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: Bedrock.API.InvokeRequestSchema,
         headers: Bedrock.API.ConverseHeadersSchema,
-        response: constructResponseSchema(Bedrock.API.InvokeResponseSchema),
+        response: constructResponseSchema(Bedrock.API.InvokeResponseWireSchema),
       },
     },
     async (request, reply) => {

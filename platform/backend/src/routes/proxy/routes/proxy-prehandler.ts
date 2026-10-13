@@ -38,6 +38,7 @@ export function createProxyPreHandler(params: {
   rewritePrefix?: string;
   skipErrorResponse?: Record<string, unknown>;
   rejectUnhandledPaths?: boolean;
+  beforeCleanBody?: (request: FastifyRequest, body: unknown) => Promise<void>;
 }) {
   const { apiPrefix, endpointSuffix, upstream, providerName } = params;
   const rewritePrefix = params.rewritePrefix ?? "";
@@ -134,7 +135,10 @@ export function createProxyPreHandler(params: {
       );
     }
 
-    cleanForwardedBody(request).then(() => next(), next);
+    cleanForwardedBody(request, params.beforeCleanBody).then(
+      () => next(),
+      next,
+    );
   };
 }
 
@@ -155,6 +159,7 @@ export function createProxyPreHandler(params: {
  */
 export async function cleanForwardedBody(
   request: FastifyRequest,
+  beforeCleanBody?: (request: FastifyRequest, body: unknown) => Promise<void>,
 ): Promise<void> {
   const body = request.body;
   if (!(body instanceof Readable) || !isUncompressedJson(request.headers)) {
@@ -168,16 +173,22 @@ export async function cleanForwardedBody(
   // @fastify/reply-from pipes a stream upstream as it is, and serializes an
   // object for an application/json request with a fresh content-length.
   request.body =
-    cleanedJson(raw) ?? Readable.from([raw], { objectMode: false });
+    (await cleanedJson(
+      raw,
+      beforeCleanBody && ((body) => beforeCleanBody(request, body)),
+    )) ?? Readable.from([raw], { objectMode: false });
 }
 
 // === Internal helpers ===
 
 /** The parsed body once something in it was removed; null to forward the bytes as they came. */
-function cleanedJson(raw: Buffer): object | null {
+async function cleanedJson(
+  raw: Buffer,
+  beforeCleanBody?: (body: unknown) => Promise<void>,
+): Promise<object | null> {
   const markers = mayHoldAttestationToken(raw);
   const payloads = mayHoldOpenAppaPayload(raw);
-  if (!markers && !payloads) return null;
+  if (!markers && !payloads && !beforeCleanBody) return null;
   let body: unknown;
   try {
     body = JSON.parse(raw.toString("utf8"));
@@ -185,6 +196,13 @@ function cleanedJson(raw: Buffer): object | null {
     return null;
   }
   if (typeof body !== "object" || body === null) return null;
+  if (beforeCleanBody) {
+    try {
+      await beforeCleanBody(body);
+    } catch {
+      // Optional observers must never prevent ordinary proxy forwarding.
+    }
+  }
   const removedMarkers = markers && removeMarkersFromBody(body);
   const removedPayloads = payloads && sanitizeForwardedRequest(body);
   return removedMarkers || removedPayloads ? body : null;

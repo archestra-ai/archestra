@@ -91,17 +91,20 @@ export function SecretCopyButton({
     }
   };
 
+  // On a code surface the shared terminal action sizes the icon, so it matches
+  // the reveal toggle beside it.
+  const iconSize = variant === "terminal" ? undefined : "size-4";
   const icon = isCopying ? (
-    <Loader2 className="size-4 animate-spin" />
+    <Loader2 className={cn(iconSize, "animate-spin")} />
   ) : copied ? (
     <Check
       className={cn(
-        "size-4",
+        iconSize,
         variant === "terminal" ? "text-terminal-success" : "text-green-500",
       )}
     />
   ) : (
-    <Copy className="size-4" />
+    <Copy className={iconSize} />
   );
 
   const trigger =

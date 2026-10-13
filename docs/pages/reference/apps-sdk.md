@@ -2,7 +2,7 @@
 title: Apps SDK Reference
 description: The window.archestra SDK, styling, security model, and authoring tools for MCP Apps
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -55,7 +55,7 @@ Do not use `localStorage`, `sessionStorage`, or IndexedDB. The sandbox runs the 
 
 ### Files
 
-`archestra.files` is a file store private to each viewer of the app. It never shows a chat's files, a project's files, or another viewer's files. The store is the same wherever the app runs: inline in chat, on its own page, or in an external MCP client. It needs the [Code Sandbox](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED); a deployment without it has no app file store.
+`archestra.files` is a file store private to each viewer of the app. It never shows a chat's files, a project's files, or another viewer's files. The store is the same wherever the app runs: inline in chat, on its own page, or in an external MCP client.
 
 | Method | Does |
 | --- | --- |

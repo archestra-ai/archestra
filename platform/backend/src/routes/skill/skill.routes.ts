@@ -5,7 +5,10 @@ import {
   MAX_BULK_IDS,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   ResourceVisibilityScopeSchema,
   RouteId,
 } from "@archestra/shared";
@@ -41,6 +44,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { publishesSkills } from "@/services/agent-skill-resolution";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
@@ -404,6 +408,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -427,6 +434,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeOtherPersonalSkills,
           status,
           labels,
+          access,
+          sharedWith,
+          owner,
           ...sorting
         },
         organizationId,
@@ -585,6 +595,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         excludeOtherPersonalForUserId:
           checker.isAdmin && excludeOtherPersonalSkills ? user.id : undefined,
         status,
+        access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+          userId: user.id,
+          organizationId,
+          relations: access,
+          sharedWith,
+          ownerIds: owner,
+        }),
       };
 
       // Resolved once so the page query and the count agree, and so a filter

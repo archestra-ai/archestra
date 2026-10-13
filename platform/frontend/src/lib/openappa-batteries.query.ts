@@ -27,8 +27,6 @@ export type BatterySummary =
 export type PolicyDeclarations =
   archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"];
 export type PolicyBattery = PolicyDeclarations["batteries"][number];
-export type EffectivePolicy =
-  archestraApiTypes.GetOpenappaEffectivePolicyResponses["200"];
 export type BatteryPolicySource =
   archestraApiTypes.GetOpenappaBatteryPolicySourceResponses["200"];
 /** What an attach names: the battery, and the catalog unless it governs the organization. */
@@ -63,10 +61,14 @@ export function usePolicyDeclarations() {
 }
 
 /** The composed document the runtime enforces: the root text with its batteries. */
-export function useEffectivePolicy(enabled = true) {
+export function useEffectivePolicy(
+  enabled = true,
+  refetchInterval: number | false = false,
+) {
   return useQuery({
     queryKey: effectivePolicyQueryKey,
     enabled,
+    refetchInterval,
     queryFn: async () => {
       const { data, error } =
         await archestraApiSdk.getOpenappaEffectivePolicy();
@@ -101,8 +103,8 @@ export function useAcceptHeldPull() {
     (accepted) =>
       toast.success(
         accepted.droppedBatteries.length > 0
-          ? `Repository text accepted. Dropped: ${accepted.droppedBatteries.join(", ")}`
-          : "Repository text accepted",
+          ? `Repository changes approved. Removed: ${accepted.droppedBatteries.join(", ")}`
+          : "Repository changes approved",
       ),
   );
 }
@@ -172,16 +174,18 @@ export function useCreateBatteryInstall() {
   );
 }
 
-export function useUpdateBatteryInstall() {
+/**
+ * Bind a helper variable to an organization credential, or unbind it with a
+ * null key, for every battery that reads it. Included or not, and whether or
+ * not the repository owns the policy text.
+ */
+export function useSetCredentialBinding() {
   return useBatteryMutation(
-    async (params: {
-      id: string;
-      body: archestraApiTypes.UpdateOpenappaBatteryInstallData["body"];
-    }) =>
+    async (params: { variable: string; key: string | null }) =>
       settled(
-        await archestraApiSdk.updateOpenappaBatteryInstall({
-          path: { id: params.id },
-          body: params.body,
+        await archestraApiSdk.setOpenappaCredentialBinding({
+          path: { variable: params.variable },
+          body: { key: params.key },
         }),
       ),
   );

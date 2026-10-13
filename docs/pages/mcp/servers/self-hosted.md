@@ -27,7 +27,7 @@ With the quickstart or the Helm chart, there is nothing to set up. Go straight t
 Pull from a private registry, add memory, or mount a volume, from the server's Edit page. Most servers need none of it.
 
 - **Private image:** add an image pull secret, or the registry's credentials.
-- **Memory, CPU, volumes, or node rules:** edit the **K8s YAML** tab. You need **Full access + deployment** on the server.
+- **Memory, CPU, volumes, or node rules:** edit the **K8s YAML** tab. You need **Full access + deploy** on the server.
 - A credential on each call, such as the caller's [identity provider token](/docs/mcp/authentication/servers#identity-provider-token-exchange): set **Transport** to **streamable-http**. A **stdio** server gets credentials only at start.
 
 <span id="logs-and-recovery"></span>

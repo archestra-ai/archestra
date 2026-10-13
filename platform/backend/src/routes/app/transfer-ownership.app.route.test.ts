@@ -158,7 +158,7 @@ describe("POST /api/apps/:id/transfer-ownership", () => {
     });
   });
 
-  test("a personal owner can hand off and loses ownership rights", async ({
+  test("a personal owner can hand off and keeps full access", async ({
     makeUser,
     makeMember,
   }) => {
@@ -166,7 +166,7 @@ describe("POST /api/apps/:id/transfer-ownership", () => {
     await makeMember(user.id, organizationId, { role: MEMBER_ROLE_NAME });
     const resource = await create();
     expect((await transfer(resource.id)).statusCode).toBe(200);
-    expect((await transfer(resource.id, user.id)).statusCode).toBe(403);
+    expect((await transfer(resource.id, user.id)).statusCode).toBe(200);
   });
 
   test("rejects a recipient name collision without changing the resource", async () => {

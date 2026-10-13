@@ -47,7 +47,22 @@ describe("access policy role controls", () => {
       const saved = await ctx.app.inject({
         method: "PUT",
         url,
-        payload: { revision: (policy?.revision ?? 0) + 1, grants: [] },
+        // Keeps a Full access recipient: a save leaving none is refused.
+        payload: {
+          revision: (policy?.revision ?? 0) + 1,
+          grants: [
+            {
+              subject: { type: "role", id: role.id },
+              actions: [
+                "read",
+                "use",
+                "update",
+                "delete",
+                "manage-permissions",
+              ],
+            },
+          ],
+        },
       });
       expect(saved.statusCode).toBe(
         policyActions.includes("update") ? 200 : 403,

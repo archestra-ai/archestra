@@ -235,10 +235,10 @@ describe("hasAnyAgentTypeReadPermission", () => {
     const org = await makeOrganization({ legacyPermissions: true });
     // Role with permissions only on non-agent-type resources
     await makeCustomRole(org.id, {
-      role: "tool_only",
-      permission: { toolPolicy: ["read", "create"] },
+      role: "registry_only",
+      permission: { mcpRegistry: ["read", "create"] },
     });
-    await makeMember(user.id, org.id, { role: "tool_only" });
+    await makeMember(user.id, org.id, { role: "registry_only" });
 
     const result = await hasAnyAgentTypeReadPermission({
       userId: user.id,
@@ -377,10 +377,10 @@ describe("getAgentTypePermissionChecker", () => {
     const user = await makeUser();
     const org = await makeOrganization({ legacyPermissions: true });
     await makeCustomRole(org.id, {
-      role: "tool_only",
-      permission: { toolPolicy: ["read"] },
+      role: "registry_only",
+      permission: { mcpRegistry: ["read"] },
     });
-    await makeMember(user.id, org.id, { role: "tool_only" });
+    await makeMember(user.id, org.id, { role: "registry_only" });
 
     const checker = await getAgentTypePermissionChecker({
       userId: user.id,

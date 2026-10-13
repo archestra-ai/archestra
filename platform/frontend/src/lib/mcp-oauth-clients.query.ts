@@ -16,19 +16,33 @@ type McpOauthClientsParams = {
   /** Serialized `?labels=` filter; resolved server-side. */
   labels?: string;
   enabled?: boolean;
-};
+} & Pick<
+  NonNullable<archestraApiTypes.GetMcpOauthClientsData["query"]>,
+  "access" | "sharedWith" | "owner"
+>;
 
 export function useMcpOauthClients(params?: McpOauthClientsParams) {
   const search = params?.search;
   const labels = params?.labels;
+  const access = params?.access;
+  const sharedWith = params?.sharedWith;
+  const owner = params?.owner;
 
   return useQuery({
-    queryKey: ["mcp-oauth-clients", search, labels],
+    queryKey: [
+      "mcp-oauth-clients",
+      search,
+      labels,
+      { access, sharedWith, owner },
+    ],
     queryFn: async () => {
       const { data, error } = await getMcpOauthClients({
         query: {
           search: search || undefined,
           labels,
+          access,
+          sharedWith,
+          owner,
         },
       });
       throwOnApiError(error, { toastOnError: false });

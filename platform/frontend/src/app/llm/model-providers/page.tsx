@@ -12,7 +12,6 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
-  KeyRound,
   Loader2,
   Pencil,
   Plus,
@@ -24,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -45,10 +45,15 @@ import {
 } from "@/components/llm-provider-api-key-form";
 import { LlmProviderSelectItems } from "@/components/llm-provider-select-items";
 import { PageLayout } from "@/components/page-layout";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { ResourceListActions } from "@/components/resource-list-actions";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
@@ -138,9 +143,26 @@ export default function ApiKeysPage() {
     useLlmProviderApiKeys({
       enabled: apiKeyQueriesEnabled,
     });
+  const { hasActiveScopeFilters, access, sharedWith, owner } =
+    useScopeFilterParams();
+  const hasActiveFilters = Boolean(
+    search || providerFilter !== "all" || labelsFilter || hasActiveScopeFilters,
+  );
+  const clearFilters = () =>
+    updateQueryParams({
+      search: null,
+      provider: null,
+      labels: null,
+      ...Object.fromEntries(
+        RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
+      ),
+    });
   const { data: queriedApiKeys = [], isFetching } = useLlmProviderApiKeys({
     search: search || undefined,
     labels: labelsFilter,
+    access,
+    sharedWith,
+    owner,
     provider:
       providerFilter === "all"
         ? undefined
@@ -232,15 +254,21 @@ export default function ApiKeysPage() {
     defaultValues: DEFAULT_FORM_VALUES,
   });
   const [editLabels, setEditLabels] = useState<ProfileLabel[]>([]);
-  const [editSection, setEditSection] = useState<"general" | "permissions">(
-    "general",
+  // The permissions section keeps its edits in its own form. This dialog's
+  // Test & Save is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
   );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
   const editLabelsRef = useRef<ProfileLabelsRef>(null);
 
   // Reset edit form with selected key values when dialog opens
   useEffect(() => {
     if (editingApiKey) {
-      setEditSection("general");
       editForm.reset({
         name: editingApiKey.name,
         provider: editingApiKey.provider,
@@ -285,10 +313,11 @@ export default function ApiKeysPage() {
     );
 
     try {
+      await permissionsSave.current?.();
       await updateMutation.mutateAsync({
         id: editingApiKey.id,
         data: {
-          name: values.name || undefined,
+          name: values.name.trim() || undefined,
           apiKey:
             !isBedrockSigV4 && apiKeyChanged
               ? (values.apiKey ?? undefined)
@@ -297,7 +326,7 @@ export default function ApiKeysPage() {
           inferenceBaseUrl: values.inferenceBaseUrl || null,
           extraHeaders: serializeExtraHeaders(values.extraHeaders),
           // The update route no longer accepts the retired `scope`/`teamId`
-          // fields; sharing is edited on the key's Permissions tab.
+          // fields; sharing is edited in the key's permissions section.
           isPrimary: values.isPrimary,
           vaultSecretPath:
             !isBedrockSigV4 && byosEnabled && values.vaultSecretPath
@@ -463,7 +492,14 @@ export default function ApiKeysPage() {
     rows,
     getId: (row) => row.id,
     canSelect: (row) => !row.isSystem && getKeyUsage(row.id) === null,
-    filterSignature: `${search}\u0000${providerFilter}\u0000${labelsFilter ?? ""}`,
+    filterSignature: [
+      search,
+      providerFilter,
+      labelsFilter ?? "",
+      access.join(","),
+      sharedWith?.join(",") ?? "",
+      owner?.join(",") ?? "",
+    ].join("\u0000"),
     matchDescription:
       search || providerFilter !== "all"
         ? "match the current filters"
@@ -691,14 +727,7 @@ export default function ApiKeysPage() {
           <CollectionFilters>
             <FilterBar
               onClearFilters={
-                search || providerFilter !== "all" || labelsFilter
-                  ? () =>
-                      updateQueryParams({
-                        search: null,
-                        provider: null,
-                        labels: null,
-                      })
-                  : undefined
+                hasActiveFilters ? () => clearFilters() : undefined
               }
               search={
                 <SearchInput
@@ -710,6 +739,10 @@ export default function ApiKeysPage() {
                 />
               }
             >
+              <ResourceAccessFilter
+                resource="llmProviderApiKey"
+                noun="credentials"
+              />
               <Select
                 value={providerFilter}
                 onValueChange={(value) =>
@@ -790,17 +823,9 @@ export default function ApiKeysPage() {
               isLoading={permissionsPending || isFetching}
               emptyIcon={Boxes}
               emptyMessage="No credentials configured"
-              hasActiveFilters={Boolean(
-                search || providerFilter !== "all" || labelsFilter,
-              )}
+              hasActiveFilters={hasActiveFilters}
               filteredEmptyMessage="No LLM provider credentials match your filters"
-              onClearFilters={() =>
-                updateQueryParams({
-                  search: null,
-                  provider: null,
-                  labels: null,
-                })
-              }
+              onClearFilters={clearFilters}
             />
           </div>
         </BulkActionsScope>
@@ -836,22 +861,13 @@ export default function ApiKeysPage() {
         )}
 
         {/* Edit Dialog */}
-        <TabbedDialogShell
+        <StandardFormDialog
           open={!!editingApiKey}
           onOpenChange={(open) => {
             if (!open) closeEditDialog();
           }}
           title="Edit API Key"
           description="Update the name, the API key value, or who can reach it"
-          sidebarLabel={editForm.watch("name") || "Provider key"}
-          sidebarDescription="Model provider"
-          sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
-          activeSection={editSection}
-          navItems={[
-            { id: "general", label: "General" },
-            { id: "permissions", label: "Permissions" },
-          ]}
-          onActiveSectionChange={setEditSection}
           onSubmit={handleEdit}
           footer={
             <>
@@ -869,12 +885,22 @@ export default function ApiKeysPage() {
           }
           isDirty={
             editForm.formState.isDirty ||
+            permissionsDirty ||
             JSON.stringify(editLabels) !==
               JSON.stringify(editingApiKey?.labels ?? [])
           }
         >
-          <div hidden={editSection === "permissions"}>
-            {editingApiKey && (
+          {editingApiKey && (
+            <div className="space-y-4">
+              {editingApiKey.createdBy && (
+                <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className="shrink-0">Created by</span>
+                  <CreatedByCell
+                    createdBy={editingApiKey.createdBy}
+                    className="max-w-48"
+                  />
+                </span>
+              )}
               <LlmProviderApiKeyForm
                 mode="full"
                 showConsoleLink={false}
@@ -888,18 +914,15 @@ export default function ApiKeysPage() {
                 onLabelsChange={setEditLabels}
                 labelsRef={editLabelsRef}
               />
-            )}
-          </div>
-          <div hidden={editSection !== "permissions"}>
-            {editingApiKey && (
               <ResourceAccessSection
                 resource="llmProviderApiKey"
                 id={editingApiKey.id}
-                standalone
+                registerSave={registerPermissionsSave}
+                onDirtyChange={setPermissionsDirty}
               />
-            )}
-          </div>
-        </TabbedDialogShell>
+            </div>
+          )}
+        </StandardFormDialog>
 
         {/* Delete Confirmation Dialog */}
         <DeleteConfirmDialog

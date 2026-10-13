@@ -57,7 +57,7 @@ Give every person their own account in every server, with no installs. On each c
 
 To set it up:
 
-1. Set up your identity provider's **Enterprise-Managed Credentials**. See [Enterprise-Managed Auth](/docs/admin/identity/enterprise-managed-auth).
+1. Set up your identity provider's **Enterprise-Managed Credentials**. See [Identity Providers](/docs/admin/identity).
 2. On the server, pick **IdP token exchange**, or **IdP signed JWT** if the server checks your provider's tokens itself.
 3. Set the server's tools to **Resolve at call time**.
 

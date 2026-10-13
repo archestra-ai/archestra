@@ -154,6 +154,13 @@ test("a failed agent lookup can be retried from the CTA", async () => {
 test.each([
   { promptKey: undefined, children: "Ask about the policy" },
   {
+    promptKey: "writeValidations" as const,
+    children: "Ask About Validations",
+    permissions: {
+      openappaPolicy: ["read", "update"] as ("read" | "update")[],
+    },
+  },
+  {
     promptKey: "reviewCoverage" as const,
     children: "Ask",
     target: { kind: "mcp_gateway" as const, id: "gateway", name: "Research" },
@@ -176,7 +183,9 @@ test.each([
   const button = await screen.findByRole("button", { name: props.children });
   await waitFor(() =>
     expect(button).toHaveAccessibleDescription(
-      "Missing permissions: Chats (create), OpenAPPA Policy (read)",
+      props.promptKey === "writeValidations"
+        ? "Missing permissions: OpenAPPA Policy (read, update), Chats (create)"
+        : "Missing permissions: Chats (create), OpenAPPA Policy (read)",
     ),
   );
   await userEvent.click(button);

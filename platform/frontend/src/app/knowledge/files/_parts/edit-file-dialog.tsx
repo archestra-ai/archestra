@@ -1,11 +1,10 @@
 "use client";
 
-import { FileText } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { ResourceAccessSection } from "@/components/resource-access-section";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
+import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,9 +38,16 @@ export function EditFileDialog({
   const [directoryId, setDirectoryId] = useState(ROOT_VALUE);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] = useState<"general" | "permissions">(
-    "general",
+  // The permissions block keeps its edits in its own form. This dialog's
+  // Save is the only Save on screen, so it commits them too.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
   );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
 
   const updateFile = useUpdateKnowledgeFile();
 
@@ -49,7 +55,6 @@ export function EditFileDialog({
   // values.
   useEffect(() => {
     if (!open || !file) return;
-    setActiveSection("general");
     setFilename(file.filename);
     setDirectoryId(file.directoryId ?? ROOT_VALUE);
     setLabels(file.labels);
@@ -57,9 +62,10 @@ export function EditFileDialog({
 
   const canSubmit = filename.trim().length > 0 && !updateFile.isPending;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!file) return;
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
+    await permissionsSave.current?.();
     updateFile.mutate(
       {
         fileId: file.id,
@@ -74,21 +80,17 @@ export function EditFileDialog({
   };
 
   return (
-    <TabbedDialogShell
+    <StandardFormDialog
       open={open}
       onOpenChange={onOpenChange}
       title="Edit document"
       description="Renaming or moving a document does not re-index it; its content stays as uploaded."
-      sidebarLabel={filename || "Document"}
-      sidebarDescription="Document"
-      sidebarIcon={<FileText className="h-4 w-4 text-muted-foreground" />}
-      activeSection={activeSection}
-      navItems={[
-        { id: "general", label: "General" },
-        { id: "permissions", label: "Permissions" },
-      ]}
-      onActiveSectionChange={setActiveSection}
-      onSubmit={handleSubmit}
+      isDirty={permissionsDirty}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void handleSubmit();
+      }}
+      bodyClassName="space-y-4"
       footer={
         <>
           <Button
@@ -104,48 +106,45 @@ export function EditFileDialog({
         </>
       }
     >
-      <div hidden={activeSection !== "general"} className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-filename">Name</Label>
-          <Input
-            id="edit-filename"
-            value={filename}
-            onChange={(event) => setFilename(event.target.value)}
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="edit-directory">Directory</Label>
-          <Select value={directoryId} onValueChange={setDirectoryId}>
-            <SelectTrigger id="edit-directory" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ROOT_VALUE}>No directory</SelectItem>
-              {directories.map((directory) => (
-                <SelectItem key={directory.id} value={directory.id}>
-                  {directory.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <AdvancedLabelsSection
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={setLabels}
+      <div className="space-y-1.5">
+        <Label htmlFor="edit-filename">Name</Label>
+        <Input
+          id="edit-filename"
+          value={filename}
+          onChange={(event) => setFilename(event.target.value)}
         />
       </div>
-      <div hidden={activeSection !== "permissions"}>
-        {file && (
-          <ResourceAccessSection
-            resource="knowledgeFile"
-            id={file.id}
-            standalone
-          />
-        )}
+
+      <div className="space-y-1.5">
+        <Label htmlFor="edit-directory">Directory</Label>
+        <Select value={directoryId} onValueChange={setDirectoryId}>
+          <SelectTrigger id="edit-directory" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ROOT_VALUE}>No directory</SelectItem>
+            {directories.map((directory) => (
+              <SelectItem key={directory.id} value={directory.id}>
+                {directory.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-    </TabbedDialogShell>
+
+      {file && (
+        <ResourceAccessSection
+          resource="knowledgeFile"
+          id={file.id}
+          registerSave={registerPermissionsSave}
+          onDirtyChange={setPermissionsDirty}
+        />
+      )}
+      <AdvancedLabelsSection
+        ref={labelsRef}
+        labels={labels}
+        onLabelsChange={setLabels}
+      />
+    </StandardFormDialog>
   );
 }

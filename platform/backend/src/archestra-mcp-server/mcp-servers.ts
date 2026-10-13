@@ -43,6 +43,7 @@ import {
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
 import { assertCanWriteMcpDeploymentYaml } from "@/services/mcp-advanced-settings";
 import {
+  assertCatalogCredentialRecovery,
   extractLocalConfigSecrets,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
@@ -61,6 +62,7 @@ import {
   ResourceVisibilityScopeSchema,
   UuidIdSchema,
 } from "@/types";
+import { ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY } from "@/types/enterprise-managed-credentials";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
@@ -75,6 +77,12 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import {
+  resourceAccessToolArg,
+  resourceOwnerIdsToolArg,
+  resourceSharedWithToolArg,
+  toolAccessSelection,
+} from "./resource-access-tool-arg";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -342,6 +350,17 @@ const SearchPrivateMcpRegistryToolArgsSchema = z
       .describe(
         "Optional search query to filter MCP servers by name or description.",
       ),
+    access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
+  })
+  .strict();
+
+const GetMcpServersToolArgsSchema = z
+  .object({
+    access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
+    shared_with: resourceSharedWithToolArg,
+    owner_ids: resourceOwnerIdsToolArg,
   })
   .strict();
 
@@ -421,6 +440,7 @@ const ReloadMcpServerToolsToolArgsSchema = z
   })
   .strict();
 
+type GetMcpServersArgs = z.infer<typeof GetMcpServersToolArgsSchema>;
 type SearchPrivateMcpRegistryArgs = z.infer<
   typeof SearchPrivateMcpRegistryToolArgsSchema
 >;
@@ -449,9 +469,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_MCP_SERVERS_SHORT_NAME,
     title: "Get MCP Servers",
     description: `List all MCP servers from the catalog. Use this to identify candidate MCP servers, then call ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} to fetch exact tool IDs for ${TOOL_CREATE_AGENT_SHORT_NAME}/${TOOL_EDIT_AGENT_SHORT_NAME} toolAssignments.`,
-    schema: EmptyToolArgsSchema,
+    schema: GetMcpServersToolArgsSchema,
     outputSchema: GetMcpServersOutputSchema,
-    handler: ({ context }) => handleGetMcpServers(context),
+    handler: ({ args, context }) => handleGetMcpServers(args, context),
   }),
   defineArchestraTool({
     shortName: TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
@@ -547,7 +567,10 @@ async function handleSearchPrivateMcpRegistry(
 
     let catalogItems: InternalMcpCatalog[];
 
-    if (query && query.trim() !== "") {
+    // `searchByQuery` has no `access` filter, so a filtered search narrows
+    // the filtered list by the same name/description substring instead.
+    const access = toolAccessSelection(args);
+    if (query && query.trim() !== "" && !access) {
       catalogItems = await InternalMcpCatalogModel.searchByQuery(query, {
         expandSecrets: false,
         userId: context.userId,
@@ -570,6 +593,7 @@ async function handleSearchPrivateMcpRegistry(
         isAdmin,
         organizationId,
         environmentId,
+        access,
         readGrantContext: (await userHasPermission(
           context.userId,
           organizationId,
@@ -579,6 +603,14 @@ async function handleSearchPrivateMcpRegistry(
           ? undefined
           : { userId: context.userId, organizationId },
       });
+      const needle = query?.trim().toLowerCase();
+      if (needle) {
+        catalogItems = catalogItems.filter((item) =>
+          [item.name, item.description].some((text) =>
+            text?.toLowerCase().includes(needle),
+          ),
+        );
+      }
     }
 
     if (catalogItems.length === 0) {
@@ -625,6 +657,7 @@ async function handleSearchPrivateMcpRegistry(
 }
 
 async function handleGetMcpServers(
+  args: GetMcpServersArgs,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
   const { agent: contextAgent, organizationId } = context;
@@ -648,6 +681,7 @@ async function handleGetMcpServers(
       isAdmin,
       organizationId,
       environmentId,
+      access: toolAccessSelection(args),
       readGrantContext: (await userHasPermission(
         context.userId,
         organizationId,
@@ -1007,6 +1041,17 @@ async function handleEditMcpConfig(
       catalogName: existing.name,
       existingLocalConfigSecretId: existing.localConfigSecretId,
       existingClientSecretId: existing.clientSecretId,
+      existingLocalConfig: existing.localConfig,
+      existingClientSecretKeys: [
+        ...(existing.oauthConfig ? ["client_secret"] : []),
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        ...(existing.enterpriseManagedConfig
+          ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
+          : []),
+        // SPDX-SnippetEnd
+      ],
     });
     const updated = await InternalMcpCatalogModel.update(
       existing.id,
@@ -1901,6 +1946,8 @@ async function moveCatalogSecretsToBag(params: {
   catalogName: string;
   existingLocalConfigSecretId: string | null;
   existingClientSecretId: string | null;
+  existingLocalConfig?: LocalConfig | null;
+  existingClientSecretKeys?: string[];
 }): Promise<void> {
   const {
     updateData,
@@ -1909,11 +1956,33 @@ async function moveCatalogSecretsToBag(params: {
     existingClientSecretId,
   } = params;
 
+  const submittedClientSecret = (
+    updateData.oauthConfig as { client_secret?: unknown } | null | undefined
+  )?.client_secret;
+  const clientRecovery = params.existingClientSecretKeys
+    ? {
+        requiredKeys: params.existingClientSecretKeys,
+        values: {
+          ...(typeof submittedClientSecret === "string" && submittedClientSecret
+            ? { client_secret: submittedClientSecret }
+            : {}),
+        },
+      }
+    : undefined;
+  await assertCatalogCredentialRecovery({
+    localSecretId: existingLocalConfigSecretId,
+    existingLocalConfig: params.existingLocalConfig,
+    localConfig: updateData.localConfig as LocalConfig | undefined,
+    clientSecretId: existingClientSecretId,
+    clientRecovery,
+  });
+
   if (updateData.localConfig !== undefined) {
     const { localConfig, secretId } = await extractLocalConfigSecrets({
       localConfig: updateData.localConfig as LocalConfig,
       existingSecretId: existingLocalConfigSecretId,
       catalogName,
+      existingLocalConfig: params.existingLocalConfig,
     });
     updateData.localConfig = localConfig;
     if (secretId) updateData.localConfigSecretId = secretId;
@@ -1935,6 +2004,7 @@ async function moveCatalogSecretsToBag(params: {
         catalogName,
         key: "client_secret",
         value: clientSecret,
+        recovery: clientRecovery,
       });
       updateData.oauthConfig = rest;
       updateData.clientSecretId = id;

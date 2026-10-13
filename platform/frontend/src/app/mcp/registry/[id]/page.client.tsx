@@ -58,7 +58,6 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
@@ -97,6 +96,7 @@ import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
 import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
+import type { McpCatalogFormValues } from "../_parts/mcp-catalog-form.types";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
 import { isMcpServerInstalledForViewer } from "../_parts/mcp-registry-visibility";
@@ -224,11 +224,6 @@ function CatalogItemDetails({
   onDeleted: () => void;
 }) {
   const router = useRouter();
-  const ownership = useResourceOwnershipTransfer({
-    kind: "catalog",
-    resource: item,
-    onTransferred: () => router.push("/mcp/registry"),
-  });
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [permissionsDirty, setPermissionsDirty] = useState(false);
@@ -504,14 +499,8 @@ function CatalogItemDetails({
     <PageLayout
       // The wizard's column, so Edit opens in the same one this page reads in.
       maxWidth="wizard"
-      title={
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />
-          </div>
-          <span className="min-w-0 truncate">{item.name}</span>
-        </div>
-      }
+      icon={<McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />}
+      title={<span className="block min-w-0 truncate">{item.name}</span>}
       status={
         statusIssue ? undefined : (
           <ServerStatus
@@ -584,7 +573,6 @@ function CatalogItemDetails({
                     {cloneAction.label}
                   </DropdownMenuItem>
                 )}
-                {ownership.menuItem}
                 {canModify && !isPlaywright && (
                   <>
                     <DropdownMenuSeparator />
@@ -600,7 +588,6 @@ function CatalogItemDetails({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          {ownership.dialog}
         </div>
       }
     >
@@ -830,11 +817,7 @@ function useMcpServerOverviewFacts(item: CatalogItem): MaybeOverviewFact[] {
 
   facts.push({
     label: "Authentication",
-    value: (
-      <span>
-        {AUTH_METHOD_LABEL[values.authMethod] ?? AUTH_METHOD_LABEL.none}
-      </span>
-    ),
+    value: <span>{AUTH_METHOD_LABEL[values.authMethod]}</span>,
   });
 
   facts.push(createdByFact(item.createdBy));
@@ -958,14 +941,14 @@ function ServerStatus({
   // No summary means no deployment entry for any of this server's ids. The
   // feed's own state decides what that means, never the absence of an entry
   // — the same rule the list's `installedStatusLabel` follows. A remote
-  // server has no pod at all, so "Installed" is its whole runtime story.
+  // server has no pod at all, and the page of an installed server needs no
+  // label that says so, so it shows nothing.
+  if (variant === "remote" || deploymentFeedState === "disabled") {
+    return null;
+  }
   return (
     <span className={typeRole({ role: "body" })}>
-      {variant === "remote" || deploymentFeedState === "disabled"
-        ? "Installed"
-        : deploymentFeedState === "loading"
-          ? "Checking…"
-          : "Status unavailable"}
+      {deploymentFeedState === "loading" ? "Checking…" : "Status unavailable"}
     </span>
   );
 }
@@ -1006,9 +989,10 @@ function CodeLine({ children }: { children: ReactNode }) {
 }
 
 /** Authentication method names from the wizard, without its helper prose. */
-const AUTH_METHOD_LABEL: Record<string, string> = {
+const AUTH_METHOD_LABEL: Record<McpCatalogFormValues["authMethod"], string> = {
   none: "None",
-  bearer: "Token header",
+  bearer: "Access token header (legacy)",
+  auth_header: "Token header",
   oauth: "OAuth 2.1",
   oauth_client_credentials: "OAuth client credentials",
   enterprise_managed: "Identity provider exchange",

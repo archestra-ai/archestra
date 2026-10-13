@@ -1,36 +1,37 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { KeyRound } from "lucide-react";
+import { Bot, Loader2, Network, Server, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
-import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import type { AgentSelectorAgent } from "@/components/agent-selector";
 import {
-  AgentSelector,
-  type AgentSelectorAgent,
-} from "@/components/agent-selector";
-import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
+  BudgetFields,
+  describeWindow,
+  type SpendCapValue,
+  UsersPayNotice,
+} from "@/components/credential-billing/budget-fields";
+import { ProviderKeyPicker } from "@/components/credential-billing/provider-key-picker";
 import {
-  GatewayGrantField,
-  OAUTH_CLIENT_SECTIONS,
-  type OAuthClientSection,
+  ReviewList,
+  ReviewListRow,
+} from "@/components/credential-billing/review-list";
+import { WizardSteps } from "@/components/credential-billing/wizard-steps";
+import { FormDialog } from "@/components/form-dialog";
+import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import { ChoiceCards } from "@/components/oauth-client/choice-cards";
+import { GatewayPicker } from "@/components/oauth-client/gateway-picker";
+import {
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
-import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
-import { ResourceAccessSection } from "@/components/resource-access-section";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
+import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useTeams } from "@/lib/teams/team.query";
 
 export type OAuthClientType = "mcp" | "llm";
 
@@ -40,6 +41,11 @@ export type CreateOAuthClientSubmit =
   | { kind: "mcp"; body: archestraApiTypes.CreateMcpOauthClientData["body"] }
   | { kind: "llm"; body: archestraApiTypes.CreateLlmOauthClientData["body"] };
 
+/**
+ * Registering an OAuth client, one decision per step: what it reaches and
+ * how it signs in, then only the steps that path needs (gateways, provider
+ * keys, redirect URIs, budget), then a review.
+ */
 export function CreateOAuthClientDialog({
   open,
   onOpenChange,
@@ -68,193 +74,305 @@ export function CreateOAuthClientDialog({
   const [name, setName] = useState("");
   const [grantType, setGrantType] = useState<GrantType>("client_credentials");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
+  const [grantsGateways, setGrantsGateways] = useState(false);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
   const [redirectUrisText, setRedirectUrisText] = useState("");
-  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
-    [],
-  );
-  const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] =
-    useState<OAuthClientSection>("general");
+  const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
+  const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
+  const [step, setStep] = useState<Step>("kind");
 
   useEffect(() => {
     if (open) {
-      setActiveSection("general");
+      setStep("kind");
       setClientType(fixedClientType ?? defaultClientType);
       setName("");
       setGrantType("client_credentials");
       setSelectedGatewayIds(defaultAllowedGatewayIds ?? []);
+      setGrantsGateways(false);
       setProviderApiKeyIds([]);
       setRedirectUrisText("");
-      setInitialGrants([]);
-      setLabels([]);
+      setBillingTeamId(null);
+      setSpendCap(null);
     }
   }, [open, fixedClientType, defaultClientType, defaultAllowedGatewayIds]);
 
   const isMcp = clientType === "mcp";
-  const redirectUris = parseRedirectUris(redirectUrisText);
   const isAuthorizationCode = grantType === "authorization_code";
-  const canSubmit =
-    name.trim().length > 0 &&
-    (isAuthorizationCode
-      ? redirectUris.length > 0
-      : isMcp
-        ? selectedGatewayIds.length > 0
-        : providerApiKeyIds.length > 0);
+  const redirectUris = parseRedirectUris(redirectUrisText);
+  const steps = stepsFor({ isMcp, isAuthorizationCode });
+  const stepIndex = steps.findIndex((item) => item.id === step);
+  const ready: Record<Step, boolean> = {
+    kind: name.trim().length > 0,
+    signin: redirectUris.length > 0,
+    access:
+      isAuthorizationCode && !grantsGateways
+        ? true
+        : selectedGatewayIds.length > 0,
+    keys: providerApiKeyIds.length > 0,
+    budget: true,
+    review: true,
+  };
+  const canSubmit = steps.every((item) => ready[item.id]) && !isSubmitting;
+  // Users who sign in through an authorization-code client keep their own
+  // access unless the client explicitly grants gateways on top.
+  const grantedGatewayIds =
+    isAuthorizationCode && !grantsGateways ? [] : selectedGatewayIds;
+
+  const submit = async () => {
+    const shared = {
+      name: name.trim(),
+      grantType,
+      initialGrants: [],
+      labels: [],
+    };
+    if (isMcp) {
+      await onSubmit({
+        kind: "mcp",
+        body: {
+          ...shared,
+          allowedGatewayIds: grantedGatewayIds,
+          ...(isAuthorizationCode && { redirectUris }),
+        },
+      });
+      return;
+    }
+    await onSubmit({
+      kind: "llm",
+      body: {
+        ...shared,
+        ...(isAuthorizationCode
+          ? { redirectUris }
+          : {
+              providerApiKeys: providerApiKeyIds,
+              ...(billingTeamId && { billingTeamId }),
+            }),
+        ...(spendCap && { spendCap }),
+      },
+    });
+  };
+
+  // Opening focuses the name, not the first step bar above it.
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <TabbedDialogShell
+    <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Create OAuth Client"
+      initialFocusRef={nameInputRef}
+      title="New OAuth client"
       description={describeClientType(fixedClientType)}
-      sidebarLabel={name.trim() || "New OAuth client"}
-      sidebarDescription={isMcp ? "Agents & MCP gateways" : "LLM Proxy"}
-      sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
-      activeSection={activeSection}
-      navItems={OAUTH_CLIENT_SECTIONS}
-      onActiveSectionChange={setActiveSection}
-      footer={
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={!canSubmit || isSubmitting}>
-            Create OAuth Client
-          </Button>
-        </>
-      }
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
-        const shared = {
-          name: name.trim(),
-          grantType,
-          initialGrants: initialGrants.map(
-            ({ name: _name, ...grant }) => grant,
-          ),
-          labels: finalLabels,
-        };
-        if (isMcp) {
-          await onSubmit({
-            kind: "mcp",
-            body: {
-              ...shared,
-              allowedGatewayIds: selectedGatewayIds,
-              ...(isAuthorizationCode && { redirectUris }),
-            },
-          });
-        } else {
-          await onSubmit({
-            kind: "llm",
-            body: {
-              ...shared,
-              ...(isAuthorizationCode
-                ? { redirectUris }
-                : { providerApiKeys: providerApiKeyIds }),
-            },
-          });
-        }
-      }}
+      size="small"
+      className="sm:max-w-[680px]"
     >
-      <div hidden={activeSection !== "general"} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="oauth-client-name">Name</Label>
-          <Input
-            id="oauth-client-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="support-assistant-prod"
+      <form
+        className="flex min-h-0 flex-col"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (step === "review") {
+            if (canSubmit) void submit();
+            return;
+          }
+          if (ready[step]) setStep(steps[stepIndex + 1]?.id ?? step);
+        }}
+      >
+        <DialogBody className="space-y-4">
+          <WizardSteps
+            steps={steps}
+            activeStep={step}
+            onStepClick={setStep}
+            canVisitStep={(next) =>
+              steps
+                .slice(
+                  0,
+                  steps.findIndex((item) => item.id === next),
+                )
+                .every((item) => ready[item.id])
+            }
           />
-        </div>
-        {!fixedClientType && (
-          <SelectField
-            id="oauth-client-type"
-            label="What will this client access?"
-            options={CLIENT_TYPE_OPTIONS}
-            value={clientType}
-            onChange={(next) => {
-              setClientType(next as OAuthClientType);
-              // The two kinds are separate permission namespaces, so a
-              // grant chosen under one type means nothing under the other.
-              setInitialGrants([]);
-            }}
-          />
-        )}
 
-        <SelectField
-          id="oauth-client-grant-type"
-          label="Grant type"
-          options={isMcp ? MCP_GRANT_TYPE_OPTIONS : LLM_GRANT_TYPE_OPTIONS}
-          value={grantType}
-          onChange={(next) => setGrantType(next as GrantType)}
-        />
-        {isMcp ? (
-          isAuthorizationCode ? (
+          {step === "kind" && (
             <>
-              <RedirectUrisField
-                value={redirectUrisText}
-                onChange={setRedirectUrisText}
+              <div className="space-y-2">
+                <Label htmlFor="oauth-client-name">Name</Label>
+                <Input
+                  id="oauth-client-name"
+                  ref={nameInputRef}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="support-assistant-prod"
+                />
+              </div>
+              {!fixedClientType && (
+                <ChoiceCards
+                  label="What will it reach?"
+                  idPrefix="oauth-client-type"
+                  value={clientType}
+                  onValueChange={(next) => {
+                    setClientType(next);
+                  }}
+                  options={[
+                    {
+                      value: "mcp",
+                      title: "Agents & MCP gateways",
+                      description:
+                        "Calls your A2A agents or uses MCP tools through a gateway.",
+                      icon: <Network className="size-4" />,
+                    },
+                    {
+                      value: "llm",
+                      title: "LLM Proxy",
+                      description: "Sends LLM requests through the LLM Proxy.",
+                      icon: <Bot className="size-4" />,
+                    },
+                  ]}
+                />
+              )}
+              <ChoiceCards
+                label="How does it sign in?"
+                idPrefix="oauth-client-grant"
+                value={grantType}
+                onValueChange={setGrantType}
+                options={[
+                  {
+                    value: "client_credentials",
+                    title: "As itself",
+                    description: isMcp
+                      ? "A service or bot with no user, limited to the gateways you pick."
+                      : "A service or bot with no user, using the provider keys you pick.",
+                    icon: <Server className="size-4" />,
+                  },
+                  {
+                    value: "authorization_code",
+                    title: "For its users",
+                    description: isMcp
+                      ? "An app signs users in, and tools act with each user's identity."
+                      : "An app signs users in, and each user's own keys and limits apply.",
+                    icon: <Users className="size-4" />,
+                  },
+                ]}
               />
-              <GatewayGrantField
+            </>
+          )}
+
+          {step === "signin" && (
+            <RedirectUrisField
+              value={redirectUrisText}
+              onChange={setRedirectUrisText}
+            />
+          )}
+
+          {step === "access" &&
+            (isAuthorizationCode ? (
+              <>
+                <ChoiceCards
+                  label="What can signed-in users reach?"
+                  idPrefix="oauth-client-access"
+                  columns={1}
+                  value={grantsGateways ? "grant" : "own"}
+                  onValueChange={(next) => setGrantsGateways(next === "grant")}
+                  options={[
+                    {
+                      value: "own",
+                      title: "Only what each user can already reach",
+                      description:
+                        "Access stays governed by each user's own role and teams.",
+                    },
+                    {
+                      value: "grant",
+                      title: "Also these gateways, for everyone who signs in",
+                      description:
+                        "Adds the gateways below on top of each user's own access.",
+                    },
+                  ]}
+                />
+                {grantsGateways && (
+                  <GatewayPicker
+                    label="Gateways to grant"
+                    gateways={gateways}
+                    value={selectedGatewayIds}
+                    onValueChange={setSelectedGatewayIds}
+                  />
+                )}
+              </>
+            ) : (
+              <GatewayPicker
+                label="Gateways and agents it can call"
                 gateways={gateways}
                 value={selectedGatewayIds}
                 onValueChange={setSelectedGatewayIds}
               />
-            </>
-          ) : (
+            ))}
+
+          {step === "keys" && (
             <div className="space-y-2">
-              <Label>Allowed gateways &amp; agents</Label>
-              <AgentSelector
-                mode="multiple"
-                agents={gateways}
-                value={selectedGatewayIds}
-                onValueChange={setSelectedGatewayIds}
-                placeholder="Select gateways or agents"
-                searchPlaceholder="Search gateways and agents"
-                emptyMessage="No gateways or agents found"
+              <span className="font-medium text-sm">Provider keys</span>
+              <ProviderKeyPicker
+                value={providerApiKeyIds}
+                onChange={setProviderApiKeyIds}
+                providerApiKeys={providerApiKeys as LlmProviderApiKeyResponse[]}
               />
             </div>
-          )
-        ) : isAuthorizationCode ? (
-          <RedirectUrisField
-            value={redirectUrisText}
-            onChange={setRedirectUrisText}
-          />
-        ) : (
-          <ProviderKeyAccessFields
-            providerApiKeyIds={providerApiKeyIds}
-            onProviderApiKeyIdsChange={setProviderApiKeyIds}
-            providerApiKeys={providerApiKeys}
-          />
-        )}
+          )}
 
-        <AdvancedLabelsSection
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={setLabels}
-        />
-      </div>
+          {step === "budget" && (
+            <>
+              {isAuthorizationCode && <UsersPayNotice />}
+              <BudgetFields
+                subject="client"
+                idPrefix="oauth-client"
+                showBillingTeam={!isAuthorizationCode}
+                billingTeamId={billingTeamId}
+                onBillingTeamIdChange={setBillingTeamId}
+                spendCap={spendCap}
+                onSpendCapChange={setSpendCap}
+              />
+            </>
+          )}
 
-      <div hidden={activeSection !== "permissions"}>
-        {/* SPDX-SnippetBegin
-              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-        <ResourceAccessSection
-          resource={isMcp ? "mcpOauthClient" : "llmOauthClient"}
-          grants={initialGrants}
-          onGrantsChange={setInitialGrants}
-          standalone
-        />
-        {/* SPDX-SnippetEnd */}
-      </div>
-    </TabbedDialogShell>
+          {step === "review" && (
+            <OAuthClientReview
+              name={name}
+              isMcp={isMcp}
+              isAuthorizationCode={isAuthorizationCode}
+              redirectUris={redirectUris}
+              gatewayNames={grantedGatewayIds.map(
+                (id) =>
+                  gateways.find((gateway) => gateway.id === id)?.name ?? id,
+              )}
+              providerApiKeyIds={providerApiKeyIds}
+              providerApiKeys={providerApiKeys as LlmProviderApiKeyResponse[]}
+              billingTeamId={billingTeamId}
+              spendCap={spendCap}
+              onEdit={setStep}
+            />
+          )}
+        </DialogBody>
+        <DialogStickyFooter className="mt-0">
+          {stepIndex > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="mr-auto"
+              onClick={() => setStep(steps[stepIndex - 1]?.id ?? step)}
+            >
+              Back
+            </Button>
+          )}
+          <DialogCancelButton>Cancel</DialogCancelButton>
+          {step === "review" ? (
+            <Button type="submit" disabled={!canSubmit}>
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              <span>Create client</span>
+            </Button>
+          ) : (
+            <Button type="submit" disabled={!ready[step]}>
+              Continue
+            </Button>
+          )}
+        </DialogStickyFooter>
+      </form>
+    </FormDialog>
   );
 }
 
@@ -265,11 +383,32 @@ export function CreateOAuthClientDialog({
 type GrantType =
   archestraApiTypes.GetMcpOauthClientsResponses["200"][number]["grantType"];
 
-type SelectFieldOption = {
-  value: string;
-  label: string;
-  description: string;
-};
+type Step = "kind" | "signin" | "access" | "keys" | "budget" | "review";
+
+function stepsFor({
+  isMcp,
+  isAuthorizationCode,
+}: {
+  isMcp: boolean;
+  isAuthorizationCode: boolean;
+}): Array<{ id: Step; title: string }> {
+  const kind = { id: "kind" as const, title: "Client" };
+  const review = { id: "review" as const, title: "Review" };
+  const signin = { id: "signin" as const, title: "Sign-in" };
+  if (isMcp) {
+    return isAuthorizationCode
+      ? [kind, signin, { id: "access", title: "Access" }, review]
+      : [kind, { id: "access", title: "Access" }, review];
+  }
+  return isAuthorizationCode
+    ? [kind, signin, { id: "budget", title: "Budget" }, review]
+    : [
+        kind,
+        { id: "keys", title: "Keys" },
+        { id: "budget", title: "Budget" },
+        review,
+      ];
+}
 
 /**
  * Names only the surface this dialog can actually register for. Opened from
@@ -286,85 +425,89 @@ function describeClientType(fixedClientType?: OAuthClientType) {
   return "Register an application that authenticates to your agents, MCP gateways, or the LLM Proxy with OAuth.";
 }
 
-const CLIENT_TYPE_OPTIONS: SelectFieldOption[] = [
-  {
-    value: "mcp",
-    label: "Agents & MCP gateways",
-    description:
-      "For applications that call your A2A agents or use MCP tools through a gateway.",
-  },
-  {
-    value: "llm",
-    label: "LLM Proxy",
-    description:
-      "For applications that send LLM requests through the LLM Proxy.",
-  },
-];
-
-const MCP_GRANT_TYPE_OPTIONS: SelectFieldOption[] = [
-  {
-    value: "client_credentials",
-    label: "Application (client credentials)",
-    description:
-      "A backend service or bot calls gateways or agents as itself, with no acting user. Scope it to specific gateways or agents.",
-  },
-  {
-    value: "authorization_code",
-    label: "On behalf of users (authorization code)",
-    description:
-      "A pre-registered app obtains user-scoped tokens, so gateway tools resolve each user's own identity and connections.",
-  },
-];
-
-const LLM_GRANT_TYPE_OPTIONS: SelectFieldOption[] = [
-  {
-    value: "client_credentials",
-    label: "Application (client credentials)",
-    description:
-      "A backend service or bot calls the proxy as itself, with no acting user, using provider keys you map to it.",
-  },
-  {
-    value: "authorization_code",
-    label: "On behalf of users (authorization code)",
-    description:
-      "A pre-registered app obtains user-scoped tokens, so the proxy resolves each user's own provider keys, cost limits, and policies.",
-  },
-];
-
-function SelectField({
-  id,
-  label,
-  options,
-  value,
-  onChange,
+function OAuthClientReview({
+  name,
+  isMcp,
+  isAuthorizationCode,
+  redirectUris,
+  gatewayNames,
+  providerApiKeyIds,
+  providerApiKeys,
+  billingTeamId,
+  spendCap,
+  onEdit,
 }: {
-  id: string;
-  label: string;
-  options: SelectFieldOption[];
-  value: string;
-  onChange: (value: string) => void;
+  name: string;
+  isMcp: boolean;
+  isAuthorizationCode: boolean;
+  redirectUris: string[];
+  gatewayNames: string[];
+  providerApiKeyIds: ProviderApiKeyMappings;
+  providerApiKeys: LlmProviderApiKeyResponse[];
+  billingTeamId: string | null;
+  spendCap: SpendCapValue;
+  onEdit: (step: Step) => void;
 }) {
+  const catalog = useModelProviderCatalog();
+  const { data: teams = [] } = useTeams({ enabled: !!billingTeamId });
+  const teamName = teams.find((team) => team.id === billingTeamId)?.name;
+  const keyName = (id: string) =>
+    providerApiKeys.find((key) => key.id === id)?.name ?? "Unknown key";
+
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <Select value={value} onValueChange={onChange}>
-        <SelectTrigger id={id} className="w-full">
-          <SelectValue />
-        </SelectTrigger>
-        {/* Below the trigger: item-aligned would lay the menu over the
-            fields around it, since each option is two lines tall. */}
-        <SelectContent position="popper">
-          {options.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              description={option.description}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="space-y-4">
+      <ReviewList>
+        <ReviewListRow label="Name" onEdit={() => onEdit("kind")}>
+          {name}
+        </ReviewListRow>
+        <ReviewListRow label="Client" onEdit={() => onEdit("kind")}>
+          {isMcp ? "Agents & MCP gateways" : "LLM Proxy"} ·{" "}
+          {isAuthorizationCode ? "for its users" : "as itself"}
+        </ReviewListRow>
+        {isAuthorizationCode && (
+          <ReviewListRow label="Redirect URIs" onEdit={() => onEdit("signin")}>
+            <span className="break-all">{redirectUris.join(", ")}</span>
+          </ReviewListRow>
+        )}
+        {isMcp && (
+          <ReviewListRow label="Gateways" onEdit={() => onEdit("access")}>
+            {gatewayNames.length
+              ? gatewayNames.join(", ")
+              : "Each user's own access"}
+          </ReviewListRow>
+        )}
+        {!isMcp && !isAuthorizationCode && (
+          <ReviewListRow label="Provider keys" onEdit={() => onEdit("keys")}>
+            <span className="flex flex-wrap gap-1.5">
+              {providerApiKeyIds.map((mapping) => (
+                <span
+                  key={mapping.provider}
+                  className="rounded-full border bg-muted px-2 py-0.5 text-xs"
+                >
+                  {catalog.label(mapping.provider)} ·{" "}
+                  {keyName(mapping.providerApiKeyId)}
+                </span>
+              ))}
+            </span>
+          </ReviewListRow>
+        )}
+        {!isMcp && (
+          <>
+            <ReviewListRow label="Billed to" onEdit={() => onEdit("budget")}>
+              {isAuthorizationCode
+                ? "Each signed-in user"
+                : billingTeamId
+                  ? (teamName ?? "A team")
+                  : "No team"}
+            </ReviewListRow>
+            <ReviewListRow label="Spend cap" onEdit={() => onEdit("budget")}>
+              {spendCap
+                ? `$${spendCap.limitValue.toLocaleString("en-US")} ${describeWindow(spendCap.cleanupInterval)}`
+                : "No cap"}
+            </ReviewListRow>
+          </>
+        )}
+      </ReviewList>
     </div>
   );
 }

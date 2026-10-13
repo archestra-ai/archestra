@@ -7,12 +7,13 @@ import {
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
-import {
-  parseAuthRequired,
-  parseExpiredAuth,
-  parsePolicyDenied,
-} from "@/lib/chat/mcp-error-ui";
+import { parseAuthRequired, parseExpiredAuth } from "@/lib/chat/mcp-error-ui";
 import type { PendingToolAction } from "@/lib/chat/pending-tool-state";
+
+const POLICY_PREVIEW_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  "preview_guardrails_policy_change",
+  "preview_openappa_validation_change",
+]);
 
 /**
  * Compute the default set of enabled tool IDs for a conversation.
@@ -174,7 +175,6 @@ export function isCompactEligible(params: {
   );
   if (errorText) {
     if (
-      structuredError?.type === "policy_denied" ||
       structuredError?.type === "assigned_credential_unavailable" ||
       structuredError?.type === "auth_required" ||
       structuredError?.type === "auth_expired"
@@ -182,15 +182,18 @@ export function isCompactEligible(params: {
       return false;
     }
 
-    if (
-      parsePolicyDenied(errorText) ||
-      parseExpiredAuth(errorText) ||
-      parseAuthRequired(errorText)
-    ) {
+    if (parseExpiredAuth(errorText) || parseAuthRequired(errorText)) {
       return false;
     }
 
     return true;
+  }
+
+  // A proposed policy is what the operator is asked to approve: its preview
+  // stays open in the reply instead of folding into a circle. A saved change
+  // folds as usual; its banner reports the save.
+  if (shortName && POLICY_PREVIEW_TOOL_SHORT_NAMES.has(shortName)) {
+    return false;
   }
 
   const rawOutput = toolResultPart?.output ?? part.output;

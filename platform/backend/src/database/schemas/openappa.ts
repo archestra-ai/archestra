@@ -19,6 +19,7 @@ import type {
   ExternalConsultOutcome,
   ExternalConsultRole,
 } from "@/types/openappa-external-consults";
+import type { ThreadCall, ThreadTool } from "@/types/openappa-thread-state";
 import type { UnenforcedCallReason } from "@/types/openappa-unenforced";
 import organizationsTable from "./organization";
 
@@ -183,6 +184,11 @@ export const openappaOperationsTable = pgTable(
     index("openappa_operations_pending_idx")
       .on(table.root)
       .where(sql`${table.status} = 'pending'`),
+    // The overview's activity chart reads one organization's recent rows.
+    index("openappa_operations_org_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
     check(
       "openappa_operations_status",
       sql`(${table.status} = 'pending' AND ${table.decision} IS NULL) OR (${table.status} = 'complete' AND ${table.decision} IS NOT NULL)`,
@@ -215,6 +221,27 @@ export const openappaProcessedResultsTable = pgTable(
       "openappa_results_status",
       sql`(${table.status} = 'pending' AND ${table.approvedOutput} IS NULL AND ${table.decision} IS NULL) OR (${table.status} = 'complete' AND ${table.approvedOutput} IS NOT NULL AND ${table.decision} IS NOT NULL)`,
     ),
+  ],
+);
+
+// The lease a dispatch holds on one trajectory family while it claims and
+// completes receipts. It names the owning dispatch and where the family's event
+// log ended when the dispatch began. A later dispatch recovers pending receipts
+// under the same lock. A failed dispatch may release only its own receipts,
+// and only when the log still ends at `event_seq`.
+export const openappaDispatchLeasesTable = pgTable(
+  "openappa_dispatch_leases",
+  {
+    root: text().primaryKey(),
+    owner: text().notNull(),
+    // The last event sequence of the root when the lease was taken, or -1 for
+    // an empty log.
+    eventSeq: bigint("event_seq", { mode: "number" }).notNull(),
+    // Lease generation while this family retains pending receipts; not a retry limit.
+    attempt: integer().notNull().default(1),
+  },
+  (table) => [
+    check("openappa_dispatch_leases_attempt", sql`${table.attempt} >= 1`),
   ],
 );
 
@@ -265,6 +292,39 @@ export const openappaUnenforcedCallsTable = pgTable(
     primaryKey({
       columns: [table.organizationId, table.sessionId, table.toolCallId],
     }),
+  ],
+);
+
+// What the proxy needs to govern a server-side thread. A continue carries only
+// the new messages and leaves the tools to the thread, so the proxy keeps what
+// it ruled on: one row per governed model response, keyed by the response id
+// the client names as `previous_message_id`.
+export const openappaThreadStatesTable = pgTable(
+  "openappa_thread_states",
+  {
+    organizationId: text("organization_id").notNull(),
+    // The provider's id of the response this row follows.
+    messageId: text("message_id").notNull(),
+    // The caller-scoped session the thread belongs to.
+    sessionId: text("session_id").notNull(),
+    // The response that set the thread's tools: this one, or an earlier one.
+    rootMessageId: text("root_message_id").notNull(),
+    // The declared tools, kept on a root only: name, namespace, type, marker.
+    tools: jsonb().$type<ThreadTool[]>(),
+    // The tool calls the client holds for this response, as the client echoes
+    // them: a continue carries only their results, and the ruling needs the
+    // call each result answers.
+    calls: jsonb().$type<ThreadCall[]>(),
+    // The client holds a rewrite of this response that the provider's thread
+    // cannot continue from, so the thread must be replayed.
+    diverged: boolean().notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.organizationId, table.messageId] }),
+    index("openappa_thread_states_created_at_idx").on(table.createdAt),
   ],
 );
 

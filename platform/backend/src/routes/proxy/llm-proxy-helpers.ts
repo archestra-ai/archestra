@@ -24,7 +24,6 @@ import {
   resolveRunToolDispatch,
   resolveRunToolTarget,
   resolveRunToolTargetName,
-  resolveUnprovenRunToolTarget,
 } from "@/archestra-mcp-server/run-tool-target";
 import { isNativeAnthropicModelShape } from "@/clients/anthropic-endpoint";
 import logger from "@/logging";
@@ -35,16 +34,12 @@ import type { LlmProxyToolCallRefusal } from "@/proxy/plugins/registry";
 import { getTokenizer } from "@/tokenizers";
 import type {
   CommonMcpToolDefinition,
-  CommonMessage,
-  DualLlmAnalysis,
   GatewayAgent,
   InsertInteraction,
   InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
   ToolCallBlock,
-  ToolInvocation,
-  UnsafeContextBoundary,
   UsageView,
 } from "@/types";
 import {
@@ -57,7 +52,6 @@ import { estimateToolTokens } from "./utils/cost-optimization";
 import {
   FOREIGN_TOOL_NAME_PREFIX,
   type GatewayToolIdentity,
-  type ToolNameCanonicalizer,
   type ToolNameResolution,
 } from "./utils/gateway-tool-names";
 import type { SessionSource } from "./utils/headers/session-id";
@@ -90,7 +84,7 @@ export function shouldForwardAnthropicBeta(
 
 /**
  * Normalize tool calls from either streaming or non-streaming responses
- * into the shape expected by `evaluatePolicies`.
+ * into the shape OpenAPPA rules on.
  *
  * - String arguments: validated as JSON, wrapped in `{ raw: ... }` if invalid
  * - Object arguments: serialized with JSON.stringify
@@ -149,66 +143,6 @@ export function normalizeToolCallsForPolicy(
 }
 
 /**
- * Prepares tool calls for policy evaluation.
- * Returns normalized entries from {@link normalizeToolCallsForPolicy}
- * and adds enforcement rules for declarations without verified attestations:
- *
- * - Calls using unverified `run_tool` wrappers evaluate both the wrapper
- *   and the named target tool. If a gateway is registered under multiple labels
- *   or uses replayed markers, evaluating the target prevents blocked actions
- *   from running unreviewed (see {@link resolveUnprovenRunToolTarget}).
- * - Names without persisted tool rows (such as foreign lookalikes or unattested
- *   Codex namespace members) use the organization default policy for discovered tools.
- */
-export function toolCallsForPolicyEvaluation(params: {
-  toolCalls: Array<{
-    name: string;
-    arguments: string | object;
-    namespace?: string;
-  }>;
-  toolIdentity: ToolNameResolution & Pick<GatewayToolIdentity, "attestationOf">;
-  /** The org's default invocation policy for a discovered tool. */
-  discoveredToolDefault: ToolInvocation.ToolInvocationPolicyAction;
-}): Array<{
-  toolCallName: string;
-  toolCallArgs: string;
-  isRunToolDispatchTarget?: boolean;
-  actionWithoutToolRow?: ToolInvocation.ToolInvocationPolicyAction;
-}> {
-  const { toolCalls, toolIdentity } = params;
-  const normalized = normalizeToolCallsForPolicy(toolCalls, toolIdentity);
-  return toolCalls.flatMap((toolCall, index) => {
-    const entry = normalized[index];
-    if (
-      entry.isRunToolDispatchTarget ||
-      toolIdentity.attestationOf(toolCall.name, toolCall.namespace)
-    ) {
-      return [entry];
-    }
-    const ruled =
-      toolCall.namespace ||
-      entry.toolCallName.startsWith(FOREIGN_TOOL_NAME_PREFIX)
-        ? { ...entry, actionWithoutToolRow: params.discoveredToolDefault }
-        : entry;
-    const target = resolveUnprovenRunToolTarget({
-      toolName: spelledName(toolCall.name, toolCall.namespace),
-      args: JSON.parse(entry.toolCallArgs),
-    });
-    if (!target) {
-      return [ruled];
-    }
-    return [
-      ruled,
-      {
-        toolCallName: target.toolName,
-        toolCallArgs: JSON.stringify(target.toolInput),
-        isRunToolDispatchTarget: true,
-      },
-    ];
-  });
-}
-
-/**
  * A tool call as the stream/response adapters accumulate it, in the shape
  * {@link planDispatchModeToolCallRewrites} reads and rewrites.
  */
@@ -252,7 +186,7 @@ export interface AccumulatedToolCall {
  * (such as `mcp__<label>__<tool>`, `<label>_<tool>`, or Codex namespaces),
  * `run_tool` expects the undecorated target name. Verified `run_tool` attestations
  * identify the client prefix so the proxy can remove it before dispatch.
- * Policy evaluation continues to evaluate the target tool identity.
+ * Plugins still rule on the target tool identity.
  *
  * Returns `null` when there is nothing to do — no dispatch pair in the tool
  * list (`full` exposure, where a missing tool really is disabled), or every
@@ -403,28 +337,30 @@ function isAlwaysDirectlyCallableBuiltIn(toolName: string): boolean {
 }
 
 /**
- * Return a copy of the request's common messages with every tool-call name
- * canonicalized, so trusted-data evaluation sees the platform's own tool
- * names instead of the client-decorated twins (which match no tool row and
- * would flip every gateway conversation to untrusted — including over
- * platform-authored built-in results like `search_tools`).
+ * The cost recorded for a response: what the provider says it billed when it
+ * reports one (OpenRouter does on every response), otherwise the all-in cost
+ * computed from the model's token prices.
  */
-export function canonicalizeCommonMessageToolNames(
-  messages: CommonMessage[],
-  canonicalize: ToolNameCanonicalizer,
-): CommonMessage[] {
-  return messages.map((message) => {
-    if (!message.toolCalls || message.toolCalls.length === 0) {
-      return message;
-    }
-    return {
-      ...message,
-      toolCalls: message.toolCalls.map((toolCall) => ({
-        ...toolCall,
-        name: canonicalize(toolCall.name, toolCall.namespace),
-      })),
-    };
-  });
+export async function calculateUsageCost(params: {
+  model: string;
+  usage: UsageView;
+  provider: SupportedProvider;
+}): Promise<number | undefined> {
+  const { model, usage, provider } = params;
+  if (usage.providerReportedCost !== undefined) {
+    return usage.providerReportedCost;
+  }
+  return utils.costOptimization.calculateCost(
+    model,
+    usage.inputTokens,
+    usage.outputTokens,
+    provider,
+    {
+      readTokens: usage.cacheReadTokens ?? 0,
+      writeTokens: usage.cacheWriteTokens ?? 0,
+      write1hTokens: usage.cacheWrite1hTokens ?? 0,
+    },
+  );
 }
 
 /**
@@ -440,23 +376,16 @@ export async function calculateInteractionCosts(params: {
   cacheSavings: number | undefined;
   cacheReadSavings: number | undefined;
 }> {
-  const cacheTokens = {
-    readTokens: params.usage.cacheReadTokens ?? 0,
-    writeTokens: params.usage.cacheWriteTokens ?? 0,
-    write1hTokens: params.usage.cacheWrite1hTokens ?? 0,
-  };
-  const actualCost = await utils.costOptimization.calculateCost(
-    params.actualModel,
-    params.usage.inputTokens,
-    params.usage.outputTokens,
-    params.providerName,
-    cacheTokens,
-  );
+  const actualCost = await calculateUsageCost({
+    model: params.actualModel,
+    usage: params.usage,
+    provider: params.providerName,
+  });
   const cacheBreakdown = await utils.costOptimization.calculateCacheCost(
     params.actualModel,
     params.providerName,
-    cacheTokens.readTokens,
-    cacheTokens.writeTokens,
+    params.usage.cacheReadTokens ?? 0,
+    params.usage.cacheWriteTokens ?? 0,
     params.usage.cacheWrite1hTokens ?? 0,
   );
   return {
@@ -547,6 +476,7 @@ export function buildInteractionRecord(params: {
     name: string;
     clientId: string;
   };
+  billingTeamId?: string;
   runId?: string;
   userId?: string;
   virtualKeyId?: string;
@@ -567,8 +497,6 @@ export function buildInteractionRecord(params: {
     cacheCost: number | undefined;
     cacheSavings: number | undefined;
   };
-  dualLlmAnalyses: DualLlmAnalysis[];
-  unsafeContextBoundary?: UnsafeContextBoundary;
   toolCallBlock?: ToolCallBlock;
 }): InsertInteraction {
   return {
@@ -578,6 +506,7 @@ export function buildInteractionRecord(params: {
     billingMode: params.billingMode,
     authenticatedAppId: params.authenticatedApp?.id,
     authenticatedAppName: params.authenticatedApp?.name,
+    billingTeamId: params.billingTeamId,
     runId: params.runId,
     userId: params.userId,
     virtualKeyId: params.virtualKeyId,
@@ -590,8 +519,6 @@ export function buildInteractionRecord(params: {
     request: params.request as InteractionRequest,
     processedRequest: params.processedRequest as InteractionRequest,
     response: params.response as InteractionResponse,
-    dualLlmAnalyses: params.dualLlmAnalyses,
-    unsafeContextBoundary: params.unsafeContextBoundary,
     toolCallBlock: params.toolCallBlock,
     model: params.actualModel,
     // `baseline_model` / `baseline_cost` predate the removal of optimization
@@ -646,8 +573,8 @@ export function withProviderToolCallIds<T>(
 
 /**
  * Record OTEL spans and Prometheus metrics for blocked tool calls.
- * Used by both streaming and non-streaming paths when tool invocation
- * policies refuse tool calls.
+ * Used by both streaming and non-streaming paths when guardrails refuse
+ * tool calls.
  */
 /**
  * The row-level marker for a turn whose tool calls a guardrail refused.
@@ -734,6 +661,13 @@ export function handleError(
   ) => ArchestraInternalErrorCode | undefined,
   /** Provider-specific mid-stream error framing; defaults to SSE. */
   formatStreamErrorFrame?: (event: unknown) => string,
+  /**
+   * True when the route translates the upstream provider's wire format into
+   * the client's (e.g. an OpenAI-format client served by an Anthropic
+   * upstream). The upstream's error body would be foreign to the client, so
+   * it is not relayed.
+   */
+  translatesWireFormat?: boolean,
 ): FastifyReply | never {
   logger.error(error);
 
@@ -823,18 +757,35 @@ export function handleError(
       ? ArchestraInternalErrorCode.ProviderOverloaded
       : undefined);
 
-  // Provider rate limits and overloads are relayed uncorrupted. Rewrapping
-  // them in the Archestra error envelope rewrites the provider's error type
-  // (e.g. Anthropic's `rate_limit_error` became `unknown_api_error`), which
-  // makes native clients misclassify the failure — a subscription usage-limit
-  // 429 gets reported to the user as server-side throttling. Internal
-  // ApiErrors (Archestra's own limit blocks) and errors the adapter
-  // intentionally reclassifies (adapterInternalCode) keep the envelope.
-  const upstreamPassthroughBody =
+  // Provider errors reach native clients unchanged. The Archestra envelope
+  // drops the provider's error type and details, which clients read to decide
+  // how to recover: Anthropic's `rate_limit_error` became `unknown_api_error`,
+  // so a subscription usage limit looked like throttling, and a
+  // `thread_not_found` 404 lost the code Claude Code needs to replay an
+  // expired server-side thread. These keep the envelope: Archestra's own
+  // ApiErrors (e.g. limit blocks), errors the adapter reclassifies
+  // (adapterInternalCode), routes that translate the wire format (the
+  // provider's body would be foreign to the client), and errors without a
+  // trustworthy provider body.
+  const relayable =
     !(error instanceof ApiError) &&
     adapterInternalCode === undefined &&
-    (statusCode === 429 || statusCode === 529)
+    !translatesWireFormat;
+  const isRateLimitOrOverload = statusCode === 429 || statusCode === 529;
+  // Rate limits and overloads keep the old rule and relay any parsed body,
+  // including the `{ error: { message } }` that fetch-based adapters
+  // synthesize. Other statuses need a body that is recognizably the
+  // provider's own.
+  const upstreamBody = !relayable
+    ? undefined
+    : isRateLimitOrOverload
       ? extractUpstreamErrorBody(error)
+      : extractTrustedProviderErrorBody(error);
+  const upstreamPassthroughBody =
+    upstreamBody !== undefined &&
+    statusCode >= 400 &&
+    (hasExplicitStatus || isRateLimitOrOverload)
+      ? upstreamBody
       : undefined;
 
   // Headers cannot be changed after streaming starts.
@@ -857,13 +808,19 @@ export function handleError(
     const errorEvent = {
       type: "error",
       error: {
-        // Keep the provider's own error type for rate limits/overloads so
-        // native streaming clients classify the failure correctly.
+        // Keep the provider's own error type (and details) so native
+        // streaming clients classify the failure correctly. This uses
+        // upstreamBody, not upstreamPassthroughBody: the status (200) is
+        // already sent, so the status checks of the passthrough do not apply,
+        // and the type and details are all the client has to go on.
         type:
-          (upstreamPassthroughBody !== undefined && error instanceof Error
+          (upstreamBody !== undefined && error instanceof Error
             ? nestedProviderErrorType(error)
             : undefined) ?? "api_error",
         message: errorMessage,
+        ...(upstreamBody !== undefined
+          ? providerErrorDetails(upstreamBody)
+          : {}),
         // Surface the normalized code (e.g. provider_insufficient_balance)
         // mid-stream too, so a failure after headers commit stays classifiable.
         ...(internalCode ? { internal_code: internalCode } : {}),
@@ -886,18 +843,24 @@ export function handleError(
     return reply;
   }
 
-  // Provider rate-limit/overload body is relayed verbatim (bypassing the
-  // Archestra envelope the central handler would build): the proxy's provider
-  // routes speak each provider's wire format, and native clients parse this
-  // body for the error type. Statuses 429/529 have no response schema entry,
-  // so the payload is serialized as-is.
+  // Provider error body is relayed verbatim (bypassing the Archestra envelope
+  // the central handler would build): the proxy's provider routes speak each
+  // provider's wire format, and native clients parse this body for the error
+  // type. Sent pre-serialized so a route's per-status response schema cannot
+  // reshape it.
   if (upstreamPassthroughBody !== undefined) {
-    return reply.status(statusCode).send(upstreamPassthroughBody);
+    return reply
+      .status(statusCode)
+      .type("application/json; charset=utf-8")
+      .send(JSON.stringify(upstreamPassthroughBody));
   }
 
   // Headers not sent yet - throw ApiError to let central handler return proper status code
   // This matches V1 handler behavior and ensures clients receive correct HTTP status
   const apiError = new ApiError(statusCode, errorMessage, internalCode);
+  // Keep the original cause chain for internal diagnostics. The response
+  // serializer emits only the public message and deliberately omits causes.
+  apiError.cause = error;
   // Keep the retry guidance an Archestra error already carries.
   if (error instanceof ApiError) {
     apiError.retryAfterSeconds = error.retryAfterSeconds;
@@ -1050,6 +1013,32 @@ function extractUpstreamErrorBody(error: unknown): object | undefined {
   }
   if ("error" in body) return body;
   return { error: body };
+}
+
+/**
+ * The parsed provider error body, only when it is recognizably the provider's
+ * own: an object whose error member carries a string `type` or `code`.
+ * Synthetic errors (a bare message from a fetch-based adapter, a status-less
+ * SDK failure) carry neither and keep the Archestra envelope.
+ */
+function extractTrustedProviderErrorBody(error: unknown): object | undefined {
+  const body = extractUpstreamErrorBody(error) as
+    | { error?: unknown }
+    | undefined;
+  const inner = body?.error;
+  if (!inner || typeof inner !== "object" || Array.isArray(inner)) {
+    return undefined;
+  }
+  const { type, code } = inner as { type?: unknown; code?: unknown };
+  return typeof type === "string" || typeof code === "string"
+    ? body
+    : undefined;
+}
+
+/** The provider's `details` member of its error object, for mid-stream frames. */
+function providerErrorDetails(body: object): { details?: unknown } {
+  const details = (body as { error?: { details?: unknown } }).error?.details;
+  return details && typeof details === "object" ? { details } : {};
 }
 
 /**

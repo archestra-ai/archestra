@@ -61,7 +61,11 @@ type AppsParams = Pick<
   | "scope"
   | "authorIds"
   | "excludeAuthorIds"
+  | "access"
+  | "sharedWith"
+  | "owner"
   | "labels"
+  | "pinned"
 >;
 type AppDetailQueryOptions = { toastOnError?: boolean };
 

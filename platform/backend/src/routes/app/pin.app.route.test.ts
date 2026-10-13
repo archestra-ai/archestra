@@ -66,6 +66,28 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     expect(item?.pinnedAt).toBeNull();
   });
 
+  test("pinned=true lists only the caller's pinned apps", async ({
+    makeApp,
+  }) => {
+    const pinned = await makeApp({
+      organizationId,
+      authorId: user.id,
+      name: "Pinned",
+    });
+    await makeApp({ organizationId, authorId: user.id, name: "Unpinned" });
+    await app.inject({ method: "PUT", url: `/api/apps/${pinned.id}/pin` });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0&pinned=true",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.map((i: { id: string }) => i.id)).toEqual([
+      pinned.id,
+    ]);
+    expect(await listItems()).toHaveLength(2);
+  });
+
   test("external app: pin and unpin by (install, resource, tool); pinnedAt surfaces in the listing", async ({
     makeInternalMcpCatalog,
     makeMcpServer,

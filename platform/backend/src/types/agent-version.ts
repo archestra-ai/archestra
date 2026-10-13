@@ -14,8 +14,8 @@ import {
  * - sharing: scope, teams, labels
  * - identity/singletons: slug, isDefault, isPersonalGateway, isPersonalProxy
  * - ownership/lifecycle: organizationId, authorId, timestamps, deletedAt
- * - limits and per-tool policies (separate entities keyed by agent/tool id,
- *   not owned by the agent's config surface)
+ * - limits (separate entities keyed by agent id, not owned by the agent's
+ *   config surface)
  *
  * Enum-ish fields are plain strings on purpose: snapshots are immutable
  * historical data and must keep parsing after an enum gains or loses values.
@@ -32,7 +32,6 @@ export const AgentConfigSnapshotSchema = z.object({
   description: z.string().nullable(),
   icon: z.string().nullable(),
   systemPrompt: z.string().nullable(),
-  considerContextUntrusted: z.boolean(),
   toolExposureMode: z.string(),
   // Snapshots created before credential-readiness controls preserve the
   // historical behavior: missing credentials did not block execution.

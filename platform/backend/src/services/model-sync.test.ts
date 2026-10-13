@@ -1090,6 +1090,43 @@ describe("ModelSyncService", () => {
     ]);
   });
 
+  test("prices a custom-named Claude deployment on Microsoft Foundry from its backing model", () => {
+    const [model] = buildModelsToUpsert({
+      provider: "anthropic",
+      models: [{ id: "team-sonnet", underlyingModelName: "claude-sonnet-4-6" }],
+      modelsDevData: {
+        anthropic: {
+          id: "anthropic",
+          name: "Anthropic",
+          models: {
+            "claude-sonnet-4-6": {
+              id: "claude-sonnet-4-6",
+              name: "Claude Sonnet 4.6",
+              tool_call: true,
+              modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+              cost: {
+                input: 3,
+                output: 15,
+                cache_read: 0.3,
+                cache_write: 3.75,
+              },
+              limit: { context: 1000000, output: 64000 },
+            },
+          },
+        },
+      },
+    });
+
+    expect(model).toEqual(
+      expect.objectContaining({
+        modelId: "team-sonnet",
+        contextLength: 1000000,
+        promptPricePerToken: "0.000003",
+        completionPricePerToken: "0.000015",
+      }),
+    );
+  });
+
   test("uses an authoritative fetched embedding dimension over the name heuristic", () => {
     const [model] = buildModelsToUpsert({
       provider: "ollama",

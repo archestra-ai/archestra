@@ -49,7 +49,7 @@ export function FilePreview({
   onClose?: () => void;
   /** Show the in-place editor instead of the preview (requires `fileId`). */
   editing?: boolean;
-  /** The backing row id; required to edit (rowless objects aren't editable). */
+  /** The file's row id or hand-placed `obj_` ref; required to edit. */
   fileId?: string;
   /** Called when the editor saves or cancels, so the caller can clear `editing`. */
   onExitEdit?: () => void;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
-import { CopyableCode } from "@/components/copyable-code";
+import { ShareLink } from "@/components/chat/share-link";
 import { ResourcePermissionsDialog } from "@/components/resource-permissions";
 
 export function ShareAgentRunDialog({
@@ -21,11 +21,13 @@ export function ShareAgentRunDialog({
       description="Share a read-only view of this session's output. Only its owner can use its live terminal or continue the session."
       open={open}
       onOpenChange={onOpenChange}
-    >
-      <CopyableCode
-        value={`${typeof window === "undefined" ? "" : window.location.origin}/chat/runs/${taskId}`}
-        toastMessage="Session link copied"
-      />
-    </ResourcePermissionsDialog>
+      lead={
+        <ShareLink
+          path={`/chat/runs/${taskId}`}
+          label="Session link"
+          toastMessage="Session link copied"
+        />
+      }
+    />
   );
 }

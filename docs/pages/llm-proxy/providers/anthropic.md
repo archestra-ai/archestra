@@ -2,7 +2,7 @@
 title: Anthropic
 description: Connect Claude with an Anthropic API key, Microsoft Foundry, Vertex AI, or workload identity federation.
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,15 +19,22 @@ Go to **Model Providers → Add API Key**, select **Anthropic**, and configure t
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
 - **Messages path**: `POST /v1/anthropic/v1/messages`
 
+### Claude Code Auto Mode
+
+Claude Code's auto mode uses the provider's server-side safety checks through the proxy. Where the provider runs these checks, Claude Code makes no separate classifier requests, so you do not pay for them. This works on every Anthropic option on this page and on [Amazon Bedrock](/docs/llm-proxy/providers/bedrock). See Anthropic's [auto mode classifier request charges](https://code.claude.com/docs/en/auto-mode-classifier-billing) for which platforms run the checks.
+
 ### Anthropic on Microsoft Foundry
 
-Claude models deployed in Microsoft Foundry use the Anthropic Messages API at `https://<resource>.services.ai.azure.com/anthropic`. Set [`ARCHESTRA_ANTHROPIC_BASE_URL`](/docs/reference/configuration#ARCHESTRA_ANTHROPIC_BASE_URL) to that `/anthropic` base URL. For keyless Microsoft Entra ID authentication, also set [`ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED); Archestra sends a bearer token scoped to `https://ai.azure.com/.default`.
+Use the Claude deployments in your Microsoft Foundry resource, billed through Azure. Archestra lists the resource's Claude deployments, so you pick them like any other Anthropic model.
 
-Claude Foundry deployments must exist in Azure before requests will work. Use the deployed Claude model name in the Anthropic `model` field. Microsoft lists extra Claude prerequisites: a paid eligible Azure subscription, a supported region such as East US2 or Sweden Central, Azure Marketplace access for partner models, permission to subscribe to model offerings, and Contributor or Owner role on the resource group.
+1. Deploy a Claude model in Foundry. Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) lists the subscription, region, and Marketplace requirements.
+2. Go to **Model Providers → Add API Key** and select **Anthropic**.
+3. Paste the Foundry resource key. Under **Advanced**, set **Base URL** to `https://<resource>.services.ai.azure.com/anthropic`.
+4. Click **Test & Create**. The key's models are your Claude deployments, listed by deployment name.
 
-Azure requires Anthropic deployment metadata when creating Claude deployments: `industry`, `organizationName`, and `countryCode`. In Azure CLI this may require an ARM REST deployment call with `properties.modelProviderData`.
-
-See Microsoft's [Claude on Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) for the Azure endpoint and authentication details.
+- Requests name the deployment, not the Claude model ID. On the [Model Router](/docs/llm-proxy/model-router), call `anthropic:<deployment-name>`, and map this key on your [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys).
+- Do not add Claude under the [Azure AI Foundry](/docs/llm-proxy/providers/azure) provider. That provider uses the OpenAI API, and Foundry answers Claude requests there with `404 Requested API is currently not supported`.
+- For keyless Microsoft Entra ID authentication, set [`ARCHESTRA_ANTHROPIC_BASE_URL`](/docs/reference/configuration#ARCHESTRA_ANTHROPIC_BASE_URL) to the `/anthropic` URL and [`ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED). Keyless works with this server-wide URL only, not with a key's **Base URL**.
 
 ### Anthropic on Vertex AI
 

@@ -32,10 +32,6 @@ function fakeTool(overrides: { id: string; catalogId?: string | null }): Tool {
     delegateToA2aConnectionId: null,
     meta: null,
     clonedPendingDiscovery: false,
-    policiesAutoConfiguredAt: null,
-    policiesAutoConfiguringStartedAt: null,
-    policiesAutoConfiguredReasoning: null,
-    policiesAutoConfiguredModel: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
@@ -1488,7 +1484,10 @@ describe("GET /api/agents/:agentId/tools", () => {
       agentType: "agent",
       access: { teams: [sharedTeam.id] },
     });
-    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+    });
     const tool = await makeTool({ name: "agent-tool", catalogId: catalog.id });
     const mcpServer = await makeMcpServer({
       scope: "team",
@@ -1518,6 +1517,46 @@ describe("GET /api/agents/:agentId/tools", () => {
     );
   });
 
+  test("returns only one catalog's tools when catalogId is given", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTool,
+    makeInternalMcpCatalog,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      authorId: user.id,
+      agentType: "agent",
+    });
+    const wanted = await makeInternalMcpCatalog({ organizationId });
+    const other = await makeInternalMcpCatalog({ organizationId });
+    const wantedTool = await makeTool({
+      name: "wanted-tool",
+      catalogId: wanted.id,
+    });
+    const otherTool = await makeTool({
+      name: "other-tool",
+      catalogId: other.id,
+    });
+    await makeAgentTool(agent.id, wantedTool.id);
+    await makeAgentTool(agent.id, otherTool.id);
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools?catalogId=${wanted.id}`,
+    });
+    expect(filtered.statusCode).toBe(200);
+    expect(filtered.json().map((tool: { id: string }) => tool.id)).toEqual([
+      wantedTool.id,
+    ]);
+
+    const all = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools`,
+    });
+    expect(all.json()).toHaveLength(2);
+  });
+
   test("allows a team member to read tools for a team-scoped MCP gateway in their team", async ({
     makeAgent,
     makeAgentTool,
@@ -1537,7 +1576,10 @@ describe("GET /api/agents/:agentId/tools", () => {
       agentType: "mcp_gateway",
       access: { teams: [sharedTeam.id] },
     });
-    const catalog = await makeInternalMcpCatalog({ serverType: "remote" });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "remote",
+    });
     const tool = await makeTool({
       name: "gateway-tool",
       catalogId: catalog.id,
@@ -1568,5 +1610,49 @@ describe("GET /api/agents/:agentId/tools", () => {
         }),
       ]),
     );
+  });
+
+  test("leaves out tools of an MCP server the member cannot access", async ({
+    makeAgent,
+    makeAgentTool,
+    makeTeam,
+    makeTool,
+    makeInternalMcpCatalog,
+    makeUser,
+  }) => {
+    const owner = await makeUser();
+    const otherTeam = await makeTeam(organizationId, owner.id);
+    const agent = await makeAgent({
+      organizationId,
+      authorId: owner.id,
+      agentType: "agent",
+      access: "org",
+    });
+    const teamCatalog = await makeInternalMcpCatalog({
+      organizationId,
+      authorId: owner.id,
+      access: { teams: [otherTeam.id] },
+    });
+    const orgCatalog = await makeInternalMcpCatalog({ organizationId });
+    const teamTool = await makeTool({
+      name: "team_server__lookup",
+      catalogId: teamCatalog.id,
+    });
+    const orgTool = await makeTool({
+      name: "org_server__lookup",
+      catalogId: orgCatalog.id,
+    });
+    await makeAgentTool(agent.id, teamTool.id);
+    await makeAgentTool(agent.id, orgTool.id);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const ids = response.json().map((tool: { id: string }) => tool.id);
+    expect(ids).toContain(orgTool.id);
+    expect(ids).not.toContain(teamTool.id);
   });
 });

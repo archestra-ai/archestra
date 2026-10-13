@@ -13,7 +13,6 @@ import { __test as chatClient } from "./chat-tool-builder";
 const {
   firePreToolUseHook,
   firePostToolUseHook,
-  appendHookFeedbackToToolResult,
   buildPreToolUseBlockedResult,
   toolResultText,
 } = chatClient;
@@ -41,53 +40,6 @@ describe("toolResultText", () => {
     expect(toolResultText({ content: "tool output", _meta: { ui: {} } })).toBe(
       "tool output",
     );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// appendHookFeedbackToToolResult
-// ---------------------------------------------------------------------------
-describe("appendHookFeedbackToToolResult", () => {
-  test("appends feedback to a plain string result", () => {
-    const result = appendHookFeedbackToToolResult(
-      "original output",
-      "you shall not pass",
-    );
-    expect(result).toBe(
-      "original output\n\n[hook feedback] you shall not pass",
-    );
-  });
-
-  test("appends feedback to the content field of a rich object result", () => {
-    const rich = {
-      content: "original output",
-      _meta: { ui: { resourceUri: "res://ui" } },
-    };
-    const result = appendHookFeedbackToToolResult(rich, "blocked by policy");
-
-    expect(result.content).toBe(
-      "original output\n\n[hook feedback] blocked by policy",
-    );
-  });
-
-  test("preserves all extra keys on a rich object result (spread intact)", () => {
-    const rich = {
-      content: "data",
-      _meta: { ui: { resourceUri: "res://ui" }, extra: 42 },
-      structuredContent: { rows: [1, 2, 3] },
-      rawContent: [{ type: "text" as const, text: "data" }],
-    };
-    const result = appendHookFeedbackToToolResult(rich, "feedback");
-
-    // shape is preserved
-    expect(result._meta).toEqual({
-      ui: { resourceUri: "res://ui" },
-      extra: 42,
-    });
-    expect(result.structuredContent).toEqual({ rows: [1, 2, 3] });
-    expect(result.rawContent).toEqual([{ type: "text", text: "data" }]);
-    // only content changed
-    expect(result.content).toContain("[hook feedback] feedback");
   });
 });
 

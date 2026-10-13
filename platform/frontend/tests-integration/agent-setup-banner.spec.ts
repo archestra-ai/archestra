@@ -48,7 +48,7 @@ const READY: Preflight = {
   incompatible: null,
 };
 
-test("spaces the sign-in notice like the rest of the agent page, and clears it once the account is connected", async ({
+test("spaces the setup checklist like the rest of the agent overview, and clears it once the account is connected", async ({
   page,
   mswControl,
   request,
@@ -56,24 +56,28 @@ test("spaces the sign-in notice like the rest of the agent page, and clears it o
   await mockAgentPage({ mswControl, request });
   await page.goto(`/agents/${AGENT.id}?section=general`);
 
-  // A missing Claude account is the compact sign-in notice, not a checklist.
+  // A missing Claude account is a row of the setup checklist.
   const notice = page
     .getByRole("alert")
-    .filter({ hasText: "Sign in to use this agent." });
-  const form = page.locator("form").first();
+    .filter({ hasText: "Before this agent can run" });
   await expect(notice).toBeVisible();
-  await expect(form.getByLabel(/^Name/)).toBeVisible();
+  await expect(notice).toContainText("Connect your Claude subscription");
 
-  // Compare against a gap the form already keeps, not a number from the CSS.
-  const standardGap = await verticalGap(
-    form.getByLabel(/^Name/),
-    form.locator("label").filter({ hasText: /^Description$/ }),
-  );
+  // The checklist is followed by where the agent gets its work, then its
+  // instructions. Compare against a gap the page already keeps, not a number
+  // from the CSS.
+  const workSources = page.getByRole("region", { name: "Give it work" });
+  const instructions = page.getByRole("region", { name: "Instructions" });
+  const standardGap = await verticalGap(workSources, instructions);
   expect(standardGap).toBeGreaterThan(0);
-  expect(await verticalGap(notice, form)).toBeCloseTo(standardGap, 0);
+  expect(await verticalGap(notice, workSources)).toBeCloseTo(standardGap, 0);
 
   await connectClaudeAccount(page, mswControl);
+  // Setup is done, so the checklist goes and the work sources are usable.
   await expect(notice).toHaveCount(0);
+  await expect(workSources).not.toContainText(
+    "Available once setup above is done.",
+  );
 });
 
 async function mockAgentPage({
@@ -140,13 +144,13 @@ async function setAccountState({
 }
 
 /**
- * Opens sign-in from the notice's own action. Once the account connects the
- * agent is ready, so the notice — and the dialog it opened — go away.
+ * Opens sign-in from the checklist row's own action. Once the account
+ * connects the agent is ready, and the dialog it opened goes away.
  */
 async function connectClaudeAccount(page: Page, mswControl: MswControl) {
   await page
     .getByRole("alert")
-    .getByRole("button", { name: "Sign in" })
+    .getByRole("button", { name: "Sign in with Claude" })
     .click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await setAccountState({

@@ -51,6 +51,24 @@ describe("openappaFailure", () => {
   });
 
   test.each([
+    "OpenAPPA processing interrupted: annotator unavailable",
+    "OpenAPPA remedy awaiting an answer: consult pending",
+    "OpenAPPA remedy is still executing; retry later",
+    "OpenAPPA result refused: transport unavailable",
+  ])("keeps an interrupted native operation retryable: %s", (message) => {
+    const cause = new Error(message);
+    const failure = openappaFailure(cause);
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+    expect(failure.retryAfterSeconds).toBeGreaterThan(0);
+    expect(failure.message).toBe(
+      "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
+    );
+    expect(failure.cause).toBe(cause);
+  });
+
+  test.each([
     "no prepared fork to open this child",
     "parent session has not started",
   ])("an unchecked child cannot be repaired by retrying: %s", (message) => {
@@ -62,6 +80,19 @@ describe("openappaFailure", () => {
     expect(failure.retryAfterSeconds).toBeUndefined();
     expect(failure.message).toContain("start a new subagent");
     expect(failure.cause).toBe(cause);
+  });
+
+  test("a dispatch that lost its lease asks the client to retry", () => {
+    const failure = openappaFailure(
+      new Error("OpenAPPA lost its lease on this operation; retry the request"),
+    );
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+    expect(failure.retryAfterSeconds).toBeGreaterThan(0);
+    expect(failure.message).toBe(
+      "OpenAPPA could not safely complete this operation: another request of this session took over this operation. Retry the request.",
+    );
   });
 
   test("strips URL credentials and bounds the detail of a refused policy", () => {

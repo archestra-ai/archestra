@@ -1420,6 +1420,31 @@ describe("collectSubagentToolCalls", () => {
     expect(map.get("P1")?.length).toBe(1);
   });
 
+  it("keeps a call's position but takes its latest state when it settles", () => {
+    const running = {
+      type: SUBAGENT_TOOL_CALL_PART_TYPE,
+      data: {
+        parentToolCallId: "P1",
+        toolCallId: "C1",
+        toolName: "web_search",
+        state: "input-available",
+      },
+    };
+    const map = collectSubagentToolCalls([
+      message([running, subagentPart("P1", "C2")]),
+      message([
+        {
+          ...running,
+          data: { ...running.data, state: "output-available", output: "ok" },
+        },
+      ]),
+    ]);
+    expect(map.get("P1")).toMatchObject([
+      { toolCallId: "C1", state: "output-available", output: "ok" },
+      { toolCallId: "C2" },
+    ]);
+  });
+
   it("ignores malformed subagent parts (missing ids)", () => {
     const map = collectSubagentToolCalls([
       message([

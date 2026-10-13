@@ -5,7 +5,7 @@ import {
   clickButton,
   ensureWireMockAnthropicChatProvider,
   openAgentRowMenu,
-  selectAgentTableView,
+  waitForAgentsTable,
   waitForElementWithReload,
 } from "../utils";
 import { test as apiTest } from "./api-fixtures";
@@ -55,12 +55,12 @@ async function createViaWizard(
   const nameField = page.getByRole("textbox", { name: /^Name\b/ });
   const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
   const startFromScratchButton = page.getByRole("button", {
-    name: /Start from scratch/,
+    name: /^New .* agent/,
   });
 
   // 1. Open the wizard — retry the trigger until the name field mounts. The
   //    Agents page first opens its creation catalog, where this flow chooses
-  //    "Start from scratch"; gateways continue straight to their form.
+  //    its built-in agent; gateways continue straight to their form.
   await expect(async () => {
     if (!page.url().includes(`${listPath}/new`)) {
       await createButton.click();
@@ -164,19 +164,27 @@ test("can create and delete an agent", {
     page.getByRole("combobox").filter({ hasText: AGENT_NAME }),
   ).toBeVisible();
 
+  // The old A2A tab link opens the A2A details over the overview.
   await goToPage(page, `/agents/${agentId}?section=connect`);
   await expect(
-    page.getByText(new RegExp(`/v2/a2a/${agentId}`)).first(),
+    page
+      .getByRole("dialog")
+      .getByText(new RegExp(`/v2/a2a/${agentId}`))
+      .first(),
   ).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press("Escape");
   await expect(
     page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
   ).toBeVisible({ timeout: 15_000 });
 
-  // Configuration is not a second route any more: the wizard's steps are the
-  // detail page's own sections, edited in place.
+  // The overview's Edit opens the edit page; every step is one click away.
+  await page.getByRole("link", { name: "Edit", exact: true }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/agents/${agentId}/edit$`), {
+    timeout: 15_000,
+  });
   await page.getByTestId(`${E2eTestId.AgentSetupStep}-tools`).click();
   await expect(page).toHaveURL(
-    new RegExp(`/agents/${agentId}\\?section=tools`),
+    new RegExp(`/agents/${agentId}/edit\\?step=tools`),
     {
       timeout: 15_000,
     },
@@ -188,16 +196,15 @@ test("can create and delete an agent", {
     page.getByRole("heading", { level: 1, name: new RegExp(AGENT_NAME) }),
   ).toBeVisible();
 
-  // The old wizard route still resolves, so links already out there land on
-  // the section their `?step=` asked for.
-  await goToPage(page, `/agents/${agentId}/edit?step=advanced`);
+  // Links to the old settings tabs land on the matching step.
+  await goToPage(page, `/agents/${agentId}?section=advanced`);
   await expect(page).toHaveURL(
-    new RegExp(`/agents/${agentId}\\?section=advanced`),
+    new RegExp(`/agents/${agentId}/edit\\?step=advanced`),
     { timeout: 15_000 },
   );
 
   await goToPage(page, "/agents");
-  await selectAgentTableView(page);
+  await waitForAgentsTable(page);
   const agentLocator = page
     .getByTestId(E2eTestId.AgentsTable)
     .getByRole("link", { name: AGENT_NAME, exact: true });
@@ -218,16 +225,21 @@ test("can create and delete an agent", {
     .filter({
       has: page.getByRole("link", { name: AGENT_NAME, exact: true }),
     });
+  // An instance where this is the admin's first personal agent pins it for
+  // them as their personal agent, so it is a tile above the table instead of
+  // a row; the tile's whole surface is its link.
+  const isRow = (await rowNameCell.count()) > 0;
   await expect(async () => {
     if (!page.url().match(agentDetailUrl)) {
-      await rowNameCell.click({ position: { x: 4, y: 4 } });
+      if (isRow) await rowNameCell.click({ position: { x: 4, y: 4 } });
+      else await agentLocator.click();
     }
     await expect(page).toHaveURL(agentDetailUrl, { timeout: 3_000 });
   }).toPass({ timeout: 20_000 });
 
   // Delete created agent from the table
   await goToPage(page, "/agents");
-  await selectAgentTableView(page);
+  await waitForAgentsTable(page);
   await waitForElementWithReload(page, agentLocator, {
     timeout: 30_000,
     intervals: [2000, 3000, 5000],
@@ -275,7 +287,7 @@ test("can create an MCP gateway and land on its connection instructions", {
   }
 });
 
-test("pins MCP gateways across table and card views, reloads, and filters", async ({
+test("pins MCP gateways as tiles, reloads, and filters", async ({
   page,
   request,
   createAgent,
@@ -294,28 +306,33 @@ test("pins MCP gateways across table and card views, reloads, and filters", asyn
     }
     const listPath = `/mcp/gateways?name=${encodeURIComponent(prefix)}&pageSize=1&sortBy=name&sortDirection=asc`;
     await goToPage(page, listPath);
-    await selectAgentTableView(page);
-    await openAgentRowMenu(page, names[0]);
-    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+    await waitForAgentsTable(page);
+    // Pinning is the row's own button, beside Edit and the menu.
+    const pinRow = (name: string) =>
+      page
+        .getByTestId(E2eTestId.AgentsTable)
+        .getByRole("button", { name: `Pin ${name}`, exact: true })
+        .click();
+    await pinRow(names[0]);
+    // The viewer's personal gateway is pinned for them as well, so the
+    // section can be there whatever this test pins; only its own tiles count.
     const pinnedSection = page.locator("section").filter({
       has: page.getByRole("heading", { name: "Pinned", exact: true }),
     });
-    await expect(
-      pinnedSection.getByRole("link", { name: names[0], exact: true }),
-    ).toBeVisible();
+    const pinnedTile = (name: string) =>
+      pinnedSection.getByRole("link", { name, exact: true });
+    const ownTiles = pinnedSection.getByRole("link", {
+      name: new RegExp(prefix),
+    });
+    await expect(pinnedTile(names[0])).toBeVisible();
     // Pinning frees a slot on the ordinary page; the next unpinned gateway appears.
     await expect(
       page.getByRole("link", { name: names[1], exact: true }),
     ).toBeVisible();
-    await openAgentRowMenu(page, names[1]);
-    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
-    await expect(
-      pinnedSection.getByRole("row").filter({ has: page.getByRole("link") }),
-    ).toHaveText([new RegExp(names[1]), new RegExp(names[0])]);
+    await pinRow(names[1]);
+    await expect(ownTiles).toHaveText([names[1], names[0]]);
     await page.reload();
-    await expect(
-      pinnedSection.getByRole("link", { name: names[0], exact: true }),
-    ).toBeVisible();
+    await expect(pinnedTile(names[0])).toBeVisible();
     await expect(
       page.getByRole("link", { name: names[2], exact: true }),
     ).toBeVisible();
@@ -325,58 +342,41 @@ test("pins MCP gateways across table and card views, reloads, and filters", asyn
     await expect(
       page.getByRole("link", { name: names[2], exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Pinned", exact: true }),
-    ).toHaveCount(0);
+    await expect(ownTiles).toHaveCount(0);
+
     await goToPage(page, listPath);
-    await page.getByRole("button", { name: "View as cards" }).click();
-    await expect(
-      pinnedSection.getByRole("link", { name: names[0], exact: true }),
-    ).toBeVisible();
-    await openAgentRowMenu(page, names[0]);
-    await page.getByRole("menuitem", { name: "Unpin", exact: true }).click();
-    await expect(
-      pinnedSection.getByRole("link", { name: names[0], exact: true }),
-    ).toHaveCount(0);
+    await pinnedSection
+      .getByRole("button", { name: `Unpin ${names[0]}`, exact: true })
+      .click();
+    await expect(pinnedTile(names[0])).toHaveCount(0);
     await expect(
       page.getByRole("link", { name: names[0], exact: true }),
     ).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(
-      pinnedSection.getByRole("link", { name: names[1], exact: true }),
-    ).toBeVisible();
-    await openAgentRowMenu(page, names[1]);
-    await page.getByRole("menuitem", { name: "Unpin", exact: true }).click();
-    await expect(
-      page.getByRole("heading", { name: "Pinned", exact: true }),
-    ).toHaveCount(0);
+    await expect(pinnedTile(names[1])).toBeVisible();
+    await pinnedSection
+      .getByRole("button", { name: `Unpin ${names[1]}`, exact: true })
+      .click();
+    await expect(ownTiles).toHaveCount(0);
     await page.reload();
     await expect(
       page.getByRole("link", { name: names[0], exact: true }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Pinned", exact: true }),
-    ).toHaveCount(0);
+    await expect(ownTiles).toHaveCount(0);
     // Pinning the only row on the last page keeps the remaining list reachable.
     await page.setViewportSize({ width: 1280, height: 800 });
     await goToPage(page, `${listPath}&page=3`);
-    await selectAgentTableView(page);
-    await openAgentRowMenu(page, names[2]);
-    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
-    await expect(
-      pinnedSection.getByRole("link", { name: names[2], exact: true }),
-    ).toBeVisible();
+    await waitForAgentsTable(page);
+    await pinRow(names[2]);
+    await expect(pinnedTile(names[2])).toBeVisible();
     await expect(
       page.getByRole("link", { name: names[1], exact: true }),
     ).toBeVisible();
     await page
-      .getByRole("checkbox", { name: `Select ${names[2]}`, exact: true })
-      .check();
-    await page
       .getByRole("checkbox", { name: `Select ${names[1]}`, exact: true })
       .check();
     await expect(
-      page.getByText("2 gateways selected", { exact: true }).last(),
+      page.getByText("1 gateway selected", { exact: true }).last(),
     ).toBeVisible();
   } finally {
     for (const id of ids) await deleteAgent(request, id);

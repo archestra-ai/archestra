@@ -7,6 +7,10 @@ const SIGNING_DOMAIN = "archestra-connection-proxy-setup-v1:";
 const PATH_PREFIX = "/v1/connection-setup/";
 const MAX_TOKEN_LENGTH = 2048;
 const SAFE_TOKEN = /^cps1_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+const REFERENCE_PREFIX = "csr1_";
+const REFERENCE_DOMAIN = "archestra-connection-setup-reference-v1:";
+// 132 bits of the HMAC: enough that no other text matches by chance.
+const REFERENCE_LENGTH = 22;
 
 interface ProxySetupClaims {
   aud: "connection-proxy-setup";
@@ -79,6 +83,52 @@ export function verifyConnectionProxySetupContext(
 }
 
 /**
+ * The setup reference the installer prints at its end. The agent that runs
+ * the installer reads it in its own conversation, so it marks the one
+ * conversation the setup context exempts. It is derived from the setup id with
+ * the server secret: nothing on the client, the setup URL included, yields
+ * it. It grants nothing on its own.
+ */
+export function connectionSetupReference(params: {
+  setupId: string;
+  secret: string | undefined;
+}): string {
+  if (!params.secret) {
+    throw new Error("Connection proxy setup signing key is missing");
+  }
+  const digest = createHmac("sha256", params.secret)
+    .update(REFERENCE_DOMAIN)
+    .update(params.setupId)
+    .digest("base64url");
+  return `${REFERENCE_PREFIX}${digest.slice(0, REFERENCE_LENGTH)}`;
+}
+
+/**
+ * True when the request comes from the conversation that ran the installer:
+ * its body holds the setup reference of the setup the context names. A
+ * session started after the setup has no such text, so the setup URL in its
+ * settings exempts nothing. Call only for a context that
+ * `verifyConnectionProxySetupContext` accepted.
+ */
+export function carriesConnectionSetupReference(params: {
+  token: string;
+  requestBody: unknown;
+  secret: string | undefined;
+}): boolean {
+  try {
+    const setupId = setupIdOf(params.token);
+    if (!setupId || !params.secret) return false;
+    const reference = connectionSetupReference({
+      setupId,
+      secret: params.secret,
+    });
+    return JSON.stringify(params.requestBody ?? null).includes(reference);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Map `/v1/connection-setup/<token>/<suffix>` to `/v1/<suffix>`.
  * Stashes a literal token for later verification. Does not authorize.
  */
@@ -141,6 +191,15 @@ function claimsMatch(params: VerifyParams): boolean {
     expiresAt > now &&
     expiresAt - issuedAt === CONNECTION_SETUP_WINDOW_MS
   );
+}
+
+function setupIdOf(token: string): string | undefined {
+  if (!token.startsWith(PREFIX)) return undefined;
+  const [payload] = token.slice(PREFIX.length).split(".");
+  const bytes = payload ? decodeCanonicalBase64Url(payload) : null;
+  if (!bytes) return undefined;
+  const parsed = JSON.parse(bytes.toString("utf8")) as unknown;
+  return isRecord(parsed) ? readRequiredString(parsed, "setupId") : undefined;
 }
 
 function hasCompleteScope(params: {

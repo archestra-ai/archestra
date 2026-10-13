@@ -151,8 +151,9 @@ export function LlmProviderApiKeyDropdown({
             variant="outline"
             disabled={disabled}
             className={cn(
-              // Default (input) height: it stands in for a Select in forms.
-              "min-w-0 justify-start gap-1.5 px-3",
+              // Default (input) height and `--input` edge: it stands in for a
+              // Select in forms and filter bars.
+              "min-w-0 justify-start gap-1.5 border-input px-3",
               triggerVariant === "select" && "justify-between",
               triggerClassName,
             )}

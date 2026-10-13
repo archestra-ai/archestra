@@ -3,12 +3,14 @@ import {
   APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolShortName,
-  CONTEXT_TEAM_IDS,
   getArchestraToolFullName,
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
+  TOOL_DELETE_FILE_SHORT_NAME,
+  TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_FILE_RAW_SHORT_NAME,
@@ -16,9 +18,10 @@ import {
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
-import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { ToolModel } from "@/models";
 import EnvironmentModel from "@/models/environment";
@@ -29,7 +32,7 @@ import {
 } from "./app-tool-runtime-gate";
 
 // The gate is the single allowlist shared by the app runtime proxy and
-// preview_app_tool. These tests pin its assignment/visibility/policy behaviour
+// preview_app_tool. These tests pin its assignment/environment/visibility behaviour
 // directly — the gate never executes a tool, so no live MCP server is needed.
 
 async function setup(
@@ -64,12 +67,7 @@ async function setup(
   };
 }
 
-const BASE = {
-  isContextTrusted: true,
-  treatRequireApprovalAsBlock: true,
-} as const;
-
-test("allows an assigned tool with no policy", async ({
+test("allows an assigned tool", async ({
   makeOrganization,
   makeUser,
   makeApp,
@@ -77,7 +75,7 @@ test("allows an assigned tool with no policy", async ({
   makeTool,
   makeAppTool,
 }) => {
-  const { organizationId, userId, appId, toolName } = await setup({
+  const { appId, toolName } = await setup({
     makeOrganization,
     makeUser,
     makeApp,
@@ -87,11 +85,7 @@ test("allows an assigned tool with no policy", async ({
   });
   const decision = await gateAppToolCall({
     appId,
-    organizationId,
-    userId,
     toolName,
-    toolInput: {},
-    ...BASE,
   });
   expect(decision).toEqual({
     allowed: true,
@@ -108,7 +102,7 @@ test("refuses a tool not assigned to the app", async ({
   makeTool,
   makeAppTool,
 }) => {
-  const { organizationId, userId, appId } = await setup({
+  const { appId } = await setup({
     makeOrganization,
     makeUser,
     makeApp,
@@ -118,11 +112,7 @@ test("refuses a tool not assigned to the app", async ({
   });
   const decision = await gateAppToolCall({
     appId,
-    organizationId,
-    userId,
     toolName: "hf__not_assigned",
-    toolInput: {},
-    ...BASE,
   });
   expect(decision.allowed).toBe(false);
   if (!decision.allowed) expect(decision.reason).toContain("not assigned");
@@ -140,7 +130,7 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
   makeTool,
   makeAppTool,
 }) => {
-  const { organizationId, userId, appId } = await setup({
+  const { appId } = await setup({
     makeOrganization,
     makeUser,
     makeApp,
@@ -163,11 +153,7 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
   for (const shortName of authoringTools) {
     const management = await gateAppToolCall({
       appId,
-      organizationId,
-      userId,
       toolName: getArchestraToolFullName(shortName),
-      toolInput: {},
-      ...BASE,
     });
     expect(management.allowed, `${shortName} must not be app-callable`).toBe(
       false,
@@ -176,31 +162,19 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
 
   const dataStore = await gateAppToolCall({
     appId,
-    organizationId,
-    userId,
     toolName: getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME),
-    toolInput: {},
-    ...BASE,
   });
   expect(dataStore).toEqual({ allowed: true, kind: "app-builtin" });
 
   const llm = await gateAppToolCall({
     appId,
-    organizationId,
-    userId,
     toolName: getArchestraToolFullName(TOOL_APP_LLM_COMPLETE_SHORT_NAME),
-    toolInput: {},
-    ...BASE,
   });
   expect(llm).toEqual({ allowed: true, kind: "app-builtin" });
 
   const executions = await gateAppToolCall({
     appId,
-    organizationId,
-    userId,
     toolName: getArchestraToolFullName(TOOL_LIST_AGENT_RUNS_SHORT_NAME),
-    toolInput: {},
-    ...BASE,
   });
   expect(executions).toEqual({ allowed: true, kind: "app-builtin" });
 
@@ -212,11 +186,7 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
     for (const shortName of APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES) {
       const fileTool = await gateAppToolCall({
         appId,
-        organizationId,
-        userId,
         toolName: getArchestraToolFullName(shortName),
-        toolInput: {},
-        ...BASE,
       });
       expect(fileTool, `${shortName} must be app-callable`).toEqual({
         allowed: true,
@@ -228,7 +198,7 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
   }
 });
 
-test("refuses the file tools when the sandbox runtime is off", async ({
+test("with the code runtime off, admits the store-only file tools and refuses upload/download and copy_file", async ({
   makeOrganization,
   makeUser,
   makeApp,
@@ -236,7 +206,7 @@ test("refuses the file tools when the sandbox runtime is off", async ({
   makeTool,
   makeAppTool,
 }) => {
-  const { organizationId, userId, appId } = await setup({
+  const { appId } = await setup({
     makeOrganization,
     makeUser,
     makeApp,
@@ -244,32 +214,69 @@ test("refuses the file tools when the sandbox runtime is off", async ({
     makeTool,
     makeAppTool,
   });
-  // The file tools are only registered under the sandbox flag, so the gate must
-  // not admit a call the dispatcher could not resolve.
   const originalEnabled = config.skillsSandbox.enabled;
   config.skillsSandbox.enabled = false;
+  const decide = (shortName: ArchestraToolShortName) =>
+    gateAppToolCall({ appId, toolName: getArchestraToolFullName(shortName) });
   try {
-    for (const shortName of APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES) {
+    // The persistent-file tools only touch the file store.
+    for (const shortName of [
+      TOOL_SEARCH_FILES_SHORT_NAME,
+      TOOL_READ_FILE_SHORT_NAME,
+      TOOL_READ_FILE_RAW_SHORT_NAME,
+      TOOL_SAVE_FILE_SHORT_NAME,
+      TOOL_EDIT_FILE_SHORT_NAME,
+      TOOL_DELETE_FILE_SHORT_NAME,
+    ] as const) {
+      expect(await decide(shortName), `${shortName} must be admitted`).toEqual({
+        allowed: true,
+        kind: "app-builtin",
+      });
+    }
+    // upload/download move bytes through the code runtime, which is off, so
+    // the gate must not admit a call the dispatcher could not resolve; and
+    // copy_file is agent-only (see the next test).
+    for (const shortName of [
+      TOOL_UPLOAD_FILE_SHORT_NAME,
+      TOOL_DOWNLOAD_FILE_SHORT_NAME,
+      TOOL_COPY_FILE_SHORT_NAME,
+    ] as const) {
+      expect(
+        (await decide(shortName)).allowed,
+        `${shortName} must be refused`,
+      ).toBe(false);
+    }
+  } finally {
+    config.skillsSandbox.enabled = originalEnabled;
+  }
+});
+
+test("copy_file is never app-callable, with or without the code runtime", async ({
+  makeOrganization,
+  makeUser,
+  makeApp,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAppTool,
+}) => {
+  const { appId } = await setup({
+    makeOrganization,
+    makeUser,
+    makeApp,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAppTool,
+  });
+  const originalEnabled = config.skillsSandbox.enabled;
+  try {
+    for (const enabled of [true, false]) {
+      config.skillsSandbox.enabled = enabled;
       const decision = await gateAppToolCall({
         appId,
-        organizationId,
-        userId,
-        toolName: getArchestraToolFullName(shortName),
-        toolInput: {},
-        ...BASE,
+        toolName: getArchestraToolFullName(TOOL_COPY_FILE_SHORT_NAME),
       });
-      expect(decision.allowed, `${shortName} must be refused`).toBe(false);
+      expect(decision.allowed, `runtime ${enabled ? "on" : "off"}`).toBe(false);
     }
-    // The flag-independent built-ins keep working.
-    const dataStore = await gateAppToolCall({
-      appId,
-      organizationId,
-      userId,
-      toolName: getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME),
-      toolInput: {},
-      ...BASE,
-    });
-    expect(dataStore).toEqual({ allowed: true, kind: "app-builtin" });
   } finally {
     config.skillsSandbox.enabled = originalEnabled;
   }
@@ -283,7 +290,7 @@ test("refuses a tool whose visibility excludes the app surface", async ({
   makeTool,
   makeAppTool,
 }) => {
-  const { organizationId, userId, appId, toolName } = await setup(
+  const { appId, toolName } = await setup(
     {
       makeOrganization,
       makeUser,
@@ -296,206 +303,20 @@ test("refuses a tool whose visibility excludes the app surface", async ({
   );
   const decision = await gateAppToolCall({
     appId,
-    organizationId,
-    userId,
     toolName,
-    toolInput: {},
-    ...BASE,
   });
   expect(decision.allowed).toBe(false);
   if (!decision.allowed) expect(decision.reason).toContain("visibility");
 });
 
-test("enforces a block_always policy on the target (runtime gap fix)", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeInternalMcpCatalog,
-  makeTool,
-  makeAppTool,
-  makeToolPolicy,
-}) => {
-  const { organizationId, userId, appId, toolId, toolName } = await setup({
-    makeOrganization,
-    makeUser,
-    makeApp,
-    makeInternalMcpCatalog,
-    makeTool,
-    makeAppTool,
-  });
-  await makeToolPolicy(toolId, { conditions: [], action: "block_always" });
-
-  for (const treatRequireApprovalAsBlock of [true, false]) {
-    const decision = await gateAppToolCall({
-      appId,
-      organizationId,
-      userId,
-      toolName,
-      toolInput: {},
-      isContextTrusted: true,
-      treatRequireApprovalAsBlock,
-    });
-    expect(decision.allowed).toBe(false);
-    if (!decision.allowed) {
-      // The reason attributes the block to the gateway brand and names the
-      // blocked tool, so the app knows the tool itself did not fail.
-      expect(decision.reason).toContain(toolName);
-      expect(decision.reason).toContain(archestraMcpBranding.catalogName);
-    }
-  }
-});
-
-test("require_approval blocks the runtime but not preview", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeInternalMcpCatalog,
-  makeTool,
-  makeAppTool,
-  makeToolPolicy,
-}) => {
-  const { organizationId, userId, appId, toolId, toolName } = await setup({
-    makeOrganization,
-    makeUser,
-    makeApp,
-    makeInternalMcpCatalog,
-    makeTool,
-    makeAppTool,
-  });
-  await makeToolPolicy(toolId, { conditions: [], action: "require_approval" });
-
-  const runtime = await gateAppToolCall({
-    appId,
-    organizationId,
-    userId,
-    toolName,
-    toolInput: {},
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: true,
-  });
-  expect(runtime.allowed).toBe(false);
-  if (!runtime.allowed) expect(runtime.reason).toContain("approval");
-
-  const preview = await gateAppToolCall({
-    appId,
-    organizationId,
-    userId,
-    toolName,
-    toolInput: {},
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: false,
-  });
-  expect(preview.allowed).toBe(true);
-});
-
-test("an untrusted context fires a block_when_context_is_untrusted policy", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeInternalMcpCatalog,
-  makeTool,
-  makeAppTool,
-  makeToolPolicy,
-}) => {
-  const { organizationId, userId, appId, toolId, toolName } = await setup({
-    makeOrganization,
-    makeUser,
-    makeApp,
-    makeInternalMcpCatalog,
-    makeTool,
-    makeAppTool,
-  });
-  await makeToolPolicy(toolId, {
-    conditions: [],
-    action: "block_when_context_is_untrusted",
-  });
-
-  const trusted = await gateAppToolCall({
-    appId,
-    organizationId,
-    userId,
-    toolName,
-    toolInput: {},
-    isContextTrusted: true,
-    treatRequireApprovalAsBlock: false,
-  });
-  expect(trusted.allowed).toBe(true);
-
-  const untrusted = await gateAppToolCall({
-    appId,
-    organizationId,
-    userId,
-    toolName,
-    toolInput: {},
-    isContextTrusted: false,
-    treatRequireApprovalAsBlock: false,
-  });
-  expect(untrusted.allowed).toBe(false);
-});
-
-test("a team-scoped policy is matched against the viewer's teams", async ({
-  makeOrganization,
-  makeUser,
-  makeApp,
-  makeInternalMcpCatalog,
-  makeTool,
-  makeAppTool,
-  makeTeam,
-  makeTeamMember,
-  makeToolPolicy,
-}) => {
-  const org = await makeOrganization();
-  const inTeam = await makeUser();
-  const outOfTeam = await makeUser();
-  const team = await makeTeam(org.id, inTeam.id);
-  await makeTeamMember(team.id, inTeam.id);
-  const app = await makeApp({ organizationId: org.id });
-  const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-  const tool = await makeTool({
-    name: `hf__team_${crypto.randomUUID().slice(0, 8)}`,
-    catalogId: catalog.id,
-  });
-  await makeAppTool(app.id, tool.id);
-  await makeToolPolicy(tool.id, {
-    conditions: [
-      { key: CONTEXT_TEAM_IDS, operator: "contains", value: team.id },
-    ],
-    action: "block_always",
-  });
-
-  // viewer in the team → the team-scoped policy matches and blocks
-  const blocked = await gateAppToolCall({
-    appId: app.id,
-    organizationId: org.id,
-    userId: inTeam.id,
-    toolName: tool.name,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(blocked.allowed).toBe(false);
-
-  // viewer outside the team → the condition does not match
-  const allowed = await gateAppToolCall({
-    appId: app.id,
-    organizationId: org.id,
-    userId: outOfTeam.id,
-    toolName: tool.name,
-    toolInput: {},
-    ...BASE,
-  });
-  expect(allowed.allowed).toBe(true);
-});
-
 test("refuses an assigned tool whose catalog left the app's environment", async ({
   makeOrganization,
-  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
 }) => {
   const org = await makeOrganization();
-  const user = await makeUser();
   const prod = await EnvironmentModel.create({
     organizationId: org.id,
     name: "production",
@@ -520,11 +341,7 @@ test("refuses an assigned tool whose catalog left the app's environment", async 
 
   const decision = await gateAppToolCall({
     appId: app.id,
-    organizationId: org.id,
-    userId: user.id,
     toolName: tool.name,
-    toolInput: {},
-    ...BASE,
   });
   expect(decision.allowed).toBe(false);
   expect(decision.allowed === false && decision.reason).toContain(
@@ -534,14 +351,12 @@ test("refuses an assigned tool whose catalog left the app's environment", async 
 
 test("allows an assigned Default-environment tool on an env-bound app", async ({
   makeOrganization,
-  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
 }) => {
   const org = await makeOrganization();
-  const user = await makeUser();
   const prod = await EnvironmentModel.create({
     organizationId: org.id,
     name: "production",
@@ -561,25 +376,19 @@ test("allows an assigned Default-environment tool on an env-bound app", async ({
 
   const decision = await gateAppToolCall({
     appId: app.id,
-    organizationId: org.id,
-    userId: user.id,
     toolName: tool.name,
-    toolInput: {},
-    ...BASE,
   });
   expect(decision.allowed).toBe(true);
 });
 
 test("allows an assigned tool in the app's bound environment", async ({
   makeOrganization,
-  makeUser,
   makeApp,
   makeInternalMcpCatalog,
   makeTool,
   makeAppTool,
 }) => {
   const org = await makeOrganization();
-  const user = await makeUser();
   const prod = await EnvironmentModel.create({
     organizationId: org.id,
     name: "production",
@@ -597,11 +406,7 @@ test("allows an assigned tool in the app's bound environment", async ({
 
   const decision = await gateAppToolCall({
     appId: app.id,
-    organizationId: org.id,
-    userId: user.id,
     toolName: tool.name,
-    toolInput: {},
-    ...BASE,
   });
   expect(decision).toEqual({
     allowed: true,

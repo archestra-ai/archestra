@@ -9,6 +9,7 @@ import type { StageResult } from "./a2a/stage-attachments";
 import {
   type A2AAttachment,
   buildUserContent,
+  createLiveSubagentToolCallEmitter,
   emitSubagentToolCalls,
   executeA2AMessage,
 } from "./a2a-executor";
@@ -882,7 +883,7 @@ describe("executeA2AMessage current turn assembly", () => {
 });
 
 describe("executeA2AMessage model selection", () => {
-  test("uses the shared conversation selection so delegated agents inherit the organization default model", async ({
+  test("uses the shared conversation selection so delegated agents inherit the organization default model and key", async ({
     makeUser,
     makeOrganization,
     makeMember,
@@ -963,6 +964,9 @@ describe("executeA2AMessage model selection", () => {
         model: "gemini-2.5-pro",
         provider: "gemini",
         externalAgentId: `agent-parent:${agent.id}`,
+        // The key selected with the model, not a fresh lookup that would
+        // prefer the caller's personal key.
+        agentLlmApiKeyId: "org-key",
       }),
     );
   });
@@ -1500,5 +1504,63 @@ describe("emitSubagentToolCalls", () => {
       message: { id: "m", role: "assistant" } as unknown as UIMessage,
     });
     expect(emitted).toHaveLength(0);
+  });
+
+  test("live emitter surfaces a call when its input is ready and again when it settles", () => {
+    const { bridge, emitted } = fakeBridge();
+    const emit = createLiveSubagentToolCallEmitter({
+      bridge,
+      parentToolCallId: "P1",
+    });
+
+    emit({
+      type: "tool-input-available",
+      toolCallId: "C1",
+      toolName: "web_search",
+      input: { q: "nitpicker" },
+    });
+    emit({ type: "text-delta", id: "t", delta: "thinking" });
+    emit({ type: "tool-output-error", toolCallId: "C2", errorText: "lost" });
+    emit({
+      type: "tool-input-available",
+      toolCallId: "C2",
+      toolName: "fetch",
+      input: {},
+    });
+    emit({ type: "tool-output-available", toolCallId: "C1", output: "1.2.3" });
+    emit({ type: "tool-output-error", toolCallId: "C2", errorText: "404" });
+
+    expect(emitted).toEqual([
+      {
+        parentToolCallId: "P1",
+        toolCallId: "C1",
+        toolName: "web_search",
+        input: { q: "nitpicker" },
+        state: "input-available",
+      },
+      {
+        parentToolCallId: "P1",
+        toolCallId: "C2",
+        toolName: "fetch",
+        input: {},
+        state: "input-available",
+      },
+      {
+        parentToolCallId: "P1",
+        toolCallId: "C1",
+        toolName: "web_search",
+        input: { q: "nitpicker" },
+        state: "output-available",
+        output: "1.2.3",
+      },
+      {
+        parentToolCallId: "P1",
+        toolCallId: "C2",
+        toolName: "fetch",
+        input: {},
+        state: "output-error",
+        errorText: "404",
+      },
+    ]);
   });
 });

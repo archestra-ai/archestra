@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ResourceAccessRelation,
+} from "@archestra/shared";
 import {
   type QueryClient,
   useMutation,
@@ -16,6 +20,7 @@ const {
   deleteInternalMcpCatalogItem,
   getDeploymentYamlPreview,
   getInternalMcpCatalog,
+  getInternalMcpCatalogCredentialPreflight,
   getInternalMcpCatalogLabelKeys,
   getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
@@ -96,6 +101,64 @@ export function useInternalMcpCatalog(
     },
     initialData: params?.initialData,
     enabled: params?.enabled,
+  });
+}
+
+/**
+ * Ids of the catalog items the registry's access filters keep. The registry
+ * filters its rows in the browser over the shared catalog list; only the
+ * access relation, recipient, and owner filters need the server, which reads
+ * the grants. Disabled when no filter is given, meaning every row is kept.
+ */
+export function useInternalMcpCatalogAccessIds(filters: {
+  access?: ResourceAccessRelation[];
+  sharedWith?: string[];
+  owner?: string[];
+}) {
+  const { access, sharedWith, owner } = filters;
+  return useQuery({
+    queryKey: [
+      "mcp-catalog",
+      "access-ids",
+      {
+        access: access ?? null,
+        sharedWith: sharedWith ?? null,
+        owner: owner ?? null,
+      },
+    ],
+    enabled: !!access || !!sharedWith || !!owner,
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalog({
+        query: { access, sharedWith, owner },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return new Set((data ?? []).map((item) => item.id));
+    },
+  });
+}
+
+/**
+ * The saved credentials that would stop the caller installing a catalog item
+ * at this scope, so the install dialog can explain before they press Install.
+ */
+export function useMcpCatalogCredentialPreflight(params: {
+  catalogId: string | undefined;
+  scope: "personal" | "team" | "org";
+  enabled?: boolean;
+}) {
+  const { catalogId, scope } = params;
+  return useQuery({
+    queryKey: ["mcp-catalog", catalogId, "credential-preflight", scope],
+    enabled: !!catalogId && (params.enabled ?? true),
+    refetchOnMount: "always",
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalogCredentialPreflight({
+        path: { id: catalogId ?? "" },
+        query: { scope },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.blockers ?? [];
+    },
   });
 }
 

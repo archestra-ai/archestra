@@ -24,11 +24,18 @@ import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructions";
 import { SecretCopyButton } from "@/components/secret-copy-button";
-import { terminalCodeClass } from "@/components/terminal-surface";
+import {
+  terminalActionClass,
+  terminalCodeClass,
+} from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -36,6 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   buildCurlExample,
   getProviderAuthHeader,
@@ -286,10 +294,8 @@ function EndpointPicker({
           key={option.value}
           htmlFor={`${id}-${option.value}`}
           className={cn(
-            "flex cursor-pointer flex-col items-start gap-1 rounded-md border p-3 font-normal transition-colors has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-            value === option.value
-              ? "border-primary bg-primary/10"
-              : "hover:bg-muted/50",
+            "flex cursor-pointer flex-col items-start gap-1 rounded-md p-3 font-normal",
+            radioCardClass({ checked: value === option.value }),
           )}
         >
           <RadioGroupItem
@@ -676,11 +682,11 @@ export function MaskedCodeExample({
       <div className="flex items-center justify-between border-b border-terminal-edge py-1 pr-1 pl-3">
         <span className="text-xs text-terminal-muted">{language}</span>
         <div className="flex items-center gap-1">
-          <Button
+          <UnstyledButton
             type="button"
-            size="icon-xs"
-            variant="outline"
             aria-label={revealed ? "Hide key" : "Show key"}
+            aria-pressed={revealed !== null}
+            className={cn(terminalActionClass, "size-7")}
             disabled={isRevealing}
             onClick={async () => {
               if (revealed) {
@@ -702,7 +708,7 @@ export function MaskedCodeExample({
             ) : (
               <Eye />
             )}
-          </Button>
+          </UnstyledButton>
           <SecretCopyButton
             variant="terminal"
             getSecretText={async () => {
@@ -761,21 +767,36 @@ function CopyButton({
   primary?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const onClick = async () => {
+    await copyToClipboard(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+  const icon = copied ? <Check /> : <Copy />;
+  // `primary` is the one deliberate call to action (copy the key you just
+  // created); every other copy on a code surface is the shared terminal action.
+  if (primary) {
+    return (
+      <Button
+        type="button"
+        size="icon-xs"
+        aria-label={copied ? "Copied" : label}
+        className="shrink-0"
+        onClick={onClick}
+      >
+        {icon}
+      </Button>
+    );
+  }
   return (
-    <Button
+    <UnstyledButton
       type="button"
-      size="icon-xs"
-      variant={primary ? "default" : "outline"}
       aria-label={copied ? "Copied" : label}
-      className="shrink-0"
-      onClick={async () => {
-        await copyToClipboard(value);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1600);
-      }}
+      className={cn(terminalActionClass, "size-7 shrink-0")}
+      onClick={onClick}
     >
-      {copied ? <Check /> : <Copy />}
-    </Button>
+      {icon}
+    </UnstyledButton>
   );
 }
 

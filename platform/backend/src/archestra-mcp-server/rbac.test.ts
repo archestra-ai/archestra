@@ -402,7 +402,6 @@ describe("filterToolNamesByPermission", () => {
       t("create_agent"),
       t("create_knowledge_base"),
       t("delete_limit"),
-      t("create_tool_invocation_policy"),
     ];
 
     const result = await filterToolNamesByPermission(

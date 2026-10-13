@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { agentEditHref } from "@/components/agent-pages/agent-page-config";
 import { AgentRuntimeCredentialsDialog } from "@/components/agent-runtime-credentials-dialog";
 import {
   AgentSetupBanner,
@@ -74,7 +75,8 @@ export function AgentSavedSetupBanner({
     .filter(({ key }) => key !== "CLAUDE_CODE_ACCOUNT")
     .map(({ key, label }) => ({
       id: key,
-      label: `Provide a value for ${label}, or connect ${label}`,
+      label: `Provide ${label}`,
+      description: `This agent needs ${label} in its container. Set a value, or connect it.`,
       status: "now",
       action: (
         <Button
@@ -87,6 +89,16 @@ export function AgentSavedSetupBanner({
         </Button>
       ),
     }));
+  if (needsClaudeAccount) {
+    items.unshift({
+      id: "CLAUDE_CODE_ACCOUNT",
+      label: "Connect your Claude subscription",
+      description:
+        "Runs use your own Pro or Max plan. Each person who uses this agent connects their own; nobody shares yours.",
+      status: "now",
+      action: <ClaudeCodeAccount agentId={agentId} variant="button" />,
+    });
+  }
   if (preflight.data.incompatible) {
     items.push({
       id: "model-incompatible",
@@ -94,7 +106,7 @@ export function AgentSavedSetupBanner({
       status: "now",
       action: (
         <Button asChild size="sm" variant="outline">
-          <Link href={`/agents/${agentId}?section=general`}>Review model</Link>
+          <Link href={agentEditHref(agentId)}>Review model</Link>
         </Button>
       ),
     });
@@ -135,7 +147,9 @@ export function AgentSavedSetupBanner({
     } else if (!hasPersonalSubscription) {
       items.push({
         id: "chatgpt-subscription",
-        label: "Connect your own ChatGPT subscription",
+        label: "Connect your ChatGPT subscription",
+        description:
+          "Runs use your own ChatGPT plan. Each person who uses this agent connects their own.",
         status: "now",
         action: (
           <Button asChild size="sm" variant="outline">
@@ -156,7 +170,7 @@ export function AgentSavedSetupBanner({
         status: "now",
         action: (
           <Button asChild size="sm" variant="outline">
-            <Link href={`/agents/${agentId}?section=general`}>Set up</Link>
+            <Link href={agentEditHref(agentId)}>Set up</Link>
           </Button>
         ),
       });
@@ -164,10 +178,7 @@ export function AgentSavedSetupBanner({
   }
   return (
     <>
-      {needsClaudeAccount && (
-        <ClaudeCodeAccount agentId={agentId} variant="compact" />
-      )}
-      {(items.length > 0 || (showReady && !needsClaudeAccount)) && (
+      {(items.length > 0 || showReady) && (
         <AgentSetupBanner
           key={agentId}
           items={items}

@@ -11,7 +11,10 @@ import {
   parseLabelsParam,
   perUserCredentialLabel,
   providerDisplayNames,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -42,6 +45,7 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import SecretModel from "@/models/secret";
 import { testProviderApiKey } from "@/routes/chat/model-fetchers/registry";
 import {
@@ -310,6 +314,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           z.array(LlmProviderApiKeyWithScopeInfoSchema),
@@ -337,6 +344,13 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
           search: query.search,
           provider: query.provider,
           labels: parseLabelsParam(query.labels),
+          access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+            userId: user.id,
+            organizationId,
+            relations: query.access,
+            sharedWith: query.sharedWith,
+            ownerIds: query.owner,
+          }),
         },
         { includeSubscriptionInfo: true },
       );
@@ -436,7 +450,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Provider API Keys"],
         body: z
           .object({
-            name: z.string().min(1, "Name is required"),
+            name: z.string().trim().min(1, "Name is required"),
             provider: SupportedProvidersSchema,
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
@@ -919,7 +933,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: z
           .object({
-            name: z.string().min(1).optional(),
+            name: z.string().trim().min(1).optional(),
             apiKey: z.string().min(1).optional(),
             baseUrl: z.string().url().nullable().optional(),
             inferenceBaseUrl: z.string().url().nullable().optional(),

@@ -4,8 +4,11 @@ import {
   isBuiltInCatalogId,
   isMetadataOnlyEdit,
   mcpRuntimeAlertSource,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionActionSchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   SERVER_NAME_PLACEHOLDER,
 } from "@archestra/shared";
@@ -48,9 +51,12 @@ import {
   ToolModel,
 } from "@/models";
 import McpCatalogTeamModel from "@/models/mcp-catalog-team";
+import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
+import { CredentialAccess } from "@/services/credential-access";
+import { preflightMcpCredentials } from "@/services/credentials";
 import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
@@ -62,6 +68,7 @@ import {
   assertCanWriteMcpDeploymentYaml,
 } from "@/services/mcp-advanced-settings";
 import {
+  assertCatalogCredentialRecovery,
   extractLocalConfigSecrets,
   getCatalogClientSecretValues,
   upsertCatalogClientSecretValue,
@@ -89,6 +96,7 @@ import {
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
+  McpCredentialBlockerSchema,
   type McpServer,
   McpServerAlertMuteSchema,
   type McpServerDismissibleAlertKind,
@@ -178,6 +186,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           z.array(
@@ -228,6 +239,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
+        access: resourceAccessSelection(request.query),
         readGrantContext: (await userHasPermission(
           request.user.id,
           request.organizationId,
@@ -462,6 +474,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await CredentialAccess.requireUseOfNewKeys({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        previous: [],
+        next: boundCredentialKeys(restBody.localConfig),
+      });
+      // SPDX-SnippetEnd
 
       // Secret FK columns are server-managed: clients submit secret values, never
       // ids. Trusting an inbound id would let a caller point the row at another
@@ -749,6 +771,49 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/internal_mcp_catalog/:id/credential-preflight",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogCredentialPreflight,
+        description:
+          "List the saved credentials that would stop the caller installing this MCP server, and why",
+        tags: ["MCP Catalog"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          scope: z.enum(["personal", "team", "org"]),
+        }),
+        response: constructResponseSchema(
+          z.object({ blockers: z.array(McpCredentialBlockerSchema) }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      await requireCatalogRead({ request, id });
+      return reply.send({
+        blockers: await preflightMcpCredentials({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          installationScope: request.query.scope,
+          environment: catalogItem.localConfig?.environment ?? [],
+        }),
+      });
+    },
+  );
+
+  fastify.get(
     "/api/internal_mcp_catalog/tools",
     {
       schema: {
@@ -811,6 +876,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // still need an access-checked backing row.
       if (!isBuiltInCatalogId(id)) {
         const catalogItem = await InternalMcpCatalogModel.findById(id, {
+          expandSecrets: false,
           userId: request.user.id,
           isAdmin,
           organizationId: request.organizationId,
@@ -1026,6 +1092,52 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         current: originalCatalogItem.deploymentSpecYaml,
         currentLocalConfig: originalCatalogItem.localConfig,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (restBody.localConfig !== undefined)
+        await CredentialAccess.requireUseOfNewKeys({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          previous: boundCredentialKeys(originalCatalogItem.localConfig),
+          next: boundCredentialKeys(restBody.localConfig),
+        });
+      // SPDX-SnippetEnd
+
+      const clientSecretRecovery = {
+        requiredKeys: [
+          ...(originalCatalogItem.oauthConfig ? ["client_secret"] : []),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ...(originalCatalogItem.enterpriseManagedConfig
+            ? [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]
+            : []),
+          // SPDX-SnippetEnd
+        ],
+        values: {
+          ...(restBody.oauthConfig?.client_secret
+            ? { client_secret: restBody.oauthConfig.client_secret }
+            : {}),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          ...(restBody.enterpriseManagedConfig?.clientSecretOverride
+            ? {
+                [ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY]:
+                  restBody.enterpriseManagedConfig.clientSecretOverride,
+              }
+            : {}),
+          // SPDX-SnippetEnd
+        },
+      };
+      await assertCatalogCredentialRecovery({
+        localSecretId: originalCatalogItem.localConfigSecretId,
+        existingLocalConfig: originalCatalogItemForGate.localConfig,
+        localConfig: restBody.localConfig,
+        clientSecretId: originalCatalogItem.clientSecretId,
+        clientRecovery: clientSecretRecovery,
+      });
 
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
@@ -1164,6 +1276,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             catalogName: originalCatalogItem.name,
             key: "client_secret",
             value: clientSecret,
+            recovery: clientSecretRecovery,
           });
           clientSecretId = result.id;
           if (result.rotated) catalogSharedSecretValuesRotated = true;
@@ -1173,6 +1286,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         delete restBody.oauthConfig.client_secret;
       }
 
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       const enterpriseManagedClientSecretOverride =
         restBody.enterpriseManagedConfig?.clientSecretOverride;
       if (enterpriseManagedClientSecretOverride) {
@@ -1181,6 +1297,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           catalogName: originalCatalogItem.name,
           key: ENTERPRISE_MANAGED_CLIENT_SECRET_OVERRIDE_SECRET_KEY,
           value: enterpriseManagedClientSecretOverride,
+          recovery: clientSecretRecovery,
         });
         clientSecretId = result.id;
         if (result.rotated) catalogSharedSecretValuesRotated = true;
@@ -1188,6 +1305,8 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         restBody.clientSecretId = clientSecretId;
         delete restBody.enterpriseManagedConfig?.clientSecretOverride;
       }
+
+      // SPDX-SnippetEnd
 
       // Handle local config secrets - either via Readonly Vault or direct values
       if (localConfigVaultPath && localConfigVaultKey) {
@@ -1235,6 +1354,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           localConfig: restBody.localConfig,
           existingSecretId: localConfigSecretId,
           catalogName: originalCatalogItem.name,
+          existingLocalConfig: originalCatalogItemForGate.localConfig,
         });
         // A userConfig-only edit reaches here with no localConfig. Assigning
         // the (undefined) result would still create the key, and `update()`
@@ -2734,4 +2854,16 @@ async function requireCatalogRead({
   });
   if (!readable) throw new ApiError(404, "Catalog item not found");
   // SPDX-SnippetEnd
+}
+
+/** The saved credentials a catalog item's environment variables read. */
+function boundCredentialKeys(
+  localConfig:
+    | { environment?: { credentialId?: string | null }[] }
+    | null
+    | undefined,
+): string[] {
+  return (localConfig?.environment ?? []).flatMap((variable) =>
+    variable.credentialId ? [variable.credentialId] : [],
+  );
 }

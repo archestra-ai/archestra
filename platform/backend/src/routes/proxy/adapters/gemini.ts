@@ -34,6 +34,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -136,6 +137,7 @@ class GeminiRequestAdapter
                   : undefined,
               ),
               content: functionResponse.response,
+              structured: true,
               isError: false,
             });
           }
@@ -359,7 +361,13 @@ class GeminiRequestAdapter
                   ? functionResponse.id
                   : syntheticToolCallId(contentIndex, partIndex);
 
-              if (Object.hasOwn(this.toolResultUpdates, id)) {
+              if (
+                Object.hasOwn(this.toolResultUpdates, id) &&
+                !isApprovedAsSent({
+                  sent: functionResponse.response,
+                  approved: this.toolResultUpdates[id],
+                })
+              ) {
                 // Update the function response with sanitized content
                 // Spread the original part to preserve top-level fields like
                 // thought and thoughtSignature which Gemini 3 requires
@@ -1018,9 +1026,9 @@ export function getUsageTokens(usage: {
 
 /**
  * Identifier for a `functionResponse` the client sent without one — optional in
- * Gemini's API and omitted by the AI SDK, so most requests need it. Trusted-data
- * policies are evaluated in one pass over the request and their replacements
- * written back in another, so this has to be derived from something both passes
+ * Gemini's API and omitted by the AI SDK, so most requests need it. Tool results
+ * are read in one pass over the request and their replacements written back in
+ * another, so this has to be derived from something both passes
  * observe: the response's position in the request.
  */
 function syntheticToolCallId(contentIndex: number, partIndex: number): string {

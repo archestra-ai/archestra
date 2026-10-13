@@ -1,4 +1,8 @@
-import type { UIMessageChunk } from "ai";
+import {
+  isToolOrDynamicToolUIPart,
+  type UIMessage,
+  type UIMessageChunk,
+} from "ai";
 
 // A tool call is "started" at `tool-input-start` and "resolved" once it emits
 // any chunk past input streaming — input complete (`tool-input-available`),
@@ -18,6 +22,11 @@ export function createAbortiveTurnTracker(params: {
    * on a stream the downstream consumer hasn't started draining yet.
    */
   onUnresolvedToolCall: () => UIMessageChunk | null;
+  /**
+   * Invoked from `flush()` when every started tool call resolved. Returns a
+   * chunk to append (e.g. a notice computed once the turn finished), or null.
+   */
+  onResolvedTurnEnd?: () => UIMessageChunk | null;
 }): TransformStream<UIMessageChunk, UIMessageChunk> {
   const startedToolCallIds = new Set<string>();
   const resolvedToolCallIds = new Set<string>();
@@ -28,10 +37,12 @@ export function createAbortiveTurnTracker(params: {
       controller.enqueue(chunk);
     },
     flush(controller) {
-      if (!hasUnresolvedToolCall(startedToolCallIds, resolvedToolCallIds)) {
-        return;
-      }
-      const chunk = params.onUnresolvedToolCall();
+      const chunk = hasUnresolvedToolCall(
+        startedToolCallIds,
+        resolvedToolCallIds,
+      )
+        ? params.onUnresolvedToolCall()
+        : (params.onResolvedTurnEnd?.() ?? null);
       if (chunk) {
         controller.enqueue(chunk);
       }
@@ -71,4 +82,12 @@ function recordToolCallLifecycle(
     default:
       break;
   }
+}
+
+/** True when a tool call never finished streaming its input — the tracker's unresolved case. */
+export function hasUnfinishedToolInput(message: UIMessage): boolean {
+  return message.parts.some(
+    (part) =>
+      isToolOrDynamicToolUIPart(part) && part.state === "input-streaming",
+  );
 }

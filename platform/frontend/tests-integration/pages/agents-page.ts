@@ -21,16 +21,9 @@ export class AgentsPage {
   // The DataTable truncates names with CSS and stashes the full string on the
   // <td title> attribute, so matching by title is the only stable locator.
   rowFor(name: string): Locator {
-    const tableRow = this.table.getByRole("row").filter({
+    return this.table.getByRole("row").filter({
       has: this.page.getByText(name, { exact: true }),
     });
-    return tableRow.or(this.cardFor(name));
-  }
-
-  private cardFor(name: string): Locator {
-    return this.table
-      .getByRole("heading", { name, level: 3 })
-      .locator("../../..");
   }
 
   async openRowMenu(name: string): Promise<void> {

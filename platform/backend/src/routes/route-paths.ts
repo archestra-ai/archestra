@@ -126,3 +126,6 @@ export const OPENAPPA_HELPERS_PREFIX = "/api/openappa/helpers";
  */
 export const OPENAPPA_ARCHESTRA_ANNOTATOR_PATH =
   "/api/openappa/annotators/archestra";
+
+/** Authenticated read-only instruction refresh for installed connection wrappers. */
+export const CONNECTION_INSTRUCTIONS_PATH = "/v1/connection-instructions";

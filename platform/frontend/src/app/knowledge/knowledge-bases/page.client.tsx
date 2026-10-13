@@ -33,6 +33,10 @@ import {
   permanentDeleteRowAction,
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ResourceDeletedStatusFilter,
@@ -278,6 +282,7 @@ function KnowledgeBasesList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      ...RESOURCE_ACCESS_FILTER_PARAMS,
     ]) {
       params.delete(key);
     }
@@ -500,6 +505,12 @@ function KnowledgeBasesList() {
                 />
               }
             >
+              {!isDeletedView && (
+                <ResourceAccessFilter
+                  resource="knowledgeBase"
+                  noun="knowledge bases"
+                />
+              )}
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}
               />

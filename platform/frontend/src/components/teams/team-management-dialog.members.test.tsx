@@ -121,11 +121,13 @@ beforeEach(() => {
 });
 
 describe("TeamManagementDialog member roles", () => {
-  it("keeps labels in a closed Advanced section", async () => {
+  it("shows labels without an Advanced section", async () => {
     renderDialog();
 
-    const advanced = screen.getByRole("button", { name: "Advanced" });
-    expect(advanced).toHaveAttribute("data-state", "closed");
+    expect(screen.getByLabelText("Label key")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Advanced" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers valid parent paths and excludes the current team's descendants", async () => {

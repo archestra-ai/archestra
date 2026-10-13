@@ -6,11 +6,7 @@ import AzureResponsesInteraction from "./llmProviders/azure-responses";
 import BedrockConverseInteraction from "./llmProviders/bedrock";
 import CerebrasChatCompletionInteraction from "./llmProviders/cerebras";
 import CohereChatInteraction from "./llmProviders/cohere";
-import type {
-  DualLlmAnalysis,
-  Interaction,
-  InteractionUtils,
-} from "./llmProviders/common";
+import type { Interaction, InteractionUtils } from "./llmProviders/common";
 import DeepSeekChatCompletionInteraction from "./llmProviders/deepseek";
 import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
@@ -163,7 +159,6 @@ export class DynamicInteraction implements InteractionUtils {
   profileId: string | null;
   externalAgentId: string | null;
   runId: string | null;
-  unsafeContextBoundary: Interaction["unsafeContextBoundary"];
   type: Interaction["type"];
   provider: SupportedProvider;
   endpoint: string;
@@ -181,7 +176,6 @@ export class DynamicInteraction implements InteractionUtils {
     this.profileId = interaction.profileId;
     this.externalAgentId = interaction.externalAgentId;
     this.runId = interaction.runId;
-    this.unsafeContextBoundary = interaction.unsafeContextBoundary;
     this.type = interaction.type;
     this.provider = provider as SupportedProvider;
     this.endpoint = endpoint;
@@ -234,14 +228,6 @@ export class DynamicInteraction implements InteractionUtils {
     return this.interactionClass.getLastToolCallId();
   }
 
-  getToolNamesRefused(): string[] {
-    if (this.contentUnavailable) return [];
-    if (this.getErrorResponseText() !== null) {
-      return [];
-    }
-    return this.interactionClass.getToolNamesRefused();
-  }
-
   getToolNamesRequested(): string[] {
     if (this.contentUnavailable) return [];
     if (this.getErrorResponseText() !== null) {
@@ -256,14 +242,6 @@ export class DynamicInteraction implements InteractionUtils {
       return [];
     }
     return this.interactionClass.getToolNamesUsed();
-  }
-
-  getToolRefusedCount(): number {
-    if (this.contentUnavailable) return 0;
-    if (this.getErrorResponseText() !== null) {
-      return 0;
-    }
-    return this.interactionClass.getToolRefusedCount();
   }
 
   getLastUserMessage(): string {
@@ -281,9 +259,9 @@ export class DynamicInteraction implements InteractionUtils {
   }
 
   /**
-   * Map request messages, combining tool calls with their results and dual LLM analysis
+   * Map request messages, combining tool calls with their results
    */
-  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
+  mapToUiMessages(): PartialUIMessage[] {
     // An encrypted-chat interaction stores a sentinel where the provider payload
     // would be, so there is no conversation to render. Provider mappers read
     // fields off it unguarded (`request.messages.length`), so this has to stop
@@ -292,14 +270,14 @@ export class DynamicInteraction implements InteractionUtils {
     if (this.contentUnavailable) return [];
     const errorText = this.getErrorResponseText();
     if (errorText === null) {
-      return this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+      return this.interactionClass.mapToUiMessages();
     }
     // Failed interaction: the response is `{ error }`, not a provider response.
     // Recover the request side when the provider mapper tolerates the missing
     // response fields, then surface the error as the assistant turn.
     let messages: PartialUIMessage[] = [];
     try {
-      messages = this.interactionClass.mapToUiMessages(dualLlmAnalyses);
+      messages = this.interactionClass.mapToUiMessages();
     } catch {
       messages = [];
     }

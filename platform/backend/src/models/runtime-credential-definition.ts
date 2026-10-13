@@ -1,11 +1,15 @@
-import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import type { ResourcePermissionGrant } from "@archestra/shared";
+import { DEFAULT_CREDENTIAL_GRANTS } from "@archestra/shared";
+import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import db, { schema, withDbTransaction } from "@/database";
 import type {
   InsertRuntimeCredentialDefinition,
   RuntimeCredentialDefinition,
   UpdateRuntimeCredentialDefinition,
 } from "@/types";
 import CreatedByModel from "./created-by";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import type { ResourceAccessFilter } from "./resource-permission-subject";
 
 export default class RuntimeCredentialDefinitionModel {
   static async hasGitHubUserDefinitions(params: {
@@ -82,36 +86,95 @@ export default class RuntimeCredentialDefinitionModel {
     organizationId: string;
     createdBy: string;
     definition: InsertRuntimeCredentialDefinition;
+    /** Explicit starting audience; omitted starts it with its creator. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
   }): Promise<RuntimeCredentialDefinition> {
-    const [created] = await db
-      .insert(schema.runtimeCredentialDefinitionsTable)
-      .values(
-        await CreatedByModel.forInsert({
-          data: {
-            ...params.definition,
-            organizationId: params.organizationId,
-            createdBy: params.createdBy,
-          },
-          userIdField: "createdBy",
-        }),
-      )
-      .returning();
-    return created;
+    // The access policy is written with the row it governs, so a failure
+    // cannot leave a credential nobody can manage.
+    return withDbTransaction(async (tx) => {
+      const [created] = await tx
+        .insert(schema.runtimeCredentialDefinitionsTable)
+        .values(
+          await CreatedByModel.forInsert({
+            data: {
+              ...params.definition,
+              organizationId: params.organizationId,
+              createdBy: params.createdBy,
+            },
+            userIdField: "createdBy",
+            transaction: tx,
+          }),
+        )
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: created.organizationId,
+        resource: "credential",
+        scope: created.id,
+        grants: params.initialPermissionGrants ?? DEFAULT_CREDENTIAL_GRANTS,
+        authorId: CreatedByModel.id(created, created.createdBy) ?? null,
+      });
+      // SPDX-SnippetEnd
+      return created;
+    });
   }
 
   static async list(
     organizationId: string,
+    /** The Credentials page's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter,
   ): Promise<RuntimeCredentialDefinition[]> {
     return db
       .select()
       .from(schema.runtimeCredentialDefinitionsTable)
       .where(
-        eq(
-          schema.runtimeCredentialDefinitionsTable.organizationId,
-          organizationId,
+        and(
+          eq(
+            schema.runtimeCredentialDefinitionsTable.organizationId,
+            organizationId,
+          ),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                ...access,
+                organizationId,
+                resource: "credential",
+                scopeColumn: schema.runtimeCredentialDefinitionsTable.id,
+                ownerColumn: schema.runtimeCredentialDefinitionsTable.createdBy,
+              })
+            : undefined,
+          // SPDX-SnippetEnd
         ),
       )
       .orderBy(asc(schema.runtimeCredentialDefinitionsTable.name));
+  }
+
+  /** Definitions for one resolution batch, including absent keys. */
+  static async findByKeys(params: {
+    organizationId: string;
+    keys: string[];
+  }): Promise<Map<string, RuntimeCredentialDefinition>> {
+    if (params.keys.length === 0) return new Map();
+    const rows = await db
+      .select()
+      .from(schema.runtimeCredentialDefinitionsTable)
+      .where(
+        and(
+          eq(
+            schema.runtimeCredentialDefinitionsTable.organizationId,
+            params.organizationId,
+          ),
+          inArray(schema.runtimeCredentialDefinitionsTable.key, [
+            ...new Set(params.keys),
+          ]),
+        ),
+      );
+    return new Map(rows.map((row) => [row.key, row]));
   }
 
   static async find(params: {
@@ -159,19 +222,33 @@ export default class RuntimeCredentialDefinitionModel {
     organizationId: string;
     key: string;
   }): Promise<RuntimeCredentialDefinition | null> {
-    const [deleted] = await db
-      .delete(schema.runtimeCredentialDefinitionsTable)
-      .where(
-        and(
-          eq(
-            schema.runtimeCredentialDefinitionsTable.organizationId,
-            params.organizationId,
+    return withDbTransaction(async (tx) => {
+      const [deleted] = await tx
+        .delete(schema.runtimeCredentialDefinitionsTable)
+        .where(
+          and(
+            eq(
+              schema.runtimeCredentialDefinitionsTable.organizationId,
+              params.organizationId,
+            ),
+            eq(schema.runtimeCredentialDefinitionsTable.key, params.key),
           ),
-          eq(schema.runtimeCredentialDefinitionsTable.key, params.key),
-        ),
-      )
-      .returning();
-    return deleted ?? null;
+        )
+        .returning();
+      if (!deleted) return null;
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      // The id is gone for good, so leaving its policy behind would hand the
+      // grants to whatever row reused the id.
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["credential"],
+        scope: deleted.id,
+      });
+      // SPDX-SnippetEnd
+      return deleted;
+    });
   }
 
   static async listOtherUsage(params: { organizationId: string; key: string }) {

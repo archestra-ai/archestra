@@ -14,7 +14,8 @@ import {
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { AgentToolModel, ToolModel } from "@/models";
+import { AgentModel, AgentToolModel, ToolModel } from "@/models";
+import AgentExcludedSubagentModel from "@/models/agent-excluded-subagent";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -100,7 +101,6 @@ describe("clone agent route", () => {
       knowledgeBaseIds: [kb.id],
       connectorIds: [connector.id],
       suggestedPrompts: [{ summaryTitle: "S1", prompt: "P1" }],
-      considerContextUntrusted: true,
     });
 
     await makeAgentTool(sourceAgent.id, baseTool.id, {
@@ -120,8 +120,6 @@ describe("clone agent route", () => {
 
     expect(cloned.id).not.toBe(sourceAgent.id);
     expect(cloned.name).toBe(`Copy of ${sourceAgent.name}`);
-    expect(cloned.considerContextUntrusted).toBe(true);
-
     // Associations via API response
     expect(cloned.labels).toEqual(sourceAgent.labels);
     expect(cloned.knowledgeBaseIds).toEqual([kb.id]);
@@ -157,6 +155,35 @@ describe("clone agent route", () => {
         },
       ]),
     );
+  });
+
+  test("clones Auto subagent access with its exclusions", async ({
+    makeInternalAgent,
+  }) => {
+    const excludedTarget = await makeInternalAgent({
+      organizationId,
+      name: "Excluded Sub Agent",
+    });
+    const sourceAgent = await makeInternalAgent({
+      organizationId,
+      name: "All Subagents Source",
+    });
+    await AgentModel.update(sourceAgent.id, { accessAllSubagents: true });
+    await AgentExcludedSubagentModel.replaceForAgent(sourceAgent.id, [
+      excludedTarget.id,
+    ]);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/agents/${sourceAgent.id}/clone`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    const cloned = response.json() as Agent;
+    expect(cloned.accessAllSubagents).toBe(true);
+    expect(
+      await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(cloned.id),
+    ).toEqual([excludedTarget.id]);
   });
 
   test("does not force-assign creation-default built-ins the source agent lacked", async ({
@@ -211,8 +238,7 @@ describe("clone agent route", () => {
       name: "Built In",
       builtInAgentConfig: {
         // Any valid built-in discriminator works here
-        name: BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-        autoConfigureOnToolDiscovery: false,
+        name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       },
       labels: [],
       knowledgeBaseIds: [],
@@ -780,29 +806,6 @@ describe("clone agent route", () => {
     const cloned = response.json() as Agent;
 
     expect(cloned.systemPrompt).toBe(systemPrompt);
-  });
-
-  test("clones agent with considerContextUntrusted", async ({
-    makeInternalAgent,
-  }) => {
-    const sourceAgent = await makeInternalAgent({
-      organizationId,
-      name: "Untrusted Agent",
-      labels: [],
-      knowledgeBaseIds: [],
-      connectorIds: [],
-      considerContextUntrusted: true,
-    });
-
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/agents/${sourceAgent.id}/clone`,
-    });
-
-    expect(response.statusCode).toBe(200);
-    const cloned = response.json() as Agent;
-
-    expect(cloned.considerContextUntrusted).toBe(true);
   });
 
   test("clones agent with multiple labels", async ({ makeInternalAgent }) => {

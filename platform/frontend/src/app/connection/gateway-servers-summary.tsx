@@ -54,14 +54,12 @@ export function GatewayServersSummary({
     () =>
       gatewayServers.map((server) => ({
         catalogId: server.catalogId,
-        name:
-          server.catalogName ??
-          deriveFallbackName(gateway?.tools ?? [], server.catalogId),
+        name: server.catalogName ?? "Unknown",
         icon: server.icon,
         description: server.description,
         toolCount: server.toolCount,
       })),
-    [gatewayServers, gateway?.tools],
+    [gatewayServers],
   );
 
   // Loading (or gateway unreadable): the review line already names the gateway,
@@ -195,15 +193,4 @@ function ServerRowItem({ server }: { server: ServerRow }) {
       </Link>
     </li>
   );
-}
-
-/** Tools without a catalog entry: derive a name from the tool-name prefix. */
-function deriveFallbackName(
-  tools: { name: string; catalogId: string | null }[],
-  catalogId: string | null,
-): string {
-  const tool = tools.find((t) => t.catalogId === catalogId);
-  const prefix = tool?.name.split("__")[0];
-  if (!prefix) return "Unknown";
-  return prefix.charAt(0).toUpperCase() + prefix.slice(1);
 }

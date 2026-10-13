@@ -1,12 +1,11 @@
 "use client";
 
-import { Info, MessageCircle } from "lucide-react";
+import { Info } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -28,30 +27,19 @@ import {
 import { cn } from "@/lib/utils/tailwind";
 import { batteryDisplayName } from "./battery-display-name";
 import { BatteryIcon } from "./battery-icon";
-import { OpenAppaChatButton } from "./openappa-chat-button";
 
 /** The Overview's trust chain, and its audiences nested by containment. */
-export function TrustAudienceCard() {
+export function TrustAudienceCard({ className }: { className?: string }) {
   const view = useTrustAudience();
 
   return (
-    <Card className="gap-5 py-5">
+    <Card className={cn("gap-5 py-5", className)}>
       <CardHeader className="px-5">
         <CardTitle>Security label</CardTitle>
         <CardDescription>
           Each agent session has a security label — its audience and trust. It
           determines what the agent can do, based on the data it has read.
         </CardDescription>
-        <CardAction>
-          <OpenAppaChatButton
-            size="sm"
-            variant="outline"
-            promptKey="explainSecurityLabel"
-          >
-            <MessageCircle />
-            <span>Ask about the security label</span>
-          </OpenAppaChatButton>
-        </CardAction>
       </CardHeader>
       <CardContent className="px-5">
         {view.isLoadingError ? (

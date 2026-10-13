@@ -83,7 +83,7 @@ local_resource(
   # propogate the required environment variables (ie. DATABASE_URL)
   # Retry logic: wait for PostgreSQL to be ready before running migrations, then seed
   cmd='''
-    for i in {1..30}; do
+    for i in $(seq 1 30); do
       if pnpm db:migrate 2>/dev/null; then
         echo "✅ Migration completed successfully"
         tilt trigger pnpm-dev-backend

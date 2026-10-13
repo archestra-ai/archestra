@@ -14,7 +14,6 @@ import yaml
 from apply import (
     BuiltHook,
     BuiltInstall,
-    BuiltPolicy,
     _build_payload,
     _Built,
     _execute,
@@ -317,18 +316,6 @@ def test_dry_run_redaction_hides_user_secrets() -> None:
     assert "plaintextsecret" not in shown_url
     assert "region=us" in shown_url  # non-secret query param preserved
 
-def test_tool_policy_requires_extracted_semantics(index: dict[str, Item]) -> None:
-    with pytest.raises(ContractError, match="user_answers"):
-        _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "tool_policy")
-    _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "tool_policy",
-                       user_answers={"tool_name": "shell", "key": "command",
-                                      "operator": "regex", "value": "rm\\s+-rf\\s+/"})
-    assert isinstance(built, BuiltPolicy)
-    assert built.tool_name == "shell"
-    assert built.conditions[0].operator == "regex"
-    assert built.action == "block_always"
-
-
 def test_bundled_hook_builds_native_hook_with_pep723_requirements(index: dict[str, Item]) -> None:
     _, built = _decide(index, "hook:.claude/settings.json:PreToolUse:0:0", "hook")
     assert isinstance(built, BuiltHook)
@@ -513,6 +500,22 @@ def test_dry_run_manual_decision_without_target_kind(tmp_path: Path) -> None:
     op = result["ops"][0]
     assert op["outcome"] == "manual"
     assert op["target_kind"] == "manual"
+
+
+def test_plan_with_removed_tool_policy_kind_fails(tmp_path: Path) -> None:
+    """a stale plan carrying the removed tool_policy kind is rejected, not silently skipped."""
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("ARCHESTRA_BASE_URL", "ARCHESTRA_API_KEY")}
+    proc, result_path = _run_apply_cli(tmp_path, {
+        "schema_version": 1,
+        "default_scope": "personal",
+        "decisions": [{"source_id": "hook:.claude/settings.json:PreToolUse:0:0",
+                       "target_kind": "tool_policy", "scope": "personal"}],
+    }, "--dry-run", env=env)
+
+    assert proc.returncode != 0
+    assert "target kind 'tool_policy' must be one of" in proc.stderr
+    assert not result_path.exists()
 
 
 def test_install_execute_sends_catalog_name() -> None:

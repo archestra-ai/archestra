@@ -2,7 +2,7 @@
 title: MS Teams
 description: Connect Archestra agents to Microsoft Teams channels
 order: 4
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -78,11 +78,13 @@ They come first, before the agent's own instructions. They add to what the agent
 | `@Archestra /select-agent` | Changes the agent for this channel |
 | `@Archestra /status` | Shows the agent for this channel |
 | `@Archestra /help` | Lists the commands |
+| `reset` | Starts a new conversation. Direct messages and group chats only. |
 
 <span id="autoprovisioning-ms-teams-users"></span><span id="attachments"></span>
 
 ## What to Know
 
+- **Memory:** in a channel, the agent reads the thread. In a direct message or group chat, Archestra keeps the history. See [Conversation History](/docs/agents/triggers-and-channels#conversation-history).
 - **New people:** someone who messages the bot without an Archestra account gets one. It has the organization's default role for new users, set in **Settings → Auth**. Find these accounts in **Settings → Users**.
 - **Welcome message:** the bot DMs a new person a sign-up link, or a sign-in link when you use [SSO](/docs/admin/identity/sso). To turn it off, set [`ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CHATOPS_SIGNUP_WELCOME_ENABLED).
 - **Files:** the agent reads images, PDFs, and text files such as CSV, JSON, and Markdown. With a [code sandbox](/docs/agents#code-sandbox), it can open other files too, such as ZIP archives.
@@ -95,5 +97,5 @@ They come first, before the agent's own instructions. They add to what the agent
 | **"You don't have access to this app"** | Your organization blocks custom apps. Ask your Teams admin to allow them in the [Teams Admin Center](https://admin.teams.microsoft.com/). |
 | **The bot does not answer** | Check that [`ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_CHATOPS_MS_TEAMS_ENABLED), that Teams can reach your URL, and that the app ID and password are correct. |
 | **"Could not verify your identity"** | Add the `TeamMember.Read.Group` and `ChatMember.Read.Chat` permissions to the app manifest. Then install the app again. |
-| **No thread history, or Answer all messages does nothing** | Add the `ChannelMessage.Read.Group` and `ChatMessage.Read.Chat` permissions to the manifest. Install the app again, and have the team owner approve them. |
+| **No history in a channel thread, or Answer all messages does nothing** | Add the `ChannelMessage.Read.Group` and `ChatMessage.Read.Chat` permissions to the manifest. Install the app again, and have the team owner approve them. |
 | **Direct messages do not work** | Upload the latest app manifest. Older manifests do not include the `personal` scope. |

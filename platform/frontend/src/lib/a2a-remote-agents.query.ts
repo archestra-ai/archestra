@@ -1,12 +1,8 @@
-import {
-  archestraApiSdk,
-  type archestraApiTypes,
-  type ResourceVisibilityScope,
-} from "@archestra/shared";
+import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentCatalogQueryKeys } from "@/lib/agent-catalog.query";
-import { runBulkAction } from "@/lib/bulk-action";
+import { useScopedCapabilities } from "@/lib/auth/auth.query";
 import { handleApiError, throwOnApiError } from "./utils";
 
 const {
@@ -30,25 +26,18 @@ export type UpdateA2aRemoteAgentBody =
 
 export const a2aRemoteAgentQueryKeys = {
   all: ["a2a-remote-agents"] as const,
-  list: (accessibleOnly: boolean) =>
-    ["a2a-remote-agents", "list", { accessibleOnly }] as const,
+  list: () => ["a2a-remote-agents", "list"] as const,
   assignments: (agentId: string) =>
     ["a2a-remote-agents", "assignments", agentId] as const,
   runs: (remoteAgentId: string) =>
     ["a2a-remote-agents", "runs", remoteAgentId] as const,
 };
 
-export function useA2aRemoteAgents(options?: {
-  enabled?: boolean;
-  accessibleOnly?: boolean;
-}) {
-  const accessibleOnly = options?.accessibleOnly === true;
+export function useA2aRemoteAgents(options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: a2aRemoteAgentQueryKeys.list(accessibleOnly),
+    queryKey: a2aRemoteAgentQueryKeys.list(),
     queryFn: async () => {
-      const response = await listA2aRemoteAgents(
-        accessibleOnly ? { query: { accessibleOnly: true } } : undefined,
-      );
+      const response = await listA2aRemoteAgents();
       throwOnApiError(response.error);
       return response.data ?? [];
     },
@@ -142,43 +131,6 @@ export function useUpdateA2aRemoteAgent(id: string) {
   });
 }
 
-export function useBulkUpdateA2aRemoteAgentVisibility() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({
-      agents,
-      scope,
-      teamIds,
-      userIds,
-    }: {
-      agents: A2aRemoteAgent[];
-      scope: ResourceVisibilityScope;
-      teamIds: string[];
-      userIds: string[];
-    }) =>
-      runBulkAction({
-        items: agents,
-        describe: (agent) => agent.name,
-        run: async (agent) => {
-          const response = await updateA2aRemoteAgent({
-            path: { id: agent.id },
-            body: {
-              scope,
-              teams: scope === "team" ? teamIds : [],
-              users: scope === "personal" ? userIds : [],
-            },
-          });
-          if (response.error) throw response.error;
-          return response.data;
-        },
-      }),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: a2aRemoteAgentQueryKeys.all });
-      queryClient.invalidateQueries({ queryKey: agentCatalogQueryKeys.all });
-    },
-  });
-}
-
 export function useDeleteA2aRemoteAgent(options?: { notify?: boolean }) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -244,4 +196,25 @@ export function useSyncAgentA2aDelegations() {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
+}
+
+/**
+ * What the viewer may do with each external agent, from that agent's own
+ * permission policy and the organization-wide one.
+ */
+export function useExternalAgentCapabilities() {
+  const capabilities = useScopedCapabilities();
+  const has = (action: "update" | "delete", scope: string) =>
+    !!capabilities.data?.some(
+      (grant) =>
+        grant.resource === "externalAgent" &&
+        grant.action === action &&
+        (grant.scope === "*" || grant.scope === scope),
+    );
+  return {
+    isPending: capabilities.isPending,
+    can: (id: string, action: "update" | "delete") => has(action, id),
+    /** The action is granted on every external agent, not only some. */
+    canEvery: (action: "update" | "delete") => has(action, "*"),
+  };
 }

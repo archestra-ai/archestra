@@ -1,5 +1,6 @@
 import {
   CreatedByNullableSchema,
+  ResourcePermissionGrantSchema,
   ResourceVisibilityScopeSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -158,9 +159,8 @@ export const CreateA2aRemoteAgentRequestSchema = z.object({
   auth: A2aConnectionAuthInputSchema.default({ type: "none" }),
   name: z.string().trim().min(1).max(255).optional(),
   description: z.string().trim().max(2_000).nullable().optional(),
-  scope: ResourceVisibilityScopeSchema.default("personal"),
-  teams: z.array(z.string()).default([]),
-  users: z.array(z.string()).default([]),
+  /** Who can reach the agent besides its author, who always gets Full access. */
+  initialGrants: z.array(ResourcePermissionGrantSchema).max(200).optional(),
 });
 
 export const UpdateA2aRemoteAgentRequestSchema = z
@@ -170,9 +170,6 @@ export const UpdateA2aRemoteAgentRequestSchema = z
     source: A2aRemoteAgentSourceSchema.optional(),
     auth: A2aConnectionAuthInputSchema.optional(),
     enabled: z.boolean().optional(),
-    scope: ResourceVisibilityScopeSchema.optional(),
-    teams: z.array(z.string()).optional(),
-    users: z.array(z.string()).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required",
@@ -251,24 +248,22 @@ export const PublicA2aConnectionSchema = SelectA2aConnectionSchema.omit({
   hasCredential: z.boolean(),
 });
 
-export const PublicA2aRemoteAgentSchema = SelectA2aRemoteAgentSchema.extend({
+export const PublicA2aRemoteAgentSchema = SelectA2aRemoteAgentSchema.omit({
+  // Retired: the agent's permission policy decides who can reach it.
+  scope: true,
+}).extend({
   connection: PublicA2aConnectionSchema,
   toolId: z.string().uuid(),
   assignmentCount: z.number().int().nonnegative(),
   lastUsedAt: z.date().nullable(),
   authorName: z.string().nullable(),
   createdBy: CreatedByNullableSchema,
-  teams: z.array(z.object({ id: z.string(), name: z.string() })),
-  users: z.array(
-    z.object({ id: z.string(), name: z.string(), email: z.string() }),
-  ),
 });
 
 export const ListA2aRemoteAgentsQuerySchema = z.object({
   scope: ResourceVisibilityScopeSchema.optional(),
   teamId: z.string().optional(),
   authorId: z.string().optional(),
-  accessibleOnly: z.stringbool().meta({ type: "boolean" }).optional(),
 });
 
 export const A2aRemoteAgentInspectionSchema = z.object({

@@ -473,6 +473,23 @@ describe("isDynamicallyAvailableArchestraTool", () => {
 
       expect(available).toBe(true);
     });
+    test("with the runtime off, a persistent-files tool stays available and run_command does not", async () => {
+      const original = config.skillsSandbox.enabled;
+      (config.skillsSandbox as { enabled: boolean }).enabled = false;
+      try {
+        const check = (toolName: string) =>
+          isDynamicallyAvailableArchestraTool({
+            toolName,
+            agentId: agent.id,
+            userId,
+            organizationId,
+          });
+        expect(await check(TOOL_READ_FILE_FULL_NAME)).toBe(true);
+        expect(await check(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+      } finally {
+        (config.skillsSandbox as { enabled: boolean }).enabled = original;
+      }
+    });
   });
 
   test("sandbox built-in unavailable when the feature is off", async () => {

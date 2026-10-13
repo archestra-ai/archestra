@@ -21,12 +21,13 @@ import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-sto
 import { expect, test, vi } from "@/test";
 import manager from "./manager";
 import { buildAgentRuntimeSandbox } from "./manifests";
+import { agentSandboxApi } from "./sandbox-api";
 
 // Real controller/Secret/PVC/exec integration. Never target the ambient context.
 test.skipIf(process.env.ARCHESTRA_TEST_SANDBOX_CONTEXT !== "orbstack")(
   "recovers a continuation interrupted before Pod wake-up without replaying it",
   async ({ makeOrganization, makeUser, makeAgent }) => {
-    config.agentRuntime.enabled = true;
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
     expect(config.orchestrator.kubernetes.kubeconfig).toBeFalsy();
     expect(
       config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster,

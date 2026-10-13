@@ -156,12 +156,14 @@ export function createOpenAiTestClient(options: OpenAiStubOptions = {}) {
 export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
   return {
     messages: {
-      create: async (params: Anthropic.Messages.MessageCreateParams) => {
+      // Typed as the plain async form tests wrap; the streaming result also
+      // carries the SDK's `asResponse()` at runtime.
+      create: ((params: Anthropic.Messages.MessageCreateParams) => {
         if (params.stream) {
-          return createAnthropicStream(options);
+          return anthropicStreamPromise(createAnthropicStream(options));
         }
 
-        return {
+        return Promise.resolve({
           id: "msg-test-anthropic",
           type: "message",
           container: null,
@@ -204,8 +206,12 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
             cache_creation_input_tokens: 0,
             cache_read_input_tokens: options.cacheReadInputTokens ?? 0,
           },
-        } as unknown as Anthropic.Message;
-      },
+        } as unknown as Anthropic.Message);
+      }) as (
+        params: Anthropic.Messages.MessageCreateParams,
+      ) => Promise<
+        ReturnType<typeof createAnthropicStream> | Anthropic.Message
+      >,
       stream: () => createAnthropicStream(options),
     },
   };
@@ -700,4 +706,48 @@ function createGeminiStream(options: GeminiStubOptions) {
       };
     },
   };
+}
+
+/**
+ * A streaming `messages.create()` result shaped like the SDK's: awaitable as
+ * the event iterable, or read as the raw SSE `Response` through
+ * `asResponse()`, which is what the proxy consumes.
+ */
+export function anthropicStreamPromise(
+  events: AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>,
+) {
+  const promise = Promise.resolve(events);
+  return Object.assign(promise, {
+    asResponse: async () => anthropicSseResponse(await promise),
+  });
+}
+
+function anthropicSseResponse(events: AsyncIterable<unknown>): Response {
+  const encoder = new TextEncoder();
+  const iterator = events[Symbol.asyncIterator]();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const next = await iterator.next();
+        if (next.done) {
+          controller.close();
+          return;
+        }
+        const event = next.value as { type?: string };
+        controller.enqueue(
+          encoder.encode(
+            `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          ),
+        );
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
+  return new Response(body, {
+    headers: { "content-type": "text/event-stream" },
+  });
 }

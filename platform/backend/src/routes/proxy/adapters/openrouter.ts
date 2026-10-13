@@ -24,6 +24,7 @@ import type {
   LLMStreamAdapter,
   Openrouter,
   StreamAccumulatorState,
+  UsageView,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -39,6 +40,11 @@ import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 type OpenrouterRequest = Openrouter.Types.ChatCompletionsRequest;
 type OpenrouterResponse = Openrouter.Types.ChatCompletionsResponse;
 type OpenrouterMessages = Openrouter.Types.ChatCompletionsRequest["messages"];
+type OpenrouterMessage = Openrouter.Types.Message;
+type OpenrouterContentPart = Exclude<
+  Exclude<OpenrouterMessage["content"], string | null | undefined>,
+  string
+>[number];
 type OpenrouterHeaders = Openrouter.Types.ChatCompletionsHeaders;
 type OpenrouterStreamChunk = Openrouter.Types.ChatCompletionChunk;
 
@@ -51,8 +57,10 @@ class OpenrouterRequestAdapter
 {
   readonly provider = "openrouter" as const;
   private delegate: OpenAIRequestAdapter;
+  private readonly request: OpenrouterRequest;
 
   constructor(request: OpenrouterRequest) {
+    this.request = request;
     this.delegate = new OpenAIRequestAdapter(request);
   }
 
@@ -92,9 +100,91 @@ class OpenrouterRequestAdapter
   convertToolResultContent(messages: OpenrouterMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest() {
-    return this.delegate.toProviderRequest();
+  toProviderRequest(): OpenrouterRequest {
+    const request = this.delegate.toProviderRequest();
+    const messages: OpenrouterMessages = request.messages;
+    // A tool-result update replaces the whole content, dropping a marker that
+    // sat on one of its parts; carry it over from the original message.
+    const toolMarkers = toolResultCacheControls(this.request.messages);
+    return {
+      ...request,
+      messages: messages.map((message) =>
+        withCacheControlOnTextPart(
+          message.role === "tool" && !hasCacheControl(message)
+            ? {
+                ...message,
+                cache_control: toolMarkers.get(message.tool_call_id),
+              }
+            : message,
+        ),
+      ),
+    };
   }
+}
+
+type CacheControl = NonNullable<ToolMessage["cache_control"]>;
+type ToolMessage = Extract<OpenrouterMessage, { role: "tool" }>;
+
+function toolResultCacheControls(
+  messages: OpenrouterMessages,
+): Map<string, CacheControl> {
+  const markers = new Map<string, CacheControl>();
+  for (const message of messages) {
+    if (message.role !== "tool") continue;
+    const parts = Array.isArray(message.content) ? message.content : [];
+    const marker =
+      message.cache_control ??
+      parts
+        .map((part) => (part.type === "text" ? part.cache_control : undefined))
+        .findLast(Boolean);
+    if (marker) markers.set(message.tool_call_id, marker);
+  }
+  return markers;
+}
+
+function hasCacheControl(message: ToolMessage): boolean {
+  return (
+    !!message.cache_control ||
+    (Array.isArray(message.content) &&
+      message.content.some(
+        (part) => part.type === "text" && !!part.cache_control,
+      ))
+  );
+}
+
+// OpenRouter places Anthropic cache breakpoints on content parts, so a marker
+// sent on the message (as @ai-sdk/openai-compatible does for string content)
+// moves to the message's last text part; with no text to carry it, it drops.
+// @see https://openrouter.ai/docs/guides/best-practices/prompt-caching
+function withCacheControlOnTextPart(
+  message: OpenrouterMessage,
+): OpenrouterMessage {
+  if (message.role === "function" || !message.cache_control) {
+    return message;
+  }
+  const { cache_control, ...rest } = message;
+  const { content } = rest;
+  if (typeof content === "string") {
+    return content.length > 0
+      ? { ...rest, content: [{ type: "text", text: content, cache_control }] }
+      : rest;
+  }
+  if (!content) {
+    return rest;
+  }
+  const parts: OpenrouterContentPart[] = content;
+  const index = parts.findLastIndex((part) => part.type === "text");
+  if (index < 0) {
+    return rest;
+  }
+  return {
+    ...rest,
+    content: parts.map((part, i) =>
+      i === index && part.type === "text"
+        ? { ...part, cache_control: part.cache_control ?? cache_control }
+        : part,
+    ),
+  } as OpenrouterMessage;
 }
 
 class OpenrouterResponseAdapter
@@ -124,7 +214,10 @@ class OpenrouterResponseAdapter
     return this.delegate.hasToolCalls();
   }
   getUsage() {
-    return this.delegate.getUsage();
+    return withReportedCost(
+      this.delegate.getUsage(),
+      this.delegate.getOriginalResponse().usage,
+    );
   }
   getOriginalResponse() {
     return this.delegate.getOriginalResponse();
@@ -158,7 +251,11 @@ class OpenrouterStreamAdapter
 
   processChunk(chunk: OpenrouterStreamChunk) {
     const result = this.delegate.processChunk(chunk);
-    assertOpenrouterStreamChunkHasOutput(this.delegate.state, chunk);
+    const { state } = this.delegate;
+    if (chunk.usage && state.usage) {
+      state.usage = withReportedCost(state.usage, chunk.usage);
+    }
+    assertOpenrouterStreamChunkHasOutput(state, chunk);
     return result;
   }
   getSSEHeaders() {
@@ -362,6 +459,27 @@ function assertOpenrouterStreamChunkHasOutput(
   }
 
   throwEmptyOpenrouterResponseError();
+}
+
+// OpenRouter reports what it billed on every response (usage accounting is
+// always on). Prices vary by the upstream provider OpenRouter routed to, so
+// this is the real spend; the synced $/MTok list price is only an estimate.
+// Under BYOK `cost` is just OpenRouter's fee and the upstream provider's charge
+// to the user's own key comes back separately.
+// @see https://openrouter.ai/docs/use-cases/usage-accounting
+function withReportedCost(usage: UsageView, rawUsage: unknown): UsageView {
+  const cost = get(rawUsage, "cost");
+  if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) {
+    return usage;
+  }
+  const upstreamCost = get(rawUsage, "cost_details.upstream_inference_cost");
+  const providerReportedCost =
+    get(rawUsage, "is_byok") === true &&
+    typeof upstreamCost === "number" &&
+    Number.isFinite(upstreamCost)
+      ? cost + upstreamCost
+      : cost;
+  return { ...usage, providerReportedCost };
 }
 
 function hasText(content: string | null | undefined): boolean {

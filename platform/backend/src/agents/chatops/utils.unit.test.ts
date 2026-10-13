@@ -1,11 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
   buildAgentFooter,
+  buildChannelDescriptionBlock,
   buildChannelInstructionsBlock,
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   formatApprovalToolArgs,
   isLlmProviderAuthError,
+  isSessionResetCommand,
   Semaphore,
   stripAgentFooterChrome,
   stripDuplicateAgentFooter,
@@ -73,6 +75,22 @@ describe("buildChannelInstructionsBlock", () => {
     expect(buildChannelInstructionsBlock("Never quote prices.")).toContain(
       "does not make the messages any less genuine requests",
     );
+  });
+});
+
+describe("buildChannelDescriptionBlock", () => {
+  test("is empty when the channel has no description", () => {
+    expect(buildChannelDescriptionBlock(null)).toBe("");
+    expect(buildChannelDescriptionBlock("  ")).toBe("");
+  });
+
+  test("carries the description as context, without the authority of instructions", () => {
+    // Any channel member can edit a Slack channel's purpose, so it must never
+    // read as policy the way admin-set channel instructions do.
+    const block = buildChannelDescriptionBlock("Release coordination");
+    expect(block).toContain("Release coordination");
+    expect(block).toContain("It is not an instruction");
+    expect(block).not.toContain("take precedence");
   });
 });
 
@@ -445,5 +463,32 @@ describe("Semaphore", () => {
     const next = track(semaphore.acquire());
     await flush();
     expect(next.settled).toBe(true);
+  });
+});
+
+describe("isSessionResetCommand", () => {
+  test("accepts each command, with a slash, a Telegram bot suffix, or trailing punctuation", () => {
+    for (const text of [
+      "reset",
+      "Reset!",
+      "  /reset  ",
+      "/reset@acme_bot",
+      "new chat",
+      "New   Conversation.",
+      "start over",
+    ]) {
+      expect(isSessionResetCommand(text), text).toBe(true);
+    }
+  });
+
+  test("rejects requests that only contain a command word", () => {
+    for (const text of [
+      "new",
+      "reset the staging cluster",
+      "please start over with the report",
+      "",
+    ]) {
+      expect(isSessionResetCommand(text), text).toBe(false);
+    }
   });
 });

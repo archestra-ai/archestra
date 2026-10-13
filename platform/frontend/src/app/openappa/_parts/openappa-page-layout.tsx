@@ -1,18 +1,23 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { BatteriesUploadAction } from "./batteries-panel";
+import { OpenAppaPageActionSlotContext } from "./openappa-page-action";
 import { openAppaUrl } from "./overview-setup-cards";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
 export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const [pageActionSlot, setPageActionSlot] = useState<HTMLDivElement | null>(
+    null,
+  );
   const { data: canReadYells } = useHasPermissions({
     openappaDiagnostics: ["read"],
   });
@@ -25,8 +30,19 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
     pathname === "/openappa/batteries"
       ? {
           title: "Batteries",
-          description:
-            "Add and manage reusable policy rules for your tools. See which batteries are active and what they need to work.",
+          description: (
+            <>
+              <span>
+                Batteries are ready-made sets of guardrail rules for your tools
+                and services. See which are active and what they need to work.
+              </span>{" "}
+              <ExternalDocsLink
+                href={getDocsUrl(DocsPage.PlatformAiToolGuardrailsBatteries)}
+              >
+                Learn more
+              </ExternalDocsLink>
+            </>
+          ),
         }
       : pathname === "/openappa/policy"
         ? {
@@ -34,23 +50,39 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
             description:
               "Review your guardrail policy and the effective rules applied to tool calls, including rules from batteries.",
           }
-        : pathname === "/openappa/yells"
+        : pathname === "/openappa/tests" ||
+            pathname.startsWith("/openappa/validation")
           ? {
-              title: "Yells",
+              title:
+                pathname === "/openappa/validation/history"
+                  ? "Validation run history"
+                  : pathname === "/openappa/validation/new"
+                    ? "Add validation"
+                    : "Validations",
               description:
-                "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed.",
+                pathname === "/openappa/validation/history"
+                  ? "Review previous validation results."
+                  : pathname === "/openappa/validation/new"
+                    ? "Write a scenario and save it as a validation file."
+                    : "Write policy scenarios and check their expected decisions.",
             }
-          : {
-              title: "Guardrails",
-              description: (
-                <>
-                  {`${appName} uses OpenAPPA to check tool calls against your policy and keep data visible only to people allowed to see it.`}{" "}
-                  <ExternalDocsLink href={openAppaUrl("/how-it-works")}>
-                    How it works
-                  </ExternalDocsLink>
-                </>
-              ),
-            };
+          : pathname === "/openappa/yells"
+            ? {
+                title: "Yells",
+                description:
+                  "Yells are agent reports of blocks it could not make sense of or get past. Investigate them in chat and mark them resolved once fixed.",
+              }
+            : {
+                title: "Guardrails",
+                description: (
+                  <>
+                    {`${appName} uses OpenAPPA to check tool calls against your policy and keep data visible only to people allowed to see it.`}{" "}
+                    <ExternalDocsLink href={openAppaUrl("/how-it-works")}>
+                      How it works
+                    </ExternalDocsLink>
+                  </>
+                ),
+              };
   // Until a policy is saved, the Overview shows only that first step.
   const firstStepOnly = isFresh === true && pathname === "/openappa";
 
@@ -79,6 +111,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
                     { label: "Overview", href: "/openappa" },
                     { label: "Batteries", href: "/openappa/batteries" },
                     { label: "Policy", href: "/openappa/policy" },
+                    { label: "Validations", href: "/openappa/validation" },
                   ]
                 : []),
               ...(canReadYells
@@ -87,14 +120,20 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
             ]
       }
       actionButton={
-        firstStepOnly ||
-        pathname === "/openappa/yells" ||
-        pathname === "/openappa/policy" ? null : (
+        pathname === "/openappa/validation" ? (
+          <div ref={setPageActionSlot} />
+        ) : firstStepOnly ||
+          pathname === "/openappa/yells" ||
+          pathname === "/openappa/tests" ||
+          pathname.startsWith("/openappa/validation") ||
+          pathname === "/openappa/policy" ? null : (
           <BatteriesUploadAction />
         )
       }
     >
-      {children}
+      <OpenAppaPageActionSlotContext.Provider value={pageActionSlot}>
+        {children}
+      </OpenAppaPageActionSlotContext.Provider>
     </PageLayout>
   );
 }

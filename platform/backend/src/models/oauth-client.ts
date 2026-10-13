@@ -31,6 +31,7 @@ class OAuthClientModel {
     const access = schema.oauthAccessTokensTable;
     const refresh = schema.oauthRefreshTokensTable;
     const clients = schema.oauthClientsTable;
+    const consents = schema.oauthConsentsTable;
     const issued = conn
       .select({ clientId: access.clientId, createdAt: access.createdAt })
       .from(access)
@@ -64,6 +65,12 @@ class OAuthClientModel {
         lastIssuedAt: sql<Date>`max(${issued.createdAt})`.mapWith(
           access.createdAt,
         ),
+        /** When the user consented to this client: its first sign-in. */
+        consentedAt: sql<Date | null>`(
+          SELECT min(${consents.createdAt}) FROM ${consents}
+          WHERE ${consents.clientId} = ${clients.clientId}
+            AND ${consents.userId} = ${params.userId}
+        )`.mapWith(access.createdAt),
       })
       .from(issued)
       .innerJoin(clients, eq(issued.clientId, clients.clientId))

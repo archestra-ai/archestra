@@ -172,7 +172,7 @@ function BatteriesContent({ summary }: { summary: CoverageSummary }) {
             }
           />
         </div>
-        {actionable && (
+        {actionable && totals.tools > 0 && (
           <ReachableCoverage
             total={totals.tools}
             custom={totals.root}

@@ -31,7 +31,6 @@ import logger from "@/logging";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
-import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import {
   formatSessionReceipt,
   mintReceiptCode,
@@ -1116,15 +1115,12 @@ describe("Anthropic count_tokens passthrough", () => {
         callerId: "user:count-tokens",
         secret,
       });
-    const offer = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: "org-count-tokens",
-        callerId: "user:count-tokens",
-        sessionId: "user:count-tokens|count-tokens-session",
-        offerId: "offer-weather",
-      }),
-      secret,
-    );
+    // Leftover offer material from persisted history. Not minted, and not a route.
+    const offer = {
+      protected: "eyJhbGciOiJIUzI1NiJ9",
+      payload: JSON.stringify({ session_id: "historical-offer-session" }),
+      signature: "historical-offer",
+    };
     const ruling = "[appa] get_weather is blocked until a plan is approved.";
     const control = "mcp__gw__archestra__execute_remedy_plan";
     const remedyArguments = { offer_id: "offer-weather", plan: "approve" };
@@ -1135,9 +1131,10 @@ describe("Anthropic count_tokens passthrough", () => {
       tool_name: control,
       original_arguments: JSON.stringify(remedyArguments),
     } satisfies RemedyExecution;
-    // Declaring tools rules out restoring a control call from its receipt
-    // alone. The catch-all has no gateway identity either, so the control call
-    // goes back only because its JWS verifies under the signing secret.
+    // Declaring tools rules out restoring a control call in the notice pass.
+    // The catch-all has no gateway identity. After the stamp is put back, the
+    // execution receipt names this call, so the legacy offer fields are removed
+    // with it. They are not checked.
     const tools = [
       {
         name: "get_weather",
@@ -1171,13 +1168,15 @@ describe("Anthropic count_tokens passthrough", () => {
                 type: "tool_use",
                 id: stamp("toolu_weather"),
                 name: "mcp__gw__archestra__get_remedy_plans",
-                input: buildNoticeArguments({
-                  id: "toolu_weather",
-                  tool: "get_weather",
-                  arguments: { location: "SF" },
-                  result: ruling,
+                input: {
+                  ...buildNoticeArguments({
+                    id: "toolu_weather",
+                    tool: "get_weather",
+                    arguments: { location: "SF" },
+                    result: ruling,
+                  }),
                   offers: [offer],
-                }),
+                },
               },
             ],
           },
@@ -1283,14 +1282,7 @@ describe("Anthropic count_tokens passthrough", () => {
       caller_id: "user:count-tokens",
       session_id: "count-tokens-session",
     };
-    const sessionReceipt = formatSessionReceipt(
-      mintReceiptCode({
-        secret,
-        organizationId: session.organization_id,
-        callerId: session.caller_id,
-        sessionId: session.session_id,
-      }),
-    );
+    const sessionReceipt = formatSessionReceipt(mintReceiptCode());
     const childReceipt = mintChildTrajectoryReceipt({
       organizationId: session.organization_id,
       callerId: session.caller_id,

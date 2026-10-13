@@ -91,6 +91,14 @@ function classify(error: unknown): {
       statusCode: 503,
       detail: "the policy runtime has no free database connection.",
     };
+  // Another dispatch took over the operation while this one was cut off from
+  // the ledger. That dispatch answers the retry.
+  if (message === LEASE_LOST)
+    return {
+      statusCode: 503,
+      detail:
+        "another request of this session took over this operation. Retry the request.",
+    };
   // Every later request of the subagent fails the same way: no fork exists
   // for it to open, whatever the retry.
   if (message.includes(UNFORKED_CHILD) || message === UNSTARTED_PARENT)
@@ -101,6 +109,10 @@ function classify(error: unknown): {
     };
   return { statusCode: 503, detail: "the policy runtime is unavailable." };
 }
+
+/** The runtime's report of a dispatch that no longer owns its session family. */
+const LEASE_LOST =
+  "OpenAPPA lost its lease on this operation; retry the request";
 
 /** The runtime's refusal of a child that no approved spawn prepared. */
 const UNFORKED_CHILD = "no prepared fork to open this child";

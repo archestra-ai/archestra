@@ -7,7 +7,15 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { AuditLogModel, PluginModel } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createGithubPat } from "@/services/github-pat";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  accessGrants,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import { STUB_COMMIT_SHA, stubGithub } from "@/test/github-skills-stub";
 import { useRouteTestApp } from "@/test/route-test-app";
 import { grantEverywhere } from "@/test/wildcard-grants";
@@ -488,6 +496,73 @@ describe("plugin routes", () => {
       url: `/api/plugins/${foreign.id}`,
     });
     expect(response.statusCode).toBe(404);
+  });
+
+  test("access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, { role: "member" });
+    const myTeam = await makeTeam(ctx.organizationId, ctx.user.id);
+    await makeTeamMember(myTeam.id, ctx.user.id);
+    const otherTeam = await makeTeam(ctx.organizationId, otherUser.id);
+
+    const seed = async (
+      displayName: string,
+      access: TestAccess,
+      userId = otherUser.id,
+    ) => {
+      const plugin = await PluginModel.create({
+        organizationId: ctx.organizationId,
+        userId,
+        input: { ...createPayload(), displayName },
+        ...accessGrants(access),
+      });
+      if (!plugin) throw new Error("failed to seed plugin");
+    };
+    await seed("Mine", "personal", ctx.user.id);
+    await seed("Other Personal", "personal");
+    await seed("Org", "org");
+    await seed("My Team", { teams: [myTeam.id] });
+    await seed("Other Team", { teams: [otherTeam.id] });
+    await seed("Shared With Me", { users: [ctx.user.id] });
+
+    const list = async (access?: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/plugins${access ? `?access=${access}` : ""}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .map((plugin: { displayName: string }) => plugin.displayName)
+        .sort();
+    };
+
+    // The caller reads every plugin through a `*` grant, which the filter
+    // must not count as "shared".
+    expect(await list()).toEqual([
+      "Mine",
+      "My Team",
+      "Org",
+      "Other Personal",
+      "Other Team",
+      "Shared With Me",
+    ]);
+    expect(await list("mine,shared,org")).toEqual([
+      "Mine",
+      "My Team",
+      "Org",
+      "Shared With Me",
+    ]);
+    expect(await list("others")).toEqual(["Other Personal", "Other Team"]);
+    expect(await list("mine")).toEqual(["Mine"]);
+    expect(await list("shared")).toEqual(["My Team", "Shared With Me"]);
+    expect(await list("org")).toEqual(["Org"]);
   });
 
   test("soft-deletes the plugin and removes it from reads", async () => {

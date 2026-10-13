@@ -44,6 +44,7 @@ function isTabActive(
 export function PageLayout({
   title,
   documentTitle,
+  icon,
   backLink,
   description,
   status,
@@ -89,8 +90,17 @@ export function PageLayout({
    */
   documentTitle?: string;
   /**
-   * "Back to <parent>" control for a detail page, rendered above the title so
-   * it reads as part of the header rather than as the first item of content.
+   * The record's own mark (an agent's icon, an MCP server's logo), for a
+   * detail page. Pass the bare glyph at 24px; the header draws the tile around
+   * it. It sits to the left of the title and description as one column, so the
+   * description lines up under the name rather than under the icon — which is
+   * where it lands when the icon is composed into `title` instead.
+   */
+  icon?: React.ReactNode;
+  /**
+   * "Back to <parent>" control for a detail or wizard page — a `PageBackLink`.
+   * It sits in the title row, before the title, so the way back reads as part
+   * of the header without spending a row of its own.
    */
   backLink?: React.ReactNode;
   /** Omit on pages whose title needs no gloss — nothing is rendered. */
@@ -207,31 +217,56 @@ export function PageLayout({
               "mx-auto px-6",
               minWidth,
               maxWidth,
-              maxWidthKey === "wizard" ? "pt-4 sm:pt-6" : "pt-6",
+              HEADER_SPACING.top,
             )}
           >
             {/* On phones, the title and actions share a row while the
-                description uses the full width below them. */}
+                description uses the full width below them. An icon adds a
+                leading column; from `sm` up the title and description stack
+                beside it as one block, so both start at the same edge. Every
+                width shares HEADER_SPACING; `wizard` only clamps the copy to
+                one line each, so its header never changes height. */}
             <div
               className={cn(
-                "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 sm:gap-x-6 sm:gap-y-3",
-                maxWidthKey === "wizard" ? "mb-4 sm:mb-6" : "mb-6",
-                maxWidthKey === "wizard" && description && "sm:min-h-[3.75rem]",
+                "grid items-center gap-x-3 gap-y-2 sm:gap-y-3",
+                icon
+                  ? "grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4"
+                  : "grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6",
+                HEADER_SPACING.bottom,
               )}
             >
-              {backLink && (
-                <div className="col-start-1 row-start-1 min-w-0">
+              {icon && (
+                // The back link leads the tile, so the arrow stays outside
+                // the record's own mark: "← [icon] Title".
+                <div className="col-start-1 row-start-1 flex items-center gap-1 self-center">
                   {backLink}
+                  <div
+                    aria-hidden
+                    data-page-icon
+                    className={cn(
+                      "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/40",
+                      // The tile owns the glyph size so no page can drift.
+                      // Line icons keep a 2px inner margin, so a 20px raster
+                      // logo reads the same size as a 24px line icon.
+                      "*:size-6! [&>img]:size-5!",
+                      // From `sm` up the description stacks beside the icon,
+                      // so the tile grows to the height of the two lines it
+                      // fronts.
+                      description && "sm:size-12",
+                      // On a phone the arrow and the tile together would
+                      // squeeze the title to a few letters; the tile is only
+                      // decoration, so the title keeps that room instead.
+                      backLink && "hidden sm:flex",
+                    )}
+                  >
+                    {icon}
+                  </div>
                 </div>
               )}
               <div
                 className={cn(
-                  "contents sm:col-start-1 sm:block sm:min-w-0",
-                  backLink ? "row-start-2" : "row-start-1",
-                  maxWidthKey === "wizard" &&
-                    description &&
-                    "min-h-10 sm:relative sm:h-[3.75rem] sm:min-h-0",
-                  maxWidthKey === "wizard" && !description && "min-h-10",
+                  "contents row-start-1 sm:block sm:min-w-0",
+                  icon ? "sm:col-start-2" : "sm:col-start-1",
                 )}
               >
                 {/* Sibling pages of a tabbed section render PageLayout at the
@@ -244,22 +279,23 @@ export function PageLayout({
                   (facebook/react#11538). Keying the wrappers by pathname
                   swaps a whole element per page instead. */}
                 {/* The status pill is a sibling of the heading, not part of it:
-                  detail titles already compose an icon, a name and badges
-                  inside `title`, and folding a live state into the accessible
+                  detail titles already compose a name and badges inside
+                  `title`, and folding a live state into the accessible
                   heading name would make the heading change every time the
                   probe does. */}
                 <div
                   className={cn(
-                    "col-start-1 flex min-w-0 items-center gap-2",
-                    backLink ? "row-start-2" : "row-start-1",
-                    // 40px even without an icon, so a plain text title and
-                    // the actions share one centre line.
+                    "row-start-1 flex min-w-0 items-center gap-2",
+                    HEADER_SPACING.titleRow,
+                    icon ? "col-start-2" : "col-start-1",
                     maxWidthKey === "wizard"
-                      ? "min-h-10 flex-nowrap overflow-hidden"
-                      : "min-h-9 flex-wrap",
-                    description && maxWidthKey !== "wizard" && "sm:mb-2",
+                      ? "flex-nowrap overflow-hidden"
+                      : "flex-wrap",
                   )}
                 >
+                  {/* Without an icon the back link leads the title itself;
+                    with one it leads the tile instead (above). */}
+                  {!icon && backLink}
                   <h1
                     className={cn(
                       "min-w-0 break-words text-2xl font-semibold tracking-tight",
@@ -274,10 +310,9 @@ export function PageLayout({
                   <div
                     data-page-description
                     className={cn(
-                      "col-span-2 text-sm text-muted-foreground",
-                      backLink ? "row-start-3" : "row-start-2",
-                      maxWidthKey === "wizard" &&
-                        "hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:line-clamp-1",
+                      "col-span-full row-start-2 text-sm text-muted-foreground",
+                      HEADER_SPACING.description,
+                      maxWidthKey === "wizard" && "hidden sm:line-clamp-1",
                     )}
                   >
                     <span key={pathname}>{description}</span>
@@ -288,12 +323,12 @@ export function PageLayout({
                 <div
                   data-page-actions
                   className={cn(
-                    "col-start-2 flex min-h-9 items-center justify-self-end self-start lg:self-center",
-                    backLink ? "row-start-2" : "row-start-1",
-                    contentOverflowX === "clip" && "max-w-full overflow-x-auto",
                     // Tablet and phone actions align with the title; desktop
                     // actions centre against the title and description together.
-                    maxWidthKey === "wizard" && "min-h-10",
+                    "row-start-1 flex items-center justify-self-end self-start lg:self-center",
+                    HEADER_SPACING.titleRow,
+                    icon ? "col-start-3" : "col-start-2",
+                    contentOverflowX === "clip" && "max-w-full overflow-x-auto",
                   )}
                 >
                   {actionButton}
@@ -419,11 +454,7 @@ export function PageLayout({
                 </div>
               </>
             )}
-            {!tabs.length && (
-              <div
-                className={maxWidthKey === "wizard" ? "mb-2 sm:mb-6" : "mb-6"}
-              />
-            )}
+            {!tabs.length && <div className={HEADER_SPACING.bottom} />}
           </div>
         </div>
         <div
@@ -474,6 +505,16 @@ export function PageLayout({
 const MIN_WIDTH_CLASSES = {
   none: "",
   phone: "min-w-[20rem]",
+} as const;
+
+// One vertical rhythm for every page header, whatever its width. The title
+// row is 40px, the height of the icon tile and of the actions, so all three
+// share a centre line.
+const HEADER_SPACING = {
+  top: "pt-4 sm:pt-6",
+  bottom: "mb-4 sm:mb-6",
+  titleRow: "min-h-10",
+  description: "sm:mt-1",
 } as const;
 
 const MAX_WIDTH_CLASSES = {

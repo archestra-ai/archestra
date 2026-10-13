@@ -3852,6 +3852,76 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
+  test("delivers a denial of arguments that are not JSON as a notice, and keeps the rest of the batch", async () => {
+    // Streamed tool input can end as text that is not JSON. The runtime denies
+    // that call before evaluation; its ruling must reach the client as a
+    // notice instead of failing the whole response.
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({ sessionId: "malformed-arguments" });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: undefined,
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+    };
+    const ruling =
+      "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.";
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: ruling },
+        { kind: "allow" as const },
+      ]);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "ask-1",
+            name: "archestra__ask_user",
+            arguments: '{"question":"Pick one',
+          },
+          {
+            id: "ask-2",
+            name: "archestra__ask_user",
+            arguments: '{"question":"Pick two"}',
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected a notice");
+      expect(outcome.toolCalls).toHaveLength(2);
+      expect(outcome.toolCalls[0]).toMatchObject({
+        id: "ask-1",
+        name: "archestra__get_remedy_plans",
+      });
+      expect(JSON.parse(String(outcome.toolCalls[0].arguments))).toEqual({
+        tool: "archestra__ask_user",
+        arguments: {},
+        ruling,
+        notice: { v: 1, call_id: "ask-1" },
+      });
+      expect(outcome.toolCalls[1]).toMatchObject({
+        id: "ask-2",
+        name: "archestra__ask_user",
+        arguments: '{"question":"Pick two"}',
+      });
+      expect(outcome.blocked).toEqual([
+        { id: "ask-1", name: "archestra__ask_user", reason: ruling },
+      ]);
+    } finally {
+      evaluateToolCalls.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("presents a denied dispatch under a client alias the platform does not know as its target, in compat", async () => {
     // Without attestations, the alias a client registered the gateway under
     // is free text; the loose wrapper match still recovers the dispatch, and

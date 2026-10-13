@@ -248,7 +248,7 @@ test.each([
     await writeFile(
       path.join(directory, "test.py"),
       `
-import io, json, os, pathlib, runpy, subprocess, urllib.error
+import io, json, os, pathlib, runpy, subprocess, urllib.error, urllib.request
 from unittest.mock import patch
 root = pathlib.Path(__file__).parent
 home = root / 'home'

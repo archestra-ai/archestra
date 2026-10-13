@@ -177,16 +177,6 @@ test.each([
 ])("OpenCode %i writes both limit fields when either is known and omits limit when neither is", (major) => {
   const home = mkdtempSync(path.join(tmpdir(), "opencode-limits-"));
   const section = major === 2 ? "providers" : "provider";
-  const model = (
-    id: string,
-    context: number | null,
-    output: number | null,
-  ) => ({
-    id,
-    name: id,
-    context,
-    output,
-  });
   try {
     execFileSync(process.execPath, ["-e", OPENCODE_PRIMARY_CONFIG_SCRIPT], {
       input: JSON.stringify(
@@ -206,10 +196,20 @@ test.each([
               provider: "anthropic",
               name: "Anthropic",
               models: [
-                model("context-only", 200000, null),
-                model("output-only", null, 8192),
-                model("both", 200000, 8192),
-                model("neither", null, null),
+                {
+                  id: "context-only",
+                  name: "context-only",
+                  context: 200000,
+                  output: null,
+                },
+                {
+                  id: "output-only",
+                  name: "output-only",
+                  context: null,
+                  output: 8192,
+                },
+                { id: "both", name: "both", context: 200000, output: 8192 },
+                { id: "neither", name: "neither", context: null, output: null },
               ],
             },
           ],

@@ -21,22 +21,3 @@ export function useRemedies() {
     },
   });
 }
-
-export type RemediesActivity =
-  archestraApiTypes.GetOpenappaRemediesActivityResponses["200"];
-export type ActivityDay = RemediesActivity["days"][number];
-
-/** Denied calls per day over the last week by how each ended, in the viewer's time zone. */
-export function useRemediesActivity() {
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return useQuery({
-    queryKey: ["openappa-remedies-activity", timeZone],
-    queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getOpenappaRemediesActivity(
-        { query: { timeZone } },
-      );
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
-    },
-  });
-}

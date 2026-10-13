@@ -1,5 +1,6 @@
 import {
   ADMIN_ROLE_NAME,
+  APPA_KEEPER_AGENT_ICON,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
@@ -787,6 +788,36 @@ Be neurodiversity friendly.
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.id, staleDelegation.id));
     expect(delegationTool.name).toBe("agent__context_compaction_subagent");
+  });
+
+  test("gives APPA Keeper its icon, including on an org seeded before it had one", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    await syncBuiltInAgents();
+
+    const seeded = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    expect(seeded?.icon).toBe(APPA_KEEPER_AGENT_ICON);
+
+    await db
+      .update(schema.agentsTable)
+      .set({ icon: null })
+      .where(eq(schema.agentsTable.id, seeded?.id ?? ""));
+    await syncBuiltInAgents();
+
+    const reconciled = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+      organization.id,
+    );
+    expect(reconciled?.icon).toBe(APPA_KEEPER_AGENT_ICON);
+    const compaction = await AgentModel.getBuiltInAgent(
+      BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+      organization.id,
+    );
+    expect(compaction?.icon).toBeNull();
   });
 
   test("seeded built-in agents get a config version", async ({

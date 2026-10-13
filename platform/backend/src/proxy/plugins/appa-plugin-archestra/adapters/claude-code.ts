@@ -102,6 +102,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     },
     rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
       structuredQuestionRuling(result, shownQuestion(asked)),
+    formFallback: true,
   };
   // Claude Code connects MCP servers in the background and declares this tool
   // in the requests it sends before they are ready.

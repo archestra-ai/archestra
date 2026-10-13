@@ -45,10 +45,12 @@ import {
   verifyDelegatedPrompt,
 } from "@/openappa/delegation";
 import {
+  askHitlReviewInForm,
   getHitlAskUserArguments,
   getHitlReview,
   getHitlReviewResult,
   type HitlReviewOutcome,
+  hitlReviewAskedInForm,
   recordHitlRuling,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
@@ -176,6 +178,8 @@ type AppaPluginBinding = {
   pendingHitlReviewOfferIds: string[];
   /** Verified native answers that must control the next model action. */
   nativeHitlRulings: RecordedNativeHitlRuling[];
+  /** Offers whose native answer could not be read; asked again in a form. */
+  unreadNativeAnswerOfferIds: string[];
   /** The native id this request's children will report as their parent. */
   spawnerNativeId: string | undefined;
   /** Server-bound child metadata needed to correlate its terminal return. */
@@ -270,6 +274,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
       nativeHitlRulings: [],
+      unreadNativeAnswerOfferIds: [],
       spawnerNativeId: trajectory.adapter?.nativeConversationId(
         trajectory.matchContext,
       ),
@@ -360,16 +365,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding,
       results: toolResults,
     });
-    binding.nativeHitlRulings = await recordNativeHitlRulings({
+    const nativeAnswers = await recordNativeHitlRulings({
       binding,
       verifiedNativeQuestionResults,
     });
+    binding.nativeHitlRulings = nativeAnswers.rulings;
+    // An unread answer leaves its review pending. Its own guidance asks again.
+    binding.unreadNativeAnswerOfferIds = nativeAnswers.unreadOfferIds;
     binding.pendingHitlReviewOfferIds = await pendingNativeHitlOfferIds({
       binding,
       results: toolResults,
-      resolvedOfferIds: new Set(
-        binding.nativeHitlRulings.map((entry) => entry.offerId),
-      ),
+      resolvedOfferIds: new Set([
+        ...binding.nativeHitlRulings.map((entry) => entry.offerId),
+        ...nativeAnswers.unreadOfferIds,
+      ]),
     });
     // A handback's result and a message's delivery receipt are the client's
     // acknowledgements of calls the runtime already governed as crossings. A
@@ -595,6 +604,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           }),
         });
       }
+    }
+    if (binding && binding.unreadNativeAnswerOfferIds.length > 0) {
+      const offerIds = binding.unreadNativeAnswerOfferIds;
+      binding.unreadNativeAnswerOfferIds = [];
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: unreadNativeAnswerGuidance(offerIds),
+      });
+      requireCodexToolCall({ binding, context });
     }
     if (binding && binding.pendingHitlReviewOfferIds.length > 0) {
       const offerIds = binding.pendingHitlReviewOfferIds;
@@ -846,8 +865,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         changed ||= prepared !== call;
       }
       // Before any policy sees it: the call the policies rule on is the one
-      // the client will run.
-      const nativeQuestion = this.asNativeQuestion(binding, prepared);
+      // the client will run. A review whose native answer could not be read
+      // stays on the gateway, whose form returns the choice as data.
+      const nativeQuestion =
+        offerIds.length > 0 &&
+        (await hitlReviewAskedInForm({ session: binding.session, offerIds }))
+          ? prepared
+          : this.asNativeQuestion(binding, prepared);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issued =
@@ -4472,10 +4496,15 @@ async function claimNativeQuestionResults(params: {
 async function recordNativeHitlRulings(params: {
   binding: AppaPluginBinding;
   verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
-}): Promise<RecordedNativeHitlRuling[]> {
-  const parse = params.binding.adapter?.nativeQuestion?.rulingFromResult;
-  if (!parse) return [];
+}): Promise<{
+  rulings: RecordedNativeHitlRuling[];
+  unreadOfferIds: string[];
+}> {
+  const native = params.binding.adapter?.nativeQuestion;
+  const parse = native?.rulingFromResult;
+  if (!parse) return { rulings: [], unreadOfferIds: [] };
   const recorded: RecordedNativeHitlRuling[] = [];
+  const unreadOfferIds: string[] = [];
   for (const [answer, claim] of params.verifiedNativeQuestionResults) {
     if (!claim.offerIds || claim.offerIds.length === 0 || !isRecord(answer))
       continue;
@@ -4486,7 +4515,7 @@ async function recordNativeHitlRulings(params: {
       session: params.binding.session,
       offerIds: claim.offerIds,
     });
-    const ruling = asked
+    const reading = asked
       ? parse(
           {
             content:
@@ -4500,6 +4529,30 @@ async function recordNativeHitlRulings(params: {
           asked,
         )
       : "none";
+    if (reading === "unrecognized") {
+      // A client version may word its answer differently. Nothing is read
+      // from it; a client with forms is asked again there.
+      logger.warn(
+        {
+          client: params.binding.adapter?.id,
+          userAgent: params.binding.requestHeaders["user-agent"],
+          offerIds: claim.offerIds,
+          askedAgainInForm: native.formFallback === true,
+        },
+        "OpenAPPA could not read the answer to a native approval question",
+      );
+      if (native.formFallback) {
+        for (const offerId of claim.offerIds) {
+          await askHitlReviewInForm({
+            session: params.binding.session,
+            offerId,
+          });
+          unreadOfferIds.push(offerId);
+        }
+        continue;
+      }
+    }
+    const ruling = reading === "unrecognized" ? "none" : reading;
     logger.debug(
       {
         ruling,
@@ -4531,7 +4584,7 @@ async function recordNativeHitlRulings(params: {
       }
     }
   }
-  return recorded;
+  return { rulings: recorded, unreadOfferIds };
 }
 
 function assertUniqueNativeQuestionResultIds(params: {
@@ -4932,6 +4985,15 @@ function reviewResultStatus(
     if (status) return status;
   }
   return null;
+}
+
+function unreadNativeAnswerGuidance(offerIds: readonly string[]): string {
+  return [
+    "The platform could not read the answer to the last approval question, so it recorded nothing and the call stays blocked.",
+    "Ask once more with the declared ask_user tool, one call for each offer ID below, with the same question, header, options, and remedy_offer_ids as before.",
+    "This time the question opens as a form.",
+    `Offer IDs: ${JSON.stringify(offerIds)}.`,
+  ].join(" ");
 }
 
 function hitlQuestionGuidance(offerIds: readonly string[]): string {

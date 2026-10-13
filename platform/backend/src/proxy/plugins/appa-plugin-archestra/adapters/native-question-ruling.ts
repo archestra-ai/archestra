@@ -1,4 +1,8 @@
-import type { NativeQuestionResult, NativeQuestionRuling } from "../types";
+import type {
+  NativeQuestionReading,
+  NativeQuestionResult,
+  NativeQuestionRuling,
+} from "../types";
 
 /**
  * Reads Approve or Deny from the result of a client's own question tool.
@@ -7,7 +11,7 @@ import type { NativeQuestionResult, NativeQuestionRuling } from "../types";
 export function structuredQuestionRuling(
   result: NativeQuestionResult,
   question: string,
-): NativeQuestionRuling {
+): NativeQuestionReading {
   if (result.isError) return "none";
   try {
     const parsed = JSON.parse(result.content) as { answers?: unknown };
@@ -24,22 +28,28 @@ export function structuredQuestionRuling(
 export function openCodeQuestionRuling(
   result: NativeQuestionResult,
   question: string,
-): NativeQuestionRuling {
+): NativeQuestionReading {
   if (result.isError) return "none";
   return textQuestionRuling(result.content, question);
 }
 
 /**
- * Claude Code and OpenCode answer in one text: a fixed opening, then
+ * Claude Code and OpenCode answer in one text: an opening sentence, then
  * `"<question>"="<answer>"`. The question, and the option preview Claude Code
  * adds after the answer, can repeat text the agent wrote in the reviewed call.
  * So the answer is read in one place only: directly after the question the
- * platform asked. Any other text is not a ruling.
+ * platform asked.
+ *
+ * Only the client's wording tells a submitted answer from one that merely
+ * repeats a selection: Claude Code also writes `"<question>"="Approve"` when
+ * the user went idle before submitting, asked a follow-up, or added a note.
+ * So only the wordings below count. A known text that says the user gave no
+ * answer is "none". Any other text is "unrecognized", never a guess.
  */
 function textQuestionRuling(
   content: string,
   question: string,
-): NativeQuestionRuling {
+): NativeQuestionReading {
   for (const opening of ANSWER_OPENINGS) {
     const asked = `${opening}"${question}"="`;
     if (!content.startsWith(asked)) continue;
@@ -53,7 +63,7 @@ function textQuestionRuling(
         return rulingFromValues([label]);
     }
   }
-  return "none";
+  return NO_ANSWER_TEXTS.includes(content.trim()) ? "none" : "unrecognized";
 }
 
 function rulingFromValues(values: readonly string[]): NativeQuestionRuling {
@@ -72,12 +82,18 @@ function stringValues(value: unknown): string[] {
   return [];
 }
 
-// Claude Code opens with the first text. OpenCode and earlier Claude Code
-// versions open with the second. A timeout, a follow-up request, or an answer
-// with the user's own notes opens with other text and is not a ruling.
+// The openings of a submitted answer. Claude Code writes the first, OpenCode
+// and earlier Claude Code versions the second.
 const ANSWER_OPENINGS = [
   "Your questions have been answered: ",
   "User has answered your questions: ",
+];
+
+// The whole answer when the user answered nothing: Claude Code, and earlier
+// Claude Code versions. These can only withhold an approval.
+const NO_ANSWER_TEXTS = [
+  "The user did not answer the questions.",
+  "User has declined to answer your questions.",
 ];
 
 // What follows a selected option: the closing sentence, or the selected

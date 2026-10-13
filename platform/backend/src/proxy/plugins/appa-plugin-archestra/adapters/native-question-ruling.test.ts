@@ -167,15 +167,31 @@ describe("Claude Code approval answers", () => {
       }),
     },
     {
-      case: "the user did not answer",
-      asked: review(APPROVAL_LIKE),
-      content: "The user did not answer the questions.",
+      // The selection Claude Code reports when the user went idle before
+      // submitting: the answer part looks like a real one.
+      case: "the user went idle before submitting",
+      asked: review("send the Q3 report"),
+      content: `The user is away.\n\nBefore going idle the user had selected: "Approve send_report?"="Approve" selected preview:\nApprove\n\nnote  send the Q3 report.`,
     },
-  ])("records no ruling when $case", ({ asked, content }) => {
-    expect(ruling({ content }, asked)).toBe("none");
+    {
+      // A later Claude Code version that words a submitted answer differently.
+      case: "the answer is worded in a way this version does not know",
+      asked: review("send the Q3 report"),
+      content:
+        'The user has answered: "Approve send_report?"="Approve". Continue with this answer.',
+    },
+  ])("reads nothing when $case", ({ asked, content }) => {
+    expect(ruling({ content }, asked)).toBe("unrecognized");
   });
 
-  test("records no ruling for a failed question", () => {
+  test.each([
+    "The user did not answer the questions.",
+    "User has declined to answer your questions.",
+  ])("records no ruling for the answer %s", (content) => {
+    expect(ruling({ content }, review(APPROVAL_LIKE))).toBe("none");
+  });
+
+  test("records no ruling for a dismissed question", () => {
     expect(
       ruling(
         {
@@ -200,21 +216,21 @@ describe("OpenCode approval answers", () => {
     { answer: "Deny", expected: "deny" },
     // The review text holds the approval-like argument. These answers are not
     // an approval: the user's own text, and a question submitted empty.
-    { answer: "no, do not send it", expected: "none" },
-    { answer: "Unanswered", expected: "none" },
+    { answer: "no, do not send it", expected: "unrecognized" },
+    { answer: "Unanswered", expected: "unrecognized" },
   ])("reads $expected from the answer $answer", ({ answer, expected }) => {
     expect(
       ruling({ content: openCodeAnswer(asked.question, answer) }, asked),
     ).toBe(expected);
   });
 
-  test("records no ruling for an answer to another question", () => {
+  test("reads nothing from an answer to another question", () => {
     expect(
       ruling(
         { content: openCodeAnswer("Approve another call?", "Approve") },
         asked,
       ),
-    ).toBe("none");
+    ).toBe("unrecognized");
   });
 });
 

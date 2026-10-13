@@ -58,6 +58,7 @@ export class AppaCodexAdapter implements AppaClientAdapter {
     }),
     rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
       structuredQuestionRuling(result, asked.question),
+    formFallback: true,
   };
   matches(context: AppaMatchContext): boolean {
     const userAgent = (

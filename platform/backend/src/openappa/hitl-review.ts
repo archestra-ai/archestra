@@ -343,6 +343,34 @@ export async function clearHitlReview(params: {
   );
 }
 
+/**
+ * Asks a pending review once more through the gateway's MCP form, where the
+ * choice comes back as data. For an answer the proxy could not read.
+ */
+export async function askHitlReviewInForm(params: {
+  session: OpenAppaSession;
+  offerId: string;
+}): Promise<void> {
+  await cacheManager.set(
+    formKey(params.session, params.offerId),
+    { offerId: params.offerId },
+    HITL_REVIEW_TTL_MS,
+  );
+}
+
+export async function hitlReviewAskedInForm(params: {
+  session: OpenAppaSession;
+  offerIds: readonly string[];
+}): Promise<boolean> {
+  for (const offerId of params.offerIds) {
+    const entry = await cacheManager.get<{ offerId: string }>(
+      formKey(params.session, offerId),
+    );
+    if (entry?.offerId === offerId) return true;
+  }
+  return false;
+}
+
 export function hitlRulingFromLabels(
   labels: readonly string[],
 ): HitlRuling | undefined {
@@ -373,6 +401,10 @@ function stagePresenceKey(
     session,
     `${offerId}:stage-presence`,
   );
+}
+
+function formKey(session: OpenAppaSession, offerId: string): AllowedCacheKey {
+  return scopedKey(CacheKey.OpenAppaHitlRuling, session, `${offerId}:form`);
 }
 
 function reviewKey(session: OpenAppaSession, offerId: string): AllowedCacheKey {

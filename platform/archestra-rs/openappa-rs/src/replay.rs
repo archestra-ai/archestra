@@ -337,12 +337,14 @@ async fn offline_runtime(content: &str, noop: Option<&NoopAnnotator>) -> Result<
         ));
     }
     let consults = OfflineConsults::start(noop).await?;
-    let mut defaults = HostDefaults::new(Duration::from_secs(1), 65536);
+    let mut defaults =
+        HostDefaults::new(Duration::from_secs(1), crate::policy::host_max_body_bytes());
     defaults.archestra = Some(ArchestraEndpoint::new(
         consults.refuse_url.clone(),
         "offline-replay".into(),
     ));
     let mut config = Config::hosted(content, defaults, |_| Some("offline-replay".into()))
+        .map(crate::policy::enforce_host_limits)
         .map_err(|error| format!("The effective policy cannot load offline: {error}"))?;
     let externals = &mut config.externals;
     // Replay opens without an elicitation channel or a supplied human ruling.

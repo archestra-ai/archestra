@@ -2570,7 +2570,7 @@ impl State {
                 )?;
             }
         }
-        let approved = decision_text(&response)?;
+        let approved = stored_approved_output(&decision_text(&response)?, &response);
         self.store
             .complete_processed_result(key, approved, response.clone())
             .map_err(error)?;
@@ -2615,6 +2615,31 @@ impl State {
         })
     }
 }
+
+/// The `approved_output` column of a completed tool result, which holds the text a second
+/// time when the stored decision already carries it (`approved_output`, set by
+/// [`with_approved_output`]). A long text is stored in the decision alone, and the column
+/// holds `sha256:<hex>` of it.
+///
+/// Contract, checked at the pinned OpenAPPA revision and by the base commit's own code:
+/// nothing reads the column as content. A replay answers from the decision
+/// (`ProcessedResultClaim::Complete { decision, .. }` here and in `peer.rs`,
+/// `inherited_result` selects `decision`), `resolve_result_claim` only requires the column
+/// non-null, and `resolve_result_completion` compares it with the value a second completion
+/// of a complete row passes, which no path in this crate or the base commit makes after a
+/// claim answered `Complete`. Re-check all three when the OpenAPPA pin moves, and before
+/// anything reads the column. No schema changes: the column stays non-null text.
+fn stored_approved_output(approved: &str, decision: &Value) -> String {
+    let carried = decision.get("approved_output").and_then(Value::as_str) == Some(approved);
+    if carried && approved.len() > REFERENCE_FROM_BYTES {
+        format!("sha256:{}", sha256_hex(approved.as_bytes()))
+    } else {
+        approved.to_owned()
+    }
+}
+
+/// Texts up to this size stay readable in the column.
+const REFERENCE_FROM_BYTES: usize = 1024;
 
 #[derive(Serialize)]
 struct ApprovedOutput<'a, T> {
@@ -4686,6 +4711,47 @@ mod runtime_child_tests {
         assert!(
             matches!(later, HookDecision::AllowCall { .. }),
             "a later call still runs after the crossing, got {later:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod stored_approved_output_tests {
+    use super::{OutputSource, stored_approved_output, with_approved_output};
+    use serde_json::json;
+
+    fn decision(text: &str) -> serde_json::Value {
+        with_approved_output(
+            &json!({"decision": "ack"}),
+            text.to_owned(),
+            OutputSource::Tool,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_long_text_the_decision_carries_is_stored_once_as_a_reference() {
+        let text = "x".repeat(5000);
+        let stored = stored_approved_output(&text, &decision(&text));
+        assert_eq!(
+            stored,
+            format!("sha256:{}", super::sha256_hex(text.as_bytes()))
+        );
+        assert_eq!(stored, stored_approved_output(&text, &decision(&text)));
+    }
+
+    #[test]
+    fn a_short_text_or_one_the_decision_lacks_stays_in_the_column() {
+        let short = "ok".repeat(100);
+        assert_eq!(stored_approved_output(&short, &decision(&short)), short);
+        let long = "y".repeat(5000);
+        assert_eq!(
+            stored_approved_output(&long, &json!({"decision": "ack"})),
+            long
+        );
+        assert_eq!(
+            stored_approved_output(&long, &decision("another text")),
+            long
         );
     }
 }

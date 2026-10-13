@@ -40,6 +40,7 @@ import {
   estimateToolResultContentLength,
   previewToolResultContent,
 } from "@/utils/tool-result-preview";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   doesModelSupportImages,
   hasImageContent,
@@ -340,6 +341,7 @@ export class OpenAIRequestAdapter
           name: toolCall?.name ?? "unknown",
           arguments: toolCall?.arguments,
           content,
+          structured: typeof message.content !== "string",
           isError: false,
         });
       }
@@ -702,6 +704,16 @@ export class OpenAIRequestAdapter
         message.role === "tool" &&
         Object.hasOwn(updates, message.tool_call_id)
       ) {
+        // Kept as sent: the parts stay, so an image part reaches the provider
+        // (or the image conversion) as an image, not as its JSON text.
+        if (
+          isApprovedAsSent({
+            sent: message.content,
+            approved: updates[message.tool_call_id],
+          })
+        ) {
+          return message;
+        }
         appliedCount++;
         logger.debug(
           { toolCallId: message.tool_call_id },

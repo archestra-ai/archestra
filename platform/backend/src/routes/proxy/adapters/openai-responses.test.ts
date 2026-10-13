@@ -471,6 +471,7 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
         name: "apply_patch",
         arguments: { input: "*** Begin Patch" },
         content: "raw patch result",
+        structured: false,
         isError: false,
       },
     ]);
@@ -520,7 +521,9 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
       isError: false,
     };
 
-    expect(adapter.getToolResults()).toEqual([expected]);
+    expect(adapter.getToolResults()).toEqual([
+      { ...expected, structured: false },
+    ]);
     expect(adapter.getMessages()).toEqual([
       { role: "tool", content: "matching tools", toolCalls: [expected] },
     ]);

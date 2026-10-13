@@ -35,6 +35,7 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import { isAnthropicBillingBlock } from "@/utils/anthropic-billing-error";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -135,6 +136,7 @@ class AnthropicRequestAdapter
               name: toolUse?.name ?? "unknown",
               arguments: toolUse?.arguments,
               content,
+              structured: typeof contentBlock.content !== "string",
               isError: contentBlock.is_error ?? false,
             });
           }
@@ -337,6 +339,7 @@ class AnthropicRequestAdapter
                 name: toolUse.name,
                 arguments: toolUse.arguments,
                 content: toolResult,
+                structured: typeof contentBlock.content !== "string",
                 isError: contentBlock.is_error ?? false,
               });
             }
@@ -389,15 +392,16 @@ class AnthropicRequestAdapter
             contentBlock.type === "tool_result" &&
             Object.hasOwn(updates, contentBlock.tool_use_id)
           ) {
-            // A tool search answers with `tool_reference` blocks, which the
-            // provider reads to load the referenced tools. When the approved
-            // output is those blocks as sent, the blocks stay; a changed
-            // output replaces them with its text.
+            // OpenAPPA reads the result as the JSON text of its blocks. When
+            // the approved output is those blocks as sent, the blocks stay:
+            // an image must reach the provider as an image, and a tool search
+            // answers with `tool_reference` blocks the provider reads to load
+            // the referenced tools. A changed output replaces them with its text.
             if (
-              isUnchangedToolReferenceResult(
-                contentBlock.content,
-                updates[contentBlock.tool_use_id],
-              )
+              isApprovedAsSent({
+                sent: contentBlock.content,
+                approved: updates[contentBlock.tool_use_id],
+              })
             ) {
               return contentBlock;
             }
@@ -1822,20 +1826,4 @@ function replaceToolUseIds<T>(
     ) as T;
   }
   return value;
-}
-
-function isUnchangedToolReferenceResult(
-  content: unknown,
-  approved: string,
-): boolean {
-  return (
-    Array.isArray(content) &&
-    content.some(
-      (block) =>
-        typeof block === "object" &&
-        block !== null &&
-        (block as { type?: unknown }).type === "tool_reference",
-    ) &&
-    approved === JSON.stringify(content)
-  );
 }

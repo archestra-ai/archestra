@@ -6,6 +6,7 @@
  */
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
+const { Client } = require('../../backend/node_modules/pg');
 const { test } = require('node:test');
 const native = require('./index.cjs');
 const { databaseUrl } = require('./test-database.cjs');
@@ -253,4 +254,57 @@ test('a spawn call keeps the first return that the runtime approved for it', { s
   const second = await child.approve('second answer');
   assert.equal(second.decision, 'ack');
   assert.equal(second.approved_output, 'first answer', 'the later result gets the kept return');
+});
+
+// The decision `child_return` comes from a child's event when the value that crossed differs
+// from what the child said, and only there: the parent's spawn result answers `ack` with the
+// text it was handed. The host echoes the returned value, then reports the parent's result.
+test('a rewritten child return answers child_return, crosses through its echo, and the parent result keeps it', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const listSchema = {
+    type: 'object',
+    properties: {
+      days: { type: 'integer', minimum: 0, maximum: 365 },
+      list: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 365 }, maxItems: 256 },
+    },
+    required: ['days', 'list'],
+  };
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    for (const event of ['child_return', 'child_end']) {
+      const run = family();
+      const { declared, call } = await startSpawn(run, listSchema);
+      assert.equal(declared.result.isError, false);
+      assert.equal(call.decision, 'allow_call');
+      await run.hook(run.child, { event: 'session_start', spawn_call_id: 's1' });
+      const said = `{ "days": 3, "list": [${Array.from({ length: 256 }, (_, i) => 100 + (i % 200)).join(', ')}] }`;
+      const extra = event === 'child_end' ? { spawn_call_id: 's1' } : {};
+      const staged = await run.hook(run.child, { event, operation_id: 'runtime-return:s1:r1', output: said, ...extra });
+      assert.equal(staged.decision, 'child_return', 'the crossed form differs from what was said');
+      assert.equal(staged.value, JSON.stringify(JSON.parse(said)));
+      const echo = await run.hook(run.child, { event, operation_id: 'runtime-return:s1:r1:echo', output: staged.value, ...extra });
+      assert.equal(echo.decision, 'ack', 'the canonical value crosses');
+      const records = await crossedReturns(run);
+      assert.deepEqual(records.map((record) => record.value), [staged.value]);
+      const result = (output) => run.hook(run.parent, { event: 'tool_result', tool_call_id: 's1', spawned_id: run.child.session_id, output, outcome: 'success' });
+      const first = await result(staged.value);
+      assert.equal(first.decision, 'ack', 'the parent result is never child_return');
+      assert.equal(first.approved_output, staged.value);
+      // Over 1 KiB, the stored text is in the decision and the column holds its digest.
+      const stored = (await client.query(
+        'SELECT approved_output, decision FROM openappa_processed_results WHERE organization_id=$1 AND session_id=$2 AND tool_call_id=$3',
+        [run.organization, run.parent.session_id, 's1'],
+      )).rows[0];
+      assert.equal(stored.decision.approved_output, staged.value);
+      assert.match(stored.approved_output, /^sha256:[0-9a-f]{64}$/);
+      // A replay, and a later return for the same call, come back as the first.
+      assert.deepEqual(await result(staged.value), first);
+      await run.hook(run.child, { event: 'child_return', operation_id: 'runtime-return:s1:r2', output: '{"days":4,"list":[9]}' });
+      const later = await result('{"days":4,"list":[9]}');
+      assert.equal(later.approved_output, staged.value, 'the kept return comes from the stored decision');
+    }
+  } finally {
+    await client.end();
+  }
 });

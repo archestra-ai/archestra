@@ -73,6 +73,7 @@ function Harness({
   allowPersonalSubscriptions,
   requiresExactSubscriptionCredential,
   withLabels,
+  geminiVertexAiEnabled,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
@@ -82,6 +83,7 @@ function Harness({
   allowPersonalSubscriptions?: boolean;
   requiresExactSubscriptionCredential?: boolean;
   withLabels?: boolean;
+  geminiVertexAiEnabled?: boolean;
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...defaults },
@@ -89,6 +91,7 @@ function Harness({
   return (
     <LlmProviderApiKeyForm
       form={form}
+      geminiVertexAiEnabled={geminiVertexAiEnabled}
       mode="full"
       showConsoleLink={false}
       existingKeys={existingKeys}
@@ -112,6 +115,7 @@ function renderForm(options?: {
   allowPersonalSubscriptions?: boolean;
   requiresExactSubscriptionCredential?: boolean;
   withLabels?: boolean;
+  geminiVertexAiEnabled?: boolean;
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -125,6 +129,7 @@ function renderForm(options?: {
         credentialMode={options?.credentialMode}
         progressive={options?.progressive}
         withLabels={options?.withLabels}
+        geminiVertexAiEnabled={options?.geminiVertexAiEnabled}
         allowPersonalSubscriptions={options?.allowPersonalSubscriptions}
         requiresExactSubscriptionCredential={
           options?.requiresExactSubscriptionCredential
@@ -343,6 +348,51 @@ describe("LlmProviderApiKeyForm", () => {
     expect(screen.queryByText("GitHub Copilot")).not.toBeInTheDocument();
     expect(screen.queryByText("Microsoft 365 Copilot")).not.toBeInTheDocument();
     expect(screen.getAllByText("OpenAI").length).toBeGreaterThan(0);
+  });
+
+  it("explains Vertex AI Gemini inline and skips it for pointer and keyboard selection", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      geminiVertexAiEnabled: true,
+      allowPersonalSubscriptions: false,
+      defaults: { provider: "deepseek" },
+    });
+
+    await user.click(screen.getByLabelText("Provider"));
+    const gemini = screen.getByRole("option", { name: /^Gemini/ });
+    expect(gemini).toBeDisabled();
+    expect(gemini).toHaveTextContent(
+      /uses Vertex AI credentials.*API key cannot be added here/,
+    );
+
+    await user.hover(gemini);
+    await user.click(gemini);
+    expect(form.getValues("provider")).toBe("deepseek");
+
+    const search = screen.getByPlaceholderText("Search providers...");
+    await user.type(search, "gemini");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(form.getValues("provider")).toBe("deepseek");
+
+    await user.clear(search);
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(form.getValues("provider")).toBe("groq");
+  });
+
+  it("allows Gemini API-key selection when Vertex AI is disabled", async () => {
+    const user = userEvent.setup();
+    renderForm({ geminiVertexAiEnabled: false });
+
+    await user.click(screen.getByLabelText("Provider"));
+    await user.type(
+      screen.getByPlaceholderText("Search providers..."),
+      "gemini",
+    );
+    const gemini = screen.getByRole("option", { name: "Gemini" });
+    expect(gemini).toBeEnabled();
+    expect(gemini).not.toHaveTextContent(/Vertex AI credentials/);
+    await user.click(gemini);
+    expect(form.getValues("provider")).toBe("gemini");
   });
 
   it("finds the OpenAI-compatible entry by the server the operator runs", async () => {

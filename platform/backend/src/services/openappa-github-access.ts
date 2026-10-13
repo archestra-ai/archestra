@@ -1,8 +1,13 @@
 import {
+  type GitAccess,
+  resolveGitCredentialAccess,
+} from "@/git-hosts/git-access";
+import {
   resolveGithubPatToken,
   resolveGithubSkillAppCredentials,
 } from "@/skills/github-app-token";
 import { GITHUB_DOT_COM_SOURCE } from "@/skills/github-source";
+import { ApiError } from "@/types";
 
 /**
  * The token and GitHub origins for an OpenAPPA policy source. A GitHub App
@@ -39,6 +44,20 @@ export async function resolveOpenAppaGithubAccess(source: {
       ...origins,
     };
   return { token: undefined, ...origins };
+}
+
+/** The GitLab host and token behind a source's GitLab token. */
+export async function resolveOpenAppaGitlabAccess(source: {
+  organizationId: string;
+  gitlabTokenId: string;
+}): Promise<GitAccess> {
+  const access = await resolveGitCredentialAccess({
+    organizationId: source.organizationId,
+    credentialId: source.gitlabTokenId,
+  });
+  if (access.host.provider !== "gitlab")
+    throw new ApiError(400, "The policy source's credential is not for GitLab");
+  return access;
 }
 
 type OpenAppaGithubAccess = {

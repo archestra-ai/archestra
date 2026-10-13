@@ -1,5 +1,4 @@
 import type { ProfileLabel } from "@/components/agent-labels";
-import type { GithubAuthMethod } from "@/components/github-auth-config-fields";
 import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import type { PluginDetail } from "@/lib/plugins/plugin.query";
 import type {
@@ -10,12 +9,14 @@ import type { PluginPlatform } from "./plugin-platforms";
 
 /**
  * A plugin as it sits in the form before a write: what it is and what it
- * installs, where its files come from when they come from GitHub, and who can
+ * installs, where its files come from when they come from Git, and who can
  * discover it. The create page and the plugin's own page fill the same draft
  * with the same form, so the shape is owned here rather than by either of them.
  */
 export interface PluginDraft {
   displayName: string;
+  /** Emoji or image shown with the name; null = the plugin glyph. */
+  icon: string | null;
   description: string;
   clientType: PluginClientType;
   enabled: boolean;
@@ -26,16 +27,33 @@ export interface PluginDraft {
   githubRepoUrl: string;
   githubSyncRef: string;
   githubSyncInterval: "15m" | "1h" | "1d" | null;
-  githubAuthMethod: GithubAuthMethod;
-  githubAppConfigId: string;
-  /** Write-only: blank keeps whatever credential the plugin already uses. */
-  githubToken: string;
+  /**
+   * How the source is read: "" for a public repository, otherwise
+   * `github_app:<id>`, `gitlab_token:<id>`, or `pat:<id>` (a legacy saved
+   * GitHub token, kept working but no longer offered).
+   */
+  gitCredential: string;
+}
+
+/** The credential columns a plugin's Git source saves. */
+export function pluginGitAuthentication(gitCredential: string): {
+  githubAppConfigId: string | null;
+  githubPatId: string | null;
+  gitlabTokenId: string | null;
+} {
+  const [kind, id = ""] = gitCredential.split(":");
+  return {
+    githubAppConfigId: kind === "github_app" ? id : null,
+    githubPatId: kind === "pat" ? id : null,
+    gitlabTokenId: kind === "gitlab_token" ? id : null,
+  };
 }
 
 /** A blank plugin, as the create page starts it. */
 export function blankPluginDraft(): PluginDraft {
   return {
     displayName: "",
+    icon: null,
     description: "",
     clientType: "claude-code",
     enabled: true,
@@ -53,15 +71,14 @@ export function blankPluginDraft(): PluginDraft {
     githubRepoUrl: "",
     githubSyncRef: "",
     githubSyncInterval: null,
-    githubAuthMethod: "pat",
-    githubAppConfigId: "",
-    githubToken: "",
+    gitCredential: "",
   };
 }
 
 export function pluginDraftFromPlugin(plugin: PluginDetail): PluginDraft {
   return {
     displayName: plugin.displayName,
+    icon: plugin.icon ?? null,
     description: plugin.description,
     clientType: plugin.clientType,
     enabled: plugin.enabled,
@@ -77,9 +94,13 @@ export function pluginDraftFromPlugin(plugin: PluginDetail): PluginDraft {
     githubRepoUrl: plugin.sourceRepo ?? "",
     githubSyncRef: plugin.githubSyncRef ?? plugin.sourceRef ?? "",
     githubSyncInterval: plugin.githubSyncInterval,
-    githubAuthMethod: plugin.githubAppConfigId ? "github_app" : "pat",
-    githubAppConfigId: plugin.githubAppConfigId ?? "",
-    githubToken: "",
+    gitCredential: plugin.githubAppConfigId
+      ? `github_app:${plugin.githubAppConfigId}`
+      : plugin.gitlabTokenId
+        ? `gitlab_token:${plugin.gitlabTokenId}`
+        : plugin.githubPatId
+          ? `pat:${plugin.githubPatId}`
+          : "",
   };
 }
 
@@ -92,20 +113,11 @@ export function isPluginDraftDirty(draft: PluginDraft, seed: PluginDraft) {
 export function isPluginDraftComplete(params: {
   draft: PluginDraft;
   isGithubPlugin: boolean;
-  /** The credential the plugin was loaded with, if any. */
-  seedAuthMethod?: GithubAuthMethod;
 }): boolean {
-  const { draft, isGithubPlugin, seedAuthMethod } = params;
+  const { draft, isGithubPlugin } = params;
   if (draft.displayName.trim().length === 0 || draft.files.length === 0) {
     return false;
   }
-  if (!isGithubPlugin) return true;
-  const authenticationComplete =
-    draft.githubAuthMethod === "github_app"
-      ? draft.githubAppConfigId.length > 0
-      : // A plugin that already authenticates with a saved token keeps it when
-        // the field is left blank; one switching away from a GitHub App has to
-        // supply the token it is switching to.
-        seedAuthMethod !== "github_app" || draft.githubToken.trim().length > 0;
-  return draft.githubRepoUrl.trim().length > 0 && authenticationComplete;
+  // A public repository needs no credential.
+  return !isGithubPlugin || draft.githubRepoUrl.trim().length > 0;
 }

@@ -69,7 +69,6 @@ import {
   canFixInstall,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
-import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { isCardShowingInstallInProgress } from "./card-install-state";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
@@ -89,6 +88,7 @@ import {
   installBlockedSummary,
   useMcpInstallBlockers,
 } from "./mcp-credential-blockers";
+import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
 import {
   type AgentUsage,
   agentOwnerLabel,
@@ -97,6 +97,7 @@ import {
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 import { OAuthReauthIndicator } from "./oauth-reauth-indicator";
+import { isOwnPersonalInstall } from "./uninstall-scope";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -299,19 +300,24 @@ export function McpServerCard({
     (s) => s.catalogId === item.id,
   );
 
-  // Find the current user's personal connection for this catalog item
-  const personalServer = mcpServerOfCurrentCatalogItem?.find(
-    (s) => s.ownerId === currentUserId && !s.teamId,
+  // Find the current user's personal connection for this catalog item. An
+  // org-wide install the user created is not theirs to uninstall here.
+  const personalServer = mcpServerOfCurrentCatalogItem?.find((s) =>
+    isOwnPersonalInstall(s, currentUserId),
   );
 
   const allServersForCatalog = (allMcpServers ?? []).filter(
     (s) => s.catalogId === item.id,
   );
-  const personalServersForCatalog = allServersForCatalog.filter(
-    (s) => s.ownerId === currentUserId && !s.teamId,
+  const personalServersForCatalog = allServersForCatalog.filter((s) =>
+    isOwnPersonalInstall(s, currentUserId),
   );
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
+  // Install is offered only while the viewer has no connection they can use —
+  // the same rule as the registry's Installed filter and the server page.
+  const isInstalledForViewer =
+    isMcpServerInstalledForViewer(allServersForCatalog);
 
   // The distinct agents that can reach this catalog item, across every install
   // of it — the audience affected if those installs go away. Shared with the
@@ -337,7 +343,12 @@ export function McpServerCard({
     return install
       ? [
           {
-            server: { id: install.id, name: install.name },
+            server: {
+              id: install.id,
+              name: install.name,
+              scope: install.scope,
+              teamId: install.teamId,
+            },
             assignedAgents: install.assignedAgents ?? [],
           },
         ]
@@ -400,27 +411,29 @@ export function McpServerCard({
 
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
-  // Check for OAuth refresh errors on any credential the user can see
-  // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
-  // Re-auth entry point gated by per-connection permission, not catalog-edit
-  // access; the detailed reason lives on the credentials tab. When several
-  // connections have failed, prefer one the caller can re-authenticate so the
-  // marker stays actionable regardless of row order.
-  const canReauthenticate = useCanReauthenticate();
-  const oauthFailedServers =
-    mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [];
-  const oauthFailedServer =
-    oauthFailedServers.find((s) => canReauthenticate(s)) ??
-    oauthFailedServers[0];
-  const oauthReauthIndicator = oauthFailedServer ? (
-    <OAuthReauthIndicator
-      onActivate={
-        canReauthenticate(oauthFailedServer)
-          ? () => goToItemPage("credentials")
-          : undefined
-      }
-    />
-  ) : null;
+  // Worst live issue first, since issues are kind-ordered; an item whose only
+  // trouble the viewer muted still shows it, muted.
+  const statusIssue =
+    issues?.find((issue) => !issue.muted) ?? issues?.[0] ?? null;
+  // The re-auth marker follows the shared issue rule: it shows only when a
+  // connection the viewer's own calls resolve to lost its sign-in, never for a
+  // colleague's connection an admin merely sees. It is a click target when the
+  // viewer may re-authenticate that connection; the detailed reason lives on
+  // the credentials tab. The issue badge already says "Needs
+  // re-authentication", so a second marker for it on the same row is skipped.
+  const viewerReauthIssue = issues?.find(
+    (issue) => issue.kind === "needs-reauth" && issue.onViewerConnection,
+  );
+  const oauthReauthIndicator =
+    viewerReauthIssue && statusIssue?.kind !== "needs-reauth" ? (
+      <OAuthReauthIndicator
+        onActivate={
+          viewerReauthIssue.audience === "you"
+            ? () => goToItemPage("credentials")
+            : undefined
+        }
+      />
+    ) : null;
 
   const isInstalling = isCardShowingInstallInProgress({
     deploymentFailed: isDeploymentFailed,
@@ -527,10 +540,6 @@ export function McpServerCard({
   const deploymentStatusIndicator = deploymentSummary ? (
     <DeploymentStatusIconDot summary={deploymentSummary} />
   ) : null;
-  // Worst live issue first, since issues are kind-ordered; an item whose only
-  // trouble the viewer muted still shows it, muted.
-  const statusIssue =
-    issues?.find((issue) => !issue.muted) ?? issues?.[0] ?? null;
   const primaryIssueAction = statusIssue ? (
     <McpServerIssueNotice
       item={item}
@@ -544,7 +553,7 @@ export function McpServerCard({
   const chatButton = shouldShowMcpCardChatButton({
     toolsCount,
     isBuiltin: isBuiltinVariant,
-    hasInstallation: allServersForCatalog.length > 0,
+    hasInstallation: isInstalledForViewer,
   }) ? (
     <Button
       variant="outline"

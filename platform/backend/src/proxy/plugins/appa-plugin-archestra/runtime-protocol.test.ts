@@ -7,6 +7,7 @@ import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import { openappaActor } from "@/openappa/actor";
 import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as service from "@/openappa/service";
+import { LlmProxyPluginRegistry } from "@/proxy/plugins/registry";
 import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -205,6 +206,107 @@ describe("protected runtime protocol", () => {
       });
     }
   }
+
+  // A model can send run_tool's tool_args as JSON text, or leave them out.
+  // The gateway reads the text as the target's arguments and defaults missing
+  // ones to {}, so the proof must sign those arguments and the registry must
+  // release the signed call unchanged otherwise.
+  for (const shape of ["object", "json-text", "omitted"] as const) {
+    test(`releases a signed runtime call through run_tool (tool_args=${shape})`, async ({
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({
+        organizationId: org.id,
+        runtime: runtimeConfig(),
+      });
+      const registry = new LlmProxyPluginRegistry();
+      registry.register(new AppaPluginArchestra([]));
+      const context = request(org.id);
+      vi.spyOn(service, "evaluateToolCalls").mockResolvedValue([
+        { kind: "allow" },
+      ]);
+      await registry.onSessionInit(context);
+      const tool = shape === "omitted" ? "list_agent_runs" : "start_run";
+      const args =
+        shape === "omitted"
+          ? {}
+          : { agent_id: agent.id, message: 'Fix "T-1" and report.\n' };
+      const wrapper = {
+        tool_name: `archestra__${tool}`,
+        ...(shape === "object" ? { tool_args: args } : {}),
+        ...(shape === "json-text" ? { tool_args: JSON.stringify(args) } : {}),
+      };
+
+      const released = await registry.onToolCalls({
+        ...context,
+        // An Anthropic stream hands the call over as the text it accumulated.
+        toolCalls: [
+          {
+            id: "runtime-call",
+            name: "archestra__run_tool",
+            arguments: JSON.stringify(wrapper),
+          },
+        ],
+      });
+
+      if (released.decision !== "allow")
+        throw new Error("Expected a released runtime call");
+      const wire = released.toolCalls[0].arguments as Record<string, unknown>;
+      expect(wire.tool_name).toBe(`archestra__${tool}`);
+      const signed =
+        typeof wire.tool_args === "string"
+          ? (JSON.parse(wire.tool_args) as Record<string, unknown>)
+          : (wire.tool_args as Record<string, unknown>);
+      expect(typeof wire.tool_args).toBe(
+        shape === "json-text" ? "string" : "object",
+      );
+      const { runtime_proof: proof, ...rest } = signed;
+      expect(rest).toEqual(args);
+      expect(
+        verifyRuntimeToolProof({
+          proof,
+          arguments: signed,
+          organizationId: org.id,
+          callerId: "user:owner",
+          action: tool,
+          secret,
+        }),
+      ).toMatchObject({ toolCallId: "runtime-call" });
+    });
+  }
+
+  test("releases run_tool arguments it cannot read unchanged and unsigned", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const registry = new LlmProxyPluginRegistry();
+    registry.register(new AppaPluginArchestra([]));
+    const context = request(org.id);
+    vi.spyOn(service, "evaluateToolCalls").mockResolvedValue([
+      { kind: "allow" },
+    ]);
+    await registry.onSessionInit(context);
+    const call = {
+      id: "runtime-call",
+      name: "archestra__run_tool",
+      arguments: JSON.stringify({
+        tool_name: "archestra__start_run",
+        tool_args: '{"agent_id": "cut off',
+      }),
+    };
+
+    const released = await registry.onToolCalls({
+      ...context,
+      toolCalls: [call],
+    });
+
+    // run_tool refuses these arguments, so the model gets that error.
+    if (released.decision !== "allow")
+      throw new Error("Expected a released call");
+    expect(released.toolCalls[0].arguments).toBe(call.arguments);
+  });
 
   // After a launch, the model reads what the gateway recorded for the call.
   // The result the client sends back is not read: not its form, not its text.

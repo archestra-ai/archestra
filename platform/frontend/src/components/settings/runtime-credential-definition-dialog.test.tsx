@@ -117,7 +117,7 @@ it("creates the guided OpenAPPA GitHub App with its organization identity", asyn
     http.post("http://localhost:9000/api/credentials", async ({ request }) => {
       const body = await request.json();
       expect(body).toMatchObject({
-        name: "OpenAPPA GitHub sync",
+        name: "OpenAPPA Git sync",
         description:
           "Creates the OpenAPPA policy repository and opens pull requests for policy changes.",
         icon: "logo:openappa",
@@ -139,7 +139,7 @@ it("creates the guided OpenAPPA GitHub App with its organization identity", asyn
         initialKind="github_app"
         initialScope="organization"
         initialValues={{
-          name: "OpenAPPA GitHub sync",
+          name: "OpenAPPA Git sync",
           description:
             "Creates the OpenAPPA policy repository and opens pull requests for policy changes.",
           icon: "logo:openappa",
@@ -153,7 +153,7 @@ it("creates the guided OpenAPPA GitHub App with its organization identity", asyn
   );
 
   expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
-    "OpenAPPA GitHub sync",
+    "OpenAPPA Git sync",
   );
   expect(screen.queryByText("Provided by")).not.toBeInTheDocument();
   expect(

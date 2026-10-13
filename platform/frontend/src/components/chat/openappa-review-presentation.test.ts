@@ -104,6 +104,77 @@ describe("getReviewCardView", () => {
       description: REVIEW_STATUS_DESCRIPTION,
     });
   });
+
+  it("appends accepted coverage and leaves arguments on the tool card", () => {
+    expect(
+      getReviewCardView({
+        message: [
+          "Tool: Bash",
+          "Arguments:",
+          '{"command":"git push -u origin feature"}',
+          "",
+          "What this ruling would cover:",
+          "  - attention: human-approval",
+          "  - the readers must be the public audience",
+          "",
+          "Accept only if this exact call may run.",
+        ].join("\n"),
+        reviewedTool: "Bash",
+        reviewedArguments: JSON.stringify({
+          command: "git push -u origin feature",
+          description: "Push the branch",
+        }),
+      }),
+    ).toEqual({
+      toolCard: {
+        title: "Bash",
+        input: {
+          command: "git push -u origin feature",
+          description: "Push the branch",
+        },
+      },
+      description: [
+        REVIEW_STATUS_DESCRIPTION,
+        "Approving also accepts:\n  - the readers must be the public audience",
+      ].join("\n\n"),
+    });
+  });
+
+  it("keeps the standard prompt when coverage is only the person's attention", () => {
+    expect(
+      getReviewCardView({
+        message: [
+          "Tool: Bash",
+          "",
+          "What this ruling would cover:",
+          "  - attention: human-approval",
+          "",
+          "Accept only if this exact call may run.",
+        ].join("\n"),
+      }),
+    ).toEqual({
+      toolCard: { title: "Bash" },
+      description: REVIEW_STATUS_DESCRIPTION,
+    });
+  });
+
+  it("keeps the standard prompt when coverage is not in the expected shape", () => {
+    expect(
+      getReviewCardView({
+        message: [
+          "Tool: archestra__todo_write",
+          "",
+          "What this ruling would cover:",
+          "  attention: signoff",
+        ].join("\n"),
+        reviewedTool: "archestra__todo_write",
+        reviewedArguments: '{"todos":[]}',
+      }),
+    ).toEqual({
+      toolCard: { title: "archestra__todo_write", input: { todos: [] } },
+      description: REVIEW_STATUS_DESCRIPTION,
+    });
+  });
 });
 
 describe("getReviewDecisionContent", () => {

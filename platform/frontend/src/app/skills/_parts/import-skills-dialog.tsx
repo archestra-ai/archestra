@@ -3,9 +3,7 @@
 import type { RowSelectionState } from "@tanstack/react-table";
 import {
   AlertTriangle,
-  ArrowLeft,
   CheckCircle2,
-  ChevronRight,
   Eye,
   Info,
   Loader2,
@@ -13,11 +11,19 @@ import {
   SearchX,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { RepositoryBar, SetupStepper } from "@/components/git/git-setup-chrome";
 import {
-  GithubAuthConfigFields,
-  type GithubAuthMethod,
-} from "@/components/github-auth-config-fields";
-import { GithubPatFields } from "@/components/github-pat-fields";
+  gitAuthFields,
+  gitRepositoryUrlWithRef,
+  resolveGitRepository,
+} from "@/components/git/git-source";
+import {
+  GitSourceStepBody,
+  GitSourceStepFooter,
+  gitSourceStepDescription,
+  gitSourceStepLabels,
+  useGitSourceSteps,
+} from "@/components/git/git-source-steps";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
@@ -28,11 +34,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -41,7 +42,6 @@ import {
 } from "@/components/ui/empty";
 import { FieldDescription } from "@/components/ui/field-description";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -56,9 +56,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { BulkRangeSelectionController } from "@/lib/bulk-range-selection";
-import { getRepositoryDisplay } from "@/lib/github/repository-display";
-import { useGithubAppConfigs } from "@/lib/github-app-config.query";
-import { useCreateGithubPat, useGithubPats } from "@/lib/github-pat.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useDiscoverGithubSkills,
@@ -113,18 +110,9 @@ export function ImportSkillsDialog({
 }) {
   const discover = useDiscoverGithubSkills();
   const importSkills = useImportGithubSkills();
-  const { data: githubAppConfigs = [] } = useGithubAppConfigs();
-  const { data: githubPats = [] } = useGithubPats();
-  const createPat = useCreateGithubPat();
   const appName = useAppName();
+  const source = useGitSourceSteps();
 
-  const [repoUrl, setRepoUrl] = useState(initialRepoUrl);
-  const [path, setPath] = useState("");
-  const [authMethod, setAuthMethod] = useState<"pat" | "github_app">("pat");
-  const [githubToken, setGithubToken] = useState("");
-  // "" = paste a one-time token; otherwise the id of a saved token
-  const [githubPatId, setGithubPatId] = useState("");
-  const [githubAppConfigId, setGithubAppConfigId] = useState("");
   const [discovered, setDiscovered] = useState<SelectStepSkill[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const rangeSelection = useRef(new BulkRangeSelectionController()).current;
@@ -137,45 +125,29 @@ export function ImportSkillsDialog({
   // pull schedule for every skill selected in this import: imports are
   // always synced from the repo and read-only here until disconnected.
   const [syncInterval, setSyncInterval] = useState<"15m" | "1h" | "1d">("1d");
-  // name under which a newly pasted token is saved (Settings → Credentials)
-  const [newTokenName, setNewTokenName] = useState("");
-  // subpath + authentication live behind this fold; opened automatically when
-  // a discover failure looks like a missing-auth problem.
-  const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // auth methods are mutually exclusive; the backend rejects combinations
-  const githubAuthFields =
-    authMethod === "github_app"
-      ? githubAppConfigId
-        ? { githubAppConfigId }
-        : {}
-      : githubPatId
-        ? { githubPatId }
-        : githubToken.trim()
-          ? { githubToken: githubToken.trim() }
-          : {};
+  // What the routes read: the repository (a /tree/<branch> URL when a branch
+  // is set), the folder, and the provider with its credential.
+  const resolved = source.resolved;
+  const repositoryFields = resolved.ok
+    ? {
+        repoUrl: gitRepositoryUrlWithRef(resolved),
+        ...(resolved.subpath && { path: resolved.subpath }),
+        ...source.auth,
+      }
+    : null;
 
   // strict null check: a repo-root skill's path is "", which is still a
   // previewable selection
   const previewBody =
-    previewSkillPath !== null
-      ? {
-          repoUrl,
-          ...(path.trim() && { path: path.trim() }),
-          ...githubAuthFields,
-          skillPath: previewSkillPath,
-        }
+    previewSkillPath !== null && repositoryFields
+      ? { ...repositoryFields, skillPath: previewSkillPath }
       : null;
   const { data: previewData, isPending: isPreviewLoading } =
     usePreviewGithubSkill(previewBody);
 
   const reset = () => {
-    setRepoUrl("");
-    setPath("");
-    setAuthMethod("pat");
-    setGithubToken("");
-    setGithubPatId("");
-    setGithubAppConfigId("");
+    source.reset();
     setDiscovered(null);
     setSelected(new Set());
     setSearch("");
@@ -183,11 +155,9 @@ export function ImportSkillsDialog({
     setDiscoverError(null);
     setInitialGrants([]);
     setSyncInterval("1d");
-    setNewTokenName("");
-    setAdvancedOpen(false);
   };
 
-  const backToDiscover = () => {
+  const backToRepository = () => {
     setDiscovered(null);
     setSearch("");
     setPreviewSkillPath(null);
@@ -198,77 +168,47 @@ export function ImportSkillsDialog({
     onOpenChange(isOpen);
   };
 
-  const handleAuthMethodChange = (value: GithubAuthMethod) => {
-    setAuthMethod(value);
-    if (value === "pat") {
-      setGithubAppConfigId("");
-    } else {
-      setGithubPatId("");
-      setGithubToken("");
-      setNewTokenName("");
-    }
-  };
-
-  const handleDiscover = async (overrideRepoUrl?: string) => {
+  const runDiscover = async (fields: NonNullable<typeof repositoryFields>) => {
     setDiscoverError(null);
-    const { data, errorMessage } = await discover.mutateAsync({
-      repoUrl: overrideRepoUrl ?? repoUrl,
-      ...(path.trim() && { path: path.trim() }),
-      ...githubAuthFields,
-    });
+    const { data, errorMessage } = await discover.mutateAsync(fields);
     if (data) {
       setDiscovered(data.skills);
       const importableSkills = data.skills.filter((s) => !s.exists);
       setSelected(new Set(importableSkills.map((s) => s.skillPath)));
     } else if (errorMessage) {
       setDiscoverError(errorMessage);
-      // a private repo without credentials is the most common failure — put
-      // the auth fields in front of the user
-      if (!hasGithubAuth) setAdvancedOpen(true);
     }
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: only fire on open
   useEffect(() => {
-    if (!open) return;
-    setRepoUrl(initialRepoUrl);
+    if (!open || !initialRepoUrl) return;
+    // The skill index lists public github.com repositories: skip straight
+    // past the host and access steps.
+    source.startOnPublicGithub(initialRepoUrl);
     if (!autoDiscover) return;
     if (initialSkill) {
       // launched from the skill index: the exact skill is already known, so
       // skip the repo-wide scan and go straight to the confirm step.
       setDiscovered([{ ...initialSkill, exists: false }]);
       setSelected(new Set([initialSkill.skillPath]));
-    } else if (initialRepoUrl) {
-      handleDiscover(initialRepoUrl);
+      return;
     }
+    const initial = resolveGitRepository({
+      provider: "github",
+      access: { kind: "public" },
+      input: initialRepoUrl,
+    });
+    runDiscover({
+      repoUrl: initial.ok ? initial.repoUrl : initialRepoUrl,
+      ...gitAuthFields({ provider: "github", access: { kind: "public" } }),
+    });
   }, [open]);
 
   const handleImport = async () => {
-    // a pasted token is saved as a stored credential first, so the recurring
-    // sync it backs stays authenticated (transient tokens are never stored)
-    let patId = githubPatId;
-    if (authMethod === "pat" && !patId && githubToken.trim()) {
-      const created = await createPat.mutateAsync({
-        name:
-          newTokenName.trim() ||
-          `${repoSlug?.split("/").pop() || "GitHub"} token`,
-        token: githubToken.trim(),
-      });
-      if (!created) return;
-      patId = created.id;
-      setGithubPatId(created.id);
-    }
-
+    if (!repositoryFields) return;
     const result = await importSkills.mutateAsync({
-      repoUrl,
-      ...(path.trim() && { path: path.trim() }),
-      ...(authMethod === "github_app"
-        ? githubAppConfigId
-          ? { githubAppConfigId }
-          : {}
-        : patId
-          ? { githubPatId: patId }
-          : {}),
+      ...repositoryFields,
       skillPaths: [...selected],
       initialGrants: initialGrants.map(({ subject, actions }) => ({
         subject,
@@ -336,34 +276,13 @@ export function ImportSkillsDialog({
 
   const isSelectStep = discovered !== null;
   const isAutoDiscovering = autoDiscover && !isSelectStep && !discoverError;
-  const hasGithubAuth =
-    authMethod === "github_app"
-      ? githubAppConfigId.length > 0
-      : githubPatId.length > 0 || githubToken.trim().length > 0;
-
-  // what the collapsed Advanced fold is configured with, e.g. "saved token, subpath"
-  const advancedSummary = [
-    authMethod === "github_app" && githubAppConfigId
-      ? "GitHub App"
-      : githubPatId
-        ? "saved token"
-        : githubToken.trim()
-          ? "one-time token"
-          : null,
-    path.trim() ? "subpath" : null,
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  const {
-    label: repoSlug,
-    owner: repoOwner,
-    avatarUrl: repoAvatarUrl,
-  } = getRepositoryDisplay(
-    repoUrl,
-    authMethod === "github_app"
-      ? githubAppConfigs.find((app) => app.id === githubAppConfigId)?.githubUrl
-      : undefined,
+  const repositoryBar = (
+    <RepositoryBar
+      provider={source.provider}
+      label={resolved.ok ? resolved.label : source.repository.input}
+      avatarUrl={resolved.ok ? resolved.avatarUrl : null}
+      onChange={autoDiscover ? undefined : backToRepository}
+    />
   );
 
   const totalImportable = discovered?.filter((s) => !s.exists).length ?? 0;
@@ -374,74 +293,62 @@ export function ImportSkillsDialog({
       open={open}
       onOpenChange={handleClose}
       title={
-        isAutoDiscovering ? (
-          "Scanning repository"
-        ) : isSelectStep ? (
-          autoDiscover ? (
-            <span>Select skills to import</span>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={backToDiscover}
-                aria-label="Go back"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <span>Select skills to import</span>
-            </div>
-          )
-        ) : (
-          "Import skills from GitHub"
-        )
+        isAutoDiscovering
+          ? "Scanning repository"
+          : isSelectStep
+            ? "Select skills to import"
+            : "Import skills"
       }
       description={
         isAutoDiscovering
-          ? "Looking for SKILL.md directories in the repository."
+          ? "Looking for SKILL.md folders."
           : isSelectStep
-            ? "Choose which skills to add to your organization."
-            : "Point at a repository containing one or more SKILL.md directories."
+            ? "Choose which skills to add."
+            : gitSourceStepDescription({
+                step: source.step,
+                provider: source.provider,
+              })
       }
       size="medium"
       bodyClassName={isSelectStep ? "p-0" : undefined}
       footer={
         isAutoDiscovering ? (
           <Button variant="outline" onClick={() => handleClose(false)}>
-            Cancel
+            <span>Cancel</span>
           </Button>
         ) : isSelectStep ? (
           <>
             {autoDiscover ? (
               <Button variant="outline" onClick={() => handleClose(false)}>
-                Cancel
+                <span>Cancel</span>
               </Button>
             ) : (
-              <Button variant="outline" onClick={backToDiscover}>
-                Back
+              <Button variant="outline" onClick={backToRepository}>
+                <span>Back</span>
               </Button>
             )}
             <Button
               onClick={handleImport}
               disabled={selected.size === 0 || importSkills.isPending}
             >
-              {importSkills.isPending
-                ? "Importing..."
-                : `Import ${selected.size > 0 ? `(${selected.size})` : ""}`}
+              {importSkills.isPending ? (
+                <Loader2 className="animate-spin" />
+              ) : null}
+              <span>
+                {importSkills.isPending
+                  ? "Importing…"
+                  : `Import${selected.size > 0 ? ` (${selected.size})` : ""}`}
+              </span>
             </Button>
           </>
         ) : (
-          <>
-            <Button variant="outline" onClick={() => handleClose(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => handleDiscover()}
-              disabled={!repoUrl.trim() || discover.isPending}
-            >
-              {discover.isPending ? "Discovering..." : "Discover"}
-            </Button>
-          </>
+          <GitSourceStepFooter
+            source={source}
+            onCancel={() => handleClose(false)}
+            findLabel="Find skills"
+            finding={discover.isPending}
+            onFind={() => repositoryFields && runDiscover(repositoryFields)}
+          />
         )
       }
     >
@@ -449,7 +356,11 @@ export function ImportSkillsDialog({
         <div className="flex flex-col items-center justify-center gap-4 py-10">
           <Avatar className="size-14">
             <AvatarImage
-              src={repoAvatarUrl ? `${repoAvatarUrl}?size=128` : undefined}
+              src={
+                resolved.ok && resolved.avatarUrl
+                  ? `${resolved.avatarUrl}?size=128`
+                  : undefined
+              }
               alt=""
             />
             <AvatarFallback>
@@ -458,38 +369,27 @@ export function ImportSkillsDialog({
           </Avatar>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />
-            <span className="font-mono text-foreground">{repoSlug}</span>
+            <span className="font-mono text-foreground">
+              {resolved.ok ? resolved.label : initialRepoUrl}
+            </span>
           </div>
         </div>
       ) : isSelectStep ? (
         <div className="flex flex-col">
+          {autoDiscover ? null : (
+            <div className="px-4 pt-4 pb-3">
+              <SetupStepper
+                steps={gitSourceStepLabels({
+                  provider: source.provider,
+                  last: "Skills",
+                })}
+                current={3}
+              />
+            </div>
+          )}
           {discovered.length === 0 ? (
             <>
-              <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-3">
-                <Avatar className="size-8 shrink-0">
-                  <AvatarImage
-                    src={repoAvatarUrl ? `${repoAvatarUrl}?size=64` : undefined}
-                    alt=""
-                  />
-                  <AvatarFallback className="text-xs">
-                    {repoOwner.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1 truncate font-mono text-sm font-medium">
-                  {repoSlug}
-                </div>
-                {!autoDiscover && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={backToDiscover}
-                    className="shrink-0"
-                  >
-                    Change source
-                  </Button>
-                )}
-              </div>
+              {repositoryBar}
               <div className="px-4 py-8">
                 <Empty>
                   <EmptyHeader>
@@ -498,8 +398,7 @@ export function ImportSkillsDialog({
                     </EmptyMedia>
                     <EmptyTitle>No SKILL.md directories</EmptyTitle>
                     <EmptyDescription>
-                      This repository doesn’t contain any directories with a
-                      SKILL.md manifest. Try a different repository or subpath.
+                      Try another repository or folder.
                     </EmptyDescription>
                   </EmptyHeader>
                 </Empty>
@@ -508,33 +407,7 @@ export function ImportSkillsDialog({
           ) : (
             <>
               <div className="sticky top-0 z-10 border-b bg-background">
-                <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-2.5">
-                  <Avatar className="size-7 shrink-0">
-                    <AvatarImage
-                      src={
-                        repoAvatarUrl ? `${repoAvatarUrl}?size=64` : undefined
-                      }
-                      alt=""
-                    />
-                    <AvatarFallback className="text-xs">
-                      {repoOwner.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1 truncate font-mono text-sm font-medium">
-                    {repoSlug}
-                  </div>
-                  {!autoDiscover && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={backToDiscover}
-                      className="shrink-0"
-                    >
-                      Change source
-                    </Button>
-                  )}
-                </div>
+                {repositoryBar}
                 <div className="space-y-2 px-4 py-3">
                   <SearchInput
                     value={search}
@@ -699,143 +572,57 @@ export function ImportSkillsDialog({
               )}
             </>
           )}
+          {discovered.length > 0 ? (
+            <div className="space-y-5 border-t px-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="skill-sync-interval">Keep in sync</Label>
+                <FieldDescription>
+                  Read-only in {appName} until you disconnect.
+                </FieldDescription>
+                <Select
+                  value={syncInterval}
+                  onValueChange={(value) =>
+                    setSyncInterval(value as typeof syncInterval)
+                  }
+                >
+                  <SelectTrigger id="skill-sync-interval" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15m">Every 15 minutes</SelectItem>
+                    <SelectItem value="1h">Every hour</SelectItem>
+                    <SelectItem value="1d">Once a day</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <InitialResourcePermissions
+                resource="skill"
+                grants={initialGrants}
+                onChange={setInitialGrants}
+              />
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="skill-repo-url">Repository URL</Label>
-            <FieldDescription>
-              Every directory with a <code className="font-mono">SKILL.md</code>{" "}
-              becomes an importable skill.
-            </FieldDescription>
-            <Input
-              id="skill-repo-url"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              placeholder="github.com/owner/repo"
-              autoFocus
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="skill-sync-interval">Keep in sync</Label>
-            <FieldDescription>
-              Pulled from the repository on this schedule; read-only in{" "}
-              {appName} until disconnected.
-            </FieldDescription>
-            <Select
-              value={syncInterval}
-              onValueChange={(value) =>
-                setSyncInterval(value as typeof syncInterval)
-              }
-            >
-              <SelectTrigger id="skill-sync-interval" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="15m">Every 15 minutes</SelectItem>
-                <SelectItem value="1h">Every hour</SelectItem>
-                <SelectItem value="1d">Once a day</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <InitialResourcePermissions
-            resource="skill"
-            grants={initialGrants}
-            onChange={setInitialGrants}
+          <GitSourceStepBody
+            source={source}
+            lastLabel="Skills"
+            withSubpath
+            subpathPlaceholder="skills"
           />
-          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <CollapsibleTrigger className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 shrink-0 transition-transform",
-                  advancedOpen && "rotate-90",
-                )}
-              />
-              Authentication & subpath
-              {!advancedOpen && advancedSummary && (
-                <span className="font-normal text-xs">· {advancedSummary}</span>
-              )}
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-5 pt-4">
-              <GithubAuthConfigFields
-                authMethod={authMethod}
-                onAuthMethodChange={handleAuthMethodChange}
-                githubAppConfigId={githubAppConfigId}
-                onGithubAppConfigIdChange={setGithubAppConfigId}
-                githubAppConfigs={githubAppConfigs}
-                authLabel="Authentication"
-                authOptional
-                authDescription={null}
-                configuredDescription={
-                  <>
-                    Mints a short-lived installation token for this import.
-                    Manage configurations in
-                  </>
-                }
-                patFields={
-                  <GithubPatFields
-                    idPrefix="skill"
-                    pats={githubPats}
-                    patId={githubPatId}
-                    onPatIdChange={(patId) => {
-                      setGithubPatId(patId);
-                      if (patId) {
-                        setGithubToken("");
-                        setNewTokenName("");
-                      }
-                    }}
-                    token={githubToken}
-                    onTokenChange={setGithubToken}
-                    tokenName={newTokenName}
-                    onTokenNameChange={setNewTokenName}
-                    repoLabel={repoSlug}
-                    purpose="scheduled syncs"
-                  />
-                }
-              />
-              <div className="space-y-2">
-                <Label htmlFor="skill-subpath">
-                  Subpath
-                  <span className="text-muted-foreground font-normal">
-                    (optional)
-                  </span>
-                </Label>
-                <FieldDescription>
-                  Scan only this directory of a large repository.
-                </FieldDescription>
-                <Input
-                  id="skill-subpath"
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="packages/skills"
-                  autoComplete="off"
-                  data-1p-ignore
-                  data-lpignore="true"
-                />
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-          {discoverError && (
+          {discoverError && source.step === "repo" ? (
             <InlineNotice variant="error">
               <AlertTriangle />
-              <span className="font-medium">
-                Couldn’t reach that repository
-              </span>
+              <span className="font-medium">Couldn’t read that repository</span>
               <InlineNoticeText>
-                {discoverError}
-                {!hasGithubAuth && (
-                  <span>
-                    {" "}
-                    If the repository is private, add GitHub authentication
-                    above and try again.
-                  </span>
-                )}
+                <span>{discoverError}</span>
+                {source.access?.kind === "public" ? (
+                  <span> Private? Change the access above.</span>
+                ) : null}
               </InlineNoticeText>
             </InlineNotice>
-          )}
+          ) : null}
         </div>
       )}
       <SkillPreviewDialog

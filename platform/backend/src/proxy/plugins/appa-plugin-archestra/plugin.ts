@@ -18,6 +18,7 @@ import {
   TOOL_START_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -1975,6 +1976,9 @@ async function resolveRuntimeCalls(params: {
     const wrapper = target.isRunToolDispatchTarget
       ? argumentRecordOf(call.arguments)
       : undefined;
+    // run_tool refuses tool_args it cannot read, so that call never runs and
+    // gets no proof.
+    if (wrapper && !readRunToolArgs(wrapper.tool_args)) continue;
     result.set(call.id, {
       action,
       args,

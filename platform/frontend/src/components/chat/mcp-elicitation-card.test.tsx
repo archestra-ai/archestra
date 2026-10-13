@@ -103,6 +103,30 @@ describe("McpElicitationCard", () => {
     });
   });
 
+  it("shows accepted review coverage without opening the arguments", () => {
+    render(
+      <McpElicitationCard
+        requests={[
+          openappaReview({
+            coverage: [
+              "  - attention: human-approval",
+              "  - the readers must be the public audience",
+            ].join("\n"),
+          }),
+        ]}
+        onRespond={vi.fn()}
+      />,
+    );
+
+    const card = screen.getByTestId("mcp-elicitation-card");
+    expect(card).toHaveTextContent("Approving also accepts:");
+    expect(card).toHaveTextContent("the readers must be the public audience");
+    expect(card).not.toHaveTextContent("What this ruling would cover");
+    expect(card).not.toHaveTextContent("attention: human-approval");
+    expect(card).not.toHaveTextContent("APPA asks you to rule");
+    expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
+  });
+
   it("submits an all-optional multi-choice question with nothing checked", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
@@ -1044,6 +1068,67 @@ describe("McpElicitationCard", () => {
     );
   });
 
+  it("marks a typed answer apart from a picked option", () => {
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", "Pick a color", {
+            status: "answered",
+            selected: ["Blue"],
+          }),
+          groupMember("call-2", "Which site?", {
+            status: "answered",
+            selected: [],
+            text: "Google",
+          }),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const [picked, typed] = within(
+      screen.getByRole("list", { name: "Answers" }),
+    ).getAllByRole("listitem");
+    expect(picked).toHaveTextContent("Pick a colorBlue");
+    expect(picked).not.toHaveTextContent("Typed answer");
+    expect(typed).toHaveTextContent("Which site?GoogleTyped answer");
+  });
+
+  it("folds a long answered question until the user expands it", async () => {
+    const user = userEvent.setup();
+    const longQuestion = `${"It is late on a Friday and prod is down. ".repeat(8)}What do you do first?`;
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", longQuestion, {
+            status: "answered",
+            selected: ["Roll back"],
+          }),
+          groupMember("call-2", "Pick a color", {
+            status: "answered",
+            selected: ["Blue"],
+          }),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    // Only the long question offers to expand.
+    const toggle = screen.getByRole("button", { name: "Show full question" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+
+    expect(screen.getByRole("button", { name: "Show less" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
   it("does not fabricate a stopped result for an initial replay gap", () => {
     render(
       <McpElicitationCard
@@ -1169,7 +1254,9 @@ function singleChoice(params: {
   };
 }
 
-function openappaReview(): ChatMcpElicitationRequest {
+function openappaReview(params?: {
+  coverage?: string;
+}): ChatMcpElicitationRequest {
   return {
     id: "review-1",
     conversationId: CONVERSATION_ID,
@@ -1182,7 +1269,7 @@ function openappaReview(): ChatMcpElicitationRequest {
       '{"todos":"[{\\"id\\":1,\\"content\\":\\"qa-hitl\\",\\"status\\":\\"pending\\"}]"}',
       "",
       "What this ruling would cover:",
-      "  attention: signoff",
+      params?.coverage ?? "  attention: signoff",
     ].join("\n"),
     mode: "form",
     kind: "openappa_review",

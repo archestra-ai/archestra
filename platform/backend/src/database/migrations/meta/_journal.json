@@ -3736,8 +3736,15 @@
     {
       "idx": 533,
       "version": "7",
-      "when": 1791912911427,
-      "tag": "0533_cool_power_man",
+      "when": 1791907571145,
+      "tag": "0533_git_providers",
+      "breakpoints": true
+    },
+    {
+      "idx": 534,
+      "version": "7",
+      "when": 1791920359207,
+      "tag": "0534_cool_power_man",
       "breakpoints": true
     }
   ]

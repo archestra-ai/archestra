@@ -692,6 +692,27 @@ grep -F '[tools]' "$CODEX_HOME/config.toml" || exit 9
     expect(code).toBe(0);
   });
 
+  test("keeps a table Codex added inside the provider block", async () => {
+    // Codex 0.162 writes a new table before the comments at the end of the
+    // file, so a marketplace added after the provider sits inside its block.
+    const { code } = await runGuardSnippet({
+      client: CODEX_GUARD_CLIENT,
+      functions: ["disconnect_proxy", "codex_logout_if_ours"],
+      files: {
+        "config.toml": `model_provider = "acme_proxy"\n# >>> archestra:acme_proxy >>>\n[model_providers.acme_proxy]\nname = "acme_proxy"\n\n[model_providers.acme_proxy.http_headers]\n"X-Archestra-Agent-Id" = "codex"\n\n[marketplaces.acme-skills]\nsource_type = "git"\n# <<< archestra:acme_proxy <<<\n`,
+      },
+      env: { CODEX_HOME: "{HOME}" },
+      invoke: `disconnect_proxy
+grep -Fx '[marketplaces.acme-skills]' "$CODEX_HOME/config.toml" || exit 7
+grep -Fx 'source_type = "git"' "$CODEX_HOME/config.toml" || exit 8
+! grep -F 'model_providers' "$CODEX_HOME/config.toml" || exit 9
+! grep -F 'archestra:acme_proxy' "$CODEX_HOME/config.toml" || exit 10
+`,
+    });
+
+    expect(code).toBe(0);
+  });
+
   test("signs Codex out of an archestra virtual key", async () => {
     const { codexArgs, stdout } = await runCodexGuardSnippet({
       functions: ["codex_logout_if_ours", "proxy_disconnect_notes"],

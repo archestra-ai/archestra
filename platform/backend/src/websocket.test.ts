@@ -2542,6 +2542,9 @@ describe("websocket MCP deployment statuses shared poller", () => {
       mcpServers: {},
     });
 
+    // No earlier refresh, so there is no cached summary to answer with first.
+    service.lastMcpDeploymentRefreshAt = 0;
+
     const ws = makeWs();
     service.clientContexts.set(ws, {
       userId: user.id,
@@ -2561,6 +2564,68 @@ describe("websocket MCP deployment statuses shared poller", () => {
     expect(ws.send).not.toHaveBeenCalled();
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(false);
     expect(service.mcpDeploymentStatusPollInterval).toBeNull();
+  });
+
+  test("answers a re-subscribe from the cached summary without waiting for a slow refresh", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+      organizationId: org.id,
+    });
+    const server = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    let resolveRefresh: (() => void) | undefined;
+    const refreshSpy = vi
+      .spyOn(McpServerRuntimeManager, "refreshAllStates")
+      .mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+    // An earlier subscriber already filled the summary.
+    service.lastMcpDeploymentRefreshAt = Date.now();
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    const subscribePromise = subscribe(ws);
+    await vi.waitFor(() => expect(refreshSpy).toHaveBeenCalled());
+
+    // The refresh is still running, yet the client already has statuses.
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse(
+      (ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0],
+    );
+    expect(sent.type).toBe("mcp_deployment_statuses");
+    expect(sent.payload.statuses[server.id]).toBeDefined();
+
+    resolveRefresh?.();
+    await subscribePromise;
+
+    // Nothing changed during the refresh, so no duplicate is sent.
+    expect(ws.send).toHaveBeenCalledTimes(1);
   });
 });
 

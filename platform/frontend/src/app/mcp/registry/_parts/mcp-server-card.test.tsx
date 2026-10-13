@@ -125,8 +125,8 @@ vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
   }),
 }));
 
-vi.mock("./mcp-registry-visibility", () => ({
-  hasMcpRegistryInstallForViewer: () => true,
+vi.mock("./mcp-registry-visibility", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./mcp-registry-visibility")>()),
   matchesMcpRegistryOwnershipFilters: () => true,
   mcpRegistryInstallPriority: () => 0,
 }));
@@ -207,6 +207,8 @@ const personalInstall = {
   name: "some-remote-server",
   ownerId: CURRENT_USER_ID,
   teamId: null,
+  scope: "personal",
+  canUseCredential: true,
   serverType: "remote",
   reinstallRequired: false,
   assignedAgents: [],
@@ -317,6 +319,61 @@ describe("McpServerCard uninstall permission", () => {
     await user.click(screen.getByRole("button", { name: "Uninstall" }));
 
     expect(await screen.findByText("Uninstall MCP Server")).toBeInTheDocument();
+  });
+
+  it("offers no Uninstall for an organization connection the user installed", () => {
+    // An org install records its installer as owner; Uninstall on the card
+    // would have targeted the connection every org agent resolves to.
+    useMcpServersMock.mockReturnValue({
+      data: [{ ...personalInstall, scope: "org" }],
+    });
+    renderCard(card);
+
+    expect(screen.queryByRole("button", { name: "Uninstall" })).toBeNull();
+  });
+
+  it("warns only about agents pinned to the personal connection being removed", async () => {
+    const user = userEvent.setup();
+    const agent = {
+      agentType: "agent",
+      ownerId: null,
+      ownerEmail: null,
+    };
+    useMcpServersMock.mockReturnValue({
+      data: [
+        {
+          ...personalInstall,
+          scope: "personal",
+          assignedAgents: [
+            {
+              ...agent,
+              id: "a-org",
+              name: "Org Assistant",
+              scope: "org",
+              pinned: false,
+            },
+            {
+              ...agent,
+              id: "a-mine",
+              name: "My Gateway",
+              scope: "personal",
+              pinned: true,
+            },
+          ],
+        },
+      ],
+    });
+    renderCard(card);
+
+    await user.click(screen.getByRole("button", { name: "Uninstall" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(
+      "Only this personal connection is removed",
+    );
+    expect(dialog).toHaveTextContent("Used by 1 agent");
+    expect(dialog).toHaveTextContent("My Gateway");
+    expect(dialog).not.toHaveTextContent("Org Assistant");
   });
 
   it("opens server settings once from the keyboard without activating the card", async () => {
@@ -433,6 +490,95 @@ describe("McpServerCard uninstall permission", () => {
     await user.click(screen.getByRole("button", { name: "Review config" }));
 
     expect(routerPush).toHaveBeenCalledWith("/mcp/registry/cat-1/edit");
+  });
+
+  it("still offers a personal Install when a team connection serves the viewer", () => {
+    useMcpServersMock.mockReturnValue({
+      data: [
+        {
+          ...personalInstall,
+          ownerId: "teammate",
+          scope: "team",
+          teamId: "team-a",
+          canUseCredential: true,
+        },
+      ],
+    });
+    renderCard(card);
+
+    expect(
+      screen.getByRole("button", { name: `Install ${item.name}` }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Install when only a colleague's personal connection exists", () => {
+    useMcpServersMock.mockReturnValue({
+      data: [
+        {
+          ...personalInstall,
+          ownerId: "colleague",
+          users: ["colleague"],
+          canUseCredential: false,
+        },
+      ],
+    });
+    renderCard(card);
+
+    expect(
+      screen.getByRole("button", { name: `Install ${item.name}` }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Chat only once the viewer has a connection of their own", () => {
+    const colleagueInstall = {
+      ...personalInstall,
+      ownerId: "colleague",
+      users: ["colleague"],
+      canUseCredential: false,
+    };
+    useMcpServersMock.mockReturnValue({ data: [colleagueInstall] });
+    const { unmount } = renderCard(
+      cloneElement(card, { item: { ...item, toolCount: 3 } }),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: `Chat using ${item.name}` }),
+    ).toBeNull();
+    unmount();
+
+    useMcpServersMock.mockReturnValue({
+      data: [colleagueInstall, personalInstall],
+    });
+    renderCard(cloneElement(card, { item: { ...item, toolCount: 3 } }));
+
+    expect(
+      screen.getByRole("button", { name: `Chat using ${item.name}` }),
+    ).toBeInTheDocument();
+  });
+
+  it("reports a failed OAuth refresh once when its issue badge is already shown", () => {
+    useMcpServersMock.mockReturnValue({
+      data: [{ ...personalInstall, oauthRefreshError: "refresh_failed" }],
+    });
+    renderCard(
+      cloneElement(card, {
+        issues: [
+          {
+            kind: "needs-reauth",
+            audience: "you",
+            catalogId: item.id,
+            serverId: personalInstall.id,
+            detail: null,
+            since: null,
+            fingerprint: "v1:needs-reauth:test",
+            muted: false,
+            mutedReason: null,
+          },
+        ],
+      }),
+    );
+
+    expect(screen.getAllByText("Needs re-authentication")).toHaveLength(1);
   });
 
   it("overlays a local runtime status dot on the icon with its status tooltip", async () => {

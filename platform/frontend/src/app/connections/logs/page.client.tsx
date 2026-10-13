@@ -3,8 +3,8 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
-import { FilterBar, filterControlClass } from "@/components/filter-bar";
-import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
+import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { AgentAdoptionOverview } from "./_components/agent-adoption";
 import { ConnectionLogTable } from "./_components/connection-log-table";
@@ -38,6 +38,19 @@ export default function ConnectionLogsPage() {
       [searchParams, router, pathname],
     ),
   });
+  // Every log page keeps its time range in the header's top-right corner.
+  const timeRangePicker = useMemo(
+    () => (
+      <TimeRangePicker
+        value={picker.range}
+        onChange={picker.setRange}
+        placeholder="Last 30 days"
+        onClear={picker.clearDateRange}
+      />
+    ),
+    [picker.range, picker.setRange, picker.clearDateRange],
+  );
+  useLogsHeaderAction(timeRangePicker);
   const picked = picker.startDateParam !== undefined;
   const rangeDisplay = picker.getDateRangeDisplay();
   const window = useMemo<ConnectionsWindow>(
@@ -60,23 +73,6 @@ export default function ConnectionLogsPage() {
 
   return (
     <div className="space-y-8">
-      {/* One range for the whole page: tiles, chart, members and log. */}
-      <FilterBar onClearFilters={picked ? picker.clearDateRange : undefined}>
-        <DateTimeRangePicker
-          startDate={picker.startDate}
-          endDate={picker.endDate}
-          isDialogOpen={picker.isDateDialogOpen}
-          tempStartDate={picker.tempStartDate}
-          tempEndDate={picker.tempEndDate}
-          displayText={rangeDisplay ?? `Last ${DEFAULT_DAYS} days`}
-          onDialogOpenChange={picker.setIsDateDialogOpen}
-          onTempStartDateChange={picker.setTempStartDate}
-          onTempEndDateChange={picker.setTempEndDate}
-          onOpenDialog={picker.openDateDialog}
-          onApply={picker.handleApplyDateRange}
-          className={filterControlClass({ active: picked })}
-        />
-      </FilterBar>
       <ErrorBoundary>
         <AgentAdoptionOverview window={window} />
       </ErrorBoundary>

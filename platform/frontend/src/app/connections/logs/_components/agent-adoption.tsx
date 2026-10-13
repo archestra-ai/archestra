@@ -160,7 +160,9 @@ export function AgentAdoptionOverview({
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* Three short cards in a row; on a tablet the calls card takes its own
+          full-width row, where a wide chart beats a tall, half-empty card. */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <AdoptionCard adoption={data} onPick={showState} />
         <AgentsInUseCard adoption={data} />
         <AgentCallsCard window={window} />
@@ -244,8 +246,10 @@ function AdoptionCard({
         </CardAction>
       </CardHeader>
       <CardContent className="@container flex flex-1 px-5">
-        <div className="flex w-full flex-col items-center gap-x-2 gap-y-4 @xs:flex-row">
-          <div className="relative size-36 shrink-0">
+        {/* The donut sits beside its legend at every width, so the card is
+            only as tall as the legend. */}
+        <div className="flex w-full items-center gap-4">
+          <div className="relative size-24 shrink-0">
             <svg
               viewBox="0 0 100 100"
               className="size-full"
@@ -296,10 +300,10 @@ function AdoptionCard({
               )}
             </svg>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-semibold tabular-nums">
+              <span className="text-lg font-semibold tabular-nums">
                 {`${share(focus.value, total)}%`}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground">
                 {focus.label.toLowerCase()}
               </span>
             </div>
@@ -317,13 +321,15 @@ function AdoptionCard({
                 {...hover(slice.state)}
               >
                 <StateDot state={slice.state} />
-                <span className="min-w-0 flex-1 whitespace-nowrap text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">
                   {slice.label}
                 </span>
                 <span className="font-medium tabular-nums">
                   {slice.value.toLocaleString()}
                 </span>
-                <span className="w-8 text-right text-xs text-muted-foreground tabular-nums">
+                {/* A narrow card keeps the count and drops the share, which
+                    the donut already shows. */}
+                <span className="hidden w-8 text-right text-xs text-muted-foreground tabular-nums @[20rem]:inline">
                   {`${share(slice.value, total)}%`}
                 </span>
               </UnstyledButton>
@@ -422,7 +428,7 @@ function AgentCallsCard({ window }: { window: ConnectionsWindow }) {
     : `the previous ${window.label.replace(/^last /, "")}`;
 
   return (
-    <Card className="gap-4 py-5">
+    <Card className="gap-4 py-5 md:col-span-2 lg:col-span-1">
       <CardHeader className="gap-1 px-5">
         <CardTitle>
           {window.picked
@@ -430,7 +436,9 @@ function AgentCallsCard({ window }: { window: ConnectionsWindow }) {
             : `Agent calls in the ${window.label}`}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 px-5">
+      {/* Full width on a tablet, the numbers sit beside a wide chart; in the
+          three-card row the chart fills the card's foot. */}
+      <CardContent className="flex flex-1 flex-col gap-2 px-5 md:max-lg:grid md:max-lg:grid-cols-[14rem_minmax(0,1fr)] md:max-lg:items-end md:max-lg:gap-6">
         {now.isLoadingError ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Couldn't load calls.
@@ -460,7 +468,7 @@ function AgentCallsCard({ window }: { window: ConnectionsWindow }) {
                 />
               )}
             </div>
-            <div>
+            <div className="mt-auto">
               <Sparkline days={now.data.days} />
               {now.data.days.length > 1 && (
                 <div className="flex justify-between text-[11px] text-muted-foreground">
@@ -520,7 +528,7 @@ function Sparkline({ days }: { days: AgentAdoptionUsage["days"] }) {
     <svg
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
-      className="h-14 w-full"
+      className="h-16 w-full"
       role="img"
       aria-label="Calls per day"
     >

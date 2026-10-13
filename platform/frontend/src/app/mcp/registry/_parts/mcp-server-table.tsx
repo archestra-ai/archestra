@@ -65,6 +65,7 @@ import {
   installBlockedSummary,
   useMcpInstallBlockers,
 } from "./mcp-credential-blockers";
+import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
 import {
   getMcpServerActionModel,
   mcpServerAction,
@@ -140,6 +141,11 @@ export function McpServerTable({
   const router = useRouter();
   const { data: session } = useSession();
   const _currentUserId = session?.user?.id;
+  const { data: allMcpServers } = useMcpServers();
+  const isInstalledForViewer = (item: CatalogItem) =>
+    isMcpServerInstalledForViewer(
+      (allMcpServers ?? []).filter((server) => server.catalogId === item.id),
+    );
   const canSelect = (item: CatalogItem) =>
     !isPlaywrightCatalogItem(item.id) &&
     (!!attention || !!getServerInfo(item).installedServer) &&
@@ -237,7 +243,9 @@ export function McpServerTable({
         }
         // Nothing installed means there is no runtime to have a status, and a
         // catalog entry nobody has connected is not "Healthy" — it is nothing.
-        if (!installedServer) return null;
+        // Neither is one only somebody else can use: the row still offers
+        // Install, so it must not also read "Installed".
+        if (!installedServer || !isInstalledForViewer(item)) return null;
         return <InstalledStatusCell />;
       },
     },
@@ -465,6 +473,8 @@ const McpServerRowActions = memo(function McpServerRowActions({
       (s.scope === "personal" || (!s.scope && !s.teamId)),
   );
   const hasPersonalConnection = personalServersForCatalog.length > 0;
+  const isInstalledForViewer =
+    isMcpServerInstalledForViewer(allServersForCatalog);
   const hasLocalInstalls = allServersForCatalog.some(
     (s) => s.serverType === "local",
   );
@@ -472,7 +482,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
   const showChat = shouldShowMcpCardChatButton({
     toolsCount: item.toolCount ?? 0,
     isBuiltin,
-    hasInstallation: allServersForCatalog.length > 0,
+    hasInstallation: isInstalledForViewer,
   });
 
   // Reinstall visibility mirrors the card's combined admin/tenant rule: an
@@ -555,7 +565,12 @@ const McpServerRowActions = memo(function McpServerRowActions({
     return install
       ? [
           {
-            server: { id: install.id, name: install.name },
+            server: {
+              id: install.id,
+              name: install.name,
+              scope: install.scope,
+              teamId: install.teamId,
+            },
             assignedAgents: install.assignedAgents ?? [],
           },
         ]
@@ -629,8 +644,9 @@ const McpServerRowActions = memo(function McpServerRowActions({
         permissions: { mcpServerInstallation: ["delete"] },
         onClick: () => setUninstallOpen(true),
       });
-    } else if (!(isLocal && showApprovalPanel)) {
-      // Install stays hidden for local items while the image awaits admin
+    } else if (!isInstalledForViewer && !(isLocal && showApprovalPanel)) {
+      // Install stays hidden once a team or organization connection already
+      // serves the viewer, and for local items while the image awaits admin
       // approval (the card drops it too — the button would only fail the gate).
       actions.push({
         icon: isLocal ? (

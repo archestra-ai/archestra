@@ -2,7 +2,7 @@
 title: Install a Server
 description: Connect a personal account or shared service account to an MCP registry entry
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -41,4 +41,5 @@ An agent or gateway can override this for each tool. See [Credential Resolution]
 
 - No account to use? The tool returns an error with a setup link. Follow it, then try again.
 - Credential rejected, or OAuth scopes changed? Click **Re-authenticate**.
+- **Uninstall** on a card removes only your personal install. Team and organization installs stay until an admin removes them.
 - Which account ran a call? See **Identity** in the [MCP Gateway logs](/docs/admin/logs).

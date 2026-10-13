@@ -2934,8 +2934,8 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `resolve_openappa_yell` | Mark an OpenAPPA yell resolved, or reopen it with resolved=false. | [`openappaDiagnostics:update`](/docs/reference/permissions#openappaDiagnostics:update) |
 | `list_openappa_yells` | List the organization's saved OpenAPPA yells, newest first, with each one's id, session, tool call, a shortened message and whether it is resolved. | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
 | `list_openappa_consults` | List the external consults OpenAPPA recorded for one session, newest first: every annotator, context provider, authority, sanitizer and audience source it asked, with the outcome, the HTTP status, ... | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
-| `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
-| `connect_guardrails_repository` | Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
+| `create_guardrails_repository` | Create a private policy repository from the OpenAPPA configuration template, seed it with the current policy and battery declarations, and start Git sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
+| `connect_guardrails_repository` | Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | `yell` | Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tools and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
@@ -2950,7 +2950,7 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `run_openappa_policy_tests` | Replay the complete currently saved validation suite offline against the current policy and record the result in validation run history. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `preview_openappa_validation_change` | Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `publish_openappa_validation_change` | Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
-| `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
+| `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `get_remedy_plans` | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None (no additional RBAC permission required) |
 | `execute_remedy_plan` | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None (no additional RBAC permission required) |
 | `list_runtime_credentials` | List reusable credential definitions visible to the caller, including whether a personal or organization connection is configured. | [`credential:read`](/docs/reference/permissions#credential:read) |
@@ -3041,7 +3041,8 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 |-----------|------|----------|-------------|
 | `owner` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `githubAppConfigId` | `string` | Yes |  |
+| `githubAppConfigId` | `string` | No |  |
+| `gitlabTokenId` | `string` | No |  |
 | `interval` | `"15m" \| "1h" \| "1d"` | No |  |
 
 
@@ -3053,10 +3054,11 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `repo` | `string` | Yes | The existing repository, as owner/name. |
+| `repo` | `string` | Yes | The existing repository, as owner/name (GitLab: group/subgroup/project). |
 | `path` | `string` | No | Repository-relative path of the policy file. |
 | `ref` | `string \| null` | No | Branch, tag, or commit to follow. Omit to follow the default branch. |
-| `githubAppConfigId` | `string` | Yes |  |
+| `githubAppConfigId` | `string` | No | An organization GitHub App, for a GitHub repository. |
+| `gitlabTokenId` | `string` | No | A GitLab access token, for a GitLab project. |
 | `interval` | `"15m" \| "1h" \| "1d"` | No |  |
 
 
@@ -3299,12 +3301,13 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 |-----------|------|----------|-------------|
 | `key` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `kind` | `"secret" \| "github_app" \| "github_app_user"` | No |  |
+| `kind` | `"secret" \| "github_app" \| "github_app_user" \| "gitlab_token"` | No |  |
 | `githubUrl` | `string \| null` | No |  |
 | `appId` | `string \| null` | No |  |
 | `installationId` | `string \| null` | No |  |
 | `githubClientId` | `string \| null` | No |  |
 | `githubAppCredentialKey` | `string \| null` | No |  |
+| `gitlabUrl` | `string \| null` | No |  |
 | `description` | `string` | No |  |
 | `icon` | `string \| null` | No |  |
 | `allowPersonal` | `boolean` | No |  |

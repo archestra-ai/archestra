@@ -84,12 +84,12 @@ import {
 import { CatalogEditNoAccess } from "./edit-catalog-dialog";
 import { InstallationProgress } from "./installation-progress";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
-import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
 import {
   InstallBlockedTooltip,
   installBlockedSummary,
   useMcpInstallBlockers,
 } from "./mcp-credential-blockers";
+import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
 import {
   type AgentUsage,
   agentOwnerLabel,

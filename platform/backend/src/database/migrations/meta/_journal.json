@@ -3753,6 +3753,27 @@
       "when": 1791921477945,
       "tag": "0535_cool_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 536,
+      "version": "7",
+      "when": 1791922639443,
+      "tag": "0536_mixed_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 537,
+      "version": "7",
+      "when": 1791925050165,
+      "tag": "0537_cultured_king_cobra",
+      "breakpoints": true
+    },
+    {
+      "idx": 538,
+      "version": "7",
+      "when": 1791926998854,
+      "tag": "0538_condemned_firebird",
+      "breakpoints": true
     }
   ]
 }

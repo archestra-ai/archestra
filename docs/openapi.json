@@ -310678,6 +310678,15 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "userId",
+            "required": false,
+            "description": "Filter by the user the call is attributed to. Ignored without `log:admin`, which already scopes the listing to the caller."
+          },
+          {
+            "schema": {
               "default": 20,
               "type": "integer",
               "minimum": 1,
@@ -370520,6 +370529,7 @@
                         "type": "string",
                         "enum": [
                           "claude-code",
+                          "claude-desktop",
                           "copilot-cli",
                           "codex",
                           "cursor"
@@ -371126,6 +371136,7 @@
                     "type": "string",
                     "enum": [
                       "claude-code",
+                      "claude-desktop",
                       "copilot-cli",
                       "codex",
                       "cursor"
@@ -371385,6 +371396,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -372143,6 +372155,7 @@
                             "type": "string",
                             "enum": [
                               "claude-code",
+                              "claude-desktop",
                               "copilot-cli",
                               "codex",
                               "cursor"
@@ -372548,6 +372561,7 @@
                           "type": "string",
                           "enum": [
                             "claude-code",
+                            "claude-desktop",
                             "copilot-cli",
                             "codex",
                             "cursor"
@@ -372801,6 +372815,7 @@
                             "type": "string",
                             "enum": [
                               "claude-code",
+                              "claude-desktop",
                               "copilot-cli",
                               "codex",
                               "cursor"
@@ -373962,6 +373977,7 @@
                         "type": "string",
                         "enum": [
                           "claude-code",
+                          "claude-desktop",
                           "copilot-cli",
                           "codex",
                           "cursor"
@@ -374162,6 +374178,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -375302,6 +375319,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -376033,6 +376051,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -377010,6 +377029,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -377892,6 +377912,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -378873,6 +378894,7 @@
                         "type": "string",
                         "enum": [
                           "claude-code",
+                          "claude-desktop",
                           "copilot-cli",
                           "codex",
                           "cursor"
@@ -379617,6 +379639,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"

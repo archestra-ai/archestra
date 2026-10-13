@@ -17,8 +17,9 @@ use serde::Deserialize;
 use serde_json::{Value, json, value::RawValue};
 
 use super::{
-    DispatchPolicy, SessionKey, SessionLock, State, canonical_tool, error, initialized,
-    postgres_store, read_completed_operation, recorded_call, required, session_actor,
+    DispatchPolicy, SessionKey, Sql, State, canonical_tool, completion_error, error,
+    held_elsewhere, initialized, lease, lease_lost, read_completed_operation, recorded_call,
+    required, session_actor,
 };
 
 const BODY_LIMIT: usize = 64 * 1024;
@@ -84,32 +85,86 @@ async fn execute(
         .await
         .map_err(error)?;
     let state = state.pinned(&deployment);
-    // acting_root's connection lease is sequential with the execution lease
-    // below, not nested. It must drop when acting_root returns, before
-    // RootLock and state.lease().await. Holding it across either await can
-    // exhaust the pool and deadlock the second lease.
-    let root = acting_root(&state, &input).await?;
-    let _root = super::RootLock::acquire(root.clone()).await;
-    let leased = state.lease().await?;
-    let pg = postgres_store(&leased.state.store)?;
-    let _lock = SessionLock::acquire(pg, root.clone())?;
-    // Holding the family's lock, a pending receipt here is one its owner's
-    // dispatch left when it stopped: the lock ends with the owner's connection.
-    // The peer stores deduplicate their own effects (a resubmitted send with
-    // the same payload replays its stored row), so a pending claim proceeds to
-    // re-drive the operation and completes the receipt with its answer.
+    let pg = &Sql(&state.store);
+    let root = acting_root(pg, &input)?;
     let actor = acting_actor(pg, &input, &root)?;
-    match kind {
-        PeerKind::Send => send(&leased.state, pg, &input, &actor).await,
-        PeerKind::Admit => admit(&leased.state, pg, &input, &actor).await,
-        PeerKind::List => list(&leased.state, pg, &input, &actor).await,
-        PeerKind::Read => read(&leased.state, pg, &input, &actor).await,
+    // A receipt recovered here is one a dispatch left pending when it stopped
+    // and its lease expired. The peer stores deduplicate their own effects (a
+    // resubmitted send with the same payload replays its stored row), so a
+    // recovered claim re-drives the operation and completes the receipt with
+    // its answer.
+    let receipts = lease::Receipts::new(state.store.clone());
+    let work = async {
+        match kind {
+            PeerKind::Send => send(&state, &receipts, pg, &input, &actor).await,
+            PeerKind::Admit => admit(&state, pg, &input, &actor).await,
+            PeerKind::List => list(&state, &receipts, pg, &input, &actor).await,
+            PeerKind::Read => read(&state, &receipts, pg, &input, &actor).await,
+        }
+    };
+    let failure = match receipts.hold(work).await {
+        lease::Guarded::Finished(Ok(value)) => return Ok(value),
+        lease::Guarded::Finished(Err(failure)) => failure,
+        lease::Guarded::Lost => lease_lost(),
+    };
+    // The host's retry takes these receipts over at once. A peer operation's
+    // effects live in the peer stores, not the event log, so its receipts are
+    // kept for that retry whatever the log did.
+    receipts.release(false);
+    Err(failure)
+}
+
+/// What claiming a peer operation's receipt left this dispatch to do.
+enum PeerClaim {
+    /// This dispatch holds the receipt and does the work.
+    Work,
+    /// The operation finished before; this is its saved decision.
+    Complete(Value),
+    /// Another live request still held the receipt when this one stopped waiting.
+    Held,
+}
+
+/// Claims a peer operation's receipt under this dispatch's lease, waiting a
+/// bounded time while another request works on the same operation.
+async fn claim_peer_operation(
+    state: &State,
+    receipts: &lease::Receipts,
+    request: OperationRequest,
+) -> Result<PeerClaim, ReceiptError> {
+    let key = request.key.clone();
+    let mut held = lease::HeldWait::new();
+    loop {
+        match state
+            .store
+            .claim_operation(request.clone(), receipts.lease())?
+        {
+            OperationClaim::Complete { decision } => return Ok(PeerClaim::Complete(decision)),
+            OperationClaim::Claimed => {
+                receipts.hold_operation(key, lease::Holding::Created);
+                return Ok(PeerClaim::Work);
+            }
+            OperationClaim::Recovered => {
+                receipts.hold_operation(key, lease::Holding::Recovered);
+                return Ok(PeerClaim::Work);
+            }
+            OperationClaim::Held if held.again().await => {}
+            OperationClaim::Held => return Ok(PeerClaim::Held),
+        }
+    }
+}
+
+/// Which holding a processed-result claim that lets this dispatch work gives it.
+fn result_holding(claim: &appa_eventlog::ProcessedResultClaim) -> lease::Holding {
+    match claim {
+        appa_eventlog::ProcessedResultClaim::Recovered => lease::Holding::Recovered,
+        _ => lease::Holding::Created,
     }
 }
 
 async fn send(
     state: &State,
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    receipts: &lease::Receipts,
+    pg: &crate::Sql<'_>,
     input: &PeerInput,
     actor: &Actor,
 ) -> napi::Result<Value> {
@@ -159,17 +214,24 @@ async fn send(
         "value": value,
     });
     let key = peer_operation_key(input, operation.to_owned());
-    match state.store.claim_operation(OperationRequest {
-        key: key.clone(),
-        root: actor.root.clone(),
-        input: request,
-        context: None,
-    }) {
-        Ok(OperationClaim::Complete { decision }) => return Ok(decision),
-        // A pending receipt is this same send, claimed by a dispatch that
+    match claim_peer_operation(
+        state,
+        receipts,
+        OperationRequest {
+            key: key.clone(),
+            root: actor.root.clone(),
+            input: request,
+            context: None,
+        },
+    )
+    .await
+    {
+        Ok(PeerClaim::Complete(decision)) => return Ok(decision),
+        // A recovered receipt is this same send, claimed by a dispatch that
         // stopped before finishing it. The peer store answers a resubmission
         // of the same payload with its stored row, so the send is not doubled.
-        Ok(OperationClaim::Claimed) | Err(ReceiptError::Pending) => {}
+        Ok(PeerClaim::Work) => {}
+        Ok(PeerClaim::Held) => return Err(held_elsewhere()),
         Err(ReceiptError::InputMismatch) => {
             return Ok(denied(
                 "OpenAPPA did not send this message: the operation id was already used for a different message.",
@@ -190,8 +252,8 @@ async fn send(
             let decision = denied(&feedback);
             state
                 .store
-                .complete_operation(key, decision.clone())
-                .map_err(error)?;
+                .complete_operation(key, decision.clone(), receipts.owner())
+                .map_err(completion_error)?;
             return Ok(decision);
         }
         Err(reason) => return Err(peer_failure(reason)),
@@ -199,14 +261,14 @@ async fn send(
     let decision = released(&notice);
     state
         .store
-        .complete_operation(key, decision.clone())
-        .map_err(error)?;
+        .complete_operation(key, decision.clone(), receipts.owner())
+        .map_err(completion_error)?;
     Ok(decision)
 }
 
 async fn admit(
     state: &State,
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     input: &PeerInput,
     actor: &Actor,
 ) -> napi::Result<Value> {
@@ -269,7 +331,8 @@ async fn admit(
 
 async fn list(
     state: &State,
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    receipts: &lease::Receipts,
+    pg: &crate::Sql<'_>,
     input: &PeerInput,
     actor: &Actor,
 ) -> napi::Result<Value> {
@@ -283,22 +346,29 @@ async fn list(
     let key = peer_operation_key(input, operation);
     let tool = bounded_tool(input.tool.as_deref())?;
     let request = json!({ "event": "peer_list", "tool": tool });
-    let decision = match state.store.claim_operation(OperationRequest {
-        key: key.clone(),
-        root: actor.root.clone(),
-        input: request,
-        context: None,
-    }) {
-        Ok(OperationClaim::Complete { decision }) => decision,
-        Ok(OperationClaim::Claimed) | Err(ReceiptError::Pending) => {
+    let decision = match claim_peer_operation(
+        state,
+        receipts,
+        OperationRequest {
+            key: key.clone(),
+            root: actor.root.clone(),
+            input: request,
+            context: None,
+        },
+    )
+    .await
+    {
+        Ok(PeerClaim::Complete(decision)) => decision,
+        Ok(PeerClaim::Work) => {
             let notices = list_notices(state, pg, input, actor).await?;
             let decision = list_result(&notices);
             state
                 .store
-                .complete_operation(key, decision.clone())
-                .map_err(error)?;
+                .complete_operation(key, decision.clone(), receipts.owner())
+                .map_err(completion_error)?;
             decision
         }
+        Ok(PeerClaim::Held) => return Err(held_elsewhere()),
         Err(ReceiptError::InputMismatch) => return Ok(withheld_peer_list()),
         Err(reason) => return Err(error(reason)),
     };
@@ -308,30 +378,37 @@ async fn list(
         .and_then(Value::as_str)
         .unwrap_or("{}")
         .to_owned();
-    match state
-        .store
-        .claim_processed_result(appa_eventlog::ProcessedResultRequest {
+    match state.store.claim_processed_result(
+        appa_eventlog::ProcessedResultRequest {
             key: result_key.clone(),
             root: actor.root.clone(),
-        }) {
+        },
+        receipts.lease(),
+    ) {
         Ok(appa_eventlog::ProcessedResultClaim::Complete {
             decision: stored, ..
         }) if stored.get("peer_list").and_then(Value::as_bool) == Some(true) => {
             return Ok(stored);
         }
+        // Another live request is journaling this same list; its answer is this one.
         Ok(appa_eventlog::ProcessedResultClaim::Complete { .. })
+        | Ok(appa_eventlog::ProcessedResultClaim::Held)
         | Err(ReceiptError::NotPending) => {}
-        Ok(appa_eventlog::ProcessedResultClaim::Claimed) | Err(ReceiptError::Pending) => {
-            if let Err(reason) =
-                state
-                    .store
-                    .complete_processed_result(result_key, approved, decision.clone())
-                && !matches!(
-                    reason,
-                    ReceiptError::NotPending | ReceiptError::CompletionMismatch
-                )
-            {
-                return Err(error(reason));
+        Ok(
+            claim @ (appa_eventlog::ProcessedResultClaim::Claimed
+            | appa_eventlog::ProcessedResultClaim::Recovered),
+        ) => {
+            receipts.hold_result(result_key.clone(), result_holding(&claim));
+            if let Err(reason) = state.store.complete_processed_result(
+                result_key,
+                approved,
+                decision.clone(),
+                receipts.owner(),
+            ) && !matches!(
+                reason,
+                ReceiptError::NotPending | ReceiptError::CompletionMismatch
+            ) {
+                return Err(completion_error(reason));
             }
         }
         Err(reason) => return Err(error(reason)),
@@ -366,7 +443,7 @@ fn list_result(notices: &[Value]) -> Value {
 
 async fn list_notices(
     state: &State,
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     input: &PeerInput,
     actor: &Actor,
 ) -> napi::Result<Vec<Value>> {
@@ -382,7 +459,8 @@ async fn list_notices(
 
 async fn read(
     state: &State,
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    receipts: &lease::Receipts,
+    pg: &crate::Sql<'_>,
     input: &PeerInput,
     actor: &Actor,
 ) -> napi::Result<Value> {
@@ -430,7 +508,16 @@ async fn read(
                 ));
             }
             let decision = read_result(value, false);
-            journal_processed(state, &actor.root, &result_key, value, &decision, true)?;
+            journal_processed(
+                state,
+                receipts,
+                &actor.root,
+                &result_key,
+                value,
+                &decision,
+                true,
+            )
+            .await?;
             Ok(decision)
         }
         HookDecision::DenyCall { .. } | HookDecision::Block { .. } => {
@@ -450,8 +537,17 @@ async fn read(
                 .unwrap_or("OpenAPPA withheld this peer read")
                 .to_owned();
             decision["approved_output"] = json!(feedback);
-            journal_processed(state, &actor.root, &result_key, &feedback, &decision, false)?;
-            retain_denial(state, input, &actor.root, tool_call_id, &decision)?;
+            journal_processed(
+                state,
+                receipts,
+                &actor.root,
+                &result_key,
+                &feedback,
+                &decision,
+                false,
+            )
+            .await?;
+            retain_denial(state, receipts, input, &actor.root, tool_call_id, &decision).await?;
             Ok(decision)
         }
         HookDecision::Ack => Err(error(
@@ -473,8 +569,9 @@ fn admitted_read(decision: &Value) -> bool {
             == Some(false)
 }
 
-fn journal_processed(
+async fn journal_processed(
     state: &State,
+    receipts: &lease::Receipts,
     root: &TrajectoryId,
     result_key: &ProcessedResultKey,
     approved: &str,
@@ -484,12 +581,21 @@ fn journal_processed(
     if replace_denial && replace_denial_receipt(state, result_key, approved, decision)? {
         return Ok(());
     }
-    match state
-        .store
-        .claim_processed_result(appa_eventlog::ProcessedResultRequest {
-            key: result_key.clone(),
-            root: root.clone(),
-        }) {
+    let request = appa_eventlog::ProcessedResultRequest {
+        key: result_key.clone(),
+        root: root.clone(),
+    };
+    let mut held = lease::HeldWait::new();
+    let claim = loop {
+        match state
+            .store
+            .claim_processed_result(request.clone(), receipts.lease())
+        {
+            Ok(appa_eventlog::ProcessedResultClaim::Held) if held.again().await => {}
+            claim => break claim,
+        }
+    };
+    match claim {
         Ok(appa_eventlog::ProcessedResultClaim::Complete {
             decision: stored, ..
         }) => {
@@ -511,10 +617,22 @@ fn journal_processed(
                 "OpenAPPA will not replace a processed result that is not a peer-read denial",
             ))
         }
-        Ok(appa_eventlog::ProcessedResultClaim::Claimed) | Err(ReceiptError::Pending) => state
-            .store
-            .complete_processed_result(result_key.clone(), approved.to_owned(), decision.clone())
-            .map_err(error),
+        Ok(
+            claim @ (appa_eventlog::ProcessedResultClaim::Claimed
+            | appa_eventlog::ProcessedResultClaim::Recovered),
+        ) => {
+            receipts.hold_result(result_key.clone(), result_holding(&claim));
+            state
+                .store
+                .complete_processed_result(
+                    result_key.clone(),
+                    approved.to_owned(),
+                    decision.clone(),
+                    receipts.owner(),
+                )
+                .map_err(completion_error)
+        }
+        Ok(appa_eventlog::ProcessedResultClaim::Held) => Err(held_elsewhere()),
         Err(reason) => Err(error(reason)),
     }
 }
@@ -530,7 +648,7 @@ fn replace_denial_receipt(
     let tool_call_id = result_key.tool_call_id.clone();
     let approved = approved.to_owned();
     let decision = decision.clone();
-    postgres_store(&state.store)?
+    Sql(&state.store)
         .with_client(move |client| {
             Ok(client.execute(
                 "UPDATE openappa_processed_results \
@@ -560,8 +678,9 @@ fn denial_receipt(decision: &Value) -> bool {
             .is_none()
 }
 
-fn retain_denial(
+async fn retain_denial(
     state: &State,
+    receipts: &lease::Receipts,
     input: &PeerInput,
     root: &TrajectoryId,
     tool_call_id: &str,
@@ -573,21 +692,28 @@ fn retain_denial(
         "message_id": input.message_id,
         "tool": input.tool,
     });
-    match state.store.claim_operation(OperationRequest {
-        key: key.clone(),
-        root: root.clone(),
-        input: request,
-        context: None,
-    }) {
-        Ok(OperationClaim::Complete { .. }) => return Ok(()),
-        Ok(OperationClaim::Claimed) | Err(ReceiptError::Pending) => {}
+    match claim_peer_operation(
+        state,
+        receipts,
+        OperationRequest {
+            key: key.clone(),
+            root: root.clone(),
+            input: request,
+            context: None,
+        },
+    )
+    .await
+    {
+        Ok(PeerClaim::Complete(_)) => return Ok(()),
+        Ok(PeerClaim::Work) => {}
+        Ok(PeerClaim::Held) => return Err(held_elsewhere()),
         Err(ReceiptError::InputMismatch) => return Ok(()),
         Err(reason) => return Err(error(reason)),
     }
     state
         .store
-        .complete_operation(key, decision.clone())
-        .map_err(error)
+        .complete_operation(key, decision.clone(), receipts.owner())
+        .map_err(completion_error)
 }
 
 fn read_result(text: &str, is_error: bool) -> Value {
@@ -604,7 +730,7 @@ fn read_result(text: &str, is_error: bool) -> Value {
 }
 
 pub(super) fn forged_read_result(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     input: &super::Input,
     call_id: &str,
 ) -> napi::Result<Option<Value>> {
@@ -676,7 +802,7 @@ fn withheld(text: &str) -> Value {
 }
 
 fn completed_decision(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     key: &appa_eventlog::ProcessedResultKey,
 ) -> napi::Result<Option<Value>> {
     let organization_id = key.session.organization_id.clone();
@@ -695,7 +821,7 @@ fn completed_decision(
 }
 
 fn notice_of(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     input: &PeerInput,
     notice: &EmbeddedPeerNotice,
 ) -> napi::Result<Value> {
@@ -773,11 +899,9 @@ fn current_trajectory(actor: &Actor) -> &TrajectoryId {
     actor.child.as_ref().unwrap_or(&actor.root)
 }
 
-async fn acting_root(state: &State, input: &PeerInput) -> napi::Result<String> {
+fn acting_root(pg: &Sql<'_>, input: &PeerInput) -> napi::Result<String> {
     let key = SessionKey::new(&input.organization_id, &input.session_id);
-    // Local lease only. Do not return it, and do not await again while it is held.
-    let leased = state.lease().await?;
-    let root = postgres_store(&leased.state.store)?
+    let root = pg
         .with_client(move |client| {
             Ok(client
                 .query_opt(
@@ -790,11 +914,7 @@ async fn acting_root(state: &State, input: &PeerInput) -> napi::Result<String> {
     root.ok_or_else(|| error("OpenAPPA session has not started"))
 }
 
-fn acting_actor(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
-    input: &PeerInput,
-    root: &str,
-) -> napi::Result<Actor> {
+fn acting_actor(pg: &crate::Sql<'_>, input: &PeerInput, root: &str) -> napi::Result<Actor> {
     let Some(row) = session_by_id(pg, &input.organization_id, &input.session_id)? else {
         return Err(error("OpenAPPA session has not started"));
     };
@@ -816,7 +936,7 @@ enum Recipient {
 }
 
 fn resolve_recipient(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     input: &PeerInput,
     root: &str,
 ) -> napi::Result<Recipient> {
@@ -883,7 +1003,7 @@ fn resolve_recipient(
 }
 
 fn allowed_spawn_binding(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     organization_id: &str,
     parent_id: &str,
     spawn_call_id: &str,
@@ -941,7 +1061,7 @@ struct SessionRow {
 }
 
 fn session_by_id(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     organization_id: &str,
     session_id: &str,
 ) -> napi::Result<Option<SessionRow>> {
@@ -961,7 +1081,7 @@ fn runtime_trajectory(row: &SessionRow) -> String {
 }
 
 fn session_for_trajectory(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     organization_id: &str,
     trajectory: &str,
 ) -> napi::Result<Option<SessionRow>> {
@@ -995,7 +1115,7 @@ fn session_for_trajectory(
 }
 
 fn session_by_actor(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     organization_id: &str,
     actor: &str,
 ) -> napi::Result<Option<SessionRow>> {
@@ -1026,7 +1146,7 @@ fn session_by_actor(
 }
 
 fn sessions_by_id(
-    pg: &appa_eventlog::postgres::LeasedPostgres,
+    pg: &crate::Sql<'_>,
     organization_id: &str,
     session_id: &str,
 ) -> napi::Result<Vec<SessionRow>> {

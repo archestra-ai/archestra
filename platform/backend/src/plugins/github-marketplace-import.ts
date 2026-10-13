@@ -142,7 +142,10 @@ export async function prepareGithubMarketplaceImports(params: {
         expectedSourceRef !== selection.sourceRef ||
         advertised.sourceCommitSha.toLowerCase() !==
           selection.approvedSourceSha.toLowerCase() ||
-        advertised.clientType !== selection.clientType
+        !isImportableAs({
+          advertised: advertised.clientType,
+          selected: selection.clientType,
+        })
       ) {
         throw new Error(
           "Selection source does not match the reviewed marketplace snapshot",
@@ -254,4 +257,22 @@ async function runWithDeadline<Value>(params: {
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * Claude Code and Claude Desktop share one plugin format, so an entry a
+ * marketplace advertises for either can be imported for the other.
+ */
+function isImportableAs(params: {
+  advertised: ClientType | null;
+  selected: ClientType;
+}): boolean {
+  if (params.advertised === params.selected) return true;
+  const claudeFormat: ReadonlySet<ClientType | null> = new Set([
+    "claude-code",
+    "claude-desktop",
+  ]);
+  return (
+    claudeFormat.has(params.advertised) && claudeFormat.has(params.selected)
+  );
 }

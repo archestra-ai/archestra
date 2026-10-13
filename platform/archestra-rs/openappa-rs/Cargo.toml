@@ -9,12 +9,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# OpenAPPA main aac8c2b3 (#638). A named fetch is not disclosure in the
-# guide. The runtime keeps the model's verdict, including a stricter hint.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "aac8c2b3c34c9bad7f08793e2d226d4791724a43", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "aac8c2b3c34c9bad7f08793e2d226d4791724a43" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "aac8c2b3c34c9bad7f08793e2d226d4791724a43", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "aac8c2b3c34c9bad7f08793e2d226d4791724a43" }
+# OpenAPPA #637: row locks instead of advisory locks, leased receipts and
+# incremental family views.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d3490532c492d955340e525d7df4ac1ec0288117", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d3490532c492d955340e525d7df4ac1ec0288117" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d3490532c492d955340e525d7df4ac1ec0288117", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d3490532c492d955340e525d7df4ac1ec0288117" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
@@ -30,13 +30,13 @@ tokio = { version = "1", features = ["sync", "time", "rt", "net", "io-util"] }
 futures-util = "0.3"
 # Stream bounded receipt lookups through the store's existing PostgreSQL client.
 postgres = "0.19"
+# The owner id a dispatch leases its receipts under; tests also build consult records with it.
+uuid = { version = "1", features = ["v7"] }
 
 [dev-dependencies]
 # A paused clock: the connection-wait test does not spend its thirty seconds.
 tokio = { version = "1", features = ["rt", "test-util"] }
 proptest = "1"
-# Building a consult record by hand: the runtime's own id and clock types.
-uuid = { version = "1", features = ["v7"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 # Cross-builds need OpenSSL compiled for musl. The Docker builder uses its

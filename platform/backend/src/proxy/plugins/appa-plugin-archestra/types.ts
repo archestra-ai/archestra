@@ -333,14 +333,15 @@ export type AppaRelayArrival = {
 export type AskUserArguments = {
   question: string;
   /**
-   * The question for hosts that show option previews (Claude Code), set when
-   * every option's preview carries what `question` spells out.
+   * For a server-held review only: the one-line question for hosts with
+   * option previews (Claude Code), and the markdown preview of the call each
+   * option shows. Together they carry what `question` spells out.
    */
-  previewQuestion?: string;
+  shortQuestion?: string;
+  callPreview?: string;
   /** Short tab label; unvalidated here, as the model wrote it. */
   header?: unknown;
-  /** `preview` is shown only by hosts with option previews (Claude Code). */
-  options: Array<{ label: string; description?: string; preview?: string }>;
+  options: Array<{ label: string; description?: string }>;
   allowMultiple?: boolean;
   remedy_offer_ids?: string[];
 };

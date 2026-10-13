@@ -121,9 +121,9 @@ const AskUserSchema = z.object({
 });
 
 const AskUserExecutionSchema = AskUserSchema.extend({
-  // The proxy rewrites a staged review's ask_user call with an option preview
-  // for hosts that show one (Claude Code). It is not advertised to models,
-  // and the handler uses the server-held review, so the preview is ignored here.
+  // Earlier proxy versions rewrote a staged review's ask_user call with option
+  // previews for Claude Code. They are not advertised to models, and the
+  // handler uses the server-held review, so a preview is ignored here.
   options: z
     .array(AskUserOptionSchema.extend({ preview: z.string().optional() }))
     .min(2)

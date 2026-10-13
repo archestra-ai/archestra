@@ -128,7 +128,7 @@ import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
-import { ApiError } from "@/types";
+import { ApiError, type CommonToolResult } from "@/types";
 import type {
   RuntimeLaunchFailureReason,
   RuntimeLaunchOutcome,
@@ -511,25 +511,28 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const waitTool = binding.adapter?.pendingServersTool;
     // A ruling in the result of the client's wait tool is a denial that tool
     // carried: the model made another call there, and has to be told so.
-    const carriedDenials = new Set(
+    const carriedDenials = new Map(
       toolResults.flatMap((answer) =>
         answer.name === waitTool &&
         !answer.namespace &&
         result.toolResultUpdates[answer.id]?.denied &&
         !binding.request.restoredNoticeCallIds?.has(answer.id)
-          ? [answer.id]
+          ? [[answer.id, answer] as const]
           : [],
       ),
     );
     const toolResultUpdates = {
       ...childResultUpdates,
       ...Object.fromEntries(
-        Object.entries(result.toolResultUpdates).map(([id, result]) => [
-          id,
-          carriedDenials.has(id)
-            ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them. The ruling on your call follows.\n\n${result.content}`
-            : result.content,
-        ]),
+        Object.entries(result.toolResultUpdates).map(([id, result]) => {
+          const wait = carriedDenials.get(id);
+          return [
+            id,
+            wait
+              ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them.${waitFailure(wait)} The ruling on your call follows.\n\n${result.content}`
+              : result.content,
+          ];
+        }),
       ),
       ...failedLaunchResults,
     };
@@ -891,7 +894,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         offerIds.length > 0 &&
         (await hitlReviewAskedInForm({ session: binding.session, offerIds }))
           ? prepared
-          : this.asNativeQuestion(binding, prepared);
+          : this.asNativeQuestion(binding, prepared, offerIds.length > 0);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issued =
@@ -1680,6 +1683,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   private asNativeQuestion(
     binding: AppaPluginBinding,
     call: LlmProxyToolCallsContext["toolCalls"][number],
+    /** The call carries a server-held review, not arguments the model wrote. */
+    review: boolean,
   ): LlmProxyToolCallsContext["toolCalls"][number] {
     if (binding.runtimeSessionId) return call;
     const native = binding.adapter?.nativeQuestion;
@@ -1696,9 +1701,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     ) {
       return call;
     }
-    const args = parseAskUserArguments(call.arguments);
-    if (!args) return call;
-    if (args.allowMultiple && native.supportsMultiple === false) return call;
+    const parsed = parseAskUserArguments(call.arguments);
+    if (!parsed) return call;
+    if (parsed.allowMultiple && native.supportsMultiple === false) return call;
+    // A preview shows only a call this server holds. Text a model put in
+    // these fields of its own question could pass for a review's call.
+    const {
+      callPreview: _callPreview,
+      shortQuestion: _shortQuestion,
+      ...asked
+    } = parsed;
+    const args = review ? parsed : asked;
     return {
       id: call.id,
       name: native.toolName,
@@ -1817,6 +1830,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ? undefined
       : name;
   }
+}
+
+/** The client's own report of a failed wait, so the model sees the real error. */
+function waitFailure(wait: CommonToolResult): string {
+  if (!wait.isError) return "";
+  const reported =
+    typeof wait.content === "string"
+      ? wait.content
+      : JSON.stringify(wait.content);
+  return ` The wait itself failed, and the client reported:\n${reported}\n`;
 }
 
 function notLoadedRulingKey(params: {

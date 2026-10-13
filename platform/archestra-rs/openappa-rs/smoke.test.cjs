@@ -1383,7 +1383,7 @@ builtin = "hitl"
     const callId = `fault-${randomUUID()}`;
     await call(session, callId, 'read_plain');
     await client.query('CREATE OR REPLACE FUNCTION openappa_smoke_fail_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION \'injected receipt failure\'; END $$');
-    await client.query(`CREATE TRIGGER openappa_smoke_failure BEFORE UPDATE ON openappa_processed_results FOR EACH ROW WHEN (NEW.tool_call_id = '${callId}') EXECUTE FUNCTION openappa_smoke_fail_receipt()`);
+    await client.query(`CREATE TRIGGER openappa_smoke_failure BEFORE UPDATE ON openappa_processed_results FOR EACH ROW WHEN (NEW.tool_call_id = '${callId}' AND NEW.status = 'complete') EXECUTE FUNCTION openappa_smoke_fail_receipt()`);
     try {
       await assert.rejects(() => result(session, callId, 'uncommitted'), /PostgreSQL|database|db error/);
     } finally {

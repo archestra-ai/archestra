@@ -95,7 +95,7 @@ const CreatePluginToolSchema = z
       .default("")
       .describe("What the plugin does."),
     clientType: ClientTypeSchema.describe(
-      "The coding client the payload targets: claude-code, codex, copilot-cli, or cursor.",
+      "The client the payload targets: claude-code, claude-desktop, codex, copilot-cli, or cursor.",
     ),
     supportedPlatforms: z
       .array(PluginPlatformSchema)

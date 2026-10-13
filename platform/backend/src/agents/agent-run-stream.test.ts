@@ -45,6 +45,36 @@ describe("probeFirstRenderableEvent", () => {
     });
   });
 
+  test("reports empty when a text part opens and closes with no text", async () => {
+    // OpenAI-compatible streams open with `content: ""`; the AI SDK opens a
+    // text part for it and drops the empty delta.
+    const events: StreamProbeEvent[] = [
+      { type: "start" },
+      { type: "start-step" },
+      { type: "text-start" },
+      { type: "text-end" },
+      { type: "finish-step" },
+      { type: "finish", finishReason: "length" },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "empty",
+      finishReason: "length",
+    });
+  });
+
+  test("returns renderable on the first text after a text part opens", async () => {
+    const events: StreamProbeEvent[] = [
+      { type: "text-start" },
+      // the AI SDK forwards a text delta only when it has text
+      { type: "text-delta" },
+    ];
+
+    expect(await probeFirstRenderableEvent(iteratorOf(events))).toEqual({
+      kind: "renderable",
+    });
+  });
+
   test("treats a tool-only turn as renderable, not empty", async () => {
     const events: StreamProbeEvent[] = [
       { type: "start" },
@@ -287,6 +317,18 @@ function emptyChunks(): ModelStreamPart[] {
   ];
 }
 
+// The shape an OpenAI-compatible stream takes when it ends at the output cap
+// before any text: an opening empty content delta, then `length`.
+function emptyTextLengthChunks(): ModelStreamPart[] {
+  return [
+    { type: "stream-start", warnings: [] },
+    { type: "text-start", id: "1" },
+    { type: "text-delta", id: "1", delta: "" },
+    { type: "text-end", id: "1" },
+    { type: "finish", finishReason: finished("length"), usage },
+  ];
+}
+
 function abortiveChunks(): ModelStreamPart[] {
   return [
     { type: "stream-start", warnings: [] },
@@ -371,6 +413,22 @@ describe("runAgentStream", () => {
 
     expect(model.doStreamCalls).toHaveLength(3);
     expect(onEmptyResponseExhausted).toHaveBeenCalledTimes(1);
+  });
+
+  test("retries a turn with only empty text to the cap, then throws EmptyModelResponseError", async () => {
+    const model = modelFor(
+      emptyTextLengthChunks(),
+      emptyTextLengthChunks(),
+      emptyTextLengthChunks(),
+    );
+
+    const error = await runAgentStream({
+      config: { model, prompt: "hello" },
+    }).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(EmptyModelResponseError);
+    expect(error).toMatchObject({ finishReason: "length", attempts: 3 });
+    expect(model.doStreamCalls).toHaveLength(3);
   });
 
   test("retries an empty response, then commits the renderable retry", async () => {

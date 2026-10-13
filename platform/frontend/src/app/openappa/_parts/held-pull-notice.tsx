@@ -3,7 +3,11 @@
 import { GitPullRequestArrow } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAcceptHeldPull } from "@/lib/openappa-batteries.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
@@ -42,27 +46,29 @@ export function HeldPullNotice({
   return (
     <InlineNotice variant="warning">
       <GitPullRequestArrow aria-hidden />
-      <span className="font-medium">A change from {host} needs approval</span>
-      <InlineNoticeText className="flex-1">
-        {heldSummary(held.message, reasons)} Your current policy stays active
-        until you approve.
-        {batteriesLink && (
-          <>
-            {" "}
-            <Link
-              href="/openappa/batteries"
-              className="font-medium underline underline-offset-4"
-            >
-              See batteries
-            </Link>
-          </>
-        )}
-      </InlineNoticeText>
+      <InlineNoticeBody>
+        <span className="font-medium">A change from {host} needs approval</span>
+        <InlineNoticeText>
+          {heldSummary(held.message, reasons)} Your current policy stays active
+          until you approve.
+          {batteriesLink && (
+            <>
+              {" "}
+              <Link
+                href="/openappa/batteries"
+                className="font-medium underline underline-offset-4"
+              >
+                See batteries
+              </Link>
+            </>
+          )}
+        </InlineNoticeText>
+      </InlineNoticeBody>
       {mayApprove && (
         <Button
-          size="sm"
+          size="xs"
           variant="outline"
-          className="ml-auto"
+          className="ml-auto shrink-0"
           disabled={accept.isPending}
           onClick={() => accept.mutate()}
         >

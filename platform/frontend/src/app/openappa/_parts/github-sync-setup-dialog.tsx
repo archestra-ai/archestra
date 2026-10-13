@@ -27,7 +27,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { FieldDescription } from "@/components/ui/field-description";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -1098,11 +1102,13 @@ function RepositoryNotice({
     return (
       <InlineNotice variant="error" aria-live="polite">
         <AlertTriangle aria-hidden />
-        <span className="font-medium">Repository not found</span>
-        <InlineNoticeText className="flex-1">
-          {repo} may have been deleted or renamed, or the App lost access. Pick
-          another repository.
-        </InlineNoticeText>
+        <InlineNoticeBody>
+          <span className="font-medium">Repository not found</span>
+          <InlineNoticeText>
+            {repo} may have been deleted or renamed, or the App lost access.
+            Pick another repository.
+          </InlineNoticeText>
+        </InlineNoticeBody>
         {manageUrl ? (
           <NoticeLink href={manageUrl}>Change access</NoticeLink>
         ) : null}
@@ -1112,20 +1118,22 @@ function RepositoryNotice({
     return (
       <InlineNotice variant="error" aria-live="polite">
         <AlertTriangle aria-hidden />
-        <span className="font-medium">
-          {status === "app_error"
-            ? "The App can't sign in"
-            : status === "unreachable"
-              ? "No access"
-              : "Couldn't check it"}
-        </span>
-        <InlineNoticeText className="flex-1">
-          {status === "app_error"
-            ? "It may be uninstalled on GitHub. Change it above."
-            : status === "unreachable"
-              ? "The selected App can't read this repository."
-              : (error ?? "Try again in a moment.")}
-        </InlineNoticeText>
+        <InlineNoticeBody>
+          <span className="font-medium">
+            {status === "app_error"
+              ? "The App can't sign in"
+              : status === "unreachable"
+                ? "No access"
+                : "Couldn't check it"}
+          </span>
+          <InlineNoticeText>
+            {status === "app_error"
+              ? "It may be uninstalled on GitHub. Change it above."
+              : status === "unreachable"
+                ? "The selected App can't read this repository."
+                : (error ?? "Try again in a moment.")}
+          </InlineNoticeText>
+        </InlineNoticeBody>
         {status === "unreachable" && manageUrl ? (
           <NoticeLink href={manageUrl}>Change access</NoticeLink>
         ) : null}

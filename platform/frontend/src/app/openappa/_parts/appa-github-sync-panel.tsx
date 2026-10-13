@@ -21,7 +21,11 @@ import { SettingsBlock } from "@/components/settings/settings-block";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -274,10 +278,14 @@ export function AppaGithubSyncPanel() {
                   <div className="px-4 pb-4">
                     <InlineNotice variant="error">
                       <AlertTriangle className="size-4 shrink-0" />
-                      <span className="font-medium">Could not sync policy</span>
-                      <InlineNoticeText>
-                        {source.lastSyncError}
-                      </InlineNoticeText>
+                      <InlineNoticeBody>
+                        <span className="font-medium">
+                          Could not sync policy
+                        </span>
+                        <InlineNoticeText>
+                          {source.lastSyncError}
+                        </InlineNoticeText>
+                      </InlineNoticeBody>
                     </InlineNotice>
                   </div>
                 ) : null}

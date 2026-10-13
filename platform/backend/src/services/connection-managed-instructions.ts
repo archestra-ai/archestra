@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared";
+import {
+  DEFAULT_APP_NAME,
+  resolveRuntimeHandoffInstructions,
+} from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import {
@@ -52,8 +55,10 @@ export async function getConnectionManagedInstructions(token: string) {
   if (!organization)
     throw new ApiError(403, "Connection is no longer available");
   const instructions = organization.connectionRuntimeHandoffEnabled
-    ? (organization.connectionRuntimeHandoffInstructions ??
-      DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS)
+    ? resolveRuntimeHandoffInstructions({
+        stored: organization.connectionRuntimeHandoffInstructions,
+        appName: organization.appName ?? DEFAULT_APP_NAME,
+      })
     : null;
   return {
     instructions,

@@ -37,6 +37,12 @@ export interface SetupScriptProxySection {
    * keeps their own provider credentials — virtualKey/virtualKeyName are
    * null. "virtual-key" and "primary-providers": the auto-provisioned key is injected.
    */
+  /**
+   * Cursor only: the chat models GET /models lists for the setup's virtual
+   * key, which replace Cursor's built-in models in its picker. `defaultId` is
+   * the organization's default model when the key can route it.
+   */
+  cursorModels?: { ids: string[]; defaultId: string | null };
   authMode: ConnectionSetupProxyAuth;
   provider: SupportedProvider;
   providerLabel: string;

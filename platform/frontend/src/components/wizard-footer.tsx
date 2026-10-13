@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect } from "react";
+import { WizardFooterArena } from "@/components/__arena__"; // design-arena: do not commit
 import {
   VERSION_IN_FOOTER_CLASS,
   VERSION_SLOT_ATTRIBUTE,
@@ -21,6 +22,28 @@ export function WizardFooter({
   className?: string;
 }) {
   useOffersVersionSlot();
+  return (
+    <WizardFooterArena
+      className={className}
+      slotProps={{ [VERSION_SLOT_ATTRIBUTE]: "" }}
+      current={
+        <CurrentWizardFooter className={className}>
+          {children}
+        </CurrentWizardFooter>
+      }
+    >
+      {children}
+    </WizardFooterArena>
+  );
+}
+
+function CurrentWizardFooter({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <div
       data-wizard-footer

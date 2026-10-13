@@ -39,6 +39,10 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   // Prefer authenticated org data; fall back to public appearance for unauthenticated pages (e.g. sign-in)
   const footerText = organization?.footerText ?? appearance?.footerText;
   const version = data?.version;
+  // Dev and staging builds report a full 40-char commit SHA; seven is enough
+  // to identify it, and the full value stays in the hover title.
+  const displayVersion =
+    version && /^[0-9a-f]{40}$/i.test(version) ? version.slice(0, 7) : version;
   // The release check only powers a footer hint, so skip it when hidden and
   // defer it when visible to keep startup focused on app data.
   const { data: latestRelease } = useLatestGitHubRelease({
@@ -56,9 +60,9 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
   const footerString = useMemo(() => {
     // Wait for version to load before rendering to avoid layout shift
     if (!version) return null;
-    if (footerText) return `${footerText} (v${version})`;
-    return `Version: ${version}`;
-  }, [footerText, version]);
+    if (footerText) return `${footerText} (v${displayVersion})`;
+    return `Version: ${displayVersion}`;
+  }, [footerText, version, displayVersion]);
 
   useEffect(() => {
     // Only check for hide-version class if not inline
@@ -113,12 +117,16 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
 
   // Custom footer text: show text with version, no upgrade link
   if (footerText) {
-    return place(<div className={className}>{footerString}</div>);
+    return place(
+      <div className={className} title={version}>
+        {footerString}
+      </div>,
+    );
   }
 
   // Default: show version with optional upgrade link
   return place(
-    <div className={className}>
+    <div className={className} title={version}>
       {footerString}
       {!hideReleaseLink && hasNewVersion && latestRelease && (
         <>

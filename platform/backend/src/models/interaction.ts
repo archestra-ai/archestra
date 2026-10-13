@@ -177,8 +177,10 @@ function computeRequestType(
     return "subagent";
   }
 
-  if (source === "opencode:main") return "main";
-  if (source?.startsWith("opencode:")) return "subagent";
+  if (source === "opencode:main" || source === "kilo:main") return "main";
+  if (source?.startsWith("opencode:") || source?.startsWith("kilo:")) {
+    return "subagent";
+  }
 
   if (isOpenCodeFamilySessionSource(sessionSource)) {
     return computeOpenCodeRequestType(request);
@@ -778,9 +780,9 @@ class InteractionModel {
           source: schema.interactionsTable.source,
           requestType: sql<"main" | "subagent">`
             CASE
-              WHEN ${schema.interactionsTable.source} = 'opencode:main'
+              WHEN ${schema.interactionsTable.source} IN ('opencode:main', 'kilo:main')
               THEN 'main'
-              WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction')
+              WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction', 'kilo:subagent', 'kilo:title', 'kilo:compaction')
               THEN 'subagent'
               WHEN ${schema.interactionsTable.sessionSource} IN ('opencode_session', 'kilo_session')
                 AND LOWER(CONCAT_WS('\n',

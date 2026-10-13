@@ -17,7 +17,6 @@ import {
   isCodexOriginator,
   isProviderApiKeyOptional,
   OPENCODE_AGENT_HEADER,
-  OPENCODE_CLIENT_ID,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
   providerRequiresPerUserCredential,
@@ -802,15 +801,19 @@ export async function handleLLMProxy<
     headersForExtraction,
     "x-parent-session-id",
   );
+  // OpenCode and Kilo Code frame their turns the same way; each gets its own
+  // source prefix (opencode:main, kilo:main, ...).
   const openCodeSource: InteractionSource | undefined =
-    externalAgentId === OPENCODE_CLIENT_ID
-      ? openCodeParentSession
-        ? "opencode:subagent"
-        : openCodeAgent === "title"
-          ? "opencode:title"
-          : openCodeAgent === "compaction"
-            ? "opencode:compaction"
-            : "opencode:main"
+    externalAgentId && isOpenCodeFamilyClient(externalAgentId)
+      ? `${externalAgentId}:${
+          openCodeParentSession
+            ? "subagent"
+            : openCodeAgent === "title"
+              ? "title"
+              : openCodeAgent === "compaction"
+                ? "compaction"
+                : "main"
+        }`
       : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !isLoopbackRequest(request);

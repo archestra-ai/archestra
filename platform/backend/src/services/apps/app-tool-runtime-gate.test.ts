@@ -227,7 +227,7 @@ test("with the code runtime off, admits the store-only file tools and refuses up
       TOOL_SAVE_FILE_SHORT_NAME,
       TOOL_EDIT_FILE_SHORT_NAME,
       TOOL_DELETE_FILE_SHORT_NAME,
-    ]) {
+    ] as const) {
       expect(await decide(shortName), `${shortName} must be admitted`).toEqual({
         allowed: true,
         kind: "app-builtin",
@@ -240,7 +240,7 @@ test("with the code runtime off, admits the store-only file tools and refuses up
       TOOL_UPLOAD_FILE_SHORT_NAME,
       TOOL_DOWNLOAD_FILE_SHORT_NAME,
       TOOL_COPY_FILE_SHORT_NAME,
-    ]) {
+    ] as const) {
       expect(
         (await decide(shortName)).allowed,
         `${shortName} must be refused`,

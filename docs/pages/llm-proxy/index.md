@@ -2,7 +2,7 @@
 title: LLM Proxy
 description: See and control every model call your company makes, from coding agents to your own apps
 order: 4
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -58,7 +58,7 @@ In `X-Archestra-Meta`, a segment can be empty, but no value can contain `/`. A s
 
 To tie a request to a person for certain, use a credential that names them. See [Attribution in Logs](/docs/llm-proxy/authentication#attribution-in-logs).
 
-For Guardrails, send a session ID too. Claude Code, Codex CLI, and OpenCode send it by themselves. Any other client, such as [n8n](/docs/integrations/web-ui-and-automation#n8n) or custom apps, adds `X-Appa-Session-ID`. See [Session Headers](/docs/agents/guardrails/clients#session-headers).
+`X-Archestra-Session-Id` only labels requests in logs. To enforce Guardrails on custom clients or workflows, send [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) with the conversation ID. When you send both headers, use the same value.
 
 <span id="authentication"></span><span id="openai-compatible-model-router"></span><span id="supported-providers"></span>
 

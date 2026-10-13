@@ -23,7 +23,6 @@ export function ClientConnectionApproval({
   gatewaySelected,
   gatewayName,
   proxySelected,
-  proxyUsesVirtualKey,
   skillsSelected,
 }: {
   requestId: string;
@@ -33,7 +32,6 @@ export function ClientConnectionApproval({
   gatewaySelected: boolean;
   gatewayName: string;
   proxySelected: boolean;
-  proxyUsesVirtualKey: boolean;
   skillsSelected: boolean;
 }) {
   const client = CONNECT_CLIENTS.find((c) => c.id === clientId);
@@ -82,20 +80,11 @@ export function ClientConnectionApproval({
                   </li>
                 )}
                 {skillsSelected && <li>Reload Cursor to see shared skills.</li>}
-                {proxySelected && proxyUsesVirtualKey && (
+                {proxySelected && (
                   <li>
-                    For model routing, find “Cursor model settings (manual
-                    step)” in the output of the setup command Cursor ran. Paste
-                    its proxy URL and virtual key into Cursor Settings → Models
-                    → API Keys.
-                  </li>
-                )}
-                {proxySelected && !proxyUsesVirtualKey && (
-                  <li>
-                    For model routing, find “Cursor model settings (manual
-                    step)” in the output of the setup command Cursor ran. Paste
-                    its proxy URL and your own OpenAI API key into Cursor
-                    Settings → Models → API Keys.
+                    Quit and reopen Cursor to load its model settings. Add
+                    models under Settings → Models by their provider-qualified
+                    id, such as anthropic:&lt;model&gt;.
                   </li>
                 )}
               </ul>
@@ -139,40 +128,38 @@ export function ClientConnectionApproval({
     request.data.clientId === clientId && request.data.platform === platform;
   return (
     <div>
-      <div className="space-y-5 p-5 sm:p-6">
-        <div className="flex items-center gap-3">
-          {client && <ClientIcon client={client} size={32} />}
-          <h2 className="text-base font-semibold tracking-tight">
-            Confirm the connection
-          </h2>
+      <div className="space-y-3 p-4 sm:p-5">
+        <div className="flex items-start gap-3">
+          {client && <ClientIcon client={client} size={24} />}
+          <div className="min-w-0 space-y-0.5">
+            <h2 className="text-sm font-semibold">Confirm the connection</h2>
+            <p className="text-sm text-muted-foreground">
+              Check the code matches your terminal, then approve.
+            </p>
+          </div>
         </div>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          Confirm the code matches your terminal. Approval lets your AI apply
-          the selected setup to your client.
-        </p>
-        <div className="space-y-2 rounded-lg border bg-muted/40 px-4 py-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            Terminal code
-          </p>
-          <p className="break-all font-mono text-2xl font-semibold tracking-wider">
-            {request.data.userCode}
-          </p>
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 rounded-lg border bg-muted/40 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">Terminal code</p>
+            <p className="break-all font-mono text-xl font-semibold tracking-wider">
+              {request.data.userCode}
+            </p>
+          </div>
+          {request.data.deviceName && (
+            <p className="break-words pb-1 text-xs text-muted-foreground">
+              <span>from </span>
+              <span className="font-medium text-foreground">
+                {request.data.deviceName}
+              </span>
+            </p>
+          )}
         </div>
-        {request.data.deviceName && (
-          <p className="break-words text-sm text-muted-foreground">
-            <span>Requested from </span>
-            <span className="font-medium text-foreground">
-              {request.data.deviceName}
-            </span>
-          </p>
-        )}
         <label
           htmlFor="confirm-connection-code"
-          className="flex items-start gap-2.5 text-sm leading-relaxed"
+          className="flex items-center gap-2.5 text-sm"
         >
           <Checkbox
             id="confirm-connection-code"
-            className="mt-0.5"
             checked={confirmed}
             onCheckedChange={(value) => setConfirmed(value === true)}
           />
@@ -187,7 +174,7 @@ export function ClientConnectionApproval({
           </InlineNotice>
         )}
       </div>
-      <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-5 py-4 sm:px-6">
+      <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-4 py-3 sm:px-5">
         <Button
           size="sm"
           disabled={!confirmed || !matches || !setupId || decision.isPending}

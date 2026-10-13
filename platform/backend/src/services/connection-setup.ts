@@ -2,6 +2,10 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
+import {
+  INSTALLER_CLIENT_LABELS,
+  type InstallerClientId,
+} from "@archestra/shared/connection-setup";
 import logger from "@/logging";
 import { LlmProviderApiKeyModel, VirtualApiKeyModel } from "@/models";
 import {
@@ -54,8 +58,14 @@ export async function ensureConnectionVirtualKey(params: {
   userTeamIds: string[];
   provider: SupportedProvider;
   /**
-   * Admin-configured default key for this provider (from the org's
-   * connectionDefaultProviderKeys mapping). Used when still valid; otherwise
+   * The client being set up. Each client gets its own key, so admin-mapped
+   * keys for one client never re-route another client's installs. Omitted by
+   * the manual flow, which keeps the shared per-user key.
+   */
+  clientId?: InstallerClientId;
+  /**
+   * Admin-configured key for this provider and client (from the org's
+   * connectionClientProviderKeys mapping). Used when still valid; otherwise
    * resolution falls back to the user's personal → team → org precedence.
    */
   preferredProviderKeyId?: string | null;
@@ -69,6 +79,7 @@ export async function ensureConnectionVirtualKey(params: {
     userEmail,
     userTeamIds,
     provider,
+    clientId,
     preferredProviderKeyId,
   } = params;
 
@@ -122,7 +133,7 @@ export async function ensureConnectionVirtualKey(params: {
         })
       : { keyToBind: providerApiKey, creditWarning: undefined };
 
-  const name = connectionVirtualKeyName(userEmail);
+  const name = connectionVirtualKeyName({ userEmail, clientId });
   const existing = await VirtualApiKeyModel.findByAuthorScopeName({
     organizationId,
     authorId: userId,
@@ -409,9 +420,15 @@ async function probeCandidateCredit(
   return probeAnthropicCredit(apiKeyValue, baseUrl, candidate.extraHeaders);
 }
 
-function connectionVirtualKeyName(userEmail: string): string {
+function connectionVirtualKeyName(params: {
+  userEmail: string;
+  clientId?: InstallerClientId;
+}): string {
+  const client = params.clientId
+    ? ` (${INSTALLER_CLIENT_LABELS[params.clientId]})`
+    : "";
   // Virtual key names cap at 256 chars; emails are well under that.
-  return `Connection setup — ${userEmail}`.slice(0, 256);
+  return `Connection setup${client} — ${params.userEmail}`.slice(0, 256);
 }
 
 function connectionPassthroughKeyName(userEmail: string): string {

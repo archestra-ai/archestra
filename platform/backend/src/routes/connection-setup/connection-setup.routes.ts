@@ -489,6 +489,18 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   null,
               }));
           }
+          // Fail here, where the Connect page shows the message, rather than
+          // when the installer downloads its script.
+          if (clientId === "opencode" && virtualApiKeyId && provider) {
+            await getVirtualKeyProviderCatalog({
+              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              provider: allPrimary ? undefined : provider,
+              organizationId,
+              userId: user.id,
+              userTeamIds: await TeamModel.getUserTeamIds(user.id),
+              virtualApiKeyId,
+            });
+          }
         } else if (
           // provider-key mode is passthrough: the script only rewires the base
           // URL and the user keeps their own provider credentials. We also

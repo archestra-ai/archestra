@@ -835,11 +835,8 @@ function SidebarSearchItem() {
         className="text-muted-foreground"
         onClick={() => {
           if (isMobile) setOpenMobile(false);
-          window.dispatchEvent(
-            new CustomEvent("open-conversation-search", {
-              detail: { recentChatsView: true },
-            }),
-          );
+          // The same palette as Cmd+K, which the row advertises.
+          window.dispatchEvent(new CustomEvent("open-conversation-search"));
         }}
       >
         <Search />

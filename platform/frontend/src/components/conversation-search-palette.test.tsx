@@ -577,6 +577,52 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getByText("No recent chats")).toBeInTheDocument();
   });
 
+  describe("with more recent chats than fit before the pages", () => {
+    beforeEach(() => {
+      mockUseConversations.mockReturnValue({
+        data: Array.from({ length: 8 }, (_, index) => ({
+          id: `recent-${index}`,
+          title: `Recent chat ${index}`,
+          updatedAt: new Date(Date.now() - index * 60_000).toISOString(),
+          lastMessageAt: new Date(Date.now() - index * 60_000).toISOString(),
+          messages: [],
+        })),
+        isLoading: false,
+        isFetching: false,
+      });
+    });
+
+    it("lists the five newest and points to search for the rest", () => {
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      expect(screen.getByText("Recent chat 4")).toBeInTheDocument();
+      expect(screen.queryByText("Recent chat 5")).not.toBeInTheDocument();
+      expect(
+        screen.getByText("Type to search older chats"),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Pages")).toBeInTheDocument();
+    });
+
+    it("finds an older chat by typing", () => {
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "Recent chat" },
+      });
+
+      expect(screen.getByText("Recent chat 7")).toBeInTheDocument();
+    });
+
+    it("lists every recent chat in the recent chats view", () => {
+      render(<ConversationSearchPalette {...defaultProps} recentChatsView />);
+
+      expect(screen.getByText("Recent chat 7")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Type to search older chats"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("redirects to /chat when deleting the currently viewed conversation", () => {
     vi.mocked(usePathname).mockReturnValue("/chat/conv-1");
 

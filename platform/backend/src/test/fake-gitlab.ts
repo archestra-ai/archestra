@@ -188,13 +188,20 @@ export class FakeGitlab {
           { message: "You are not allowed to push into this branch" },
           { status: 403 },
         );
-      const startBranch = body.start_branch ?? body.branch;
-      const parent = project.branches.get(startBranch) ?? null;
-      if (body.start_sha && body.start_sha !== parent)
+      if (body.start_branch && body.start_sha)
         return HttpResponse.json(
-          { message: "start_sha is not the tip of start_branch" },
+          { error: "start_branch, start_sha are mutually exclusive" },
           { status: 400 },
         );
+      if (body.start_sha && !project.commits.has(body.start_sha))
+        return HttpResponse.json(
+          { message: "Invalid start_sha" },
+          { status: 400 },
+        );
+      const parent =
+        body.start_sha ??
+        project.branches.get(body.start_branch ?? body.branch) ??
+        null;
       const files = new Map(parent ? project.commits.get(parent) : []);
       for (const action of body.actions) {
         if (action.action === "delete") files.delete(action.file_path);

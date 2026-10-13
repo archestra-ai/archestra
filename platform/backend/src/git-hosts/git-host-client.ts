@@ -225,8 +225,9 @@ export class GitHostClient {
   }
 
   /**
-   * One commit of file changes. `startSha` pins the parent: GitLab refuses the
-   * commit when `startBranch` moved, so a concurrent push never gets overwritten.
+   * One commit of file changes. A new `branch` starts at `startSha` when given,
+   * so it holds exactly the commit that was read; else at `startBranch`'s tip.
+   * GitLab takes only one of the two.
    */
   async commitGitlabFiles(params: {
     repo: string;
@@ -245,10 +246,11 @@ export class GitHostClient {
       {
         body: {
           branch: params.branch,
-          ...(params.startBranch && params.startBranch !== params.branch
-            ? { start_branch: params.startBranch }
-            : {}),
-          ...(params.startSha ? { start_sha: params.startSha } : {}),
+          ...(params.startSha
+            ? { start_sha: params.startSha }
+            : params.startBranch && params.startBranch !== params.branch
+              ? { start_branch: params.startBranch }
+              : {}),
           commit_message: params.message,
           actions: params.actions.map((action) => ({
             action: action.action,

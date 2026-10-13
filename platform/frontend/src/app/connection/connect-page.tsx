@@ -758,7 +758,12 @@ function ConnectArea({
           className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300"
         >
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
-            <span>Copy each block into {nameOf(client)}, top to bottom.</span>
+            <span>
+              {client.mcp.kind === "custom" &&
+              client.mcp.configFile === "terminal"
+                ? "Run the commands in a terminal and paste the snippets where each step says, top to bottom."
+                : `Copy each block into ${nameOf(client)}, top to bottom.`}
+            </span>
           </div>
           <ManualSteps client={client} data={data} />
         </div>

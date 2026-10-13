@@ -1,6 +1,7 @@
 import { SESSION_ID_HEADER } from "@archestra/shared/consts";
 import {
   CODEX_CLIENT_ID,
+  KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
 import {
@@ -334,6 +335,23 @@ describe("extractSessionInfo", () => {
         externalAgentId: OPENCODE_CLIENT_ID,
       }),
     ).toEqual({ sessionId: expected, sessionSource: "opencode_session" });
+  });
+
+  test("Kilo Code attribution groups its requests by the same session headers", () => {
+    // The headers Kilo 7.8.8 sends on an Anthropic request.
+    expect(
+      extractSessionInfo({
+        headers: {
+          "x-session-affinity": "ses_ec9353a9cffeIs4iZ3LOssZSTc",
+          "x-session-id": "ses_ec9353a9cffeIs4iZ3LOssZSTc",
+        },
+        body: undefined,
+        externalAgentId: KILO_CLIENT_ID,
+      }),
+    ).toEqual({
+      sessionId: "ses_ec9353a9cffeIs4iZ3LOssZSTc",
+      sessionSource: "opencode_session",
+    });
   });
 
   test("an x-session-id header without OpenCode attribution is not read as a session", () => {

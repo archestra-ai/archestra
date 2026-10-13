@@ -190,6 +190,16 @@ export const OAUTH_AGENTS = {
       { clientNamePattern: "^OpenCode$" },
     ],
   },
+  // Kilo Code's CLI keeps OpenCode's sign-in: CIMD at kilo.ai on its default
+  // callback port, or DCR as "Kilo" on a configured one (captured from kilo
+  // 7.8.8, 2026-10-13).
+  kilo: {
+    label: "Kilo Code",
+    identities: [
+      { clientId: "https://kilo.ai/docs/oauth/kilo/client.json" },
+      { clientNamePattern: "^Kilo$" },
+    ],
+  },
   // Registers each install as "Amp MCP Client (<server name>)" with this
   // redirect (captured from amp 0.0.1791201662).
   amp: {

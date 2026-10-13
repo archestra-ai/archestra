@@ -11,7 +11,7 @@ export interface SkillMarketplaceInstallStep {
 }
 
 export interface SkillMarketplaceClient {
-  id: "claude-code" | "codex" | "cursor" | "copilot-cli" | "opencode";
+  id: "claude-code" | "codex" | "cursor" | "copilot-cli" | "opencode" | "kilo";
   getInstallSteps: (
     params: SkillMarketplaceInstallParams,
   ) => SkillMarketplaceInstallStep[];
@@ -100,6 +100,28 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
         {
           label: "Clone the marketplace into OpenCode's skills folder",
           body: "OpenCode loads the shared skills the next time it starts.",
+          code: `git clone ${cloneUrl} ${skillsDir}`,
+          language: "bash",
+        },
+        {
+          label: "Pull updates",
+          body: "Run this whenever the shared skills change.",
+          code: `git -C ${skillsDir} pull`,
+          language: "bash",
+        },
+      ];
+    },
+  },
+  {
+    id: "kilo",
+    // Kilo Code keeps OpenCode's skills loader: every SKILL.md under its
+    // skills folder, recursively.
+    getInstallSteps: ({ cloneUrl, marketplaceName }) => {
+      const skillsDir = `"$HOME/.config/kilo/skills/${marketplaceName}"`;
+      return [
+        {
+          label: "Clone the marketplace into Kilo Code's skills folder",
+          body: "Kilo Code loads the shared skills the next time it starts.",
           code: `git clone ${cloneUrl} ${skillsDir}`,
           language: "bash",
         },

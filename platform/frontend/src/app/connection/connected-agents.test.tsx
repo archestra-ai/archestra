@@ -179,6 +179,17 @@ describe("DisconnectLine", () => {
     ).toBeInTheDocument();
   });
 
+  it("gives Kilo Code a cleanup prompt although it has no installer", () => {
+    render(<DisconnectLine data={data} picked={client("kilo")} agents={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(
+      screen.getByText(
+        "Read http://localhost:3000/disconnect.md?client=kilo and disconnect Kilo Code from Acme.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/MCP Client Tool node/)).toBeNull();
+  });
+
   it("lists what gets removed only when asked", () => {
     render(
       <DisconnectLine data={data} picked={client("claude-code")} agents={[]} />,

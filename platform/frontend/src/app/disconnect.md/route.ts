@@ -1,4 +1,4 @@
-import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
+import { ARCHESTRA_TOKEN_PREFIX, KILO_CLIENT_ID } from "@archestra/shared";
 import {
   CLAUDE_DESKTOP_PROFILE_ID,
   INSTALLER_CLIENT_IDS,
@@ -29,6 +29,7 @@ export function GET(request: Request) {
   const body =
     (client === "generic" ? genericInstructions(target) : null) ??
     (client === "claude-desktop" ? claudeDesktopInstructions(target) : null) ??
+    (client === KILO_CLIENT_ID ? kiloInstructions(target) : null) ??
     (client ? focusedInstructions(target, client) : null) ??
     pickClientInstructions(origin);
   return new Response(body, {
@@ -44,7 +45,7 @@ function pickClientInstructions(origin: string): string {
 
 Remove what the ${origin} connect setup added to the coding client running this
 conversation. Work out which client that is; ask only if it is unknown.
-Supported clients: ${INSTALLER_CLIENT_IDS.join(", ")}.
+Supported clients: ${[...INSTALLER_CLIENT_IDS, KILO_CLIENT_ID].join(", ")}.
 
 Then read ${origin}/disconnect.md?client=CLIENT_ID with CLIENT_ID replaced, and follow it.
 In Claude Desktop's Cowork or Code tab, the client ID is claude-desktop, not claude-code.
@@ -266,6 +267,31 @@ function cursorInstructions(target: DeploymentTarget): string {
   ask them to delete that text. Do not change their other rules.`,
     finish:
       "Tell the user to reload Cursor and check that the gateway is gone from Customize > MCPs.",
+  });
+}
+
+function kiloInstructions(target: DeploymentTarget): string {
+  const { base, host } = target;
+  return instructions({
+    target,
+    label: "Kilo Code",
+    inventory: `Kilo Code keeps its settings in ~/.config/kilo/kilo.jsonc (or kilo.json,
+opencode.json there). The file can have comments.
+- MCP: the entry under "mcp" whose url starts with ${base}/mcp/.
+- LLM proxy: each provider under "provider" whose options.baseURL starts with ${base},
+  its X-Archestra-Agent-Id header, and "enabled_providers" if it lists only those providers.
+- Skills: a folder in ~/.config/kilo/skills/ that is a git clone of ${host}/skills/
+  (check with git -C FOLDER remote get-url origin).`,
+    remove: `- Run kilo mcp logout SERVER_NAME to remove the stored sign-in, then remove the
+  gateway entry from "mcp" and keep the other servers.
+- For each routed provider, remove options.baseURL and the X-Archestra-Agent-Id header.
+  Keep the provider, its models and the user's own API key.
+- Ask the user whether to remove "enabled_providers": the setup added it so that every
+  request goes through ${host}.
+- Delete the skills folder found above.
+- Edit the file as text and keep its comments.`,
+    finish:
+      "Tell the user to restart Kilo Code and run kilo mcp list to check that the gateway is gone.",
   });
 }
 

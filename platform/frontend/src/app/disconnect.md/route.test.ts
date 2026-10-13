@@ -35,6 +35,7 @@ describe("Disconnect agent instructions", () => {
       "opencode",
       "cursor",
       "claude-desktop",
+      "kilo",
       "generic",
     ]) {
       const instructions = await read(`?client=${client}`);
@@ -91,5 +92,17 @@ describe("Disconnect agent instructions", () => {
     );
     expect(instructions).toContain("do not change anything there");
     expect(instructions).toContain("Do not force it to close.");
+  });
+
+  it("undoes Kilo Code's manual setup in its own config and skills folder", async () => {
+    const instructions = await read("?client=kilo");
+    expect(instructions).toContain("# Disconnect Kilo Code");
+    expect(instructions).toContain("~/.config/kilo/kilo.jsonc");
+    expect(instructions).toContain(
+      'the entry under "mcp" whose url starts with http://localhost:3000/v1/mcp/',
+    );
+    expect(instructions).toContain("kilo mcp logout SERVER_NAME");
+    expect(instructions).toContain("~/.config/kilo/skills/");
+    expect(instructions).not.toContain("startup check");
   });
 });

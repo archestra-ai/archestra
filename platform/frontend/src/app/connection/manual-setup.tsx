@@ -22,7 +22,8 @@ import {
  * - "prompt": other agents (Amp, Kiro, OpenClaw...); the generic prompt. The
  *   agent works out what it supports, which manual steps can't (Amp has no
  *   LLM proxy setting, for one).
- * - "manual": Generic client and n8n (anything that can't run a prompt).
+ * - "manual": apps with tailored steps but no installer (Kilo Code, n8n),
+ *   and Generic client.
  */
 export type SetupMode = "script" | "download" | "prompt" | "manual";
 
@@ -36,10 +37,11 @@ export function setupModeFor(client: ConnectClient): SetupMode {
 
 /**
  * An agent on the other end can read a prompt (the starter and cleanup
- * prompts). Generic client is set up by hand but is still an agent; n8n isn't.
+ * prompts). Kilo Code and Generic client are set up by hand but are still
+ * agents; n8n is a workflow tool, not an agent.
  */
 export function readsPrompts(client: ConnectClient): boolean {
-  return setupModeFor(client) !== "manual" || client.id === "generic";
+  return client.id !== "n8n";
 }
 
 export interface ManualStep {

@@ -790,6 +790,23 @@ describe("ConnectPage (no connect request)", () => {
     expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
   });
 
+  it("walks Kilo Code through its terminal steps instead of a prompt", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=kilo") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockOrganization({});
+    render(<ConnectionPage />);
+    expect(screen.getByText("Follow the steps for Kilo Code")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Run the commands in a terminal and paste the snippets where each step says, top to bottom.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
+  });
+
   it("gives other agents the prompt only, even when linked to manual setup", () => {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("clientId=hermes-agent&mode=manual") as ReturnType<

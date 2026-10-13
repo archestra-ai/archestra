@@ -2,6 +2,7 @@ import {
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
   isCodexClientAgentId,
+  isKiloClientAgentId,
   isOpenCodeClientAgentId,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
@@ -145,7 +146,11 @@ export function extractSessionInfo({
 
   // Priority 5: OpenCode's session id, gated on the resolved client
   // attribution for the same reason as Codex: these header names are generic.
-  if (isOpenCodeClientAgentId(externalAgentId)) {
+  // Kilo Code, an OpenCode fork, sends the same headers and session ids.
+  if (
+    isOpenCodeClientAgentId(externalAgentId) ||
+    isKiloClientAgentId(externalAgentId)
+  ) {
     for (const header of OPENCODE_SESSION_ID_HEADERS) {
       const openCodeSessionId = getHeaderValue(headers, header)?.trim();
       if (openCodeSessionId) {

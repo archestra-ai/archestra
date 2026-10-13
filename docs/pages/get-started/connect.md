@@ -17,6 +17,7 @@ Open **Connect** in the Archestra sidebar and choose how to connect:
 
 - **Coding agents:** for [Claude Code](/docs/integrations/claude-code), Codex, Cursor, Copilot CLI, and OpenCode, you run one command in a terminal and approve the connection in your browser.
 - **[Claude Desktop](/docs/integrations/claude-desktop#setup):** a downloadable installer sets up Desktop.
+- **Kilo Code:** you run the `kilo mcp` commands the page shows and paste its model settings into `~/.config/kilo/kilo.jsonc`. Kilo Code has no one-command setup.
 - **[n8n](/docs/integrations/web-ui-and-automation#n8n):** you enter the gateway URL and model settings in your workflow.
 - **Any Client:** any tool that supports MCP or an OpenAI-compatible API. Copy the gateway URL, the proxy base URL, a key, and a Git URL for the shared skills.
 
@@ -33,6 +34,7 @@ Guardrails recognize Archestra Chat, Claude Code, Codex CLI, and OpenCode automa
 <span id="cursor"></span>
 <span id="copilot-cli"></span>
 <span id="opencode"></span>
+<span id="kilo"></span>
 
 ## Before You Start
 

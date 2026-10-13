@@ -748,7 +748,8 @@ export async function handleLLMProxy<
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
   // CLI stamps on every request; OpenCode → "opencode" from its equivalent
-  // identity headers; Cursor → "cursor" from its User-Agent).
+  // identity headers; Kilo Code → "kilo" and Cursor → "cursor" from their
+  // User-Agents).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
@@ -757,6 +758,7 @@ export async function handleLLMProxy<
       bodyForExtraction,
     ) ??
     utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction) ??
+    utils.headers.clientApp.detectKiloClientId(headersForExtraction) ??
     utils.headers.clientApp.detectCursorClientId(headersForExtraction);
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (

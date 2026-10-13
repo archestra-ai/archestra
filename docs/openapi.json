@@ -208252,7 +208252,8 @@
                 "codex",
                 "copilot-cli",
                 "cursor",
-                "opencode"
+                "opencode",
+                "kilo"
               ]
             },
             "in": "query",
@@ -428034,7 +428035,8 @@
                 "codex",
                 "copilot-cli",
                 "cursor",
-                "opencode"
+                "opencode",
+                "kilo"
               ]
             },
             "in": "query",

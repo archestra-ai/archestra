@@ -644,8 +644,6 @@ function ProjectFilesSidebar({
       name: f.filename,
       mimeType: f.mimeType,
       contentUrl: sandboxArtifactUrl(f.downloadRef),
-      // The real row id (null for a rowless hand-placed object) — gates editing.
-      rowId: f.id,
     }));
   const selected = items.find((i) => i.id === selectedId) ?? null;
   const instructionsSelected = selectedId === INSTRUCTIONS_SELECTION;
@@ -653,12 +651,12 @@ function ProjectFilesSidebar({
   const detailName = instructionsSelected
     ? PROJECT_INSTRUCTIONS_FILENAME
     : (selected?.name ?? "");
-  // Editable only for a row-backed .md/.txt file when the viewer has real project
-  // access (the admin-oversight view is read-only, so `canEditFiles` is false).
+  // Editable for a .md/.txt file — row-backed or hand-placed — when the viewer has
+  // real project access (the admin-oversight view is read-only, so
+  // `canEditFiles` is false).
   const selectedEditable =
     selected != null &&
     canEditFiles &&
-    selected.rowId != null &&
     isEditableTextFile({
       filename: selected.name,
       mimeType: selected.mimeType,
@@ -672,7 +670,6 @@ function ProjectFilesSidebar({
         ? canManageProject
         : !!file &&
             canEditFiles &&
-            !!file.rowId &&
             isEditableTextFile({
               filename: file.name,
               mimeType: file.mimeType,
@@ -811,7 +808,6 @@ function ProjectFilesSidebar({
                   onEdit={openFile}
                   canEdit={(file) =>
                     canEditFiles &&
-                    !!file.rowId &&
                     isEditableTextFile({
                       filename: file.name,
                       mimeType: file.mimeType,
@@ -853,9 +849,9 @@ function ProjectFilesSidebar({
               key={selected.id}
               file={selected}
               onClose={deselect}
-              // Only row-backed files are editable; a rowless (obj_) object has
-              // no `rowId`, so `selectedEditable` is false and Edit stays hidden.
-              fileId={selected.rowId ?? undefined}
+              // The row id, or the `obj_` ref of a hand-placed object; the
+              // content route edits either in place.
+              fileId={selected.id}
               editing={editing && selectedEditable}
               onExitEdit={deselect}
             />

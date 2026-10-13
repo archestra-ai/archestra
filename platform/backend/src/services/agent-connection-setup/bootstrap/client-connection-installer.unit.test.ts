@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { renderSetupScript } from "../index";
 import { CLIENT_CONNECTION_INSTALLER } from "./client-connection-installer";
 
 let directory: string;
@@ -177,6 +178,64 @@ test("downloads and executes the approved script without logging polling credent
     clientId: "cursor",
     deviceName: hostname().trim().slice(0, 64),
   });
+});
+
+test("Copilot prints saved credentials once in the final instructions, after the summary and before sign-in", async () => {
+  const bin = join(directory, "bin");
+  await mkdir(bin);
+  await writeFile(
+    join(bin, "copilot"),
+    '#!/bin/sh\nif [ "$1" = --version ]; then echo "GitHub Copilot CLI 1.0.95"; fi\n',
+    { mode: 0o755 },
+  );
+  vi.stubEnv("HOME", directory);
+  vi.stubEnv("ZDOTDIR", directory);
+  vi.stubEnv("XDG_CONFIG_HOME", join(directory, ".config"));
+  vi.stubEnv("COPILOT_HOME", join(directory, ".copilot"));
+  vi.stubEnv("COPILOT_PROVIDERS_CONFIG", "");
+  vi.stubEnv("PATH", `${bin}:${process.env.PATH}`);
+  vi.stubEnv("SHELL", "/bin/bash");
+  scriptBody = renderSetupScript({
+    clientId: "copilot-cli",
+    platform: "macos",
+    appName: "Test",
+    mcp: {
+      serverName: "test",
+      toolPrefix: "test",
+      url: "https://example.com/mcp",
+    },
+    skills: null,
+    proxy: {
+      authMode: "virtual-key",
+      provider: "openai",
+      providerLabel: "OpenAI",
+      baseUrl: "https://example.com/v1",
+      url: "https://example.com/v1/openai",
+      proxyName: "test",
+      virtualKey: "test-key",
+      virtualKeyName: "Test",
+      passthroughVirtualKey: null,
+      model: "gpt-4o",
+    },
+  });
+  const result = await run(origin, "copilot-cli");
+  expect(result.code).toBe(0);
+  const summary = result.output.indexOf("Copilot CLI is connected");
+  const optional = result.output.indexOf("Environment variables (optional)");
+  const credentials = result.output.indexOf(
+    "export COPILOT_PROVIDER_API_KEY='test-key'",
+  );
+  const signIn = result.output.indexOf("Sign in to Test tools");
+  expect(summary).toBeGreaterThan(-1);
+  expect(optional).toBeGreaterThan(summary);
+  expect(credentials).toBeGreaterThan(optional);
+  expect(signIn).toBeGreaterThan(credentials);
+  expect(
+    result.output.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm),
+  ).toHaveLength(1);
+  expect(result.output).toContain(
+    "copilot -i 'What can you do with my Test tools?'",
+  );
 });
 
 test("sends the gateway and plugins picked on the Connect page", async () => {
@@ -379,6 +438,92 @@ test("writes the approved Windows setup with a UTF-8 BOM so powershell.exe -File
   const bytes: Buffer = written;
   expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
   expect(bytes.subarray(3).toString("utf8")).toBe(scriptBody);
+});
+
+test.each([
+  { serverName: "prod_gateway", runs: true },
+  { serverName: "r&d_(prod)", runs: false },
+])("Windows sign-in for $serverName gives cmd.exe one command line, never an argument list", async ({
+  serverName,
+  runs,
+}) => {
+  const command = ["opencode", "mcp", "auth", serverName];
+  const ending = {
+    label: "OpenCode",
+    appName: "Test",
+    parts: [],
+    signIn: { command, text: command.join(" "), howTo: "Sign in later." },
+    launch: null,
+    notes: [],
+  };
+  scriptBody = `# archestra-ending: ${Buffer.from(JSON.stringify(ending)).toString("base64")}\nWrite-Host 'setup'\n`;
+  const calls: Array<{ command: string; args: unknown }> = [];
+  const output: string[] = [];
+  await new Promise<void>((resolve, reject) => {
+    runInNewContext(CLIENT_CONNECTION_INSTALLER, {
+      __filename: join(directory, "connect.cjs"),
+      process: {
+        argv: [
+          process.execPath,
+          "connect.cjs",
+          "--url",
+          namedLoopbackOrigin(),
+          "--client",
+          "opencode",
+          "--no-open",
+        ],
+        platform: "win32",
+        execPath: process.execPath,
+        env: { NO_COLOR: "1" },
+        stdout: { isTTY: true, write: (text: string) => output.push(text) },
+      },
+      Buffer,
+      URL,
+      fetch,
+      AbortSignal,
+      setTimeout,
+      clearTimeout,
+      console: {
+        log: (message: string) => {
+          output.push(message);
+          if (message.includes("Next: open")) resolve();
+        },
+        error: (message: string) => reject(new Error(message)),
+      },
+      require: (name: string) => {
+        if (name === "node:crypto") return { createHash };
+        // The terminal answers the sign-in question with Enter (yes).
+        if (name === "node:fs")
+          return { openSync: () => 7, readSync: () => 0, closeSync() {} };
+        if (name === "node:fs/promises") return fileSystem;
+        if (name === "node:path") return { join };
+        if (name === "node:os")
+          return { hostname: () => "test-host", tmpdir: () => directory };
+        if (name === "node:child_process")
+          return {
+            spawn,
+            spawnSync: (command: string, args: unknown) => {
+              calls.push({ command, args });
+              return { status: 0 };
+            },
+          };
+        throw new Error(`Unexpected module ${name}`);
+      },
+    });
+  });
+  expect(calls[0]?.command).toBe("powershell.exe");
+  const signIn = calls.slice(1);
+  if (runs) {
+    expect(signIn).toEqual([
+      {
+        command: "opencode mcp auth prod_gateway",
+        args: expect.objectContaining({ shell: true }),
+      },
+    ]);
+  } else {
+    expect(signIn).toEqual([]);
+    expect(output).toContain("  opencode mcp auth r&d_(prod)");
+  }
 });
 
 test("a downloaded Desktop setup redeems its reviewed ticket without another approval flow", async () => {

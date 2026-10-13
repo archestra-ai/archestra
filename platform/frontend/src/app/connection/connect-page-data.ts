@@ -423,7 +423,7 @@ export function useConnectPageData(
     partsFor,
     guardrails: {
       name: "OpenAPPA",
-      // No setting to read, or the guardrails beta is off: no chip at all.
+      // No setting to read, or guardrails are unavailable: no chip at all.
       state:
         !guardrails || !guardrails.featureEnabled
           ? null

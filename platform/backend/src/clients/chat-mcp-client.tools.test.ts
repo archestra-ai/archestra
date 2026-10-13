@@ -1,6 +1,6 @@
 // Characterization tests for getChatMcpTools composition: the per-kind AI SDK
-// wrappers (MCP gateway tools vs agent delegation tools), their approval and
-// hook pipelines, error handling, metric emission, and tool-cache gating.
+// wrappers (MCP gateway tools vs agent delegation tools), their hook
+// pipelines, error handling, metric emission, and tool-cache gating.
 // Mocks sit only at process boundaries: the MCP SDK client (gateway transport),
 // mcpClient.executeToolCallForOwner (gateway network call), executeA2AMessage
 // (child-agent run), hookDispatcherService.fire (hook scripts run in
@@ -10,7 +10,6 @@ import {
   getArchestraToolFullName,
   MCP_EXECUTED_AS_META_KEY,
   TOOL_GET_AGENT_SHORT_NAME,
-  TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
 } from "@archestra/shared";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Tool } from "ai";
@@ -18,7 +17,6 @@ import { afterEach, vi } from "vitest";
 import { getArchestraToolInputSchema } from "@/archestra-mcp-server";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { ToolModel } from "@/models";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -72,14 +70,6 @@ const execOptions = (toolCallId?: string) =>
   ({ toolCallId, messages: [] }) as unknown as Parameters<
     NonNullable<Tool["execute"]>
   >[1];
-
-const callableNeedsApproval = (tool: Tool) => {
-  expect(typeof tool.needsApproval).toBe("function");
-  return tool.needsApproval as Exclude<
-    NonNullable<Tool["needsApproval"]>,
-    boolean
-  >;
-};
 
 const toolResultContent = (result: unknown): string =>
   typeof result === "string" ? result : (result as { content: string }).content;
@@ -139,10 +129,6 @@ interface Fixtures {
   makeTool: (
     overrides: Record<string, unknown>,
   ) => Promise<{ id: string; name: string }>;
-  makeToolPolicy: (
-    toolId: string,
-    overrides: Record<string, unknown>,
-  ) => Promise<unknown>;
   makeApp: (
     overrides?: Record<string, unknown>,
   ) => Promise<{ id: string; name: string }>;
@@ -170,7 +156,6 @@ beforeEach(
     makeAgentTool,
     makeInternalMcpCatalog,
     makeTool,
-    makeToolPolicy,
     makeApp,
     makeMcpServer,
     seedAndAssignArchestraTools,
@@ -184,7 +169,6 @@ beforeEach(
       makeAgentTool,
       makeInternalMcpCatalog,
       makeTool,
-      makeToolPolicy,
       makeApp,
       makeMcpServer,
       seedAndAssignArchestraTools,
@@ -304,7 +288,7 @@ describe("getChatMcpTools per-kind tool shape", () => {
     expect(mcpTool).toBeDefined();
     expect(mcpTool.description).toBe("Tool: extsrv__fetch_data");
     expect(typeof mcpTool.toModelOutput).toBe("function");
-    expect(typeof mcpTool.needsApproval).toBe("function");
+    expect(mcpTool.needsApproval).toBeUndefined();
     expect(
       (
         mcpTool.inputSchema as unknown as {
@@ -319,7 +303,7 @@ describe("getChatMcpTools per-kind tool shape", () => {
       "Delegate task to agent: Research Helper. Researches things",
     );
     expect(agentTool.toModelOutput).toBeUndefined();
-    expect(typeof agentTool.needsApproval).toBe("function");
+    expect(agentTool.needsApproval).toBeUndefined();
   });
 });
 
@@ -1034,129 +1018,6 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
   });
 });
 
-describe("getChatMcpTools approval gating", () => {
-  test("blockOnApprovalRequired removes needsApproval and blocks approval-required execution", async () => {
-    const { agent, org, baseParams } = await setupChatToolEnv({
-      isolationKey: "headless-exec-1",
-      gatewayTools: [externalTool("extsrv__restricted_export")],
-    });
-    const catalog = await f.makeInternalMcpCatalog({ organizationId: org.id });
-    const restrictedTool = await f.makeTool({
-      name: "extsrv__restricted_export",
-      catalogId: catalog.id,
-    });
-    await f.makeAgentTool(agent.id, restrictedTool.id);
-    await f.makeToolPolicy(restrictedTool.id, {
-      action: "require_approval",
-      conditions: [],
-    });
-    const { delegationTool } = await makeAssignedDelegationTool({
-      agentId: agent.id,
-      organizationId: org.id,
-      childName: "Autonomy Child",
-    });
-
-    const tools = await chatClient.getChatMcpTools({
-      ...baseParams,
-      blockOnApprovalRequired: true,
-    });
-
-    expect(tools.extsrv__restricted_export.needsApproval).toBeUndefined();
-    expect(tools[delegationTool.name].needsApproval).toBeUndefined();
-
-    await expect(
-      tools.extsrv__restricted_export.execute?.(
-        { query: "q" },
-        execOptions("call-5"),
-      ),
-    ).rejects.toThrow(TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON);
-    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
-  });
-
-  test("run_tool needsApproval reflects only invocation policy, never proposes a grant", async () => {
-    const { agent, org, baseParams } = await setupChatToolEnv({
-      gatewayTools: [
-        {
-          name: getArchestraToolFullName("run_tool"),
-          description: "Run tool",
-          inputSchema: {
-            type: "object",
-            properties: {
-              tool_name: { type: "string" },
-              tool_args: { type: "object" },
-            },
-            required: ["tool_name"],
-          },
-        },
-      ],
-    });
-    const catalog = await f.makeInternalMcpCatalog({ organizationId: org.id });
-    const unassignedTool = await f.makeTool({
-      name: "github__search_repositories",
-      catalogId: catalog.id,
-    });
-    const assignedTool = await f.makeTool({
-      name: "workspace__list_projects",
-      catalogId: catalog.id,
-    });
-    await f.makeAgentTool(agent.id, assignedTool.id);
-
-    const tools = await chatClient.getChatMcpTools(baseParams);
-
-    const needsApproval = callableNeedsApproval(
-      tools[getArchestraToolFullName("run_tool")],
-    );
-    // Dynamic tool access replaced the grant-on-first-use flow: an
-    // accessible-but-unassigned target no longer triggers an approval
-    // proposal — needsApproval is driven solely by the invocation policy,
-    // which neither tool here requires.
-    await expect(
-      needsApproval(
-        { tool_name: unassignedTool.name, tool_args: {} },
-        execOptions(),
-      ),
-    ).resolves.toBe(false);
-    await expect(
-      needsApproval(
-        { tool_name: assignedTool.name, tool_args: {} },
-        execOptions(),
-      ),
-    ).resolves.toBe(false);
-  });
-
-  test("delegation needsApproval targets the delegation tool itself, not a tool_name in args", async () => {
-    const { agent, org, baseParams } = await setupChatToolEnv();
-    const catalog = await f.makeInternalMcpCatalog({ organizationId: org.id });
-    const guardedTool = await f.makeTool({
-      name: "extsrv__guarded_export",
-      catalogId: catalog.id,
-    });
-    await f.makeToolPolicy(guardedTool.id, {
-      action: "require_approval",
-      conditions: [],
-    });
-    const { delegationTool } = await makeAssignedDelegationTool({
-      agentId: agent.id,
-      organizationId: org.id,
-      childName: "Retarget Child",
-    });
-
-    const tools = await chatClient.getChatMcpTools(baseParams);
-
-    const needsApproval = callableNeedsApproval(tools[delegationTool.name]);
-    await expect(
-      needsApproval(
-        {
-          message: "do the work",
-          tool_name: guardedTool.name,
-          tool_args: {},
-        },
-        execOptions(),
-      ),
-    ).resolves.toBe(false);
-  });
-});
-
 describe("getChatMcpTools repeated-call circuit breaker", () => {
   test("nudges instead of executing once an identical call repeats past the threshold", async () => {
     const { baseParams } = await setupChatToolEnv({
@@ -1521,211 +1382,6 @@ describe("getChatMcpTools failure and cache gating", () => {
     expect(clientB.listTools).toHaveBeenCalledTimes(1);
     expect(Object.keys(toolsA)).toEqual(["extsrv__a"]);
     expect(Object.keys(toolsB)).toEqual(["extsrv__b"]);
-  });
-});
-
-describe("getChatMcpTools approval-gated execution idempotency (#5132)", () => {
-  /** An approval-gated external tool assigned to the env's agent. */
-  async function setupApprovalGatedTool() {
-    const env = await setupChatToolEnv({
-      gatewayTools: [externalTool("extsrv__create_ticket")],
-    });
-    const catalog = await f.makeInternalMcpCatalog({
-      organizationId: env.org.id,
-    });
-    const gatedTool = await f.makeTool({
-      name: "extsrv__create_ticket",
-      catalogId: catalog.id,
-    });
-    await f.makeAgentTool(env.agent.id, gatedTool.id);
-    const policy = (await f.makeToolPolicy(gatedTool.id, {
-      action: "require_approval",
-      conditions: [],
-    })) as { id: string };
-    return { ...env, policy };
-  }
-
-  test("a replayed execute for the same approval-gated toolCallId dispatches once and returns the recorded result", async () => {
-    const { baseParams } = await setupApprovalGatedTool();
-    vi.mocked(mcpClient.executeToolCallForOwner)
-      .mockResolvedValueOnce({
-        content: [{ type: "text", text: "Ticket created: TICKET-1" }],
-        isError: false,
-      } as never)
-      .mockResolvedValueOnce({
-        content: [{ type: "text", text: "Ticket created: TICKET-2" }],
-        isError: false,
-      } as never);
-
-    const tools = await chatClient.getChatMcpTools(baseParams);
-    const first = await tools.extsrv__create_ticket.execute?.(
-      { query: "Printer on fire" },
-      execOptions("call-1"),
-    );
-    const replay = await tools.extsrv__create_ticket.execute?.(
-      { query: "Printer on fire" },
-      execOptions("call-1"),
-    );
-
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
-    expect(toolResultContent(first)).toContain("TICKET-1");
-    expect(toolResultContent(replay)).toContain("TICKET-1");
-  });
-
-  test("concurrent duplicate executes dispatch once; the loser fails closed without re-dispatching", async () => {
-    const { baseParams } = await setupApprovalGatedTool();
-    let releaseGateway = () => {};
-    vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          releaseGateway = () =>
-            resolve({
-              content: [{ type: "text", text: "Ticket created: TICKET-1" }],
-              isError: false,
-            } as never);
-        }),
-    );
-
-    const tools = await chatClient.getChatMcpTools(baseParams);
-    const winner = tools.extsrv__create_ticket.execute?.(
-      { query: "Printer on fire" },
-      execOptions("call-1"),
-    );
-    // The duplicate must resolve while the winner is still in flight — it can
-    // never wait for or trigger a second dispatch.
-    const loserResult = await tools.extsrv__create_ticket.execute?.(
-      { query: "Printer on fire" },
-      execOptions("call-1"),
-    );
-    releaseGateway();
-    const winnerResult = await winner;
-
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
-    expect(toolResultContent(winnerResult)).toContain("TICKET-1");
-    expect(toolResultContent(loserResult)).toContain("already");
-  });
-
-  test("a replay still dedups after the require_approval policy is removed", async () => {
-    const { baseParams, policy } = await setupApprovalGatedTool();
-    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
-      content: [{ type: "text", text: "Ticket created: TICKET-1" }],
-      isError: false,
-    } as never);
-
-    const tools = await chatClient.getChatMcpTools(baseParams);
-    await tools.extsrv__create_ticket.execute?.(
-      { query: "Printer on fire" },
-      execOptions("call-1"),
-    );
-    await ToolInvocationPolicyModel.delete(policy.id);
-
-    const replay = await tools.extsrv__create_ticket.execute?.(
-      { query: "Printer on fire" },
-      execOptions("call-1"),
-    );
-
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
-    expect(toolResultContent(replay)).toContain("TICKET-1");
-  });
-
-  test("a replay after a failed execution reports the failure without re-dispatching", async () => {
-    const { baseParams } = await setupApprovalGatedTool();
-    vi.mocked(mcpClient.executeToolCallForOwner).mockRejectedValueOnce(
-      new Error("gateway exploded"),
-    );
-
-    const tools = await chatClient.getChatMcpTools(baseParams);
-    await expect(
-      tools.extsrv__create_ticket.execute?.(
-        { query: "Printer on fire" },
-        execOptions("call-1"),
-      ),
-    ).rejects.toThrow("gateway exploded");
-
-    const replay = await tools.extsrv__create_ticket.execute?.(
-      { query: "Printer on fire" },
-      execOptions("call-1"),
-    );
-
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
-    expect(toolResultContent(replay)).toContain("failed");
-    expect(toolResultContent(replay)).toContain("NOT re-executed");
-  });
-
-  test("an abort mid-dispatch leaves the claim executing, so a replay fails closed", async () => {
-    const { baseParams } = await setupApprovalGatedTool();
-    const controller = new AbortController();
-    vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
-      async () => {
-        controller.abort();
-        throw new Error("MCP error -32001: The operation was aborted");
-      },
-    );
-
-    const abortableTools = await chatClient.getChatMcpTools({
-      ...baseParams,
-      abortSignal: controller.signal,
-    });
-    await expect(
-      abortableTools.extsrv__create_ticket.execute?.(
-        { query: "Printer on fire" },
-        execOptions("call-1"),
-      ),
-    ).rejects.toThrow();
-
-    const replayTools = await chatClient.getChatMcpTools(baseParams);
-    const replay = await replayTools.extsrv__create_ticket.execute?.(
-      { query: "Printer on fire" },
-      execOptions("call-1"),
-    );
-
-    // The aborted dispatch may have committed externally — the replay must
-    // never re-dispatch.
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(1);
-    expect(toolResultContent(replay)).toContain("already dispatched");
-    expect(toolResultContent(replay)).toContain("NOT re-executed");
-  });
-
-  test("a tool with no approval policy re-dispatches on a duplicate toolCallId (no claim gate)", async () => {
-    const { baseParams } = await setupChatToolEnv({
-      gatewayTools: [externalTool("extsrv__fetch_data")],
-    });
-    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
-      content: [{ type: "text", text: "data" }],
-      isError: false,
-    } as never);
-
-    const tools = await chatClient.getChatMcpTools(baseParams);
-    await tools.extsrv__fetch_data.execute?.(
-      { query: "q" },
-      execOptions("call-1"),
-    );
-    await tools.extsrv__fetch_data.execute?.(
-      { query: "q" },
-      execOptions("call-1"),
-    );
-
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(2);
-  });
-
-  test("distinct toolCallIds on the same approval-gated tool each dispatch", async () => {
-    const { baseParams } = await setupApprovalGatedTool();
-    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
-      content: [{ type: "text", text: "Ticket created" }],
-      isError: false,
-    } as never);
-
-    const tools = await chatClient.getChatMcpTools(baseParams);
-    await tools.extsrv__create_ticket.execute?.(
-      { query: "a" },
-      execOptions("call-1"),
-    );
-    await tools.extsrv__create_ticket.execute?.(
-      { query: "b" },
-      execOptions("call-2"),
-    );
-
-    expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(2);
   });
 });
 

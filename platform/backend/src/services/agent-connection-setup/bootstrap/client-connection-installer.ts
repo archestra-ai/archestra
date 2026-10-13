@@ -241,12 +241,20 @@ function finishSetup(ending, platform) {
     console.log('\n' + ending.parts.map(part => '  ' + paint('1', part.name.padEnd(width)) + '   ' + part.detail).join('\n'));
   }
   if (ending.notes.length) console.log('\nGood to know:\n' + ending.notes.map(note => '  - ' + note).join('\n'));
+  if (ending.optionalInstructions) {
+    const child = spawnSync(process.execPath, ['-e', ending.optionalInstructions], { stdio: 'inherit' });
+    if (child.error || child.status !== 0) console.log('Could not print optional environment variables. Your saved provider configuration is unchanged.');
+  }
   const terminal = openTerminal();
   try {
     if (ending.signIn) {
       console.log('\n' + paint('1', 'Sign in to ' + ending.appName + ' tools'));
-      if (ending.signIn.command && terminal !== null && ask(terminal, '  Sign in now? This opens your browser. [Y/n] ')) {
-        const child = spawnSync(ending.signIn.command[0], ending.signIn.command.slice(1), { stdio: [terminal, 'inherit', 'inherit'], shell: platform === 'windows' });
+      const windowsLine = ending.signIn.command && platform === 'windows' ? windowsCommandLine(ending.signIn.command) : null;
+      const runnable = ending.signIn.command && (platform !== 'windows' || windowsLine !== null);
+      if (runnable && terminal !== null && ask(terminal, '  Sign in now? This opens your browser. [Y/n] ')) {
+        const child = windowsLine !== null
+          ? spawnSync(windowsLine, { stdio: [terminal, 'inherit', 'inherit'], shell: true })
+          : spawnSync(ending.signIn.command[0], ending.signIn.command.slice(1), { stdio: [terminal, 'inherit', 'inherit'] });
         console.log(!child.error && child.status === 0 ? paint('1;32', '  Signed in.') : '  Sign-in did not finish. ' + ending.signIn.howTo);
       } else console.log('  ' + ending.signIn.text);
     }
@@ -254,6 +262,13 @@ function finishSetup(ending, platform) {
   // The command is the last thing printed, so it is the first thing seen.
   if (ending.launch) console.log('\n' + paint('1', 'Next: open a new terminal and run:') + '\n\n  ' + paint('1;36', ending.launch.text));
   else console.log('\n' + paint('1', 'Next: open ' + ending.label + ' to start using ' + ending.appName + '.'));
+}
+// Windows starts npm .cmd shims only through cmd.exe. With shell: true, Node
+// joins an argument list unescaped (deprecated as DEP0190), so cmd.exe gets one
+// line instead, and only when no part needs quoting. A gateway name such as
+// r&d_(prod) is printed for the person to run.
+function windowsCommandLine(parts) {
+  return parts.every(part => /^[\w.:@=+\/-]+$/.test(part)) ? parts.join(' ') : null;
 }
 // stdin is the download pipe, so questions go to the terminal itself.
 function openTerminal() {

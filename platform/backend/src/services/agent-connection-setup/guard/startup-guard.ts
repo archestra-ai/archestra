@@ -13,6 +13,7 @@ import {
   ARCHESTRA_MARK_TAGLINE_ROW,
 } from "@/services/archestra-mark";
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
+import { MANAGED_INSTRUCTIONS_REFRESH } from "../payloads/managed-instructions-refresh";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { sh } from "../steps/quoting";
@@ -80,6 +81,8 @@ interface StartupGuardMcpSection {
 }
 
 interface StartupGuardProxySection {
+  /** OpenCode managed catalog requires restoring its configuration snapshot. */
+  usesModelCatalog?: boolean;
   authMode?: SetupScriptProxySection["authMode"];
   /** The proxied provider — drives the health URL's `/v1/<provider>/` path. */
   provider: SupportedProvider;
@@ -117,6 +120,7 @@ export interface StartupGuardContext {
   proxy: StartupGuardProxySection | null;
   skills: StartupGuardSkillsSection | null;
   runtimeHandoffInstructions?: string | null;
+  managedInstructionsSource?: { url: string; token: string } | null;
 }
 
 /**
@@ -286,6 +290,7 @@ export function buildStartupGuardContext(
     proxy: ctx.proxy
       ? {
           authMode: ctx.proxy.authMode,
+          usesModelCatalog: Boolean(ctx.proxy.primaryProviders),
           provider: ctx.proxy.provider,
           providerLabel: ctx.proxy.providerLabel,
           url: ctx.proxy.url,
@@ -296,6 +301,7 @@ export function buildStartupGuardContext(
       : null,
     skills: ctx.skills,
     runtimeHandoffInstructions: ctx.mcp ? ctx.runtimeHandoffInstructions : null,
+    managedInstructionsSource: ctx.mcp ? ctx.managedInstructionsSource : null,
   };
 }
 
@@ -408,10 +414,12 @@ uninstall_guard() {
       return 0
     fi
   fi
+  rm -f "$GUARD_PATH.instructions-source.json" "$GUARD_PATH.instructions-refresh.py"
   rm -f "$GUARD_PATH.handoff.cjs" 2>/dev/null || true`
       : ""
   }
   GUARD_UNINSTALLED=1
+  rm -f "$GUARD_PATH.instructions-source.json" "$GUARD_PATH.instructions-refresh.py"
   rm -f "$GUARD_PATH" "$SKIP_FILE" "$GUARD_PATH.prompt.md" 2>/dev/null || true
   rm -rf "$GUARD_PATH.instructions" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
@@ -1213,16 +1221,19 @@ export function buildStartupGuardInstallSection(
     functionName: refreshFunctionName,
   });
   const promptPath = `${guardPath}.prompt.md`;
-  const handoffEnabled = !!ctx.mcp && !!ctx.runtimeHandoffInstructions;
-  const promptInstall = handoffEnabled
-    ? `printf '%s' ${sh(ctx.runtimeHandoffInstructions ?? "")} > "${promptPath}"\nchmod 600 "${promptPath}"`
-    : `rm -f "${promptPath}"`;
+  const handoffEnabled =
+    !!ctx.mcp &&
+    (!!ctx.runtimeHandoffInstructions || !!ctx.managedInstructionsSource);
+  const promptInstall =
+    !!ctx.mcp && !!ctx.runtimeHandoffInstructions
+      ? `printf '%s' ${sh(ctx.runtimeHandoffInstructions ?? "")} > "${promptPath}"\nchmod 600 "${promptPath}"`
+      : `rm -f "${promptPath}"`;
   const extraInstall =
     client.clientId === "codex"
       ? `printf '%s' ${sh(CODEX_HANDOFF_HELPER)} > "${guardPath}.handoff.cjs"`
       : client.clientId === "copilot-cli"
         ? handoffEnabled
-          ? `mkdir -p "${guardPath}.instructions"\ncp "${promptPath}" "${guardPath}.instructions/AGENTS.md"`
+          ? `mkdir -p "${guardPath}.instructions"\nif [ -s "${promptPath}" ]; then cp "${promptPath}" "${guardPath}.instructions/AGENTS.md"; else rm -f "${guardPath}.instructions/AGENTS.md"; fi`
           : `rm -f "${guardPath}.instructions/AGENTS.md"`
         : client.clientId === "opencode"
           ? handoffEnabled
@@ -1252,7 +1263,7 @@ export function buildStartupGuardInstallSection(
       --system-prompt|--system-prompt=*|--system-prompt-file|--system-prompt-file=*|--append-system-prompt|--append-system-prompt=*|--append-system-prompt-file|--append-system-prompt-file=*|--help|-h|--version|-v) archestra_add_prompt=0 ;;
     esac
   done
-  if [ "$archestra_add_prompt" = 1 ] && [ -f "${guardPath}" ] && [ -r "${promptPath}" ] && ! grep -qx mcp "$HOME/${client.skipRelpath}" 2>/dev/null; then
+  if [ "$archestra_add_prompt" = 1 ] && [ -f "${guardPath}" ] && [ -s "${promptPath}" ] && ! grep -qx mcp "$HOME/${client.skipRelpath}" 2>/dev/null; then
     ${launchArgs}
   fi`
     : "";
@@ -1261,6 +1272,14 @@ export function buildStartupGuardInstallSection(
 mkdir -p "$(dirname "${guardPath}")"
 ${promptInstall}
 ${extraInstall}
+${
+  ctx.managedInstructionsSource
+    ? `printf '%s' ${sh(JSON.stringify(ctx.managedInstructionsSource))} > "${guardPath}.instructions-source.json"
+chmod 600 "${guardPath}.instructions-source.json"
+printf '%s' ${sh(MANAGED_INSTRUCTIONS_REFRESH)} > "${guardPath}.instructions-refresh.py"
+chmod 600 "${guardPath}.instructions-refresh.py"`
+    : `rm -f "${guardPath}.instructions-source.json" "${guardPath}.instructions-refresh.py"`
+}
 ${client.clientId === "codex" ? `node "${guardPath}.handoff.cjs" ${ctx.proxy ? '--install-direct "$(command -v codex)"' : "--remove-direct"}` : ""}
 # A guard installed BEFORE the version-check feature has no GUARD_FORMAT_VERSION
 # stamp and no [U] update check, so at launch it can never nudge the user to
@@ -1302,6 +1321,13 @@ ${client.binary}() {
   case "\${1:-}" in
     ${client.utilitySubcommands.join("|")}|--help|-h|--version|-v) command ${client.binary} "$@"; return $? ;;
   esac
+  ${
+    ctx.managedInstructionsSource
+      ? `if [ -f "${guardPath}" ] && ! grep -qx mcp "$HOME/${client.skipRelpath}" 2>/dev/null && command -v python3 >/dev/null 2>&1; then
+    python3 "${guardPath}.instructions-refresh.py" "${guardPath}.instructions-source.json" "${promptPath}" ${client.clientId === "copilot-cli" ? `"${guardPath}.instructions/AGENTS.md"` : ""} 2>/dev/null || true
+  fi`
+      : ""
+  }
   if [ -x "$HOME/${client.scriptRelpath}" ]; then
     "$HOME/${client.scriptRelpath}" "$@" || true
   fi${promptArgs}

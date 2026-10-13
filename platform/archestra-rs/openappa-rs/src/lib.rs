@@ -1,11 +1,15 @@
 //! Archestra's host boundary. Policy evaluation and event serialization live in
 //! OpenAPPA; identity, call correlation and durable processing receipts live here.
+// Clippy's deeper trait analysis overflows the default solver recursion on the
+// napi-bound dispatch futures; plain rustc stays within it.
+#![recursion_limit = "256"]
 
 mod adapter;
 mod batteries;
 mod consults;
 mod declarations;
 mod deployments;
+mod lease;
 #[allow(dead_code)]
 mod peer;
 mod policy;
@@ -13,7 +17,7 @@ mod replay;
 
 use appa_eventlog::{
     Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
-    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, SessionScope,
+    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError, SessionScope,
     postgres::{LeasedPostgres, PostgresError},
 };
 use appa_runtime::{
@@ -320,6 +324,11 @@ fn error(message: impl ToString) -> napi::Error {
     napi::Error::from_reason(message.to_string())
 }
 
+/// The host retries: the dispatch that took the family over answers it.
+fn lease_lost() -> napi::Error {
+    error("OpenAPPA lost its lease on this operation; retry the request")
+}
+
 /// The upstream pin and host replay boundary version stored with each run.
 #[napi(js_name = "getOpenappaReplayEngineVersion")]
 pub fn get_openappa_replay_engine_version() -> String {
@@ -366,7 +375,15 @@ fn required<'a>(value: &'a Option<String>, name: &str) -> napi::Result<&'a str> 
         .ok_or_else(|| error(format!("missing {name}")))
 }
 fn wire(decision: &HookDecision) -> napi::Result<Value> {
+    require_decision(decision)?;
     serde_json::to_value(WireDecision::of(decision)).map_err(error)
+}
+
+fn require_decision(decision: &HookDecision) -> napi::Result<()> {
+    if let HookDecision::Refuse { detail } = decision {
+        return Err(error(format!("OpenAPPA processing interrupted: {detail}")));
+    }
+    Ok(())
 }
 
 fn session_scope(input: &Input) -> SessionScope {
@@ -395,6 +412,39 @@ fn processed_result_key(input: &Input, tool_call_id: String) -> ProcessedResultK
         session: session_scope(input),
         caller_id: input.caller_id.clone(),
         tool_call_id,
+    }
+}
+
+/// The receipts this event's dispatch may claim, for the lease's settle: its
+/// operation receipt, and the processed-result receipt of the call it answers.
+/// The call's own operation receipt is never listed: an earlier dispatch
+/// claimed it, and releasing it here on an unrelated failure could strand a
+/// committed decision behind a terminal unreleased-call answer. It recovers
+/// when the call is resubmitted, or when a later report re-drives it.
+fn own_receipts(input: &Input) -> lease::OwnReceipts {
+    let mut operations = Vec::new();
+    let mut results = Vec::new();
+    match input.event {
+        HookEventKind::SessionStart => {}
+        HookEventKind::ToolResult => {
+            results.extend(input.tool_call_id.clone());
+        }
+        HookEventKind::CancelCall => {
+            if let Some(id) = &input.tool_call_id {
+                operations.push(cancellation_operation(id));
+                results.push(id.clone());
+            }
+        }
+        HookEventKind::Remedy => {
+            operations.extend(remedy_operation(input).ok());
+            results.extend(input.tool_call_id.clone());
+        }
+        _ => operations.extend(input.operation_id.clone()),
+    }
+    lease::OwnReceipts {
+        session_id: input.session_id.clone(),
+        operations,
+        results,
     }
 }
 
@@ -1852,17 +1902,10 @@ impl State {
     ) -> napi::Result<Value> {
         let pg = postgres_store(&self.store)?;
         let _lock = SessionLock::acquire(pg, root.clone())?;
-        // Check every member of the family: continuing a parent while a child's
-        // result is interrupted could otherwise bypass inherited restrictions.
-        let interrupted = self
-            .store
-            .has_pending_receipts(&TrajectoryId::new(root.as_str()))
-            .map_err(error)?;
-        if interrupted {
-            return Err(error(
-                "OpenAPPA session has interrupted processing; operator recovery is required",
-            ));
-        }
+        // Holding the family's lock, this dispatch knows no other one is still
+        // working on a receipt it finds pending: the lock ends with its owner's
+        // connection. A pending receipt is recovered when its operation is
+        // resubmitted (`claim_operation`), never by closing the family.
 
         let actor = expected_actor(&root, &input.session_id, input.parent_id.as_deref());
         let lookup = key.clone();
@@ -1951,6 +1994,33 @@ impl State {
             }).map_err(error)?;
         }
 
+        // Taken after the session's own start events, so the lease records
+        // where the log ends before this dispatch claims anything. A remedy
+        // takes it too: its receipts recover like any operation's.
+        let own = own_receipts(&input);
+        let lease = lease::DispatchLease::take(pg, &root).map_err(error)?;
+        let work = self.handle_event(pg, input, root, key, actor);
+        match lease.hold(pg, work).await {
+            lease::Guarded::Finished(result) => {
+                // A lease that cannot be settled stays for the next dispatch,
+                // which recovers what this one left.
+                let _ = lease.settle(pg, result.is_ok(), &own);
+                result
+            }
+            lease::Guarded::Lost => Err(lease_lost()),
+        }
+    }
+
+    /// The part of a dispatch that claims and completes receipts. It runs under
+    /// the family's lock and lease.
+    async fn handle_event(
+        &self,
+        pg: &LeasedPostgres,
+        input: Input,
+        root: String,
+        key: SessionKey,
+        actor: Actor,
+    ) -> napi::Result<Value> {
         if input.event == HookEventKind::SessionStart {
             return pg
                 .with_client(move |client| {
@@ -1973,6 +2043,10 @@ impl State {
             let operation = remedy_operation(&input)?;
             let request = remedy_request(&input)?;
             let binding = remedy_binding(&input.caller_id);
+            let result_key = input
+                .tool_call_id
+                .clone()
+                .map(|tool_call_id| processed_result_key(&input, tool_call_id));
             if let Some(decision) = claim_operation(
                 &self.store,
                 &input,
@@ -1982,23 +2056,31 @@ impl State {
                 binding.clone(),
                 None,
             )? {
+                // The remedy's answer is saved. A dispatch stopped between its
+                // two completions leaves the tracked result pending; it takes
+                // exactly this answer, so finish that receipt from it now. An
+                // absent or identical result receipt is no repair at all.
+                if let Some(result_key) = result_key {
+                    let approved = decision_text(&decision)?;
+                    match self.store.complete_processed_result(
+                        result_key,
+                        approved,
+                        decision.clone(),
+                    ) {
+                        Ok(()) | Err(ReceiptError::NotPending) => {}
+                        Err(reason) => return Err(error(reason)),
+                    }
+                }
                 return Ok(decision);
             }
-            let result_key = input
-                .tool_call_id
-                .clone()
-                .map(|tool_call_id| processed_result_key(&input, tool_call_id));
             if let Some(result_key) = &result_key {
-                match self
-                    .store
-                    .claim_processed_result(ProcessedResultRequest {
-                        key: result_key.clone(),
-                        root: TrajectoryId::new(root.as_str()),
-                    })
-                    .map_err(error)?
-                {
-                    ProcessedResultClaim::Claimed => {}
-                    ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
+                match self.store.claim_processed_result(ProcessedResultRequest {
+                    key: result_key.clone(),
+                    root: TrajectoryId::new(root.as_str()),
+                }) {
+                    Ok(ProcessedResultClaim::Claimed) | Err(ReceiptError::Pending) => {}
+                    Ok(ProcessedResultClaim::Complete { decision, .. }) => return Ok(decision),
+                    Err(reason) => return Err(error(reason)),
                 }
             }
             if let Some(refusal) = &input.precheck_refusal {
@@ -2043,6 +2125,7 @@ impl State {
                 },
             )
             .await;
+            require_decision(&gate)?;
             if !matches!(gate, HookDecision::PassControl) {
                 let text = match gate {
                     HookDecision::DenyCall { feedback, .. } => feedback,
@@ -2122,6 +2205,24 @@ impl State {
             // Retained so the child's side can find what its parent addressed to it.
             request["spawned_id"] = json!(input.spawned_id);
         }
+        // Reject host configuration and malformed reporting input before
+        // claiming a durable operation. No effect has started yet, so these
+        // refusals must not leave a pending receipt fencing the whole family.
+        let report = if input.event == HookEventKind::Yell {
+            let reporting = self
+                .reporting
+                .as_ref()
+                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
+            let args: YellArguments =
+                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+            let endpoint = match &input.yell_receiver {
+                Some(receiver) => receiver.endpoint()?,
+                None => reporting.endpoint.clone(),
+            };
+            Some((reporting, args, endpoint))
+        } else {
+            None
+        };
         if let Some(decision) = claim_operation(
             &self.store,
             &input,
@@ -2133,22 +2234,13 @@ impl State {
         )? {
             return Ok(decision);
         }
-        let decision = if input.event == HookEventKind::Yell {
-            let reporting = self
-                .reporting
-                .as_ref()
-                .ok_or_else(|| error("OpenAPPA reporting is disabled"))?;
-            let args: YellArguments =
-                serde_json::from_str(required_arguments(&input)?).map_err(error)?;
+        let decision = if let Some((reporting, args, endpoint)) = report {
             let result = appa_runtime::yell::embedded::send(
                 &self.runtime,
                 appa_runtime::yell::embedded::Request {
                     actor: actor.clone(),
                     harness: adapter::harness(),
-                    endpoint: match &input.yell_receiver {
-                        Some(receiver) => receiver.endpoint()?,
-                        None => reporting.endpoint.clone(),
-                    },
+                    endpoint,
                     hostname: reporting.hostname.clone(),
                     message: args.message,
                     with_trajectory: args.with_trajectory,
@@ -2309,28 +2401,42 @@ impl State {
             return Ok(withheld);
         }
         let key = processed_result_key(input, call_id.clone());
-        match self
-            .store
-            .claim_processed_result(ProcessedResultRequest {
-                key: key.clone(),
-                root: actor.root.clone(),
-            })
-            .map_err(error)?
-        {
-            ProcessedResultClaim::Claimed => {}
-            ProcessedResultClaim::Complete { decision, .. } => return Ok(decision),
+        match self.store.claim_processed_result(ProcessedResultRequest {
+            key: key.clone(),
+            root: actor.root.clone(),
+        }) {
+            // A pending receipt is this same result, claimed by a dispatch
+            // that stopped mid-processing. Drive it again and complete it.
+            Ok(ProcessedResultClaim::Claimed) | Err(ReceiptError::Pending) => {}
+            Ok(ProcessedResultClaim::Complete { decision, .. }) => return Ok(decision),
+            Err(reason) => return Err(error(reason)),
         }
         let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
-        let Some(released) = read_completed_operation(pg, &operation)? else {
-            // A fork replays the history of the session it forks: a result from before the
-            // fork comes back as that session processed it, never as an unknown call.
-            let response =
-                inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
-            let approved = decision_text(&response)?;
-            self.store
-                .complete_processed_result(key, approved, response.clone())
-                .map_err(error)?;
-            return Ok(response);
+        let released = match read_operation_state(pg, &operation)? {
+            OperationState::Complete(completed) => completed,
+            OperationState::Pending {
+                input: recorded,
+                context,
+            } => {
+                // The call's own dispatch was interrupted after its claim.
+                // Re-drive the recorded call — the runtime replays a committed
+                // decision and decides one it never recorded — and complete
+                // its receipt, so this result is processed against exactly the
+                // answer the host was owed.
+                self.recover_call(input, actor, &operation, recorded, context)
+                    .await?
+            }
+            OperationState::Absent => {
+                // A fork replays the history of the session it forks: a result from before the
+                // fork comes back as that session processed it, never as an unknown call.
+                let response =
+                    inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
+                let approved = decision_text(&response)?;
+                self.store
+                    .complete_processed_result(key, approved, response.clone())
+                    .map_err(error)?;
+                return Ok(response);
+            }
         };
         let allowed = matches!(
             released.decision.get("decision").and_then(Value::as_str),
@@ -2464,13 +2570,76 @@ impl State {
                 )?;
             }
         }
-        let approved = decision_text(&response)?;
+        let approved = stored_approved_output(&decision_text(&response)?, &response);
         self.store
             .complete_processed_result(key, approved, response.clone())
             .map_err(error)?;
         Ok(response)
     }
+
+    /// Re-drives a call whose receipt an interrupted dispatch left pending,
+    /// then completes that receipt with the answer. The runtime replays a
+    /// decision it committed and decides afresh one it never recorded, so the
+    /// completed receipt holds exactly the answer the first dispatch owed.
+    async fn recover_call(
+        &self,
+        input: &Input,
+        actor: &Actor,
+        operation: &OperationKey,
+        recorded: Value,
+        context: Option<Value>,
+    ) -> napi::Result<CompletedOperation> {
+        let call = recorded_call(context.clone(), recorded.clone())?;
+        let event = HookEvent::ToolCall {
+            actor: actor.clone(),
+            call: proposed_recorded_call(&call)?,
+            call_id: Some(operation.operation_id.clone()),
+            spawn: call.spawn.then_some(SpawnKind::Single),
+            prompt: None,
+            ruling: None,
+        };
+        let outcome = hooks::handle_embedded_with_options(
+            &self.runtime,
+            event,
+            result_presentation_options(input, &call),
+        )
+        .await;
+        let decision = wire(&outcome.decision)?;
+        self.store
+            .complete_operation(operation.clone(), decision.clone())
+            .map_err(error)?;
+        Ok(CompletedOperation {
+            input: recorded,
+            context,
+            decision,
+        })
+    }
 }
+
+/// The `approved_output` column of a completed tool result, which holds the text a second
+/// time when the stored decision already carries it (`approved_output`, set by
+/// [`with_approved_output`]). A long text is stored in the decision alone, and the column
+/// holds `sha256:<hex>` of it.
+///
+/// Contract, checked at the pinned OpenAPPA revision and by the base commit's own code:
+/// nothing reads the column as content. A replay answers from the decision
+/// (`ProcessedResultClaim::Complete { decision, .. }` here and in `peer.rs`,
+/// `inherited_result` selects `decision`), `resolve_result_claim` only requires the column
+/// non-null, and `resolve_result_completion` compares it with the value a second completion
+/// of a complete row passes, which no path in this crate or the base commit makes after a
+/// claim answered `Complete`. Re-check all three when the OpenAPPA pin moves, and before
+/// anything reads the column. No schema changes: the column stays non-null text.
+fn stored_approved_output(approved: &str, decision: &Value) -> String {
+    let carried = decision.get("approved_output").and_then(Value::as_str) == Some(approved);
+    if carried && approved.len() > REFERENCE_FROM_BYTES {
+        format!("sha256:{}", sha256_hex(approved.as_bytes()))
+    } else {
+        approved.to_owned()
+    }
+}
+
+/// Texts up to this size stay readable in the column.
+const REFERENCE_FROM_BYTES: usize = 1024;
 
 #[derive(Serialize)]
 struct ApprovedOutput<'a, T> {
@@ -2644,7 +2813,21 @@ fn render_remedy_outcome(outcome: RemedyOutcome, act: &RemedyAct) -> napi::Resul
             false,
             render_human_denial(&presentation, act).unwrap_or(presentation.feedback),
         ),
-        RemedyOutcome::NoAnswer { feedback } => (OutputSource::Runtime, None, false, feedback),
+        RemedyOutcome::NoAnswer { feedback } => {
+            return Err(error(format!(
+                "OpenAPPA remedy awaiting an answer: {feedback}"
+            )));
+        }
+        RemedyOutcome::Refused {
+            reason: appa_runtime::api::RemedyRefusal::Runtime { detail },
+        } => return Err(error(format!("OpenAPPA remedy interrupted: {detail}"))),
+        RemedyOutcome::Refused {
+            reason: appa_runtime::api::RemedyRefusal::AlreadyExecuting,
+        } => {
+            return Err(error(
+                "OpenAPPA remedy is still executing; retry the request",
+            ));
+        }
         RemedyOutcome::Refused { reason } => (
             OutputSource::Runtime,
             unknown_control_reason(&reason),
@@ -2930,10 +3113,18 @@ struct CompletedOperation {
     decision: Value,
 }
 
-fn read_completed_operation(
-    pg: &LeasedPostgres,
-    key: &OperationKey,
-) -> napi::Result<Option<CompletedOperation>> {
+/// The operation receipt's state: absent, claimed but never completed (its
+/// dispatch was interrupted mid-operation), or completed with its decision.
+enum OperationState {
+    Absent,
+    Pending {
+        input: Value,
+        context: Option<Value>,
+    },
+    Complete(CompletedOperation),
+}
+
+fn read_operation_state(pg: &LeasedPostgres, key: &OperationKey) -> napi::Result<OperationState> {
     let session_id = key.session.session_id.clone();
     let operation_id = key.operation_id.clone();
     let organization_id = key.session.organization_id.clone();
@@ -2943,17 +3134,9 @@ fn read_completed_operation(
             &[&session_id, &operation_id, &organization_id],
         )?;
         let Some(row) = row else {
-            return Ok(None);
+            return Ok(OperationState::Absent);
         };
-        let status: String = row.get("status");
-        if status != "complete" {
-            return Ok(None);
-        }
         let input: Value = row.get("input");
-        let decision: Option<Value> = row.get("decision");
-        let Some(decision) = decision else {
-            return Ok(None);
-        };
         let (actual_input, context) = if let Some(obj) = input.as_object() {
             if let Some(semantic) = obj.get("semantic") {
                 (semantic.clone(), obj.get("context").cloned())
@@ -2965,13 +3148,34 @@ fn read_completed_operation(
         } else {
             (input, None)
         };
-        Ok(Some(CompletedOperation {
+        let status: String = row.get("status");
+        if status != "complete" {
+            return Ok(OperationState::Pending {
+                input: actual_input,
+                context,
+            });
+        }
+        let decision: Option<Value> = row.get("decision");
+        let Some(decision) = decision else {
+            return Ok(OperationState::Absent);
+        };
+        Ok(OperationState::Complete(CompletedOperation {
             input: actual_input,
             context,
             decision,
         }))
     })
     .map_err(error)
+}
+
+fn read_completed_operation(
+    pg: &LeasedPostgres,
+    key: &OperationKey,
+) -> napi::Result<Option<CompletedOperation>> {
+    Ok(match read_operation_state(pg, key)? {
+        OperationState::Complete(completed) => Some(completed),
+        OperationState::Absent | OperationState::Pending { .. } => None,
+    })
 }
 
 fn cancelled_call(
@@ -3223,6 +3427,13 @@ fn routing_owner(pg: &LeasedPostgres, input: &OfferInput) -> napi::Result<Option
     }))
 }
 
+/// Claims the operation's receipt. `None` means the dispatch does the work:
+/// the receipt was just claimed, or it was left pending by a dispatch that
+/// stopped mid-operation. The store answers `Pending` only for the identical
+/// input of the same scope, so proceeding re-drives exactly this operation:
+/// the runtime answers from its committed facts where it kept them and runs
+/// the operation afresh where it kept nothing, and the finish completes the
+/// pending receipt with that answer. A mismatched retry still fails closed.
 fn claim_operation(
     store: &LogStore,
     input: &Input,
@@ -3232,17 +3443,15 @@ fn claim_operation(
     binding: ReceiptBinding,
     context: Option<Value>,
 ) -> napi::Result<Option<Value>> {
-    match store
-        .claim_operation(OperationRequest {
-            key: operation_key(input, binding, operation.to_owned()),
-            root: TrajectoryId::new(root),
-            input: request.clone(),
-            context,
-        })
-        .map_err(error)?
-    {
-        OperationClaim::Claimed => Ok(None),
-        OperationClaim::Complete { decision } => Ok(Some(decision)),
+    match store.claim_operation(OperationRequest {
+        key: operation_key(input, binding, operation.to_owned()),
+        root: TrajectoryId::new(root),
+        input: request.clone(),
+        context,
+    }) {
+        Ok(OperationClaim::Claimed) | Err(ReceiptError::Pending) => Ok(None),
+        Ok(OperationClaim::Complete { decision }) => Ok(Some(decision)),
+        Err(reason) => Err(error(reason)),
     }
 }
 
@@ -3667,7 +3876,7 @@ mod typed_tests {
 
     #[test]
     fn a_blocked_result_repeats_the_ruling_and_steers_the_model() {
-        let ruling = "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
+        let ruling = "[appa] Blocked: read_secret cannot run yet.\n\nWhy:\n  - allowed readers would narrow: public -> 1 reader";
         let response = authoritative_unexecuted_response(serde_json::json!({
             "decision": "deny_call",
             "feedback": ruling,
@@ -3841,7 +4050,7 @@ mod remedy_tests {
     // The runtime's re-rendered block after a denial: the operator plan is
     // filtered out, so no Continue section remains.
     const DENIED_BLOCK: &str =
-        "[appa] Blocked: this call cannot run yet.\n\nWhy:\n  - requires attention: signoff";
+        "[appa] Blocked: send_mail cannot run yet.\n\nWhy:\n  - requires attention: signoff";
 
     fn owner(spelling: Option<&str>) -> OfferOwner {
         OfferOwner {
@@ -4502,6 +4711,47 @@ mod runtime_child_tests {
         assert!(
             matches!(later, HookDecision::AllowCall { .. }),
             "a later call still runs after the crossing, got {later:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod stored_approved_output_tests {
+    use super::{OutputSource, stored_approved_output, with_approved_output};
+    use serde_json::json;
+
+    fn decision(text: &str) -> serde_json::Value {
+        with_approved_output(
+            &json!({"decision": "ack"}),
+            text.to_owned(),
+            OutputSource::Tool,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_long_text_the_decision_carries_is_stored_once_as_a_reference() {
+        let text = "x".repeat(5000);
+        let stored = stored_approved_output(&text, &decision(&text));
+        assert_eq!(
+            stored,
+            format!("sha256:{}", super::sha256_hex(text.as_bytes()))
+        );
+        assert_eq!(stored, stored_approved_output(&text, &decision(&text)));
+    }
+
+    #[test]
+    fn a_short_text_or_one_the_decision_lacks_stays_in_the_column() {
+        let short = "ok".repeat(100);
+        assert_eq!(stored_approved_output(&short, &decision(&short)), short);
+        let long = "y".repeat(5000);
+        assert_eq!(
+            stored_approved_output(&long, &json!({"decision": "ack"})),
+            long
+        );
+        assert_eq!(
+            stored_approved_output(&long, &decision("another text")),
+            long
         );
     }
 }

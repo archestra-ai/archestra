@@ -99,7 +99,6 @@ export {
   chatActiveRunEventsTable,
   chatActiveRunsTable,
 } from "./chat-active-run";
-export { default as chatToolExecutionClaimsTable } from "./chat-tool-execution-claim";
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadContextsTable } from "./chatops-thread-context";
@@ -259,9 +258,7 @@ export { default as teamLabelsTable } from "./team-label";
 export { default as teamTokensTable } from "./team-token";
 export { default as teamVaultFoldersTable } from "./team-vault-folder";
 export { default as toolsTable } from "./tool";
-export { default as toolInvocationPoliciesTable } from "./tool-invocation-policy";
 export { default as toolObservationsTable } from "./tool-observation";
-export { default as trustedDataPoliciesTable } from "./trusted-data-policy";
 export { default as twoFactorsTable } from "./two-factor";
 export { default as usersTable } from "./user";
 export { default as userCredentialsTable } from "./user-credential";

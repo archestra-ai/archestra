@@ -18,7 +18,9 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import { OauthClientLabelModel } from "./entity-labels";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessFilter,
+} from "./resource-permission-subject";
 import UserModel from "./user";
 
 class McpOauthClientModel {
@@ -32,6 +34,8 @@ class McpOauthClientModel {
      */
     viewer?: { userId: string };
     labels?: Record<string, string[]>;
+    /** The list's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter;
   }) {
     const labelFilteredIds = params.labels
       ? await OauthClientLabelModel.getIdsMatchingLabels(params.labels)
@@ -66,6 +70,16 @@ class McpOauthClientModel {
                 resource: "mcpOauthClient",
                 scopeColumn: schema.oauthClientsTable.id,
                 action: "read",
+              })
+            : undefined,
+          params.access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                ...params.access,
+                organizationId: params.organizationId,
+                resource: "mcpOauthClient",
+                scopeColumn: schema.oauthClientsTable.id,
+                // Who created a client is kept in its metadata.
+                ownerColumn: sql`${schema.oauthClientsTable.metadata}->>'authorId'`,
               })
             : undefined,
           // SPDX-SnippetEnd

@@ -1,7 +1,11 @@
 "use client";
 
-import { E2eTestId, parseVaultReference } from "@archestra/shared";
-import { CheckCircle2, Key } from "lucide-react";
+import {
+  E2eTestId,
+  EnvironmentVariableSchema,
+  parseVaultReference,
+} from "@archestra/shared";
+import { CheckCircle2, Key, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
@@ -76,6 +80,16 @@ interface EnvironmentVariableDialogProps {
   normalizeKey?: (key: string) => string;
   credentialBindingOptions?: readonly CredentialBindingOption[];
   /**
+   * Offers "Create credential" in the secret source picker. Resolves with the
+   * new credential's binding option once it exists, or null if the reader
+   * backed out; the dialog then selects it, so no one has to leave and come
+   * back.
+   */
+  onCreateCredential?: (prefill: {
+    key: string;
+    description: string;
+  }) => Promise<CredentialBindingOption | null>;
+  /**
    * Optional validator for a static plain-text value (e.g. an environment's
    * allowlist regex). Returns an error message to show under the value input
    * and block confirm, or null when the value is allowed.
@@ -124,6 +138,7 @@ export function EnvironmentVariableDialog({
   allowRequiredStaticSecret = false,
   normalizeKey = identity,
   credentialBindingOptions,
+  onCreateCredential,
   validateValue,
   onClose,
   onConfirm,
@@ -147,6 +162,11 @@ export function EnvironmentVariableDialog({
     () => existingKeys.includes(trimmedKey) && trimmedKey.length > 0,
     [existingKeys, trimmedKey],
   );
+  const keyError =
+    trimmedKey.length > 0
+      ? EnvironmentVariableSchema.shape.key.safeParse(trimmedKey).error
+          ?.issues[0]?.message
+      : undefined;
 
   const hasStoredSecret =
     mode === "edit" &&
@@ -189,6 +209,7 @@ export function EnvironmentVariableDialog({
   const canSubmit =
     trimmedKey.length > 0 &&
     !duplicate &&
+    !keyError &&
     !credentialIdError &&
     !valueError &&
     (!valueRequired || draft.value.trim().length > 0);
@@ -291,6 +312,7 @@ export function EnvironmentVariableDialog({
               A variable named &quot;{trimmedKey}&quot; already exists.
             </p>
           )}
+          {keyError && <p className="text-xs text-destructive">{keyError}</p>}
         </div>
 
         <div className="space-y-2">
@@ -360,6 +382,18 @@ export function EnvironmentVariableDialog({
             draft={draft}
             options={credentialBindingOptions}
             onChange={updateDraft}
+            onCreate={
+              onCreateCredential
+                ? async () => {
+                    const option = await onCreateCredential({
+                      key: trimmedKey,
+                      description: draft.description,
+                    });
+                    if (option)
+                      updateDraft(credentialBindingPatch(option, draft));
+                  }
+                : undefined
+            }
           />
         )}
 
@@ -402,14 +436,34 @@ export function EnvironmentVariableDialog({
   );
 }
 
+function credentialBindingPatch(
+  option: CredentialBindingOption,
+  draft: EnvVarDraft,
+): Partial<EnvVarDraft> {
+  const scope = option.allowedScopes.includes(draft.scope)
+    ? draft.scope
+    : option.allowedScopes[0];
+  return {
+    credentialId: option.id,
+    key: draft.key || option.defaultKey,
+    description: draft.description || option.description,
+    scope,
+    value: "",
+  };
+}
+
+const CREATE_CREDENTIAL_VALUE = "__create-credential__";
+
 function CredentialBindingEditor({
   draft,
   options,
   onChange,
+  onCreate,
 }: {
   draft: EnvVarDraft;
   options: readonly CredentialBindingOption[];
   onChange: (patch: Partial<EnvVarDraft>) => void;
+  onCreate?: () => void;
 }) {
   const reserved = options.find((option) => option.id === draft.credentialId);
   const selection = reserved?.id ?? "one-off";
@@ -432,19 +486,14 @@ function CredentialBindingEditor({
       <Select
         value={selection}
         onValueChange={(value) => {
+          if (value === CREATE_CREDENTIAL_VALUE) {
+            onCreate?.();
+            return;
+          }
           const option = options.find((entry) => entry.id === value);
-          const scope = option?.allowedScopes.includes(draft.scope)
-            ? draft.scope
-            : option?.allowedScopes[0];
           onChange(
             option
-              ? {
-                  credentialId: option.id,
-                  key: draft.key || option.defaultKey,
-                  description: draft.description || option.description,
-                  scope,
-                  value: "",
-                }
+              ? credentialBindingPatch(option, draft)
               : { credentialId: undefined },
           );
         }}
@@ -488,6 +537,21 @@ function CredentialBindingEditor({
           >
             Resource-specific secret
           </SelectItem>
+          {onCreate && (
+            <SelectItem
+              value={CREATE_CREDENTIAL_VALUE}
+              description={
+                <span className="line-clamp-2 whitespace-normal">
+                  Save it once and reuse it across agents.
+                </span>
+              }
+              icon={<Plus className="size-4" />}
+            >
+              {draft.key.trim()
+                ? `Create credential "${draft.key.trim()}"…`
+                : "Create credential…"}
+            </SelectItem>
+          )}
         </SelectContent>
       </Select>
     </div>

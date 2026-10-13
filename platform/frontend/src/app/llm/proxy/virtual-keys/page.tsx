@@ -38,7 +38,12 @@ import {
 } from "@/components/provider-key-filter-select";
 import { formatProviderKeySummary } from "@/components/provider-key-mappings-field";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
   TableCard,
@@ -133,6 +138,8 @@ function VirtualKeysTable() {
   const { data: canCreate } = useHasPermissions({ llmVirtualKey: ["create"] });
   const { data: scopedGrants } = useScopedCapabilities();
 
+  const { hasActiveScopeFilters, access, sharedWith, owner } =
+    useScopeFilterParams();
   const query = useAllVirtualApiKeys({
     limit: pageSize,
     offset,
@@ -140,6 +147,9 @@ function VirtualKeysTable() {
     keyType: keyTypeFilter,
     providerApiKeyId: providerApiKeyIdFilter,
     labels: labelsFilter,
+    access,
+    sharedWith,
+    owner,
     toastOnError: false,
   });
 
@@ -223,7 +233,11 @@ function VirtualKeysTable() {
     }),
   );
   const hasActiveFilters = Boolean(
-    searchFromUrl || keyTypeFilter || providerApiKeyIdFilter || labelsFilter,
+    searchFromUrl ||
+      keyTypeFilter ||
+      providerApiKeyIdFilter ||
+      labelsFilter ||
+      hasActiveScopeFilters,
   );
 
   const clearFilters = useCallback(() => {
@@ -233,6 +247,9 @@ function VirtualKeysTable() {
       scope: null,
       providerApiKeyId: null,
       labels: null,
+      ...Object.fromEntries(
+        RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
+      ),
       page: "1",
     });
   }, [updateQueryParams]);
@@ -359,6 +376,10 @@ function VirtualKeysTable() {
               />
             }
           >
+            <ResourceAccessFilter
+              resource="llmVirtualKey"
+              noun="virtual keys"
+            />
             <FilterSelect
               value={keyTypeFilter ?? "all"}
               onValueChange={(value) =>

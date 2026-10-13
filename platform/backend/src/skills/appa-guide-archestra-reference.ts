@@ -14,7 +14,7 @@ Archestra stores one root policy per organization, \`organization.appa.toml\`. W
 
 The document's \`[policy] version = 2\` names the format. The API \`revision\` is a separate save number that prevents overwriting concurrent edits. Change a saved policy with \`edits\` that name only the text you replace; send the complete text only for a first policy or a full rewrite. Merge rules into the existing document and never add a second \`[policy]\` header.
 
-The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations.
+The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations. Archestra sets the body size limit from its LLM proxy body limit, so \`max_body_bytes\` in \`[externals]\` has no effect; do not add it.
 
 ## Tool names
 
@@ -77,7 +77,7 @@ This protection is for native CLI subagents. Loading a skill runs in the current
 
 ## Provider-hosted tools
 
-Known provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them but cannot check each call before it executes. Unknown tool types and client-run types without a call gate are refused instead of assumed hosted. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Azure Responses hosted web search is refused because its result cannot be withheld. Deferred \`tool_search\` declarations, including versioned Anthropic types and \`defer_loading\` tools, are refused because their client-callable tools are not on the wire.
+Known provider-hosted declarations, including Claude's advisor, run inside the model provider. OpenAPPA accepts them but cannot check each call before it executes. Unknown tool types and client-run types without a call gate are refused instead of assumed hosted. OpenAI Responses web search is different: its result can be withheld and ruled on before the client receives it. Azure Responses hosted web search is refused because its result cannot be withheld. Deferred tools are governed: \`tool_search\` declarations, Anthropic's provider-run tool-search types and \`defer_loading\` tools are accepted. A call to a tool the request does not declare, because the client has not loaded it, is refused with the instruction to search for it and call it again.
 
 No policy setting refuses all provider-hosted declarations with a signed offer to call a client-side counterpart. A hosted declaration arrives before the provider chooses a call or its arguments, so a tool rule cannot provide that substitute. If the operator requires this boundary, identify the client and provider tools and report it as unsupported. Do not add a rule that claims to protect provider-side execution.
 

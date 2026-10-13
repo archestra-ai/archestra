@@ -1,11 +1,16 @@
+// biome-ignore-all lint/suspicious/noTemplateCurlyInString: generated shell parameter expansion
+
 import {
   COPILOT_CLI_CLIENT_ID,
-  COPILOT_PROVIDER_ENV_KEYS,
   DEFAULT_MODELS,
   EXTERNAL_AGENT_ID_HEADER,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { COPILOT_GUARD_CLIENT } from "../guard/clients";
+import {
+  COPILOT_PROVIDER_CONFIG_NODE,
+  COPILOT_PROVIDER_INSTRUCTIONS_NODE,
+} from "../payloads/copilot-provider-config";
 import { starterPrompt } from "../steps/ending";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { legacyServerNames } from "../steps/mcp";
@@ -21,35 +26,68 @@ import type {
   ShellAgentSetup,
 } from "../types";
 
-// Copilot CLI setup. Shared helpers first, then the GitHub Copilot device-flow
-// link step for bash and PowerShell, the section lists and next steps side by
-// side, then the agent module the dispatcher in ../index.ts uses.
+export const copilotCliSetup: ShellAgentSetup = {
+  label: "Copilot CLI",
+  binary: "copilot",
+  bash: { sections: copilotBashSections },
+  powerShell: {
+    sections: copilotPowerShellSections,
+  },
+  ending: copilotEnding,
+};
 
-/**
- * Value of the COPILOT_PROVIDER_HEADERS env var, shared by the bash and
- * PowerShell renderers: attribution headers the Copilot CLI sends only to its
- * BYOK provider endpoint (the LLM proxy), never to GitHub's own services.
- * Entries are joined with a literal `\n` — the CLI's documented separator —
- * so the value stays a single line in shell profiles and the Windows
- * registry. Always carries the client id; in passthrough mode also the
- * personal passthrough key that attributes the request to the user (the
- * Copilot analog of Claude Code's ANTHROPIC_CUSTOM_HEADERS injection).
- */
-function copilotAttributionHeadersValue(
-  proxy: SetupScriptProxySection,
-): string {
-  const lines = [`${EXTERNAL_AGENT_ID_HEADER}: ${COPILOT_CLI_CLIENT_ID}`];
-  if (proxy.passthroughVirtualKey) {
-    lines.push(`${VIRTUAL_KEY_HEADER}: ${proxy.passthroughVirtualKey}`);
-  }
-  return lines.join("\\n");
+// Native provider setup, GitHub sign-in, and optional environment instructions.
+
+function copilotProviderConfig(proxy: SetupScriptProxySection): string {
+  return JSON.stringify({
+    url: proxy.url,
+    model: proxy.model ?? DEFAULT_MODELS[proxy.provider],
+    headers: {
+      [EXTERNAL_AGENT_ID_HEADER]: COPILOT_CLI_CLIENT_ID,
+      ...(proxy.passthroughVirtualKey
+        ? { [VIRTUAL_KEY_HEADER]: proxy.passthroughVirtualKey }
+        : {}),
+    },
+  });
+}
+
+function copilotProviderBash(proxy: SetupScriptProxySection): string {
+  const key = proxy.virtualKey
+    ? sh(proxy.virtualKey)
+    : proxy.provider === "github-copilot"
+      ? '"${ARCHESTRA_GHCP_TOKEN:-}"'
+      : '"${COPILOT_PROVIDER_API_KEY:-}"';
+  return `say 'Saving Copilot provider settings'
+ARCHESTRA_COPILOT_VERSION="$(cli copilot --version)" ARCHESTRA_COPILOT_ACTION=install ARCHESTRA_COPILOT_CONFIG=${sh(copilotProviderConfig(proxy))} ARCHESTRA_COPILOT_API_KEY=${key} node <<'ARCHESTRA_COPILOT_NODE'
+${COPILOT_PROVIDER_CONFIG_NODE}
+ARCHESTRA_COPILOT_NODE`;
+}
+
+function copilotProviderPowerShell(proxy: SetupScriptProxySection): string {
+  const key = proxy.virtualKey
+    ? psq(proxy.virtualKey)
+    : proxy.provider === "github-copilot"
+      ? "$ArchGhcpToken"
+      : "$env:COPILOT_PROVIDER_API_KEY";
+  return `Say 'Saving Copilot provider settings'
+  $env:ARCHESTRA_COPILOT_VERSION = (copilot --version | Out-String)
+  $env:ARCHESTRA_COPILOT_ACTION = 'install'
+  $env:ARCHESTRA_COPILOT_CONFIG = ${psq(copilotProviderConfig(proxy))}
+  $env:ARCHESTRA_COPILOT_API_KEY = ${key}
+  try {
+    @'
+${COPILOT_PROVIDER_CONFIG_NODE}
+'@ | node
+    if ($LASTEXITCODE -ne 0) { throw 'Could not update Copilot provider configuration.' }
+  } finally {
+    Remove-Item Env:ARCHESTRA_COPILOT_VERSION, Env:ARCHESTRA_COPILOT_ACTION, Env:ARCHESTRA_COPILOT_CONFIG, Env:ARCHESTRA_COPILOT_API_KEY -ErrorAction SilentlyContinue
+  }`;
 }
 
 /**
  * GitHub Copilot in passthrough mode: there is no static API key — the proxy
  * expects the user's long-lived GitHub OAuth token as the bearer. The script
- * obtains one locally and prints it in the export lines, so the token never
- * leaves the machine:
+ * obtains one locally for providers.json and the optional export lines:
  *  1. reuse a token the Copilot CLI / VS Code already stored in
  *     ~/.config/github-copilot/{apps,hosts}.json — but only if Copilot's token
  *     exchange accepts it (valid + active Copilot seat);
@@ -94,7 +132,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 python3 not found — skipping the automatic GitHub sign-in.
 Sign in manually instead: run the Copilot CLI once and complete its login,
 then use the "oauth_token" value from ~/.config/github-copilot/apps.json
-as COPILOT_PROVIDER_API_KEY below.
+as apiKey in providers.json.
 ARCHESTRA_GHCP_MANUAL
 else
   # 1. Reuse a GitHub token already stored by the Copilot CLI / VS Code.
@@ -181,61 +219,7 @@ ARCHESTRA_GHCP_PY
     fi
   fi
 fi
-
-say 'Copilot provider settings (GitHub Copilot via OpenAI-compatible protocol)'
-echo
-echo 'Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER_ENV_KEYS.model} if you use a different model:'
-printf '  export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"\\n'
-printf '  export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}="%s"\\n' ${sh(proxy.url)}
-if [ -n "$ARCHESTRA_GHCP_TOKEN" ]; then
-  printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' "$ARCHESTRA_GHCP_TOKEN"
-else
-  printf '  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}="%s"\\n' '<your-github-oauth-token>'
-fi
-printf '  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${proxy.model ?? DEFAULT_MODELS["github-copilot"]}"\\n'
-printf '  export ${COPILOT_PROVIDER_ENV_KEYS.headers}="%s"\\n' ${sh(copilotAttributionHeadersValue(proxy))}`;
-}
-
-/**
- * PowerShell lines applying one env var to the current session AND persisting
- * it at User scope. `irm | iex` runs in the caller's session, so the `$env:`
- * assignment survives the script (unlike bash, where a piped script cannot
- * export into the caller's shell). [Environment]::SetEnvironmentVariable is
- * an in-process call, so unlike setx the value never appears in an argv and
- * is not subject to setx's 1024-character truncation.
- */
-function psApplyUserEnv(name: string, psValueExpr: string): string {
-  return `$env:${name} = ${psValueExpr}
-[Environment]::SetEnvironmentVariable('${name}', ${psValueExpr}, 'User')`;
-}
-
-/** Shared success line of both Copilot provider sections. */
-const PS_COPILOT_APPLIED_OK = `Ok 'Copilot provider settings applied: current session + saved to your User environment.'`;
-
-/**
- * COPILOT_MODEL companion to the provider apply: with a BYOK provider
- * configured, the Copilot CLI refuses to launch without an explicit model
- * ("BYOK providers require an explicit model"). A model chosen in the
- * wizard's review step is the user's reviewed decision and is applied
- * outright; without one, an unset COPILOT_MODEL gets the provider's default
- * (session + User scope) and an existing value is never overwritten.
- */
-function psCopilotModelApply(params: {
-  chosenModel: string | null;
-  defaultModel: string;
-}): string {
-  if (params.chosenModel) {
-    return `${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.model, psq(params.chosenModel))}
-Ok ${psq(`set ${COPILOT_PROVIDER_ENV_KEYS.model} = ${params.chosenModel} (your selection on the connection page).`)}
-Write-Host 'Restart any open Copilot CLI sessions to pick this up.'`;
-  }
-  return `if ([string]::IsNullOrEmpty($env:${COPILOT_PROVIDER_ENV_KEYS.model})) {
-  ${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.model, psq(params.defaultModel))}
-  Ok ${psq(`set ${COPILOT_PROVIDER_ENV_KEYS.model} = ${params.defaultModel} — change it anytime ($env:${COPILOT_PROVIDER_ENV_KEYS.model}).`)}
-} else {
-  Write-Host ('Keeping your existing ${COPILOT_PROVIDER_ENV_KEYS.model} = ' + $env:${COPILOT_PROVIDER_ENV_KEYS.model})
-}
-Write-Host 'Restart any open Copilot CLI sessions to pick this up.'`;
+`;
 }
 
 /**
@@ -245,8 +229,7 @@ Write-Host 'Restart any open Copilot CLI sessions to pick this up.'`;
  * if Copilot's token exchange accepts it), otherwise run the GitHub device flow
  * (RFC 8628). The token stays in a PowerShell variable and is passed via
  * Invoke-RestMethod headers / request bodies, never as argv to an external
- * command; it ends up applied as the COPILOT_* provider env vars (session +
- * User scope) without ever being echoed to the console.
+ * command; it is saved to providers.json and printed in the optional env instructions.
  */
 function copilotGithubLinkPowerShell(proxy: SetupScriptProxySection): string {
   const gh = proxy.githubCopilot;
@@ -375,21 +358,7 @@ if ([string]::IsNullOrEmpty($ArchGhcpToken)) {
     exit 1
   }
 }
-
-Say 'Applying Copilot provider settings (GitHub Copilot via OpenAI-compatible protocol)'
-${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.type, psq("openai"))}
-${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.baseUrl, psq(proxy.url))}
-${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.headers, psq(copilotAttributionHeadersValue(proxy)))}
-if (-not [string]::IsNullOrEmpty($ArchGhcpToken)) {
-  ${psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.apiKey, "$ArchGhcpToken")}
-  ${PS_COPILOT_APPLIED_OK}
-} else {
-  Write-Host 'No GitHub token was linked — set your own key the same way: $env:${COPILOT_PROVIDER_ENV_KEYS.apiKey} = "<your-github-oauth-token>"'
-}
-${psCopilotModelApply({
-  chosenModel: proxy.model,
-  defaultModel: DEFAULT_MODELS["github-copilot"],
-})}`;
+`;
 }
 
 function copilotBashSections(ctx: SetupScriptContext): string[] {
@@ -410,23 +379,8 @@ cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
   if (ctx.proxy) {
     if (ctx.proxy.provider === "github-copilot" && !ctx.proxy.virtualKey) {
       sections.push(copilotGithubLinkBash(ctx.proxy));
-    } else {
-      // A piped script cannot export into the caller's shell; print the lines.
-      sections.push(`say ${sh(`Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
-cat <<'ARCHESTRA_COPILOT'
-
-Add these lines to your shell profile (e.g. ~/.zshrc); adjust ${COPILOT_PROVIDER_ENV_KEYS.model} if you use a different model:
-  export ${COPILOT_PROVIDER_ENV_KEYS.type}="openai"
-  export ${COPILOT_PROVIDER_ENV_KEYS.baseUrl}=${sh(ctx.proxy.url)}
-  export ${COPILOT_PROVIDER_ENV_KEYS.apiKey}=${
-    ctx.proxy.virtualKey
-      ? sh(ctx.proxy.virtualKey)
-      : `"<your-${ctx.proxy.provider}-api-key>"`
-  }
-  export ${COPILOT_PROVIDER_ENV_KEYS.model}="${ctx.proxy.model ?? DEFAULT_MODELS[ctx.proxy.provider]}"
-  export ${COPILOT_PROVIDER_ENV_KEYS.headers}="${copilotAttributionHeadersValue(ctx.proxy)}"
-ARCHESTRA_COPILOT`);
     }
+    sections.push(copilotProviderBash(ctx.proxy));
   }
 
   if (ctx.skills) {
@@ -443,7 +397,17 @@ fi
 ${installs.join("\n")}`);
   }
 
-  return withStartupGuardBash(ctx, COPILOT_GUARD_CLIENT, sections);
+  return [
+    ...(ctx.proxy
+      ? [
+          `if ! command -v node >/dev/null 2>&1; then
+  err 'Node.js is required to save Copilot provider settings. Install Node.js and re-run setup.'
+  exit 1
+fi`,
+        ]
+      : []),
+    ...withStartupGuardBash(ctx, COPILOT_GUARD_CLIENT, sections),
+  ];
 }
 
 function copilotPowerShellSections(ctx: SetupScriptContext): string[] {
@@ -466,35 +430,8 @@ copilot mcp get ${psq(ctx.mcp.serverName)}`);
   if (ctx.proxy) {
     if (ctx.proxy.provider === "github-copilot" && !ctx.proxy.virtualKey) {
       sections.push(copilotGithubLinkPowerShell(ctx.proxy));
-    } else {
-      const apply = [
-        psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.type, psq("openai")),
-        psApplyUserEnv(COPILOT_PROVIDER_ENV_KEYS.baseUrl, psq(ctx.proxy.url)),
-        psApplyUserEnv(
-          COPILOT_PROVIDER_ENV_KEYS.headers,
-          psq(copilotAttributionHeadersValue(ctx.proxy)),
-        ),
-      ];
-      if (ctx.proxy.virtualKey) {
-        apply.push(
-          psApplyUserEnv(
-            COPILOT_PROVIDER_ENV_KEYS.apiKey,
-            psq(ctx.proxy.virtualKey),
-          ),
-        );
-      }
-      sections.push(`Say ${psq(`Applying Copilot provider settings (${ctx.proxy.providerLabel} via OpenAI-compatible protocol)`)}
-${apply.join("\n")}
-${PS_COPILOT_APPLIED_OK}${
-  ctx.proxy.virtualKey
-    ? ""
-    : `\nWrite-Host 'Set your own key the same way: $env:${COPILOT_PROVIDER_ENV_KEYS.apiKey} = "<your-${ctx.proxy.provider}-api-key>"'`
-}
-${psCopilotModelApply({
-  chosenModel: ctx.proxy.model,
-  defaultModel: DEFAULT_MODELS[ctx.proxy.provider],
-})}`);
     }
+    sections.push(copilotProviderPowerShell(ctx.proxy));
   }
 
   if (ctx.skills) {
@@ -511,29 +448,23 @@ if ($LASTEXITCODE -ne 0) { Warn "Marketplace may already be registered — run '
 ${pluginInstalls}`);
   }
 
-  return withStartupGuardPowerShell(ctx, COPILOT_GUARD_CLIENT, sections);
+  return [
+    ...(ctx.proxy
+      ? [
+          `if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+  throw 'Node.js is required to save Copilot provider settings. Install Node.js and re-run setup.'
+}`,
+        ]
+      : []),
+    ...withStartupGuardPowerShell(ctx, COPILOT_GUARD_CLIENT, sections),
+  ];
 }
 
 function copilotEnding(ctx: SetupScriptContext): AgentEnding {
   const notes: string[] = [];
-  let proxyDetail: string | undefined;
-  if (ctx.proxy && ctx.platform !== "windows") {
-    proxyDetail =
-      "Ready once the COPILOT_* lines printed above are in your shell profile";
-    notes.push(
-      "Add the COPILOT_* lines printed above to your shell profile (for example ~/.zshrc), then open a new terminal.",
-    );
-  } else if (ctx.proxy) {
-    // The key is applied automatically when the script knows it: a minted
-    // virtual key, or the GitHub token the Copilot link section obtains.
-    const keyApplied =
-      Boolean(ctx.proxy.virtualKey) || ctx.proxy.provider === "github-copilot";
-    if (!keyApplied) {
-      notes.push(
-        `Set ${COPILOT_PROVIDER_ENV_KEYS.apiKey} to your own key. The other COPILOT_* settings are in place.`,
-      );
-    }
-  }
+  const proxyDetail = ctx.proxy
+    ? "Provider settings saved in providers.json"
+    : undefined;
   if (ctx.skills && describeMarketplaceContents(ctx.skills).hasSkills) {
     notes.push(
       `To add the shared skills, run: copilot plugin marketplace browse ${ctx.skills.marketplaceName}`,
@@ -541,6 +472,9 @@ function copilotEnding(ctx: SetupScriptContext): AgentEnding {
   }
   return {
     proxyDetail,
+    ...(ctx.proxy
+      ? { optionalInstructions: COPILOT_PROVIDER_INSTRUCTIONS_NODE }
+      : {}),
     parts:
       ctx.mcp || ctx.proxy || ctx.skills
         ? [{ name: "Launch check", detail: "Runs each time you start copilot" }]
@@ -556,13 +490,3 @@ function copilotEnding(ctx: SetupScriptContext): AgentEnding {
     notes,
   };
 }
-
-export const copilotCliSetup: ShellAgentSetup = {
-  label: "Copilot CLI",
-  binary: "copilot",
-  bash: { sections: copilotBashSections },
-  powerShell: {
-    sections: copilotPowerShellSections,
-  },
-  ending: copilotEnding,
-};

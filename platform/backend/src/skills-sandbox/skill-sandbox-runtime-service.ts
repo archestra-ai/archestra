@@ -22,7 +22,11 @@ import type { SkillSandbox } from "@/types";
 import { asSandboxId, type SandboxId } from "@/types";
 import { shellQuote } from "@/utils/shell-quote";
 import { storageFilename } from "./file-storage";
-import { fileStore } from "./file-store";
+import {
+  fileStore,
+  type MyFileResolutionError,
+  type MyFileTarget,
+} from "./file-store";
 import { resolveArtifactMime } from "./mime-sniff";
 import {
   SKILL_SANDBOX_ATTACHMENTS_DIR,
@@ -272,28 +276,34 @@ class SkillSandboxRuntimeService {
                   conversationId: sandbox.conversationId,
                 }
               : null;
-        const existing = ownerScope
-          ? await fileStore.resolveMyFileRef({
+        // A project's hand-placed object (no row) is overwritten in place too.
+        const existing: MyFileTarget | MyFileResolutionError = ownerScope
+          ? await fileStore.resolveMyFileTarget({
               organizationId: sandbox.organizationId,
               userId: sandbox.userId,
               filename,
               scope: ownerScope,
             })
-          : await fileStore.resolveOrphanRef({
-              organizationId: sandbox.organizationId,
-              userId: sandbox.userId,
-              filename,
-            });
+          : await fileStore
+              .resolveOrphanRef({
+                organizationId: sandbox.organizationId,
+                userId: sandbox.userId,
+                filename,
+              })
+              .then((row) =>
+                "error" in row ? row : { kind: "row" as const, file: row },
+              );
         if (!("error" in existing)) {
-          const updated = await fileStore.update({
-            file: existing,
+          const updated = await fileStore.replace({
+            target: existing,
             mimeType,
-            sizeBytes: data.byteLength,
             data,
+            organizationId: sandbox.organizationId,
+            userId: sandbox.userId,
           });
           if (updated) {
             return {
-              artifactId: updated.id,
+              artifactId: updated.fileId,
               sandboxId: params.sandboxId,
               path: resolvedPath,
               mimeType: updated.mimeType,

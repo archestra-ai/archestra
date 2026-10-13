@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOKEN_PREFIX,
+  ASK_USER_OTHER_ANSWER_FIELD,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
   TOOL_ASK_USER_FULL_NAME,
@@ -39,6 +40,7 @@ import {
 } from "@/archestra-mcp-server/tool-attestation";
 import mcpClient from "@/clients/mcp-client";
 import config from "@/config";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   AgentTeamModel,
   McpCatalogLabelModel,
@@ -66,8 +68,13 @@ import {
 } from "./utils";
 
 let mockValidateJwt: MockInstance<typeof jwksValidator.validateJwt>;
+let previousOpenappaEnabled: boolean;
 
 beforeEach(() => {
+  previousOpenappaEnabled = config.openappa.enabled;
+  // OpenAPPA cases enable it explicitly; keep unrelated tool-list assertions
+  // independent of the deployment default.
+  config.openappa.enabled = false;
   config.enterpriseFeatures.core = true;
   mockValidateJwt = vi
     .spyOn(jwksValidator, "validateJwt")
@@ -75,6 +82,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  config.openappa.enabled = previousOpenappaEnabled;
   mockValidateJwt.mockRestore();
 });
 
@@ -1788,6 +1796,26 @@ describe("createAgentServer tools/list", () => {
     expect(names).toContain(
       archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
     );
+    // A client that defers tools to a tool search must still declare
+    // OpenAPPA's session tools from its first request. The policy tools stay
+    // behind the search.
+    const alwaysLoaded = response.tools
+      .filter(
+        (tool) =>
+          (tool as { _meta?: Record<string, unknown> })._meta?.[
+            "anthropic/alwaysLoad"
+          ] === true,
+      )
+      .map((tool) => archestraMcpBranding.getToolShortName(tool.name))
+      .sort();
+    expect(alwaysLoaded).toEqual([
+      "ask_user",
+      "execute_remedy_plan",
+      "get_remedy_plans",
+      "list_peer_messages",
+      "read_peer_message",
+      "yell",
+    ]);
     for (const inboxTool of [
       "list_peer_messages",
       "read_peer_message",
@@ -2013,10 +2041,11 @@ describe("createAgentServer tools/list", () => {
     makeOrganization,
     makeUser,
   }) => {
-    const previousEnabled = config.agentRuntime.enabled;
-    config.agentRuntime.enabled = true;
+    const sandboxInstalled = vi
+      .spyOn(agentSandboxApi, "isInstalled", "get")
+      .mockReturnValue(true);
     onTestFinished(() => {
-      config.agentRuntime.enabled = previousEnabled;
+      sandboxInstalled.mockRestore();
       archestraMcpBranding.syncFromOrganization(null);
     });
     const org = await makeOrganization();
@@ -2506,11 +2535,10 @@ describe("createAgentServer tools/list", () => {
     makeUser,
     makeMember,
   }) => {
-    const runtimeEnabled = config.agentRuntime.enabled;
-    config.agentRuntime.enabled = false;
-    onTestFinished(() => {
-      config.agentRuntime.enabled = runtimeEnabled;
-    });
+    const sandboxInstalled = vi
+      .spyOn(agentSandboxApi, "isInstalled", "get")
+      .mockReturnValue(false);
+    onTestFinished(() => sandboxInstalled.mockRestore());
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: "admin" });
@@ -3386,12 +3414,6 @@ describe("createAgentServer tools/list", () => {
     const copyFileName = archestraMcpBranding.getToolName(
       TOOL_COPY_FILE_SHORT_NAME,
     );
-    // copy_file only exists under the sandbox runtime, so without this both
-    // copy_file assertions below would pass for the wrong reason.
-    const config = (await import("@/config")).default;
-    const originalSandboxEnabled = config.skillsSandbox.enabled;
-    (config.skillsSandbox as { enabled: boolean }).enabled = true;
-
     const gatewayAgent = await makeAgent({
       toolExposureMode: "full",
       organizationId: org.id,
@@ -3434,24 +3456,19 @@ describe("createAgentServer tools/list", () => {
       return new Set(response.tools.map((tool) => tool.name));
     };
 
-    try {
-      const gatewayNames = await listFor(gatewayAgent.id);
-      expect(gatewayNames.has(renderAppName)).toBe(false);
-      // copy_file is chat-locked for the same reason: it exchanges files with
-      // the app the user has open in chat, and an external client has neither a
-      // conversation nor an open app, so every call there could only refuse.
-      expect(gatewayNames.has(copyFileName)).toBe(false);
-      // The rest of the authoring surface (scaffold/read/edit/validate) works
-      // from external clients and stays.
-      expect(gatewayNames.has(scaffoldAppName)).toBe(true);
+    const gatewayNames = await listFor(gatewayAgent.id);
+    expect(gatewayNames.has(renderAppName)).toBe(false);
+    // copy_file is chat-locked for the same reason: it exchanges files with
+    // the app the user has open in chat, and an external client has neither a
+    // conversation nor an open app, so every call there could only refuse.
+    expect(gatewayNames.has(copyFileName)).toBe(false);
+    // The rest of the authoring surface (scaffold/read/edit/validate) works
+    // from external clients and stays.
+    expect(gatewayNames.has(scaffoldAppName)).toBe(true);
 
-      const chatNames = await listFor(chatAgent.id);
-      expect(chatNames.has(renderAppName)).toBe(true);
-      expect(chatNames.has(copyFileName)).toBe(true);
-    } finally {
-      (config.skillsSandbox as { enabled: boolean }).enabled =
-        originalSandboxEnabled;
-    }
+    const chatNames = await listFor(chatAgent.id);
+    expect(chatNames.has(renderAppName)).toBe(true);
+    expect(chatNames.has(copyFileName)).toBe(true);
   });
 
   // The list exclusion above is not enough on its own: sibling tool
@@ -3883,10 +3900,21 @@ describe("createAgentServer tools/list", () => {
     }
   });
 
-  test("ask_user elicits a choice form through the MCP caller", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
+  test.for([
+    {
+      answer: "a selected option",
+      content: { choice: "Accept for this session" },
+      expected: { selected: ["Accept for this session"] },
+    },
+    {
+      answer: "a typed answer",
+      content: { [ASK_USER_OTHER_ANSWER_FIELD]: "  Only this time  " },
+      expected: { selected: [], text: "Only this time" },
+    },
+  ])("ask_user elicits a form and returns $answer through the MCP caller", async ({
+    content,
+    expected,
+  }, { makeAgent, makeOrganization }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const { server } = await createAgentServer({ agentId: agent.id });
@@ -3902,7 +3930,7 @@ describe("createAgentServer tools/list", () => {
 
     const sendRequest = vi.fn().mockResolvedValue({
       action: "accept",
-      content: { choice: "Accept for this session" },
+      content,
     });
     const result = await callToolHandler(
       {
@@ -3934,7 +3962,16 @@ describe("createAgentServer tools/list", () => {
           message: "Accept this change for the rest of this session?",
           requestedSchema: expect.objectContaining({
             type: "object",
-            required: ["choice"],
+            properties: expect.objectContaining({
+              choice: expect.objectContaining({
+                enum: ["Accept for this session", "Do not accept"],
+              }),
+              [ASK_USER_OTHER_ANSWER_FIELD]: {
+                type: "string",
+                title: "Type something",
+              },
+            }),
+            required: [],
           }),
         },
       },
@@ -3945,14 +3982,47 @@ describe("createAgentServer tools/list", () => {
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toEqual({
       action: "accept",
-      selected: ["Accept for this session"],
+      ...expected,
     });
   });
 
-  test("ask_user treats Codex automatic MCP decline as no visible form", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
+  test.for([
+    {
+      case: "under its automatic reviewer",
+      callMeta: {},
+      answer: {
+        action: "decline",
+        _meta: { approvals_reviewer: "auto_review" },
+      },
+      noPerson: true,
+    },
+    {
+      // `codex exec` declares forms, then declines each one itself.
+      case: "in a run no person drives",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
+      answer: { action: "decline" },
+      noPerson: true,
+    },
+    {
+      case: "sent as text, in a run no person drives",
+      callMeta: {
+        "x-codex-turn-metadata": JSON.stringify({ turn_trigger: "exec" }),
+      },
+      answer: { action: "decline" },
+      noPerson: true,
+    },
+    {
+      // A person who declines the form in an interactive session refuses it.
+      case: "from a person",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "user" } },
+      answer: { action: "decline" },
+      noPerson: false,
+    },
+  ])("ask_user reads a Codex form decline $case", async ({
+    callMeta,
+    answer,
+    noPerson,
+  }, { makeAgent, makeOrganization }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const { server } = await createAgentServer({ agentId: agent.id });
@@ -3973,21 +4043,20 @@ describe("createAgentServer tools/list", () => {
           },
           _meta: {
             "io.modelcontextprotocol/clientCapabilities": { elicitation: {} },
+            ...callMeta,
           },
         },
       },
-      {
-        sendRequest: vi.fn().mockResolvedValue({
-          action: "decline",
-          _meta: { approvals_reviewer: "auto_review" },
-        }),
-      },
+      { sendRequest: vi.fn().mockResolvedValue(answer) },
     );
-    expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      "This client did not answer the choice form",
-    );
-    expect(JSON.stringify(result.content)).not.toContain("The user declined");
+    const text = JSON.stringify(result.content);
+    if (noPerson) {
+      expect(result.isError).toBe(true);
+      expect(text).toContain("This client did not answer the choice form");
+      expect(text).not.toContain("declined");
+    } else {
+      expect(text).toContain("The MCP client declined the choice form");
+    }
   });
 
   test("ask_user reports a question nobody answered in time, not a client without forms", async ({

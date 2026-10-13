@@ -18,6 +18,7 @@ import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
@@ -42,6 +43,7 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
+import { policyView } from "./result-view";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
@@ -190,6 +192,8 @@ type ProcessedToolResult = {
   outputSource: OutputSource;
   reason?: RuntimeReason;
   code?: string;
+  /** The runtime denied this call, so `content` is its ruling, not an output. */
+  denied?: true;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -217,11 +221,11 @@ export function enterCapturedGuardrailsActivation(
   capturedActivation.enterWith(activation);
 }
 export function openappaYellEnabled(): boolean {
-  return config.openappa.enabled && config.openappa.yellEnabled;
+  return enterpriseTier.isOpenappaActive() && config.openappa.yellEnabled;
 }
 
 export function openappaEnabled(): boolean {
-  return config.openappa.enabled;
+  return enterpriseTier.isOpenappaActive();
 }
 
 /** Read the persisted label of a started session without dispatching a hook. */
@@ -396,7 +400,24 @@ async function dispatch(
   /** A policy the caller already read, shared across a batch of dispatches. */
   policy?: DispatchPolicy,
 ) {
-  const principal = await sessionPrincipal(session);
+  return dispatchWithPrincipal({
+    session,
+    event,
+    policy,
+    principal: await sessionPrincipal(session),
+  });
+}
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+async function dispatchWithPrincipal(params: {
+  session: OpenAppaSession;
+  event: Record<string, unknown>;
+  policy?: DispatchPolicy;
+  principal: { principal?: string };
+}) {
+  const { session, event, policy, principal } = params;
   return withRuntime(
     session.organization_id,
     (module, policy) =>
@@ -413,6 +434,29 @@ async function dispatch(
     policy,
   );
 }
+
+/**
+ * Resolve membership once for a tool-call batch, including its cancellation
+ * events. The promise belongs only to this batch: the next batch must observe
+ * membership revocation and principal changes.
+ */
+function sessionDispatch(session: OpenAppaSession, policy: SharedPolicy) {
+  let principal: ReturnType<typeof sessionPrincipal> | undefined;
+  return async (event: Record<string, unknown>) => {
+    principal ??= sessionPrincipal(session);
+    const [batchPolicy, batchPrincipal] = await Promise.all([
+      policy(),
+      principal,
+    ]);
+    return dispatchWithPrincipal({
+      session,
+      event,
+      policy: batchPolicy,
+      principal: batchPrincipal,
+    });
+  };
+}
+// SPDX-SnippetEnd
 
 /**
  * Whether the deployment's Log Content mode keeps content out of the consult
@@ -568,16 +612,23 @@ export function sessionFromHeaders(params: {
 export const UNDELIVERABLE_RETURN_CONTRACT =
   "This session requires an OpenAPPA return contract the proxy cannot deliver before inference";
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function startSession(params: {
   session: OpenAppaSession;
   policy?: DispatchPolicy;
   deliverReturnContract?: (text: string) => void;
+  principal?: { principal?: string };
 }): Promise<string | undefined> {
-  const decision = await dispatch(
-    params.session,
-    { event: "session_start" },
-    params.policy,
-  );
+  const decision = params.principal
+    ? await dispatchWithPrincipal({
+        session: params.session,
+        event: { event: "session_start" },
+        policy: params.policy,
+        principal: params.principal,
+      })
+    : await dispatch(params.session, { event: "session_start" }, params.policy);
   if (decision.decision === "context") {
     const text = decision.text;
     if (
@@ -595,6 +646,7 @@ async function startSession(params: {
     throw new ApiError(409, decisionMessage(decision));
   return undefined;
 }
+// SPDX-SnippetEnd
 
 /** Binds the prepared fork before a runtime receives any prompt or file. */
 export async function startRuntimeChild(params: {
@@ -667,6 +719,9 @@ function extractApprovedOutput(
   return fallbackOutput;
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 async function approveToolResult(params: {
   session: OpenAppaSession;
   toolCallId: string;
@@ -674,10 +729,11 @@ async function approveToolResult(params: {
   outcome: ExecutionOutcome;
   controlToolName?: string;
   policy?: DispatchPolicy;
+  principal: { principal?: string };
 }): Promise<ProcessedToolResult> {
-  const decision = await dispatch(
-    params.session,
-    {
+  const decision = await dispatchWithPrincipal({
+    session: params.session,
+    event: {
       event: "tool_result",
       tool_call_id: params.toolCallId,
       output: params.output,
@@ -686,8 +742,9 @@ async function approveToolResult(params: {
         ? { presentation: nativePresentation(params.controlToolName) }
         : {}),
     },
-    params.policy,
-  );
+    policy: params.policy,
+    principal: params.principal,
+  });
   const content = extractApprovedOutput(decision, params.output);
   const outputSource =
     ("output_source" in decision ? decision.output_source : undefined) ??
@@ -700,8 +757,10 @@ async function approveToolResult(params: {
     outputSource,
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
+    ...(decision.decision === "deny_call" ? { denied: true as const } : {}),
   };
 }
+// SPDX-SnippetEnd
 
 /**
  * A remedy call whose remedy never ran: the client declined it (a permission
@@ -728,6 +787,18 @@ function unexecutedControlResult(content: unknown): ProcessedToolResult {
 
 const UNEXECUTED_REMEDY_QUESTION_HINT =
   "[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
+
+/**
+ * The body handed to the runtime for a result: a string as it is, anything
+ * else as JSON. The runtime records this body, so the payload of each binary
+ * part the client sent is a marker here, never its bytes.
+ */
+function resultOutput(result: CommonToolResult): string {
+  if (typeof result.content === "string") return result.content;
+  return JSON.stringify(
+    result.structured ? policyView(result.content) : result.content,
+  );
+}
 
 function toolResultText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -777,6 +848,9 @@ function isOutputDecision(
 /**
  * Submits tool results to the OpenAPPA runtime for evaluation and updates.
  */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
@@ -802,12 +876,17 @@ export async function processProxyResults(params: {
     result: CommonToolResult,
   ) => "pending" | "failed" | undefined;
 }) {
-  // The results dispatch one after another; one policy read serves them all.
-  const policy = await effectivePolicy(params.session.organization_id);
+  // One policy and membership snapshot serve this ordered result batch.
+  // Nothing persists across batches: the next one sees membership revocation.
+  const [policy, principal] = await Promise.all([
+    effectivePolicy(params.session.organization_id),
+    sessionPrincipal(params.session),
+  ]);
   const returnContract = await startSession({
     session: params.session,
     policy,
     deliverReturnContract: params.deliverReturnContract,
+    principal,
   });
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
@@ -828,13 +907,11 @@ export async function processProxyResults(params: {
     const approved = await approveToolResult({
       session: params.session,
       toolCallId: result.id,
-      output:
-        typeof result.content === "string"
-          ? result.content
-          : JSON.stringify(result.content),
+      output: resultOutput(result),
       outcome,
       controlToolName: params.controlToolName,
       policy,
+      principal,
     });
     const pendingReview =
       approved.code === UNRELEASED_CALL_CODE
@@ -850,11 +927,9 @@ export async function processProxyResults(params: {
   return {
     toolResultUpdates: updates,
     ...(returnContract ? { returnContract } : {}),
-    contextIsTrusted: true,
-    dualLlmAnalyses: [],
-    unsafeContextBoundary: undefined,
   };
 }
+// SPDX-SnippetEnd
 
 /** Decision for a proposed tool call. */
 type AppaCallDecision =
@@ -865,8 +940,16 @@ type AppaCallDecision =
       feedback: string;
       offers?: string[];
       review?: Array<{ offer_id: string; text: string }>;
+      /**
+       * The runtime recorded this denial under the call's id, so it answers
+       * that id's result with the ruling.
+       */
+      recorded?: true;
     };
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function evaluateToolCalls(
   session: OpenAppaSession,
   calls: Array<{
@@ -905,21 +988,14 @@ export async function evaluateToolCalls(
   policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<AppaCallDecision[]> {
   const ids = new Set<string>();
-  // Validate tool call IDs and arguments before dispatch.
+  const malformedIds = new Set<string>();
   for (const call of calls) {
     if (!call.id || ids.has(call.id)) {
       throw new ApiError(400, "OpenAPPA requires distinct tool-call IDs");
     }
     ids.add(call.id);
-    if (typeof call.arguments === "string") {
-      try {
-        JSON.parse(call.arguments);
-      } catch {
-        throw new ApiError(
-          400,
-          "OpenAPPA cannot release malformed tool arguments",
-        );
-      }
+    if (typeof call.arguments === "string" && !isJson(call.arguments)) {
+      malformedIds.add(call.id);
     }
   }
   const normalized = normalizeToolCallsForPolicy(calls, {
@@ -927,8 +1003,18 @@ export async function evaluateToolCalls(
     looseRunToolDispatch: options.looseRunToolDispatch === true,
   });
   const admitted: string[] = [];
+  const dispatchCall = sessionDispatch(session, policy);
   const results = await Promise.allSettled(
     calls.map(async (call, index) => {
+      // Malformed arguments (often a truncated stream) are denied before any
+      // bypass or dispatch, so nothing runs on them and the batch stands.
+      if (malformedIds.has(call.id)) {
+        return {
+          kind: "deny" as const,
+          feedback:
+            "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.",
+        };
+      }
       const target = normalized[index];
       // Direct remedy control calls bypass evaluation and execute via gateway.
       // Only the declared control tool itself, in its own namespace: a
@@ -1004,18 +1090,14 @@ export async function evaluateToolCalls(
         });
         if (refusal) return refusal;
       }
-      const decision = await dispatch(session, event, await policy());
+      const decision = await dispatchCall(event);
       if (
         spawn &&
         (decision.decision === "pass_control" ||
           (decision.decision === "allow_call" && !decision.spawn_binding))
       ) {
         if (decision.decision === "allow_call")
-          await dispatch(
-            session,
-            { event: "cancel_call", tool_call_id: call.id },
-            await policy(),
-          );
+          await dispatchCall({ event: "cancel_call", tool_call_id: call.id });
         return {
           kind: "deny" as const,
           feedback:
@@ -1045,6 +1127,9 @@ export async function evaluateToolCalls(
               ? decision.review
               : undefined
             : undefined,
+        ...(decision.decision === "deny_call"
+          ? { recorded: true as const }
+          : {}),
       };
     }),
   );
@@ -1056,12 +1141,8 @@ export async function evaluateToolCalls(
     if (admitted.length > 0) {
       // Cancel admitted calls from this batch if evaluation failed mid-batch.
       const cancelResults = await Promise.allSettled(
-        admitted.map(async (id) =>
-          dispatch(
-            session,
-            { event: "cancel_call", tool_call_id: id },
-            await policy(),
-          ),
+        admitted.map((id) =>
+          dispatchCall({ event: "cancel_call", tool_call_id: id }),
         ),
       );
       for (const [index, cancelResult] of cancelResults.entries()) {
@@ -1085,7 +1166,18 @@ export async function evaluateToolCalls(
   );
 }
 
+function isJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Verdict on a call the provider already ran. */
+// SPDX-SnippetEnd
+
 type AppaHostedCallDecision =
   | { kind: "release" }
   | { kind: "hold"; feedback: string };
@@ -1098,6 +1190,9 @@ type AppaHostedCallDecision =
  * `confined_results` stages the result itself, so accepting the offer returns
  * it; any other denial drops it, and the model searches again once allowed.
  */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function evaluateHostedToolCalls(
   session: OpenAppaSession,
   calls: ReadonlyArray<{
@@ -1129,6 +1224,7 @@ export async function evaluateHostedToolCalls(
         : { kind: "release" },
     );
   }
+  const principal = await sessionPrincipal(session);
   const verdicts: AppaHostedCallDecision[] = [];
   for (const call of calls) {
     const approved = await approveToolResult({
@@ -1138,6 +1234,7 @@ export async function evaluateHostedToolCalls(
       outcome: "success",
       controlToolName: options.control?.name,
       policy: await policy(),
+      principal,
     });
     verdicts.push(
       approved.outputSource === "tool" && approved.content === call.output
@@ -1147,21 +1244,20 @@ export async function evaluateHostedToolCalls(
   }
   return verdicts;
 }
+// SPDX-SnippetEnd
 
 /** Cancels admitted tool calls when the carrier response is withheld. */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 export async function cancelCalls(
   session: OpenAppaSession,
   ids: readonly string[],
   policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<void> {
+  const dispatchCall = sessionDispatch(session, policy);
   const results = await Promise.allSettled(
-    ids.map(async (id) =>
-      dispatch(
-        session,
-        { event: "cancel_call", tool_call_id: id },
-        await policy(),
-      ),
-    ),
+    ids.map((id) => dispatchCall({ event: "cancel_call", tool_call_id: id })),
   );
   for (const [index, result] of results.entries()) {
     if (result.status === "rejected") {
@@ -1176,6 +1272,8 @@ export async function cancelCalls(
     }
   }
 }
+
+// SPDX-SnippetEnd
 
 /** Reports the start of a user turn, before the model is called. */
 export async function notePrompt(
@@ -1246,12 +1344,20 @@ export async function returnRuntimeValue(params: {
     : { kind: "held", reason: outcome.content };
 }
 
-/** Verifies that a parent carrier contains bytes admitted through ChildEnd. */
+/**
+ * Verifies that a parent carrier contains bytes admitted through ChildEnd.
+ *
+ * The runtime keeps one approved return for each spawn call. A child that
+ * answers a follow-up returns again under the same call, and the runtime then
+ * answers with the return it approved first. `crossedReturns` names every
+ * return of this child that crossed, so that answer is accepted too.
+ */
 export async function approveSpawnReturn(params: {
   session: OpenAppaSession;
   toolCallId: string;
   childId: string;
   value: string;
+  crossedReturns?: ReadonlySet<string>;
 }): Promise<void> {
   const decision = await dispatch(params.session, {
     event: "tool_result",
@@ -1287,7 +1393,7 @@ export async function approveSpawnReturn(params: {
     );
   }
   const approved = extractApprovedOutput(decision, params.value);
-  if (approved !== params.value) {
+  if (approved !== params.value && !params.crossedReturns?.has(approved)) {
     throw openappaFailure(
       new Error("OpenAPPA changed an already crossed child return"),
     );

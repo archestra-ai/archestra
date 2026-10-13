@@ -12,7 +12,13 @@ vi.mock("@/lib/integration-overrides", () => ({
   useModelProviderCatalog: () => ({ label: (provider: string) => provider }),
 }));
 vi.mock("@/components/agent-selector", () => ({
-  AgentSelector: () => null,
+  AgentSelector: ({ agents }: { agents: { id: string; name: string }[] }) => (
+    <ul aria-label="Default MCP Gateway options">
+      {agents.map((agent) => (
+        <li key={agent.id}>{agent.name}</li>
+      ))}
+    </ul>
+  ),
 }));
 vi.mock("@/components/roles/with-permissions", () => ({
   WithPermissions: ({
@@ -151,26 +157,20 @@ describe("ConnectionSettingsForm", () => {
   it("disables Add when all agents are chosen and re-enables it after removal", async () => {
     const user = userEvent.setup();
     render(<ConnectionSettingsForm />);
-    expect(
-      screen.getByRole("combobox", { name: "All agents added" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add agent" })).toBeDisabled();
     await user.click(
       screen.getByRole("button", { name: "Remove Codex from Connect" }),
     );
-    expect(
-      screen.getByRole("combobox", { name: "Add an agent" }),
-    ).toBeEnabled();
-    await user.click(screen.getByRole("combobox", { name: "Add an agent" }));
-    await user.click(screen.getByRole("option", { name: /Codex/ }));
-    expect(
-      screen.getByRole("combobox", { name: "All agents added" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add agent" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Add agent" }));
+    await user.click(screen.getByRole("button", { name: "Codex" }));
+    expect(screen.getByRole("button", { name: "Add agent" })).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Remove Codex from Connect" }),
     ).toHaveFocus();
   });
 
-  it("adds an agent through search at the end, removes it, and discards back to the saved list", async () => {
+  it("adds an agent through the inline menu at the end, removes it, and discards back to the saved list", async () => {
     const user = userEvent.setup();
     const organization = vi.mocked(useOrganization)();
     vi.mocked(useOrganization).mockReturnValue({
@@ -182,9 +182,8 @@ describe("ConnectionSettingsForm", () => {
       },
     } as ReturnType<typeof useOrganization>);
     render(<ConnectionSettingsForm />);
-    await user.click(screen.getByRole("combobox", { name: "Add an agent" }));
-    await user.type(screen.getByPlaceholderText("Search agents…"), "cursor");
-    await user.click(screen.getByRole("option", { name: /Cursor/ }));
+    await user.click(screen.getByRole("button", { name: "Add agent" }));
+    await user.click(screen.getByRole("button", { name: "Cursor" }));
     expect(
       within(screen.getByRole("list", { name: "Available agents" }))
         .getAllByRole("button", { name: /^Reorder / })
@@ -220,9 +219,7 @@ describe("ConnectionSettingsForm", () => {
     expect(
       screen.getByText("No agents added. Generic client is still available."),
     ).toBeVisible();
-    expect(
-      screen.getByRole("combobox", { name: "Add an agent" }),
-    ).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Add agent" })).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(mutate).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -230,9 +227,8 @@ describe("ConnectionSettingsForm", () => {
         connectionClientOrder: [],
       }),
     );
-    await user.click(screen.getByRole("combobox", { name: "Add an agent" }));
-    await user.type(screen.getByPlaceholderText("Search agents…"), "codex");
-    await user.click(screen.getByRole("option", { name: /Codex/ }));
+    await user.click(screen.getByRole("button", { name: "Add agent" }));
+    await user.click(screen.getByRole("button", { name: "Codex" }));
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
@@ -240,13 +236,13 @@ describe("ConnectionSettingsForm", () => {
     const user = userEvent.setup();
     render(<ConnectionSettingsForm />);
     const editor = screen.getByRole("textbox", {
-      name: "Runtime handoff instructions",
+      name: "Instructions for connected agents",
     });
     expect(editor).toBeVisible();
     expect(editor).toBeEnabled();
     expect(editor).toHaveValue(DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS);
     const toggle = screen.getByRole("switch", {
-      name: "Suggest runtime handoff",
+      name: "Enable managed instructions",
     });
     expect(toggle).toBeChecked();
     await user.clear(editor);
@@ -286,7 +282,7 @@ describe("ConnectionSettingsForm", () => {
     );
   });
 
-  it("respects a saved disabled handoff setting", () => {
+  it("respects a saved disabled managed instructions setting", () => {
     const organization = vi.mocked(useOrganization)();
     vi.mocked(useOrganization).mockReturnValue({
       ...organization,
@@ -297,10 +293,12 @@ describe("ConnectionSettingsForm", () => {
     } as ReturnType<typeof useOrganization>);
     render(<ConnectionSettingsForm />);
     expect(
-      screen.getByRole("switch", { name: "Suggest runtime handoff" }),
+      screen.getByRole("switch", { name: "Enable managed instructions" }),
     ).not.toBeChecked();
     expect(
-      screen.getByRole("textbox", { name: "Runtime handoff instructions" }),
+      screen.getByRole("textbox", {
+        name: "Instructions for connected agents",
+      }),
     ).toBeDisabled();
   });
 
@@ -357,5 +355,20 @@ describe("ConnectionSettingsForm", () => {
         connectionClientOrder: expect.anything(),
       }),
     );
+  });
+
+  it("offers shared gateways as the default but not a member's personal one", () => {
+    vi.mocked(useProfiles).mockReturnValue({
+      data: [
+        { id: "shared", name: "Team Gateway", isPersonalGateway: false },
+        { id: "personal", name: "My Gateway", isPersonalGateway: true },
+      ],
+    } as unknown as ReturnType<typeof useProfiles>);
+    render(<ConnectionSettingsForm />);
+    const options = screen.getByRole("list", {
+      name: "Default MCP Gateway options",
+    });
+    expect(within(options).getByText("Team Gateway")).toBeInTheDocument();
+    expect(within(options).queryByText("My Gateway")).not.toBeInTheDocument();
   });
 });

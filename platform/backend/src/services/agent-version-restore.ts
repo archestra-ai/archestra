@@ -414,7 +414,6 @@ async function planScalars(params: {
     description: snapshot.description,
     icon: snapshot.icon,
     systemPrompt: snapshot.systemPrompt,
-    considerContextUntrusted: snapshot.considerContextUntrusted,
     accessAllTools: snapshot.accessAllTools,
     accessAllSubagents: snapshot.accessAllSubagents,
     incomingEmailEnabled: snapshot.incomingEmailEnabled,

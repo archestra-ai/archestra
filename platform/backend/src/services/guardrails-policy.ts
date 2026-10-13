@@ -6,6 +6,7 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
+import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
@@ -18,6 +19,7 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import { parsePolicyToml } from "@/openappa/policy-text";
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
@@ -196,6 +198,7 @@ export const guardrailsPolicyService = {
             : `include: no battery answers ${JSON.stringify(entry.entry)}`,
         );
     errors.push(...duplicateEntryErrors(resolution));
+    if (statesResultBodyLimit(content)) warnings.push(RESULT_BODY_LIMIT_NOTE);
     if (errors.length === 0) {
       const composed = await openappaDeclarations.composeForCheck({
         root: content,
@@ -311,7 +314,7 @@ export async function requireGrantPermission(params: {
 }
 
 function requireEnabled() {
-  if (!config.openappa.enabled)
+  if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
 function noopAnnotatorUrl() {
@@ -393,4 +396,17 @@ builtin = "hitl"
 [externals.annotators.noop]
 url = "${noopAnnotatorUrl()}"
 `;
+}
+
+const RESULT_BODY_LIMIT_NOTE =
+  "externals.max_body_bytes has no effect: the platform sets the body size limit from its LLM proxy body limit.";
+
+/** Whether the document's `[externals]` table states `max_body_bytes`. */
+function statesResultBodyLimit(content: string): boolean {
+  const externals = parsePolicyToml(content)?.externals;
+  return (
+    typeof externals === "object" &&
+    externals !== null &&
+    "max_body_bytes" in externals
+  );
 }

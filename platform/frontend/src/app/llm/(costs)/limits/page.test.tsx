@@ -4,6 +4,8 @@ import LimitsPage, { getLimitModels } from "./page";
 
 const mockSetCostsAction = vi.fn();
 const mockUseLimits = vi.fn();
+const mockCreateLimit = vi.fn();
+const mockUpdateLimit = vi.fn();
 const mockUseAllVirtualApiKeys = vi.fn();
 const mockDataTableSearchParams = vi.fn(() => new URLSearchParams());
 const mockUpdateQueryParams = vi.fn();
@@ -36,8 +38,8 @@ vi.mock("@/app/llm/(costs)/layout", () => ({
 
 vi.mock("@/lib/limits.query", () => ({
   useLimits: (...args: unknown[]) => mockUseLimits(...args),
-  useCreateLimit: () => ({ mutateAsync: vi.fn() }),
-  useUpdateLimit: () => ({ mutateAsync: vi.fn() }),
+  useCreateLimit: () => ({ mutateAsync: mockCreateLimit }),
+  useUpdateLimit: () => ({ mutateAsync: mockUpdateLimit }),
   useDeleteLimit: () => ({ mutateAsync: vi.fn() }),
   useBulkDeleteLimits: () => ({ mutate: vi.fn(), isPending: false }),
 }));
@@ -94,14 +96,6 @@ vi.mock("@/lib/agent.query", () => ({
     }
     return { data: [] };
   },
-}));
-
-// The LLM Proxy singleton the llm_proxy limit target resolves against.
-vi.mock("@/lib/llm-proxy.query", () => ({
-  useLlmProxy: () => ({
-    data: { id: "proxy-1", identityProviderId: null },
-    isPending: false,
-  }),
 }));
 
 vi.mock("@/lib/hooks/use-data-table-query-params", () => ({
@@ -209,10 +203,6 @@ vi.mock("@/components/ui/select", () => ({
   SelectSeparator: () => <hr />,
 }));
 
-vi.mock("@/components/ui/searchable-select", () => ({
-  SearchableSelect: () => <div>SearchableSelect</div>,
-}));
-
 vi.mock("@/components/ui/permission-button", () => ({
   PermissionButton: ({ children }: { children: React.ReactNode }) => (
     <button type="button">{children}</button>
@@ -259,9 +249,7 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogBody: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
-  DialogForm: ({ children }: { children: React.ReactNode }) => (
-    <form>{children}</form>
-  ),
+  DialogForm: (props: React.ComponentProps<"form">) => <form {...props} />,
   DialogStickyFooter: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -285,20 +273,6 @@ vi.mock("@/components/ui/input", () => ({
 
 vi.mock("@/components/ui/label", () => ({
   Label: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}));
-
-vi.mock("@/components/ui/button", () => ({
-  Button: ({
-    children,
-    onClick,
-  }: {
-    children: React.ReactNode;
-    onClick?: React.MouseEventHandler<HTMLButtonElement>;
-  }) => (
-    <button type="button" onClick={onClick}>
-      {children}
-    </button>
-  ),
 }));
 
 vi.mock("@/components/ui/alert", () => ({
@@ -400,6 +374,49 @@ describe("LimitsPage", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("offers organization budgets without a proxy scope for new limits", () => {
+    render(<LimitsPage />);
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Limit scope" }));
+
+    const scopes = screen.getByRole("listbox", { name: "Limit scope" });
+    expect(
+      within(scopes).getByRole("option", { name: /Organization/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(scopes).getByRole("option", { name: /Agent/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(scopes).queryByRole("option", { name: /LLM Proxy/ }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(
+      within(scopes).getByRole("option", { name: /Organization/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Limit value"), {
+      target: { value: "100" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create limit" }));
+    expect(mockCreateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entityType: "organization",
+        entityId: "org-1",
+        limitValue: 100,
+      }),
+    );
+  });
+
+  it("omits the proxy scope from the applied-to filter", () => {
+    render(<LimitsPage />);
+    fireEvent.click(screen.getByRole("combobox", { name: "All applied to" }));
+    const scopes = screen.getByRole("listbox", { name: "All applied to" });
+    expect(
+      within(scopes).queryByRole("option", { name: /LLM Proxy/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(scopes).getByRole("option", { name: /Organization/ }),
+    ).toBeInTheDocument();
   });
 
   it("shows a settings notice when a default user limit is configured", () => {
@@ -801,39 +818,13 @@ describe("LimitsPage", () => {
     expect(row).toHaveTextContent("CI runner");
   });
 
-  it("labels the LLM Proxy row for a limit targeting the proxy", () => {
-    mockUseLimits.mockReturnValue({
-      data: [
-        {
-          id: "limit-proxy",
-          entityType: "agent",
-          entityId: "proxy-1",
-          limitType: "token_cost",
-          limitValue: 1000,
-          model: null,
-          mcpServerName: null,
-          toolName: null,
-          lastCleanup: null,
-          createdAt: "2026-01-01",
-          updatedAt: "2026-01-01",
-          modelUsage: [],
-        },
-      ],
-      isPending: false,
-    });
-
-    render(<LimitsPage />);
-    const row = screen.getByTestId("data-table-row-limit-proxy");
-    expect(row).toHaveTextContent("LLM Proxy");
-  });
-
   it("shows 'Unknown agent' for an agent row that no longer resolves", () => {
     mockUseLimits.mockReturnValue({
       data: [
         {
-          id: "limit-proxy",
+          id: "limit-unknown-agent",
           entityType: "agent",
-          entityId: "unknown-proxy",
+          entityId: "unknown-agent",
           limitType: "token_cost",
           limitValue: 1000,
           model: null,
@@ -849,15 +840,16 @@ describe("LimitsPage", () => {
     });
 
     render(<LimitsPage />);
-    const row = screen.getByTestId("data-table-row-limit-proxy");
+    const row = screen.getByTestId("data-table-row-limit-unknown-agent");
     expect(row).toHaveTextContent("Unknown agent");
+    expect(within(row).getByText("Agent", { exact: true })).toBeInTheDocument();
   });
 
   it("opens the edit dialog seeded from an ?edit= deep link", async () => {
     const limit = {
-      id: "limit-proxy",
+      id: "limit-agent",
       entityType: "agent",
-      entityId: "proxy-1",
+      entityId: "agent-1",
       limitType: "token_cost",
       limitValue: 1000,
       model: null,
@@ -879,6 +871,18 @@ describe("LimitsPage", () => {
 
     expect(await screen.findByText("Save changes")).toBeInTheDocument();
     expect(screen.getByLabelText("Limit value")).toHaveValue("1,000");
+    expect(
+      screen.getByRole("combobox", { name: "Limit scope" }),
+    ).toHaveTextContent("Agent");
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(mockUpdateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: limit.id,
+        entityType: "agent",
+        entityId: "agent-1",
+        limitValue: 1000,
+      }),
+    );
   });
 });
 

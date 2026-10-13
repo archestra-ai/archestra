@@ -4,15 +4,13 @@ import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 import Fastify from "fastify";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  carriesConnectionSetupReference,
   connectionProxySetupContext,
+  connectionSetupReference,
   issueConnectionProxySetupContext,
   rewriteConnectionProxySetupUrl,
   verifyConnectionProxySetupContext,
 } from "./connection-proxy-setup-context";
-import {
-  issueConnectionSetupContext,
-  verifyConnectionSetupContext,
-} from "./connection-setup-context";
 
 const PREFIX = "cps1_";
 const DOMAIN = "archestra-connection-proxy-setup-v1:";
@@ -50,25 +48,6 @@ test("the capability is bound to org, presented key, and proxy", () => {
       ...scope,
       proxyAgentId: "other-proxy",
       token,
-    }),
-  ).toBe(false);
-  const mcp = issueConnectionSetupContext({
-    userId: "user-1",
-    organizationId: scope.organizationId,
-    gatewayId: scope.proxyAgentId,
-    setupId: scope.setupId,
-    secret: scope.secret,
-  });
-  expect(verifyConnectionProxySetupContext({ ...scope, token: mcp })).toBe(
-    false,
-  );
-  expect(
-    verifyConnectionSetupContext({
-      token,
-      userId: "user-1",
-      organizationId: scope.organizationId,
-      gatewayId: scope.proxyAgentId,
-      secret: scope.secret,
     }),
   ).toBe(false);
 });
@@ -304,6 +283,45 @@ function signed(claims: unknown): string {
     .digest("base64url");
   return `${PREFIX}${payload}.${mac}`;
 }
+
+test("only the installer's printed reference marks its conversation", () => {
+  const token = issueConnectionProxySetupContext(scope);
+  const reference = connectionSetupReference(scope);
+  const carries = (requestBody: unknown) =>
+    carriesConnectionSetupReference({
+      token,
+      requestBody,
+      secret: scope.secret,
+    });
+
+  expect(
+    carries({ messages: [{ role: "user", content: `done ${reference}` }] }),
+  ).toBe(true);
+  // A session that read the client's settings has the setup URL and the
+  // setup id, but no way to the reference without the server secret.
+  expect(
+    carries({
+      messages: [
+        {
+          role: "user",
+          content: `ANTHROPIC_BASE_URL=https://a.example/v1/connection-setup/${token}/anthropic ${scope.setupId}`,
+        },
+      ],
+    }),
+  ).toBe(false);
+  expect(
+    carries({
+      content: connectionSetupReference({ ...scope, setupId: "setup-2" }),
+    }),
+  ).toBe(false);
+  expect(
+    carriesConnectionSetupReference({
+      token,
+      requestBody: { content: reference },
+      secret: undefined,
+    }),
+  ).toBe(false);
+});
 
 function decode(token: string): Record<string, unknown> {
   const payload = token.slice(PREFIX.length).split(".")[0] ?? "";

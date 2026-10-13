@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-09
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -65,6 +65,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM Proxy and chat requests.
   - Default: `70MB`
   - Values: bytes (`73400320`) or a size with `KB`, `MB`, or `GB` (`100MB`)
+  - Guardrails uses the same limit for the size of a tool result, so a result the LLM Proxy accepts is never dropped for size. A policy's `max_body_bytes` has no effect.
   - All attachments of one chat message share this limit. Raise it when you raise [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/reference/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT), or for very long conversations.
 
 - **`ARCHESTRA_PROCESS_TYPE`** - Which part of the backend this process runs.
@@ -77,7 +78,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_BETA`** - Turns on beta features.
   - Default: `false`
   - Values: `true`, `false`
-  - Turns on [Guardrails](#guardrails) and plugins directly.
+  - Turns on plugins directly. Guardrails and Agent Runtime do not use this switch.
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
@@ -94,6 +95,10 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Default: `false`
   - Values: `true`, `false`
   - Requires [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED).
+
+- **`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`** - Activates the Platform + AI Security tier: the OpenAPPA integration behind [Guardrails](/docs/agents/guardrails). Instances with fewer than 30 users get it without this flag.
+  - Default: `false`
+  - Values: `true`, `false`
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING`** - Removes the "Powered by Archestra" branding and the community links.
   - Default: `false`
@@ -196,7 +201,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`** - Encrypts secrets stored in the database, such as API keys and tokens.
   - Default: Helm generates one in the `<release>-auth` Secret under `secrets-encryption-secret`. Without Helm, it falls back to [`ARCHESTRA_AUTH_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SECRET).
   - Values: a random string of at least 32 characters
-  - Startup stops if this key cannot decrypt the stored secrets. To rotate it, set the old value in [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) and restart. See [Secrets Management](/docs/admin/security/secrets-management).
+  - Startup stops if this key cannot decrypt the stored secrets. To rotate it, set the old value in [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) and restart. See [Credentials and Secrets](/docs/admin/security/credentials#secrets-storage).
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - Previous encryption secret, used on startup to re-encrypt stored secrets under the new one.
   - Default: [`ARCHESTRA_AUTH_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SECRET)
@@ -206,6 +211,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Default: `false`
   - Values: `true`, `false`
   - Set it for one boot, then unset it. Secrets encrypted with the old key stay unreadable. Enter them again.
+  - Catalog metadata remains available when credentials are unreadable. Operations that need those credentials return HTTP 409 with recovery instructions. To replace a catalog's unreadable database-backed credentials, submit all its configured secret values together, including registry passwords. Partial credential edits are rejected.
 
 - **`ARCHESTRA_AUTH_SECRET`** - Combined secret used for both [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SESSION_SECRET) and [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) when either is unset.
   - Default: generated on first start. Helm stores it in the `<release>-auth` Secret; the Docker image saves it to `/app/data/.auth_secret`.
@@ -222,12 +228,12 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`** - Turns on [encrypted chats](/docs/chat#encrypted-chats). Archestra escrows each chat key to this RSA public key for recovery.
   - Default: unset (encrypted chats unavailable)
   - Values: an RSA public key of at least 2048 bits, as PEM or base64-encoded PEM. Startup fails on any other value.
-  - Set it in its own rollout, after the release is deployed. See [Key Escrow](/docs/chat#key-escrow) and [Recovering an Encrypted Chat](/docs/admin/security/content-encryption#recovering-an-encrypted-chat).
+  - Set it in its own rollout, after the release is deployed. See [Key Escrow for Encrypted Chats](/docs/admin/security/content-encryption#key-escrow) and [Recovering an Encrypted Chat](/docs/admin/security/content-encryption#recovering-an-encrypted-chat).
 
 - **`ARCHESTRA_SECRETS_MANAGER`** - Where Archestra stores secrets such as API keys and tokens.
   - Default: `DB`
   - Values: `DB`, `VAULT`, `READONLY_VAULT`. Both Vault values require an enterprise license.
-  - With an invalid Vault configuration or no license, Archestra logs a warning and uses `DB`. See [Secrets Management](/docs/admin/security/secrets-management).
+  - With an invalid Vault configuration or no license, Archestra logs a warning and uses `DB`. See [Credentials and Secrets](/docs/admin/security/credentials#secrets-storage).
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - Address of the HashiCorp Vault server.
   - Required when: [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/reference/configuration#ARCHESTRA_SECRETS_MANAGER) or `READONLY_VAULT`
@@ -585,9 +591,9 @@ These variables set each provider's deployment-wide endpoint and authentication.
   - Archestra records Anthropic requests paid from extra usage credits, after the subscription allowance runs out, as metered. See [Subscription vs Metered Cost](/docs/llm-proxy/costs-and-limits#subscription-vs-metered-cost).
 
 - **`ARCHESTRA_LLM_PROXY_PLUGINS`** - LLM proxy plugins loaded at startup.
-  - Default: unset (no plugins)
+  - Default: `appa` (always loaded)
   - Values: comma-separated; the only plugin is `appa`. An unknown name or a duplicate stops startup.
-  - [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) adds `appa` automatically. Listing `appa` without [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) has no effect.
+  - OpenAPPA is always loaded, independently of [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA).
 
 ## Chat
 
@@ -932,12 +938,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 ## Agent Runtime
 
-Agent Runtime needs the orchestrator configured. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
-
-- **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime.
-  - Default: `false`
-  - Values: `true`, `false`
-  - Does not follow [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA).
+Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, and OpenClaw images are pulled from.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`
@@ -1439,7 +1440,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 ## Guardrails
 
-[Guardrails](/docs/agents/guardrails) are a beta feature: set [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) to show them. Enforcement is a separate switch on the Guardrails page and starts off.
+[Guardrails](/docs/agents/guardrails) are available on every deployment. Enforcement is a separate switch on the Guardrails page and starts off.
 
 - **`ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`** - Key that signs delegation bindings, child-session recovery receipts, and peer proofs.
   - Default: generated and kept across upgrades by the Helm chart. Without Helm, derived from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SESSION_SECRET).

@@ -579,9 +579,9 @@ class CohereStreamAdapter
         };
         isFinal = true;
         // Withhold the upstream message-end: it carries the tool-call finish
-        // reason and would reach the client before the proxy evaluates tool
-        // invocation policies. formatEndSSE emits the single message-end after
-        // evaluation (COMPLETE when a refusal replaced the response).
+        // reason and would reach the client before the proxy plugins rule on
+        // the tool calls. formatEndSSE emits the single message-end after
+        // the ruling (COMPLETE when a refusal replaced the response).
         break;
       }
 

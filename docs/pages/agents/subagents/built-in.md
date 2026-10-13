@@ -2,7 +2,7 @@
 title: Built-in Subagents
 description: The system subagents Archestra seeds into every organization, and what each one does
 order: 1
-lastUpdated: 2026-08-26
+lastUpdated: 2026-10-11
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -20,7 +20,7 @@ What to know:
 
 | Subagent | What It Does |
 | --- | --- |
-| **OpenAPPA Configuration Agent** | Explains your [Guardrails](/docs/agents/guardrails) policy, and changes it when you ask. It shows each change before it publishes. |
+| **APPAdvisor** | Explains your [Guardrails](/docs/agents/guardrails) policy, and changes it when you ask. Open its chat from Guardrails. It stays out of the chat agent picker and shows each change before it publishes. |
 | **Context Compaction Subagent** | Summarizes older history when a chat nears the model's context limit. Recent turns stay word for word, and the full history stays visible. |
 | **Chat Title Generation Subagent** | Names each chat in three to six words. |
 | **App Runtime LLM Agent** | Serves `archestra.llm.complete()` for [MCP Apps](/docs/chat/apps). Apps cannot pick a model, so set one here. |

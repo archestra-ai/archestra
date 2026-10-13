@@ -29,6 +29,10 @@ export async function fetchAnthropicModels(
   }
   const url = joinBaseUrl(baseUrl, "/v1/models?limit=100");
 
+  if (!apiKey && anthropicWorkloadIdentity.isEnabled()) {
+    anthropicWorkloadIdentity.assertTrustedEndpoint(url);
+  }
+
   const response = await fetch(url, {
     headers: {
       ...(extraHeaders ?? {}),

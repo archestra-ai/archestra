@@ -1,6 +1,7 @@
 import {
   CreatedByNullableSchema,
   EnvFromSchema,
+  HttpUrlSchema,
   ImagePullSecretConfigSchema,
   LocalConfigEnvironmentDefaultSchema,
   LocalConfigSchema,
@@ -217,8 +218,9 @@ const InsertInternalMcpCatalogSchemaBase = createInsertSchema(
   .extend({
     // Allow explicit ID for builtin catalog items (e.g., Archestra)
     id: z.string().uuid().optional(),
-    name: z.string().trim().min(1, "Name cannot be empty"),
+    name: z.string().trim().min(1, "Name cannot be empty").max(255),
     serverType: InternalMcpCatalogServerTypeSchema,
+    serverUrl: HttpUrlSchema.nullable().optional(),
     dynamicConnectionMcpServerId: z.string().uuid().nullable().optional(),
     authFields: z.array(AuthFieldSchema).nullable().optional(),
     userConfig: z
@@ -276,8 +278,9 @@ const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   schema.internalMcpCatalogTable,
 )
   .extend({
-    name: z.string().trim().min(1, "Name cannot be empty"),
+    name: z.string().trim().min(1, "Name cannot be empty").max(255),
     serverType: InternalMcpCatalogServerTypeSchema,
+    serverUrl: HttpUrlSchema.nullable().optional(),
     dynamicConnectionMcpServerId: z.string().uuid().nullable().optional(),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

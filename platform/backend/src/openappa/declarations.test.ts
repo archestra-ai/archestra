@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import { HttpResponse, http } from "msw";
+import config from "@/config";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
@@ -144,4 +145,22 @@ test("a policy line wins, a stored binding fills what an included battery reads,
   expect(won.content).toBe(declared);
   expect(won.resolution.credentials).toEqual({ [GITHUB_TOKEN]: "repo-github" });
   expect(won.credentialSource).toEqual({ [GITHUB_TOKEN]: "policy" });
+});
+
+test("publishes the proxy body limit as the default result cap of a policy that states none", () => {
+  const variable = "APPA_ARCHESTRA_MAX_BODY_BYTES";
+  const original = config.api.bodyLimit;
+  const prior = process.env[variable];
+  try {
+    openappaDeclarations.publishBridgeToken();
+    expect(process.env[variable]).toBe(String(original));
+
+    config.api.bodyLimit = 5 * 1024 * 1024;
+    openappaDeclarations.publishBridgeToken();
+    expect(process.env[variable]).toBe(String(5 * 1024 * 1024));
+  } finally {
+    config.api.bodyLimit = original;
+    if (prior === undefined) delete process.env[variable];
+    else process.env[variable] = prior;
+  }
 });

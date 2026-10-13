@@ -1,5 +1,5 @@
 {
-  "id": "8038713a-6a67-473d-be04-c0a56f2fa9f0",
+  "id": "3204cde1-1d48-4600-a3dc-bd3532a24cbd",
   "prevId": "aa9988c1-7e75-4290-b8b7-fd0c451e4652",
   "version": "7",
   "dialect": "postgresql",
@@ -4328,13 +4328,6 @@
           "notNull": true,
           "default": false
         },
-        "consider_context_untrusted": {
-          "name": "consider_context_untrusted",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "agent_type": {
           "name": "agent_type",
           "type": "text",
@@ -6868,94 +6861,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.chat_tool_execution_claims": {
-      "name": "chat_tool_execution_claims",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "conversation_id": {
-          "name": "conversation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool_call_id": {
-          "name": "tool_call_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool_name": {
-          "name": "tool_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'executing'"
-        },
-        "result": {
-          "name": "result",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "chat_tool_execution_claims_conversation_id_conversations_id_fk": {
-          "name": "chat_tool_execution_claims_conversation_id_conversations_id_fk",
-          "tableFrom": "chat_tool_execution_claims",
-          "tableTo": "conversations",
-          "columnsFrom": [
-            "conversation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "chat_tool_execution_claims_conversation_id_tool_call_id_unique": {
-          "name": "chat_tool_execution_claims_conversation_id_tool_call_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "conversation_id",
-            "tool_call_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -10508,18 +10413,6 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true
-        },
-        "dual_llm_analyses": {
-          "name": "dual_llm_analyses",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "unsafe_context_boundary": {
-          "name": "unsafe_context_boundary",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
         },
         "tool_call_block": {
           "name": "tool_call_block",
@@ -18254,34 +18147,6 @@
           "notNull": true,
           "default": false
         },
-        "global_tool_policy": {
-          "name": "global_tool_policy",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'permissive'"
-        },
-        "discovered_tool_policy": {
-          "name": "discovered_tool_policy",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'relaxed'"
-        },
-        "default_discovered_tool_invocation_policy": {
-          "name": "default_discovered_tool_invocation_policy",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'allow_when_context_is_untrusted'"
-        },
-        "default_discovered_tool_result_policy": {
-          "name": "default_discovered_tool_result_policy",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'mark_as_untrusted'"
-        },
         "allow_chat_file_uploads": {
           "name": "allow_chat_file_uploads",
           "type": "boolean",
@@ -21322,12 +21187,6 @@
           "notNull": true,
           "default": false
         },
-        "secret_id": {
-          "name": "secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "last_used_at": {
           "name": "last_used_at",
           "type": "timestamp",
@@ -21393,22 +21252,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "service_account_tokens_platform_token_unique_idx": {
-          "name": "service_account_tokens_platform_token_unique_idx",
-          "columns": [
-            {
-              "expression": "service_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_account_tokens\".\"secret_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -21418,19 +21261,6 @@
           "tableTo": "service_accounts",
           "columnsFrom": [
             "service_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_account_tokens_secret_id_secret_id_fk": {
-          "name": "service_account_tokens_secret_id_secret_id_fk",
-          "tableFrom": "service_account_tokens",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
           ],
           "columnsTo": [
             "id"
@@ -21481,19 +21311,6 @@
           "notNull": true,
           "default": false
         },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_system": {
-          "name": "is_system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -21537,21 +21354,6 @@
           "method": "btree",
           "with": {}
         },
-        "service_accounts_team_id_idx": {
-          "name": "service_accounts_team_id_idx",
-          "columns": [
-            {
-              "expression": "team_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "service_accounts_organization_id_name_unique_idx": {
           "name": "service_accounts_organization_id_name_unique_idx",
           "columns": [
@@ -21572,22 +21374,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "service_accounts_organization_id_system_unique_idx": {
-          "name": "service_accounts_organization_id_system_unique_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_accounts\".\"is_system\"",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -21602,19 +21388,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_accounts_team_id_team_id_fk": {
-          "name": "service_accounts_team_id_team_id_fk",
-          "tableFrom": "service_accounts",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "service_accounts_created_by_user_id_fk": {
@@ -25328,79 +25101,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.tool_invocation_policies": {
-      "name": "tool_invocation_policies",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tool_id": {
-          "name": "tool_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "conditions": {
-          "name": "conditions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "tool_invocation_policies_tool_id_tools_id_fk": {
-          "name": "tool_invocation_policies_tool_id_tools_id_fk",
-          "tableFrom": "tool_invocation_policies",
-          "tableTo": "tools",
-          "columnsFrom": [
-            "tool_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.tool_observations": {
       "name": "tool_observations",
       "schema": "",
@@ -25579,30 +25279,6 @@
           "notNull": true,
           "default": false
         },
-        "policies_auto_configured_at": {
-          "name": "policies_auto_configured_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "policies_auto_configuring_started_at": {
-          "name": "policies_auto_configuring_started_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "policies_auto_configured_reasoning": {
-          "name": "policies_auto_configured_reasoning",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "policies_auto_configured_model": {
-          "name": "policies_auto_configured_model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -25776,80 +25452,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.trusted_data_policies": {
-      "name": "trusted_data_policies",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "tool_id": {
-          "name": "tool_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "conditions": {
-          "name": "conditions",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "action": {
-          "name": "action",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'mark_as_trusted'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "trusted_data_policies_tool_id_tools_id_fk": {
-          "name": "trusted_data_policies_tool_id_tools_id_fk",
-          "tableFrom": "trusted_data_policies",
-          "tableTo": "tools",
-          "columnsFrom": [
-            "tool_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

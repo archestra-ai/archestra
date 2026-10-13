@@ -142,7 +142,7 @@ export async function startActiveMcpSpan<T>(params: {
 }
 
 /**
- * Records short-lived spans for tool calls that were blocked by tool invocation policies.
+ * Records short-lived spans for tool calls that were blocked by guardrails.
  * Each blocked tool call gets its own span with `mcp.blocked=true` and `mcp.blocked_reason`.
  *
  * These spans have the same attributes as normal MCP tool call spans so they appear alongside

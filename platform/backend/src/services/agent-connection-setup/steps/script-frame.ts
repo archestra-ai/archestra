@@ -5,7 +5,12 @@ import type {
   SetupScriptContext,
   ShellAgentSetup,
 } from "../types";
-import { endingMarker, INSTALLER_ENV, renderEndingText } from "./ending";
+import {
+  endingMarker,
+  INSTALLER_ENV,
+  renderEndingNextSteps,
+  renderEndingSummary,
+} from "./ending";
 import { describeMarketplaceContents } from "./marketplace-copy";
 
 /** Collapse control characters so appName is safe in comments and bare echoes. */
@@ -140,7 +145,17 @@ export function bashFooter(ending: SetupEnding): string {
 if [ -z "\${${INSTALLER_ENV}:-}" ]; then
   echo
   cat <<'ARCHESTRA_NEXT'
-${renderEndingText(ending)}
+${renderEndingSummary(ending)}
+ARCHESTRA_NEXT
+${
+  ending.optionalInstructions
+    ? `node <<'ARCHESTRA_OPTIONAL'
+${ending.optionalInstructions}
+ARCHESTRA_OPTIONAL
+`
+    : ""
+}cat <<'ARCHESTRA_NEXT'
+${renderEndingNextSteps(ending)}
 ARCHESTRA_NEXT
 fi`;
 }
@@ -246,7 +261,17 @@ export function powerShellFooter(ending: SetupEnding): string {
 if (-not $env:${INSTALLER_ENV}) {
 Write-Host @'
 
-${renderEndingText(ending)}
+${renderEndingSummary(ending)}
+'@
+${
+  ending.optionalInstructions
+    ? `@'
+${ending.optionalInstructions}
+'@ | node
+`
+    : ""
+}Write-Host @'
+${renderEndingNextSteps(ending)}
 '@
 }`;
 }

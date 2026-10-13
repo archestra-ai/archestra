@@ -1,7 +1,6 @@
 import type * as archestraApiTypes from "../../hey-api/clients/api/types.gen";
-import { parseArchestraToolRefusal } from "../../tool-refusal";
 import type { PartialUIMessage } from "../types";
-import type { DualLlmAnalysis, Interaction, InteractionUtils } from "./common";
+import type { Interaction, InteractionUtils } from "./common";
 import { tryParseJson } from "./json";
 
 class OpenAiChatCompletionInteraction implements InteractionUtils {
@@ -55,32 +54,6 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     return Array.from(toolsUsed);
   }
 
-  getToolNamesRefused(): string[] {
-    const toolsRefused = new Set<string>();
-    for (const message of this.request.messages) {
-      if (message.role === "assistant") {
-        const refusal = message.refusal;
-        if (refusal && refusal.length > 0) {
-          const toolName = parseArchestraToolRefusal(refusal).toolName;
-          if (toolName) {
-            toolsRefused.add(toolName);
-          }
-        }
-      }
-    }
-
-    for (const message of this.response.choices) {
-      const refusal = message.message.refusal;
-      if (refusal && refusal.length > 0) {
-        const toolName = parseArchestraToolRefusal(refusal).toolName;
-        if (toolName) {
-          toolsRefused.add(toolName);
-        }
-      }
-    }
-    return Array.from(toolsRefused);
-  }
-
   getToolNamesRequested(): string[] {
     const toolsRequested = new Set<string>();
 
@@ -116,25 +89,6 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
 
   getLastAssistantResponse(): string {
     return this.response.choices[0]?.message?.content ?? "";
-  }
-
-  getToolRefusedCount(): number {
-    let count = 0;
-    for (const message of this.request.messages) {
-      if (message.role === "assistant") {
-        const refusal = message.refusal;
-        if (refusal && refusal.length > 0) {
-          count++;
-        }
-      }
-    }
-    for (const message of this.response.choices) {
-      const refusal = message.message.refusal;
-      if (refusal && refusal.length > 0) {
-        count++;
-      }
-    }
-    return count;
   }
 
   private mapToUiMessage(
@@ -186,7 +140,6 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
           }
         }
       } else if (refusal) {
-        // Push as text - parsePolicyDenied in message-thread will handle policy denials
         parts.push({ type: "text", text: refusal });
       } else {
         // Plain text assistant message (no tool calls, no refusal)
@@ -282,9 +235,7 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     };
   }
 
-  private mapRequestToUiMessages(
-    dualLlmAnalyses?: DualLlmAnalysis[],
-  ): PartialUIMessage[] {
+  private mapRequestToUiMessages(): PartialUIMessage[] {
     const messages = this.request.messages;
     const uiMessages: PartialUIMessage[] = [];
 
@@ -318,26 +269,6 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
             // Map the tool result to a UI part
             const toolResultUiMsg = this.mapToUiMessage(toolResultMsg);
             toolCallParts.push(...toolResultUiMsg.parts);
-
-            // Check if there's a dual LLM result for this tool call
-            const dualLlmResultForTool = dualLlmAnalyses?.find(
-              (result) => result.toolCallId === toolCall.id,
-            );
-
-            if (dualLlmResultForTool) {
-              const dualLlmPart = {
-                type: "dual-llm-analysis" as const,
-                toolCallId: dualLlmResultForTool.toolCallId,
-                safeResult: dualLlmResultForTool.result,
-                conversations: Array.isArray(dualLlmResultForTool.conversations)
-                  ? (dualLlmResultForTool.conversations as Array<{
-                      role: "user" | "assistant";
-                      content: string | unknown;
-                    }>)
-                  : [],
-              };
-              toolCallParts.push(dualLlmPart);
-            }
           }
         }
 
@@ -359,9 +290,9 @@ class OpenAiChatCompletionInteraction implements InteractionUtils {
     );
   }
 
-  mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
+  mapToUiMessages(): PartialUIMessage[] {
     return [
-      ...this.mapRequestToUiMessages(dualLlmAnalyses),
+      ...this.mapRequestToUiMessages(),
       ...this.mapResponseToUiMessages(),
     ];
   }

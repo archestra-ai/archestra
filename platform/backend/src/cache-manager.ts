@@ -60,6 +60,10 @@ export const CacheKey = {
   OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
   /** Sessions already told once to resend a request that lacked the gateway remedy tools */
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
+  /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
+  OpenAppaNotLoadedRuling: "openappa-not-loaded-ruling",
+  /** Sessions whose client already waited once for the gateway remedy tools to load */
+  OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
@@ -92,6 +96,7 @@ export const CacheKey = {
   RumIngestRateLimit: "rum-ingest-rate-limit",
   /** Slack missing-scope notification throttle per workspace */
   SlackScopeNotification: "slack-scope-notification",
+  SlackAppInstallState: "slack-app-install-state",
   /** Organization-scoped settings cache */
   OrganizationSettings: "organization-settings",
   /** Per-user group-token resolution for auto-sync-permissions KB connectors */
@@ -120,10 +125,6 @@ export const CacheKey = {
   TeamsTeamAadGroupId: "teams-team-aad-group-id",
   /** MS Teams teams that have delivered an un-mentioned channel message — proof the RSC consent for reading channel messages exists */
   TeamsUnmentionedChannelTraffic: "teams-unmentioned-channel-traffic",
-  /** Dual LLM sanitized tool results, keyed by tool call + content hash */
-  DualLlmSanitizedResult: "dual-llm-sanitized-result",
-  /** Completed Q&A rounds of a dual LLM analysis that failed mid-flight, keyed by content hash so a retry resumes instead of re-interrogating */
-  DualLlmPartialTranscript: "dual-llm-partial-transcript",
   /** Telegram approval-button payloads (callback_data is capped at 64 bytes) */
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
@@ -136,6 +137,8 @@ export const CacheKey = {
    * read an old boolean and mistake it for "not an encrypted chat".
    */
   EncryptedChatSession: "encrypted-chat-session-v2",
+  /** Arguments behind a Slack approval's "View arguments" button (a button value is capped at 2,000 chars) */
+  SlackApprovalArguments: "chatops-slack-approval-arguments",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

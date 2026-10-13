@@ -153,15 +153,17 @@ export interface A2AExecuteParams {
   attachments?: A2AAttachment[];
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
+  /**
+   * Someone answers this run's OpenAPPA reviews, so a reviewed remedy call
+   * pauses the run (set by the A2A manager).
+   */
+  openappaReviewPause?: boolean;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
-  /** Whether the parent execution context was still trusted at delegation time */
-  parentContextIsTrusted?: boolean;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
-
-  /** Whether to block execution when an approval-required tool is called (defaults to true) */
-  blockOnApprovalRequired?: boolean;
 
   /**
    * History of UI messages needed for persistance at new UIMessage generation
@@ -233,7 +235,7 @@ export async function executeA2AMessage(
     attachments,
     chatOpsBindingId,
     chatOpsThreadId,
-    parentContextIsTrusted,
+    chatOpsPinnedAgentId,
     scheduleTriggerRunId,
     subagentToolStream,
     delegationToolCallId,
@@ -351,18 +353,23 @@ export async function executeA2AMessage(
       organizationId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsPinnedAgentId,
       sessionId,
       delegationChain,
       conversationId: params.conversationId,
       isolationKey,
       abortSignal,
-      blockOnApprovalRequired: params.blockOnApprovalRequired ?? true,
       scheduleTriggerRunId,
       // Forward the same bridge so a nested delegation's tool calls surface too,
       // attributed to the nested delegation call (recursion through the chain).
       subagentToolStream,
       repeatTracker,
       appaSubagent: params.appaSubagent,
+      // A delegated run's pause would never reach whoever answers the root.
+      openappaReviewPause:
+        params.openappaReviewPause === true &&
+        !parentDelegationChain &&
+        !params.appaSubagent,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({
@@ -402,7 +409,6 @@ export async function executeA2AMessage(
         source,
         externalAgentId: delegationChain,
         agentLlmApiKeyId: llmApiKeyId,
-        contextIsTrusted: parentContextIsTrusted,
         appaSubagentToken: params.appaSubagent?.token,
       });
 
@@ -560,7 +566,6 @@ export async function executeA2AMessage(
               source: "a2a:tool_call_repair",
               externalAgentId: delegationChain,
               agentLlmApiKeyId: llmApiKeyId,
-              contextIsTrusted: parentContextIsTrusted,
               appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,

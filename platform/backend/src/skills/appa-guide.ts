@@ -7,12 +7,16 @@ import {
   appaContractsPartPath,
 } from "./appa-guide-contracts";
 import {
+  VALIDATION_READ_RESTRICTION,
+  VALIDATION_WORKFLOW,
+  VALIDATION_WRITING,
+} from "./appa-guide-validation";
+import {
   ADJUST_WORKFLOW,
   CLIENTS_REFERENCE,
   FIRST_POLICY_WORKFLOW,
   INIT_WORKFLOW,
   REQUESTS_WORKFLOW,
-  VALIDATION_WORKFLOW,
 } from "./appa-guide-workflows";
 import type { BuiltInSkill } from "./built-in-skills";
 
@@ -29,13 +33,8 @@ export const APPA_GUIDE_SKILL: BuiltInSkill = {
     "Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview policy and lightweight validation changes, and publish locally or through a GitHub pull request.",
   feature: "appa",
   // white-label-ok: applyBuiltInSkillBranding rebrands the built-in skill body at reconcile
-  content: `---
-name: appa-guide
-description: Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview policy and lightweight validation changes, and publish locally or through a GitHub pull request.
-argument-hint: "init|adjust|validate|explain|review|investigate|github-sync"
----
-
-Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client hosts. Request: $ARGUMENTS
+  // The body only: the frontmatter is built from name and description.
+  content: `Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client hosts.
 
 You run inside Archestra chat or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). This skill has these parts:
 
@@ -96,15 +95,14 @@ These rules replace the shared rules on ending a turn with the proposal: in Arch
 - Preview before you propose, with the revision you read: \`edits\` for a saved policy, naming only the text you replace (to insert rules, replace a nearby line with the new rules plus that same line); \`content\` only for a first policy or a full rewrite. Fix errors and preview again, and explain warnings. Check that \`diff\` shows only the lines you meant to change. A valid preview does not prove that a battery governs tools or a helper works.
 - If a saved policy would not change, say that no update is needed, without approval language. An unsaved local revision-0 starter is the exception: even with an empty diff it still needs approval and publication. Do not manufacture an edit.
 - Preview only a change the operator asked for or picked. Explain and review requests preview nothing. Previewing saves nothing: "show me first" or "don't save yet" still means preview, explain, and ask.
-- When approval is needed, end the same turn with one \`archestra__ask_user\` question: "Apply this policy?" ("Open this pull request?" when approval opens a GitHub PR), unless the workflow names its own question, with options "Approve", "Show TOML", and "Change something". Without \`archestra__ask_user\`, use the client's own question tool with the same options; with neither, end with **Approve, or tell me what to change.** Never end a turn on a preview without the question, also when the operator asked to see the change first. If an optional refinement of a valid preview of the requested change fails while the policy is unchanged since that preview, propose that last valid preview and ask; do not end the turn waiting for a better one. Write the proposal as message text before the question, including any **Effect on agents**; option descriptions are not the proposal.
+- When approval is needed, end the same turn with one \`archestra__ask_user\` question: "Apply this policy?" ("Open this pull request?" when approval opens a GitHub PR), unless the workflow names its own question, with options "Approve" and "Not now"; its "Type something" choice lets the operator type a change instead. The preview card already shows the proposed TOML, so do not offer to show it. Without \`archestra__ask_user\`, use the client's own question tool with the same options; with neither, end with **Approve, or tell me what to change.** Never end a turn on a preview without the question, also when the operator asked to see the change first. If an optional refinement of a valid preview of the requested change fails while the policy is unchanged since that preview, propose that last valid preview and ask; do not end the turn waiting for a better one. Write the proposal as message text before the question, including any **Effect on agents**; option descriptions are not the proposal.
   - **Approve**: continue in the same response with **Publish**.
-  - **Show TOML** is inspection, not approval. For \`edits\`, show the preview's \`diff\` in a fenced diff block and say every other line stays as it is; for a first policy or a full rewrite, show the complete proposed root TOML you previewed in a fenced toml block, with no omissions or invented edits. Then ask again with Approve and Change something.
-  - **Change something**: ask in one sentence what to change, then wait.
-  - Declined, dismissed, or unanswered: stop without saving and wait for the next message.
+  - **A typed answer** is a change request: apply it, preview again, and ask again. If it asks to see the TOML instead, show the preview's \`diff\` in a fenced diff block for \`edits\`, or the complete proposed root TOML for a first policy or full rewrite, with no omissions or invented edits, then ask again.
+  - **Not now**, dismissed, or unanswered: stop without saving and wait for the next message.
 - Ask for approval only before an action you can perform. When the operator must act elsewhere, give the steps or link instead.
 - Call \`archestra__execute_remedy_plan\` with the offered \`offer_id\` without asking first; it requests the review itself, or returns one to ask with \`archestra__ask_user\`. This replaces the shared rule against calling the runtime's remedy tool before approval.
 - Ask independent questions in the same step, one \`archestra__ask_user\` call per question with a short \`header\`; Archestra chat shows them as one card. Ask later only a question whose options depend on an earlier answer.
-- A question that ends your turn with a choice between known options, such as approval, a new or existing repository, or which servers to cover, goes on \`archestra__ask_user\` with those options, not in prose; without it, use the client's question tool, and with neither, end with a line that lists the options. Only these stay in text: the one-sentence question that ends **Explain** or follows **Change something**, the numbered changes that end **Review**, and a one-sentence next step that a workflow offers.
+- A question that ends your turn with a choice between known options, such as approval, a new or existing repository, or which servers to cover, goes on \`archestra__ask_user\` with those options, not in prose; without it, use the client's question tool, and with neither, end with a line that lists the options. Only these stay in text: the one-sentence question that ends **Explain**, the numbered changes that end **Review**, and a one-sentence next step that a workflow offers.
 
 ### Publish
 
@@ -125,56 +123,24 @@ This replaces the summary in the shared **Publish and finish**.
 - An error caused by your own call, such as a mistyped ID, is not a finding: fix the call and retry it. If a tool fails twice with the same error, stop and tell the operator in one sentence what failed and what they can do. If an edit is rejected, copy the exact text from the latest \`archestra__get_guardrails_policy\` result and preview again. If a policy tool keeps failing, give the operator its exact error, not a general reason. Read this skill's files with \`archestra__load_skill\`, never \`run_command\`.
 - Inspection reads stored tool metadata only. Never execute business tools or read private content to classify them. Reuse inspection results already in this conversation; inspect a server again only when the policy changed, the operator asks for a fresh check, or you need rows, pages, or full detail you do not have yet. Use \`"detail": "full"\` only with \`tools\` naming the tools whose arguments you will write rules for. Use only the tools this skill names; do not search for others to do its steps.
 - Do not restrict the configuring actor, the agent running this skill. Archestra releases \`get_remedy_plans\`, \`list_peer_messages\`, and \`read_peer_message\` without the policy, so they need no rule. \`yell\` is evaluated as \`mcp/appa/yell\`: without the catch-all, declare it with \`delta = {}\` and never restrict it. Never declare \`execute_remedy_plan\`: a rule that names it refuses the policy at load.
-- Keep agents working: \`archestra__load_skill\`, \`archestra__search_tools\`, and this assistant's tools \`archestra__get_guardrails_policy\`, \`archestra__validate_guardrails_policy\`, \`archestra__preview_guardrails_policy_change\`, \`archestra__update_guardrails_policy\`, \`archestra__get_guardrails_policy_change_status\`, \`archestra__list_guardrails_battery_fits\`, \`archestra__inspect_guardrails_server\`, \`archestra__list_mcp_server_deployments\`, \`archestra__get_agent\`, \`archestra__get_mcp_gateway\`, \`archestra__get_openappa_policy_tests\`, \`archestra__preview_openappa_validation_change\`, \`archestra__publish_openappa_validation_change\`, \`archestra__get_openappa_yell\`, \`archestra__list_openappa_yells\`, \`archestra__resolve_openappa_yell\`, \`archestra__list_openappa_consults\`, \`archestra__list_runtime_credentials\`, \`archestra__get_runtime_credential\`, \`archestra__request_runtime_credential_setup\`, \`archestra__request_battery_credentials\`, \`archestra__bind_guardrails_credential\`, and \`archestra__ask_user\` stay unrestricted unless the operator names them; a request for a strict policy does not cover them. Without the catch-all, declare them with \`delta = {}\` and say so. \`archestra__run_tool\` needs no rule: a call is evaluated as the tool it runs.
+- Keep agents working: \`archestra__load_skill\`, \`archestra__search_tools\`, and this assistant's tools \`archestra__get_guardrails_policy\`, \`archestra__validate_guardrails_policy\`, \`archestra__preview_guardrails_policy_change\`, \`archestra__update_guardrails_policy\`, \`archestra__get_guardrails_policy_change_status\`, \`archestra__list_guardrails_battery_fits\`, \`archestra__inspect_guardrails_server\`, \`archestra__list_mcp_server_deployments\`, \`archestra__get_agent\`, \`archestra__get_mcp_gateway\`, \`archestra__get_openappa_policy_tests\`, \`archestra__run_openappa_policy_tests\`, \`archestra__discover_openappa_validation_scenarios\`, \`archestra__draft_openappa_validation_scenario\`, \`archestra__preview_openappa_validation_change\`, \`archestra__publish_openappa_validation_change\`, \`archestra__get_openappa_yell\`, \`archestra__list_openappa_yells\`, \`archestra__resolve_openappa_yell\`, \`archestra__list_openappa_consults\`, \`archestra__list_runtime_credentials\`, \`archestra__get_runtime_credential\`, \`archestra__request_runtime_credential_setup\`, \`archestra__request_battery_credentials\`, \`archestra__bind_guardrails_credential\`, and \`archestra__ask_user\` stay unrestricted unless the operator names them; a request for a strict policy does not cover them. Without the catch-all, declare them with \`delta = {}\` and say so. \`archestra__run_tool\` needs no rule: a call is evaluated as the tool it runs.
 - A change that removes the catch-all or restricts those tools changes how agents work. Flag it once under **Effect on agents**, before the approval question: what stops working and for whom, whether you can still change the policy afterwards, and how to undo it (an administrator turns enforcement off on the OpenAPPA Overview page, then fixes the policy in a new chat). If the operator still approves, apply it. If one of them is refused later, say that the policy blocks it and how to undo that; never read a refusal as proof that a change worked.
 - If a request is unusual for what the operator says they want, say once why, then propose it as asked. Do not quietly weaken a rule to let a blocked call succeed.
 - Keep secrets out of policy text. Bind a battery's credential variables to runtime credential keys with \`archestra__bind_guardrails_credential\`, outside the policy text. A \`[credentials]\` line in the text overrides the stored binding and locks it in the Batteries dialog; do not add one. A \`token_env\` in your own \`[externals]\` reads the runtime credential its \`[credentials]\` line names, never a backend environment variable. Adding or rekeying that line, or pointing another external at it, needs \`credential:update\`. Never ask for a token or private key in chat.
 - The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\` and \`[server_aliases]\`. An \`include\` entry is \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`; removing it turns the battery off.
-- Reading and previewing need \`openappaPolicy:read\`; publishing \`openappaPolicy:update\`; creating the policy repository \`organizationSettings:update\`; yells and helper errors \`openappaDiagnostics:read\`; GitHub PR publishing and status \`credential:read\`; binding runtime credentials \`openappaPolicy:update\` and \`credential:update\`. On a permission error, say what is missing. Policy writes are assigned only to agents such as the built-in OpenAPPA Configuration Agent; elsewhere, preview and direct the operator to that agent.
+- Reading and previewing need \`openappaPolicy:read\`; publishing \`openappaPolicy:update\`; creating the policy repository \`organizationSettings:update\`; yells and helper errors \`openappaDiagnostics:read\`; GitHub PR publishing and status \`credential:read\`; binding runtime credentials \`openappaPolicy:update\` and \`credential:update\`. On a permission error, say what is missing. Policy writes are assigned only to agents such as the built-in APPAdvisor; elsewhere, preview and direct the operator to that agent.
 
 ${APPA_GUIDE_CORE}`,
   files: [
     {
       path: "references/validation-writing.md",
       kind: "reference",
-      content: `# Lightweight OpenAPPA validation specifications
-
-A specification is a UTF-8 .appa file with an ordered scenario. Every file starts a fresh session. Calls use canonical tool names and a brace-delimited argument block, followed by the expected policy decision. Use \`{}\` for no arguments. Otherwise put each unquoted argument name on its own line, followed by a colon and a JSON value. The argument block is not a JSON object: do not quote argument names or separate lines with commas:
-
-\`\`\`appa
-mcp/mail/send {
-  recipient: "reviewer@example.com"
-  body: "Status update"
-}
-expect allow
-\`\`\`
-
-A short # comment records intent:
-
-\`\`\`appa
-# External data must not lead to a trusted-context email write.
-mcp/files/read {}
-expect allow
-mcp/mail/send {}
-expect deny
-\`\`\`
-
-This example requires a policy that marks files__read suspicious and requires mail__send to have trusted context. It expresses an intended high-level restriction, not a universal rule. Use actual inspected tool names and arguments needed by the user's policy; do not invent call arguments from a Yell archive.
-
-A companion scenario can check that the same write is allowed from a fresh trusted session:
-
-\`\`\`appa
-# A fresh trusted session can send mail.
-mcp/mail/send {}
-expect allow
-\`\`\`
-
-Put that companion in a separate file because calls in one file share their ordered session state. Start with only the essential cases, usually one file or a small pair; avoid a large matrix. Preserve existing expectations when updating a policy. If two requirements conflict, explain the conflict rather than silently rewriting tests.
-
-Offline replay uses the same native policy engine as enforcement, against the composed candidate policy. It executes no tools, models or remote helpers. The host's catch-all annotator (\`noop\`) answers offline; a step that needs any other annotator, such as \`archestra.run-command\`, or an audience lookup such as team membership reports cannot_run. Steps before a missing annotator still pass or fail; after an unanswered audience lookup, replay stops at the first call in the file that was not allowed, which can be an earlier denial. A policy with a model annotator other than \`archestra\`, a model profile, or an external authority or sanitizer cannot run at all. A passing replay demonstrates only the decisions represented by the scenario; it does not prove live client integration or provider behavior.
-
-Use get_openappa_policy_tests to obtain the authoritative version and configured directory. Upsert only the named files you intend to edit and use explicit deletions. For Git sources, files must stay under that directory and Git remains authoritative. Preview the full patched suite against the current policy; omit policyContent or pass null for validation-only work. Include policyContent only when the operator explicitly requested a policy change. A replay failure does not authorize a policy fix.
-`,
+      content: VALIDATION_WRITING,
+    },
+    {
+      path: "references/validation-read-restriction.md",
+      kind: "reference",
+      content: VALIDATION_READ_RESTRICTION,
     },
     {
       path: "references/first-policy.md",

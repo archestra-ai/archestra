@@ -1,24 +1,17 @@
-import { afterEach, describe, expect, test } from "vitest";
-import config from "@/config";
+import { describe, expect, test } from "vitest";
 import type { AgentRuntime } from "@/types";
 import { extractFinalAnswer, resolveAgentRuntime } from "./pod-run";
 
-const originalEnabled = config.agentRuntime.enabled;
-
-afterEach(() => {
-  config.agentRuntime.enabled = originalEnabled;
-});
-
 describe("resolveAgentRuntime", () => {
-  test("does not change foreground delegation while Agent Runtime is disabled", () => {
-    config.agentRuntime.enabled = false;
-
-    expect(resolveAgentRuntime(agentWithRuntime)).toBeNull();
+  test("keeps an Agent without a runtime in the foreground", () => {
+    expect(
+      resolveAgentRuntime({ ...agentWithRuntime, runtime: null }),
+    ).toBeNull();
   });
 
-  test("resolves the Agent runtime after the independent feature is enabled", () => {
-    config.agentRuntime.enabled = true;
-
+  test("resolves a configured runtime without consulting the cluster", () => {
+    // A cluster without the Agent Sandbox controller fails at launch with a
+    // 503, not by silently running the Agent in the foreground.
     expect(resolveAgentRuntime(agentWithRuntime)).toEqual({
       ...runtime,
       agentId: "agent-1",

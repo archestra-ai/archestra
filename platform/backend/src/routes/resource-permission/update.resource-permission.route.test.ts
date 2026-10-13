@@ -1,3 +1,4 @@
+import { resourcePermissionPresetsFor } from "@archestra/shared";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import {
@@ -5,6 +6,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import AgentModel from "@/models/agent";
 import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
 import MemberModel from "@/models/member";
@@ -481,6 +483,11 @@ describe("resource permission routes", () => {
       payload: {
         revision: 1,
         grants: [
+          // Somebody must keep Full access on every agent.
+          {
+            subject: { type: "role", id: "admin" },
+            actions: ["read", "use", "update", "delete", "manage-permissions"],
+          },
           { subject: { type: "user", id: recipient.id }, actions: ["read"] },
         ],
       },
@@ -495,13 +502,13 @@ describe("resource permission routes", () => {
     expect(cleared.statusCode).toBe(200);
     expect(cleared.json()).toMatchObject({
       grants: [],
-      inheritedGrants: [
-        {
+      inheritedGrants: expect.arrayContaining([
+        expect.objectContaining({
           name: "Resource reader",
           subject: { type: "user", id: recipient.id },
           actions: ["read"],
-        },
-      ],
+        }),
+      ]),
     });
   });
 
@@ -565,6 +572,56 @@ describe("resource permission routes", () => {
         scope: ownKey.id,
       }),
     ).toEqual(before);
+  });
+
+  test("a personal MCP gateway cannot be shared beyond its owner", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const colleague = await makeUser();
+    await makeMember(colleague.id, organizationId);
+    const gateway = await AgentModel.ensurePersonalMcpGateway({
+      userId: user.id,
+      organizationId,
+    });
+    const url = `/api/resource-permissions/mcpGateway/${gateway.id}`;
+    const { revision } = (await ResourcePermissionPolicyModel.find({
+      organizationId,
+      resource: "mcpGateway",
+      scope: gateway.id,
+    })) ?? { revision: 0 };
+    const [narrowest] = Object.values(
+      resourcePermissionPresetsFor("mcpGateway"),
+    );
+    const ownerOnly = [
+      { subject: { type: "user", id: user.id }, actions: narrowest.actions },
+    ];
+
+    const shared = await app.inject({
+      method: "PUT",
+      url,
+      payload: {
+        revision,
+        grants: [
+          ...ownerOnly,
+          {
+            subject: { type: "user", id: colleague.id },
+            actions: narrowest.actions,
+          },
+        ],
+      },
+    });
+    expect(shared.json().error.message).toBe(
+      "Personal MCP gateways cannot be shared",
+    );
+    expect(shared.statusCode).toBe(400);
+
+    const kept = await app.inject({
+      method: "PUT",
+      url,
+      payload: { revision, grants: ownerOnly },
+    });
+    expect(kept.statusCode, kept.body).toBe(200);
   });
 
   test("rejects duplicate recipient rows without saving an ambiguous policy", async ({

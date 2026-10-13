@@ -138,22 +138,21 @@ describe("CreateVirtualKeyDialog", () => {
     expect(
       screen.getByRole("heading", { name: "New virtual key" }),
     ).toBeInTheDocument();
-    // Every value starts at a sensible default, so Continue is enough.
+    // Every value starts at a sensible default, so Create is enough.
     expect(screen.getByLabelText("Name")).toHaveValue(
       "Self Admin's virtual key (2)",
     );
-    expect(screen.getByLabelText("Selected provider keys")).toHaveTextContent(
-      "OpenAI · Main OpenAI",
-    );
-    // Sharing is set from the saved key's Permissions tab, not on create.
     expect(
-      screen.queryByRole("button", { name: "Permissions" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("region", { name: "Provider keys" }),
+    ).toHaveTextContent("OpenAI · Main OpenAI");
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByText("Never")).toBeVisible();
-    expect(screen.getByText("No team")).toBeVisible();
+    expect(screen.getByLabelText("Expires")).toHaveTextContent("Never");
+    expect(screen.getByLabelText("Who pays for this key?")).toHaveTextContent(
+      "No team",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Continue" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -167,6 +166,7 @@ describe("CreateVirtualKeyDialog", () => {
         labels: [],
         billingTeamId: undefined,
         spendCap: undefined,
+        initialGrants: [],
       },
     });
   });
@@ -175,23 +175,34 @@ describe("CreateVirtualKeyDialog", () => {
     const user = userEvent.setup();
     renderDialog("standard");
 
-    await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(screen.getByLabelText("Who pays for this key?"));
     await user.click(await screen.findByRole("option", { name: /^Platform/ }));
     expect(
       screen.getByText(/The owner's personal limit does not apply/),
     ).toBeVisible();
     await user.type(screen.getByLabelText("Spend cap in dollars"), "500");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-
-    expect(screen.getByText("Platform")).toBeVisible();
-    expect(screen.getByText("$500 this month")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
       data: expect.objectContaining({
         billingTeamId: "team-platform",
         spendCap: { limitValue: 500, cleanupInterval: "calendar_month" },
+      }),
+    });
+  });
+
+  it("keeps a cap period picked before the amount", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard");
+
+    await user.click(screen.getByLabelText("Cap resets"));
+    await user.click(await screen.findByRole("option", { name: "Every week" }));
+    await user.type(screen.getByLabelText("Spend cap in dollars"), "100");
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        spendCap: { limitValue: 100, cleanupInterval: "calendar_week_monday" },
       }),
     });
   });
@@ -205,7 +216,6 @@ describe("CreateVirtualKeyDialog", () => {
     expect(
       screen.queryByRole("button", { name: "Continue" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
     await user.type(screen.getByLabelText("Name"), "Regional key");
     await user.type(screen.getByLabelText("Spend cap in dollars"), "250");
     await user.click(screen.getByRole("button", { name: "Create key" }));
@@ -219,32 +229,77 @@ describe("CreateVirtualKeyDialog", () => {
     });
   });
 
-  it("focuses the name rather than the step bars when it opens", async () => {
+  it("focuses the name when it opens", async () => {
     renderDialog("standard");
 
     await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
   });
 
-  it("lets valid wizard steps be visited directly and preserves edits", async () => {
+  it("starts with every provider's primary key", async () => {
     const user = userEvent.setup();
-    renderDialog("standard");
-    await user.click(screen.getByRole("button", { name: "3. Review" }));
-    expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "2. Budget" }));
-    await user.type(screen.getByLabelText("Spend cap in dollars"), "75");
-    await user.click(screen.getByRole("button", { name: "1. Key" }));
-    await user.clear(screen.getByLabelText("Name"));
-    expect(screen.getByRole("button", { name: "3. Review" })).toBeDisabled();
-    await user.type(screen.getByLabelText("Name"), "Build key");
-    await user.click(screen.getByRole("button", { name: "3. Review" }));
-    expect(screen.getByText("$75 this month")).toBeVisible();
+    renderDialog("standard", {
+      parentableKeys: SEVERAL_KEYS,
+      initialProviderApiKeys: null,
+    });
+
+    const section = screen.getByRole("region", { name: "Provider keys" });
+    expect(section).toHaveTextContent("OpenAI · Team key");
+    expect(section).toHaveTextContent("Each provider uses its primary key.");
+    expect(
+      within(section).getByRole("button", { name: "Enable all" }),
+    ).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Create key" }));
+
     expect(mutateAsync).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        name: "Build key",
-        spendCap: { limitValue: 75, cleanupInterval: "calendar_month" },
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: "openai-team" },
+          { provider: "zhipuai", providerApiKeyId: "zhipu-key" },
+        ],
       }),
     });
+  });
+
+  it("stops using a provider, lists it as not used, and adds it back", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard", {
+      parentableKeys: SEVERAL_KEYS,
+      initialProviderApiKeys: null,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    await user.click(screen.getByRole("button", { name: "Stop using OpenAI" }));
+    expect(
+      screen.getByRole("group", { name: "Providers not used" }),
+    ).toHaveTextContent("OpenAI");
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    expect(mutateAsync).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({
+        providerApiKeys: [
+          { provider: "zhipuai", providerApiKeyId: "zhipu-key" },
+        ],
+      }),
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add OpenAI" }));
+    expect(
+      screen.queryByRole("group", { name: "Providers not used" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the provider picker and blocks Create when no provider is used", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard", {
+      parentableKeys: SEVERAL_KEYS,
+      initialProviderApiKeys: [],
+    });
+
+    expect(
+      screen.getByText("Pick the providers this key can use"),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create key" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Enable all" }));
+    expect(screen.getByRole("button", { name: "Create key" })).toBeEnabled();
   });
 
   it("hands off a standard key with a runnable request for the endpoint picked", async () => {
@@ -333,7 +388,7 @@ describe("CreateVirtualKeyDialog", () => {
     expect(dialog).toHaveTextContent("X-Archestra-Virtual-Key: arch_created");
   });
 
-  it("makes the creator the owner, even for an admin", async () => {
+  it("makes the creator the owner and hides the owner field from members", async () => {
     const user = userEvent.setup();
     renderDialog("standard", {
       existingKeys: [
@@ -346,27 +401,40 @@ describe("CreateVirtualKeyDialog", () => {
     expect(screen.getByLabelText("Name")).toHaveValue(
       "Self Admin's virtual key (2)",
     );
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.queryByText("Key owner")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Owner")).not.toBeInTheDocument();
     await createFromAnyStep(user);
 
     expect(mutateAsync).toHaveBeenCalledWith({
       data: expect.not.objectContaining({ ownerId: expect.anything() }),
     });
   });
+
+  it("lets an admin pick the owner, defaulting to themselves", () => {
+    renderDialog("standard", { isVirtualKeyAdmin: true });
+
+    expect(screen.getByLabelText("Owner")).toHaveTextContent("Yourself");
+  });
 });
 
-/** Walk the remaining wizard steps with their defaults and create. */
 async function createFromAnyStep(user: ReturnType<typeof userEvent.setup>) {
-  for (;;) {
-    const create = screen.queryByRole("button", { name: "Create key" });
-    if (create) {
-      await user.click(create);
-      return;
-    }
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-  }
+  await user.click(screen.getByRole("button", { name: "Create key" }));
 }
+
+const SEVERAL_KEYS = [
+  {
+    id: "openai-staging",
+    name: "Staging key",
+    provider: "openai",
+    isPrimary: false,
+  },
+  {
+    id: "openai-team",
+    name: "Team key",
+    provider: "openai",
+    isPrimary: true,
+  },
+  { id: "zhipu-key", name: "Zhipu key", provider: "zhipuai", isPrimary: true },
+] as never[];
 
 function createdKey(
   keyType: "standard" | "passthrough",
@@ -395,6 +463,13 @@ function renderDialog(
       authorId: string;
       keyType: "standard" | "passthrough";
     }>;
+    parentableKeys?: never[];
+    /** null starts from every provider's primary key. */
+    initialProviderApiKeys?: Array<{
+      provider: "openai" | "zhipuai";
+      providerApiKeyId: string;
+    }> | null;
+    isVirtualKeyAdmin?: boolean;
   } = {},
 ) {
   // The permissions section reads the role and team catalog through queries.
@@ -404,18 +479,24 @@ function renderDialog(
         open
         onOpenChange={vi.fn()}
         keyType={keyType}
-        parentableKeys={[
-          {
-            id: "provider-key-1",
-            name: "Main OpenAI",
-            provider: "openai",
-          } as never,
-        ]}
-        initialProviderApiKeys={
-          keyType === "standard"
-            ? [{ provider: "openai", providerApiKeyId: "provider-key-1" }]
-            : undefined
+        parentableKeys={
+          options.parentableKeys ?? [
+            {
+              id: "provider-key-1",
+              name: "Main OpenAI",
+              provider: "openai",
+            } as never,
+          ]
         }
+        initialProviderApiKeys={
+          options.initialProviderApiKeys === null
+            ? undefined
+            : (options.initialProviderApiKeys ??
+              (keyType === "standard"
+                ? [{ provider: "openai", providerApiKeyId: "provider-key-1" }]
+                : undefined))
+        }
+        isVirtualKeyAdmin={options.isVirtualKeyAdmin ?? false}
         connectionBaseUrl="https://proxy.example.com"
         defaultExpirationSeconds={null}
         currentUser={{ id: "u-self", name: "Self Admin" }}

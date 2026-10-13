@@ -85,6 +85,7 @@ export function ResourcePermissions({
   registerSave,
   standalone = false,
   layout = "default",
+  lockedReason,
 }: {
   resource: ScopedResource;
   scope: string;
@@ -101,6 +102,12 @@ export function ResourcePermissions({
   /** The section is a pane of its own, so it draws no separating rule. */
   standalone?: boolean;
   layout?: "default" | "settings";
+  /**
+   * Why this object's access cannot be changed by anyone, shown in place of
+   * the editor's controls. Unlike a viewer lacking permission, asking someone
+   * with full access would not help.
+   */
+  lockedReason?: string;
 }) {
   const policy = useResourcePermissions(resource, scope);
   if (policy.isPending)
@@ -143,6 +150,7 @@ export function ResourcePermissions({
       registerSave={registerSave}
       standalone={standalone}
       layout={layout}
+      lockedReason={lockedReason}
     />
   );
 }
@@ -242,6 +250,7 @@ function PermissionsEditor({
   registerSave,
   standalone = false,
   layout = "default",
+  lockedReason,
 }: {
   policy: Policy;
   refreshFailed: boolean;
@@ -253,6 +262,7 @@ function PermissionsEditor({
   registerSave?: (save: (() => Promise<void>) | null) => void;
   standalone?: boolean;
   layout?: "default" | "settings";
+  lockedReason?: string;
 }) {
   const form = useForm<{ revision: number; grants: Policy["grants"] }>({
     defaultValues: { revision: policy.revision, grants: policy.grants },
@@ -281,9 +291,10 @@ function PermissionsEditor({
   });
   const { data: session } = useSession();
   const canManage =
-    policy.scope === "*"
+    !lockedReason &&
+    (policy.scope === "*"
       ? !!canUpdateGlobal
-      : policy.effectiveActions.includes("manage-permissions");
+      : policy.effectiveActions.includes("manage-permissions"));
   const presets = resourcePermissionPresetsFor(policy.resource);
   // A level is offered only when the viewer holds every action in it.
   const canGrant = (actions: readonly ResourcePermissionAction[]) =>
@@ -551,7 +562,8 @@ function PermissionsEditor({
               <Info />
               <span className="font-medium">You can’t change permissions.</span>
               <InlineNoticeText>
-                Ask someone with full access to let you change permissions.
+                {lockedReason ??
+                  "Ask someone with full access to let you change permissions."}
               </InlineNoticeText>
             </InlineNotice>
           )}
@@ -622,14 +634,42 @@ function PermissionsEditor({
             dirty &&
             safety &&
             (blocked ? (
-              <InlineNotice variant="error">
+              policy.scope === "*" ? (
+                <InlineNotice variant="error" className="w-full">
+                  <AlertTriangle />
+                  <span className="font-medium">
+                    At least one recipient needs Full access.
+                  </span>
+                  <InlineNoticeText>
+                    Without it, nobody can edit, delete, or share{" "}
+                    {resourcePluralNames[policy.resource]} that other people
+                    created.
+                  </InlineNoticeText>
+                </InlineNotice>
+              ) : (
+                <InlineNotice variant="error" className="w-full">
+                  <AlertTriangle />
+                  <span className="font-medium">
+                    Someone must be able to change permissions.
+                  </span>
+                  <InlineNoticeText>
+                    These changes would leave no one able to change permissions.
+                    Give another recipient full access before removing your own.
+                  </InlineNoticeText>
+                </InlineNotice>
+              )
+            ) : safety.losesManagement && policy.scope === "*" ? (
+              // Editing this list takes a role permission, not a grant here,
+              // so the caller can always change it back.
+              <InlineNotice className="w-full">
                 <AlertTriangle />
                 <span className="font-medium">
-                  Someone must be able to change permissions.
+                  {safety.losesAccess
+                    ? `You’ll lose access to ${resourcePluralNames[policy.resource]} that other people created.`
+                    : `You won’t be able to edit or delete ${resourcePluralNames[policy.resource]} that other people created.`}
                 </span>
                 <InlineNoticeText>
-                  These changes would leave no one able to change permissions.
-                  Give another recipient full access before removing your own.
+                  You can change this list again at any time.
                 </InlineNoticeText>
               </InlineNotice>
             ) : safety.losesManagement ? (
@@ -724,12 +764,18 @@ function PermissionsEditor({
         }
       >
         <p className="text-sm text-muted-foreground">
-          You won’t be able to undo this yourself.
-          <span>
-            {safety?.losesAccess
-              ? ` Ask ${safety?.recovery} to give you access again.`
-              : ` To change permissions again, ask ${safety?.recovery}.`}
-          </span>
+          {policy.scope === "*" ? (
+            <span>You can change this list again at any time.</span>
+          ) : (
+            <>
+              You won’t be able to undo this yourself.
+              <span>
+                {safety?.losesAccess
+                  ? ` Ask ${safety?.recovery} to give you access again.`
+                  : ` To change permissions again, ask ${safety?.recovery}.`}
+              </span>
+            </>
+          )}
         </p>
       </StandardDialog>
       <StandardDialog

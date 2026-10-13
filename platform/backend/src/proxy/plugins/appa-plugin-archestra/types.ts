@@ -114,8 +114,29 @@ export type AppaClientAdapter = {
     isAvailable?(headers: IncomingHttpHeaders): boolean;
     supportsMultiple?: boolean;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
-    rulingFromResult?(result: NativeQuestionResult): NativeQuestionRuling;
+    /**
+     * Approve or Deny from the tool's result. `asked` is the question the
+     * platform wrote for the review; the ruling is read against it, never
+     * found by a search of the result text.
+     */
+    rulingFromResult?(
+      result: NativeQuestionResult,
+      asked: AskUserArguments,
+    ): NativeQuestionReading;
+    /**
+     * The client also shows the gateway's MCP form (elicitation), which
+     * returns the choice as data. An answer in a wording the proxy does not
+     * know is then asked once more there, instead of counting as no answer.
+     */
+    formFallback?: boolean;
   };
+  /**
+   * The client's own tool that waits for MCP servers which are still
+   * connecting. The client declares it when it sends requests before its tool
+   * list is complete. The call takes no arguments and changes nothing, so it
+   * can carry a denial while the gateway notice tool is not declared yet.
+   */
+  readonly pendingServersTool?: string;
   /**
    * Reads the trajectory identity the client itself puts on the wire: the id
    * it keeps stable across a resumed or compacted conversation, so a resume
@@ -304,9 +325,15 @@ export type AppaRelayArrival = {
 /** The arguments of the platform's ask_user tool. */
 export type AskUserArguments = {
   question: string;
+  /**
+   * The question for hosts that show option previews (Claude Code), set when
+   * every option's preview carries what `question` spells out.
+   */
+  previewQuestion?: string;
   /** Short tab label; unvalidated here, as the model wrote it. */
   header?: unknown;
-  options: Array<{ label: string; description?: string }>;
+  /** `preview` is shown only by hosts with option previews (Claude Code). */
+  options: Array<{ label: string; description?: string; preview?: string }>;
   allowMultiple?: boolean;
   remedy_offer_ids?: string[];
 };
@@ -317,3 +344,9 @@ export type NativeQuestionResult = {
 };
 
 export type NativeQuestionRuling = "approve" | "deny" | "none";
+
+/**
+ * A ruling, or "unrecognized" for an answer in a wording the adapter does not
+ * know. An unrecognized answer is never read as a choice.
+ */
+export type NativeQuestionReading = NativeQuestionRuling | "unrecognized";

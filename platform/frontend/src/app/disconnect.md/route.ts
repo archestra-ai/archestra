@@ -155,13 +155,21 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
 - Skills and plugins: the extraKnownMarketplaces entry in ~/.copilot/settings.json cloned
   from {{HOST}}/skills/, and the plugins installed from it (named PLUGIN@MARKETPLACE; see
   copilot plugin --help for the list command).
-- LLM proxy: export COPILOT_PROVIDER_TYPE, COPILOT_PROVIDER_BASE_URL,
+- LLM proxy: the archestra provider and its models in ~/.copilot/providers.json
+  (respect COPILOT_HOME and COPILOT_PROVIDERS_CONFIG overrides); the selected model in
+  ~/.copilot/settings.json. Setup ownership and the previous model are recorded in
+  a sidecar at the registry path with .archestra-state.json appended.
+- Optional environment settings: export COPILOT_PROVIDER_TYPE, COPILOT_PROVIDER_BASE_URL,
   COPILOT_PROVIDER_API_KEY and COPILOT_PROVIDER_HEADERS lines in ~/.zshrc, ~/.bashrc
-  and ~/.profile (on Windows, user environment variables of the same names).`,
+  and ~/.profile; fish set -gx lines in config.fish or conf.d/*.fish
+  (on Windows, user environment variables of the same names).`,
     manual: `- copilot mcp remove SERVER_NAME.
 - For each plugin from the marketplace: copilot plugin uninstall PLUGIN@MARKETPLACE.
   Then copilot plugin marketplace remove MARKETPLACE.
-- Remove the export COPILOT_PROVIDER_* lines found above. Leave COPILOT_MODEL alone.`,
+- Remove only the archestra provider whose baseUrl points to {{BASE}}, and its models.
+  If settings.json still selects the model in the setup state file, restore previousModel
+  (or remove the model setting if previousModel is null). Remove the setup state file.
+- Remove the COPILOT_PROVIDER_* assignments found above. Remove COPILOT_MODEL only when it selects an archestra/ model; preserve other choices.`,
     finish:
       "Tell the user to open a new terminal so the removed environment variables are gone.",
   },
@@ -169,12 +177,15 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
     binary: "opencode",
     inventory: `- Config: \${XDG_CONFIG_HOME:-~/.config}/opencode/opencode.json. The gateway is the mcp
   entry whose URL starts with {{BASE}}/mcp/. The proxy is a provider entry whose
-  options.baseURL points at {{HOST}}, or x-archestra-* headers added to a provider.
+  options.baseURL (V1) or settings.baseURL (V2 providers) points at {{HOST}}, or x-archestra-* headers added to a provider.
 - Skills: the folder \${XDG_CONFIG_HOME:-~/.config}/opencode/skills/MARKETPLACE cloned from {{HOST}}/skills/.
 - Routing plugin: \${XDG_CONFIG_HOME:-~/.config}/opencode/plugins/archestra-llm-proxy.js.`,
     manual: `- opencode mcp logout SERVER_NAME, then remove mcp.SERVER_NAME from opencode.json.
 - Delete the skills folder named above.
-- Remove the provider entry that points at {{HOST}}, or only the baseURL and
+- If ~/.archestra/opencode-primary-state.json exists, restore its sections and fields
+  into opencode.json: null means delete the field or provider entry. Then delete
+  that state file and ~/.archestra/opencode-primary.key.
+- Otherwise, remove the provider entry that points at {{HOST}}, or only the baseURL and
   x-archestra-* headers that were added to the user's own provider.
 - Routing plugin: if ~/.archestra/opencode-routing-plugin-state.json says the plugin
   file existed before, restore its saved content; otherwise delete archestra-llm-proxy.js.

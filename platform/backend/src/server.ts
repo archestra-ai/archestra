@@ -75,6 +75,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 // biome-ignore lint/style/noRestrictedImports: runtime-gated image prefetch
 import { agentImagePrefetcher } from "@/k8s/agent-runtime/image-prefetch.ee";
 // SPDX-SnippetEnd
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { agentWarmPoolManager } from "@/k8s/agent-runtime/warm-pool";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
@@ -1086,6 +1087,10 @@ const startWebServer = async () => {
     // (it also prunes terminal event logs), started here unconditionally so
     // orphaned tasks get settled even on pods that never start a run.
     a2aTaskRunService.startMaintenance();
+    // Agent Runtime is available once the cluster serves the Agent Sandbox
+    // API. The loops below start regardless and idle until it does, so
+    // installing the controller later needs no restart.
+    void agentSandboxApi.refresh();
     agentRunReconciler.start();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

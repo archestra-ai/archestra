@@ -4,7 +4,7 @@ ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903
 # Go toolchain is sourced from the official golang:alpine image because Alpine's
 # community repo lags upstream Go patch releases. Stays binary-compatible since
 # both images share the Alpine base.
-ARG GOLANG_IMAGE=golang:1.26.6-alpine@sha256:af8d6740070b8906d12eae1c3e3ea0957fb63f492051ea05e354c38ef9fe88df
+ARG GOLANG_IMAGE=golang:1.26.9-alpine@sha256:cdfd4fe2da6b225d8b40c6b7a105736e548e83ff56d5d8f9394446eeb5eb84e0
 
 FROM ${GOLANG_IMAGE} AS go-bin
 
@@ -148,13 +148,8 @@ RUN apk add --no-cache \
    # CVE-2026-11824, CVE-2026-11822: sqlite vulnerabilities (HIGH) fixed in 3.53.4-r0.
    # The pinned python:3.12-alpine base ships sqlite-libs 3.51.2-r0 (a python3
    # runtime dependency), so it must be upgraded explicitly here.
-   # Go runtime is copied from the golang:1.26.6-alpine image below to pick up the
-   # Go stdlib HIGH CVEs fixed in 1.25.10 (CVE-2026-42499/39836/39820/33814/33811),
-   # 1.25.11 (CVE-2026-42504), the CRITICAL fixed in 1.25.13 (CVE-2026-39821), and the
-   # HIGH fixed in 1.26.6 (CVE-2026-46600) that Alpine's apk index has not yet shipped.
-   # No 1.25.x release carries the CVE-2026-46600 fix (the line ends at 1.25.13
-   # upstream), so this moves to the same 1.26.6 toolchain the platform image's
-   # go-builder stage already uses.
+   # Copy the same Go 1.26.9 toolchain used by the platform builders for the
+   # October 2026 stdlib security fixes; Alpine packages can lag upstream patches.
    apk upgrade --no-cache nodejs bind openssl zlib expat sqlite-libs && \
    # The pinned build can keep bind 9.20.26-r0 after Alpine publishes security
    # fixes. Require the 9.20.29-r0 release that fixes its seven HIGH CVEs.

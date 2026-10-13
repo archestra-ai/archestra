@@ -92,9 +92,6 @@ describe("OllamaNativeChatInteraction", () => {
 
       expect(utils.getToolNamesUsed()).toEqual(["search", "fetch"]);
       expect(utils.getToolNamesRequested()).toEqual(["next_tool"]);
-      // The native wire has no `refusal` field to read.
-      expect(utils.getToolNamesRefused()).toEqual([]);
-      expect(utils.getToolRefusedCount()).toBe(0);
     });
   });
 
@@ -227,37 +224,6 @@ describe("OllamaNativeChatInteraction", () => {
       );
 
       expect(result).toMatchObject({ toolName: "search" });
-    });
-
-    it("does not attach a dual-LLM analysis to an id-less call", () => {
-      const utils = new OllamaNativeChatInteraction(
-        interaction({
-          model: "llama3.2",
-          messages: [
-            { role: "user", content: "go" },
-            {
-              role: "assistant",
-              content: "",
-              tool_calls: [{ function: { name: "search", arguments: {} } }],
-            },
-            { role: "tool", tool_name: "search", content: "hit" },
-          ],
-        }),
-      );
-
-      // The analysis is keyed by tool-call id; with none present, matching on
-      // `undefined === undefined` would attach the first analysis to every call.
-      const uiMessages = utils.mapToUiMessages([
-        {
-          toolCallId: "some-other-call",
-          result: "safe",
-          conversations: [],
-        } as never,
-      ]);
-      const assistantTurn = uiMessages.find((m) => m.role === "assistant");
-
-      const partTypes = (assistantTurn?.parts ?? []).map((p) => String(p.type));
-      expect(partTypes).not.toContain("dual-llm-analysis");
     });
   });
 });

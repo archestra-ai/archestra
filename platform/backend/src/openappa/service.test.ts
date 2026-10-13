@@ -9,9 +9,12 @@ import * as database from "@/database";
 import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import MemberModel from "@/models/member";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
 import {
   addressRuntimeChild,
@@ -683,6 +686,7 @@ describe("APPA feature boundary", () => {
         kind: "deny",
         feedback: "[appa] a call is already outstanding",
         offers: [],
+        recorded: true,
       },
     ]);
     expect(
@@ -691,6 +695,88 @@ describe("APPA feature boundary", () => {
       ),
     ).toEqual(["call:first", "call:second"]);
   });
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test("a tool batch reads its principal once and the next batch sees revoked membership", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const user = await makeUser({ email: "batch-member@example.com" });
+    await makeMember(user.id, organizationId);
+    const userSession = { ...session, caller_id: `user:${user.id}` };
+    const calls = Array.from({ length: 4 }, (_, index) => ({
+      id: `batch-${index}`,
+      name: "read_file",
+      arguments: {},
+    }));
+    const options = { canonicalize: (name: string) => name };
+    const { result, statements } = await recordQueries(() =>
+      evaluateToolCalls(userSession, calls, options),
+    );
+    expect(result).toEqual(calls.map(() => ({ kind: "allow" })));
+    expect(
+      statements.filter((statement) => statement.includes('from "member"')),
+    ).toHaveLength(1);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(calls.map(() => user.email));
+
+    await MemberModel.deleteAllByUserId(user.id);
+    native.dispatchHook.mockClear();
+    await evaluateToolCalls(userSession, calls, options);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(calls.map(() => undefined));
+  });
+  // SPDX-SnippetEnd
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  test("a result batch shares membership and refreshes it for the next batch", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    const user = await makeUser({ email: "result-member@example.com" });
+    await makeMember(user.id, organizationId);
+    const userSession = { ...session, caller_id: `user:${user.id}` };
+    const results = Array.from({ length: 5 }, (_, index) => ({
+      id: `result-${index}`,
+      name: "read_file",
+      content: `example ${index}`,
+      isError: false,
+    }));
+    const run = () =>
+      processProxyResults({
+        session: userSession,
+        results,
+        canonicalize: (name) => name,
+      });
+    const { result, statements } = await recordQueries(run);
+    expect(
+      Object.values(result.toolResultUpdates).map((update) => update.content),
+    ).toEqual(results.map((entry) => entry.content));
+    expect(
+      statements.filter((statement) => statement.includes('from "member"')),
+    ).toHaveLength(1);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(Array.from({ length: results.length + 1 }, () => user.email));
+
+    await MemberModel.deleteAllByUserId(user.id);
+    native.dispatchHook.mockClear();
+    await run();
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).principal),
+    ).toEqual(Array.from({ length: results.length + 1 }, () => undefined));
+  });
+  // SPDX-SnippetEnd
 
   test("names a member's email as the session principal, and nobody else's", async ({
     makeUser,
@@ -907,7 +993,12 @@ describe("APPA feature boundary", () => {
     } else {
       expect(await check).toEqual([
         { kind: "allow" },
-        { kind: "deny", feedback: "Policy denied", offers: [] },
+        {
+          kind: "deny",
+          feedback: "Policy denied",
+          offers: [],
+          recorded: true,
+        },
         { kind: "allow" },
       ]);
       expect([...open]).toEqual(["unrelated", "first", "third"]);
@@ -924,19 +1015,45 @@ describe("APPA feature boundary", () => {
     ).toEqual([{ kind: "allow" }]);
   });
 
-  test("refuses malformed arguments and duplicate IDs before admitting any call", async () => {
+  test("refuses duplicate IDs before admitting any call", async () => {
     const first = { id: "first", name: "read_file", arguments: {} };
-    for (const second of [
-      { id: "second", name: "read_file", arguments: "{" },
-      first,
-    ]) {
-      await expect(
-        evaluateToolCalls(session, [first, second], {
-          canonicalize: (name) => name,
-        }),
-      ).rejects.toMatchObject({ statusCode: 400 });
-    }
+    await expect(
+      evaluateToolCalls(session, [first, first], {
+        canonicalize: (name) => name,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
     expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test("denies only the calls with malformed arguments, before any bypass or dispatch", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const decisions = await evaluateToolCalls(
+      session,
+      [
+        { id: "first", name: "read_file", arguments: {} },
+        { id: "truncated", name: "read_file", arguments: '{"path": "/a' },
+        { id: "control", name: "remedy", arguments: "{" },
+      ],
+      {
+        canonicalize: (name) => name,
+        control: { name: "remedy" },
+      },
+    );
+    expect(decisions.map((decision) => decision.kind)).toEqual([
+      "allow",
+      "deny",
+      "deny",
+    ]);
+    // The runtime never saw these calls, so it holds no ruling for their ids.
+    expect(decisions[1]).not.toHaveProperty("recorded");
+    expect(decisions[2]).not.toHaveProperty("recorded");
+    expect(
+      native.dispatchHook.mock.calls.map(
+        ([raw]) => JSON.parse(raw).operation_id,
+      ),
+    ).toEqual(["call:first"]);
   });
 
   test("fails closed when a withheld admission cannot be settled", async () => {
@@ -1059,6 +1176,126 @@ describe("APPA feature boundary", () => {
     expect(result.toolResultUpdates["ask-call"]?.content).toBe(
       reported ? "APPA: withheld; remedy offer-123" : undefined,
     );
+  });
+
+  test("hands the runtime a marker, not the bytes, for a result with an image", async () => {
+    const data = Buffer.alloc(300_000, 5).toString("base64");
+    const adapter = anthropicAdapterFactory.createRequestAdapter({
+      model: "claude-sonnet-4-5",
+      max_tokens: 10,
+      messages: [
+        { role: "user", content: "look" },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "toolu_img", name: "Read", input: {} },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_img",
+              content: [
+                { type: "text", text: "the file" },
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: "image/png", data },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as never);
+
+    await processProxyResults({
+      session,
+      canonicalize: (each) => each,
+      results: adapter.getToolResults(),
+    });
+
+    const [event] = native.dispatchHook.mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .filter((each) => each.event === "tool_result");
+    expect(event.output).toContain("the file");
+    expect(event.output).toContain("[binary image/png, 300000 bytes, sha256 ");
+    expect(event.output).not.toContain(data.slice(0, 64));
+  });
+
+  test("a rewritten text beside an image goes upstream as text with the marker, first and on replay", async () => {
+    const data = Buffer.alloc(300_000, 5).toString("base64");
+    const request = () =>
+      anthropicAdapterFactory.createRequestAdapter({
+        model: "claude-sonnet-4-5",
+        max_tokens: 10,
+        messages: [
+          { role: "user", content: "look" },
+          {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu_img", name: "Read", input: {} },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_img",
+                content: [
+                  { type: "text", text: "the file" },
+                  {
+                    type: "image",
+                    source: { type: "base64", media_type: "image/png", data },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      } as never);
+    // The sanitizer rewrote the text part of the body the runtime was handed.
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event !== "tool_result")
+        return JSON.stringify({ decision: "ack" });
+      const parts = JSON.parse(event.output);
+      parts[0].text = "[redacted]";
+      const rewritten = JSON.stringify(parts);
+      return JSON.stringify({
+        decision: "deliver_value",
+        value: rewritten,
+        approved_output: rewritten,
+        output_source: "tool",
+      });
+    });
+
+    // The same stored decision answers both requests.
+    for (const _request of ["first", "replay"]) {
+      const adapter = request();
+      const { toolResultUpdates } = await processProxyResults({
+        session,
+        canonicalize: (each) => each,
+        results: adapter.getToolResults(),
+      });
+      adapter.applyToolResultUpdates(
+        Object.fromEntries(
+          Object.entries(toolResultUpdates).map(([id, update]) => [
+            id,
+            update.content,
+          ]),
+        ),
+      );
+      const upstream = adapter.toProviderRequest().messages[2]
+        .content as Array<{ content: unknown }>;
+      const sent = upstream[0].content;
+      expect(typeof sent).toBe("string");
+      expect(sent).toContain("[redacted]");
+      expect(sent).toContain("[binary image/png, 300000 bytes, sha256 ");
+      expect(sent).not.toContain(data.slice(0, 64));
+    }
   });
 
   describe("a remedy call the gateway never ran", () => {
@@ -1271,7 +1508,7 @@ describe("APPA feature boundary", () => {
 
     expect(decisions).toEqual([
       { kind: "control" },
-      { kind: "deny", feedback: "Not declared", offers: [] },
+      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1313,7 +1550,7 @@ describe("APPA feature boundary", () => {
     );
     expect(decisions).toEqual([
       { kind: "allow" },
-      { kind: "deny", feedback: "Not declared", offers: [] },
+      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1356,7 +1593,7 @@ describe("APPA feature boundary", () => {
     );
 
     expect(decisions).toEqual([
-      { kind: "deny", feedback: "Not declared", offers: [] },
+      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1956,7 +2193,12 @@ describe("APPA feature boundary", () => {
       { canonicalize: (name) => name },
     );
     expect(denied).toEqual([
-      { kind: "deny", feedback: "Parent policy denied", offers: [] },
+      {
+        kind: "deny",
+        feedback: "Parent policy denied",
+        offers: [],
+        recorded: true,
+      },
     ]);
   });
 
@@ -2470,6 +2712,7 @@ describe("APPA feature boundary", () => {
       content:
         "[appa] Blocked: tool archestra__download_file is not declared in this policy.\n\nThe tool did not run.",
       outputSource: "runtime",
+      denied: true,
     });
   });
   test("handles block decision falling back to reason or feedback when approved_output is absent", async () => {

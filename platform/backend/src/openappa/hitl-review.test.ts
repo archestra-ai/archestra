@@ -301,6 +301,173 @@ test("uses the staged review for fixed native approval choices", async () => {
   ).toBe(false);
 });
 
+test("asks preview hosts about a structured tool by name and previews its arguments beside each choice", async () => {
+  const active = session("preview-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "mcp/slack/send_message",
+      arguments: JSON.stringify({ channel: "#general", text: "Hello" }),
+    },
+  });
+
+  const argumentLines = "channel  #general\ntext     Hello";
+  expect(
+    await getHitlAskUserArguments({ session: active, offerIds: ["offer-1"] }),
+  ).toEqual({
+    question: "Full review text.",
+    previewQuestion: "Approve slack__send_message?",
+    header: "Approval",
+    options: [
+      {
+        label: "Approve",
+        description: "Allow this exact tool call.",
+        preview: `Approve\n\n${argumentLines}`,
+      },
+      {
+        label: "Deny",
+        description: "Keep this tool call blocked.",
+        preview: `Deny\n\n${argumentLines}`,
+      },
+    ],
+    allowMultiple: false,
+    remedy_offer_ids: ["offer-1"],
+  });
+});
+
+test("wraps long argument values to the preview pane width", async () => {
+  const active = session("wrapped-preview");
+  const text = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "mcp/slack/send_message",
+      arguments: JSON.stringify({ text }),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  const lines = question?.options[0].preview?.split("\n") ?? [];
+  expect(lines.slice(0, 2)).toEqual(["Approve", ""]);
+  expect(lines.length).toBeGreaterThan(3);
+  expect(lines.slice(2).every((line) => line.length <= 56)).toBe(true);
+  expect(
+    lines
+      .slice(2)
+      .map((line) => line.slice("text  ".length))
+      .join(" "),
+  ).toBe(text);
+});
+
+test.each([
+  ["no arguments", undefined],
+  ["empty arguments", "{}"],
+  ["arguments that are not an object", "[1,2]"],
+])("previews only the choice when the review has %s", async (_, reviewedArguments) => {
+  const active = session("bare-preview");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "local_tool",
+      ...(reviewedArguments ? { arguments: reviewedArguments } : {}),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.question).toBe("Full review text.");
+  expect(question?.previewQuestion).toBe("Approve local_tool?");
+  expect(question?.options.map((option) => option.preview)).toEqual([
+    "Approve",
+    "Deny",
+  ]);
+});
+
+/** A review as the OpenAPPA runtime writes it, with the given coverage lines. */
+function runtimeReview(coverage: string): string {
+  return [
+    "[OpenAPPA] Approve this call?",
+    'APPA asks you to rule as the authority "hitl".',
+    "Ask the person running this session to approve this exact call.",
+    "",
+    "Tool: host/archestra/send_report",
+    "Arguments:",
+    '{\n  "to": "finance@example.com"\n}',
+    "",
+    "What this ruling would cover:",
+    coverage,
+    "",
+    "Accept only if this exact call, with these exact arguments, may run. Decline refuses it.",
+  ].join("\n");
+}
+
+test.each([
+  {
+    case: "the person's attention only",
+    coverage: "  - attention: human-approval",
+    expected:
+      "Approve send_report?\n\nto  finance@example.com\n\nApprove lets this exact call run. Deny keeps it blocked.",
+  },
+  {
+    case: "more than the person's attention",
+    coverage:
+      "  - attention: human-approval\n  - the readers must be the public audience",
+    expected:
+      "Approve send_report?\n\nto  finance@example.com\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
+  },
+])("asks forms about the call itself when the ruling covers $case", async ({
+  coverage,
+  expected,
+}) => {
+  const active = session("form-question");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview(coverage),
+      tool: "send_report",
+      arguments: '{"to":"finance@example.com"}',
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.question).toBe(expected);
+});
+
+test("keeps the full review text when its coverage is in an unknown shape", async () => {
+  const active = session("unknown-coverage");
+  const text = runtimeReview("  * the readers must be the public audience");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text,
+      tool: "send_report",
+      arguments: '{"to":"finance@example.com"}',
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.question).toBe(text);
+});
+
 test("renders a terminal-safe heading without changing the reviewed payload", async () => {
   const active = session("terminal-review");
   const graphicHeading =
@@ -322,8 +489,6 @@ test("renders a terminal-safe heading without changing the reviewed payload", as
   const review = {
     offerId: "offer-1",
     text: `${graphicHeading}${body}`,
-    tool: "mcp/example/write",
-    arguments: reviewedArguments,
     remedyArguments: { offer_id: "offer-1", plan: "Submit for approval" },
   };
   await stageHitlReview({ session: active, review });

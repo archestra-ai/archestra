@@ -141,7 +141,29 @@ function fullContext(
     proxy:
       clientId === "claude-code"
         ? PROXY
-        : { ...PROXY, provider: "openai", providerLabel: "OpenAI" },
+        : {
+            ...PROXY,
+            provider: "openai",
+            providerLabel: "OpenAI",
+            ...(clientId === "opencode"
+              ? {
+                  primaryProviders: [
+                    {
+                      provider: "openai" as const,
+                      name: "OpenAI",
+                      models: [
+                        {
+                          id: "gpt-test",
+                          name: "GPT test",
+                          context: null,
+                          output: null,
+                        },
+                      ],
+                    },
+                  ],
+                }
+              : {}),
+          },
     skills: SKILLS,
   };
 }
@@ -289,6 +311,7 @@ async function runClaudeAppaPermissionsMerge(params: {
 
 describe("Claude Code APPA permission installation", () => {
   const rules = [
+    "run_tool",
     "get_remedy_plans",
     "execute_remedy_plan",
     "list_peer_messages",
@@ -327,6 +350,23 @@ describe("Claude Code APPA permission installation", () => {
     ).toBe(true);
   });
 
+  test("pre-approves the gateway tool runner and leaves a hand-added rule to the user", async () => {
+    const runTool = "mcp__prod_gateway__archestra__run_tool";
+    const fresh = await runClaudeAppaPermissionsMerge({ existing: {} });
+    expect(fresh.settings.permissions.allow).toContain(runTool);
+    expect(fresh.ownership.prod_gateway).toContain(runTool);
+
+    const handAdded = await runClaudeAppaPermissionsMerge({
+      existing: { permissions: { allow: [runTool] } },
+    });
+    expect(
+      handAdded.settings.permissions.allow.filter(
+        (rule: string) => rule === runTool,
+      ),
+    ).toHaveLength(1);
+    expect(handAdded.ownership.prod_gateway).not.toContain(runTool);
+  });
+
   test("migrates owned legacy rules and branded prefixes without removing user or other-gateway rules", async () => {
     const old = "mcp__my_gateway__archestra__get_remedy_plans";
     const userRule = "mcp__my_gateway__archestra__ask_user";
@@ -345,6 +385,7 @@ describe("Claude Code APPA permission installation", () => {
       contexts: [branded],
     });
     const desired = [
+      "run_tool",
       "get_remedy_plans",
       "execute_remedy_plan",
       "list_peer_messages",
@@ -429,7 +470,7 @@ describe("Claude Code APPA permission installation", () => {
     expect(script).toContain("claude mcp add");
     expect(script).toContain("team_(eu)");
     expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
-    expect(script).not.toContain("call the guardrail helpers");
+    expect(script).not.toContain("without asking each time");
     expect(script).not.toContain("python3 is required");
     expect(script).not.toContain("mcp__team_(eu)__");
     expect(() =>
@@ -444,7 +485,7 @@ describe("Claude Code APPA permission installation", () => {
     });
     expect(script).toContain("claude mcp add");
     expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
-    expect(script).not.toContain("call the guardrail helpers");
+    expect(script).not.toContain("without asking each time");
     expect(script).not.toContain("mcp__prod_gateway__");
     expect(script).not.toContain("*get_remedy_plans");
     expect(() =>
@@ -454,6 +495,7 @@ describe("Claude Code APPA permission installation", () => {
 
   test("a failed settings write after the ledger is recovered on retry", async () => {
     const rules = [
+      "run_tool",
       "get_remedy_plans",
       "execute_remedy_plan",
       "list_peer_messages",
@@ -725,35 +767,6 @@ const ALL_CLIENTS = [
 ] as const;
 
 describe("renderSetupScript", () => {
-  const signedGatewayUrl = `${MCP.url}?archestra_setup_ctx=cs1_example.signature`;
-
-  test.each(
-    ALL_CLIENTS,
-  )("%s: retains the approved setup context in both shell installers", (clientId) => {
-    for (const platform of ["linux", "windows"] as const) {
-      const script = renderSetupScript({
-        ...fullContext(clientId, platform),
-        mcp: { ...MCP, url: signedGatewayUrl },
-      });
-      expect(script).toContain(signedGatewayUrl);
-    }
-  });
-
-  test.each([
-    "linux",
-    "windows",
-  ] as const)("Claude Desktop (%s): carries the approved setup context in its encoded installer", (platform) => {
-    const script = renderSetupScript({
-      ...fullContext("claude-desktop", platform),
-      mcp: { ...MCP, url: signedGatewayUrl },
-      proxy: PROXY,
-    });
-    const encoded = script.match(/base64\.b64decode\('([^']+)'\)/)?.[1];
-    expect(encoded).toBeDefined();
-    const context = JSON.parse(Buffer.from(encoded ?? "", "base64").toString());
-    expect(context.mcp.url).toBe(signedGatewayUrl);
-  });
-
   test.each([
     { clientId: "claude-code" as const, binary: "claude", mode: "-p" },
     { clientId: "codex" as const, binary: "codex", mode: "exec" },
@@ -921,7 +934,10 @@ ${binary} "$@"
       // $(...) in embedded data (URLs derive from user-supplied baseUrl).
       expect(script).not.toMatch(/<<[ \t]*ARCHESTRA/);
       // No leftover template placeholders.
-      expect(script).not.toMatch(/<your-[a-z-]+>/);
+      // Copilot's embedded helper contains a runtime fallback for missing keys;
+      // its executed output is checked in copilot-provider-config.unit.test.ts.
+      if (clientId !== "copilot-cli")
+        expect(script).not.toMatch(/<your-[a-z-]+>/);
       expect(script).not.toContain("archestra_TOKEN");
       // Secrets are injected.
       expect(script).toContain(PROXY.virtualKey);
@@ -939,7 +955,7 @@ ${binary} "$@"
       // The ending's text shows commands for the person to type; it is
       // printed, never run.
       const bareInvocations = script
-        .replace(/<<'ARCHESTRA_NEXT'\n[\s\S]*?\nARCHESTRA_NEXT/, "")
+        .replace(/<<'ARCHESTRA_NEXT'\n[\s\S]*?\nARCHESTRA_NEXT/g, "")
         .split("\n")
         .map((line) => line.trim())
         .filter((line) =>
@@ -1640,6 +1656,122 @@ ${script.slice(pluginStart, pluginEnd)}
     }
   });
 
+  test.each([
+    {
+      major: 1,
+      authMode: "primary-providers" as const,
+      provider: "vllm" as const,
+    },
+    {
+      major: 2,
+      authMode: "primary-providers" as const,
+      provider: "vllm" as const,
+    },
+    {
+      major: 1,
+      authMode: "virtual-key" as const,
+      provider: "bedrock" as const,
+    },
+    {
+      major: 2,
+      authMode: "virtual-key" as const,
+      provider: "bedrock" as const,
+    },
+  ])("OpenCode $major $authMode setup installs a large catalog and every plugin route", async ({
+    major,
+    authMode,
+    provider,
+  }) => {
+    const models = Array.from({ length: 1500 }, (_, i) => ({
+      id: `accounts/example/models/coder-${i}`,
+      name: `Coding model ${i}`,
+      context: 200000,
+      output: 8192,
+    }));
+    const script = renderSetupScript({
+      ...fullContext("opencode", "linux"),
+      proxy: {
+        ...PROXY,
+        authMode,
+        provider,
+        primaryProviders: [
+          { provider, name: "Selected inference", models },
+          ...(authMode === "primary-providers"
+            ? [
+                {
+                  provider: "openai" as const,
+                  name: "My subscription",
+                  models: [models[0]],
+                },
+              ]
+            : []),
+        ],
+      },
+    });
+    const start = script.indexOf('say "Configuring model providers');
+    const end = script.indexOf("\nsay ", start + 5);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const home = await mkdtemp(path.join(tmpdir(), "opencode-primary-script-"));
+    try {
+      const block = path.join(home, "install.sh");
+      await writeFile(
+        block,
+        `set -euo pipefail
+say() { :; }
+ok() { :; }
+err() { echo "$*" >&2; }
+ARCHESTRA_OPENCODE_MAJOR=${major}
+ARCHESTRA_OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+${script.slice(start, end)}
+`,
+      );
+      await execFileAsync("bash", [block], {
+        env: {
+          ...process.env,
+          HOME: home,
+          XDG_CONFIG_HOME: path.join(home, ".config"),
+        },
+      });
+      const config = JSON.parse(
+        await readFile(
+          path.join(home, ".config/opencode/opencode.json"),
+          "utf8",
+        ),
+      );
+      const providers = config[major === 2 ? "providers" : "provider"];
+      expect(
+        Object.keys(providers[`archestra-${provider}`].models),
+      ).toHaveLength(1500);
+      expect(Object.keys(providers)).toHaveLength(
+        authMode === "primary-providers" ? 2 : 1,
+      );
+      const plugin = await readFile(
+        path.join(home, ".config/opencode/plugins/archestra-llm-proxy.js"),
+        "utf8",
+      );
+      expect(plugin).toContain(
+        `"archestra-${provider}":"https://archestra.example.com/v1/model-router"`,
+      );
+      if (authMode === "primary-providers") {
+        expect(plugin).toContain(
+          '"archestra-openai":"https://archestra.example.com/v1/model-router"',
+        );
+      } else {
+        expect(plugin).not.toContain('"archestra-openai"');
+        expect(
+          providers[`archestra-${provider}`].models[models[0].id],
+        ).toMatchObject(
+          major === 2
+            ? { modelID: `${provider}:${models[0].id}` }
+            : { id: `${provider}:${models[0].id}` },
+        );
+      }
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("opencode provider-key merge preserves local auth options and model selection", async () => {
     const script = renderSetupScript({
       ...fullContext("opencode", "linux"),
@@ -2178,6 +2310,103 @@ ${script.slice(start, end)}
     );
   });
 
+  test("codex: approves the guardrail helpers once, under the gateway's own entry", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "archestra-codex-approvals-"),
+    );
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const codexHome = path.join(home, ".codex");
+    const scriptPath = path.join(root, "setup.sh");
+    try {
+      await Promise.all(
+        [bin, codexHome].map((dir) => mkdir(dir, { recursive: true })),
+      );
+      // A config the person already had: it stays as it is.
+      await writeFile(
+        path.join(codexHome, "config.toml"),
+        'model = "gpt-5"\n\n[mcp_servers.docs]\nurl = "https://docs.example.com/mcp"\n',
+      );
+      // Edits config.toml the way the real `codex mcp add` and `remove` do:
+      // add appends the server's table, remove drops it with its sub-tables.
+      await writeFile(
+        path.join(bin, "codex"),
+        `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const [command, action, name, , url] = process.argv.slice(2);
+const file = path.join(process.env.HOME, ".codex", "config.toml");
+if (command === "mcp" && action === "remove") {
+  let skip = false;
+  const kept = fs.readFileSync(file, "utf8").split("\\n").filter((line) => {
+    if (line.startsWith("[")) skip = line === "[mcp_servers." + name + "]" || line.startsWith("[mcp_servers." + name + ".") || line.startsWith('[mcp_servers."' + name + '".');
+    return !skip;
+  });
+  fs.writeFileSync(file, kept.join("\\n"));
+} else if (command === "mcp" && action === "add") {
+  fs.appendFileSync(file, "\\n[mcp_servers." + name + "]\\nurl = " + JSON.stringify(url) + "\\n");
+} else if (command === "debug") {
+  process.stdout.write(JSON.stringify({ models: [] }));
+}
+`,
+      );
+      await chmod(path.join(bin, "codex"), 0o755);
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("codex", "linux"),
+          proxy: null,
+          skills: null,
+        }),
+      );
+      // A rerun of setup must not define the tables twice.
+      for (let run = 0; run < 2; run++) {
+        await execFileAsync("bash", [scriptPath], {
+          env: {
+            HOME: home,
+            SHELL: "/bin/bash",
+            PATH: `${bin}:${process.env.PATH}`,
+            NO_COLOR: "1",
+          },
+          cwd: home,
+        });
+      }
+
+      const config = parseToml(
+        await readFile(path.join(codexHome, "config.toml"), "utf8"),
+      ) as {
+        model: string;
+        mcp_servers: Record<
+          string,
+          { url: string; tools?: Record<string, { approval_mode: string }> }
+        >;
+      };
+      expect(config.model).toBe("gpt-5");
+      expect(config.mcp_servers.docs).toEqual({
+        url: "https://docs.example.com/mcp",
+      });
+      expect(config.mcp_servers[MCP.serverName]).toEqual({
+        url: MCP.url,
+        // The tool runner and other gateway tools keep Codex's question.
+        tools: Object.fromEntries(
+          [
+            "get_remedy_plans",
+            "execute_remedy_plan",
+            "list_peer_messages",
+            "read_peer_message",
+            "yell",
+            "ask_user",
+          ].map((name) => [
+            `${MCP.toolPrefix}${name}`,
+            { approval_mode: "approve" },
+          ]),
+        ),
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("codex passthrough: attributes user + client via config.toml http_headers", () => {
     const script = renderSetupScript({
       ...fullContext("codex"),
@@ -2274,14 +2503,6 @@ if (process.argv[2] === 'debug') {
     }
   });
 
-  test("copilot-cli: prints export lines instead of exporting into a dead shell", () => {
-    const script = renderSetupScript(fullContext("copilot-cli"));
-    expect(script).toContain('export COPILOT_PROVIDER_TYPE="openai"');
-    expect(script).toContain("export COPILOT_PROVIDER_API_KEY=");
-    expect(script).toContain("copilot mcp add --transport http");
-    expect(script).toContain("copilot mcp get");
-  });
-
   test("copilot-cli github-copilot passthrough: links GitHub in-script, token never in argv", async () => {
     const script = renderSetupScript({
       ...fullContext("copilot-cli"),
@@ -2308,35 +2529,12 @@ if (process.argv[2] === 'debug') {
     // never the well-known CI variable name
     expect(script).not.toContain("GITHUB_TOKEN");
     // export lines come from printf with the runtime token
-    expect(script).toContain('"$ARCHESTRA_GHCP_TOKEN"');
-    expect(script).toContain('export COPILOT_PROVIDER_TYPE="openai"');
+    expect(script).toContain(
+      'ARCHESTRA_COPILOT_API_KEY="${ARCHESTRA_GHCP_TOKEN:-}"',
+    );
     // client attribution rides COPILOT_PROVIDER_HEADERS (proxy-only headers)
     expect(script).toContain("COPILOT_PROVIDER_HEADERS");
-    expect(script).toContain("'X-Archestra-Agent-Id: github_copilot_cli'");
-  });
-
-  test("copilot-cli: a wizard-chosen model lands in the export lines", async () => {
-    const script = renderSetupScript({
-      ...fullContext("copilot-cli"),
-      proxy: { ...GITHUB_COPILOT_PROXY, model: "claude-sonnet-4" },
-    });
-    await expectValidBash(script);
-    expect(script).toContain('export COPILOT_MODEL="claude-sonnet-4"');
-  });
-
-  test("copilot-cli github-copilot passthrough: attribution key joins the headers export", async () => {
-    const script = renderSetupScript({
-      ...fullContext("copilot-cli"),
-      proxy: {
-        ...GITHUB_COPILOT_PROXY,
-        passthroughVirtualKey: "arch_passthroughcafe",
-      },
-    });
-    await expectValidBash(script);
-    // literal \n separator — the CLI's documented entry delimiter
-    expect(script).toContain(
-      "X-Archestra-Agent-Id: github_copilot_cli\\nX-Archestra-Virtual-Key: arch_passthroughcafe",
-    );
+    expect(script).toContain('"X-Archestra-Agent-Id":"github_copilot_cli"');
   });
 
   test("copilot-cli github-copilot virtual-key: injects the virtual key, no device flow", async () => {
@@ -2355,9 +2553,7 @@ if (process.argv[2] === 'debug') {
     expect(script).not.toContain("login/device/code");
     expect(script).not.toContain("ghcp_validate");
     // client attribution header suggested alongside the provider exports
-    expect(script).toContain(
-      'export COPILOT_PROVIDER_HEADERS="X-Archestra-Agent-Id: github_copilot_cli"',
-    );
+    expect(script).toContain('"X-Archestra-Agent-Id":"github_copilot_cli"');
   });
 
   test("github-copilot passthrough without device-flow config throws", () => {
@@ -2566,7 +2762,10 @@ describe("renderSetupScript (windows)", () => {
       expect(script).toContain("function Say($m)");
       expect(script).toContain("Write-Host");
       // No leftover template placeholders.
-      expect(script).not.toMatch(/<your-[a-z-]+>/);
+      // Copilot's embedded helper contains a runtime fallback for missing keys;
+      // its executed output is checked in copilot-provider-config.unit.test.ts.
+      if (clientId !== "copilot-cli")
+        expect(script).not.toMatch(/<your-[a-z-]+>/);
       // Secrets are injected.
       expect(script).toContain(PROXY.virtualKey);
       expect(script).toContain(SKILLS.cloneUrl);
@@ -2748,92 +2947,10 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain("Invoke-RestMethod");
     // never the well-known CI variable name
     expect(script).not.toContain("GITHUB_TOKEN");
-    // token is applied as the provider env var (session + User scope) straight
-    // from the runtime variable, and never echoed to the console
-    expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', $ArchGhcpToken, 'User')",
-    );
+    expect(script).toContain("$env:ARCHESTRA_COPILOT_API_KEY = $ArchGhcpToken");
     expect(script).not.toContain("+ $ArchGhcpToken");
-    // BYOK needs an explicit model to launch: default applied when unset
-    expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'gpt-4o', 'User')",
-    );
-    // client attribution rides COPILOT_PROVIDER_HEADERS (proxy-only headers)
-    expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_HEADERS', 'X-Archestra-Agent-Id: github_copilot_cli', 'User')",
-    );
-  });
-
-  test("copilot-cli github-copilot passthrough: attribution key joins the applied headers", () => {
-    const script = renderSetupScript({
-      ...fullContext("copilot-cli", "windows"),
-      proxy: {
-        ...GITHUB_COPILOT_PROXY,
-        passthroughVirtualKey: "arch_passthroughcafe",
-      },
-    });
-    // literal \n separator — the CLI's documented entry delimiter
-    expect(script).toContain(
-      "$env:COPILOT_PROVIDER_HEADERS = 'X-Archestra-Agent-Id: github_copilot_cli\\nX-Archestra-Virtual-Key: arch_passthroughcafe'",
-    );
-  });
-
-  test("copilot-cli: a wizard-chosen model is applied outright, not if-unset", () => {
-    const script = renderSetupScript({
-      ...fullContext("copilot-cli", "windows"),
-      proxy: { ...GITHUB_COPILOT_PROXY, model: "claude-sonnet-4" },
-    });
-    expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'claude-sonnet-4', 'User')",
-    );
-    expect(script).toContain("your selection on the connection page");
-    expect(script).not.toContain(
-      "if ([string]::IsNullOrEmpty($env:COPILOT_MODEL))",
-    );
-  });
-
-  test("copilot-cli virtual-key: applies COPILOT_* env vars to session and User scope", () => {
-    const script = renderSetupScript(fullContext("copilot-cli", "windows"));
-    expect(script).toContain("$env:COPILOT_PROVIDER_TYPE = 'openai'");
-    expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_TYPE', 'openai', 'User')",
-    );
-    expect(script).toContain(
-      "$env:COPILOT_PROVIDER_BASE_URL = 'https://archestra.example.com/v1/anthropic'",
-    );
-    expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY', 'arch_deadbeefcafe', 'User')",
-    );
-    // a BYOK provider without an explicit model refuses to launch, so an
-    // unset COPILOT_MODEL gets the provider default — never overwriting one
-    expect(script).toContain(
-      "if ([string]::IsNullOrEmpty($env:COPILOT_MODEL))",
-    );
-    expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_MODEL', 'gpt-5.5', 'User')",
-    );
-    expect(script).toContain("Keeping your existing COPILOT_MODEL");
-    expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_HEADERS', 'X-Archestra-Agent-Id: github_copilot_cli', 'User')",
-    );
-    // the pre-apply behavior printed instructions instead of acting
-    expect(script).not.toContain("use setx or System settings");
-  });
-
-  test("copilot-cli openai passthrough: applies type/base URL, leaves the key to the user", () => {
-    const script = renderSetupScript({
-      ...fullContext("copilot-cli", "windows"),
-      proxy: OPENAI_PASSTHROUGH_PROXY,
-    });
-    expect(script).toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_BASE_URL', 'https://archestra.example.com/v1/openai', 'User')",
-    );
-    expect(script).not.toContain(
-      "[Environment]::SetEnvironmentVariable('COPILOT_PROVIDER_API_KEY'",
-    );
-    expect(script).toContain(
-      '$env:COPILOT_PROVIDER_API_KEY = "<your-openai-api-key>"',
-    );
+    expect(script).toContain('"model":"gpt-4o"');
+    expect(script).toContain('"X-Archestra-Agent-Id":"github_copilot_cli"');
   });
 
   test("cursor: merges mcp.json and prints manual model steps", () => {

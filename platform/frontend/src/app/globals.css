@@ -34,6 +34,7 @@
   --color-sidebar-emphasis: var(--sidebar-emphasis);
   --color-sidebar-chip: var(--sidebar-chip);
   --color-sidebar-track: var(--sidebar-track);
+  --color-sidebar-raised: var(--sidebar-raised);
   --color-raised: var(--raised);
   --color-sidebar-attention: var(--sidebar-attention);
   --color-sidebar-attention-foreground: var(--sidebar-attention-foreground);
@@ -173,6 +174,10 @@
   /* Track of the sidebar's segmented AI/Studio toggle: pulled toward the
      sidebar text so it never matches the sidebar, whatever --muted is. */
   --sidebar-track: color-mix(in oklab, var(--sidebar-foreground) 10%, var(--sidebar));
+  /* Fill for an outlined button on the sidebar (New chat). It must read as
+     raised: the page color does in light mode, but in dark mode the page is
+     darker than the sidebar, so dark mode uses the track fill instead. */
+  --sidebar-raised: var(--background);
   /* Sidebar "needs action" signals (attention count, onboarding dot), drawn
      from the theme's --destructive hue instead of a fixed red. The ink is
      pushed toward the far end of the range so it clears 4.5:1 on the tinted
@@ -187,6 +192,7 @@ html.dark {
   --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
   --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));
   --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, white);
+  --sidebar-raised: var(--sidebar-track);
   --sidebar-attention-foreground: color-mix(in oklab, var(--destructive) 55%, white);
 }
 

@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { ExternalDocsLink } from "@/components/external-docs-link";
+import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,11 +46,16 @@ import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
 import { useMemberSearch } from "@/lib/member.query";
 import { useActiveOrganization } from "@/lib/organization.query";
+import {
+  parseRoleAssignmentBlocked,
+  RoleAssignmentBlockedError,
+} from "@/lib/role-assignment-blocked";
 import { useTeams } from "@/lib/teams/team.query";
 import {
   formatTeamPath,
   getTeamDescendantIds,
 } from "@/lib/teams/team-hierarchy";
+import { formatRoleName } from "@/lib/utils/role";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
@@ -131,6 +137,9 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     team?.parentId ?? null,
   );
   const [labels, setLabels] = useState<ProfileLabel[]>(team?.labels ?? []);
+  // A refused role, parent team, or member add, shown under the section.
+  const [assignmentBlocked, setAssignmentBlocked] =
+    useState<RoleAssignmentBlockedError | null>(null);
   const [memberChanges, setMemberChanges] = useState<StagedMemberChanges>(
     new Map(),
   );
@@ -171,7 +180,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     ];
   }, [byosEnabled, canUpdateTeams, mode, readOnly, team]);
   const title =
-    mode === "create"
+    mode === "create" && !team
       ? "Create Team"
       : readOnly
         ? "External Group Sync"
@@ -182,6 +191,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     if (!open) return;
     setActiveSection(readOnly ? "external-groups" : "team");
     setMemberChanges(new Map());
+    setAssignmentBlocked(null);
     if (mode === "create") {
       setCreatedTeam(null);
       setName("");
@@ -236,7 +246,10 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
               path: { id: team.id },
               body,
             });
-        if (error) throw new Error(error.error.message);
+        if (error)
+          throw (
+            parseRoleAssignmentBlocked(error) ?? new Error(error.error.message)
+          );
         savedTeam = data as Team;
       }
 
@@ -244,6 +257,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       // team exists). Failed changes stay staged so Save can be retried.
       const failedChanges: StagedMemberChanges = new Map();
       const memberErrors: string[] = [];
+      let memberBlocked: RoleAssignmentBlockedError | null = null;
       if (savedTeam) {
         for (const [userId, change] of memberChanges) {
           try {
@@ -252,7 +266,11 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
                 path: { id: savedTeam.id },
                 body: { userId, role: change.role },
               });
-              if (error) throw new Error(error.error.message);
+              if (error)
+                throw (
+                  parseRoleAssignmentBlocked(error) ??
+                  new Error(error.error.message)
+                );
             } else if (change.type === "remove") {
               const { error } = await archestraApiSdk.removeTeamMember({
                 path: { id: savedTeam.id, userId },
@@ -267,7 +285,12 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
             }
           } catch (err) {
             failedChanges.set(userId, change);
-            memberErrors.push(err instanceof Error ? err.message : `${err}`);
+            // Every refused add names the same team items: one notice
+            // explains them all.
+            if (err instanceof RoleAssignmentBlockedError)
+              memberBlocked ??= err;
+            else
+              memberErrors.push(err instanceof Error ? err.message : `${err}`);
           }
         }
       }
@@ -276,13 +299,16 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
         savedTeam,
         failedChanges,
         memberErrors,
+        memberBlocked,
         hadMemberChanges: memberChanges.size > 0,
       };
     },
+    onMutate: () => setAssignmentBlocked(null),
     onSuccess: ({
       savedTeam,
       failedChanges,
       memberErrors,
+      memberBlocked,
       hadMemberChanges,
     }) => {
       queryClient.invalidateQueries({ queryKey: ["auth"] });
@@ -297,6 +323,10 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       setMemberChanges(failedChanges);
       if (mode === "create" && !team && savedTeam) {
         setCreatedTeam(savedTeam);
+      }
+      if (memberBlocked) {
+        setAssignmentBlocked(memberBlocked);
+        return;
       }
       if (memberErrors.length > 0) {
         toast.error(
@@ -315,6 +345,10 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
       onOpenChange(false);
     },
     onError: (error: Error) => {
+      if (error instanceof RoleAssignmentBlockedError) {
+        setAssignmentBlocked(error);
+        return;
+      }
       toast.error(
         error.message ||
           (mode === "create"
@@ -383,7 +417,10 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           name={name}
           description={description}
           roles={roles}
-          onRolesChange={setRoles}
+          onRolesChange={(value) => {
+            setRoles(value);
+            setAssignmentBlocked(null);
+          }}
           parentId={parentId}
           organizationTeams={organizationTeams}
           canManageAllTeams={canUpdateTeams}
@@ -391,7 +428,10 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           labelsRef={labelsRef}
           onNameChange={setName}
           onDescriptionChange={setDescription}
-          onParentIdChange={setParentId}
+          onParentIdChange={(value) => {
+            setParentId(value);
+            setAssignmentBlocked(null);
+          }}
           onLabelsChange={setLabels}
           readOnlyDetails={!canEditDetails}
         />
@@ -401,8 +441,25 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
           open={open}
           team={team}
           memberChanges={memberChanges}
-          onMemberChangesChange={setMemberChanges}
+          onMemberChangesChange={(changes) => {
+            setMemberChanges(changes);
+            setAssignmentBlocked(null);
+          }}
           onGoToExternalGroups={() => setActiveSection("external-groups")}
+        />
+      )}
+      {(activeSection === "team" || activeSection === "members") && (
+        <RoleAssignmentBlockedNotice
+          error={assignmentBlocked}
+          name={{
+            role: formatRoleName(roles),
+            team:
+              activeSection === "members"
+                ? team?.name
+                : organizationTeams.find(
+                    (candidate) => candidate.id === parentId,
+                  )?.name,
+          }}
         />
       )}
       {activeSection === "vault-folder" && mode === "edit" && team && (
@@ -565,7 +622,9 @@ function TeamMembersSection(props: {
             External Group Sync
           </UnstyledButton>{" "}
           to sync membership. Configure roles through{" "}
-          <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoRoleMapping)}>
+          <ExternalDocsLink
+            href={getDocsUrl(DocsPage.PlatformSsoRoleMapping, "role-mapping")}
+          >
             Role Mapping
           </ExternalDocsLink>
           .

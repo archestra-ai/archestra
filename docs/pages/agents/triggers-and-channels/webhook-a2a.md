@@ -2,7 +2,7 @@
 title: Webhook (A2A)
 description: Call an agent over HTTP with the A2A protocol
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -131,12 +131,22 @@ What to know:
 
 ## Approving Tool Calls
 
-When a tool call needs [approval](/docs/agents/guardrails), the result is a task in `TASK_STATE_INPUT_REQUIRED`. The pending requests are in `metadata.approvalRequests`:
+When your [policy](/docs/agents/guardrails/policies#human-review) asks a person to approve an action, the result is a task in `TASK_STATE_INPUT_REQUIRED`. The pending requests are in `metadata.approvalRequests`. `openappaReview.text` is what the reviewer should read:
 
 ```json
 "metadata": {
   "approvalRequests": [
-    { "approvalId": "appr-1", "toolName": "send_email", "approved": false, "resolved": false }
+    {
+      "approvalId": "appr-1",
+      "toolName": "archestra__execute_remedy_plan",
+      "approved": false,
+      "resolved": false,
+      "openappaReview": {
+        "offerId": "3f9a1c0d2b7e4a51",
+        "text": "Approve this call? send_email to ceo@example.com",
+        "expiresAt": "2026-10-13T10:00:00.000Z"
+      }
+    }
   ]
 }
 ```
@@ -156,6 +166,12 @@ Answer with a `SendMessage` that names the task and carries a decision for each 
 ```
 
 The run resumes once every request has a decision. `CancelTask` on a waiting task cancels it.
+
+What to know:
+
+- Whoever calls with the token answers, so your code decides for the reviewer. Show the text to a person before you approve.
+- An approval lets the agent continue only when the policy allows it. A decline keeps the action blocked.
+- Answer within 24 hours. After that the task is canceled and the action stays blocked.
 
 ## Other Methods
 

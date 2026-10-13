@@ -157,13 +157,25 @@ export function useLlmModelsByProvider(params?: LlmModelsParams) {
 export function useModelsWithApiKeys(options?: {
   toastOnError?: boolean;
   enabled?: boolean;
+  /** The models page's access filters; models have no owner. */
+  access?: NonNullable<
+    archestraApiTypes.GetModelsWithApiKeysData["query"]
+  >["access"];
+  sharedWith?: string[];
 }) {
   const toastOnError = options?.toastOnError;
+  const access = options?.access;
+  const sharedWith = options?.sharedWith;
   return useQuery({
-    queryKey: ["models-with-api-keys"],
+    queryKey:
+      access || sharedWith
+        ? ["models-with-api-keys", { access, sharedWith }]
+        : ["models-with-api-keys"],
     enabled: options?.enabled,
     queryFn: async (): Promise<ModelWithApiKeys[]> => {
-      const { data, error } = await getModelsWithApiKeys();
+      const { data, error } = await getModelsWithApiKeys({
+        query: { access, sharedWith },
+      });
       throwOnApiError(error, { toastOnError });
       return data ?? [];
     },

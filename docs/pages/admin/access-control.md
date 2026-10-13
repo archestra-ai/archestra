@@ -2,7 +2,7 @@
 title: Access Control
 description: Assign roles and share resources with users, teams, and service accounts
 order: 2
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-12
 ---
 
 Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
@@ -27,7 +27,7 @@ Organization roles assigned to teams are separate from [team membership roles](#
 
 You can grant only permissions you already hold. This applies when changing roles, inviting members, assigning roles to teams or service accounts, and changing team membership or hierarchy. Role pickers disable roles beyond your authority.
 
-[SSO role mapping](/docs/admin/identity/sso-role-mapping) is configured by the identity provider and can assign roles independently of the signing-in user's permissions.
+[SSO role mapping](/docs/admin/identity/sso#role-mapping) is configured by the identity provider and can assign roles independently of the signing-in user's permissions.
 
 ### Service Account Creators
 
@@ -46,6 +46,8 @@ Granular access control is an Enterprise feature, including the [small-team allo
 To share a resource, add recipients in its permissions, next to its other settings. One field adds everyone in the organization, a role, a team, a person, or a service account. Each recipient gets its own level: **Can view**, **Can use**, **Can edit**, or **Full access**. A new recipient starts at **Can use** when you may grant it. Save, then confirm the recipient appears with the intended level.
 
 For grants covering every object of a kind, open the resource list's **More actions** menu beside **Create** or **Add**, then choose **Permissions**. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
+
+At least one recipient must keep **Full access** in the permissions for every object of a kind. Without it, nobody can edit, delete, or share objects that other people created, so **Save** stays off until one recipient has it.
 
 ### Actions And Scopes
 
@@ -72,13 +74,13 @@ What to know:
 
 ### Find Resources by Access
 
-Lists of shared resources, such as agents, MCP gateways, Knowledge Bases, apps, plugins, projects, skills, and the MCP registry, filter by how you reach each item:
+Lists of shared resources filter by how you reach each item. These lists have the filters: agents, MCP gateways, Knowledge Bases, connectors, Knowledge Files, apps, plugins, projects, skills, the MCP registry, LLM provider credentials, virtual keys, models, and OAuth clients.
 
 - **Access:** **Mine** for items you own. **Shared with me** for items shared with you, your team, your role, or everyone. **Admin access** for items nobody shared with you, visible through an organization-wide grant.
-- **Shared with:** everyone, a role, a team, a person, or a service account.
+- **Shared with:** everyone, a role, a team, a person, or a service account. Shown while **Admin access** is on.
 - **Owner:** one or more owners.
 
-The filters combine. The list API takes the same filters as `access`, `sharedWith`, and `owner` query parameters. `sharedWith` takes comma-separated `org`, `role:<id>`, `team:<id>`, `user:<id>`, or `serviceAccount:<id>`. `org` matches only grants to everyone. `owner` takes comma-separated user IDs.
+Models have no owner, so their list has no **Mine** option and no **Owner** filter. On Knowledge Files, the filters narrow documents. Directories always show. The filters combine. The list API takes the same filters as `access`, `sharedWith`, and `owner` query parameters. `sharedWith` takes comma-separated `org`, `role:<id>`, `team:<id>`, `user:<id>`, or `serviceAccount:<id>`. `org` matches only grants to everyone. `owner` takes comma-separated user IDs.
 
 ### Inheritance And Revocation
 
@@ -90,7 +92,9 @@ The Permissions editor displays inherited grants separately. A read grant on all
 
 You can share only actions you hold. Team administration can change membership, but does not authorize editing the resources or grants shared with the team.
 
-Assigning a role, or adding someone to a team, shares every grant the role or team carries, so you must hold those grants too. Grants that members put on their own chats, agent runs, and personal provider keys do not count: only their owner holds those.
+Assigning a role, or adding someone to a team, shares every grant the role or team carries, so you must hold those grants and `manage-permissions` on each object. Grants that members put on their own chats, agent runs, and personal provider keys do not count: only their owner holds those. [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) skips this check, so it can assign any role or team.
+
+When the check refuses an assignment, the form lists each object you cannot share. Hover over an object to see the actions you lack on it.
 
 If another administrator saves first, the editor preserves your draft and asks you to reload. Review the latest permissions before saving again. Permission changes appear in the audit log.
 
@@ -136,7 +140,7 @@ A team **member** receives shared access. A team **admin** can manage its member
 
 Members inherit resource grants and organization roles from ancestor teams. Access does not flow from a child to its parent or to siblings. Team administrator roles are not inherited. Deleting a parent moves its direct children to the root.
 
-[SSO Team Sync](/docs/admin/identity/sso-team-sync) creates direct membership in mapped teams. Normal inheritance then applies.
+[SSO Team Sync](/docs/admin/identity/sso#team-sync) creates direct membership in mapped teams. Normal inheritance then applies.
 
 ### Environments
 

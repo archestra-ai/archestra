@@ -13,7 +13,7 @@ import {
 } from "fastify-type-provider-zod";
 import { HttpResponse } from "msw";
 import OpenAIProvider from "openai";
-import { type MockInstance, vi } from "vitest";
+import { vi } from "vitest";
 import { createChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import {
   buildMcpGatewayTool,
@@ -23,8 +23,6 @@ import { internalCallHeader } from "@/clients/internal-call";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
-import * as toolInvocation from "@/guardrails/tool-invocation";
-import * as trustedData from "@/guardrails/trusted-data";
 import { logRingBuffer } from "@/logging/log-ring-buffer";
 import {
   A2AContextModel,
@@ -62,6 +60,7 @@ import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import {
+  connectionSetupReference,
   issueConnectionProxySetupContext,
   rewriteConnectionProxySetupUrl,
 } from "@/services/connection-proxy-setup-context";
@@ -134,14 +133,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    // These provider stubs exercise direct Anthropic credentials, independent
+    // of a developer's configured Vertex project.
+    config.llm.anthropic.vertexAi.enabled = false;
+    config.openappa = parseOpenAppaConfig();
     // The server flag alone no longer enforces: the deployment-wide switch has
     // to be on too, and every case here is about APPA actually enforcing.
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -476,7 +475,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           teamId: null,
           isOrganizationToken: false,
         },
-        considerContextUntrusted: false,
         repeatTracker: new ToolCallRepeatTracker(),
         modelAcceptsImageToolResults: false,
       },
@@ -1452,11 +1450,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
   test("block mode lets the platform's own guardrail models through ungoverned", async () => {
     await GuardrailsDeploymentModel.set({ unsupportedClientAction: "block" });
-    for (const source of ["guardrail:annotator", "guardrail:dual_llm"]) {
-      const response = await guardrailCall(source);
-      expect(response.statusCode, response.body).toBe(200);
-    }
-    expect(providerRequests).toHaveLength(2);
+    const response = await guardrailCall("guardrail:annotator");
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
     expect(events).toHaveLength(0);
     const [proofHeader] = Object.keys(internalCallHeader());
     for (const [, options] of vi.mocked(anthropicAdapterFactory.createClient)
@@ -3893,11 +3889,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const namespace = "mcp__gw";
     const thread = crypto.randomUUID();
     const probeThread = crypto.randomUUID();
-    const evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-    const evaluateTrustedData = vi.spyOn(
-      trustedData,
-      "evaluateIfContextIsTrusted",
-    );
     block = true;
     const directTools = [
       {
@@ -3962,19 +3953,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       },
     ];
     const governed = async (token: string, threadId: string, text: string) => {
-      evaluatePolicies.mockClear();
-      evaluateTrustedData.mockClear();
       providerRequests.length = 0;
       events.length = 0;
       const response = await send(token, threadId, withSecret(text));
       expect(response.statusCode, response.body).toBe(200);
       expect(response.body).not.toContain("defers its tools to a tool search");
       expect(names(response.body)).not.toContain("get_weather");
-      expect(evaluatePolicies).toHaveBeenCalled();
-      expect(JSON.stringify(evaluatePolicies.mock.calls)).toContain(
-        "get_weather",
-      );
-      expect(evaluateTrustedData).toHaveBeenCalled();
       expect(JSON.stringify(providerRequests)).not.toContain(secret);
       expect(JSON.stringify(providerRequests)).toContain(
         "APPROVED REPLACEMENT",
@@ -3991,8 +3975,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     // Pasting the old connect prompt no longer opens a setup bypass.
     await governed(virtualKey, thread, prompt);
 
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
     providerRequests.length = 0;
     events.length = 0;
     const orgThread = crypto.randomUUID();
@@ -4000,15 +3982,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(org.statusCode, org.body).toBe(200);
     expect(org.body).not.toContain("defers its tools to a tool search");
     expect(names(org.body)).not.toContain("get_weather");
-    expect(evaluatePolicies).toHaveBeenCalled();
-    expect(evaluateTrustedData).toHaveBeenCalled();
     expect(JSON.stringify(providerRequests)).not.toContain(secret);
     expect(JSON.stringify(providerRequests)).toContain("APPROVED REPLACEMENT");
     expect(events).toContainEqual(
       expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
     );
-    evaluatePolicies.mockClear();
-    evaluateTrustedData.mockClear();
     providerRequests.length = 0;
     events.length = 0;
     const orgContinued = await send(orgKey, orgThread, [
@@ -4020,8 +3998,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
     expect(orgContinued.statusCode, orgContinued.body).toBe(200);
     expect(names(orgContinued.body)).not.toContain("get_weather");
-    expect(evaluatePolicies).toHaveBeenCalled();
-    expect(evaluateTrustedData).toHaveBeenCalled();
   });
 
   test("scopes an external client's explicit session to its credential", async ({
@@ -4128,105 +4104,128 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
   });
 
-  for (const mode of ["missing", "invalid", "valid"] as const) {
-    test(`observing runtime identity requires a verified binding (${mode})`, async ({
-      makeSecret,
-      makeLlmProviderApiKey,
-    }) => {
-      await GuardrailsDeploymentModel.setEnabled(false);
-      config.openappa.offerSigningSecret =
-        "runtime-observing-binding-test-secret";
-      const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
-      const providerKey = await makeLlmProviderApiKey(
-        agent.organizationId,
-        secret.id,
-        { provider: "anthropic" },
-      );
-      const { value: key, virtualKey } = await VirtualApiKeyModel.create({
-        organizationId: agent.organizationId,
-        name: "runtime-observing",
-        scope: "org",
-        authorId: null,
-        providerApiKeys: [
-          { provider: providerKey.provider, providerApiKeyId: providerKey.id },
-        ],
+  // Enforcement names a missing binding, so the owner of an image that
+  // predates it knows what to change. A presented binding that fails stays
+  // a plain mismatch. While only observing, neither is refused.
+  for (const enforced of [false, true]) {
+    for (const mode of ["missing", "invalid", "valid"] as const) {
+      test(`${enforced ? "enforced" : "observing"} runtime identity requires a verified binding (${mode})`, async ({
+        makeSecret,
+        makeLlmProviderApiKey,
+      }) => {
+        await GuardrailsDeploymentModel.setEnabled(enforced);
+        config.openappa.offerSigningSecret = "runtime-binding-test-secret";
+        const secret = await makeSecret({ secret: { apiKey: "sk-ant-test" } });
+        const providerKey = await makeLlmProviderApiKey(
+          agent.organizationId,
+          secret.id,
+          { provider: "anthropic" },
+        );
+        const { value: key, virtualKey } = await VirtualApiKeyModel.create({
+          organizationId: agent.organizationId,
+          name: "runtime-binding",
+          scope: "org",
+          authorId: null,
+          providerApiKeys: [
+            {
+              provider: providerKey.provider,
+              providerApiKeyId: providerKey.id,
+            },
+          ],
+        });
+        const context = await A2AContextModel.create({
+          actorKind: "organization",
+          actorId: agent.organizationId,
+        });
+        const task = await A2ATaskModel.create({
+          contextId: context.id,
+          agentId: agent.id,
+          state: "TASK_STATE_WORKING",
+        });
+        const workloadName = `runtime-binding-${task.id.slice(0, 8)}`;
+        const workspace = await AgentWorkspaceModel.create({
+          organizationId: agent.organizationId,
+          agentId: agent.id,
+          actorKind: "organization",
+          actorId: agent.organizationId,
+          backend: "kubernetes",
+          runtimeScope: "test",
+          workloadName,
+          state: "active",
+          activeTaskId: task.id,
+          lastTaskId: task.id,
+          expiresAt: new Date(Date.now() + 3600_000),
+        });
+        await AgentRunModel.create({
+          organizationId: agent.organizationId,
+          taskId: task.id,
+          agentId: agent.id,
+          actorKind: "organization",
+          actorId: agent.organizationId,
+          actorUserId: null,
+          workloadName,
+          backend: "kubernetes",
+          runtimeScope: "test",
+          virtualApiKeyId: virtualKey.id,
+        });
+        const binding = issueRuntimeBinding({
+          secret: config.openappa.offerSigningSecret,
+          organizationId: agent.organizationId,
+          workspaceId: workspace.id,
+          workloadName,
+          taskId: task.id,
+          agentId: agent.id,
+          actorKind: "organization",
+          actorId: agent.organizationId,
+          expiresAt: Date.now() + 600_000,
+        });
+        if (!binding) throw new Error("The fixture has no signed binding");
+        const response = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "203.0.113.20",
+          headers: {
+            authorization: `Bearer ${key}`,
+            "anthropic-version": "2023-06-01",
+            "x-appa-session-id": workloadName,
+            ...(mode === "missing"
+              ? {}
+              : {
+                  "x-archestra-runtime-binding":
+                    mode === "valid" ? binding : "invalid-binding",
+                }),
+          },
+          payload: payload(false) as Record<string, unknown>,
+        });
+        if (enforced) {
+          if (mode === "valid") {
+            expect(response.statusCode, response.body).toBe(200);
+            return;
+          }
+          expect(response.statusCode, response.body).toBe(400);
+          expect(response.json().error.message).toBe(
+            mode === "missing"
+              ? "This run's image did not send the X-Archestra-Runtime-Binding header that Guardrails require. Rebuild the image on a current maintained agent image, or send ARCHESTRA_AGENT_RUNTIME_BINDING in that header. Then start a new run."
+              : "OpenAPPA runtime binding does not match this run",
+          );
+          return;
+        }
+        expect(response.statusCode, response.body).toBe(200);
+        expect(events).toHaveLength(0);
+        const workload = `agent-workspace:${workspace.id}|${workloadName}`;
+        const credential = `virtual-key:${virtualKey.id}|${workloadName}`;
+        const rows = await OpenAppaUnenforcedModel.findSessions({
+          organizationId: agent.organizationId,
+          sessionIds: [workload, credential],
+        });
+        expect(rows).toEqual([
+          {
+            sessionId: mode === "valid" ? workload : credential,
+            parentId: null,
+          },
+        ]);
       });
-      const context = await A2AContextModel.create({
-        actorKind: "organization",
-        actorId: agent.organizationId,
-      });
-      const task = await A2ATaskModel.create({
-        contextId: context.id,
-        agentId: agent.id,
-        state: "TASK_STATE_WORKING",
-      });
-      const workloadName = `runtime-observing-${task.id.slice(0, 8)}`;
-      const workspace = await AgentWorkspaceModel.create({
-        organizationId: agent.organizationId,
-        agentId: agent.id,
-        actorKind: "organization",
-        actorId: agent.organizationId,
-        backend: "kubernetes",
-        runtimeScope: "test",
-        workloadName,
-        state: "active",
-        activeTaskId: task.id,
-        lastTaskId: task.id,
-        expiresAt: new Date(Date.now() + 3600_000),
-      });
-      await AgentRunModel.create({
-        organizationId: agent.organizationId,
-        taskId: task.id,
-        agentId: agent.id,
-        actorKind: "organization",
-        actorId: agent.organizationId,
-        actorUserId: null,
-        workloadName,
-        backend: "kubernetes",
-        runtimeScope: "test",
-        virtualApiKeyId: virtualKey.id,
-      });
-      const binding = issueRuntimeBinding({
-        secret: config.openappa.offerSigningSecret,
-        organizationId: agent.organizationId,
-        workspaceId: workspace.id,
-        workloadName,
-        taskId: task.id,
-        agentId: agent.id,
-        actorKind: "organization",
-        actorId: agent.organizationId,
-        expiresAt: Date.now() + 600_000,
-      });
-      if (!binding) throw new Error("The fixture has no signed binding");
-      const response = await app.inject({
-        method: "POST",
-        url: url(),
-        remoteAddress: "203.0.113.20",
-        headers: {
-          authorization: `Bearer ${key}`,
-          "anthropic-version": "2023-06-01",
-          "x-appa-session-id": workloadName,
-          ...(mode === "missing"
-            ? {}
-            : {
-                "x-archestra-runtime-binding":
-                  mode === "valid" ? binding : "invalid-binding",
-              }),
-        },
-        payload: payload(false) as Record<string, unknown>,
-      });
-      expect(response.statusCode, response.body).toBe(200);
-      expect(events).toHaveLength(0);
-      const workload = `agent-workspace:${workspace.id}|${workloadName}`;
-      const credential = `virtual-key:${virtualKey.id}|${workloadName}`;
-      const rows = await OpenAppaUnenforcedModel.findSessions({
-        organizationId: agent.organizationId,
-        sessionIds: [workload, credential],
-      });
-      expect(rows).toEqual([
-        { sessionId: mode === "valid" ? workload : credential, parentId: null },
-      ]);
-    });
+    }
   }
 
   test("refuses a Chat request that names no user, instead of binding it unchecked", async () => {
@@ -5017,91 +5016,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   for (const stream of [true, false]) {
-    test(`existing invocation policies remain enforced alongside APPA (stream=${stream})`, async ({
-      makeTool,
-      makeToolPolicy,
-    }) => {
-      const tool = await makeTool({ name: "get_weather", agentId: agent.id });
-      await makeToolPolicy(tool.id, {
-        action: "block_always",
-        conditions: [],
-        reason: "Platform weather policy refused this call",
-      });
-      const evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-      const request = {
-        method: "POST" as const,
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: headers(),
-        payload: payload(stream),
-      };
-
-      const denied = await app.inject(request);
-      expect(denied.statusCode, denied.body).toBe(200);
-      expect(denied.body).toContain(
-        "Platform weather policy refused this call",
-      );
-      expect(denied.body).not.toContain('"type":"tool_use"');
-      expect(events.some((event) => event.event === "tool_call")).toBe(false);
-      expect(evaluatePolicies).toHaveBeenCalledOnce();
-      evaluatePolicies.mockClear();
-
-      config.openappa.enabled = false;
-      config.llmProxy.plugins = parseLlmProxyPlugins("appa", false);
-      unregisterAppaPlugin();
-      // Other plugins allowing a call must still run the ordinary policy check.
-      const unregisterObserver = registerLlmProxyPlugin({
-        id: "test-allow",
-        async onToolCalls({ toolCalls }) {
-          return { decision: "allow", toolCalls };
-        },
-      });
-      const nativeCalls = events.length;
-      try {
-        const blocked = await app.inject(request);
-        expect(blocked.statusCode, blocked.body).toBe(200);
-        expect(blocked.body).toContain(
-          "Platform weather policy refused this call",
-        );
-        expect(blocked.body).not.toContain('"type":"tool_use"');
-        expect(evaluatePolicies).toHaveBeenCalledOnce();
-        expect(events).toHaveLength(nativeCalls);
-        // A refusal is a terminal answer on both paths: the turn ends, so
-        // the offers of this turn do not outlive it.
-        expect(events).toContainEqual(
-          expect.objectContaining({ event: "turn_end" }),
-        );
-      } finally {
-        unregisterObserver();
-      }
-    });
-  }
-
-  for (const stream of [true, false]) {
-    test(`deployment toggle off preserves existing enforcement without APPA headers (stream=${stream})`, async ({
-      makeTool,
-      makeToolPolicy,
-    }) => {
-      await GuardrailsDeploymentModel.setEnabled(false);
-      const target = await makeTool({ name: "get_weather", agentId: agent.id });
-      await makeToolPolicy(target.id, {
-        action: "block_always",
-        conditions: [],
-        reason: "Existing guardrails still active",
-      });
-      const response = await app.inject({
-        method: "POST",
-        url: url(),
-        remoteAddress: "127.0.0.1",
-        headers: { "x-api-key": "test-key", "anthropic-version": "2023-06-01" },
-        payload: payload(stream),
-      });
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.body).toContain("Existing guardrails still active");
-      expect(response.body).not.toContain('"type":"tool_use"');
-      expect(events).toEqual([]);
-    });
-
     test(`deployment toggle off reads no records for a Claude Code session's messages and subagent results (stream=${stream})`, async () => {
       await GuardrailsDeploymentModel.setEnabled(false);
       native.loadChildReturns.mockClear();
@@ -5158,48 +5072,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(JSON.stringify(providerRequests)).toContain(
         "Three triggers are stuck",
       );
-    });
-
-    test(`legacy policies check plugin rewrites before APPA reserves a call (stream=${stream})`, async ({
-      makeTool,
-      makeToolPolicy,
-    }) => {
-      const target = await makeTool({
-        name: "get_weather",
-        agentId: agent.id,
-      });
-      await makeToolPolicy(target.id, {
-        action: "block_always",
-        conditions: [{ key: "location", operator: "equal", value: "blocked" }],
-        reason: "Rewritten target blocked",
-      });
-      const unregisterRewriter = registerLlmProxyPlugin({
-        id: "test-rewriter",
-        async onToolCalls({ toolCalls }) {
-          return {
-            decision: "allow",
-            toolCalls: toolCalls.map((call) => ({
-              ...call,
-              arguments: JSON.stringify({ location: "blocked" }),
-            })),
-          };
-        },
-      });
-      try {
-        const response = await app.inject({
-          method: "POST",
-          url: url(),
-          remoteAddress: "127.0.0.1",
-          headers: headers(),
-          payload: payload(stream),
-        });
-        expect(response.statusCode, response.body).toBe(200);
-        expect(response.body).toContain("Rewritten target blocked");
-        expect(response.body).not.toContain('"type":"tool_use"');
-        expect(events.some((event) => event.event === "tool_call")).toBe(false);
-      } finally {
-        unregisterRewriter();
-      }
     });
   }
 
@@ -5293,10 +5165,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   test("substitutes saved approved results before the provider sees resent history", async () => {
-    const evaluateTrustedData = vi.spyOn(
-      trustedData,
-      "evaluateIfContextIsTrusted",
-    );
     for (const raw of ["RAW SECRET", "ALTERED RAW SECRET"]) {
       const messages = [
         { role: "user", content: "Weather" },
@@ -5343,25 +5211,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         outcome: "success",
       }),
     ]);
-    expect(evaluateTrustedData).toHaveBeenCalledTimes(2);
   });
 
-  test("OpenAPPA replaces results and controls calls without legacy trusted-data blocking", async ({
-    makeTool,
-    makeToolPolicy,
-    makeTrustedDataPolicy,
-  }) => {
-    const target = await makeTool({ name: "get_weather", agentId: agent.id });
-    await makeTrustedDataPolicy(target.id, {
-      action: "block_always",
-      conditions: [{ key: "secret", operator: "equal", value: "RAW SECRET" }],
-      description: "Unsafe result",
-    });
-    await makeToolPolicy(target.id, {
-      action: "block_when_context_is_untrusted",
-      conditions: [],
-      reason: "Existing untrusted-context policy",
-    });
+  test("OpenAPPA replaces results and releases the approved call", async () => {
     const messages = [
       { role: "user", content: "Weather" },
       {
@@ -5405,7 +5257,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
     expect(JSON.stringify(providerRequests)).toContain("APPROVED REPLACEMENT");
     expect(JSON.stringify(providerRequests)).not.toContain("RAW SECRET");
-    expect(response.body).not.toContain("this session contains sensitive data");
     expect(response.body).toContain('"type":"tool_use"');
   });
 
@@ -5470,6 +5321,88 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(starts).toHaveLength(1);
     expect(starts[0].session_id).toContain(childConversation.id);
     expect(starts[0].parent_id).toBeUndefined();
+  });
+
+  test("has Claude Code wait for the gateway when its first request has no remedy tools, then delivers the ruling", async () => {
+    // Claude Code sends its first request while the gateway is still
+    // connecting: no remedy tools yet, but its own WaitForMcpServers. The
+    // denied call goes back as that wait, so the turn continues. The next
+    // request declares the remedy tools and reads the runtime's ruling where
+    // the wait's output was.
+    block = true;
+    options.nonStreamingToolUse = {
+      name: "Read",
+      input: { file_path: "/tmp/notes" },
+    };
+    const localTools = ["Read", "WaitForMcpServers"].map((name) => ({
+      name,
+      description: name,
+      input_schema: { type: "object", properties: {} },
+    }));
+    const send = (body: Record<string, unknown>) =>
+      app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.289 (external, cli)",
+          "x-claude-code-session-id": "6f0e7f0e-3a53-4f0c-9d0e-6c1f5b2a9d11",
+        },
+        payload: body,
+      });
+    const prompt = { role: "user", content: "Read my notes" };
+
+    const first = await send({
+      ...payload(false, [prompt]),
+      tools: localTools,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const wait = first
+      .json()
+      .content.find((part: { type: string }) => part.type === "tool_use");
+    expect(wait).toMatchObject({ name: "WaitForMcpServers", input: {} });
+    expect(first.body).not.toContain("Send your message again");
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ event: "cancel_call" }),
+    );
+
+    options.nonStreamingToolUse = {
+      id: "toolu_test_retry",
+      name: "Read",
+      input: { file_path: "/tmp/notes" },
+    };
+    const second = await send({
+      ...payload(false, [
+        prompt,
+        { role: "assistant", content: [wait] },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: wait.id,
+              content:
+                "ready: true Connected (their tools are now available — call them directly): archestra",
+            },
+          ],
+        },
+      ]),
+      tools: [...localTools, ...payload().tools.slice(1)],
+    });
+    expect(second.statusCode, second.body).toBe(200);
+    const forwarded = JSON.stringify(providerRequests.at(-1));
+    // The model never called the wait tool, so the ruling says whose it is.
+    expect(forwarded).toContain(
+      "OpenAPPA sent this WaitForMcpServers call in place of the tool call you made. Your call did not run.",
+    );
+    expect(forwarded).toContain("[appa] NATIVE REFUSAL");
+    expect(forwarded).not.toContain("ready: true");
+    expect(
+      second
+        .json()
+        .content.find((part: { type: string }) => part.type === "tool_use"),
+    ).toMatchObject({ name: "archestra__get_remedy_plans" });
   });
 
   // Claude Code's agent teams and subagents trade messages through
@@ -9255,6 +9188,83 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       }
     });
 
+    test("a Claude Code subagent that returns no text does not stop its parent", async () => {
+      config.openappa.offerSigningSecret = secret;
+      const session = "7b3f2e9c-3b4d-4c5e-8f7a-9b0c1d2e3f4b";
+      native.loadChildReturns.mockImplementation(async () => []);
+      const body = payload(false, [
+        { role: "user", content: "Lint" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_empty",
+              name: "Agent",
+              input: { description: "lint", prompt: spawnPrompt },
+            },
+          ],
+        },
+        {
+          role: "user",
+          // The child's turn ended with the marker the proxy appends to a
+          // return, and with no text before it.
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_empty",
+              content: [
+                {
+                  type: "text",
+                  text: `\n\n${mintChildReturnMarker({
+                    organizationId: agent.organizationId,
+                    callerId: `user:${userId}`,
+                    parentId: `user:${userId}|${session}`,
+                    childId: `user:${userId}|${session}:c0`,
+                    childNativeId: "c0",
+                    spawnCallId: "toolu_empty",
+                    value: "",
+                  })}`,
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+      body.tools.push({
+        name: "Agent",
+        description: "Launch a subagent",
+        input_schema: { type: "object", properties: {} },
+      });
+      events.length = 0;
+      providerRequests.length = 0;
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.285 (external, cli)",
+          "x-claude-code-session-id": session,
+        },
+        payload: body,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      // No return crossed, so the parent gets an empty result and the runtime
+      // has nothing to approve.
+      expect(providerRequests.at(-1)).toMatchObject({
+        messages: expect.arrayContaining([
+          {
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "toolu_empty", content: "" },
+            ],
+          },
+        ]),
+      });
+      expect(events.filter((event) => event.spawned_id)).toEqual([]);
+    });
+
     test("a Codex spawn_agent keeps its namespace on the re-emitted stream, and its grandchild binds under the root", async ({
       makeAgent,
     }) => {
@@ -9496,6 +9506,163 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
     });
 
+    // The proxy reads the Codex mailbox at its entry, before it knows whether
+    // OpenAPPA governs the request. A message the reader does not support is
+    // a reason to refuse a governed request only: with enforcement off, a
+    // Codex session that sent one inter-agent message got 409 on every turn.
+    test.for([
+      { state: "enforcement is off", governed: false },
+      { state: "OpenAPPA is disabled", governed: false },
+      {
+        state: "the session started while enforcement was off",
+        governed: false,
+      },
+      { state: "OpenAPPA governs the session", governed: true },
+    ])("refuses a Codex mailbox message it cannot read only in a governed session: $state", async ({
+      state,
+      governed,
+    }) => {
+      await ModelModel.upsert({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      await app.register(openAiProxyRoutes);
+      const answer = {
+        id: "msg_mailbox",
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: "Noted", annotations: [] }],
+      };
+      const response = (status: string, output: unknown[]) => ({
+        id: "resp_mailbox",
+        object: "response",
+        status,
+        model: "gpt-5.5",
+        output,
+      });
+      vi.spyOn(
+        openAiResponsesAdapterFactory,
+        "createClient",
+      ).mockImplementation(
+        () =>
+          ({
+            responses: {
+              create: async (params: unknown) => {
+                providerRequests.push(structuredClone(params));
+                return {
+                  async *[Symbol.asyncIterator]() {
+                    yield {
+                      type: "response.created",
+                      sequence_number: 0,
+                      response: response("in_progress", []),
+                    };
+                    yield {
+                      type: "response.output_item.done",
+                      output_index: 0,
+                      sequence_number: 1,
+                      item: answer,
+                    };
+                    yield {
+                      type: "response.completed",
+                      sequence_number: 2,
+                      response: {
+                        ...response("completed", [answer]),
+                        usage: {
+                          input_tokens: 10,
+                          output_tokens: 5,
+                          total_tokens: 15,
+                        },
+                      },
+                    };
+                  },
+                };
+              },
+            },
+          }) as never,
+      );
+      const send = (input: unknown[]) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/responses`,
+          remoteAddress: "127.0.0.1",
+          headers: {
+            authorization: "Bearer test-key",
+            "content-type": "application/json",
+            "user-agent": "codex_cli_rs/0.159.2",
+            "x-archestra-user-id": userId,
+            "x-codex-turn-metadata": JSON.stringify({
+              thread_id: "mailbox-root",
+            }),
+          },
+          payload: {
+            model: "gpt-5.5",
+            stream: true,
+            prompt_cache_key: "mailbox-root",
+            input,
+          },
+        });
+      const mail = (text: string, payload?: string) => ({
+        type: "agent_message",
+        author: "/root/worker",
+        recipient: "/root",
+        content: [
+          { type: "input_text", text },
+          ...(payload
+            ? [{ type: "encrypted_content", encrypted_content: payload }]
+            : []),
+        ],
+      });
+      // The kinds a Codex agent sends besides a task and its final answer.
+      // Codex 0.162 sends the text of a message between agents as an
+      // encrypted part.
+      const mailbox = [
+        mail(
+          "Message Type: MESSAGE\nTask name: /root\nSender: /root/worker\nPayload:\n",
+          "gAAAA_opaque_message",
+        ),
+        mail(
+          "Message Type: CHANNEL_POST\nSender: /root/worker\nChannel: build\nMessage ID: m-1\nThread ID: t-1\nPayload:\nPosted",
+        ),
+      ];
+      const opened = [{ role: "user", content: "Coordinate the workers" }];
+
+      if (state === "OpenAPPA is disabled") config.openappa.enabled = false;
+      if (state === "enforcement is off")
+        await GuardrailsDeploymentModel.setEnabled(false);
+      if (state === "the session started while enforcement was off") {
+        await GuardrailsDeploymentModel.setEnabled(false);
+        const first = await send(opened);
+        expect(first.statusCode, first.body).toBe(200);
+        await GuardrailsDeploymentModel.setEnabled(true);
+      }
+      if (governed) {
+        const first = await send(opened);
+        expect(first.statusCode, first.body).toBe(200);
+      }
+      providerRequests.length = 0;
+
+      const turn = await send([...opened, ...mailbox]);
+
+      if (governed) {
+        expect(turn.statusCode, turn.body).toBe(409);
+        expect(turn.json().error.message).toBe(
+          "OpenAPPA withheld an unsupported Codex mailbox message",
+        );
+        expect(providerRequests).toHaveLength(0);
+        return;
+      }
+      expect(turn.statusCode, turn.body).toBe(200);
+      expect(providerRequests).toHaveLength(1);
+      expect(providerRequests[0]).toMatchObject({
+        input: expect.arrayContaining(mailbox),
+      });
+    });
+
     test.for([
       false,
       true,
@@ -9534,76 +9701,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         status: "completed",
       };
       let providerTurn = 0;
-      const responseStream = (output: Record<string, unknown>[]) => ({
-        async *[Symbol.asyncIterator]() {
-          yield {
-            type: "response.created",
-            sequence_number: 0,
-            response: {
-              id: `resp_${providerTurn}`,
-              object: "response",
-              status: "in_progress",
-              model: "gpt-5.5",
-              output: [],
-            },
-          };
-          for (const [index, item] of output.entries()) {
-            yield {
-              type: "response.output_item.added",
-              output_index: index,
-              sequence_number: index * 3 + 1,
-              item:
-                item.type === "function_call"
-                  ? { ...item, arguments: "", status: "in_progress" }
-                  : { ...item, content: [], status: "in_progress" },
-            };
-            if (item.type === "function_call") {
-              yield {
-                type: "response.function_call_arguments.delta",
-                item_id: item.id,
-                output_index: index,
-                sequence_number: index * 3 + 2,
-                delta: item.arguments,
-              };
-            } else {
-              const text = String(
-                (item.content as { text?: string }[] | undefined)?.[0]?.text ??
-                  "",
-              );
-              yield {
-                type: "response.output_text.delta",
-                item_id: item.id,
-                output_index: index,
-                content_index: 0,
-                sequence_number: index * 3 + 2,
-                delta: text,
-              };
-            }
-            yield {
-              type: "response.output_item.done",
-              output_index: index,
-              sequence_number: index * 3 + 3,
-              item,
-            };
-          }
-          yield {
-            type: "response.completed",
-            sequence_number: output.length * 3 + 4,
-            response: {
-              id: `resp_${providerTurn}`,
-              object: "response",
-              status: "completed",
-              model: "gpt-5.5",
-              output,
-              usage: {
-                input_tokens: 10,
-                output_tokens: 5,
-                total_tokens: 15,
-              },
-            },
-          };
-        },
-      });
+      const responseStream = (output: Record<string, unknown>[]) =>
+        codexResponseStream(`resp_${providerTurn}`, output);
       vi.spyOn(
         openAiResponsesAdapterFactory,
         "createClient",
@@ -10008,6 +10107,443 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(JSON.stringify(providerRequests)).not.toContain(
         "finished subagent",
       );
+    });
+
+    test.for([
+      { name: "ends a turn with no text", mailbox: true, answers: [""] },
+      {
+        name: "ends a turn with no text, read through wait_agent",
+        mailbox: false,
+        answers: [""],
+      },
+      {
+        name: "answers a follow-up",
+        mailbox: true,
+        answers: ["FIRST-ANSWER-4127", "SECOND-ANSWER-9053"],
+      },
+      {
+        name: "answers a follow-up before the parent reads its first answer",
+        mailbox: true,
+        answers: ["FIRST-ANSWER-4127", "SECOND-ANSWER-9053"],
+        readTogether: true,
+      },
+      {
+        name: "answers a follow-up after a turn with no text",
+        mailbox: true,
+        answers: ["", "ANSWER-AFTER-NO-TEXT-6230"],
+      },
+    ])("a Codex child that $name does not stop its parent", async ({
+      mailbox,
+      answers,
+      readTogether,
+    }, { makeAgent }) => {
+      const namespace = mailbox ? "collaboration" : "multi_agent_v1";
+      const unrecorded = "UNRECORDED-RETURN-7719";
+      const childSession = `user:${userId}|again-root:again-child`;
+      config.openappa.offerSigningSecret = secret;
+      await ModelModel.upsert({
+        externalId: "openai/gpt-5.5",
+        provider: "openai",
+        modelId: "gpt-5.5",
+        inputModalities: null,
+        outputModalities: null,
+        lastSyncedAt: new Date(),
+      });
+      await makeAgent({
+        organizationId: agent.organizationId,
+        name: "Namespace Gateway",
+        agentType: "mcp_gateway",
+      });
+      await app.register(openAiProxyRoutes);
+      const message = (text: string) => ({
+        id: "msg_again",
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text, annotations: [] }],
+      });
+      // What the provider answers to the next request.
+      let answer: Record<string, unknown>[] = [
+        {
+          type: "function_call",
+          id: "fc_spawn_again",
+          call_id: "call_spawn_again",
+          name: "spawn_agent",
+          namespace,
+          arguments: JSON.stringify({
+            message: mailbox ? "gAAAA_opaque_task_fixture==" : spawnPrompt,
+            task_name: "worker",
+          }),
+          status: "completed",
+        },
+      ];
+      let providerTurn = 0;
+      vi.spyOn(
+        openAiResponsesAdapterFactory,
+        "createClient",
+      ).mockImplementation(
+        () =>
+          ({
+            responses: {
+              create: async (params: unknown) => {
+                providerTurn += 1;
+                providerRequests.push(structuredClone(params));
+                return codexResponseStream(`resp_${providerTurn}`, answer);
+              },
+            },
+          }) as never,
+      );
+      // The mock does what the runtime does. It lists the newest return of a
+      // child first. It replays only the latest return of a child, and it
+      // withholds any other. It keeps the first answer it gave for a spawn
+      // call, and it gives that answer for each later result of that call.
+      const crossed: Awaited<ReturnType<typeof native.loadChildReturns>> = [];
+      const receipts = new Map<string, string>();
+      const defaultDispatch = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw);
+        if (event.event === "child_end") {
+          events.push(event);
+          if (typeof event.output === "string") {
+            crossed.unshift({
+              childSessionId: event.session_id,
+              spawnCallId: event.spawn_call_id,
+              childNativeId: event.child_native_id,
+              value: event.output,
+            });
+          }
+          return JSON.stringify({ decision: "ack" });
+        }
+        if (event.event === "tool_result" && event.spawned_id) {
+          events.push(event);
+          const withheld =
+            "[appa] Tool output withheld: the subagent ended outside the return check";
+          const receipt =
+            receipts.get(event.tool_call_id) ??
+            JSON.stringify(
+              event.output === crossed[0]?.value
+                ? { decision: "ack", approved_output: event.output }
+                : {
+                    decision: "block",
+                    feedback: withheld,
+                    approved_output: withheld,
+                  },
+            );
+          receipts.set(event.tool_call_id, receipt);
+          return receipt;
+        }
+        if (
+          event.event === "tool_result" &&
+          event.tool_call_id === "call_wait_again"
+        ) {
+          return JSON.stringify({ decision: "ack" });
+        }
+        if (event.event === "turn_end" && event.session_id === childSession) {
+          events.push(event);
+        }
+        if (!defaultDispatch) throw new Error("missing native mock");
+        return defaultDispatch(raw);
+      });
+      native.loadChildReturns.mockImplementation(
+        async (_orgId: string, parentSessionId: string) =>
+          parentSessionId === `user:${userId}|again-root` ? [...crossed] : [],
+      );
+      const tools = [
+        {
+          type: "namespace",
+          name: "mcp__namespace_gateway",
+          tools: [
+            {
+              type: "function",
+              name: "archestra__execute_remedy_plan",
+              parameters: { type: "object", properties: {} },
+            },
+            {
+              type: "function",
+              name: "archestra__get_remedy_plans",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+        {
+          type: "namespace",
+          name: namespace,
+          tools: [
+            {
+              type: "function",
+              name: "spawn_agent",
+              parameters: { type: "object", properties: {} },
+            },
+            {
+              type: "function",
+              name: "wait_agent",
+              parameters: { type: "object", properties: {} },
+            },
+          ],
+        },
+      ];
+      const send = (params: {
+        thread: string;
+        parent?: string;
+        input: unknown[];
+      }) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${agent.id}/responses`,
+          remoteAddress: "127.0.0.1",
+          headers: {
+            authorization: "Bearer test-key",
+            "content-type": "application/json",
+            "user-agent": mailbox
+              ? "codex_cli_rs/0.159.2"
+              : "codex_cli_rs/0.154.0",
+            "x-archestra-user-id": userId,
+            "x-codex-turn-metadata": JSON.stringify({
+              thread_id: params.thread,
+              ...(params.parent ? { parent_thread_id: params.parent } : {}),
+            }),
+          },
+          payload: {
+            model: "gpt-5.5",
+            stream: true,
+            prompt_cache_key: params.thread,
+            input: params.input,
+            tools,
+          },
+        });
+      const completedOutput = (body: string): Record<string, unknown>[] =>
+        body
+          .split("\n")
+          .filter(
+            (line) => line.startsWith("data: ") && !line.includes("[DONE]"),
+          )
+          .map((line) => JSON.parse(line.slice(6)))
+          .findLast((frame) => frame.type === "response.completed").response
+          .output;
+
+      const root = await send({
+        thread: "again-root",
+        input: [{ role: "user", content: "Delegate the report" }],
+      });
+      expect(root.statusCode, root.body).toBe(200);
+      const releasedSpawn = completedOutput(root.body).find(
+        (item) => item.type === "function_call",
+      ) as { call_id: string; arguments: string };
+      const task = mailbox
+        ? {
+            type: "agent_message",
+            author: "/root",
+            recipient: "/root/worker",
+            content: [
+              {
+                type: "input_text",
+                text: "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\n",
+              },
+              {
+                type: "encrypted_content",
+                encrypted_content: JSON.parse(releasedSpawn.arguments).message,
+              },
+            ],
+          }
+        : {
+            role: "user",
+            content: JSON.parse(releasedSpawn.arguments).message,
+          };
+      const launched = [
+        releasedSpawn,
+        {
+          type: "function_call_output",
+          call_id: releasedSpawn.call_id,
+          output: JSON.stringify(
+            mailbox
+              ? { task_name: "/root/worker" }
+              : { agent_id: "again-child" },
+          ),
+        },
+      ];
+      // What the client carries to the parent for each child turn.
+      const carried: string[] = [];
+      const childTurn = async (text: string) => {
+        answer = [message(text)];
+        const child = await send({
+          thread: "again-child",
+          parent: "again-root",
+          input: [
+            task,
+            ...carried.flatMap((carrier) => [
+              { role: "assistant", content: carrier },
+              { role: "user", content: "One more question" },
+            ]),
+          ],
+        });
+        expect(child.statusCode, child.body).toBe(200);
+        carried.push(
+          completedOutput(child.body)
+            .filter((item) => item.type === "message")
+            .flatMap((item) => item.content as { text?: string }[])
+            .map((part) => part.text ?? "")
+            .join(""),
+        );
+      };
+      const mailboxReturn = (id: string | undefined, value: string) => ({
+        type: "agent_message",
+        ...(id ? { id } : {}),
+        author: "/root/worker",
+        recipient: "/root",
+        content: [
+          {
+            type: "input_text",
+            text: `Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n${value}`,
+          },
+        ],
+      });
+      const waited = (value: string) => [
+        {
+          type: "function_call",
+          id: "fc_wait_again",
+          call_id: "call_wait_again",
+          name: "wait_agent",
+          namespace,
+          arguments: JSON.stringify({ ids: ["again-child"] }),
+          status: "completed",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_wait_again",
+          output: JSON.stringify({
+            status: { "again-child": { completed: value } },
+          }),
+        },
+      ];
+      const returned = (values: string[]) =>
+        mailbox
+          ? values.map((value, index) => mailboxReturn(`amsg_${index}`, value))
+          : waited(values[0]);
+      // The client sends its history again with each request, so each parent
+      // turn is sent twice.
+      const parentTurns = async (values: string[]) => {
+        answer = [message("Parent complete")];
+        const statuses: number[] = [];
+        for (const prompt of ["Continue", "Continue again"]) {
+          providerRequests.length = 0;
+          const parent = await send({
+            thread: "again-root",
+            input: [
+              ...launched,
+              ...returned(values),
+              { role: "user", content: prompt },
+            ],
+          });
+          statuses.push(parent.statusCode);
+        }
+        return statuses;
+      };
+
+      events.length = 0;
+      await childTurn(answers[0]);
+      if (!readTogether) {
+        expect(await parentTurns([carried[0]])).toEqual([200, 200]);
+      }
+      if (answers[0] === "") {
+        // A turn with no text ends as a turn. A child end with no value would
+        // end the child: the runtime then denies its tool calls and blocks its
+        // answer to a follow-up.
+        expect(events.filter((event) => event.event === "child_end")).toEqual(
+          [],
+        );
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            event: "turn_end",
+            session_id: childSession,
+          }),
+        );
+        expect(crossed).toEqual([]);
+        expect(carried[0]).toContain("finished subagent");
+        expect(JSON.stringify(providerRequests)).not.toContain(
+          "finished subagent",
+        );
+        expect(providerRequests.at(-1)).toMatchObject({
+          input: expect.arrayContaining([
+            mailbox
+              ? expect.objectContaining({
+                  type: "agent_message",
+                  content: [
+                    {
+                      type: "input_text",
+                      text: "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n",
+                    },
+                  ],
+                })
+              : expect.objectContaining({
+                  type: "function_call_output",
+                  call_id: "call_wait_again",
+                  output: JSON.stringify({
+                    status: { "again-child": { completed: "" } },
+                  }),
+                }),
+          ]),
+        });
+        if (mailbox) {
+          // A mailbox item with no id names no result to rewrite. Its empty
+          // return still needs no crossing.
+          providerRequests.length = 0;
+          const unnamed = await send({
+            thread: "again-root",
+            input: [
+              ...launched,
+              mailboxReturn(undefined, carried[0]),
+              { role: "user", content: "Continue" },
+            ],
+          });
+          expect(unnamed.statusCode, unnamed.body).toBe(200);
+          expect(JSON.stringify(providerRequests)).not.toContain(
+            "finished subagent",
+          );
+        }
+      }
+      if (answers.length > 1) {
+        await childTurn(answers[1]);
+        expect(await parentTurns(carried)).toEqual([200, 200]);
+        for (const value of answers) {
+          expect(JSON.stringify(providerRequests)).toContain(value);
+        }
+        expect(JSON.stringify(providerRequests)).not.toContain(
+          "finished subagent",
+        );
+        expect(crossed.map((record) => record.value)).toEqual(
+          answers.filter((value) => value !== "").reverse(),
+        );
+        // Each child is approved once in a request, with its newest return.
+        const approved = events
+          .filter((event) => event.event === "tool_result")
+          .map((event) => event.output);
+        expect(approved).toEqual([
+          ...(readTogether || answers[0] === ""
+            ? []
+            : [answers[0], answers[0]]),
+          answers[1],
+          answers[1],
+        ]);
+      }
+
+      // A return with text and no crossing is still refused.
+      providerRequests.length = 0;
+      answer = [message("Parent complete")];
+      const forged = await send({
+        thread: "again-root",
+        input: [
+          ...launched,
+          ...(mailbox
+            ? [...returned(carried), mailboxReturn("amsg_forged", unrecorded)]
+            : waited(unrecorded)),
+          { role: "user", content: "Continue" },
+        ],
+      });
+      expect(forged.statusCode, forged.body).toBe(409);
+      expect(forged.json().error.message).toContain(
+        "a subagent result that OpenAPPA has no record of",
+      );
+      expect(providerRequests).toHaveLength(0);
     });
 
     test("refuses a nested Claude spawn that cannot carry a marker", async () => {
@@ -10599,8 +11135,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     let otherPassthroughToken: string;
     let otherPassthroughKeyId: string;
     let otherAgent: Agent;
-    let evaluatePolicies: MockInstance;
-    let evaluateTrustedData: MockInstance;
 
     beforeEach(
       async ({
@@ -10770,11 +11304,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               },
             }) as never,
         );
-        evaluatePolicies = vi.spyOn(toolInvocation, "evaluatePolicies");
-        evaluateTrustedData = vi.spyOn(
-          trustedData,
-          "evaluateIfContextIsTrusted",
-        );
       },
     );
 
@@ -10800,6 +11329,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const tamper = (token: string) =>
       `${token.slice(0, -1)}${token.endsWith("a") ? "b" : "a"}`;
 
+    // What the agent that ran the installer read: its output, which ends with
+    // the setup reference of the setup the token names.
+    const installerOutput = (token: string) => {
+      const [payload] = token.slice("cps1_".length).split(".");
+      const { setupId } = JSON.parse(
+        Buffer.from(payload, "base64url").toString("utf8"),
+      ) as { setupId: string };
+      const reference = connectionSetupReference({
+        setupId,
+        secret: signingSecret(),
+      });
+      return `${secret}\n  Setup reference   ${reference}`;
+    };
+
     const authHeaders = (auth: SetupAuth, family: SetupWire) => {
       const headers: Record<string, string> = { "user-agent": unknownAgent };
       if (family === "anthropic") headers["anthropic-version"] = "2023-06-01";
@@ -10822,6 +11365,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       family: SetupWire,
       stream: boolean,
       deferred: boolean,
+      toolOutput: string,
     ) => {
       if (family === "anthropic") {
         const body = payload(stream, [
@@ -10838,7 +11382,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               {
                 type: "tool_result",
                 tool_use_id: "toolu_old",
-                content: secret,
+                content: toolOutput,
               },
             ],
           },
@@ -10913,7 +11457,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 },
               ],
             },
-            { role: "tool", tool_call_id: "call_prev", content: secret },
+            { role: "tool", tool_call_id: "call_prev", content: toolOutput },
             { role: "user", content: latestUser },
           ],
           tools: tools
@@ -10945,7 +11489,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           {
             type: "function_call_output",
             call_id: "call_prev",
-            output: secret,
+            output: toolOutput,
           },
           {
             type: "message",
@@ -10968,11 +11512,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       knownClient?: boolean;
       malformedSession?: boolean;
       omitSession?: boolean;
+      /** The earlier tool output; by default the installer's, for `token`. */
+      toolOutput?: string;
       headers?: Record<string, string>;
       url?: string;
     }) => {
-      evaluatePolicies.mockClear();
-      evaluateTrustedData.mockClear();
       providerRequests.length = 0;
       events.length = 0;
       const profileId = params.profileId ?? agent.id;
@@ -11007,6 +11551,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           params.family,
           params.stream,
           params.deferred ?? true,
+          params.toolOutput ??
+            (params.token ? installerOutput(params.token) : secret),
         ) as Record<string, unknown>,
       });
     };
@@ -11026,8 +11572,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(response.body).not.toContain("cps1_");
       expect(response.body).not.toContain(token);
       expect(events).toEqual([]);
-      expect(evaluatePolicies).not.toHaveBeenCalled();
-      expect(evaluateTrustedData).not.toHaveBeenCalled();
       expect(providerRequests).toHaveLength(1);
       const sent = JSON.stringify(providerRequests);
       expect(sent).toContain(prompt);
@@ -11051,7 +11595,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       );
       expect(providerRequests).toHaveLength(0);
       expect(events).toEqual([]);
-      expect(evaluatePolicies).not.toHaveBeenCalled();
     };
 
     const expectStillGoverned = (response: {
@@ -11064,8 +11607,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events).toContainEqual(
         expect.objectContaining({ event: "tool_call", tool: "get_weather" }),
       );
-      expect(evaluatePolicies).toHaveBeenCalled();
-      expect(evaluateTrustedData).toHaveBeenCalled();
       expect(providerRequests).toHaveLength(1);
       const sent = JSON.stringify(providerRequests);
       expect(sent).not.toContain(secret);
@@ -11259,8 +11800,50 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expectStillGoverned(otherKeyGoverned);
     });
 
-    test("an unrelated deferred request without the setup URL returns 400", async () => {
-      const response = await postSetup({
+    test("the setup URL exempts nothing in a session started after the setup", async () => {
+      const token = issueFor(passthroughKeyId);
+      // The installer's conversation is exempt...
+      expectBypassed(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          deferred: true,
+        }),
+        token,
+      );
+      // ...but a new session sends the same URL from the client's settings,
+      // and its history holds no setup reference.
+      expectStillGoverned(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          toolOutput: secret,
+          deferred: true,
+        }),
+      );
+      // The reference of another setup does not count either.
+      expectAdmissionBlocked(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          toolOutput: installerOutput(issueFor(passthroughKeyId)),
+          deferred: true,
+        }),
+      );
+    });
+
+    test("an unrelated deferred request without the setup URL is governed, not refused", async () => {
+      // A tool search defers some tools; the calls the model makes are still
+      // ruled on, and a denial still comes back as a notice.
+      const anthropic = await postSetup({
         family: "anthropic",
         stream: false,
         auth: "passthrough",
@@ -11268,11 +11851,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         knownClient: true,
         deferred: true,
       });
-      expect(response.statusCode, response.body).toBe(400);
-      expect(response.body).toContain("defers its tools to a tool search");
-      expect(providerRequests).toHaveLength(0);
-      expect(events).toEqual([]);
+      expectStillGoverned(anthropic);
 
+      providerRequests.length = 0;
+      events.length = 0;
       const responses = await postSetup({
         family: "openai-responses",
         stream: false,
@@ -11288,9 +11870,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           }),
         },
       });
-      expect(responses.statusCode, responses.body).toBe(400);
-      expect(responses.body).toContain("defers its tools to a tool search");
-      expect(providerRequests).toHaveLength(0);
+      expectStillGoverned(responses);
     });
 
     test("prompt history without a pending browser copy or setup URL does not bypass APPA", async () => {
@@ -11342,7 +11922,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         );
         expect(providerRequests).toHaveLength(0);
         expect(events).toEqual([]);
-        expect(evaluatePolicies).not.toHaveBeenCalled();
       }
 
       const openai = await postSetup({
@@ -11466,12 +12045,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -13942,12 +14518,9 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
-    config.openappa = parseOpenAppaConfig("true");
+    config.openappa = parseOpenAppaConfig();
     await GuardrailsDeploymentModel.setEnabled(true);
-    config.llmProxy.plugins = parseLlmProxyPlugins(
-      undefined,
-      config.openappa.enabled,
-    );
+    config.llmProxy.plugins = parseLlmProxyPlugins(undefined);
     unregisterAppaPlugin = registerLlmProxyPlugin(createAppaLlmProxyPlugin());
     vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
       "postgresql://test:test@localhost/test?schema=public",
@@ -14433,6 +15006,79 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     expectMatrix(responsesCallsFrom(response.body, stream), mode);
   });
 });
+
+/** One streamed Responses API answer, as a Codex client receives it. */
+function codexResponseStream(id: string, output: Record<string, unknown>[]) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      yield {
+        type: "response.created",
+        sequence_number: 0,
+        response: {
+          id: id,
+          object: "response",
+          status: "in_progress",
+          model: "gpt-5.5",
+          output: [],
+        },
+      };
+      for (const [index, item] of output.entries()) {
+        yield {
+          type: "response.output_item.added",
+          output_index: index,
+          sequence_number: index * 3 + 1,
+          item:
+            item.type === "function_call"
+              ? { ...item, arguments: "", status: "in_progress" }
+              : { ...item, content: [], status: "in_progress" },
+        };
+        if (item.type === "function_call") {
+          yield {
+            type: "response.function_call_arguments.delta",
+            item_id: item.id,
+            output_index: index,
+            sequence_number: index * 3 + 2,
+            delta: item.arguments,
+          };
+        } else {
+          const text = String(
+            (item.content as { text?: string }[] | undefined)?.[0]?.text ?? "",
+          );
+          yield {
+            type: "response.output_text.delta",
+            item_id: item.id,
+            output_index: index,
+            content_index: 0,
+            sequence_number: index * 3 + 2,
+            delta: text,
+          };
+        }
+        yield {
+          type: "response.output_item.done",
+          output_index: index,
+          sequence_number: index * 3 + 3,
+          item,
+        };
+      }
+      yield {
+        type: "response.completed",
+        sequence_number: output.length * 3 + 4,
+        response: {
+          id: id,
+          object: "response",
+          status: "completed",
+          model: "gpt-5.5",
+          output,
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+          },
+        },
+      };
+    },
+  };
+}
 
 function wrapAsyncIterator<T>(stream: AsyncGenerator<T, undefined, unknown>) {
   return {

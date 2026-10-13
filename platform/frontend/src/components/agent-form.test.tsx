@@ -1,4 +1,6 @@
 import {
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
+  BUILT_IN_AGENT_IDS,
   E2eTestId,
   getAgentCatalogImages,
   type SupportedProvider,
@@ -547,12 +549,15 @@ vi.mock("@/components/system-prompt-editor", () => ({
   SystemPromptEditor: ({
     value,
     onChange,
+    headerExtra,
   }: {
     value?: string;
     onChange?: (value: string) => void;
+    headerExtra?: React.ReactNode;
   }) => (
     <div>
       Mock Instruction Editor
+      {headerExtra}
       <textarea
         aria-label="Instructions"
         value={value ?? ""}
@@ -667,6 +672,39 @@ vi.mock("@/components/llm-provider-api-key-dropdown", () => ({
           })}
         </output>
       )}
+    </>
+  ),
+}));
+
+// Claude Code lists its connections instead of the dropdown; the same stub
+// buttons keep the form-level tests about key selection working for both.
+vi.mock("@/components/claude-provider-connections", () => ({
+  ClaudeProviderConnections: ({
+    onAddApiKey,
+    onSelect,
+    canRunClaude,
+  }: {
+    onAddApiKey?: () => void;
+    onSelect: (keyId: string) => void;
+    canRunClaude: (provider: SupportedProvider) => boolean;
+  }) => (
+    <>
+      <button type="button" onClick={() => onSelect("key-1")}>
+        Pick API key
+      </button>
+      {onAddApiKey && (
+        <button type="button" onClick={onAddApiKey}>
+          Add provider key
+        </button>
+      )}
+      <output data-testid="runtime-provider-filter">
+        {JSON.stringify({
+          gemini: canRunClaude("gemini"),
+          openai: canRunClaude("openai"),
+          anthropic: canRunClaude("anthropic"),
+          bedrock: canRunClaude("bedrock"),
+        })}
+      </output>
     </>
   ),
 }));
@@ -841,6 +879,9 @@ vi.mock("@/components/ui/dialog", () => ({
     <div>{children}</div>
   ),
   DialogContent: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogBody: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
   DialogDescription: ({ children }: { children?: React.ReactNode }) => (
@@ -1047,7 +1088,6 @@ const baseAgent = {
   llmApiKeyId: null,
   llmModel: null,
   modelId: null,
-  considerContextUntrusted: false,
   identityProviderId: null,
   environmentId: null,
   builtInAgentConfig: null,
@@ -2704,6 +2744,71 @@ describe("AgentForm save payload and failure handling", () => {
    * is what gates the button, and it only stays true while the awaited
    * mutation is still in flight.
    */
+
+  describe("a built-in agent", () => {
+    const builtInName = BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION;
+    const defaultPrompt = BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[builtInName];
+    const builtInAgent = {
+      ...baseAgent,
+      builtIn: true,
+      builtInAgentConfig: { name: builtInName },
+      systemPrompt: "Customized title prompt",
+    };
+
+    const renderBuiltIn = () =>
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={builtInAgent}
+          sections={["configuration"]}
+        />,
+      );
+
+    beforeEach(() => {
+      useProfileMock.mockReturnValue({ data: builtInAgent, refetch: vi.fn() });
+      updateAgent.mockResolvedValue(builtInAgent);
+    });
+
+    it("saves an edited prompt", async () => {
+      const user = userEvent.setup();
+      renderBuiltIn();
+
+      const editor = await screen.findByLabelText("Instructions");
+      await user.clear(editor);
+      await user.type(editor, "Write short titles");
+      await user.click(screen.getByRole("button", { name: /update/i }));
+
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody()).toMatchObject({
+        builtInAgentConfig: { name: builtInName },
+        systemPrompt: "Write short titles",
+      });
+    });
+
+    it("saves the shipped prompt after Reset to default", async () => {
+      const user = userEvent.setup();
+      renderBuiltIn();
+
+      await user.click(
+        await screen.findByRole("button", { name: /reset to default/i }),
+      );
+      expect(screen.getByLabelText("Instructions")).toHaveValue(defaultPrompt);
+      expect(
+        screen.getByRole("button", { name: /reset to default/i }),
+      ).toBeDisabled();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().systemPrompt).toBe(defaultPrompt.trim());
+    });
+
+    it("offers no labels", async () => {
+      renderBuiltIn();
+
+      await screen.findByLabelText("Instructions");
+      expect(screen.queryByText("Labels", { exact: true })).toBeNull();
+    });
+  });
   it("keeps Update disabled while a save is in flight", async () => {
     const user = userEvent.setup();
     let releaseSave: (agent: unknown) => void = () => {};
@@ -3821,23 +3926,25 @@ describe("AgentForm save payload and failure handling", () => {
   it("sends the advanced step's own fields, and nothing the step does not show", async () => {
     vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
     const user = userEvent.setup();
-    const { container } = render(
+    render(
       <AgentForm agentType="agent" agent={baseAgent} sections={["advanced"]} />,
     );
 
-    await screen.findByText("Security");
+    await screen.findByText("Suggested prompts");
     expect(screen.queryByTestId("agent-runtime")).not.toBeInTheDocument();
-    const securitySwitch = container.querySelector<HTMLInputElement>(
-      "#consider-context-untrusted",
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await user.type(screen.getByLabelText("Button Label"), "Summarize");
+    await user.type(
+      screen.getByLabelText("Suggested prompt"),
+      "Summarize recent changes",
     );
-    if (!securitySwitch) throw new Error("No security switch rendered");
-    await user.click(securitySwitch);
     await user.click(screen.getByRole("button", { name: /update/i }));
 
     await waitFor(() => expect(updateAgent).toHaveBeenCalled());
-    expect(savedBody().considerContextUntrusted).toBe(true);
+    expect(savedBody().suggestedPrompts).toEqual([
+      { summaryTitle: "Summarize", prompt: "Summarize recent changes" },
+    ]);
     expect(Object.keys(savedBody()).sort()).toEqual([
-      "considerContextUntrusted",
       "identityProviderId",
       "labels",
       // The environment and the suggested prompts are edited on this step, so
@@ -4089,7 +4196,10 @@ describe("AgentForm save payload and failure handling", () => {
     const name = screen.getByPlaceholderText("Enter agent name");
     await user.clear(name);
     await user.type(name, "Incident helper");
-    const description = screen.getByLabelText("Description");
+    // The variable editor beside it has a Description field of its own.
+    const description = document.getElementById(
+      "agentDescription",
+    ) as HTMLTextAreaElement;
     await user.clear(description);
     await user.type(description, "Investigate build failures");
     const instructions = screen.getByRole("textbox", { name: "Instructions" });
@@ -4250,9 +4360,7 @@ describe("AgentForm save payload and failure handling", () => {
     expect(
       screen.queryByRole("img", { name: /Connect your Claude account/ }),
     ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("radio", { name: /API key or cloud provider/ }),
-    );
+    await user.click(screen.getByRole("radio", { name: /A company API key/ }));
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     expect(screen.queryByText(/GPT-5.6 Luna/)).not.toBeInTheDocument();
     expect(
@@ -4260,11 +4368,15 @@ describe("AgentForm save payload and failure handling", () => {
         name: "Select a provider and Claude model",
       }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Authentication/ }));
+    await user.click(
+      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
+    );
     expect(
       screen.queryByRole("button", { name: "Pick API key" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Authentication/ }));
+    await user.click(
+      screen.getByRole("button", { name: /^Whose Claude account runs it/ }),
+    );
     await user.click(screen.getByRole("button", { name: "Pick API key" }));
     expect(screen.getByRole("button", { name: "Create" })).toBeEnabled();
     expect(
@@ -4306,9 +4418,7 @@ describe("AgentForm save payload and failure handling", () => {
         initialValues={claude?.initialValues}
       />,
     );
-    await user.click(
-      screen.getByRole("radio", { name: /API key or cloud provider/ }),
-    );
+    await user.click(screen.getByRole("radio", { name: /A company API key/ }));
     await user.click(screen.getByRole("button", { name: "Pick API key" }));
     expect(
       screen.getByRole("img", {
@@ -4317,7 +4427,7 @@ describe("AgentForm save payload and failure handling", () => {
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
     await user.click(
-      screen.getByRole("radio", { name: /Personal Claude subscription/ }),
+      screen.getByRole("radio", { name: /Each person's Claude subscription/ }),
     );
     expect(
       screen.queryByRole("img", { name: /Select a model/ }),
@@ -4562,6 +4672,7 @@ describe("AgentForm save payload and failure handling", () => {
       expect(onCreated).toHaveBeenCalledWith({
         id: "created-agent",
         name: "New Agent",
+        hasRuntime: false,
       }),
     );
     expect(createAgent.mock.calls[0][0]).toMatchObject({
@@ -4569,6 +4680,22 @@ describe("AgentForm save payload and failure handling", () => {
       accessAllTools: true,
       initialGrants: [],
     });
+  });
+
+  it("does not ask for a runtime again once the catalog picked the built-in agent", () => {
+    vi.mocked(useFeature).mockImplementation((flag) => flag === "agentRuntime");
+    render(
+      <AgentForm
+        agentType="agent"
+        activeSection="configuration"
+        onChangeRuntimeTemplate={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId(E2eTestId.AgentRuntimePicker),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Claude Code" })).toBeNull();
   });
 
   it("keeps every step's editors mounted while one step shows, and submits only when told to", async () => {
@@ -4622,7 +4749,7 @@ describe("AgentForm save payload and failure handling", () => {
       <AgentForm agentType="agent" activeSection="advanced" submitEnabled />,
     );
     expect(
-      panelOf(screen.getByRole("heading", { name: "Security" })),
+      panelOf(screen.getByRole("heading", { name: "Suggested prompts" })),
     ).not.toHaveClass("hidden");
     expect(panelOf(runtimeSection.parentElement as HTMLElement)).toHaveClass(
       "hidden",
@@ -4639,7 +4766,6 @@ describe("AgentForm save payload and failure handling", () => {
       runtime: null,
       labels: [],
       suggestedPrompts: [],
-      considerContextUntrusted: false,
       identityProviderId: null,
       accessAllTools: true,
     });

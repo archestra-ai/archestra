@@ -5,6 +5,8 @@ import type {
   MsTeamsDbConfig,
   NgrokDbConfig,
   SecretValue,
+  SlackAgentBotConfig,
+  SlackAppConfigToken,
   SlackDbConfig,
   TelegramDbConfig,
 } from "@/types";
@@ -19,6 +21,8 @@ const FORCE_DB = true;
 
 const MS_TEAMS_SECRET_NAME = "chatops-ms-teams";
 const SLACK_SECRET_NAME = "chatops-slack";
+const SLACK_AGENT_BOTS_SECRET_NAME = "chatops-slack-agent-bots";
+const SLACK_APP_CONFIG_TOKEN_SECRET_NAME = "chatops-slack-app-config-token";
 const TELEGRAM_SECRET_NAME = "chatops-telegram";
 const NGROK_SECRET_NAME = "chatops-ngrok";
 
@@ -60,6 +64,63 @@ class ChatOpsConfigModel {
     logger.info("ChatOpsConfigModel: saved Slack config to DB");
   }
 
+  /** Slack apps pinned to one agent each (see SlackAgentBotConfig). */
+  async getSlackAgentBots(): Promise<SlackAgentBotConfig[]> {
+    const raw = await this.getConfig<{ bots?: SlackAgentBotConfig[] }>(
+      SLACK_AGENT_BOTS_SECRET_NAME,
+    );
+    return (raw?.bots ?? []).map((bot) => ({
+      ...bot,
+      connectionMode: bot.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE,
+      appLevelToken: bot.appLevelToken ?? "",
+    }));
+  }
+
+  /** Add or replace the bot pinned to `bot.agentId`. */
+  async saveSlackAgentBot(bot: SlackAgentBotConfig): Promise<void> {
+    const bots = await this.getSlackAgentBots();
+    await this.saveSlackAgentBots([
+      ...bots.filter((existing) => existing.agentId !== bot.agentId),
+      bot,
+    ]);
+    logger.info(
+      { agentId: bot.agentId },
+      "ChatOpsConfigModel: saved Slack agent bot",
+    );
+  }
+
+  /**
+   * A user's Slack app configuration token. Without a user, the
+   * organization-wide token saved before tokens were per user.
+   */
+  async getSlackAppConfigToken(
+    userId?: string,
+  ): Promise<SlackAppConfigToken | null> {
+    return this.getConfig<SlackAppConfigToken>(
+      appConfigTokenSecretName(userId),
+    );
+  }
+
+  async saveSlackAppConfigToken(
+    value: SlackAppConfigToken,
+    userId?: string,
+  ): Promise<void> {
+    await this.saveConfig(
+      appConfigTokenSecretName(userId),
+      value as unknown as SecretValue,
+    );
+  }
+
+  /** Remove the bot pinned to an agent. Returns whether one existed. */
+  async deleteSlackAgentBot(agentId: string): Promise<boolean> {
+    const bots = await this.getSlackAgentBots();
+    const remaining = bots.filter((bot) => bot.agentId !== agentId);
+    if (remaining.length === bots.length) return false;
+    await this.saveSlackAgentBots(remaining);
+    logger.info({ agentId }, "ChatOpsConfigModel: deleted Slack agent bot");
+    return true;
+  }
+
   async getTelegramConfig(): Promise<TelegramDbConfig | null> {
     return this.getConfig<TelegramDbConfig>(TELEGRAM_SECRET_NAME);
   }
@@ -85,12 +146,15 @@ class ChatOpsConfigModel {
    * Non-secret ChatOps connectivity snapshot for audit diffs.
    */
   async getRedactedSnapshotForAudit(): Promise<Record<string, unknown>> {
-    const [ms, slack, telegram, ngrok] = await Promise.all([
-      this.getMsTeamsConfig(),
-      this.getSlackConfig(),
-      this.getTelegramConfig(),
-      this.getNgrokConfig(),
-    ]);
+    const [ms, slack, telegram, ngrok, slackAgentBots, slackAppConfigToken] =
+      await Promise.all([
+        this.getMsTeamsConfig(),
+        this.getSlackConfig(),
+        this.getTelegramConfig(),
+        this.getNgrokConfig(),
+        this.getSlackAgentBots(),
+        this.getSlackAppConfigToken(),
+      ]);
 
     return {
       msTeams: ms
@@ -111,6 +175,13 @@ class ChatOpsConfigModel {
             hasAppLevelToken: Boolean(slack.appLevelToken),
           }
         : null,
+      hasSlackAppConfigToken: Boolean(slackAppConfigToken),
+      slackAgentBots: slackAgentBots.map((bot) => ({
+        agentId: bot.agentId,
+        enabled: bot.enabled,
+        connectionMode: bot.connectionMode,
+        hasBotToken: Boolean(bot.botToken),
+      })),
       telegram: telegram
         ? {
             enabled: telegram.enabled,
@@ -124,6 +195,12 @@ class ChatOpsConfigModel {
           }
         : null,
     };
+  }
+
+  private async saveSlackAgentBots(bots: SlackAgentBotConfig[]): Promise<void> {
+    await this.saveConfig(SLACK_AGENT_BOTS_SECRET_NAME, {
+      bots,
+    } as unknown as SecretValue);
   }
 
   private async getConfig<T>(secretName: string): Promise<T | null> {
@@ -151,3 +228,9 @@ class ChatOpsConfigModel {
 }
 
 export default new ChatOpsConfigModel();
+
+function appConfigTokenSecretName(userId?: string): string {
+  return userId
+    ? `${SLACK_APP_CONFIG_TOKEN_SECRET_NAME}:${userId}`
+    : SLACK_APP_CONFIG_TOKEN_SECRET_NAME;
+}

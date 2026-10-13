@@ -27,8 +27,6 @@ import type {
   NetworkPolicy,
   OnboardingWizard,
   OrganizationChatLink,
-  ToolInvocation,
-  TrustedData,
   TrustedImageRegistries,
 } from "@/types";
 import modelsTable from "./model";
@@ -74,49 +72,6 @@ const organizationsTable = pgTable("organization", {
   skillMarketplaceAnonymousAccess: boolean("skill_marketplace_anonymous_access")
     .notNull()
     .default(false),
-  /**
-   * @deprecated The "security engine on/off" toggle (permissive/restrictive) was
-   * removed — the security engine is always enabled now. This column is inert:
-   * no code reads or writes it, and it is omitted from the API schemas. Retained
-   * (not dropped) for rollout safety — dropping a column older app versions may
-   * still read is not deploy-safe. Safe to drop in a future expand/contract
-   * migration once every supported version no longer references it.
-   */
-  globalToolPolicy: varchar("global_tool_policy")
-    .notNull()
-    .default("permissive"),
-  /**
-   * @deprecated Inert leftover column from the reverted PR #6027 (added by
-   * migration 0316). No code reads or writes it; retained for
-   * backward-compatibility and typed as a plain string so the schema stays
-   * consistent without re-introducing the reverted policy type. Safe to drop in
-   * a future migration.
-   */
-  discoveredToolPolicy: varchar("discovered_tool_policy")
-    .notNull()
-    .default("relaxed"),
-  /**
-   * Admin-configurable default invocation policy applied to every tool the LLM
-   * proxy auto-discovers and persists. Defaults to "allow_when_context_is_untrusted"
-   * ("Allow always") so discovered tools are not blocked by default.
-   */
-  defaultDiscoveredToolInvocationPolicy: varchar(
-    "default_discovered_tool_invocation_policy",
-  )
-    .$type<ToolInvocation.ToolInvocationPolicyAction>()
-    .notNull()
-    .default("allow_when_context_is_untrusted"),
-  /**
-   * Admin-configurable default result policy applied to every tool the LLM proxy
-   * auto-discovers and persists. Defaults to "mark_as_untrusted" ("Mark as
-   * sensitive") so discovered-tool output is treated as untrusted by default.
-   */
-  defaultDiscoveredToolResultPolicy: varchar(
-    "default_discovered_tool_result_policy",
-  )
-    .$type<TrustedData.TrustedDataPolicyAction>()
-    .notNull()
-    .default("mark_as_untrusted"),
   /**
    * Whether file uploads are allowed in chat.
    * Defaults to true. Security policies currently only work on text-based content,

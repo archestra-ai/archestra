@@ -398,6 +398,7 @@ describe("GeminiRequestAdapter", () => {
           name: "get_weather",
           arguments: { location: "NYC" },
           content: { temperature: 72, unit: "fahrenheit" },
+          structured: true,
           isError: false,
         },
       ]);

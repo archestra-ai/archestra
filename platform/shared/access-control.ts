@@ -52,7 +52,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "delete"],
   mcpOauthClient: ["read", "create"],
-  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
@@ -112,7 +111,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "delete"],
   mcpOauthClient: ["read", "create"],
-  toolPolicy: ["read", "create", "update", "delete"],
   mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
@@ -176,7 +174,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // MCP
   mcpGateway: ["read", "create", "delete"],
   mcpOauthClient: ["read"],
-  toolPolicy: ["read"],
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   environment: ["read"],
@@ -378,12 +375,6 @@ export const permissionDescriptions: Record<string, string> = {
   "mcpGateway:delete": "Open the trash of deleted MCP gateways",
   "mcpOauthClient:read": "Open MCP OAuth client registrations",
   "mcpOauthClient:create": "Create MCP OAuth client registrations",
-  "toolPolicy:read":
-    "View tools, tool invocation policies, and trusted data policies",
-  "toolPolicy:create": "Register tools and create security policies",
-  "toolPolicy:update":
-    "Modify tools, tool configuration, and security policies",
-  "toolPolicy:delete": "Remove tools and security policies",
   "mcpRegistry:read": "Open the MCP registry and use its built-in servers",
   "mcpRegistry:create": "Add servers to the MCP registry",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
@@ -612,6 +603,8 @@ export const requiredEndpointPermissionsMap: Partial<
    * Note: Auth is skipped in middleware for this route.
    */
   [RouteId.GetConnectionHealth]: {},
+  // Installation credential and live access are checked by the refresh handler.
+  [RouteId.GetConnectionInstructions]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
@@ -694,41 +687,22 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Agent-tool routes: agent-type and scope checks are handled dynamically in the route handlers
   [RouteId.GetAgentTools]: {},
-  [RouteId.GetAllAgentTools]: {
-    toolPolicy: ["read"],
-  },
+  [RouteId.GetAllAgentTools]: {},
   [RouteId.GetAgentAvailableTokens]: {},
-  [RouteId.GetUnassignedTools]: {
-    toolPolicy: ["read"],
-  },
   // Tool-assignment routes: agent-type update checked dynamically in handler
   [RouteId.AssignToolToAgent]: {},
   [RouteId.BulkAssignTools]: {},
   [RouteId.BulkUpdateAgentTools]: {},
-  [RouteId.AutoConfigureAgentToolPolicies]: {
-    toolPolicy: ["update"],
-  },
   [RouteId.UnassignToolFromAgent]: {},
-  [RouteId.UpdateAgentTool]: {
-    toolPolicy: ["update"],
-  },
+  [RouteId.UpdateAgentTool]: {},
   // Labels are cross-type — any agent-type read permission suffices (checked in handler)
   [RouteId.GetLabelKeys]: {},
   [RouteId.GetLabelValues]: {},
-  [RouteId.GetTool]: {
-    toolPolicy: ["read"],
-  },
   [RouteId.GetTools]: {
-    toolPolicy: ["read"],
+    mcpRegistry: ["read"],
   },
   [RouteId.GetToolsWithAssignments]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.GetToolObservers]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.DeleteTool]: {
-    toolPolicy: ["delete"],
+    mcpRegistry: ["read"],
   },
   [RouteId.GetInteractions]: {
     log: ["read"],
@@ -750,45 +724,6 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetInteractionSessionLineage]: {
     log: ["read"],
-  },
-  [RouteId.GetOperators]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.GetToolInvocationPolicies]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.CreateToolInvocationPolicy]: {
-    toolPolicy: ["create"],
-  },
-  [RouteId.GetToolInvocationPolicy]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.UpdateToolInvocationPolicy]: {
-    toolPolicy: ["update"],
-  },
-  [RouteId.DeleteToolInvocationPolicy]: {
-    toolPolicy: ["delete"],
-  },
-  [RouteId.BulkUpsertDefaultCallPolicy]: {
-    toolPolicy: ["update"],
-  },
-  [RouteId.GetTrustedDataPolicies]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.CreateTrustedDataPolicy]: {
-    toolPolicy: ["create"],
-  },
-  [RouteId.GetTrustedDataPolicy]: {
-    toolPolicy: ["read"],
-  },
-  [RouteId.UpdateTrustedDataPolicy]: {
-    toolPolicy: ["update"],
-  },
-  [RouteId.DeleteTrustedDataPolicy]: {
-    toolPolicy: ["delete"],
-  },
-  [RouteId.BulkUpsertDefaultResultPolicy]: {
-    toolPolicy: ["update"],
   },
   [RouteId.GetInternalMcpCatalog]: {},
   [RouteId.CreateInternalMcpCatalogItem]: {
@@ -1538,6 +1473,33 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSlackChatOpsConfig]: {
     organizationSettings: ["update"],
   },
+  [RouteId.ListSlackAgentBots]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.UpdateSlackAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.DeleteSlackAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.UpdateSlackAppConfigToken]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.CreateSlackAgentBotApp]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.MigrateSlackApps]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ConvertSlackAppToAgentBot]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ListSlackAgentBotChannels]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.JoinSlackAgentBotChannel]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.UpdateTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
   },
@@ -1695,6 +1657,14 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAppaGithubSync]: { organizationSettings: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.CreateAppaGithubRepository]: { organizationSettings: ["update"] },
+  [RouteId.StartAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.CompleteAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.GetPendingAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.DiscardAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.InstallAppaGithubApp]: { organizationSettings: ["update"] },
+  [RouteId.GetAppaGithubAppAccounts]: { credential: ["read"] },
+  [RouteId.GetAppaGithubAppRepositories]: { organizationSettings: ["update"] },
+  [RouteId.GetAppaGithubRepositoryStatus]: { organizationSettings: ["update"] },
   [RouteId.UpdateAppaGithubSync]: { organizationSettings: ["update"] },
   [RouteId.GetOpenappaBatteries]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaBatteryPolicySource]: { openappaPolicy: ["read"] },
@@ -1715,6 +1685,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
   [RouteId.AcceptHeldAppaGithubPull]: { openappaPolicy: ["update"] },
+  [RouteId.GetHeldAppaGithubPull]: { openappaPolicy: ["read"] },
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
@@ -1908,6 +1879,8 @@ export const requiredEndpointPermissionsMap: Partial<
 
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
+  // Bundles the signed-in user's own startup reads; each part is self-scoped.
+  [RouteId.GetBootstrap]: {},
 
   // Site Notification Routes
   // Every signed-in user sees the active banner.
@@ -2036,8 +2009,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/gateways": { mcpGateway: ["read"] },
   "/mcp/gateways/new": { mcpGateway: ["create"] },
 
-  "/mcp/tool-policies": { toolPolicy: ["read"] },
-  "/mcp/tool-guardrails": { toolPolicy: ["read"] },
   "/openappa": { openappaPolicy: ["read"] },
   "/openappa/policy": { openappaPolicy: ["read"] },
   "/openappa/batteries": { openappaPolicy: ["read"] },
@@ -2075,7 +2046,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/messaging-channels/telegram": { organizationSettings: ["read"] },
   "/settings/messaging-channels/email": { organizationSettings: ["read"] },
   "/settings/apps": { organizationSettings: ["read"] },
-  "/settings/security": { organizationSettings: ["read"] },
   "/settings/environments": { environment: ["update"] },
   "/settings/knowledge": { organizationSettings: ["read"] },
   "/settings/users": { member: ["read"] },
@@ -2086,7 +2056,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/identity-providers": { identityProvider: ["read"] },
   "/settings/secrets": { organizationSettings: ["read"] },
   "/settings/credentials": { credential: ["read"] },
-  "/settings/openappa": { organizationSettings: ["read"] },
+  "/settings/guardrails": { organizationSettings: ["read"] },
   "/settings/appearance": { organizationSettings: ["read"] },
   "/settings/auth": { organizationSettings: ["read"] },
   "/settings/connection": { organizationSettings: ["read"] },

@@ -563,7 +563,7 @@ class InteractionDeltaManager {
     return map;
   }
 
-  /** Fold a row's parent chain into its full request, memoizing each ancestor. */
+  /** Fold a row's parent chain, reusing cached ancestors and caching the target. */
   private static foldFor(
     id: string,
     map: Map<string, ChainRow>,
@@ -635,9 +635,15 @@ class InteractionDeltaManager {
         processedMessages,
         parentFull,
       );
-      InteractionDeltaManager.reconstructCache.set(row.id, full);
       parentFull = full;
       foldedTarget = full;
+    }
+
+    // Intermediate conversations grow with every turn. Sizing and retaining
+    // each prefix repeats work over the same messages and churns the byte
+    // budget; only the requested target needs a new cache entry.
+    if (foldedTarget) {
+      InteractionDeltaManager.reconstructCache.set(id, foldedTarget);
     }
 
     return foldedTarget;

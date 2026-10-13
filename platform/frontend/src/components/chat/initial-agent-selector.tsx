@@ -186,7 +186,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 
   const currentAgentSummary = useMemo(
     () =>
-      allAgents.find((a) => a.id === currentAgentId) ?? allAgents[0] ?? null,
+      allAgents.find((a) => a.id === currentAgentId) ??
+      allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
+      allAgents.find((a) => !a.builtIn) ??
+      null,
     [allAgents, currentAgentId],
   );
   // The roster omits large embedded icons and editing-only fields. Hydrate one
@@ -219,31 +222,22 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
-  const { data: canReadToolPolicy } = useHasPermissions({
-    toolPolicy: ["read"],
-  });
   const { data: canReadKnowledgeBase } = useHasPermissions({
     knowledgeSource: ["read"],
   });
   const { data: catalogItems = [] } = useInternalMcpCatalog({
     enabled: shouldLoadAgentManagementDetails && !!canReadMcpRegistry,
   });
-  const { data: assignedToolsData } = useAllProfileTools({
-    filters: { agentId: effectiveAgentId ?? undefined },
-    skipPagination: true,
-    enabled:
-      shouldLoadAgentManagementDetails &&
-      !!effectiveAgentId &&
-      !!canReadToolPolicy,
-  });
-
+  // The agent detail already lists its tools' catalogs, so the server icons
+  // need no separate tool-assignment request (which carries every tool's full
+  // schema and can run to megabytes).
   const assignedCatalogs = useMemo(() => {
     const catalogIds = new Set<string>();
-    for (const at of assignedToolsData?.data ?? []) {
-      if (at.tool.catalogId) catalogIds.add(at.tool.catalogId);
+    for (const tool of currentAgentDetail?.tools ?? []) {
+      if (tool.catalogId) catalogIds.add(tool.catalogId);
     }
     return catalogItems.filter((c) => catalogIds.has(c.id));
-  }, [assignedToolsData, catalogItems]);
+  }, [currentAgentDetail, catalogItems]);
 
   const { data: triggerDelegations = [] } = useAgentDelegations(
     effectiveAgentId ?? undefined,

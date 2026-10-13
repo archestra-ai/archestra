@@ -223,6 +223,27 @@ export const openappaProcessedResultsTable = pgTable(
   ],
 );
 
+// The lease a dispatch holds on one trajectory family while it claims and
+// completes receipts. It names the owning dispatch and where the family's event
+// log ended when the dispatch began. A later dispatch recovers pending receipts
+// under the same lock. A failed dispatch may release only its own receipts,
+// and only when the log still ends at `event_seq`.
+export const openappaDispatchLeasesTable = pgTable(
+  "openappa_dispatch_leases",
+  {
+    root: text().primaryKey(),
+    owner: text().notNull(),
+    // The last event sequence of the root when the lease was taken, or -1 for
+    // an empty log.
+    eventSeq: bigint("event_seq", { mode: "number" }).notNull(),
+    // Lease generation while this family retains pending receipts; not a retry limit.
+    attempt: integer().notNull().default(1),
+  },
+  (table) => [
+    check("openappa_dispatch_leases_attempt", sql`${table.attempt} >= 1`),
+  ],
+);
+
 // The proxy writes the two tables below only while Guardrails enforcement is
 // off, and reads them while it is on. OpenAPPA ignores what they name: the
 // part of a session that it did not see.

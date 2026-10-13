@@ -40,11 +40,10 @@ describe("getAllArchestraMcpTools", () => {
   });
 
   test("keeps the code-runtime tools that getArchestraMcpTools drops when no runtime is configured", () => {
-    // Pinned explicitly: with the runtime on, the assertions below would pass
-    // vacuously instead of failing, and the gap between the two accessors is
-    // the whole point of this test.
-    expect(config.skillsSandbox.enabled).toBe(false);
-    expect(config.hooks.enabled).toBe(false);
+    // Exercise the unconfigured deployment regardless of the runner's runtime
+    // settings. The test setup restores config after each test.
+    config.skillsSandbox.enabled = false;
+    config.hooks.enabled = false;
 
     const served = shortNamesOf(getArchestraMcpTools());
     const all = shortNamesOf(getAllArchestraMcpTools());

@@ -140,6 +140,7 @@ it("edits access through the knowledge base's own policy, not its sharing column
           },
         ],
         inheritedGrants: [],
+        actorSubjects: [],
         effectiveActions: [
           "read",
           "use",

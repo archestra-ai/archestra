@@ -1,8 +1,8 @@
 ---
 title: "Content Encryption at Rest"
 description: "Server-side encryption of stored conversation and tool content"
-order: 1
-lastUpdated: 2026-10-05
+order: 2
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,7 +11,7 @@ Content encryption at rest (Enterprise, disabled by default) encrypts stored con
 
 > **Enterprise feature:** Content encryption at rest requires an enterprise license. Contact sales@archestra.ai for licensing information.
 
-Beyond [stored secrets](/docs/admin/security/secrets-management), Archestra can encrypt conversation and tool content at rest. Set [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET) — a key separate from the stored-secrets key, so a security team can hold it in their own vault and map it to the environment variable at deploy time. Encryption and decryption are transparent; rows written before enablement are encrypted by a background sweep.
+Beyond [stored credentials and secrets](/docs/admin/security/credentials#secrets-storage), Archestra can encrypt conversation and tool content at rest. Set [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET) — a key separate from the stored-secrets key, so a security team can hold it in their own vault and map it to the environment variable at deploy time. Encryption and decryption are transparent; rows written before enablement are encrypted by a background sweep.
 
 ## What Is Encrypted
 
@@ -43,6 +43,14 @@ Plan disk headroom before enabling. Plaintext JSONB payloads compress inside Pos
 ## Startup Verification
 
 On every startup Archestra verifies the configured key against previously encrypted content and aborts on a mismatch or a missing key. Unlike stored secrets, there is deliberately no accept-new-key override: chat history cannot be re-entered. Disabling encryption after enabling it is not currently supported.
+
+## Key Escrow for Encrypted Chats
+
+<span id="key-escrow"></span>
+
+Configure an organization escrow public key so designated key holders can recover [encrypted chats](/docs/chat#encrypted-chats) if local browser storage is lost.
+
+Setting [`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`](/docs/reference/configuration#ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY) enables encrypted chats across your organization. Provide an RSA public key of at least 2048 bits in PEM or base64-encoded PEM format. When enabled, the browser generates an AES key per chat and encrypts that key with your escrow public key before storing the conversation.
 
 ## Recovering an Encrypted Chat
 

@@ -4,7 +4,7 @@ OpenAPPA evaluates tool calls and tool results at the LLM proxy. The proxy ident
 
 The runtime keys session state by session ID. Internal requests over loopback share session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback forms the platform trust boundary. Requests without a session ID fall back to a shared identity per credential and agent (`<caller-id>@<agent-id>`), which couples their histories and turn approvals.
 
-This guide explains Archestra's integration rather than OpenAPPA policy syntax. The native addon currently pins [OpenAPPA `85465feb`](https://github.com/archestra-ai/OpenAPPA/tree/85465feb8214f662dd21d40df2c01964e5b099fa). Examples use the default `archestra__` tool prefix. Client labels and branding can change this prefix on the wire.
+This guide explains Archestra's integration rather than OpenAPPA policy syntax. The native addon uses the OpenAPPA revision pinned in [`Cargo.toml`](../platform/archestra-rs/openappa-rs/Cargo.toml). Examples use the default `archestra__` tool prefix; client labels and branding can change it on the wire.
 
 Protocol jump links: [call rewriting](#tool-calls-and-results), [remedy execution](#remedies), [user questions](#ask_user-and-native-elicitation), [session and child markers](#protected-session-markers), and [yell reporting](#yell-and-diagnostic-tools).
 
@@ -30,23 +30,19 @@ The proxy, connected clients, and user are trusted. Model output and external to
 
 ## Startup configuration
 
-OpenAPPA uses the `ARCHESTRA_BETA` master switch. Setting `ARCHESTRA_BETA=true` enables the OpenAPPA UI, registers the proxy plugin, and mounts the policy API.
+OpenAPPA is available on every deployment. Its UI, proxy plugin, and policy API do not depend on `ARCHESTRA_BETA`.
 
-The deployment-wide guardrail setting controls policy enforcement for the whole deployment. It defaults to off and lives in the database (`guardrails_deployment.enabled`). You need both the server flag and this database switch to enforce policies. Each request reads the database switch, so replicas do not depend on local process state. The plugin list alone does not activate enforcement.
+The deployment-wide guardrail setting controls policy enforcement for the whole deployment. It defaults to off and lives in the database (`guardrails_deployment.enabled`). Turn this database switch on to enforce policies. Each request reads the database switch, so replicas do not depend on local process state. The plugin list alone does not activate enforcement.
 
-Policy editing and GitHub sync stay available while enforcement is off. The OpenAPPA editor stores policy revisions in PostgreSQL. Restart the backend after changing `ARCHESTRA_BETA`. Toggling the database switch takes effect immediately without a restart.
+Policy editing and GitHub sync stay available while enforcement is off. The OpenAPPA editor stores policy revisions in PostgreSQL. Toggling the database switch takes effect immediately without a restart.
 
-Existing invocation guardrails always stay active. When APPA is on, tool calls pass existing invocation checks before APPA reserves them. Unconditional block or approval rules still fire normally.
-
-Setting `ARCHESTRA_BETA=true` stands down the legacy trusted-data guardrail on the proxy. It marks no tool result as untrusted, skips dual-LLM sanitization, and ignores the agent setting for untrusted context. Proxied requests then read as trusted context. Because of this, legacy invocation rules that only restrict untrusted context stop firing on the proxy. The flag alone does not enforce APPA policies. Until you also turn on the database switch, neither guardrail judges context trust on the proxy. The MCP gateway independently checks `!agent.considerContextUntrusted` for its invocation rules.
-
-Turning off `ARCHESTRA_BETA` restores the legacy Guardrails page, Security tab, and trusted-data evaluation, leaving all policy rows intact.
+Without enforcement, the proxy and the MCP gateway apply no tool-call guardrails. They still refuse calls to tools that the request does not declare.
 
 | Boundary | Beta off | Beta on, switch off | Both on |
 | --- | --- | --- | --- |
-| Incoming tool results | Legacy result policies | Stood down (treated as trusted) | APPA admission and saved output |
-| Outgoing calls | Legacy invocation policies | Legacy invocation policies | Legacy invocation policies, then APPA decision |
-| Denied call | Legacy adapter refusal | Legacy adapter refusal | Notice call carrying APPA ruling and remedies |
+| Incoming tool results | Passed through | Passed through | APPA admission and saved output |
+| Outgoing calls | Undeclared-tool check | Undeclared-tool check | Undeclared-tool check, then APPA decision |
+| Denied call | Undeclared-tool refusal | Undeclared-tool refusal | Notice call carrying APPA ruling and remedies |
 | Session header | No APPA wiring | Observes unenforced sessions | Stable conversation identity and trajectory |
 | Runtime MCP tools | Not advertised implicitly | Notice, remedy, and peer tools not advertised implicitly | Notice, remedy, and peer tools advertised |
 | Runtime | No proxy enforcement | Unenforced-session observation | Lazy native init, call reservation, receipt commits |
@@ -63,7 +59,7 @@ Saving revision `1` through MCP local publication can auto-enable enforcement if
 
 ## GitHub policy sync
 
-Open **OpenAPPA** (`/openappa`) and select **Connect GitHub**, or configure it under **Settings > OpenAPPA**. When beta is on, organization administrators can pick an `owner/repository`, a branch or tag (blank uses default), and a repository-relative TOML path. Public repositories need no credential. Private repositories use an organization token or GitHub App, requiring `credential:read`.
+Open **OpenAPPA** (`/openappa`) and select **Connect GitHub**, or configure it under **Settings > OpenAPPA**. Users with `organizationSettings:update` can pick an `owner/repository`, a branch or tag (blank uses default), and a repository-relative TOML path. Public repositories need no credential. Private repositories use an organization token or GitHub App, requiring `credential:read`.
 
 Saving the source queues the first pull. Choose a schedule: every 15 minutes, every hour, or once a day. You can also select **Sync now** for an immediate pull. The panel displays the last check, the accepted commit, and any errors. The background scheduler checks for due syncs every minute and deduplicates jobs per organization.
 
@@ -186,7 +182,7 @@ Client tool names do not prove gateway identity. The gateway appends `[[gwa1.<pa
 
 In attested mode, the proxy demotes unverified lookalike tools. Internal Chat trusts the tool list it builds. If no attestation verifies, the resolver falls back to a label-based compatibility mode. That mode does not provide cryptographic proof.
 
-Outgoing calls flow through dispatch rewrites, `onPrepareToolCalls`, legacy invocation validation, and the APPA finalizer. The registry prevents finalizers from adding calls that skipped validation. APPA can allow a call, replace a denied call with a notice, or append delegation metadata. If partial processing fails, the proxy attempts to cancel already-admitted calls. Failed cancellation is logged.
+Outgoing calls flow through dispatch rewrites, `onPrepareToolCalls`, undeclared-tool validation, and the APPA finalizer. The registry prevents finalizers from adding calls that skipped validation. APPA can allow a call, replace a denied call with a notice, or append delegation metadata. If partial processing fails, the proxy attempts to cancel already-admitted calls. Failed cancellation is logged.
 
 Sources: [`gateway-tool-names.ts`](../platform/backend/src/routes/proxy/utils/gateway-tool-names.ts), [`tool-attestation.ts`](../platform/backend/src/archestra-mcp-server/tool-attestation.ts), [`registry.ts`](../platform/backend/src/proxy/plugins/registry.ts).
 
@@ -259,7 +255,9 @@ tool:      call_send -> <runtime feedback and offered plans>
 
 The proxy restores the original call using the embedded ruling, without a database lookup. Restoration depends on declared tool identity and host metadata. This request-local restoration survives restarts and replica changes. The native runtime separately checks result admission against released calls and retained records. The runtime withholds results for call IDs it never released.
 
-If the client did not declare the notice tool, the proxy cannot deliver this protocol. It refuses the call, attempts to cancel sibling calls, and writes a client failure report. A missing notice tool does not authorize releasing the denied call.
+If the client did not declare the notice tool, the proxy cannot deliver this protocol. A client can be in this state for a moment: Claude Code connects MCP servers in the background and can send a session's first request before the gateway tools are listed. In such a request, Claude Code declares its own `WaitForMcpServers` tool. The proxy then sends the denied call back as that wait call, once per session. The call keeps its ID and takes no arguments. The runtime answers its result with the ruling it recorded for that ID, so nothing the wait tool returns reaches the model. The proxy adds a line that says the model's own call did not run. The history keeps the wait call; the proxy does not restore the original call. The next request can declare the remedy tools.
+
+Without that tool, after the one wait, or when the runtime has no record of the denial (for example, a call with malformed arguments), the proxy refuses the call and attempts to cancel sibling calls. The first refusal in a session asks the user to send the message again. A repeat writes a client failure report. A missing notice tool does not authorize releasing the denied call.
 
 When a client uses a `run_tool` wrapper, OpenAPPA evaluates the call as the underlying target. The runtime receives the target tool name and arguments. This ensures that policy rules, annotators, and wildcards match the tool that runs, not the wrapper. If denied, the notice identifies the target tool. If allowed, the call uses the wrapper declared by the client.
 
@@ -762,10 +760,16 @@ The gateway verifies the proof and released-call receipt before dispatch. The la
 
 Before execution, the gateway atomically claims the released call in the durable operation ledger. Concurrent or later replays do not dispatch again, even within the proof lifetime. A transport failure does not reopen the claim; inspect the run status before requesting another action.
 
+After a launch, the gateway records the outcome in the same ledger under the call ID, before it answers the client: the run's session ID and state, or a reason code. The proxy gives the model that record in its own text and does not read the result the client sends back. A launch with no record gives the model no handle.
+
+A runtime tool call without a proof comes from a client whose model requests did not pass the proxy. The gateway cannot bind such a caller to a session, so the setting for unrecognized clients decides the call, as it does at the proxy. When they are blocked, the gateway refuses it. When they are allowed, the caller starts a runtime with no parent, and reads, steers, and writes only runtimes that have no parent. A runtime bound to a parent still answers only to that parent's proof, and a runtime whose session cannot be resolved is refused. The gateway cannot tell an unrecognized client from a followed session whose call the proxy did not classify as a runtime call, so with unrecognized clients allowed the proxy's classification is the only check on that case.
+
 ```text
 Parent -> Proxy: propose runtime launch
 Proxy -> Gateway: allowed spawn + signed source proof
 Gateway -> Runtime: bind child, inherit restrictions, then deliver inputs
+Gateway -> Ledger: launch outcome under the call ID
+Proxy -> Parent: the recorded outcome, not the client's result
 Runtime -> Proxy: model calls and results under the stored child identity
 Gateway -> Parent: get_run returns the recorded admitted ChildReturn
 ```
@@ -790,7 +794,9 @@ Sources: [`runtime-crossing.ts`](../platform/backend/src/services/agent-runtime/
 
 The Rust binding stores event batches, policy snapshots, sessions, operations, and receipts in PostgreSQL.
 
-Execution follows three steps under a family advisory lock: insert a pending receipt, run the native hook to append events, and mark the receipt complete. A crash after committing events leaves a pending receipt, failing subsequent operations closed across the session family (except peer reads).
+Execution follows three steps under a family advisory lock: insert a pending receipt, run the native hook to append events, and mark the receipt complete. A crash leaves the receipt pending until the client resubmits that operation. Other operations in the family can continue under the same lock.
+
+On resubmission, the runtime replays a committed decision or continues work it did not record. Operational failures remain retryable; genuine policy denials stay saved. A failed dispatch releases only its own pending receipts when the event log is unchanged, preserving earlier dispatches' recovery evidence.
 
 Completed receipts return saved decisions without re-running the engine. Reusing IDs with modified arguments causes an immediate rejection. The event log enforces strict sequence ordering via transaction advisory locks.
 
@@ -802,7 +808,7 @@ The host acquires an in-process root lock before leasing a database connection. 
 
 The connection pool defaults to 4 connections (capped at 64). Calls wait up to 30 seconds for a connection. Connections enforce 30-second lock timeouts and 60-second statement timeouts. Pool exhaustion typically stems from slow external consults. Stale connections are replaced automatically. Modifying pool limits requires a backend restart.
 
-OpenAPPA administration uses `openappaPolicy`, `openappaDiagnostics`, and `organizationSettings`. These are distinct resources in [`access-control.ts`](../platform/shared/access-control.ts). Legacy `toolPolicy` permissions still exist for other features, but do not authorize OpenAPPA administration. This guide does not prescribe a role migration.
+OpenAPPA administration uses `openappaPolicy`, `openappaDiagnostics`, and `organizationSettings`. These are distinct resources in [`access-control.ts`](../platform/shared/access-control.ts).
 
 | Endpoint | Role | Permission |
 | --- | --- | --- |
@@ -822,21 +828,22 @@ Start new conversations after enabling OpenAPPA. Retained unenforced sessions an
 
 For schema history, inspect [`the migrations directory`](../platform/backend/src/database/migrations/). This includes `0477_appa_github_sync`, `0483_openappa_batteries`, and `0485_fine_silver_surfer`. Startup backfill behavior lives in [`declare-installs.ts`](../platform/backend/src/openappa/declare-installs.ts), not a separate runtime migration.
 
-There is no automated cleanup API for pending receipts. Do not delete pending rows or truncate database tables manually. Investigate the root cause and check external state first. `pnpm --dir backend db:reset-openappa` is a development command that wipes policy data. Never run it to fix stuck production sessions.
+Pending receipts recover through a matching operation retry, not a cleanup API. A result with no committed admission still requires the client to resubmit its bytes; recovery does not invent approvals or guarantee exactly-once external execution. Do not delete pending rows or truncate tables manually.
+
+Investigate persistent failures and check external state first. `pnpm --dir backend db:reset-openappa` is a development command that wipes policy data. Never run it to repair production sessions.
 
 ## Build and deployment
 
-The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads OpenAPPA at the commit pinned in `openappa-rs/Cargo.toml` (`85465feb8214f662dd21d40df2c01964e5b099fa`) and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
+The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads OpenAPPA at the commit pinned in `openappa-rs/Cargo.toml` and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `ARCHESTRA_BETA` | `false` | Enables UI/API and proxy registration. Enforcement also requires the database switch. Requires restart. |
-| `ARCHESTRA_LLM_PROXY_PLUGINS` | Empty | Automatically appends `appa` when beta is enabled. |
+| `ARCHESTRA_LLM_PROXY_PLUGINS` | `appa` | Always includes `appa`, independently of beta features. |
 | `guardrails_deployment.enabled` | `false` | Database row switch. Effective immediately without restart. |
 | `guardrails_deployment.unsupported_client_action` | `bypass` | Action for unknown clients (`bypass` or `block`). |
 | `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` | Auto-derived | Legacy name for retained lineage and execution-proof signing. Not used for remedy routing, new question IDs, or display codes. Min 32 chars if explicit. |
 | `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS` | `4` | Max native pool connections (cap 64). Requires restart. |
-| `ARCHESTRA_OPENAPPA_YELL_ENABLED` | `true` | Enables yell diagnostic reporting when beta is on. |
+| `ARCHESTRA_OPENAPPA_YELL_ENABLED` | `true` | Enables yell diagnostic reporting. |
 | `ARCHESTRA_ANALYTICS` | Environment-dependent | Unset enables analytics in production/prod. `disabled` prevents upstream yell forwarding, not local storage. |
 | `ARCHESTRA_DATABASE_URL` | None | Database connection string. Strips `schema` parameter on init. |
 | `ARCHESTRA_CODE_RUNTIME_ENABLED` | `false` | Required for sandbox helper script execution. |

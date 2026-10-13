@@ -48,7 +48,7 @@ export default function ValidationHistoryPage() {
   ];
   return (
     <div className="space-y-4">
-      <PageBackLink href="/openappa/validation">
+      <PageBackLink href="/openappa/validation" labelled>
         <span>Back to validation</span>
       </PageBackLink>
       {history.isError ? (

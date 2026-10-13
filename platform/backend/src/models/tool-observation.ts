@@ -1,9 +1,5 @@
-import {
-  type ClientFilter,
-  clientForExternalAgentIds,
-  TimeInMs,
-} from "@archestra/shared";
-import { eq, inArray } from "drizzle-orm";
+import { TimeInMs } from "@archestra/shared";
+import { inArray } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import logger from "@/logging";
@@ -65,45 +61,6 @@ class ToolObservationModel {
       },
       "[toolObservation] recorded tool observations",
     );
-  }
-
-  /**
-   * Filter options for the guardrails page: the users who have observed tools,
-   * and the client families (Claude, Codex, …) their observations map to.
-   */
-  static async getObserverFilterOptions(): Promise<{
-    users: Array<{ id: string; name: string; email: string }>;
-    clients: ClientFilter[];
-  }> {
-    const [userRows, clientRows] = await Promise.all([
-      db
-        .selectDistinct({
-          id: schema.toolObservationsTable.userId,
-          name: schema.usersTable.name,
-          email: schema.usersTable.email,
-        })
-        .from(schema.toolObservationsTable)
-        .innerJoin(
-          schema.usersTable,
-          eq(schema.usersTable.id, schema.toolObservationsTable.userId),
-        )
-        .orderBy(schema.usersTable.name),
-      db
-        .selectDistinct({
-          externalAgentId: schema.toolObservationsTable.externalAgentId,
-        })
-        .from(schema.toolObservationsTable),
-    ]);
-
-    const clients = new Set<ClientFilter>();
-    for (const row of clientRows) {
-      const family = clientForExternalAgentIds([row.externalAgentId]);
-      if (family) {
-        clients.add(family.filter);
-      }
-    }
-
-    return { users: userRows, clients: [...clients] };
   }
 }
 

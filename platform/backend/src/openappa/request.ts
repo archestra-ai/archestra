@@ -51,6 +51,7 @@ import {
   stripDeclaredParameters,
   stripProxyArguments,
   stripSessionReceiptsFromRequest,
+  stripToolReferences,
 } from "./wire";
 
 export type AppaRequestTools = {
@@ -77,6 +78,17 @@ export type AppaPreparedRequest = {
   customTools: ReadonlySet<string>;
   /** Tool declarations retained so adapters can detect native local tools. */
   declaredTools: readonly DeclaredToolSpelling[];
+  /**
+   * The request defers tools to a tool search: some callable tools are not
+   * declared until the client loads them, the gateway remedy tools among them.
+   */
+  defersTools?: true;
+  /**
+   * Gateway remedy and ask_user tools the client declared while the remedy
+   * pair was incomplete. They are withheld from the model, and a call to one
+   * is refused, until both remedy tools are declared.
+   */
+  heldTools?: readonly DeclaredToolSpelling[];
   promptOperationId?: string;
   turnEndOperationId?: string;
   /** Original call IDs whose results are restored rulings, not executions. */
@@ -130,12 +142,16 @@ export function prepareAppaRequest(params: {
   const family = appaWireFamily(params.interactionType);
   const entries = declaredToolEntries(params.body);
   const declared = entries.map((entry) => entry.tool);
-  refuseDeferredTools(declared);
+  const defersTools = declared.some(declaresToolSearch);
   refuseUnsupportedToolTypes(declared);
   // Provider-run tools never return a client call to gate. Responses web search
   // remains governed by the response adapter, not by its declaration.
   const clientEntries = entries.filter((entry) => {
     if (providerHostedTool(entry.tool)) return false;
+    // A Responses `tool_search` names no tool and returns no call to run: the
+    // tools it loads are declared in `tools` or `tool_search_output` and
+    // their calls are ruled on by name like any other.
+    if (asToolDeclaration(entry.tool)?.type === "tool_search") return false;
     if (
       params.interactionType === "gemini:generateContent" &&
       !entry.grouped &&
@@ -238,6 +254,7 @@ export function prepareAppaRequest(params: {
     declaredTools: readonly DeclaredToolSpelling[],
   ): AppaPreparedRequest => ({
     tools: undefined,
+    ...(defersTools ? { defersTools: true as const } : {}),
     ...(historicalControlToolName ? { historicalControlToolName } : {}),
     session,
     customTools,
@@ -290,6 +307,9 @@ export function prepareAppaRequest(params: {
     });
   let control = remedyTool(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
   let notice = remedyTool(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
+  const heldWhenIncomplete = [control, notice, ...askUserDeclarations].filter(
+    (each): each is DeclaredToolSpelling => each !== undefined,
+  );
   if (params.identity.mode === "attested" && control && notice) {
     // Control and notice status come from one gateway: each declaration must
     // still hold its attestation after demotion, and both must name the same
@@ -354,6 +374,30 @@ export function prepareAppaRequest(params: {
         appendDeclaredTool(params.body, family, control.name);
       }
     } else {
+      // A session that defers tools has not loaded the remedy tools yet. Every
+      // call is still ruled on, and a denial is refused with the tools to
+      // load; once the client loads them they arrive declared and attested,
+      // and the remedy flow runs as usual.
+      if (defersTools) {
+        // Codex loads tools one search at a time, and an older gateway tool
+        // list has no alwaysLoad: part of the set can be declared. None of it
+        // is usable on its own, so it is withheld from the model and refused
+        // when called, until the pair is complete.
+        stripAppaTools({ body: params.body, tools: heldWhenIncomplete });
+        stripToolReferences({ body: params.body, tools: heldWhenIncomplete });
+        const isHeld = (tool: DeclaredToolSpelling) =>
+          heldWhenIncomplete.some(
+            (held) =>
+              held.name === tool.name && held.namespace === tool.namespace,
+          );
+        return {
+          ...withoutRemedies(
+            customTools,
+            declaredTools.filter((t) => !isHeld(t)),
+          ),
+          heldTools: heldWhenIncomplete,
+        };
+      }
       const missing = [
         control ? undefined : TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
         notice ? undefined : TOOL_GET_REMEDY_PLANS_SHORT_NAME,
@@ -395,6 +439,7 @@ export function prepareAppaRequest(params: {
   const namespaces = declaredToolNamespaces(params.body);
   // Strip notice tool from provider request so the model cannot invoke it directly.
   stripAppaTools({ body: params.body, tools: [notice] });
+  stripToolReferences({ body: params.body, tools: [notice] });
   return {
     tools: {
       control,
@@ -406,6 +451,7 @@ export function prepareAppaRequest(params: {
     session,
     customTools,
     declaredTools,
+    ...(defersTools ? { defersTools: true as const } : {}),
     ...(family ? appaTurnBoundaries({ family, body: params.body }) : {}),
     ...(restoredNoticeCallIds ? { restoredNoticeCallIds } : {}),
     ...(delegation ? { delegation } : {}),
@@ -1012,22 +1058,18 @@ function appendDeclaredTool(
   ];
 }
 
-/** Refuses sessions where tools are deferred to a provider tool search. */
-function refuseDeferredTools(declared: readonly unknown[]): void {
-  const deferred = declared.some((tool) => {
-    const declaration = asToolDeclaration(tool);
-    return (
-      declaration?.type === "tool_search" ||
-      declaration?.type?.startsWith("tool_search_tool_") === true ||
-      declaration?.defer_loading === true
-    );
-  });
-  if (deferred) {
-    throw new ApiError(
-      400,
-      "OpenAPPA cannot govern a session that defers its tools to a tool search; the tools it may call are not on the wire. Configure the client to declare its tools inline, or disable OpenAPPA for this client.",
-    );
-  }
+/**
+ * Whether the request defers tools to a tool search: a `tool_search`
+ * declaration (Responses; Anthropic's provider-run `tool_search_tool_*`) or
+ * any tool declared with `defer_loading`.
+ */
+function declaresToolSearch(tool: unknown): boolean {
+  const declaration = asToolDeclaration(tool);
+  return (
+    declaration?.type === "tool_search" ||
+    declaration?.type?.startsWith("tool_search_tool_") === true ||
+    declaration?.defer_loading === true
+  );
 }
 
 function refuseUnsupportedToolTypes(declared: readonly unknown[]): void {

@@ -52,8 +52,6 @@ export type ContentEncryptionContext =
   | "interactions.request"
   | "interactions.processed_request"
   | "interactions.response"
-  | "interactions.dual_llm_analyses"
-  | "interactions.unsafe_context_boundary"
   | "messages.content"
   | "mcp_tool_calls.tool_call"
   | "mcp_tool_calls.tool_result";

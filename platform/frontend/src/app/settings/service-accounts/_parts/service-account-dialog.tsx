@@ -29,6 +29,7 @@ import {
 import { FormDialog } from "@/components/form-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceAccessSection } from "@/components/resource-access-section";
+import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
 import { SearchInput } from "@/components/search-input";
 import {
   AccountHealthBadge,
@@ -80,6 +81,7 @@ import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
+import { formatRoleName } from "@/lib/utils/role";
 import { ServiceAccountTeamSelect } from "./service-account-team-select";
 
 type ServiceAccountFormValues = {
@@ -390,17 +392,23 @@ export function ServiceAccountDialog({
   const handleEdit = editForm.handleSubmit(async (values) => {
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     await permissionsSave.current?.();
-    await updateMutation.mutateAsync({
-      id: serviceAccountId,
-      body: {
-        name: values.name.trim(),
-        role: values.role,
-        // Only when changed: linking is checked against team admin rights,
-        // which someone editing just the name may not hold.
-        ...(values.teamId !== account.teamId ? { teamId: values.teamId } : {}),
-        labels: finalLabels,
-      },
-    });
+    const saved = await updateMutation
+      .mutateAsync({
+        id: serviceAccountId,
+        body: {
+          name: values.name.trim(),
+          role: values.role,
+          // Only when changed: linking is checked against team admin rights,
+          // which someone editing just the name may not hold.
+          ...(values.teamId !== account.teamId
+            ? { teamId: values.teamId }
+            : {}),
+          labels: finalLabels,
+        },
+      })
+      // A refused role stays open with a notice; other errors were toasted.
+      .catch(() => null);
+    if (!saved) return;
     onOpenChange(false);
   });
 
@@ -555,9 +563,10 @@ export function ServiceAccountDialog({
                   multiple
                   id="edit-service-account-role"
                   value={editForm.watch("role")}
-                  onValueChange={(role) =>
-                    editForm.setValue("role", role, { shouldDirty: true })
-                  }
+                  onValueChange={(role) => {
+                    editForm.setValue("role", role, { shouldDirty: true });
+                    updateMutation.reset();
+                  }}
                   placeholder="Select a role"
                   className="w-full"
                 />
@@ -566,6 +575,10 @@ export function ServiceAccountDialog({
                   account&apos;s keys.
                 </FieldDescription>
               </div>
+              <RoleAssignmentBlockedNotice
+                error={updateMutation.error}
+                name={formatRoleName(editForm.watch("role"))}
+              />
               <ServiceAccountTeamSelect
                 id="edit-service-account-team"
                 value={editForm.watch("teamId")}

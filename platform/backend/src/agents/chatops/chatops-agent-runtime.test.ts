@@ -56,12 +56,9 @@ beforeEach(
     makeTeamMember,
     makeAgent,
   }) => {
-    const previousEnabled = config.agentRuntime.enabled;
     const previousUrl = config.agentRuntime.platformBaseUrl;
-    config.agentRuntime.enabled = true;
     config.agentRuntime.platformBaseUrl = "https://platform.example.test";
     onTestFinished(() => {
-      config.agentRuntime.enabled = previousEnabled;
       config.agentRuntime.platformBaseUrl = previousUrl;
     });
     // The Kubernetes backend is the process boundary; everything above it runs.

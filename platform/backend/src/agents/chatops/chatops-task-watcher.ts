@@ -5,6 +5,7 @@ export async function watchChatOpsTask(params: {
   bindingId: string;
   threadId: string;
   agentName: string;
+  pinnedAgentId?: string;
 }): Promise<void> {
   return watchTaskCompletion({
     taskId: params.taskId,
@@ -13,6 +14,7 @@ export async function watchChatOpsTask(params: {
       type: "chatops",
       bindingId: params.bindingId,
       threadId: params.threadId,
+      ...(params.pinnedAgentId && { pinnedAgentId: params.pinnedAgentId }),
     },
   });
 }

@@ -3673,8 +3673,64 @@
     {
       "idx": 524,
       "version": "7",
-      "when": 1791580888577,
-      "tag": "0524_furry_korath",
+      "when": 1791506292356,
+      "tag": "0524_pale_mikhail_rasputin",
+      "breakpoints": true
+    },
+    {
+      "idx": 525,
+      "version": "7",
+      "when": 1791578938459,
+      "tag": "0525_remove-llm-proxy-cost-limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 526,
+      "version": "7",
+      "when": 1791731977475,
+      "tag": "0526_rename-appadvisor",
+      "breakpoints": true
+    },
+    {
+      "idx": 527,
+      "version": "7",
+      "when": 1791742269490,
+      "tag": "0527_enable-personal-gateway-handoff-tools",
+      "breakpoints": true
+    },
+    {
+      "idx": 528,
+      "version": "7",
+      "when": 1791755944641,
+      "tag": "0528_cleanup-orphaned-personal-gateways",
+      "breakpoints": true
+    },
+    {
+      "idx": 529,
+      "version": "7",
+      "when": 1791804549189,
+      "tag": "0529_cleanup-orphaned-personal-agents",
+      "breakpoints": true
+    },
+    {
+      "idx": 530,
+      "version": "7",
+      "when": 1791806920228,
+      "tag": "0530_modern_krista_starr",
+      "breakpoints": true
+    },
+    {
+      "idx": 531,
+      "version": "7",
+      "when": 1791812756858,
+      "tag": "0531_mighty_sumo",
+      "breakpoints": true
+    },
+    {
+      "idx": 532,
+      "version": "7",
+      "when": 1791898448259,
+      "tag": "0532_furry_korath",
       "breakpoints": true
     }
   ]

@@ -23,6 +23,7 @@ import {
   BOOTSTRAP_QUERY_RETRY,
   flushPersistedQueryCache,
   PERSISTED_QUERY_META,
+  seedOnlyStaleTime,
 } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
@@ -205,6 +206,8 @@ export function useProfilesPaginated(
     includeActivationSkillsCount,
     providerApiKeyId,
     pinned,
+    ids,
+    excludeIds,
   } = params || {};
 
   // Check if we can use initialData (server-side fetched data)
@@ -254,6 +257,8 @@ export function useProfilesPaginated(
         includeActivationSkillsCount,
         providerApiKeyId,
         pinned,
+        ids,
+        excludeIds,
       },
     ],
     queryFn: async () => {
@@ -278,6 +283,8 @@ export function useProfilesPaginated(
           includeActivationSkillsCount,
           providerApiKeyId,
           pinned,
+          ids,
+          excludeIds,
         },
       });
       throwOnApiError(error, { toastOnError: false });
@@ -288,6 +295,9 @@ export function useProfilesPaginated(
     // A reload can restore the snapshot saved just before a pin mutation.
     // Revalidate both sections even while that snapshot is considered fresh.
     refetchOnMount: pinned !== undefined ? "always" : true,
+    ...(pinned !== undefined && {
+      staleTime: seedOnlyStaleTime(useInitialData ? initialData : undefined),
+    }),
     // The list pages restore their last rows on refresh and swap in the fresh
     // page when it lands, so a reload lands on a filled table rather than an
     // empty one. Keyed by the full filter set, so a restored page only ever
@@ -613,12 +623,20 @@ export const memberDefaultAgentQueryKey = ["member-default-agent"] as const;
  */
 export function useDefaultAgentId() {
   return useQuery({
-    queryKey: memberDefaultAgentQueryKey,
-    queryFn: async () => {
-      const { data, error } = await getMemberDefaultAgent();
-      throwOnApiError(error, { toastOnError: false });
-      return data?.defaultAgentId ?? null;
-    },
+    ...memberAgentsQuery,
+    select: (agents) => agents.defaultAgentId,
+  });
+}
+
+/**
+ * The current user's personal chat agent: the oldest live personal agent they
+ * authored (the assistant seeded at their first login, unless deleted). It is
+ * reported whether or not it is also their default.
+ */
+export function usePersonalChatAgentId() {
+  return useQuery({
+    ...memberAgentsQuery,
+    select: (agents) => agents.personalChatAgentId,
   });
 }
 
@@ -661,7 +679,13 @@ export function useUpdateDefaultAgentId() {
     },
     onSuccess: (data) => {
       if (!data) return;
-      queryClient.setQueryData(memberDefaultAgentQueryKey, data.defaultAgentId);
+      queryClient.setQueryData<MemberAgents>(
+        memberDefaultAgentQueryKey,
+        (previous) => ({
+          personalChatAgentId: previous?.personalChatAgentId ?? null,
+          defaultAgentId: data.defaultAgentId,
+        }),
+      );
     },
   });
 }
@@ -817,3 +841,21 @@ function findCachedAgent(
   }
   return undefined;
 }
+
+type MemberAgents = {
+  defaultAgentId: string | null;
+  personalChatAgentId: string | null;
+};
+
+/** One read for both of the member's agents, shared by the hooks above. */
+const memberAgentsQuery = {
+  queryKey: memberDefaultAgentQueryKey,
+  queryFn: async (): Promise<MemberAgents> => {
+    const { data, error } = await getMemberDefaultAgent();
+    throwOnApiError(error, { toastOnError: false });
+    return {
+      defaultAgentId: data?.defaultAgentId ?? null,
+      personalChatAgentId: data?.personalChatAgentId ?? null,
+    };
+  },
+};

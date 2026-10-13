@@ -43,7 +43,6 @@ import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
 import {
-  AgentModel,
   AgentTeamModel,
   ServiceAccountModel,
   TeamModel,
@@ -769,6 +768,7 @@ export async function getChatMcpTools({
   organizationId,
   chatOpsBindingId,
   chatOpsThreadId,
+  chatOpsPinnedAgentId,
   enabledToolIds,
   conversationId,
   isolationKey,
@@ -778,7 +778,6 @@ export async function getChatMcpTools({
   abortSignal,
   elicitation,
   user,
-  blockOnApprovalRequired,
   scheduleTriggerRunId,
   hookRunCollector,
   kbChunksCollector,
@@ -789,6 +788,7 @@ export async function getChatMcpTools({
   encryptedChatAudit,
   modelAcceptsImageToolResults,
   appaSubagent,
+  openappaReviewPause,
 }: {
   agentName: string;
   agentId: string;
@@ -798,6 +798,8 @@ export async function getChatMcpTools({
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Set when the ChatOps conversation is with a Slack bot pinned to this agent */
+  chatOpsPinnedAgentId?: string;
   enabledToolIds?: string[];
   /**
    * Id of a persisted `conversations` row — tools may persist it as a foreign
@@ -823,8 +825,6 @@ export async function getChatMcpTools({
   elicitation?: ChatMcpElicitationBridge;
   /** User identity for OTEL span attributes */
   user?: { id: string; email?: string; name?: string };
-  /** Block tool execution when policy is require_approval (for A2A/autonomous contexts where no one can approve) */
-  blockOnApprovalRequired?: boolean;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
   /** Per-turn sink for inline `data-hook-run` entries (chat path only). */
@@ -875,6 +875,12 @@ export async function getChatMcpTools({
    * one spawn's.
    */
   appaSubagent?: SubagentBinding;
+  /**
+   * Someone answers OpenAPPA reviews for this run (a Slack reviewer or the
+   * A2A caller): a reviewed `execute_remedy_plan` call pauses the run for
+   * approval. Never cached: other runs on the same scope may have no one.
+   */
+  openappaReviewPause?: boolean;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -883,7 +889,8 @@ export async function getChatMcpTools({
     scopeKey,
     delegationChain,
   );
-  const shouldUseToolCache = !abortSignal && !appaSubagent;
+  const shouldUseToolCache =
+    !abortSignal && !appaSubagent && !openappaReviewPause;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -998,14 +1005,11 @@ export async function getChatMcpTools({
       "Fetched tools from MCP Gateway for agent/user",
     );
 
-    // Fetch the agent (for its trust config) and the agent's + user's teams
-    // (for trace span attributes).
-    const [agent, teams, userTeams] = await Promise.all([
-      AgentModel.findById(agentId),
+    // The agent's + user's teams, for trace span attributes.
+    const [teams, userTeams] = await Promise.all([
       AgentTeamModel.getTeamLabelInfoForAgent(agentId),
       TeamModel.getTeamLabelInfoForUser({ userId, organizationId }),
     ]);
-    const considerContextUntrusted = agent?.considerContextUntrusted ?? false;
 
     // Convert MCP tools to AI SDK Tool format
     const toolContext: ChatToolContext = {
@@ -1018,22 +1022,22 @@ export async function getChatMcpTools({
       openedAppId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsPinnedAgentId,
       sessionId,
       delegationChain,
       scheduleTriggerRunId,
       abortSignal,
       elicitation,
       user,
-      blockOnApprovalRequired,
       hookRunCollector,
       kbChunksCollector,
       subagentToolStream,
       taskBridge,
       mcpGwToken,
-      considerContextUntrusted,
       suppressContentLogging,
       encryptedChatAudit,
       modelAcceptsImageToolResults: modelAcceptsImageToolResults ?? true,
+      openappaReviewPause,
       teams,
       userTeams,
       // One tracker per run: the caller's instance when it owns a stop policy,

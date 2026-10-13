@@ -10,6 +10,7 @@ import { Check, Copy, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { toast } from "sonner";
+import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
 import { Button } from "@/components/ui/button";
 import { DialogForm, DialogStickyFooter } from "@/components/ui/dialog";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -41,7 +42,10 @@ function InviteByLinkCardContent({
   const isValidEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const handleGenerateLink = useCallback(async () => {
-    const data = await createMutation.mutateAsync({ email, role });
+    // A refused role shows as a notice under the Roles field.
+    const data = await createMutation
+      .mutateAsync({ email, role })
+      .catch(() => null);
     const initialName = email
       .split("@")[0]
       .split(".")
@@ -106,7 +110,10 @@ function InviteByLinkCardContent({
                 multiple
                 id="role"
                 value={role}
-                onValueChange={(value) => setRole(value as AnyRoleName)}
+                onValueChange={(value) => {
+                  setRole(value as AnyRoleName);
+                  createMutation.reset();
+                }}
                 disabled={createMutation.isPending}
                 placeholder="Select a role"
                 data-testid={E2eTestId.InviteRoleSelect}
@@ -116,6 +123,10 @@ function InviteByLinkCardContent({
                 The roles this person will have in your organization
               </FieldDescription>
             </div>
+            <RoleAssignmentBlockedNotice
+              error={createMutation.error}
+              name={formatRoleName(role)}
+            />
           </>
         ) : (
           <div className="space-y-2">

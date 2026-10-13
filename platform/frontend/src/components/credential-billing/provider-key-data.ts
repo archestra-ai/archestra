@@ -73,6 +73,18 @@ export function pickProviderKey(
   ];
 }
 
+/**
+ * One mapping per provider, to its primary key (or its first key by name when
+ * none is primary): what a new virtual key starts with.
+ */
+export function primaryKeyMappings(
+  keys: LlmProviderApiKeyResponse[],
+): ProviderApiKeyMappings {
+  return [...keysByProvider(keys)].flatMap(([provider, list]) =>
+    list[0] ? [{ provider, providerApiKeyId: list[0].id }] : [],
+  );
+}
+
 /** Subscription keys bill $0 in Costs and skip spend caps and team limits. */
 export function isSubscriptionKey(key: LlmProviderApiKeyResponse): boolean {
   return !!key.subscriptionKind;

@@ -7,11 +7,7 @@ import {
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
-import {
-  parseAuthRequired,
-  parseExpiredAuth,
-  parsePolicyDenied,
-} from "@/lib/chat/mcp-error-ui";
+import { parseAuthRequired, parseExpiredAuth } from "@/lib/chat/mcp-error-ui";
 import type { PendingToolAction } from "@/lib/chat/pending-tool-state";
 
 /**
@@ -174,7 +170,6 @@ export function isCompactEligible(params: {
   );
   if (errorText) {
     if (
-      structuredError?.type === "policy_denied" ||
       structuredError?.type === "assigned_credential_unavailable" ||
       structuredError?.type === "auth_required" ||
       structuredError?.type === "auth_expired"
@@ -182,11 +177,7 @@ export function isCompactEligible(params: {
       return false;
     }
 
-    if (
-      parsePolicyDenied(errorText) ||
-      parseExpiredAuth(errorText) ||
-      parseAuthRequired(errorText)
-    ) {
+    if (parseExpiredAuth(errorText) || parseAuthRequired(errorText)) {
       return false;
     }
 

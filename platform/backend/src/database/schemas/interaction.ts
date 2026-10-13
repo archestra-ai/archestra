@@ -17,12 +17,10 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type {
-  DualLlmAnalysis,
   InteractionAuthMethod,
   InteractionRequest,
   InteractionResponse,
   ToolCallBlock,
-  UnsafeContextBoundary,
 } from "@/types";
 import agentsTable from "./agent";
 import environmentsTable from "./environment";
@@ -224,10 +222,6 @@ const interactionsTable = pgTable(
      */
     requestLastMessageHash: varchar("request_last_message_hash"),
     response: jsonb("response").$type<InteractionResponse>().notNull(),
-    dualLlmAnalyses: jsonb("dual_llm_analyses").$type<DualLlmAnalysis[]>(),
-    unsafeContextBoundary: jsonb(
-      "unsafe_context_boundary",
-    ).$type<UnsafeContextBoundary>(),
     /**
      * Non-null when a guardrail refused this turn's tool calls. Lets a refused
      * turn be told apart from a healthy one — and counted per session — without
@@ -240,8 +234,8 @@ const interactionsTable = pgTable(
      */
     toolCallBlock: jsonb("tool_call_block").$type<ToolCallBlock>(),
     /**
-     * Non-null marks this row's five content columns (request, processedRequest,
-     * response, dualLlmAnalyses, unsafeContextBoundary) as encrypted under an
+     * Non-null marks this row's content columns (request, processedRequest,
+     * response) as encrypted under an
      * encrypted chat's browser-held key rather than the server key, and
      * names the conversation whose escrow record recovers it. Readers MUST
      * consult this before decrypting: a server-key decrypt of these envelopes

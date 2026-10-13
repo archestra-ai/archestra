@@ -48,6 +48,7 @@ beforeEach(() => {
       },
     ],
     effectiveActions: ["read", "use", "update", "delete", "manage-permissions"],
+    actorSubjects: [],
   };
   server.use(
     http.get(endpoint, () => HttpResponse.json(policy)),
@@ -230,7 +231,7 @@ it("retains a stale draft and requires an explicit reload after a concurrent edi
 
 it("requires confirmation before saving a mock permission handoff", async () => {
   vi.stubEnv("NEXT_PUBLIC_API_MOCKING", "enabled");
-  policy.previewActorSubjects = [{ type: "role", id: "admin" }];
+  policy.actorSubjects = [{ type: "role", id: "admin" }];
   policy.grants = [
     {
       subject: { type: "role", id: "admin" },
@@ -274,7 +275,7 @@ it("requires confirmation before saving a mock permission handoff", async () => 
 
 it("blocks a mock policy edit that would remove its last manager", async () => {
   vi.stubEnv("NEXT_PUBLIC_API_MOCKING", "enabled");
-  policy.previewActorSubjects = [{ type: "role", id: "admin" }];
+  policy.actorSubjects = [{ type: "role", id: "admin" }];
   policy.grants = [
     {
       subject: { type: "role", id: "admin" },
@@ -322,6 +323,28 @@ it("lets readers inspect grants without offering mutations", async () => {
   ).not.toBeInTheDocument();
   // The audience still shows, read off the saved grants.
   expect(screen.getByTestId("audience-chip")).toHaveTextContent("Personal");
+});
+
+it("a locked object offers no sharing even to someone who manages permissions", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
+  client.setQueryData(["auth", "userPermissions"], {});
+  render(
+    <QueryClientProvider client={client}>
+      <ResourcePermissions
+        resource="mcpRegistry"
+        scope={policy.scope}
+        lockedReason="Only for its owner."
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByText("Build automation");
+  expect(screen.getByText("Only for its owner.")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", { name: "Add access" }),
+  ).not.toBeInTheDocument();
 });
 
 it("moves the audience chip with the draft grants before saving", async () => {

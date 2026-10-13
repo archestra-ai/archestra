@@ -240,9 +240,6 @@ describe("InitialAgentSelector keyboard navigation", () => {
     expect(mockUseInternalMcpCatalog).toHaveBeenLastCalledWith({
       enabled: false,
     });
-    expect(mockUseAllProfileTools).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: false }),
-    );
     expect(mockUseKnowledgeBases).toHaveBeenLastCalledWith({ enabled: false });
     expect(mockUseConnectors).toHaveBeenLastCalledWith({ enabled: false });
     expect(mockUseProfile).toHaveBeenCalledWith("agent-1", { enabled: false });
@@ -255,11 +252,11 @@ describe("InitialAgentSelector keyboard navigation", () => {
     expect(mockUseInternalMcpCatalog).toHaveBeenLastCalledWith({
       enabled: true,
     });
-    expect(mockUseAllProfileTools).toHaveBeenLastCalledWith(
-      expect.objectContaining({ enabled: true }),
-    );
     expect(mockUseKnowledgeBases).toHaveBeenLastCalledWith({ enabled: true });
     expect(mockUseConnectors).toHaveBeenLastCalledWith({ enabled: true });
     expect(mockUseProfile).toHaveBeenCalledWith("agent-1", { enabled: true });
+    // The server icons come from the agent detail; the full tool-assignment
+    // list (every tool's schema) is only for the edit dialog.
+    expect(mockUseAllProfileTools).not.toHaveBeenCalled();
   });
 });

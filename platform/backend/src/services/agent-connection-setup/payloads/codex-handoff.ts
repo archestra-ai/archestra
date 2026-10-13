@@ -18,7 +18,7 @@ function envValue(name) {
 function nestedCodexShell() {
   return envValue('CODEX_SANDBOX_NETWORK_DISABLED') && envValue('CODEX_THREAD_ID');
 }
-function prepareDirectCatalog(executable, clientArgs = []) {
+function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
   const { command, args } = codexEntry(executable);
   const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
   const original = existsSync(path.join(home, 'config.toml')) ? readFileSync(path.join(home, 'config.toml'), 'utf8') : '';
@@ -64,7 +64,7 @@ function prepareDirectCatalog(executable, clientArgs = []) {
     // model override. Enabling API-key discovery applies only to this process.
     result = spawnSync(command, [...args, 'debug', 'models', '-c', 'model_provider="openai"', '-c', 'cli_auth_credentials_store="file"', '--enable', 'api_key_model_discovery'], { cwd: shadow, encoding: 'utf8', windowsHide: true, maxBuffer: 10 * 1024 * 1024, timeout: 30000, env: { ...process.env, CODEX_HOME: shadow } });
     if (result.error || result.status !== 0) throw new Error('Could not read the Codex model catalog.');
-    // Codex can return the bundled catalog with exit 0 after a network/auth
+    // Codex can return the bundled catalog with a successful exit after a network/auth
     // failure. A newly written cache is evidence of an actual remote refresh.
     const cacheFile = path.join(shadow, 'models_cache.json');
     const cache = existsSync(cacheFile) ? JSON.parse(readFileSync(cacheFile, 'utf8')) : null;
@@ -89,8 +89,9 @@ function prepareDirectCatalog(executable, clientArgs = []) {
   const requested = requestedModel(clientArgs, original);
   const unnamespaced = requested?.replace(/^[A-Za-z0-9_-]+\/([^/]+)$/, '$1');
   if (requested && !catalog.models.some(model => requested.startsWith(model.slug) || unnamespaced.startsWith(model.slug))) {
-    throw new Error('Selected model is missing from the current Codex catalog.');
+    throw modelCompatibilityError(requested, executable, catalog);
   }
+  if (!persist) return { home };
   for (const model of catalog.models) {
     model.tool_mode = 'direct';
     model.supports_search_tool = false;
@@ -106,6 +107,18 @@ function prepareDirectCatalog(executable, clientArgs = []) {
     throw error;
   }
   return { home, filename };
+}
+function modelCompatibilityError(requested, executable, catalog) {
+  let version = 'version unavailable';
+  if (executable) {
+    const entry = codexEntry(executable);
+    const result = spawnSync(entry.command, [...entry.args, '--version'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+    if (result.status === 0) version = result.stdout.trim().slice(0, 200);
+  }
+  const available = catalog.models.slice(0, 12).map(model => model.slug).join(', ');
+  return new Error('Selected model is missing from the current Codex catalog: ' + JSON.stringify(requested) + ' (' + version + (executable ? '; CLI: ' + executable : '') + '). '
+    + 'The desktop app and terminal CLI can expose different catalogs. Update the terminal Codex CLI to a version that supports this model, then rerun setup; or explicitly choose a model supported by that CLI. '
+    + 'Catalog models: ' + available + '. Your selected model and permission settings have not been changed. This check does not test LLM proxy inference.');
 }
 function tomlTables(lines) {
   const tables = [];
@@ -264,7 +277,7 @@ function reusePreparedDirectCatalog(clientArgs) {
   const requested = requestedModel(clientArgs, original);
   const unnamespaced = requested && requested.replace(/^[A-Za-z0-9_-]+\/([^/]+)$/, '$1');
   if (requested && !catalog.models.some(model => requested.startsWith(model.slug) || unnamespaced.startsWith(model.slug))) {
-    throw new Error('Selected model is missing from the current Codex catalog.');
+    throw modelCompatibilityError(requested, undefined, catalog);
   }
   return { home, filename };
 }
@@ -332,7 +345,9 @@ function updateDirectConfig(home, filename) {
     throw error;
   }
 }
-if (process.argv[2] === '--remove-direct') {
+if (process.argv[2] === '--setup-only') {
+  // Gateway/skills-only setup does not require model discovery.
+} else if (process.argv[2] === '--remove-direct') {
   try {
     const home = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
     const configFile = path.join(home, 'config.toml');
@@ -342,6 +357,12 @@ if (process.argv[2] === '--remove-direct') {
     if (!config.includes(catalog) && !config.includes(JSON.stringify(catalog))) rmSync(catalog, { force: true });
   } catch (error) {
     process.stderr.write('Codex direct tool mode could not be removed: ' + error.message + '\n');
+    process.exitCode = 1;
+  }
+} else if (process.argv[2] === '--preflight') {
+  try { prepareDirectCatalog(process.argv[3], [], false); }
+  catch (error) {
+    process.stderr.write('Codex setup preflight failed: ' + error.message + '\nNo client configuration was changed. Fix the compatibility or credential problem and start a new installer run.\n');
     process.exitCode = 1;
   }
 } else if (process.argv[2] === '--direct' || process.argv[2] === '--install-direct') {

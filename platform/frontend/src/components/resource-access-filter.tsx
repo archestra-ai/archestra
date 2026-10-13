@@ -9,7 +9,7 @@ import {
   type ScopedResource,
 } from "@archestra/shared";
 import { Check, ChevronDown, Users } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { filterControlClass } from "@/components/filter-bar";
 import {
@@ -38,6 +38,8 @@ import { cn } from "@/lib/utils/tailwind";
  *    viewer) is off, and offered only to a viewer who reads every object of
  *    the type through a `*` grant, because nobody else can see such objects.
  * 2. "Shared with": objects whose own grants reach a picked recipient.
+ *    Shown only while "Admin access" is on, the one view where the viewer
+ *    browses objects shared with other people.
  * 3. "Owner": objects authored by a picked person.
  *
  * The selection lives in the `access`, `sharedWith` and `owner` URL
@@ -48,6 +50,7 @@ export function ResourceAccessFilter({
   resource,
   noun,
   offerBuiltIn = false,
+  owned = true,
   navigate,
   queryParamsAdapter,
 }: {
@@ -57,13 +60,17 @@ export function ResourceAccessFilter({
   noun: string;
   /** Agents page only: offer the "Built-in" option, kept in the `builtIn` URL parameter. */
   offerBuiltIn?: boolean;
+  /**
+   * Off for objects nobody authors (synced models): no "Mine" option and no
+   * Owner box, since neither could match anything.
+   */
+  owned?: boolean;
   /** Override navigation for lists that own local URL state without an RSC round trip. */
   navigate?: (url: string) => void;
   /** Optional logical-to-URL adapter shared by a page section. */
   queryParamsAdapter?: QueryParamsAdapter;
 }) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const {
     access,
@@ -78,8 +85,13 @@ export function ResourceAccessFilter({
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
+      // The lists fetch on the client, so the URL changes in place: a
+      // router navigation would re-render the server page on every click.
       if (queryParamsAdapter) {
-        queryParamsAdapter.updateQueryParams({ ...updates, page: null });
+        queryParamsAdapter.updateQueryParams(
+          { ...updates, page: null },
+          { shallow: true },
+        );
         return;
       }
       const params = new URLSearchParams(searchParams.toString());
@@ -89,11 +101,10 @@ export function ResourceAccessFilter({
       }
       // reset server-side pagination (a no-op on pages without a page param)
       params.delete("page");
-      const navigateTo =
-        navigate ?? ((url: string) => router.push(url, { scroll: false }));
+      const navigateTo = navigate ?? pushUrlInPlace;
       navigateTo(`${pathname}?${params.toString()}`);
     },
-    [searchParams, router, pathname, navigate, queryParamsAdapter],
+    [searchParams, pathname, navigate, queryParamsAdapter],
   );
 
   const reset = isDefault ? null : (
@@ -123,29 +134,34 @@ export function ResourceAccessFilter({
         access={access}
         builtIn={builtIn}
         offerBuiltIn={offerBuiltIn}
+        owned={owned}
         updateParams={updateParams}
         reset={reset}
       />
-      <ResourceSharedWithFilter
-        resource={resource}
-        value={sharedWith ?? []}
-        onChange={(next) =>
-          updateParams({
-            [SHARED_WITH_PARAM]: next.length > 0 ? next.join(",") : null,
-          })
-        }
-        footer={reset}
-      />
-      <ResourceOwnerFilter
-        resource={resource}
-        value={owner ?? []}
-        onChange={(next) =>
-          updateParams({
-            [OWNER_PARAM]: next.length > 0 ? next.join(",") : null,
-          })
-        }
-        footer={reset}
-      />
+      {(access.includes("others") || sharedWith) && (
+        <ResourceSharedWithFilter
+          resource={resource}
+          value={sharedWith ?? []}
+          onChange={(next) =>
+            updateParams({
+              [SHARED_WITH_PARAM]: next.length > 0 ? next.join(",") : null,
+            })
+          }
+          footer={reset}
+        />
+      )}
+      {owned && (
+        <ResourceOwnerFilter
+          resource={resource}
+          value={owner ?? []}
+          onChange={(next) =>
+            updateParams({
+              [OWNER_PARAM]: next.length > 0 ? next.join(",") : null,
+            })
+          }
+          footer={reset}
+        />
+      )}
     </>
   );
 }
@@ -232,6 +248,7 @@ function AccessRelationFilter({
   access,
   builtIn,
   offerBuiltIn,
+  owned,
   updateParams,
   reset,
 }: {
@@ -240,6 +257,7 @@ function AccessRelationFilter({
   access: ResourceAccessRelation[];
   builtIn: boolean;
   offerBuiltIn: boolean;
+  owned: boolean;
   updateParams: (updates: Record<string, string | null>) => void;
   reset: ReactNode;
 }) {
@@ -254,7 +272,9 @@ function AccessRelationFilter({
   // A bookmarked selection that holds "others" keeps the option visible, so
   // the viewer can still clear it.
   const options = ACCESS_OPTION_IDS.filter(
-    (id) => id !== "others" || readsEveryObject || isOn("others"),
+    (id) =>
+      (id !== "others" || readsEveryObject || isOn("others")) &&
+      (id !== "mine" || owned),
   );
   const onCount = options.filter(isOn).length;
   // Only agent admins can list the built-in agents.
@@ -267,8 +287,13 @@ function AccessRelationFilter({
       toggled.has(relation) ? turnOn : selected.has(relation),
     );
     // An empty selection would list nothing; keep the last option on.
-    if (next.length > 0)
-      updateParams({ [RESOURCE_ACCESS_PARAM]: serializeAccess(next) });
+    if (next.length === 0) return;
+    updateParams({
+      [RESOURCE_ACCESS_PARAM]: serializeAccess(next),
+      // "Shared with" is shown only with "Admin access"; never leave it
+      // filtering the list while hidden.
+      ...(!next.includes("others") && { [SHARED_WITH_PARAM]: null }),
+    });
   };
 
   return (
@@ -284,7 +309,7 @@ function AccessRelationFilter({
           })}
         >
           <Users className="size-4" />
-          <span>{summarize({ access, noun })}</span>
+          <span>{summarize({ access, noun, owned })}</span>
           {builtIn && <span>+ Built-in</span>}
           <ChevronDown className="size-4 opacity-50" />
         </Button>
@@ -413,6 +438,11 @@ function serializeAccess(access: ResourceAccessRelation[]): string | null {
   return value === DEFAULT_RESOURCE_ACCESS_RELATIONS.join(",") ? null : value;
 }
 
+/** Change the URL without re-rendering the server page; Next.js syncs `useSearchParams`. */
+function pushUrlInPlace(url: string) {
+  window.history.pushState(null, "", url);
+}
+
 /** A comma-separated list parameter; undefined when absent or empty. */
 function parseList(raw: string | null): string[] | undefined {
   const values = [
@@ -429,14 +459,18 @@ function parseList(raw: string | null): string[] | undefined {
 function summarize({
   access,
   noun,
+  owned,
 }: {
   access: ResourceAccessRelation[];
   noun: string;
+  owned: boolean;
 }): string {
   if (access.length === RESOURCE_ACCESS_RELATIONS.length) return `All ${noun}`;
   const selected = new Set(access);
-  return ACCESS_OPTION_IDS.filter((id) =>
-    ACCESS_OPTIONS[id].relations.some((relation) => selected.has(relation)),
+  return ACCESS_OPTION_IDS.filter(
+    (id) =>
+      (id !== "mine" || owned) &&
+      ACCESS_OPTIONS[id].relations.some((relation) => selected.has(relation)),
   )
     .map((id) => ACCESS_OPTIONS[id].label)
     .join(" · ");

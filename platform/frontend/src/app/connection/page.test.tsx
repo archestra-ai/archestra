@@ -1,4 +1,5 @@
-import { archestraApiClient } from "@archestra/shared";
+import { archestraApiClient, DocsPage, getDocsUrl } from "@archestra/shared";
+import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
@@ -427,6 +428,12 @@ describe("ConnectPage saved agent order", () => {
           .getAllByRole("option")
           .map((option) => option.getAttribute("data-value")),
       ).toEqual(["openclaw", "claude-code", "generic"]);
+      await user.click(screen.getByRole("option", { name: /Claude Code/ }));
+      expect(
+        within(
+          screen.getByRole("button", { name: "Claude Code, change agent" }),
+        ).getByRole("img", { name: "Supports LLM proxy guardrails" }),
+      ).toBeVisible();
     } finally {
       width.mockRestore();
     }
@@ -495,6 +502,73 @@ describe("ConnectPage guardrails chip", () => {
     expect(
       setup("claude-code", { active: true, unsupportedClientAction: "block" }),
     ).toHaveTextContent("Enforced");
+  });
+
+  it.each(
+    Object.entries(NATIVE_SESSION_CLIENT_LABELS),
+  )("marks %s as supporting guardrails even before enforcement is enabled", async (clientId, label) => {
+    setup(clientId, { active: false, unsupportedClientAction: "block" });
+    const badge = within(
+      screen.getByRole("button", { name: new RegExp(`${label}$`) }),
+    ).getByRole("img", { name: "Supports LLM proxy guardrails" });
+    expect(badge).toBeVisible();
+    await userEvent.hover(badge);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Enforcement depends on your organization's settings.",
+    );
+  });
+
+  it("does not mark an unsupported client as supporting guardrails", () => {
+    setup("cursor", { active: true, unsupportedClientAction: "block" });
+    expect(
+      screen.queryByRole("img", { name: "Supports LLM proxy guardrails" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps the selected client button name concise when it has a support hint", () => {
+    setup("codex", { active: true, unsupportedClientAction: "block" });
+    const tile = screen.getByRole("button", { name: "Codex" });
+    expect(tile).toHaveAttribute("aria-pressed", "true");
+    expect(tile).toHaveAccessibleDescription("Supports LLM proxy guardrails");
+  });
+
+  it.each(
+    Object.keys(NATIVE_SESSION_CLIENT_LABELS),
+  )("omits the supported-client notice for %s", async (clientId) => {
+    setup(clientId, { active: true, unsupportedClientAction: "block" });
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    expect(await screen.findByRole("tooltip")).not.toHaveTextContent(
+      "LLM proxy guardrails support only",
+    );
+  });
+
+  it.each([
+    "block",
+    "bypass",
+  ] as const)("lists the supported clients for an unrecognized agent (%s)", async (unsupportedClientAction) => {
+    setup("cursor", { active: true, unsupportedClientAction });
+    await userEvent.hover(
+      screen.getByRole("button", { name: "What the guardrails do" }),
+    );
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("LLM proxy guardrails support only");
+    for (const label of Object.values(NATIVE_SESSION_CLIENT_LABELS)) {
+      expect(tooltip).toHaveTextContent(label);
+    }
+    expect(within(tooltip).getAllByRole("link")[0]).toHaveAttribute(
+      "href",
+      getDocsUrl(DocsPage.PlatformAiToolGuardrailsClients),
+    );
+    expect(
+      within(tooltip).getByRole("link", {
+        name: "add APPA session headers",
+      }),
+    ).toHaveAttribute(
+      "href",
+      getDocsUrl(DocsPage.PlatformAiToolGuardrailsClients, "session-headers"),
+    );
   });
 
   it("says guardrails are not enforced for an allowed unrecognized agent", () => {

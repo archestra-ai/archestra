@@ -83,7 +83,6 @@ export const RouteId = {
   AssignToolToAgent: "assignToolToAgent",
   BulkAssignTools: "bulkAssignTools",
   BulkUpdateAgentTools: "bulkUpdateAgentTools",
-  AutoConfigureAgentToolPolicies: "autoConfigureAgentToolPolicies",
   UnassignToolFromAgent: "unassignToolFromAgent",
   GetAgentTools: "getAgentTools",
   GetAllAgentTools: "getAllAgentTools",
@@ -100,6 +99,7 @@ export const RouteId = {
 
   // Config Routes
   GetConfig: "getConfig",
+  GetBootstrap: "getBootstrap",
   GetPublicConfig: "getPublicConfig",
 
   // RUM Routes
@@ -207,12 +207,8 @@ export const RouteId = {
   BulkDeleteRoles: "bulkDeleteRoles",
 
   // Tool Routes
-  GetTool: "getTool",
   GetTools: "getTools",
   GetToolsWithAssignments: "getToolsWithAssignments",
-  GetToolObservers: "getToolObservers",
-  GetUnassignedTools: "getUnassignedTools",
-  DeleteTool: "deleteTool",
 
   // Interaction Routes
   GetInteractions: "getInteractions",
@@ -226,21 +222,6 @@ export const RouteId = {
   // MCP Tool Call Routes
   GetMcpToolCalls: "getMcpToolCalls",
   GetMcpToolCall: "getMcpToolCall",
-
-  // Autonomy Policy Routes
-  GetOperators: "getOperators",
-  GetToolInvocationPolicies: "getToolInvocationPolicies",
-  CreateToolInvocationPolicy: "createToolInvocationPolicy",
-  GetToolInvocationPolicy: "getToolInvocationPolicy",
-  UpdateToolInvocationPolicy: "updateToolInvocationPolicy",
-  DeleteToolInvocationPolicy: "deleteToolInvocationPolicy",
-  GetTrustedDataPolicies: "getTrustedDataPolicies",
-  CreateTrustedDataPolicy: "createTrustedDataPolicy",
-  GetTrustedDataPolicy: "getTrustedDataPolicy",
-  UpdateTrustedDataPolicy: "updateTrustedDataPolicy",
-  DeleteTrustedDataPolicy: "deleteTrustedDataPolicy",
-  BulkUpsertDefaultCallPolicy: "bulkUpsertDefaultCallPolicy",
-  BulkUpsertDefaultResultPolicy: "bulkUpsertDefaultResultPolicy",
 
   // Proxy Routes - OpenAI
   OpenAiChatCompletionsWithDefaultAgent:
@@ -738,6 +719,15 @@ export const RouteId = {
   CreateChatOpsDmBinding: "createChatOpsDmBinding",
   UpdateChatOpsConfigInQuickstart: "updateChatOpsConfigInQuickstart",
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
+  ListSlackAgentBots: "listSlackAgentBots",
+  UpdateSlackAgentBot: "updateSlackAgentBot",
+  DeleteSlackAgentBot: "deleteSlackAgentBot",
+  UpdateSlackAppConfigToken: "updateSlackAppConfigToken",
+  CreateSlackAgentBotApp: "createSlackAgentBotApp",
+  MigrateSlackApps: "migrateSlackApps",
+  ConvertSlackAppToAgentBot: "convertSlackAppToAgentBot",
+  ListSlackAgentBotChannels: "listSlackAgentBotChannels",
+  JoinSlackAgentBotChannel: "joinSlackAgentBotChannel",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
   UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
@@ -845,6 +835,14 @@ export const RouteId = {
   GetAppaGithubSync: "getAppaGithubSync",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
+  StartAppaGithubApp: "startAppaGithubApp",
+  CompleteAppaGithubApp: "completeAppaGithubApp",
+  GetPendingAppaGithubApp: "getPendingAppaGithubApp",
+  DiscardAppaGithubApp: "discardAppaGithubApp",
+  InstallAppaGithubApp: "installAppaGithubApp",
+  GetAppaGithubAppAccounts: "getAppaGithubAppAccounts",
+  GetAppaGithubAppRepositories: "getAppaGithubAppRepositories",
+  GetAppaGithubRepositoryStatus: "getAppaGithubRepositoryStatus",
   UpdateAppaGithubSync: "updateAppaGithubSync",
   GetOpenappaBatteries: "getOpenappaBatteries",
   GetOpenappaBatteryPolicySource: "getOpenappaBatteryPolicySource",
@@ -859,6 +857,7 @@ export const RouteId = {
   SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
+  GetHeldAppaGithubPull: "getHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
   // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
   AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",
@@ -964,6 +963,7 @@ export const RouteId = {
   GetConnectionSetupScript: "getConnectionSetupScript",
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
+  GetConnectionInstructions: "getConnectionInstructions",
   GetConnectionHealth: "getConnectionHealth",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",

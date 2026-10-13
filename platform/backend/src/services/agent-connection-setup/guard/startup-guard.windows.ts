@@ -11,6 +11,7 @@ import {
   archestraMarkWithText,
 } from "@/services/archestra-mark";
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
+import { MANAGED_INSTRUCTIONS_REFRESH_WINDOWS } from "../payloads/managed-instructions-refresh.windows";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import { psq } from "../steps/quoting";
@@ -157,6 +158,7 @@ function Remove-ArchGuard {
       : ""
   }
   $Script:GuardUninstalled = $true
+  Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions-source.json'), ($GuardPath + '.instructions-refresh.ps1')
   Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile
   Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.prompt.md')
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions')
@@ -995,16 +997,19 @@ export function buildWindowsStartupGuardInstallSection(
   $global:LASTEXITCODE = $archClientExit`
     : "";
   const promptRelpath = `${client.psScriptRelpath}.prompt.md`;
-  const handoffEnabled = !!ctx.mcp && !!ctx.runtimeHandoffInstructions;
-  const promptInstall = handoffEnabled
-    ? `[IO.File]::WriteAllBytes((Join-Path $env:USERPROFILE ${psq(promptRelpath)}), [Convert]::FromBase64String('${Buffer.from(ctx.runtimeHandoffInstructions ?? "", "utf8").toString("base64")}'))`
-    : `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(promptRelpath)})`;
+  const handoffEnabled =
+    !!ctx.mcp &&
+    (!!ctx.runtimeHandoffInstructions || !!ctx.managedInstructionsSource);
+  const promptInstall =
+    !!ctx.mcp && !!ctx.runtimeHandoffInstructions
+      ? `[IO.File]::WriteAllBytes((Join-Path $env:USERPROFILE ${psq(promptRelpath)}), [Convert]::FromBase64String('${Buffer.from(ctx.runtimeHandoffInstructions ?? "", "utf8").toString("base64")}'))`
+      : `Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(promptRelpath)})`;
   const extraInstall =
     client.clientId === "codex"
       ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.cjs'), [Convert]::FromBase64String('${Buffer.from(CODEX_HANDOFF_HELPER).toString("base64")}'))`
       : client.clientId === "copilot-cli"
         ? handoffEnabled
-          ? `$null = New-Item -ItemType Directory -Force ($archGuardPath + '.instructions')\nCopy-Item -Force (Join-Path $env:USERPROFILE ${psq(promptRelpath)}) ($archGuardPath + '.instructions/AGENTS.md')`
+          ? `$null = New-Item -ItemType Directory -Force ($archGuardPath + '.instructions')\nif (Test-Path (Join-Path $env:USERPROFILE ${psq(promptRelpath)})) { Copy-Item -Force (Join-Path $env:USERPROFILE ${psq(promptRelpath)}) ($archGuardPath + '.instructions/AGENTS.md') } else { Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions/AGENTS.md') }`
           : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions/AGENTS.md')`
         : client.clientId === "opencode"
           ? handoffEnabled
@@ -1045,6 +1050,16 @@ $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archGuard
 ${promptInstall}
 ${extraInstall}
 ${
+  ctx.managedInstructionsSource
+    ? `[IO.File]::WriteAllBytes(($archGuardPath + '.instructions-source.json'), [Convert]::FromBase64String('${Buffer.from(JSON.stringify(ctx.managedInstructionsSource)).toString("base64")}'))
+[IO.File]::WriteAllBytes(($archGuardPath + '.instructions-refresh.ps1'), [Convert]::FromBase64String('${Buffer.from(MANAGED_INSTRUCTIONS_REFRESH_WINDOWS).toString("base64")}'))
+$archSourceAcl = New-Object System.Security.AccessControl.FileSecurity
+$archSourceAcl.SetAccessRuleProtection($true, $false)
+$archSourceAcl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule([System.Security.Principal.WindowsIdentity]::GetCurrent().Name, 'FullControl', 'Allow')))
+Set-Acl -LiteralPath ($archGuardPath + '.instructions-source.json') -AclObject $archSourceAcl`
+    : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions-source.json'), ($archGuardPath + '.instructions-refresh.ps1')`
+}
+${
   client.clientId === "codex"
     ? ctx.proxy
       ? `$archCodexExe = Get-Command -Name codex -CommandType Application -ErrorAction Stop | Select-Object -First 1
@@ -1064,7 +1079,7 @@ if ((Test-Path $archGuardPath) -and -not (Select-String -Path $archGuardPath -Pa
   $archGuardPreFeature = $true
 }
 $archGuardBody = @'
-${renderStartupGuardPowerShell(ctx, client)}'@
+${inSingleQuotedHereString(renderStartupGuardPowerShell(ctx, client))}'@
 [IO.File]::WriteAllText($archGuardPath, $archGuardBody, (New-Object System.Text.UTF8Encoding $true))
 Write-Host ('Updated ' + $archGuardPath)
 if ($archGuardPreFeature) {
@@ -1082,10 +1097,20 @@ $archGuardBlock = @'
 ${client.markerStart}
 # Pre-flight connectivity check for ${ctx.appName}-connected ${client.label}.
 # Remove this block and ~/${client.psScriptRelpath} to uninstall.
-${refreshBlock}
+${inSingleQuotedHereString(refreshBlock)}
 function ${client.binary} {
   $archGuard = Join-Path $env:USERPROFILE '${client.psScriptRelpath}'
   $archUtilityCommand = $args.Count -gt 0 -and $args[0] -in @(${client.utilitySubcommands.map(psq).join(", ")}, '--help', '-h', '--version', '-v')
+  ${
+    ctx.managedInstructionsSource
+      ? `# Windows PowerShell 5.1 Select-String reports a missing file even with
+  # -ErrorAction SilentlyContinue, so check that the skip file exists first.
+  $archSkip = Join-Path $env:USERPROFILE '${client.skipRelpath}'
+  if (-not $archUtilityCommand -and (Test-Path $archGuard) -and -not ((Test-Path $archSkip) -and (Select-String -Path $archSkip -Pattern '^mcp$' -Quiet))) {
+    try { & ($archGuard + '.instructions-refresh.ps1') ($archGuard + '.instructions-source.json') ($archGuard + '.prompt.md') ${client.clientId === "copilot-cli" ? "($archGuard + '.instructions/AGENTS.md')" : ""} } catch { }
+  }`
+      : ""
+  }
   if (-not $archUtilityCommand -and (Test-Path $archGuard)) { try { & $archGuard @args } catch { } }
   $archReal = Get-Command -Name ${client.binary} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $archReal) {
@@ -1278,6 +1303,20 @@ Remove-Item Function:${client.binary} -ErrorAction SilentlyContinue`;
 // ===================================================================
 // Internal helpers
 // ===================================================================
+
+/**
+ * A line starting with '@ would end the enclosing here-string early, and the
+ * rest of the script would then parse as setup code.
+ * @public — exported for tests; used internally otherwise.
+ */
+export function inSingleQuotedHereString(content: string): string {
+  if (/^'@/m.test(content)) {
+    throw new Error(
+      "Rendered content embedded in a single-quoted here-string has a line starting with '@",
+    );
+  }
+  return content;
+}
 
 /**
  * The pre-loader header: the Archestra mark with the title beside it, for the

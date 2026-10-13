@@ -4,6 +4,7 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   RouteId,
+  SLACK_BOT_HANDLE_PATTERN,
   TimeInMs,
 } from "@archestra/shared";
 import { WebClient } from "@slack/web-api";
@@ -31,6 +32,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
+import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import {
   buildAgentFooter,
   EventDedupMap,
@@ -772,142 +774,153 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Receives events from Slack Events API.
    * Signature validation via HMAC SHA256 signing secret.
    */
-  fastify.post(
+  // The main Slack app, and each Slack bot pinned to an agent.
+  for (const path of [
     "/api/webhooks/chatops/slack",
-    {
-      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
-      preParsing: [captureSlackRawBody as any],
-      schema: {
-        description: "Slack Events API webhook endpoint",
-        tags: ["ChatOps Webhooks"],
-        body: z.unknown(),
-        response: {
-          200: z.union([
-            z.object({ challenge: z.string() }),
-            z.object({ ok: z.boolean() }),
-          ]),
-          400: z.object({
-            error: z.object({
-              message: z.string(),
-              type: z.string(),
+    "/api/webhooks/chatops/slack/agents/:agentId",
+  ]) {
+    fastify.post(
+      path,
+      {
+        // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+        preParsing: [captureSlackRawBody as any],
+        schema: {
+          description: "Slack Events API webhook endpoint",
+          tags: ["ChatOps Webhooks"],
+          body: z.unknown(),
+          response: {
+            200: z.union([
+              z.object({ challenge: z.string() }),
+              z.object({ ok: z.boolean() }),
+            ]),
+            400: z.object({
+              error: z.object({
+                message: z.string(),
+                type: z.string(),
+              }),
             }),
-          }),
-          429: z.object({
-            error: z.object({
-              message: z.string(),
-              type: z.string(),
+            429: z.object({
+              error: z.object({
+                message: z.string(),
+                type: z.string(),
+              }),
             }),
-          }),
-          500: z.object({
-            error: z.object({
-              message: z.string(),
-              type: z.string(),
+            500: z.object({
+              error: z.object({
+                message: z.string(),
+                type: z.string(),
+              }),
             }),
-          }),
+          },
         },
       },
-    },
-    async (request, reply) => {
-      const provider = chatOpsManager.getSlackProvider();
+      async (request, reply) => {
+        const provider = resolveSlackWebhookProvider(request.params);
 
-      if (!provider) {
-        logger.warn(
-          "[ChatOps] Slack webhook called but provider not configured",
-        );
-        throw new ApiError(400, "Slack chatops provider not configured");
-      }
-
-      // Rate limiting
-      const clientIp = request.ip || "unknown";
-      const rateLimitKey =
-        `${CacheKey.WebhookRateLimit}-chatops-slack-${clientIp}` as AllowedCacheKey;
-      const rateLimitConfig = {
-        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
-        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
-      };
-      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
-        logger.warn(
-          { ip: clientIp },
-          "[ChatOps] Rate limit exceeded for Slack webhook",
-        );
-        throw new ApiError(429, "Too many requests");
-      }
-
-      const headers: Record<string, string | string[] | undefined> = {};
-      for (const [key, value] of Object.entries(request.headers)) {
-        headers[key] = value;
-      }
-
-      const body = request.body;
-
-      // Socket mode guard — webhooks are not used in socket mode
-      if (provider.isSocketMode()) {
-        throw new ApiError(
-          400,
-          "Slack is configured for Socket Mode. Webhooks are disabled.",
-        );
-      }
-
-      // Validate request signature FIRST — even url_verification challenges are signed.
-      const rawBody = (request as unknown as { slackRawBody?: string })
-        .slackRawBody;
-      if (!rawBody) {
-        throw new ApiError(400, "Could not read request body for verification");
-      }
-      const isValid = await provider.validateWebhookRequest(rawBody, headers);
-      if (!isValid) {
-        logger.warn("[ChatOps] Invalid Slack webhook signature");
-        throw new ApiError(400, "Invalid request signature");
-      }
-
-      // Handle URL verification challenge (after signature is verified)
-      const challengeResponse = provider.handleValidationChallenge(body) as {
-        challenge: string;
-      } | null;
-      if (challengeResponse) {
-        return reply.send(challengeResponse);
-      }
-
-      try {
-        const slackBody = body as {
-          type?: string;
-          event?: { type?: string; ts?: string; event_ts?: string };
-        };
-
-        if (slackBody.type === "event_callback") {
-          // Quick in-memory dedup for Slack's duplicate message+app_mention events.
-          // Messages carry event.ts; reaction events carry event.event_ts.
-          const eventTs = slackBody.event?.ts ?? slackBody.event?.event_ts;
-          if (eventTs && slackWebhookDedup.mark(eventTs)) {
-            return reply.send({ ok: true });
-          }
-
-          // Delegate to shared handler (async — return 200 immediately for Slack's 3s timeout)
-          chatOpsManager
-            .handleIncomingMessage(provider, body)
-            .catch((error) => {
-              logger.error(
-                {
-                  error: error instanceof Error ? error.message : String(error),
-                },
-                "[ChatOps] Error processing Slack message (async)",
-              );
-            });
+        if (!provider) {
+          logger.warn(
+            "[ChatOps] Slack webhook called but provider not configured",
+          );
+          throw new ApiError(400, "Slack chatops provider not configured");
         }
 
-        return reply.send({ ok: true });
-      } catch (error) {
-        logger.error(
-          {
-            error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined,
-          },
-          "[ChatOps] Error processing Slack webhook",
-        );
-        throw new ApiError(500, "Internal server error");
-      }
-    },
-  );
+        // Rate limiting
+        const clientIp = request.ip || "unknown";
+        const rateLimitKey =
+          `${CacheKey.WebhookRateLimit}-chatops-slack-${clientIp}` as AllowedCacheKey;
+        const rateLimitConfig = {
+          windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+          maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+        };
+        if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+          logger.warn(
+            { ip: clientIp },
+            "[ChatOps] Rate limit exceeded for Slack webhook",
+          );
+          throw new ApiError(429, "Too many requests");
+        }
+
+        const headers: Record<string, string | string[] | undefined> = {};
+        for (const [key, value] of Object.entries(request.headers)) {
+          headers[key] = value;
+        }
+
+        const body = request.body;
+
+        // Socket mode guard — webhooks are not used in socket mode
+        if (provider.isSocketMode()) {
+          throw new ApiError(
+            400,
+            "Slack is configured for Socket Mode. Webhooks are disabled.",
+          );
+        }
+
+        // Validate request signature FIRST — even url_verification challenges are signed.
+        const rawBody = (request as unknown as { slackRawBody?: string })
+          .slackRawBody;
+        if (!rawBody) {
+          throw new ApiError(
+            400,
+            "Could not read request body for verification",
+          );
+        }
+        const isValid = await provider.validateWebhookRequest(rawBody, headers);
+        if (!isValid) {
+          logger.warn("[ChatOps] Invalid Slack webhook signature");
+          throw new ApiError(400, "Invalid request signature");
+        }
+
+        // Handle URL verification challenge (after signature is verified)
+        const challengeResponse = provider.handleValidationChallenge(body) as {
+          challenge: string;
+        } | null;
+        if (challengeResponse) {
+          return reply.send(challengeResponse);
+        }
+
+        try {
+          const slackBody = body as {
+            type?: string;
+            event?: { type?: string; ts?: string; event_ts?: string };
+          };
+
+          if (slackBody.type === "event_callback") {
+            // Quick in-memory dedup for Slack's duplicate message+app_mention events.
+            // Messages carry event.ts; other events (Stop, DM opened) carry
+            // event.event_ts.
+            const eventTs = slackBody.event?.ts ?? slackBody.event?.event_ts;
+            if (eventTs && slackWebhookDedup.mark(eventTs)) {
+              return reply.send({ ok: true });
+            }
+
+            // Delegate to shared handler (async — return 200 immediately for Slack's 3s timeout)
+            chatOpsManager
+              .handleIncomingMessage(provider, body)
+              .catch((error) => {
+                logger.error(
+                  {
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                  },
+                  "[ChatOps] Error processing Slack message (async)",
+                );
+              });
+          }
+
+          return reply.send({ ok: true });
+        } catch (error) {
+          logger.error(
+            {
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+            },
+            "[ChatOps] Error processing Slack webhook",
+          );
+          throw new ApiError(500, "Internal server error");
+        }
+      },
+    );
+  }
 
   /**
    * Slack interactive endpoint
@@ -915,92 +928,152 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
    * Receives block_actions payloads from Slack when users click buttons
    * (e.g., agent selection buttons).
    */
-  fastify.post(
+  for (const path of [
     "/api/webhooks/chatops/slack/interactive",
-    {
-      // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
-      preParsing: [captureSlackRawBody as any],
-      schema: {
-        description: "Slack interactive components endpoint",
-        tags: ["ChatOps Webhooks"],
-        body: z.unknown(),
-        response: {
-          200: z.object({ ok: z.boolean() }),
-          400: z.object({
-            error: z.object({ message: z.string(), type: z.string() }),
-          }),
-          429: z.object({
-            error: z.object({ message: z.string(), type: z.string() }),
-          }),
+    "/api/webhooks/chatops/slack/agents/:agentId/interactive",
+  ]) {
+    fastify.post(
+      path,
+      {
+        // biome-ignore lint/suspicious/noExplicitAny: Fastify hook types don't align with our shared helper signature
+        preParsing: [captureSlackRawBody as any],
+        schema: {
+          description: "Slack interactive components endpoint",
+          tags: ["ChatOps Webhooks"],
+          body: z.unknown(),
+          response: {
+            200: z.object({ ok: z.boolean() }),
+            400: z.object({
+              error: z.object({ message: z.string(), type: z.string() }),
+            }),
+            429: z.object({
+              error: z.object({ message: z.string(), type: z.string() }),
+            }),
+          },
         },
+      },
+      async (request, reply) => {
+        const provider = resolveSlackWebhookProvider(request.params);
+        if (!provider) {
+          throw new ApiError(400, "Slack chatops provider not configured");
+        }
+
+        // Rate limiting
+        const clientIp = request.ip || "unknown";
+        const rateLimitKey =
+          `${CacheKey.WebhookRateLimit}-chatops-slack-interactive-${clientIp}` as AllowedCacheKey;
+        const rateLimitConfig = {
+          windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
+          maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
+        };
+        if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
+          logger.warn(
+            { ip: clientIp },
+            "[ChatOps] Rate limit exceeded for Slack interactive webhook",
+          );
+          throw new ApiError(429, "Too many requests");
+        }
+
+        // Socket mode guard
+        if (provider.isSocketMode()) {
+          throw new ApiError(
+            400,
+            "Slack is configured for Socket Mode. Webhooks are disabled.",
+          );
+        }
+
+        // Validate request signature using the captured raw body
+        const headers: Record<string, string | string[] | undefined> = {};
+        for (const [key, value] of Object.entries(request.headers)) {
+          headers[key] = value;
+        }
+        const rawBody = (request as unknown as { slackRawBody?: string })
+          .slackRawBody;
+        if (!rawBody) {
+          throw new ApiError(
+            400,
+            "Could not read request body for verification",
+          );
+        }
+        const isValid = await provider.validateWebhookRequest(rawBody, headers);
+        if (!isValid) {
+          logger.warn("[ChatOps] Invalid Slack interactive webhook signature");
+          throw new ApiError(400, "Invalid request signature");
+        }
+
+        // Slack sends interactive payloads as form-encoded with a "payload" field
+        const formBody = request.body as { payload?: string };
+        const payloadStr = formBody.payload;
+        if (!payloadStr) {
+          throw new ApiError(400, "Missing payload");
+        }
+
+        let payload: unknown;
+        try {
+          payload = JSON.parse(payloadStr);
+        } catch {
+          throw new ApiError(400, "Invalid payload JSON");
+        }
+
+        if (provider.handleInteractivePayload) {
+          await provider.handleInteractivePayload(payload);
+        } else {
+          await chatOpsManager.handleInteractiveSelection(provider, payload);
+        }
+        return reply.send({ ok: true });
+      },
+    );
+  }
+
+  /**
+   * Slack OAuth callback for an agent bot's app that Archestra created. Slack
+   * sends the admin's browser here after they approve the install; the page
+   * they land on says how it went.
+   */
+  fastify.get(
+    "/api/webhooks/chatops/slack/oauth/callback",
+    {
+      schema: {
+        description: "Slack OAuth callback for an agent bot install",
+        tags: ["ChatOps Webhooks"],
+        querystring: z.object({
+          code: z.string().optional(),
+          state: z.string().optional(),
+          error: z.string().optional(),
+        }),
       },
     },
     async (request, reply) => {
-      const provider = chatOpsManager.getSlackProvider();
-      if (!provider) {
-        throw new ApiError(400, "Slack chatops provider not configured");
-      }
-
-      // Rate limiting
-      const clientIp = request.ip || "unknown";
-      const rateLimitKey =
-        `${CacheKey.WebhookRateLimit}-chatops-slack-interactive-${clientIp}` as AllowedCacheKey;
-      const rateLimitConfig = {
-        windowMs: CHATOPS_RATE_LIMIT.WINDOW_MS,
-        maxRequests: CHATOPS_RATE_LIMIT.MAX_REQUESTS,
-      };
-      if (await isRateLimited(rateLimitKey, rateLimitConfig)) {
-        logger.warn(
-          { ip: clientIp },
-          "[ChatOps] Rate limit exceeded for Slack interactive webhook",
+      const settingsUrl = new URL(
+        "/settings/messaging-channels/slack",
+        config.frontendBaseUrl,
+      );
+      const { code, state, error } = request.query;
+      if (error || !code || !state) {
+        settingsUrl.searchParams.set(
+          "slackBotError",
+          error ?? "Slack did not finish the install",
         );
-        throw new ApiError(429, "Too many requests");
+        return reply.redirect(settingsUrl.toString());
       }
-
-      // Socket mode guard
-      if (provider.isSocketMode()) {
-        throw new ApiError(
-          400,
-          "Slack is configured for Socket Mode. Webhooks are disabled.",
-        );
-      }
-
-      // Validate request signature using the captured raw body
-      const headers: Record<string, string | string[] | undefined> = {};
-      for (const [key, value] of Object.entries(request.headers)) {
-        headers[key] = value;
-      }
-      const rawBody = (request as unknown as { slackRawBody?: string })
-        .slackRawBody;
-      if (!rawBody) {
-        throw new ApiError(400, "Could not read request body for verification");
-      }
-      const isValid = await provider.validateWebhookRequest(rawBody, headers);
-      if (!isValid) {
-        logger.warn("[ChatOps] Invalid Slack interactive webhook signature");
-        throw new ApiError(400, "Invalid request signature");
-      }
-
-      // Slack sends interactive payloads as form-encoded with a "payload" field
-      const formBody = request.body as { payload?: string };
-      const payloadStr = formBody.payload;
-      if (!payloadStr) {
-        throw new ApiError(400, "Missing payload");
-      }
-
-      let payload: unknown;
       try {
-        payload = JSON.parse(payloadStr);
-      } catch {
-        throw new ApiError(400, "Invalid payload JSON");
+        const { agentId } = await slackAppFactory.completeOAuthInstall({
+          code,
+          state,
+        });
+        await chatOpsManager.reinitialize();
+        settingsUrl.searchParams.set("slackBotInstalled", agentId);
+      } catch (installError) {
+        logger.warn(
+          { error: errorMessage(installError) },
+          "[ChatOps] Slack agent bot install failed",
+        );
+        settingsUrl.searchParams.set(
+          "slackBotError",
+          errorMessage(installError),
+        );
       }
-
-      if (provider.handleInteractivePayload) {
-        await provider.handleInteractivePayload(payload);
-      } else {
-        await chatOpsManager.handleInteractiveSelection(provider, payload);
-      }
-      return reply.send({ ok: true });
+      return reply.redirect(settingsUrl.toString());
     },
   );
 
@@ -1306,8 +1379,13 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // Drop the cached "answer all messages" flag so the message gate picks up
-      // the change without waiting for the short cache TTL to lapse.
-      if (request.body.answerAllMessages !== undefined) {
+      // the change without waiting for the short cache TTL to lapse. The agent
+      // matters too: a Slack bot pinned to an agent answers every message only
+      // in channels assigned to that agent.
+      if (
+        request.body.answerAllMessages !== undefined ||
+        request.body.agentId !== undefined
+      ) {
         await invalidateChannelAnswerAll({
           provider: updated.provider,
           channelId: updated.channelId,
@@ -1868,39 +1946,621 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         appLevelToken: appLevelToken ?? existing?.appLevelToken ?? "",
       };
 
-      // Validate bot token by calling auth.test()
-      if (merged.enabled && merged.botToken) {
-        try {
-          const client = new WebClient(merged.botToken);
-          await client.auth.test();
-        } catch {
-          throw new ApiError(
-            400,
-            "Invalid Slack credentials — could not authenticate with Slack. Please check your Bot Token.",
-          );
-        }
-      }
-
-      // Validate app-level token for socket mode by calling apps.connections.open()
-      if (
-        merged.enabled &&
-        merged.connectionMode === "socket" &&
-        merged.appLevelToken
-      ) {
-        try {
-          const client = new WebClient(merged.appLevelToken);
-          await client.apps.connections.open();
-        } catch {
-          throw new ApiError(
-            400,
-            "Invalid Slack App-Level Token — could not open a Socket Mode connection. Please check your App-Level Token.",
-          );
-        }
-      }
+      await validateSlackCredentials(merged);
 
       await ChatOpsConfigModel.saveSlackConfig(merged);
       await chatOpsManager.reinitialize();
 
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * List the Slack bots pinned to an agent. Secrets are never returned.
+   */
+  fastify.get(
+    "/api/chatops/config/slack/agents",
+    {
+      schema: {
+        operationId: RouteId.ListSlackAgentBots,
+        description:
+          "List the Slack bots that each answer as one agent, with their connection status",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({
+            bots: z.array(SlackAgentBotSummarySchema),
+            /** This user saved their configuration token, so Archestra can create apps for them. */
+            canCreateApps: z.boolean(),
+            /** The public URL is HTTPS, so a created app installs in one click. */
+            oneClickInstall: z.boolean(),
+            /** The Slack workspace the bots are in, once one has connected. */
+            workspaceName: z.string().nullable(),
+            /**
+             * A Slack app connected the old way — answering whichever agent a
+             * channel picks — waiting to become one agent's bot.
+             */
+            unassignedApp: z
+              .object({
+                appId: z.string(),
+                connectionMode: ChatOpsConnectionModeSchema,
+                /** Agents its channels and DMs use, most used first. */
+                agentUsage: z.array(
+                  z.object({
+                    agentId: z.string(),
+                    agentName: z.string(),
+                    bindings: z.number(),
+                  }),
+                ),
+              })
+              .nullable(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const bots = await ChatOpsConfigModel.getSlackAgentBots();
+      const main = await ChatOpsConfigModel.getSlackConfig();
+      const creatorNames = await UserModel.getNamesByIds([
+        ...new Set(bots.flatMap((bot) => bot.configTokenUserId ?? [])),
+      ]);
+      const summaries = await Promise.all(
+        bots.map(async (bot) => {
+          const agent = await AgentModel.findById(bot.agentId);
+          if (!agent || agent.organizationId !== request.organizationId) {
+            return null;
+          }
+          const provider = chatOpsManager.getSlackProvider(bot.agentId);
+          // Live, so a reinstall shows up when the page is reloaded.
+          await provider?.refreshGrantedScopes();
+          const missingScopes = provider?.getMissingScopes() ?? [];
+          // The reinstall below only grants scopes the app's manifest asks for.
+          if (missingScopes.length > 0) {
+            await slackAppFactory.ensureManifestScopes(bot);
+          }
+          return {
+            missingScopes,
+            handle: provider?.getBotHandle() ?? null,
+            reinstallUrl:
+              missingScopes.length > 0
+                ? (provider?.getReinstallUrl() ?? null)
+                : null,
+            agentId: bot.agentId,
+            agentName: agent.name,
+            enabled: bot.enabled,
+            connectionMode: (bot.connectionMode ??
+              SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
+            appId: bot.appId,
+            connected: Boolean(provider?.getBotUserId()),
+            botUserId: provider?.getBotUserId() ?? null,
+            teamId: provider?.getWorkspaceId() ?? null,
+            installed: Boolean(bot.botToken),
+            needsAppLevelToken:
+              bot.connectionMode === "socket" && !bot.appLevelToken,
+            createdByArchestra: Boolean(bot.managed || bot.clientId),
+            createdBy: bot.configTokenUserId
+              ? {
+                  id: bot.configTokenUserId,
+                  name: creatorNames.get(bot.configTokenUserId) ?? null,
+                }
+              : null,
+            /** Why Slack refused the last name or icon update. */
+            identitySyncError: bot.identitySyncError ?? null,
+          };
+        }),
+      );
+      return reply.send({
+        bots: summaries.filter((bot) => bot !== null),
+        canCreateApps: await slackAppFactory.hasConfigToken(request.user.id),
+        oneClickInstall: slackAppFactory.canInstallWithOAuth(),
+        workspaceName:
+          bots
+            .map((bot) =>
+              chatOpsManager.getSlackProvider(bot.agentId)?.getWorkspaceName(),
+            )
+            .find(Boolean) ??
+          chatOpsManager.getSlackProvider()?.getWorkspaceName() ??
+          null,
+        unassignedApp:
+          main?.enabled && main.botToken
+            ? {
+                appId: main.appId,
+                connectionMode: (main.connectionMode ??
+                  SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
+                agentUsage: await describeSlackAgentUsage(
+                  request.organizationId,
+                ),
+              }
+            : null,
+      });
+    },
+  );
+
+  /**
+   * Turn the Slack app connected the old way (answering whichever agent a
+   * channel picks) into one agent's bot, as if Archestra had created it for
+   * that agent. Its token and DMs carry over; with a configuration token saved
+   * its Slack settings are updated too.
+   */
+  fastify.post(
+    "/api/chatops/config/slack/convert-app",
+    {
+      schema: {
+        operationId: RouteId.ConvertSlackAppToAgentBot,
+        description:
+          "Turn the channel-routed Slack app into the Slack bot of one agent",
+        tags: ["ChatOps"],
+        body: z.object({ agentId: z.string().uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            /** Slack wants the app reinstalled to grant changed scopes. */
+            reinstallUrl: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { agentId } = request.body;
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
+      const agent = await AgentModel.findById(agentId);
+      if (
+        !agent ||
+        agent.organizationId !== request.organizationId ||
+        agent.agentType !== "agent"
+      ) {
+        throw new ApiError(404, "Agent not found");
+      }
+      const main = await ChatOpsConfigModel.getSlackConfig();
+      if (!main?.enabled || !main.botToken) {
+        throw new ApiError(400, "There is no Slack app to convert");
+      }
+      const existing = (await ChatOpsConfigModel.getSlackAgentBots()).find(
+        (bot) => bot.agentId === agentId,
+      );
+      if (existing) {
+        throw new ApiError(
+          400,
+          `${agent.name} already has a Slack bot. Remove it first, or pick another agent.`,
+        );
+      }
+
+      const connectionMode =
+        main.connectionMode ?? SLACK_DEFAULT_CONNECTION_MODE;
+      const canUpdateSlack = await slackAppFactory.hasConfigToken(
+        request.user.id,
+      );
+      // A webhook app keeps posting to the old URL until Slack is told about
+      // its new one, which takes the configuration token.
+      if (connectionMode === "webhook" && !canUpdateSlack) {
+        throw new ApiError(
+          400,
+          `Add your Slack app configuration token first, so ${archestraMcpBranding.appName} can point this webhook app at the agent.`,
+        );
+      }
+
+      let reinstallUrl: string | undefined;
+      if (canUpdateSlack && main.appId) {
+        try {
+          ({ reinstallUrl } = await slackAppFactory.retargetAppToAgent({
+            appId: main.appId,
+            agentId,
+            connectionMode,
+            userId: request.user.id,
+          }));
+        } catch (error) {
+          throw new ApiError(
+            400,
+            `Slack could not update the app: ${errorMessage(error)}`,
+          );
+        }
+      }
+
+      await ChatOpsConfigModel.saveSlackAgentBot({
+        ...main,
+        agentId,
+        connectionMode,
+        enabled: true,
+        managed: canUpdateSlack,
+        ...(canUpdateSlack && { configTokenUserId: request.user.id }),
+      });
+      await ChatOpsConfigModel.saveSlackConfig({
+        enabled: false,
+        botToken: "",
+        signingSecret: "",
+        appId: "",
+        connectionMode,
+        appLevelToken: "",
+      });
+      await chatOpsManager.reinitialize();
+      // Now the agent's: it takes the agent's icon (its name stays).
+      await slackAppFactory.syncAgentIdentity(agentId);
+      return reply.send({
+        success: true,
+        ...(reinstallUrl && { reinstallUrl }),
+      });
+    },
+  );
+
+  /**
+   * Connect (or update) the Slack bot pinned to an agent. Validates the
+   * credentials against Slack, saves them, and reconnects.
+   */
+  fastify.put(
+    "/api/chatops/config/slack/agents/:agentId",
+    {
+      schema: {
+        operationId: RouteId.UpdateSlackAgentBot,
+        description:
+          "Connect a Slack app whose bot always answers as this agent",
+        tags: ["ChatOps"],
+        params: z.object({ agentId: z.string().uuid() }),
+        body: z.object({
+          enabled: z.boolean().optional(),
+          botToken: z.string().max(512).optional(),
+          signingSecret: z.string().max(256).optional(),
+          appId: z.string().max(256).optional(),
+          connectionMode: ChatOpsConnectionModeSchema.optional(),
+          appLevelToken: z.string().max(512).optional(),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const { agentId } = request.params;
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
+      const agent = await AgentModel.findById(agentId);
+      if (
+        !agent ||
+        agent.organizationId !== request.organizationId ||
+        agent.agentType !== "agent"
+      ) {
+        throw new ApiError(404, "Agent not found");
+      }
+
+      const existing = (await ChatOpsConfigModel.getSlackAgentBots()).find(
+        (bot) => bot.agentId === agentId,
+      );
+      const body = request.body;
+      const merged = {
+        ...existing,
+        agentId,
+        enabled: body.enabled ?? true,
+        botToken: body.botToken ?? existing?.botToken ?? "",
+        signingSecret: body.signingSecret ?? existing?.signingSecret ?? "",
+        appId: body.appId ?? existing?.appId ?? "",
+        connectionMode:
+          body.connectionMode ??
+          existing?.connectionMode ??
+          SLACK_DEFAULT_CONNECTION_MODE,
+        appLevelToken: body.appLevelToken ?? existing?.appLevelToken ?? "",
+      };
+      await validateSlackCredentials(merged);
+
+      // One Slack app answers as one agent: the same app connected twice would
+      // answer every message twice.
+      const main = await ChatOpsConfigModel.getSlackConfig();
+      const others = (await ChatOpsConfigModel.getSlackAgentBots()).filter(
+        (bot) => bot.agentId !== agentId,
+      );
+      if (
+        merged.appId &&
+        [main?.appId, ...others.map((bot) => bot.appId)].includes(merged.appId)
+      ) {
+        throw new ApiError(
+          400,
+          "This Slack app is already connected. Create a separate Slack app for each agent.",
+        );
+      }
+
+      await ChatOpsConfigModel.saveSlackAgentBot(merged);
+      await chatOpsManager.reinitialize();
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * Save a Slack app configuration token, so Archestra can create the Slack
+   * app for an agent bot itself.
+   */
+  fastify.put(
+    "/api/chatops/config/slack/app-config-token",
+    {
+      schema: {
+        operationId: RouteId.UpdateSlackAppConfigToken,
+        description:
+          "Save your Slack app configuration token, used to create and update Slack apps for you",
+        tags: ["ChatOps"],
+        body: z.object({
+          accessToken: z.string().min(1).max(512),
+          refreshToken: z.string().min(1).max(512),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            success: z.boolean(),
+            /** Connected apps brought up to date with the token. */
+            migrated: z.array(SlackAppMigrationResultSchema),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
+      try {
+        await slackAppFactory.saveConfigToken({
+          ...request.body,
+          userId: request.user.id,
+        });
+      } catch (error) {
+        throw new ApiError(
+          400,
+          `Slack did not accept this configuration token: ${errorMessage(error)}`,
+        );
+      }
+      // Existing apps become managed like the ones Archestra creates.
+      const migrated = await slackAppFactory.migrateExistingApps(
+        request.user.id,
+      );
+      return reply.send({ success: true, migrated });
+    },
+  );
+
+  /**
+   * Bring every connected Slack app up to date again (for example after an
+   * install that needed approval, or a Slack error the first time).
+   */
+  fastify.post(
+    "/api/chatops/config/slack/apps/migrate",
+    {
+      schema: {
+        operationId: RouteId.MigrateSlackApps,
+        description:
+          "Update every connected Slack app to the current settings (agent experience, events, scopes)",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(
+          z.object({ migrated: z.array(SlackAppMigrationResultSchema) }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
+      try {
+        return reply.send({
+          migrated: await slackAppFactory.migrateExistingApps(request.user.id),
+        });
+      } catch (error) {
+        throw new ApiError(400, errorMessage(error));
+      }
+    },
+  );
+
+  /**
+   * Create the Slack app for an agent bot from its manifest. Returns the link
+   * the admin opens to install it.
+   */
+  fastify.post(
+    "/api/chatops/config/slack/agents/:agentId/app",
+    {
+      schema: {
+        operationId: RouteId.CreateSlackAgentBotApp,
+        description:
+          "Create a Slack app for this agent's bot and return its install link",
+        tags: ["ChatOps"],
+        params: z.object({ agentId: z.string().uuid() }),
+        body: z.object({
+          /** The bot's handle, what people type after @. */
+          appName: z
+            .string()
+            .regex(
+              SLACK_BOT_HANDLE_PATTERN,
+              "Use lowercase letters, digits, periods, hyphens, and underscores (at most 35)",
+            ),
+          connectionMode: ChatOpsConnectionModeSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            appId: z.string(),
+            installUrl: z.string(),
+            installMode: z.enum(["oauth", "manual"]),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { agentId } = request.params;
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
+      const agent = await AgentModel.findById(agentId);
+      if (
+        !agent ||
+        agent.organizationId !== request.organizationId ||
+        agent.agentType !== "agent"
+      ) {
+        throw new ApiError(404, "Agent not found");
+      }
+      try {
+        return reply.send(
+          await slackAppFactory.createAgentApp({
+            agentId,
+            appName: request.body.appName,
+            connectionMode: request.body.connectionMode,
+            organizationId: request.organizationId,
+            userId: request.user.id,
+          }),
+        );
+      } catch (error) {
+        throw new ApiError(
+          400,
+          `Slack could not create the app: ${errorMessage(error)}`,
+        );
+      }
+    },
+  );
+
+  /**
+   * Disconnect the Slack bot pinned to an agent.
+   */
+  fastify.delete(
+    "/api/chatops/config/slack/agents/:agentId",
+    {
+      schema: {
+        operationId: RouteId.DeleteSlackAgentBot,
+        description: "Disconnect the Slack bot pinned to this agent",
+        tags: ["ChatOps"],
+        params: z.object({ agentId: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const agent = await AgentModel.findById(request.params.agentId);
+      if (!agent || agent.organizationId !== request.organizationId) {
+        throw new ApiError(404, "Agent not found");
+      }
+      const bot = (await ChatOpsConfigModel.getSlackAgentBots()).find(
+        (candidate) => candidate.agentId === request.params.agentId,
+      );
+      if (!bot) {
+        throw new ApiError(404, "This agent has no Slack bot");
+      }
+      await ChatOpsConfigModel.deleteSlackAgentBot(request.params.agentId);
+      await chatOpsManager.reinitialize();
+      // An app Archestra created goes from Slack too, so it does not linger in
+      // the workspace's channels.
+      await slackAppFactory.deleteCreatedApp(bot);
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * The Slack channels an agent's bot is in, and the public ones it can join.
+   */
+  fastify.get(
+    "/api/chatops/config/slack/agents/:agentId/channels",
+    {
+      schema: {
+        operationId: RouteId.ListSlackAgentBotChannels,
+        description: "List the Slack channels an agent's bot is in or can join",
+        tags: ["ChatOps"],
+        params: z.object({ agentId: z.string().uuid() }),
+        response: constructResponseSchema(
+          z.object({
+            workspaceId: z.string().nullable(),
+            canJoin: z.boolean(),
+            channels: z.array(
+              z.object({
+                channelId: z.string(),
+                channelName: z.string().nullable(),
+                description: z.string().nullable(),
+                isPrivate: z.boolean(),
+                isMember: z.boolean(),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const provider = await requireAgentSlackBot({
+        agentId: request.params.agentId,
+        organizationId: request.organizationId,
+      });
+      let channels: Awaited<ReturnType<typeof provider.listJoinableChannels>>;
+      try {
+        channels = await provider.listJoinableChannels();
+      } catch (error) {
+        throw new ApiError(
+          502,
+          `Slack did not list the channels: ${errorMessage(error)}`,
+        );
+      }
+      return reply.send({
+        workspaceId: provider.getWorkspaceId(),
+        canJoin: !provider.getMissingScopes().includes("channels:join"),
+        channels: channels
+          // A private channel the bot was not invited to is not ours to show.
+          .filter((channel) => channel.isMember || !channel.isPrivate)
+          .sort((a, b) =>
+            (a.channelName ?? "").localeCompare(b.channelName ?? ""),
+          ),
+      });
+    },
+  );
+
+  /**
+   * Add an agent's bot to a public Slack channel. A channel no agent owns yet
+   * becomes this agent's, so its settings show on the agent's page.
+   */
+  fastify.post(
+    "/api/chatops/config/slack/agents/:agentId/channels/:channelId/join",
+    {
+      schema: {
+        operationId: RouteId.JoinSlackAgentBotChannel,
+        description: "Add an agent's Slack bot to a public channel",
+        tags: ["ChatOps"],
+        params: z.object({
+          agentId: z.string().uuid(),
+          channelId: z.string().regex(/^[A-Z0-9]+$/),
+        }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const { agentId, channelId } = request.params;
+      const provider = await requireAgentSlackBot({
+        agentId,
+        organizationId: request.organizationId,
+      });
+      let channelName: string | null;
+      try {
+        ({ channelName } = await provider.joinChannel(channelId));
+      } catch (error) {
+        const slackError = (error as { data?: { error?: string } }).data?.error;
+        throw new ApiError(
+          400,
+          slackError === "missing_scope"
+            ? "The bot needs Slack's permission to join channels. Reinstall it from the Slack settings, then try again."
+            : slackError === "method_not_supported_for_channel_type"
+              ? "A bot cannot join a private channel by itself. Invite it from the channel in Slack."
+              : `Slack did not add the bot to the channel: ${errorMessage(error)}`,
+        );
+      }
+      const workspaceId = provider.getWorkspaceId();
+      const binding = await ChatOpsChannelBindingModel.findByChannel({
+        provider: "slack",
+        channelId,
+        workspaceId,
+      });
+      if (!binding) {
+        await ChatOpsChannelBindingModel.upsertByChannel({
+          organizationId: request.organizationId,
+          provider: "slack",
+          channelId,
+          workspaceId,
+          workspaceName: provider.getWorkspaceName() ?? undefined,
+          channelName: channelName ?? undefined,
+          agentId,
+        });
+      } else if (!binding.agentId) {
+        await ChatOpsChannelBindingModel.update(binding.id, { agentId });
+        await invalidateChannelAnswerAll({
+          provider: "slack",
+          channelId,
+          workspaceId,
+        });
+      }
       return reply.send({ success: true });
     },
   );
@@ -2238,6 +2898,110 @@ async function getDefaultOrganizationId(): Promise<string> {
  * Reads credentials from DB (the single source of truth).
  * Uses exhaustive switch to force updates when new providers are added.
  */
+/**
+ * The Slack connection a webhook is for: the main app, or with an `agentId`
+ * path parameter the Slack bot pinned to that agent.
+ */
+function resolveSlackWebhookProvider(params: unknown) {
+  const agentId = (params as { agentId?: string } | undefined)?.agentId;
+  return chatOpsManager.getSlackProvider(agentId);
+}
+
+/**
+ * Check Slack credentials before saving them: the bot token with auth.test,
+ * and for Socket Mode the app-level token by opening a connection.
+ */
+async function validateSlackCredentials(config: {
+  enabled: boolean;
+  botToken: string;
+  connectionMode: ChatOpsConnectionMode;
+  appLevelToken: string;
+}): Promise<void> {
+  if (config.enabled && config.botToken) {
+    try {
+      const client = new WebClient(config.botToken);
+      await client.auth.test();
+    } catch {
+      throw new ApiError(
+        400,
+        "Invalid Slack credentials — could not authenticate with Slack. Please check your Bot Token.",
+      );
+    }
+  }
+
+  if (
+    config.enabled &&
+    config.connectionMode === "socket" &&
+    config.appLevelToken
+  ) {
+    try {
+      const client = new WebClient(config.appLevelToken);
+      await client.apps.connections.open();
+    } catch {
+      throw new ApiError(
+        400,
+        "Invalid Slack App-Level Token — could not open a Socket Mode connection. Please check your App-Level Token.",
+      );
+    }
+  }
+}
+
+/** Agents the Slack channels and DMs are assigned to, most used first. */
+async function describeSlackAgentUsage(organizationId: string) {
+  const usage = await ChatOpsChannelBindingModel.countByAgent({
+    organizationId,
+    provider: "slack",
+  });
+  const agents = await Promise.all(
+    usage.map(async ({ agentId, bindings }) => {
+      const agent = await AgentModel.findById(agentId);
+      return agent?.organizationId === organizationId
+        ? { agentId, agentName: agent.name, bindings }
+        : null;
+    }),
+  );
+  return agents.filter((agent) => agent !== null);
+}
+
+const SlackAppMigrationResultSchema = z.object({
+  appId: z.string(),
+  agentId: z.string().optional(),
+  ok: z.boolean(),
+  error: z.string().optional(),
+  reinstallUrl: z.string().optional(),
+});
+
+const SlackAgentBotSummarySchema = z.object({
+  identitySyncError: z.string().nullable(),
+  /** The bot's Slack username, what people type after @. */
+  handle: z.string().nullable(),
+  /** Required scopes the bot token lacks; a reinstall grants them. */
+  missingScopes: z.array(z.string()),
+  /** The app's OAuth page, set when it needs a reinstall. */
+  reinstallUrl: z.string().nullable(),
+  /** Installed to the workspace (it has a bot token). */
+  installed: z.boolean(),
+  /** Socket Mode without the app-level token Slack has no API to create. */
+  needsAppLevelToken: z.boolean(),
+  createdByArchestra: z.boolean(),
+  /**
+   * Whose Slack token created the app. Slack makes them its only collaborator
+   * until they add others on the app's Slack page.
+   */
+  createdBy: z
+    .object({ id: z.string(), name: z.string().nullable() })
+    .nullable(),
+  agentId: z.string(),
+  agentName: z.string(),
+  enabled: z.boolean(),
+  connectionMode: ChatOpsConnectionModeSchema,
+  appId: z.string(),
+  /** Whether the bot authenticated with Slack on this server. */
+  connected: z.boolean(),
+  botUserId: z.string().nullable(),
+  teamId: z.string().nullable(),
+});
+
 async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
   id: ChatOpsProviderType;
   displayName: string;
@@ -2290,7 +3054,13 @@ async function getProviderInfo(providerType: ChatOpsProviderType): Promise<{
       return {
         id: "slack",
         displayName: "Slack",
-        configured: provider?.isConfigured() ?? false,
+        configured:
+          (provider?.isConfigured() ?? false) ||
+          (await ChatOpsConfigModel.getSlackAgentBots()).some(
+            (bot) =>
+              chatOpsManager.getSlackProvider(bot.agentId)?.isConfigured() ??
+              false,
+          ),
         credentials,
         dmInfo:
           provider?.getBotUserId() || provider?.getWorkspaceId()
@@ -2933,3 +3703,19 @@ const TEAMS_AAD_GROUP_ID_TTL_MS = TimeInMs.Day;
  * Bot Framework round trip and how long it keeps using the fallback id.
  */
 const TEAMS_AAD_GROUP_ID_RETRY_TTL_MS = 5 * TimeInMs.Minute;
+
+/** The connected Slack bot pinned to an agent of this organization. */
+async function requireAgentSlackBot(params: {
+  agentId: string;
+  organizationId: string;
+}) {
+  const agent = await AgentModel.findById(params.agentId);
+  if (!agent || agent.organizationId !== params.organizationId) {
+    throw new ApiError(404, "Agent not found");
+  }
+  const provider = chatOpsManager.getSlackProvider(params.agentId);
+  if (!provider) {
+    throw new ApiError(404, "This agent has no connected Slack bot");
+  }
+  return provider;
+}

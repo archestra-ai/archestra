@@ -87,12 +87,6 @@ describe("Tool copy actions", () => {
       <ToolOutput
         output={{
           content: "ARCH_TEST = asdfasdfadsf",
-          unsafeContextBoundary: {
-            kind: "tool_result",
-            reason: "tool_result_marked_untrusted",
-            toolCallId: "call-1",
-            toolName: "test_tool",
-          },
           rawContent: [{ type: "text", text: "ARCH_TEST = asdfasdfadsf" }],
           _meta: {
             ignored: true,

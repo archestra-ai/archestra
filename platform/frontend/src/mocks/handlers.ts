@@ -8,7 +8,12 @@ import {
   clientFilterToAgentIds,
 } from "@archestra/shared/interactions/client";
 import { type HttpHandler, HttpResponse, http, type JsonBodyType } from "msw";
-import { agentsSeed, makeAgent, makeAgentCatalog } from "./data/agents";
+import {
+  agentsSeed,
+  builtInAgentsSeed,
+  makeAgent,
+  makeAgentCatalog,
+} from "./data/agents";
 import {
   adminPermissionsSeed,
   adminScopedCapabilitiesSeed,
@@ -227,6 +232,11 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/auth/organization/get-active-member-role", {
     role: sessionSeed.user.role,
   }),
+  // Unavailable by default, so the shell falls back to the individual reads
+  // below and per-test overrides of those endpoints keep taking effect.
+  ...paths("/api/bootstrap").map((url) =>
+    http.get(url, () => HttpResponse.json(null, { status: 401 })),
+  ),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
   // An object's own permissions: none beyond the admin's, who may edit them.
@@ -237,6 +247,7 @@ export const handlers: HttpHandler[] = [
         scope: params.scope,
         name: "",
         revision: 0,
+        actorSubjects: [],
         grants: [],
         inheritedGrants: [],
         effectiveActions: [
@@ -333,6 +344,15 @@ export const handlers: HttpHandler[] = [
   // editor still renders its provider setup links and an empty assignment
   // table.
   ...getJson("/api/chatops/status", { providers: [] }),
+  // The record's Slack bot section: no bots, Slack not connected. The agent
+  // edit page mounts it on every step, so it is read whichever step opens.
+  ...getJson("/api/chatops/config/slack/agents", {
+    bots: [],
+    canCreateApps: false,
+    oneClickInstall: false,
+    unassignedApp: null,
+    workspaceName: null,
+  }),
   ...getJson("/api/chatops/bindings", {
     data: [],
     pagination: {
@@ -371,6 +391,16 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
   ...getJson("/api/k8s/capabilities", {
+    agentSandbox: {
+      installed: false,
+      missingResources: [
+        "sandboxes.agents.x-k8s.io",
+        "sandboxclaims.extensions.agents.x-k8s.io",
+        "sandboxtemplates.extensions.agents.x-k8s.io",
+        "sandboxwarmpools.extensions.agents.x-k8s.io",
+      ],
+      message: "The Agent Sandbox controller is not installed.",
+    },
     networkPolicy: {
       kubernetesNetworkPolicy: true,
       ciliumNetworkPolicy: false,
@@ -398,7 +428,23 @@ export const handlers: HttpHandler[] = [
 
   // Agents
   ...getJson("/api/agents", agentsSeed),
-  ...getJson("/api/agent-catalog", makeAgentCatalog()),
+  ...paths("/api/agent-catalog").map((url) =>
+    http.get(url, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const includeBuiltIn =
+        params.get("includeBuiltIn") === "true" ||
+        params.get("scope") === "built_in";
+      const agents =
+        includeBuiltIn && params.get("pinned") !== "true"
+          ? builtInAgentsSeed.filter((agent) =>
+              agent.name
+                .toLowerCase()
+                .includes((params.get("name") ?? "").toLowerCase()),
+            )
+          : [];
+      return HttpResponse.json(makeAgentCatalog({ agents }));
+    }),
+  ),
   ...getJson("/api/agents/all", []),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
@@ -541,6 +587,11 @@ export const handlers: HttpHandler[] = [
   ),
 
   // LLM proxy logs (/llm/logs list, session detail, interaction detail).
+  ...getJson("/api/interactions/sessions/:sessionId/lineage", {
+    forkedFrom: null,
+    forks: [],
+    forksTruncated: false,
+  }),
   // The sessions handler is query-aware: it filters the seed by the params the
   // frontend actually sends (sessionId / client / source), so the Client/Source
   // filter specs genuinely exercise the request wiring rather than asserting

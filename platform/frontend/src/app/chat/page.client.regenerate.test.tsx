@@ -42,6 +42,7 @@ vi.mock("@/lib/clients/auth/auth-client");
 // The streaming chat session is the transport boundary.
 vi.mock("@/lib/chat/global-chat.context", () => ({
   useChatSession: vi.fn(),
+  useChatSessionSnapshot: () => null,
   useGlobalChat: vi.fn(),
 }));
 // Capture what the page hands the thread so the test can click regenerate.
@@ -165,7 +166,6 @@ beforeEach(() => {
   } as Awaited<ReturnType<typeof authClient.getSession>>);
   vi.mocked(useGlobalChat).mockReturnValue({
     animatingTitleIds: new Set<string>(),
-    getSession: () => null,
   } as unknown as ReturnType<typeof useGlobalChat>);
   // A session whose last turn failed: the SDK sits in "error" with the user
   // message still under its client id. Its regenerate resolves that id

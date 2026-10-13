@@ -35,6 +35,7 @@ import {
   extractCommonToolCallArguments,
 } from "@/types";
 import { isAnthropicBillingBlock } from "@/utils/anthropic-billing-error";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   hasImageContent,
   isImageTooLarge,
@@ -135,6 +136,7 @@ class AnthropicRequestAdapter
               name: toolUse?.name ?? "unknown",
               arguments: toolUse?.arguments,
               content,
+              structured: typeof contentBlock.content !== "string",
               isError: contentBlock.is_error ?? false,
             });
           }
@@ -337,6 +339,7 @@ class AnthropicRequestAdapter
                 name: toolUse.name,
                 arguments: toolUse.arguments,
                 content: toolResult,
+                structured: typeof contentBlock.content !== "string",
                 isError: contentBlock.is_error ?? false,
               });
             }
@@ -389,6 +392,19 @@ class AnthropicRequestAdapter
             contentBlock.type === "tool_result" &&
             Object.hasOwn(updates, contentBlock.tool_use_id)
           ) {
+            // OpenAPPA reads the result as the JSON text of its blocks. When
+            // the approved output is those blocks as sent, the blocks stay:
+            // an image must reach the provider as an image, and a tool search
+            // answers with `tool_reference` blocks the provider reads to load
+            // the referenced tools. A changed output replaces them with its text.
+            if (
+              isApprovedAsSent({
+                sent: contentBlock.content,
+                approved: updates[contentBlock.tool_use_id],
+              })
+            ) {
+              return contentBlock;
+            }
             appliedCount++;
             logger.debug(
               { toolUseId: contentBlock.tool_use_id },
@@ -633,8 +649,8 @@ class AnthropicStreamAdapter
 {
   readonly provider = "anthropic" as const;
   readonly state: StreamAccumulatorState;
-  private toolUseBlockIndices = new Set<number>();
-  private currentToolCallIndex = -1;
+  /** Upstream content-block index → position in `state.toolCalls`. */
+  private toolCallByBlockIndex = new Map<number, number>();
   // Upstream content-block index -> the index the client is given, assigned in
   // the order blocks are actually emitted. Withholding a tool block, or holding
   // it back and releasing it after later text, would otherwise leave the client
@@ -828,8 +844,10 @@ class AnthropicStreamAdapter
               })}\n\n`;
             }
           }
-          this.toolUseBlockIndices.add(chunk.index);
-          this.currentToolCallIndex = this.state.toolCalls.length;
+          this.toolCallByBlockIndex.set(
+            chunk.index,
+            this.state.toolCalls.length,
+          );
           this.state.toolCalls.push({
             id: chunk.content_block.id,
             name: chunk.content_block.name,
@@ -857,10 +875,11 @@ class AnthropicStreamAdapter
       case "content_block_delta":
         if (
           chunk.delta.type === "input_json_delta" &&
-          this.toolUseBlockIndices.has(chunk.index)
+          this.toolCallByBlockIndex.has(chunk.index)
         ) {
-          if (this.currentToolCallIndex >= 0) {
-            this.state.toolCalls[this.currentToolCallIndex].arguments +=
+          const position = this.toolCallByBlockIndex.get(chunk.index);
+          if (position !== undefined) {
+            this.state.toolCalls[position].arguments +=
               chunk.delta.partial_json;
           }
           // Store raw event for replay after policy approval
@@ -868,7 +887,7 @@ class AnthropicStreamAdapter
           isToolCallChunk = true;
         } else {
           // input_json_delta outside a tool_use block belongs to a
-          // server-side tool and is not subject to invocation policies.
+          // server-side tool and is not subject to tool-call rulings.
           let prefixSse = "";
           if (chunk.delta.type === "text_delta") {
             this.state.text += chunk.delta.text;
@@ -900,7 +919,7 @@ class AnthropicStreamAdapter
         break;
 
       case "content_block_stop":
-        if (!this.toolUseBlockIndices.has(chunk.index)) {
+        if (!this.toolCallByBlockIndex.has(chunk.index)) {
           const event = `event: content_block_stop\ndata: ${JSON.stringify(
             this.withOutIndex(chunk),
           )}\n\n`;
@@ -908,7 +927,9 @@ class AnthropicStreamAdapter
         } else {
           // A tool called with no input streams no `partial_json`; its input
           // is `{}`, not the empty string policy evaluation would reject.
-          const call = this.state.toolCalls[this.currentToolCallIndex];
+          const position = this.toolCallByBlockIndex.get(chunk.index);
+          const call =
+            position === undefined ? undefined : this.state.toolCalls[position];
           if (call?.arguments === "") call.arguments = "{}";
           // Store raw event for replay after policy approval
           this.state.rawToolCallEvents.push(chunk);
@@ -1086,8 +1107,7 @@ class AnthropicStreamAdapter
     this.state.rawToolCallEvents = [];
     this.state.stopReason = "end_turn";
     this.toolCallsReleased = false;
-    this.toolUseBlockIndices.clear();
-    this.currentToolCallIndex = 0;
+    this.toolCallByBlockIndex.clear();
     // Upstream data about the replaced turn (verdicts on its tool calls) does
     // not describe what the client receives.
     this.upstreamMessageDelta = null;

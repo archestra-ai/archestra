@@ -103,7 +103,7 @@ export default function NewValidationPage() {
   }
   return (
     <div className="space-y-4">
-      <PageBackLink href={listHref} onNavigate={cancel}>
+      <PageBackLink href={listHref} onNavigate={cancel} labelled>
         <span>Back to validation</span>
       </PageBackLink>
       <ValidationNotices sourceChanged={sourceChanged} />

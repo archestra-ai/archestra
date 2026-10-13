@@ -13,11 +13,8 @@ import {
   requireGrantPermission,
 } from "@/services/guardrails-policy";
 import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
+import { resolveOpenAppaGithubAccess } from "@/services/openappa-github-access";
 import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
-import {
-  resolveGithubAppInstallationToken,
-  resolveGithubPatToken,
-} from "@/skills/github-app-token";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicyProposal } from "@/types/guardrails-policy-proposal";
 import {
@@ -124,8 +121,8 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
   });
   if (!validation.valid) throw new ApiError(400, validation.errors.join("\n"));
 
-  const token = await resolveWriteToken(source);
-  const base = `/repos/${source.repo}`;
+  const { token, api, web } = await resolveWriteToken(source);
+  const base = `${api}/repos/${source.repo}`;
   const branch =
     source.ref ??
     (
@@ -261,7 +258,12 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       base: branch,
     },
   });
-  const url = checkedPullUrl(pull.html_url, source.repo, pull.number);
+  const url = checkedPullUrl({
+    url: pull.html_url,
+    web,
+    repo: source.repo,
+    number: pull.number,
+  });
   return {
     delivery: "pull_request" as const,
     number: pull.number,
@@ -295,7 +297,7 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     ))
   )
     throw new ApiError(403, "GitHub credential read permission is required");
-  const token = await resolveWriteToken(source);
+  const { token, api, web } = await resolveWriteToken(source);
   const pull = await githubJson<{
     number: number;
     html_url: string;
@@ -304,14 +306,19 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     mergeable: boolean | null;
     head: { ref: string };
   }>({
-    path: `/repos/${source.repo}/pulls/${params.number}`,
+    path: `${api}/repos/${source.repo}/pulls/${params.number}`,
     token,
   });
   if (!pull.head?.ref?.startsWith("archestra/openappa-"))
     throw new ApiError(404, "OpenAPPA policy pull request not found");
   return {
     number: pull.number,
-    url: checkedPullUrl(pull.html_url, source.repo, pull.number),
+    url: checkedPullUrl({
+      url: pull.html_url,
+      web,
+      repo: source.repo,
+      number: pull.number,
+    }),
     state: pull.merged ? "merged" : pull.state,
     mergeable: pull.mergeable,
     sync: {
@@ -379,6 +386,7 @@ export async function credentialLineWarnings(
 }
 
 async function githubJson<T = unknown>(params: {
+  /** Full API URL; the base comes from the source's credential. */
   path: string;
   token: string;
   method?: "GET" | "POST" | "PUT";
@@ -386,7 +394,7 @@ async function githubJson<T = unknown>(params: {
 }): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`https://api.github.com${params.path}`, {
+    response = await fetch(params.path, {
       method: params.method ?? "GET",
       headers: {
         Accept: "application/vnd.github+json",
@@ -414,8 +422,14 @@ async function githubJson<T = unknown>(params: {
   }
 }
 
-function checkedPullUrl(url: string, repo: string, number: number) {
-  const expected = `https://github.com/${repo}/pull/${number}`;
+function checkedPullUrl(params: {
+  url: string;
+  web: string;
+  repo: string;
+  number: number;
+}) {
+  const { url, number } = params;
+  const expected = `${params.web}/${params.repo}/pull/${number}`;
   if (url !== expected || !Number.isSafeInteger(number) || number < 1)
     throw new ApiError(502, "GitHub returned an invalid pull request");
   return url;
@@ -458,17 +472,10 @@ async function resolveWriteToken(source: {
   githubPatId: string | null;
   githubAppConfigId: string | null;
 }) {
-  if (source.githubPatId)
-    return resolveGithubPatToken({
-      organizationId: source.organizationId,
-      githubPatId: source.githubPatId,
-    });
-  if (source.githubAppConfigId)
-    return resolveGithubAppInstallationToken({
-      organizationId: source.organizationId,
-      githubAppConfigId: source.githubAppConfigId,
-    });
-  throw new ApiError(409, "A GitHub write credential is required");
+  if (!source.githubPatId && !source.githubAppConfigId)
+    throw new ApiError(409, "A GitHub write credential is required");
+  const access = await resolveOpenAppaGithubAccess(source);
+  return { ...access, token: access.token as string };
 }
 
 async function assertValidationSource(params: ChangeRequest) {

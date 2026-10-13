@@ -36,6 +36,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   type ElicitRequest,
+  type ElicitResult,
   ElicitResultSchema,
   ErrorCode,
   ListPromptsRequestSchema,
@@ -73,8 +74,6 @@ import {
 import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
-import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
-import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import logger from "@/logging";
 import {
   AgentModel,
@@ -98,6 +97,7 @@ import {
 } from "@/observability/tracing";
 import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
 import { sanitizeGeminiToolSchema } from "@/routes/proxy/adapters/gemini-schema";
+import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
 import {
   agentToolExclusionsService,
@@ -110,7 +110,6 @@ import {
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
-import { resolveConnectionSetupScope } from "@/services/connection-setup-scope";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
@@ -163,6 +162,7 @@ import {
   runToolCallMaybeTask,
   TASK_TTL_MS,
 } from "./tasks";
+import { refuseUndeclaredMcpToolCall } from "./undeclared-tool-call";
 
 export { deriveAuthMethod };
 
@@ -301,6 +301,26 @@ const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 ]);
 
+/**
+ * `_meta` key a client that defers tools to a tool search (Claude Code) reads
+ * to declare a tool inline instead of behind the search.
+ */
+const ANTHROPIC_ALWAYS_LOAD_META_KEY = "anthropic/alwaysLoad";
+
+/**
+ * OpenAPPA's session tools: the notice and control tools of a remedy, ask_user
+ * for a remedy that needs a person, the peer inbox, and yell. A tool the
+ * request does not declare is one the proxy cannot verify, and a session must
+ * not have to search for the tools that explain a block, so these are declared
+ * from the first request. The policy tools stay behind the search: only a
+ * session that configures the policy uses them.
+ */
+const ALWAYS_LOADED_SHORT_NAMES: ReadonlySet<string> = new Set([
+  ...APPA_IMPLICIT_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
+  "yell",
+]);
+
 /** Build the exact caller-scoped gateway tools/list surface without logging a request. */
 export async function buildAgentMcpToolList(params: {
   agent: GatewayAgent;
@@ -423,7 +443,7 @@ export async function buildAgentMcpToolList(params: {
   // start work. Advertise lifecycle controls for runtime handoffs and dynamic
   // delegation; handlers still enforce actor ownership and RBAC.
   const implicitTaskControlTools =
-    config.agentRuntime.enabled || hasTaskStarter
+    isAnyAgentRuntimeBackendDriverEnabled() || hasTaskStarter
       ? getImplicitTaskControlTools()
       : [];
   // A thrown switch read must fail the list, not look like the switch is off.
@@ -619,7 +639,11 @@ export async function buildAgentMcpToolList(params: {
                 undefined),
       inputSchema: parameters,
       annotations: meta?.annotations || {},
-      _meta: meta?._meta || {},
+      _meta: ALWAYS_LOADED_SHORT_NAMES.has(
+        archestraMcpBranding.getToolShortName(name) ?? "",
+      )
+        ? { ...meta?._meta, [ANTHROPIC_ALWAYS_LOAD_META_KEY]: true }
+        : meta?._meta || {},
     }));
   // Names are unique after dedupe, so the name keys each tool's provenance.
   const builtInToolNames = new Set(
@@ -670,8 +694,6 @@ export async function buildAgentMcpToolList(params: {
  */
 export async function createAgentServer(params: {
   openappaSession?: import("@/openappa/service").OpenAppaSession;
-  /** Short-lived proof minted only by an approved /connection installer. */
-  connectionSetupContext?: string;
   /** External JSON-RPC execution identity, scoped by native remedy receipts. */
   currentToolCallId?: string;
   agentId: string;
@@ -726,24 +748,6 @@ export async function createAgentServer(params: {
     ? await params.lookups.gatewayAgent(agentId)
     : await AgentModel.findGatewayAgentById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
-  const setupScope = params.connectionSetupContext
-    ? await resolveConnectionSetupScope({
-        principal: {
-          userId: tokenAuth?.userId,
-          organizationId: tokenAuth?.organizationId,
-          targetOrganizationId: agent.organizationId,
-          guardrailsActive:
-            !!tokenAuth?.userId && (await isGuardrailsV2Active()),
-        },
-        evidence: {
-          kind: "approved-installer",
-          token: params.connectionSetupContext,
-          gatewayId: agent.id,
-          signingSecret: config.openappa.offerSigningSecret,
-        },
-      })
-    : null;
-  const connectionSetupBypass = setupScope !== null;
 
   // Fetch the agent's teams and the calling user's teams (with labels) for
   // trace span team attributes.
@@ -949,7 +953,6 @@ export async function createAgentServer(params: {
         const isArchestraTool = archestraMcpBranding.isToolName(name);
         const isAgentDelegationTool = isAgentTool(name);
         const isSkillDelegationTool = isSkillTool(name);
-        const contextIsTrusted = !agent.considerContextUntrusted;
 
         // An all-tools agent's dynamically-accessible tools are not advertised
         // by tools/list (see the surface policy above), but a caller that knows
@@ -957,17 +960,16 @@ export async function createAgentServer(params: {
         // may still call one directly rather than through run_tool. Two
         // gates on this path only know assigned tools and must be told about
         // the dynamic resolution, exactly as run_tool's own dispatch does
-        // (archestra-mcp-server/run-tool.ts): the invocation-policy evaluator
-        // (whose enabled-tools filter otherwise refuses the unassigned name as
-        // "disabled"), and executeToolCallForOwner (which only accepts an
-        // unassigned tool via a pre-resolved availableTool). A no-op for
-        // assigned tools; policies still evaluate the dynamic tool itself.
+        // (archestra-mcp-server/run-tool.ts): the undeclared-tool refusal
+        // (which otherwise refuses the unassigned name as "disabled"), and
+        // executeToolCallForOwner (which only accepts an unassigned tool via a
+        // pre-resolved availableTool). A no-op for assigned tools.
         //
         // Fetch the agent's assigned names once (all-tools agents only): they
         // gate the dynamic lookup — an already-assigned name is reachable
         // without it, so skip the heavier resolveDynamicTool — and feed the
-        // invocation-policy enabled-tools filter below, so neither path
-        // re-queries assignments.
+        // undeclared-tool refusal below, so neither path re-queries
+        // assignments.
         const assignedToolNames =
           !isArchestraTool &&
           !isAgentDelegationTool &&
@@ -992,7 +994,7 @@ export async function createAgentServer(params: {
         // Direct-call availability stays limited to the UI-providing subset.
         // Accepting those is not a widening — Auto mode already grants the
         // caller dynamic access and run_tool would dispatch the same tool under
-        // the same policies — and it keeps an MCP Apps host working when it
+        // the same guardrails — and it keeps an MCP Apps host working when it
         // calls a launch tool by a name it already holds. A non-UI dynamic tool
         // stays behind search_tools/run_tool: resolving it here would silently
         // make every hidden tool name directly executable.
@@ -1001,41 +1003,25 @@ export async function createAgentServer(params: {
             ? dynamicTool
             : undefined;
 
-        const policyBlock = connectionSetupBypass
-          ? null
-          : await evaluateSingleMcpToolInvocationPolicy({
-              agentId: agent.id,
-              toolName: name,
-              toolInput: args ?? {},
-              organizationId: tokenAuth?.organizationId,
-              contextIsTrusted,
-              // The only way this path starts untrusted is the agent's own
-              // "treat context as sensitive" setting, so name that origin in
-              // any sensitive-context block.
-              sensitiveContextOrigin: contextIsTrusted
-                ? undefined
-                : { kind: "agent_configured" },
-              ...(availableTool &&
-                assignedToolNames && {
-                  enabledToolNames: new Set([...assignedToolNames, name]),
-                }),
-              // The dynamically-resolved All-mode row that will execute: evaluate the
-              // policy against it and ride its id along on a block so the "Edit
-              // policy" modal can resolve a tool with no agent_tools assignment.
-              resolvedToolId: availableTool?.id,
-            });
-        if (policyBlock) {
-          // Carry the machine-readable policy_denied error alongside the prose
-          // (in _meta + structuredContent) so MCP clients render the block
-          // structurally instead of scraping the refusal text. When the caller
-          // can edit guardrails, both gain a deep link to this tool's policy
-          // editor so the external client can offer to review/modify it.
-          const { error, text } = await buildPolicyBlockedToolResult({
-            policyBlock,
-            userId: tokenAuth?.userId,
-            organizationId: tokenAuth?.organizationId,
+        // Tool assignment applies to every caller, including a verified
+        // connection-setup session.
+        const undeclaredRefusal = await refuseUndeclaredMcpToolCall({
+          agentId: agent.id,
+          toolName: name,
+          ...(assignedToolNames && {
+            enabledToolNames: availableTool
+              ? new Set([...assignedToolNames, name])
+              : assignedToolNames,
+          }),
+        });
+        if (undeclaredRefusal) {
+          // Carry the machine-readable tool_state error alongside the prose
+          // (in _meta + structuredContent) so MCP clients render the refusal
+          // structurally instead of scraping the text.
+          const blockedResult = structuredToolErrorResult({
+            error: undeclaredRefusal.error,
+            text: undeclaredRefusal.message,
           });
-          const blockedResult = structuredToolErrorResult({ error, text });
 
           // Blocked calls are still tool calls: report metrics and persist them
           // (isError) so they show up in the MCP gateway logs and dashboards
@@ -1110,14 +1096,12 @@ export async function createAgentServer(params: {
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 openappaSession: params.openappaSession,
-                connectionSetupBypass,
                 currentToolCallId: params.currentToolCallId,
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
                 userId: tokenAuth?.userId,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
-                contextIsTrusted,
                 mrtr: {
                   enabled: mrtrEnabled,
                   inputResponses: mrtr?.inputResponses,
@@ -2613,10 +2597,10 @@ function createGatewayUserElicit(params: {
   return async ({ message, requestedSchema }) => {
     const supplied = mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
     if (supplied !== undefined) {
-      return {
-        status: "answered",
+      return formAnswer({
         result: ElicitResultSchema.parse(supplied),
-      };
+        requestMeta,
+      });
     }
 
     const request = {
@@ -2657,14 +2641,14 @@ function createGatewayUserElicit(params: {
     // client renders its native form.
     if (canElicit) {
       try {
-        return {
-          status: "answered",
+        return formAnswer({
           result: ElicitResultSchema.parse(
             await extra.sendRequest(request, ElicitResultSchema, {
               timeout: ELICITATION_ANSWER_TIMEOUT_MS,
             }),
           ),
-        };
+          requestMeta,
+        });
       } catch (error) {
         // The client showed the form; the person just never answered it.
         if (
@@ -2687,6 +2671,44 @@ function createGatewayUserElicit(params: {
 
     return { status: "no_viewer" };
   };
+}
+
+/**
+ * A form answer no person gave is no answer. Codex declares forms but declines
+ * each one itself when no person drives the turn (`codex exec`) and under its
+ * automatic reviewer. Read as a refusal, that decline would record a denial
+ * nobody made.
+ */
+function formAnswer(params: {
+  result: ElicitResult;
+  requestMeta: Record<string, unknown> | undefined;
+}): ArchestraElicitationOutcome {
+  const { result, requestMeta } = params;
+  if (
+    result.action === "decline" &&
+    (result._meta?.approvals_reviewer === "auto_review" ||
+      codexTurnTrigger(requestMeta) === "exec")
+  ) {
+    return { status: "no_viewer" };
+  }
+  return { status: "answered", result };
+}
+
+/** What started the Codex turn this tool call belongs to, if Codex said. */
+function codexTurnTrigger(
+  requestMeta: Record<string, unknown> | undefined,
+): unknown {
+  let turn = requestMeta?.["x-codex-turn-metadata"];
+  if (typeof turn === "string") {
+    try {
+      turn = JSON.parse(turn);
+    } catch {
+      return undefined;
+    }
+  }
+  return turn && typeof turn === "object"
+    ? (turn as Record<string, unknown>).turn_trigger
+    : undefined;
 }
 
 // First occurrence wins: callers (getMcpToolsByAgent) order candidates with

@@ -24,8 +24,6 @@ import PluginModel from "@/models/plugin";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
-import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
-import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
 import { parseSkillManifest, SkillParseError } from "@/skills/parser";
@@ -535,52 +533,6 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     action: "plugin.deleted",
     idFromArgs: (a) => str(a.id),
     fetchById: (id, orgId) => PluginModel.findByIdForAudit(id, orgId),
-  },
-
-  // Autonomy policies.
-  create_tool_invocation_policy: {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.created",
-    idFromResult: (s) =>
-      str((s?.policy as Record<string, unknown> | undefined)?.id),
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  update_tool_invocation_policy: {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.updated",
-    idFromArgs: (a) => str(a.id),
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  delete_tool_invocation_policy: {
-    resourceType: "toolInvocationPolicy",
-    action: "toolInvocationPolicy.deleted",
-    idFromArgs: (a) => str(a.id),
-    fetchById: (id, orgId) =>
-      ToolInvocationPolicyModel.findByIdForAudit(id, orgId),
-  },
-  create_trusted_data_policy: {
-    resourceType: "trustedDataPolicy",
-    action: "trustedDataPolicy.created",
-    idFromResult: (s) =>
-      str((s?.policy as Record<string, unknown> | undefined)?.id),
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-  update_trusted_data_policy: {
-    resourceType: "trustedDataPolicy",
-    action: "trustedDataPolicy.updated",
-    idFromArgs: (a) => str(a.id),
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
-  },
-  delete_trusted_data_policy: {
-    resourceType: "trustedDataPolicy",
-    action: "trustedDataPolicy.deleted",
-    idFromArgs: (a) => str(a.id),
-    fetchById: (id, orgId) =>
-      TrustedDataPolicyModel.findByIdForAudit(id, orgId),
   },
 
   // Limits.

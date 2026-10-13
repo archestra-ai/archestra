@@ -3,11 +3,10 @@ import {
   redactCatalogToolArguments,
   TOOL_TRANSFER_CREDENTIAL_FULL_NAME,
 } from "@archestra/shared";
-import config from "@/config";
 import { AgentModel } from "@/models";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
-import { afterEach, beforeEach, expect, test } from "@/test";
+import { beforeEach, expect, test } from "@/test";
 import type { Agent, AgentRuntime } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 
@@ -16,7 +15,6 @@ const SECRET_VALUE = "sk-transfer-PLAINTEXT-must-not-escape";
 let organizationId: string;
 let actorId: string;
 let context: ArchestraContext;
-let originalRuntimeEnabled: boolean;
 
 function runtimeConfig(overrides: Partial<AgentRuntime> = {}): AgentRuntime {
   return {
@@ -47,8 +45,6 @@ beforeEach(
     makeUser,
     seedAndAssignArchestraTools,
   }) => {
-    originalRuntimeEnabled = config.agentRuntime.enabled;
-    config.agentRuntime.enabled = true;
     const organization = await makeOrganization();
     organizationId = organization.id;
     const actor = await makeUser();
@@ -64,10 +60,6 @@ beforeEach(
     };
   },
 );
-
-afterEach(() => {
-  config.agentRuntime.enabled = originalRuntimeEnabled;
-});
 
 async function makeRuntimeAgent(
   makeAgent: (overrides: Record<string, unknown>) => Promise<Agent>,

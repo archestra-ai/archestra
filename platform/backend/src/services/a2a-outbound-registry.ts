@@ -129,10 +129,7 @@ export async function createA2aRemoteAgent(params: {
       // not prove that an authenticated message can execute successfully.
       lastVerifiedAt: null,
     });
-    const tool = await ToolModel.createA2aDelegationTool(
-      connection.id,
-      params.organizationId,
-    );
+    const tool = await ToolModel.createA2aDelegationTool(connection.id);
 
     const [result] = await hydratePublicRemoteAgents([
       { remoteAgent, connection, toolId: tool.id },

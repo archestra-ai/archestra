@@ -426,6 +426,13 @@ test("readers can inspect and preview but cannot publish specifications", async 
     context,
   );
   expect(denied.isError).toBe(true);
+  const runDenied = await executeArchestraTool(
+    "archestra__run_openappa_policy_tests",
+    {},
+    context,
+  );
+  expect(runDenied.isError).toBe(true);
+  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
   expect(await OpenAppaPolicyTestsModel.find(organization.id)).toBeNull();
 });
 

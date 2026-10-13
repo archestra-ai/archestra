@@ -30,7 +30,10 @@ test("the default Agents view uses its server list through hydration", async ({
   ).toBeVisible();
   // A real interaction establishes that hydration finished. Before the fix,
   // mounting the default visibility filter issued a redundant client GET.
-  await page.getByRole("button", { name: "View as table" }).click();
-  await expect(page.getByRole("table")).toBeVisible();
+  const select = page.getByRole("checkbox", {
+    name: "Select Server-rendered agent",
+  });
+  await select.click();
+  await expect(select).toBeChecked();
   expect(clientListRequests).toEqual([]);
 });

@@ -671,12 +671,13 @@ function buildFileHandlingInstruction(
     const deliver = hasSandbox
       ? `To hand a file to the user it must land there: compose inline content with \`${saveFile}\`, or export something already on the sandbox disk (a script's output, an attachment) with \`${downloadFile}\` by its path. Never read a file's bytes back and paste them into your reply or \`${saveFile}\` — export by path so the bytes never pass through your context. Use \`${uploadFile}\` to pull a persistent or inline file into the sandbox to process it.`
       : `To hand a file to the user, write it to the persistent files with \`${saveFile}\`; it then appears in their Files panel.`;
-    paragraphs.push(
-      `The files the user can see live in the conversation's persistent files (their Files panel), not in the sandbox workspace. ${deliver}`,
-    );
+    const where = hasSandbox
+      ? "The files the user can see live in the conversation's persistent files (their Files panel), not in the sandbox workspace."
+      : "The files the user can see live in the conversation's persistent files (their Files panel).";
+    paragraphs.push(`${where} ${deliver}`);
   } else if (hasSandbox) {
-    // Sandbox runtime without the persistent-file tools (Projects off): the only
-    // way to surface a file to the user is to export it from the sandbox.
+    // Sandbox runtime without the persistent-file tools (not assigned): the
+    // only way to surface a file to the user is to export it from the sandbox.
     paragraphs.push(
       `To hand a file to the user, export it from the sandbox with \`${downloadFile}\` by its path; its bytes are recorded for the user's Files panel without passing through your reply.`,
     );
@@ -708,8 +709,11 @@ function buildFileHandlingInstruction(
     const readBinary = hasSandbox
       ? ` For other binary types (PDF, docx, xlsx, archives), \`${uploadFile}\` it into the sandbox and inspect with \`${runCommand}\`.`
       : "";
+    const notOnDisk = hasSandbox
+      ? `, not on the sandbox disk. Call \`${searchFiles}\` first (omit the query to list them; matching is on filename only, so list and scan when the description isn't a filename), then act on the \`ref\` it returns; don't \`ls ${SKILL_SANDBOX_HOME}\` for it, since files the user dropped into the Files panel never appear there.`
+      : `. Call \`${searchFiles}\` first (omit the query to list them; matching is on filename only, so list and scan when the description isn't a filename), then act on the \`ref\` it returns.`;
     paragraphs.push(
-      `If the user points at a file they did not attach this turn — "my report", "the doc from earlier", "update the spreadsheet" — it is in the persistent files, not on the sandbox disk. Call \`${searchFiles}\` first (omit the query to list them; matching is on filename only, so list and scan when the description isn't a filename), then act on the \`ref\` it returns; don't \`ls ${SKILL_SANDBOX_HOME}\` for it, since files the user dropped into the Files panel never appear there. To read it, \`${readFile}\` returns text as numbered lines and PNG/JPEG/WebP/GIF inline, straight from the persistent store.${readBinary} If a text or image attachment is already visible to you inline, use it as-is rather than re-fetching it.`,
+      `If the user points at a file they did not attach this turn — "my report", "the doc from earlier", "update the spreadsheet" — it is in the persistent files${notOnDisk} To read it, \`${readFile}\` returns text as numbered lines and PNG/JPEG/WebP/GIF inline, straight from the persistent store.${readBinary} If a text or image attachment is already visible to you inline, use it as-is rather than re-fetching it.`,
     );
   }
 

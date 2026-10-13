@@ -15,6 +15,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
 import { removeAttestationTokens } from "@/archestra-mcp-server/tool-attestation";
@@ -172,6 +173,26 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
               ),
+            ids: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Only these agents (comma-separated IDs), such as the viewer's automatic pins.",
+              ),
+            excludeIds: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value.split(",") : value,
+                z.array(z.string().uuid()).max(20),
+              )
+              .optional()
+              .describe(
+                "Leave these agents out (comma-separated IDs), such as the ones the list already shows as automatic pins.",
+              ),
             access: ResourceAccessQuerySchema,
             sharedWith: ResourceSharedWithQuerySchema,
             owner: ResourceOwnerQuerySchema,
@@ -249,6 +270,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds,
           authorIds,
           excludeAuthorIds,
+          ids,
+          excludeIds,
           access,
           sharedWith,
           owner,
@@ -308,6 +331,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // authorIds and excludeAuthorIds are admin-only
           authorIds: isAdmin ? authorIds : undefined,
           excludeAuthorIds: isAdmin ? excludeAuthorIds : undefined,
+          ids,
+          excludeIds,
           excludeOtherPersonalAgents: isAdmin
             ? excludeOtherPersonalAgents
             : undefined,
@@ -2143,6 +2168,9 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
+      // A Slack bot of this agent follows its name and icon (best effort).
+      void slackAppFactory.syncAgentIdentity(id);
+
       // Only re-init metrics when labels were part of the update payload,
       // since that's the only field that can introduce new label keys.
       if (body.labels !== undefined) {
@@ -2481,19 +2509,25 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.GetMemberDefaultAgent,
-        description: "Get the current user's default agent ID",
+        description:
+          "Get the current user's default agent ID, and their personal chat " +
+          "agent (the oldest live personal agent they authored), if any",
         tags: ["Members"],
         response: constructResponseSchema(
-          z.object({ defaultAgentId: z.string().uuid().nullable() }),
+          z.object({
+            defaultAgentId: z.string().uuid().nullable(),
+            personalChatAgentId: z.string().uuid().nullable(),
+          }),
         ),
       },
     },
     async ({ user, organizationId }, reply) => {
-      const defaultAgentId = await MemberModel.getDefaultAgentId(
-        user.id,
-        organizationId,
-      );
-      return reply.send({ defaultAgentId });
+      const [defaultAgentId, personalChatAgentId] = await Promise.all([
+        MemberModel.getDefaultAgentId(user.id, organizationId),
+        // A lookup only: reading the list must never seed an assistant.
+        AgentModel.findPersonalChatAgentId({ userId: user.id, organizationId }),
+      ]);
+      return reply.send({ defaultAgentId, personalChatAgentId });
     },
   );
 

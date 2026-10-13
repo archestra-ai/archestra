@@ -8,6 +8,7 @@ import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { agentRuntimeManager } from "@/k8s/agent-runtime";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   A2AContextModel,
@@ -22,6 +23,8 @@ import {
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
+import { resolveAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import {
@@ -50,8 +53,6 @@ describe("Agent Runtime routes", () => {
   let agent: Agent;
   let user: User;
   let organizationId: string;
-  let previousFeatureEnabled: boolean;
-  let previousClusterReachable: unknown;
 
   beforeEach(async ({ makeAgent, makeAdmin, makeMember, makeOrganization }) => {
     const organization = await makeOrganization();
@@ -125,13 +126,7 @@ describe("Agent Runtime routes", () => {
     registerAuditLogHook(app);
     const { default: routes } = await import("./agent-runtime.routes");
     await app.register(routes);
-    previousFeatureEnabled = config.agentRuntime.enabled;
-    previousClusterReachable = Reflect.get(
-      agentRuntimeManager,
-      "clusterReachable",
-    );
-    config.agentRuntime.enabled = true;
-    Reflect.set(agentRuntimeManager, "clusterReachable", true);
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(true);
     vi.spyOn(agentRuntimeManager, "getStartupProgress").mockResolvedValue({
       phase: "scheduling",
       message: "Waiting for a node with room for this run",
@@ -141,12 +136,6 @@ describe("Agent Runtime routes", () => {
   });
 
   afterEach(async () => {
-    config.agentRuntime.enabled = previousFeatureEnabled;
-    Reflect.set(
-      agentRuntimeManager,
-      "clusterReachable",
-      previousClusterReachable,
-    );
     vi.restoreAllMocks();
     await app.close();
   });
@@ -585,7 +574,7 @@ describe("Agent Runtime routes", () => {
   });
 
   test("keeps every run endpoint unavailable when no run backend is enabled", async () => {
-    config.agentRuntime.enabled = false;
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
 
     const response = await app.inject({
       method: "GET",
@@ -697,16 +686,23 @@ describe("Agent Runtime routes", () => {
 
   test("does not start a run inside a project the caller cannot read", async ({
     makeUser,
+    makeMember,
   }) => {
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId);
     await ResourcePermissions.updatePolicy({
       organizationId,
       userId: user.id,
       resource: "project",
       scope: "*",
       revision: 1,
-      grants: [],
+      grants: [
+        {
+          subject: { type: "user", id: otherUser.id },
+          actions: ["read", "use", "update", "delete", "manage-permissions"],
+        },
+      ],
     });
-    const otherUser = await makeUser();
     const project = await projectService.create({
       organizationId,
       userId: otherUser.id,
@@ -1054,6 +1050,39 @@ describe("Agent Runtime routes", () => {
     });
   });
 
+  test("requires organization settings access to use a shared credential", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const configured = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/runtime/credentials/SHARED_TOKEN`,
+      payload: { value: "shared-value" },
+    });
+    expect(configured.statusCode).toBe(200);
+
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    user = member;
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/runtime/preflight`,
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body).not.toContain("shared-value");
+    const runtime = resolveAgentRuntime(agent);
+    assert(runtime);
+    await expect(
+      resolveAgentRuntimeCredentials({
+        runtime,
+        organizationId,
+        userId: member.id,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+  });
+
   test("preflight flags an existing Gemini model on the maintained Codex runtime", async ({
     makeAgent,
     makeLlmProviderApiKey,
@@ -1097,7 +1126,7 @@ describe("Agent Runtime routes", () => {
     });
   });
 
-  test("lets a reader manage only their own personal credential", async ({
+  test("lets a reader manage their personal credential but not use a shared one", async ({
     makeMember,
     makeUser,
   }) => {
@@ -1122,7 +1151,7 @@ describe("Agent Runtime routes", () => {
       method: "GET",
       url: `/api/agents/${agent.id}/runtime/preflight`,
     });
-    expect(preflight.json().configured).toEqual(["PERSONAL_TOKEN"]);
+    expect(preflight.statusCode).toBe(403);
   });
 
   test("reuses a typed personal connection across Agents without copying its value", async ({

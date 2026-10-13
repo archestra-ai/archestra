@@ -12,6 +12,17 @@
     "editor.defaultFormatter": "biomejs.biome"
   },
   "git.openRepositoryInParentFolders": "always",
-  "js/ts.tsserver.experimental.enableProjectDiagnostics": true,
-  "js/ts.experimental.useTsgo": true
+  "js/ts.tsserver.experimental.enableProjectDiagnostics": false,
+  "js/ts.experimental.useTsgo": true,
+  "files.watcherExclude": {
+    "**/.next/**": true,
+    "**/.next-*/**": true,
+    "**/.turbo/**": true,
+    "**/target/**": true
+  },
+  "rust-analyzer.numThreads": 4,
+  "rust-analyzer.cachePriming.enable": false,
+  "rust-analyzer.cargo.extraEnv": {
+    "CARGO_BUILD_JOBS": "2"
+  }
 }

@@ -1664,7 +1664,6 @@ describe("knowledge base routes", () => {
     test("shows permission-sync connectors to members with connector grants", async ({
       makeKnowledgeBase,
       makeKnowledgeBaseConnector,
-      makeMember,
     }) => {
       await MemberModel.updateRole(user.id, organizationId, "member");
       const kb = await makeKnowledgeBase(organizationId);
@@ -1702,7 +1701,7 @@ describe("knowledge base routes", () => {
         url: `/api/connectors/${autoSync.id}`,
         payload: { name: "renamed" },
       });
-      expect(update.statusCode).toBe(200);
+      expect(update.statusCode).toBe(404);
     });
 
     test("shows auto-sync-permissions connectors to knowledgeSource admins", async ({
@@ -2062,10 +2061,7 @@ describe("knowledge base routes", () => {
       ).toBe(true);
     });
 
-    test("allows connector editors to enable permission sync", async ({
-      makeMember,
-    }) => {
-      // The member's ordinary connector update permission is sufficient.
+    test("allows connector editors to enable permission sync", async () => {
       await MemberModel.updateRole(user.id, organizationId, "member");
       const connector = await KnowledgeBaseConnectorModel.create(
         {
@@ -2079,8 +2075,7 @@ describe("knowledge base routes", () => {
             authMethod: "pat",
           },
         },
-        // The member reaches the connector through its grants.
-        accessGrants("org"),
+        accessGrants({ users: [user.id], preset: "edit" }),
       );
 
       const response = await app.inject({
@@ -4410,6 +4405,38 @@ describe("knowledge base permission configuration", () => {
           message: "Connector not found",
           type: "api_not_found_error",
         },
+      });
+    });
+
+    test("PUT /api/connectors/:id rejects a caller with read-only connector access", async () => {
+      const connector = await KnowledgeBaseConnectorModel.create(
+        {
+          organizationId,
+          name: "Read-only auto-sync connector",
+          connectorType: "github",
+          config: {
+            type: "github",
+            githubUrl: "https://api.github.com",
+            owner: "test-org",
+            authMethod: "pat",
+          },
+          visibility: "auto-sync-permissions",
+        },
+        accessGrants({ users: [user.id], preset: "view" }),
+      );
+
+      const response = await app.inject({
+        method: "PUT",
+        url: `/api/connectors/${connector.id}`,
+        payload: { visibility: "org-wide" },
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(
+        await KnowledgeBaseConnectorModel.findById(connector.id),
+      ).toMatchObject({
+        visibility: "auto-sync-permissions",
+        syncPermissionsFromSource: true,
       });
     });
 

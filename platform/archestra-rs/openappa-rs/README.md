@@ -155,7 +155,7 @@ Migration `0471_openappa_native.sql` creates the event and receipt tables. Migra
 | `openappa_operations` | Call, lifecycle, and remedy receipts |
 | `openappa_processed_results` | Result status, decision, and approved output |
 | `openappa_external_consults` | One row per external consult a dispatch made, written after the engine returns (migration `0487`) |
-| `openappa_dispatch_leases` | One row per family with a dispatch in progress or stopped: its owner, the family's last event sequence when it began, and how many dispatches in a row stopped (migration `0530`) |
+| `openappa_dispatch_leases` | One row per family with a dispatch in progress or stopped: its owner, the family's last event sequence when it began, and its lease generation (migration `0530`) |
 
 Rust owns event encoding, decoding, policy validation, replay, ordering, and
 compare-and-swap behavior. TypeScript does not interpret policy events. The
@@ -172,7 +172,8 @@ consult an external authority, the binding commits a `pending` receipt. Hook
 event writes and the completed receipt/approved output then commit as separate
 short transactions. The runtime keeps no trajectory state in memory between
 events, so a failed dispatch leaves nothing to discard. A durable pending
-receipt blocks further work in that family until it is completed or released.
+receipt is completed or recovered when its operation is resubmitted; it does
+not block the family's other work.
 
 ### Dispatch leases
 
@@ -186,37 +187,40 @@ The lease lasts as long as its owner's connection. The owner holds the family's
 advisory lock for the whole dispatch, and PostgreSQL drops that lock when the
 connection ends. A later dispatch that holds the lock and still finds pending
 receipts therefore knows that their owner no longer works on them. No clock is
-compared. It then reads the event log:
+compared. Recovery is per operation, at the operation's own resubmission:
 
-- The log still ends where the lease recorded. The runtime kept nothing of the
-  stopped work. The dispatch deletes the pending receipts and continues. The
-  stopped operation runs again when the client submits it again, with its
-  external consults.
-- The log advanced. The runtime kept part of a decision that the host never
-  received. The family stays closed, and each dispatch returns the
-  interrupted-processing error.
+- A resubmitted operation that finds its receipt pending is driven again
+  through the runtime. Work the event log never kept runs as a first run, with
+  its external consults. Work the log kept is answered from the committed
+  facts — the same decision, the same offers, the same dispatch binding —
+  without re-execution. Either way the pending receipt completes with exactly
+  the answer the host was owed, and the family goes on.
+- A dispatch that fails while its own log is unchanged kept nothing, so the
+  receipts it claimed are released before it returns, and the host's retry
+  runs them again.
+- A remedy completes two receipts one after the other. One stopped between
+  them is repaired from its own saved decision: the completed operation
+  receipt already holds the answer the pending result receipt takes.
+- An operational refusal, such as an unavailable annotator or an unanswered
+  remedy consult, is an error rather than a completed verdict. Its retry can
+  proceed after the dependency recovers. A genuine policy denial is still saved.
+- A result whose processing stopped before the runtime recorded anything waits
+  for the client to supply the result again; the receipt's bytes exist only in
+  the client's history and are never reconstructed server-side.
 
-A dispatch that fails while its process continues to run applies the same rule
-to its own receipts before it returns. A failure that left the event log
-unchanged does not close the family.
-
-After three dispatches in a row stop with pending receipts, the family stays
-closed. This prevents a repeat of an operation that stops its process each time.
+A mismatched resubmission still fails closed: a reused call id with different
+bytes, a result that contradicts the committed one, and an input that conflicts
+with a pending receipt are refused, and no receipt is rewritten for them.
 
 A working dispatch reads its lease every five seconds. If the read fails or the
 lease has another owner, the dispatch stops and returns the lost-lease error.
 The host reports that error as retryable. The dispatch that took the family
 answers the retry from its completed receipt.
 
-Peer operations and remedies take no lease. Peer messages are stored outside
-the event log, and a remedy completes two receipts one after the other, so the
-log cannot show how far a stopped one got. A receipt that they leave pending
-closes the family. Receipts claimed before migration `0530` have no lease and
-also close the family.
-
 A tool result is recorded in the event log before its output sanitizer is
-consulted. A process that stops during that consult therefore leaves the family
-closed. A process that stops during a tool call's annotator consult does not.
+consulted. A process that stops during that consult leaves a checkpoint the
+resubmission resumes: the sanitizer answer is gathered again and the staged
+withholding completes with the same pending offers.
 
 Completed result keys are session ID + tool call ID. Operation keys are session ID + operation ID. Remedy-execution receipts bind the authenticated spender. Submitting different result bytes under a completed result key returns the saved approved output without re-evaluating hooks. Submitting changed arguments under an existing logical call ID is refused.
 
@@ -235,13 +239,13 @@ including across a chain of forks. If the parent admits a result after the fork 
 the fork withholds that result. If a process stops unexpectedly before writing
 the session row, recovery sets a NULL watermark and inherits no results.
 
-Pending receipts that a dispatch lease does not release require operator
-investigation. Inspect the scoped operation/result, native event history, and
-external authority records. Do not blindly delete the pending row: the runtime
-recorded part of the operation, and a second run can apply it twice. No
-recovery/reset endpoint is provided for these receipts. A released operation
-consults its external authorities again, so this guarantees conservative replay
-behavior, not exactly-once execution of arbitrary external services.
+Pending receipts left by a stopped dispatch recover on the operation's
+resubmission, as the dispatch-lease section describes. The event log, not the
+receipt, is the authority for what the guardrail decided; a pending receipt
+never blocks the family's later work, and it is never silently cleared. A
+released operation consults its external authorities again, so this guarantees
+conservative replay behavior, not exactly-once execution of arbitrary external
+services.
 
 ## Remedies and current limits
 
@@ -267,10 +271,9 @@ Start new conversations when enabling this feature. Historical tool results
 from before activation have no native admission receipts and are refused;
 the integration does not invent approvals or silently migrate prototype state.
 
-There is one native worker/connection per process, so throughput optimization,
-connection recovery without a backend restart, retention/purge workflows, an
-operator recovery UI, and deployment-specific TLS credential options remain
-follow-up work. PostgreSQL TLS uses the system trust store and URL SSL settings.
+Throughput tuning, retention/purge workflows, and deployment-specific TLS
+credential options remain follow-up work. PostgreSQL TLS uses the system trust
+store and URL SSL settings.
 
 ## Verification
 

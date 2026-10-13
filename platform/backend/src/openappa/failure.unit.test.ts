@@ -51,6 +51,24 @@ describe("openappaFailure", () => {
   });
 
   test.each([
+    "OpenAPPA processing interrupted: annotator unavailable",
+    "OpenAPPA remedy awaiting an answer: consult pending",
+    "OpenAPPA remedy is still executing; retry later",
+    "OpenAPPA result refused: transport unavailable",
+  ])("keeps an interrupted native operation retryable: %s", (message) => {
+    const cause = new Error(message);
+    const failure = openappaFailure(cause);
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+    expect(failure.retryAfterSeconds).toBeGreaterThan(0);
+    expect(failure.message).toBe(
+      "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
+    );
+    expect(failure.cause).toBe(cause);
+  });
+
+  test.each([
     "no prepared fork to open this child",
     "parent session has not started",
   ])("an unchecked child cannot be repaired by retrying: %s", (message) => {
@@ -75,18 +93,6 @@ describe("openappaFailure", () => {
     expect(failure.message).toBe(
       "OpenAPPA could not safely complete this operation: another request of this session took over this operation. Retry the request.",
     );
-  });
-
-  test("an interrupted session requires recovery rather than automatic retries", () => {
-    const cause = new Error(
-      "OpenAPPA session has interrupted processing; operator recovery is required",
-    );
-    const failure = openappaFailure(cause);
-    expect(failure.statusCode).toBe(409);
-    expect(failure.shouldRetry).toBe(false);
-    expect(failure.retryAfterSeconds).toBeUndefined();
-    expect(failure.message).toContain("requires administrator recovery");
-    expect(failure.cause).toBe(cause);
   });
 
   test("strips URL credentials and bounds the detail of a refused policy", () => {

@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
-  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  defaultRuntimeHandoffInstructions,
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared/consts";
 import { parse as parseToml } from "smol-toml";
@@ -324,7 +324,7 @@ if (args[0] === "app-server") {
             skills: null,
             runtimeHandoffInstructions:
               clientId === "codex"
-                ? DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+                ? defaultRuntimeHandoffInstructions("Archestra")
                 : null,
           }),
         );
@@ -421,7 +421,7 @@ exit 0
             ...(clientId === "codex"
               ? [
                   "-c",
-                  `developer_instructions=${JSON.stringify(`Keep existing guidance.\n\n${DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS}`)}`,
+                  `developer_instructions=${JSON.stringify(`Keep existing guidance.\n\n${defaultRuntimeHandoffInstructions("Archestra")}`)}`,
                 ]
               : []),
             ...originalArgs,
@@ -923,7 +923,7 @@ function windowsSetupVariants(): Array<{
                     }
                   : null,
                 runtimeHandoffInstructions: handoff
-                  ? DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+                  ? defaultRuntimeHandoffInstructions("Archestra")
                   : null,
                 managedInstructionsSource: mcp
                   ? {

@@ -1,6 +1,7 @@
 import {
   PROVIDERS_REQUIRING_BASE_URL,
   providerDisplayNames,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
@@ -19,17 +20,31 @@ type PrimaryProviderContext = {
   userId: string;
   userTeamIds: string[];
   supportedProviders: readonly SupportedProvider[];
+  /**
+   * Keys an admin mapped for the client being set up. When any is still
+   * usable they replace the user's primary keys, and the user needs no access
+   * of their own to them.
+   */
+  mappedKeys?: Array<{
+    provider: SupportedProvider;
+    providerApiKeyId: string;
+  }> | null;
 };
 
-/** Resolve usable primary credentials before creating or refreshing a personal key. */
+/**
+ * Resolve the credentials for a multi-provider personal key — the client's
+ * admin-mapped keys, else the user's usable primary keys — then create or
+ * refresh the key.
+ */
 export async function ensurePrimaryProviderKey(
   params: PrimaryProviderContext & { keyName: string },
 ) {
-  const keys = await getPrimaryKeys(params);
+  const mapped = await getMappedKeys(params);
+  const keys = mapped.length > 0 ? mapped : await getPrimaryKeys(params);
   if (keys.length === 0) {
     throw new ApiError(
       400,
-      "No usable primary provider keys are available. Mark a compatible provider key as primary, or choose another routing option.",
+      "No usable primary provider keys are available. Mark a compatible provider key as primary, ask an admin to choose provider keys for this client, or choose another routing option.",
     );
   }
   const name = params.keyName;
@@ -100,7 +115,7 @@ export async function getVirtualKeyProviderCatalog(
     clientLabel?: string;
   },
 ): Promise<NonNullable<SetupScriptProxySection["primaryProviders"]>> {
-  const [keys, mappings] = await Promise.all([
+  const [userKeys, mappedKeys, mappings] = await Promise.all([
     params.provider
       ? LlmProviderApiKeyModel.getAvailableKeysForUser(
           params.organizationId,
@@ -108,8 +123,16 @@ export async function getVirtualKeyProviderCatalog(
           params.userTeamIds,
         )
       : getPrimaryKeys(params),
+    getMappedKeys(params),
     VirtualApiKeyModel.getProviderApiKeys(params.virtualApiKeyId),
   ]);
+  // Admin-mapped keys stand in for the user's own access.
+  const keys = [
+    ...mappedKeys,
+    ...userKeys.filter(
+      (key) => !mappedKeys.some((mapped) => mapped.id === key.id),
+    ),
+  ];
   // Connection keys can be reused by other clients/providers. Only publish the
   // provider selected in this setup, never the key's unrelated mappings.
   const selectedMappings = mappings.filter(
@@ -206,6 +229,28 @@ async function getPreferredModels(params: {
     const model = found.find((candidate) => candidate.id === id);
     return model ? [{ provider: model.provider, modelId: model.modelId }] : [];
   });
+}
+
+async function getMappedKeys(params: PrimaryProviderContext) {
+  const mapped = params.mappedKeys ?? [];
+  const keys = await LlmProviderApiKeyModel.findByIds(
+    mapped.map((mapping) => mapping.providerApiKeyId),
+  );
+  return keys.filter(
+    (key) =>
+      key.organizationId === params.organizationId &&
+      mapped.some(
+        (mapping) =>
+          mapping.providerApiKeyId === key.id &&
+          mapping.provider === key.provider,
+      ) &&
+      params.supportedProviders.includes(key.provider) &&
+      // A per-user credential is never shared through an admin mapping.
+      !providerRequiresPerUserCredential(key.provider) &&
+      !key.requiresReauthentication &&
+      (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+        Boolean(key.baseUrl?.trim())),
+  );
 }
 
 async function getPrimaryKeys(params: PrimaryProviderContext) {

@@ -1,8 +1,10 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
 import type {
+  GitHubUserId,
   RuntimeCredentialConnection,
   RuntimeCredentialConnectionScope,
 } from "@/types";
@@ -14,6 +16,8 @@ export default class RuntimeCredentialConnectionModel {
     userId: string | null;
     credentialId: string;
     value: string;
+    /** Omitted on refresh so the account bound at sign-in is kept. */
+    githubId?: GitHubUserId;
   }): Promise<RuntimeCredentialConnection> {
     const existing = await RuntimeCredentialConnectionModel.find(params);
     const secret = await secretManager().createSecret(
@@ -28,6 +32,7 @@ export default class RuntimeCredentialConnectionModel {
           .set({
             secretId: secret.id,
             secretKey: SECRET_VALUE_FIELD,
+            ...(params.githubId !== undefined && { githubId: params.githubId }),
             updatedAt: new Date(),
           })
           .where(eq(schema.runtimeCredentialConnectionsTable.id, existing.id))
@@ -44,6 +49,7 @@ export default class RuntimeCredentialConnectionModel {
           userId: params.scope === "personal" ? params.userId : null,
           credentialId: params.credentialId,
           secretId: secret.id,
+          githubId: params.githubId,
         })
         .returning();
       return created;
@@ -130,6 +136,79 @@ export default class RuntimeCredentialConnectionModel {
       );
   }
 
+  /**
+   * GitHub account id to email of current organization members connected
+   * through a GitHub.com App. Ids held by more than one user are dropped.
+   */
+  static async listGitHubRoster(
+    organizationId: string,
+  ): Promise<Map<GitHubUserId, string>> {
+    const connections = schema.runtimeCredentialConnectionsTable;
+    const userCredential = alias(
+      schema.runtimeCredentialDefinitionsTable,
+      "user_credential",
+    );
+    const githubApp = alias(
+      schema.runtimeCredentialDefinitionsTable,
+      "github_app",
+    );
+    const rows = await db
+      .selectDistinct({
+        githubId: connections.githubId,
+        userId: schema.usersTable.id,
+        email: schema.usersTable.email,
+      })
+      .from(connections)
+      .innerJoin(
+        userCredential,
+        and(
+          eq(userCredential.organizationId, connections.organizationId),
+          eq(userCredential.key, connections.credentialId),
+          eq(userCredential.kind, "github_app_user"),
+        ),
+      )
+      .innerJoin(
+        githubApp,
+        and(
+          eq(githubApp.organizationId, connections.organizationId),
+          eq(githubApp.key, userCredential.githubAppCredentialKey),
+          eq(githubApp.githubUrl, GITHUB_COM_API_URL),
+        ),
+      )
+      .innerJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.organizationId, connections.organizationId),
+          eq(schema.membersTable.userId, connections.userId),
+        ),
+      )
+      .innerJoin(
+        schema.usersTable,
+        eq(schema.usersTable.id, connections.userId),
+      )
+      .where(
+        and(
+          eq(connections.organizationId, organizationId),
+          eq(connections.scope, "personal"),
+          isNotNull(connections.githubId),
+        ),
+      );
+
+    const holders = new Map<GitHubUserId, Map<string, string>>();
+    for (const { githubId, userId, email } of rows) {
+      if (githubId === null) continue;
+      const users = holders.get(githubId) ?? new Map<string, string>();
+      users.set(userId, email);
+      holders.set(githubId, users);
+    }
+    const roster = new Map<GitHubUserId, string>();
+    for (const [githubId, users] of holders) {
+      const [only, ...rest] = users.values();
+      if (rest.length === 0) roster.set(githubId, only);
+    }
+    return roster;
+  }
+
   static async findForAudit(params: {
     organizationId: string;
     scope: RuntimeCredentialConnectionScope;
@@ -209,6 +288,7 @@ export default class RuntimeCredentialConnectionModel {
 // ===================== Internals =====================
 
 const SECRET_VALUE_FIELD = "value";
+const GITHUB_COM_API_URL = "https://api.github.com";
 
 async function deleteSecretQuietly(secretId: string): Promise<void> {
   try {

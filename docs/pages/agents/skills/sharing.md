@@ -16,7 +16,7 @@ To install skills, Archestra serves them from one git repository, the shared mar
 
 ## Installing from the Connect Page
 
-Shared skills install when you [connect your agent](/docs/get-started/connect). Go to **Connect** and choose your client. The card below it lists the shared skills the setup installs. Run the setup command in a terminal and approve the setup in your browser. Skills are all or nothing: you can turn **Install shared skills** off under **Customize setup**, but not pick single skills.
+Shared skills install when you [connect your agent](/docs/get-started/connect). Go to **Connect** and choose your client. The card below it lists the shared skills the setup installs. Run the setup command in a terminal and approve the setup in your browser. Skills are all or nothing: you can turn **Skills** off under **Setup options** on the approval page, but not pick single skills.
 
 ![The Connect page with Claude Code selected and its card listing the shared skills to install](/docs/automated_screenshots/platform-agent-skills-sharing_connection-setup.webp)
 

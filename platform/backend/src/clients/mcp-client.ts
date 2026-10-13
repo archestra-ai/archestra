@@ -44,6 +44,7 @@ import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
+import { browserStorageSync } from "@/features/browser-stream/services/browser-storage-sync";
 import {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1043,6 +1044,22 @@ class McpClient {
             (this.clientRequestsInFlight.get(client) ?? 0) + 1,
           );
 
+          // Each Playwright session is a fresh browser context; load the
+          // user's saved logins into it before its first tool call.
+          const browserStorageTarget =
+            isPlaywrightCatalogItem(catalogItem.id) &&
+            tokenAuth?.userId &&
+            attemptSessionId
+              ? {
+                  client,
+                  sessionId: attemptSessionId,
+                  userId: tokenAuth.userId,
+                }
+              : null;
+          if (browserStorageTarget) {
+            await browserStorageSync.ensureRestored(browserStorageTarget);
+          }
+
           // Determine the actual upstream tool name. Prefer the stored raw name
           // (tools.raw_name): it is exact even when the slug's server-prefix was
           // truncated to fit the 64-char cap or the raw name itself contains the
@@ -1183,6 +1200,10 @@ class McpClient {
               structuredError: authError,
               encryptedChatContent,
             });
+          }
+
+          if (browserStorageTarget && !result.isError) {
+            browserStorageSync.scheduleSave(browserStorageTarget);
           }
 
           // Apply template and return

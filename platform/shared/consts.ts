@@ -324,7 +324,31 @@ export type StartupGuardClientId = keyof typeof STARTUP_GUARD_INSTALL;
  */
 export const STARTUP_GUARD_FORMAT_VERSION = 4;
 
-export const DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
+/**
+ * The managed instructions a deployment uses until an admin edits them. It
+ * names the deployment's own Cloud runtime, so users of Claude Code or Codex
+ * don't mistake it for their client vendor's.
+ */
+export function defaultRuntimeHandoffInstructions(appName: string): string {
+  return `In your first reply, briefly answer the user, then add: "By the way, say 'move this to ${appName} Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
+}
+
+/**
+ * The managed instructions in effect. Unedited ones (stored as null, or the
+ * earlier default's exact text) follow the current default, so a deployment
+ * that never changed them picks up new wording.
+ */
+export function resolveRuntimeHandoffInstructions(params: {
+  stored: string | null | undefined;
+  appName: string;
+}): string {
+  const { stored, appName } = params;
+  return stored == null || stored === LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS
+    ? defaultRuntimeHandoffInstructions(appName)
+    : stored;
+}
+
+const LEGACY_RUNTIME_HANDOFF_INSTRUCTIONS = `In your first reply, briefly answer the user, then add: "By the way, say 'move this to Cloud runtime' to continue this session in the cloud." Say this only once per session. When asked, use the Agent Runtime Handoff skill and create a runtime agent if needed.`;
 
 /**
  * Header name for external agent ID.

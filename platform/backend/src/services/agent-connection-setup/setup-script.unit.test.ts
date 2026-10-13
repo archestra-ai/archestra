@@ -2751,7 +2751,7 @@ if (process.argv[2] === 'debug') {
   test.each([
     "macos",
     "windows",
-  ] as const)("cursor (%s): prints the working plugin and model setup steps", (platform) => {
+  ] as const)("cursor (%s): writes the model settings, with steps to enter them by hand as a fallback", (platform) => {
     const script = renderSetupScript(fullContext("cursor", platform));
     expect(script).toContain(
       platform === "windows"
@@ -2759,6 +2759,7 @@ if (process.argv[2] === 'debug') {
         : "ARCHESTRA_MCP_SERVER_NAME",
     );
     expect(script).not.toContain("Authorization");
+    expect(script).toContain("Cursor/User/globalStorage/state.vscdb");
     expect(script).toContain("Override OpenAI Base URL");
     expect(script).toContain("open Customize > MCPs");
     expect(script).toContain('turn on "Use OpenAI API Key"');
@@ -2772,13 +2773,13 @@ if (process.argv[2] === 'debug') {
   test.each([
     "macos",
     "windows",
-  ] as const)("cursor (%s): requires an API key for passthrough", (platform) => {
+  ] as const)("cursor (%s): asks for a new setup when it has no virtual key", (platform) => {
     const script = renderSetupScript({
       ...fullContext("cursor", platform),
       proxy: OPENAI_PASSTHROUGH_PROXY,
     });
-    expect(script).toContain("Paste your own OpenAI API key");
-    expect(script).toContain("A Cursor subscription cannot be used");
+    expect(script).toContain("Generate a new setup command");
+    expect(script).not.toContain("state.vscdb");
   });
 
   test("cursor: setup preserves MCP servers and installs discoverable skills from a Git repository", async () => {
@@ -2818,6 +2819,16 @@ if (process.argv[2] === 'debug') {
           mcpServers: { existing: { url: "https://example.test/mcp" } },
         }),
       );
+      const stateDb = path.join(
+        home,
+        "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+      );
+      await mkdir(path.dirname(stateDb), { recursive: true });
+      await sqlite(
+        stateDb,
+        `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", '{"theme": "dark"}'))`,
+      );
       const scriptPath = path.join(home, "connect.sh");
       const context = fullContext("cursor");
       if (!context.skills) throw new Error("Missing skills");
@@ -2843,8 +2854,29 @@ if (process.argv[2] === 'debug') {
         [MCP.serverName]: { url: MCP.url },
       });
       expect(stdout).toContain("Reload Cursor and open Customize > Skills");
-      expect(stdout).toContain('turn on "Use OpenAI API Key"');
+      expect(stdout).toContain("settings now point at Archestra");
+      expect(stdout).not.toContain('turn on "Use OpenAI API Key"');
       expect(stdout).not.toContain(source);
+      const rows = JSON.parse(
+        await sqlite(
+          stateDb,
+          `print(json.dumps(dict(db.execute("SELECT key, value FROM ItemTable").fetchall())))`,
+        ),
+      );
+      expect(JSON.parse(rows[CURSOR_APPLICATION_USER_KEY])).toEqual({
+        theme: "dark",
+        openAIBaseUrl: context.proxy?.url,
+        useOpenAIKey: true,
+      });
+      expect(rows["cursorAuth/openAIKey"]).toBe(context.proxy?.virtualKey);
+      expect(
+        JSON.parse(
+          await sqlite(
+            `${stateDb}.archestra-backup`,
+            `print(json.dumps(db.execute("SELECT COUNT(*) FROM ItemTable").fetchone()[0]))`,
+          ),
+        ),
+      ).toBe(1);
       expect(
         await readFile(
           path.join(
@@ -2887,6 +2919,123 @@ if (process.argv[2] === 'debug') {
           "utf8",
         ),
       ).toContain("Updated skill");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  test("cursor: the model picker lists only Model Router models, and a re-run replaces them", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-models-"));
+    try {
+      const stateDb = path.join(
+        home,
+        "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+      );
+      await mkdir(path.dirname(stateDb), { recursive: true });
+      const user = {
+        availableDefaultModels2: [
+          { name: "default" },
+          { name: "grok-4.6" },
+          { name: "claude-sonnet-4-6" },
+        ],
+        aiSettings: {
+          userAddedModels: ["my-own-model"],
+          modelOverrideEnabled: ["grok-4.6", "my-own-model"],
+          modelOverrideDisabled: ["claude-sonnet-4-6"],
+          modelConfig: {
+            composer: {
+              modelName: "grok-4.6",
+              maxMode: false,
+              selectedModels: [{ modelId: "grok-4.6", parameters: [] }],
+            },
+          },
+        },
+      };
+      await sqlite(
+        stateDb,
+        `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", ${JSON.stringify(JSON.stringify(user))}))`,
+      );
+      const run = async (cursorModels: {
+        ids: string[];
+        defaultId: string | null;
+      }) => {
+        const base = fullContext("cursor");
+        if (!base.proxy) throw new Error("Missing proxy");
+        const scriptPath = path.join(home, "connect.sh");
+        await writeFile(
+          scriptPath,
+          renderSetupScript({
+            ...base,
+            mcp: null,
+            skills: null,
+            proxy: {
+              ...base.proxy,
+              authMode: "primary-providers",
+              cursorModels,
+            },
+          }),
+        );
+        const { stdout } = await execFileAsync("bash", [scriptPath], {
+          env: { ...process.env, HOME: home, NO_COLOR: "1" },
+        });
+        const rows = JSON.parse(
+          await sqlite(
+            stateDb,
+            `print(json.dumps(dict(db.execute("SELECT key, value FROM ItemTable").fetchall())))`,
+          ),
+        );
+        return {
+          stdout,
+          settings: JSON.parse(rows[CURSOR_APPLICATION_USER_KEY]).aiSettings,
+        };
+      };
+
+      const first = await run({
+        ids: ["anthropic:claude-sonnet-4-6", "openai:gpt-5.4"],
+        defaultId: "anthropic:claude-sonnet-4-6",
+      });
+      expect(first.stdout).toContain("model picker now lists only Archestra");
+      // Cursor routes every mapped provider, so the banner names none.
+      expect(first.stdout).toContain("Sets up:    LLM proxy\n");
+      expect(first.settings.userAddedModels).toEqual([
+        "my-own-model",
+        "anthropic:claude-sonnet-4-6",
+        "openai:gpt-5.4",
+      ]);
+      expect(first.settings.modelOverrideEnabled).toEqual([
+        "my-own-model",
+        "anthropic:claude-sonnet-4-6",
+        "openai:gpt-5.4",
+      ]);
+      expect(first.settings.modelOverrideDisabled).toEqual([
+        "default",
+        "grok-4.6",
+        "claude-sonnet-4-6",
+      ]);
+      expect(first.settings.modelConfig.composer).toEqual({
+        modelName: "anthropic:claude-sonnet-4-6",
+        maxMode: false,
+        selectedModels: [
+          { modelId: "anthropic:claude-sonnet-4-6", parameters: [] },
+        ],
+      });
+
+      // The router stopped listing the Anthropic model: it leaves the picker,
+      // the user's own model stays, and a model with no router default keeps
+      // its selection.
+      const second = await run({ ids: ["openai:gpt-5.4"], defaultId: null });
+      expect(second.settings.userAddedModels).toEqual([
+        "my-own-model",
+        "openai:gpt-5.4",
+      ]);
+      expect(second.settings.modelOverrideEnabled).toEqual([
+        "my-own-model",
+        "openai:gpt-5.4",
+      ]);
+      expect(second.settings.modelConfig.composer.modelName).toBe(
+        "anthropic:claude-sonnet-4-6",
+      );
     } finally {
       await rm(home, { recursive: true, force: true });
     }
@@ -3478,3 +3627,19 @@ describe("ending", () => {
     });
   });
 });
+
+const CURSOR_APPLICATION_USER_KEY =
+  "src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser";
+
+/** Run Python against a SQLite file, as the Cursor step does; returns stdout. */
+async function sqlite(file: string, statements: string): Promise<string> {
+  const { stdout } = await execFileAsync("python3", [
+    "-c",
+    `import json, sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+${statements}
+db.commit()`,
+    file,
+  ]);
+  return stdout;
+}

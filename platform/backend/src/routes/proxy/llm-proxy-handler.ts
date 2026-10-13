@@ -4445,16 +4445,20 @@ function observedAppaSession(params: {
  * replay request.
  */
 function isEchoOf(message: unknown, echo: object): boolean {
-  const ids = (value: unknown): string =>
-    JSON.stringify(
-      (
-        (value as { content?: Array<{ id?: string }> } | undefined)?.content ??
-        []
-      ).map((block) => block.id),
-    );
+  const ids = (value: unknown): unknown[] => {
+    const content = (value as { content?: unknown } | undefined)?.content;
+    return Array.isArray(content)
+      ? content.map((block) => (block as { id?: unknown } | undefined)?.id)
+      : [];
+  };
+  if ((message as { role?: string } | undefined)?.role !== "assistant")
+    return false;
+  const found = ids(message);
+  const expected = ids(echo);
   return (
-    (message as { role?: string } | undefined)?.role === "assistant" &&
-    ids(message) === ids(echo)
+    expected.length > 0 &&
+    found.length === expected.length &&
+    found.every((id, index) => id === expected[index])
   );
 }
 

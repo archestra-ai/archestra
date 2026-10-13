@@ -10906,7 +10906,7 @@ export const deleteSkillSandboxArtifact = <ThrowOnError extends boolean = false>
 export const getSkillSandboxArtifact = <ThrowOnError extends boolean = false>(options: Options<GetSkillSandboxArtifactData, ThrowOnError>) => (options.client ?? client).get<GetSkillSandboxArtifactResponses, unknown, ThrowOnError>({ url: '/api/skill-sandbox/artifacts/{artifactId}', ...options });
 
 /**
- * Overwrite the full text content of a row-backed Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.
+ * Overwrite the full text content of a Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.
  *
  * Authentication:
  *

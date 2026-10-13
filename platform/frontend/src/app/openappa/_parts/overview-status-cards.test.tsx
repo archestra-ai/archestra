@@ -311,3 +311,25 @@ test("the dashboard adopts a newer result when history refreshes", async () => {
     ).toHaveTextContent(/1\s*validation in this run/);
   });
 });
+
+test("sync offers to set itself up while no repository is connected", async () => {
+  show();
+  expect(
+    await screen.findByRole("link", { name: "Set up sync" }),
+  ).toHaveAttribute("href", "/settings/guardrails");
+});
+
+test("sync names its repository and shows a failed sync", async () => {
+  sync = {
+    ...sync,
+    hasPolicy: true,
+    source: { ...source, lastSyncError: "appa.toml was not found" },
+  };
+  show();
+  expect(await screen.findByText("example/policies · main")).toBeVisible();
+  expect(screen.getByText("Failed")).toBeVisible();
+  expect(screen.getByRole("link", { name: "Sync settings" })).toHaveAttribute(
+    "href",
+    "/settings/guardrails",
+  );
+});

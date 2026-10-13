@@ -1,9 +1,16 @@
 "use client";
 
-import { ArrowRight, CircleX, ClipboardCheck } from "lucide-react";
+import {
+  ArrowRight,
+  CircleCheck,
+  CircleX,
+  ClipboardCheck,
+  GitBranch,
+} from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { OpenAppaAlertIcon } from "@/components/openappa-icon";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,22 +23,27 @@ import {
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { useOpenAppaPolicyTestRuns } from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 
-/** The latest validation run and the unresolved yells, side by side. */
+/** Where the policy syncs from, the latest validation run, and the unresolved yells. */
 export function OverviewStatusCards() {
+  const { data: canReadSettings } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   const { data: canReadPolicy } = useHasPermissions({
     openappaPolicy: ["read"],
   });
   const { data: canReadYells } = useHasPermissions({
     openappaDiagnostics: ["read"],
   });
-  if (!canReadPolicy && !canReadYells) return null;
+  if (!canReadSettings && !canReadPolicy && !canReadYells) return null;
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {canReadSettings && <SyncCard />}
       {canReadPolicy && <ValidationCard />}
       {canReadYells && <YellsCard />}
     </div>
@@ -41,6 +53,65 @@ export function OverviewStatusCards() {
 // =============================================================================
 // Internal components
 // =============================================================================
+
+function SyncCard() {
+  const sync = useAppaGithubSync();
+  const source = sync.data?.source;
+  const connected = Boolean(source?.repo);
+  return (
+    <StatusCard
+      icon={<GitBranch />}
+      title="Git sync"
+      status={
+        source?.lastSyncError ? (
+          <Badge variant="destructive">
+            <CircleX />
+            <span>Failed</span>
+          </Badge>
+        ) : source?.setupPullRequestNumber ? (
+          <Badge variant="outline">
+            <span>Waiting for merge</span>
+          </Badge>
+        ) : connected ? (
+          <Badge variant="outline">
+            <CircleCheck className="text-emerald-600 dark:text-emerald-400" />
+            <span>Synced</span>
+          </Badge>
+        ) : undefined
+      }
+      action={
+        <Button size="sm" variant="outline" asChild>
+          <Link href="/settings/guardrails">
+            <span>{connected ? "Sync settings" : "Set up sync"}</span>
+            <ArrowRight />
+          </Link>
+        </Button>
+      }
+    >
+      {sync.isError ? (
+        <Button variant="ghost" size="sm" onClick={() => sync.refetch()}>
+          Could not load sync. Retry
+        </Button>
+      ) : sync.isPending ? (
+        <Skeleton className="h-12 w-full" />
+      ) : connected && source ? (
+        <div className="space-y-1.5">
+          <p className="truncate font-mono text-sm">{`${source.repo} · ${source.ref ?? "HEAD"}`}</p>
+          <CardDescription>
+            {source.lastSyncedAt
+              ? `Last synced ${formatDate({ date: source.lastSyncedAt })}.`
+              : "Not synced yet."}
+          </CardDescription>
+        </div>
+      ) : (
+        <CardDescription className="leading-relaxed">
+          Keep your policy in a repository and review every change as a pull
+          request.
+        </CardDescription>
+      )}
+    </StatusCard>
+  );
+}
 
 function ValidationCard() {
   const history = useOpenAppaPolicyTestRuns(true);

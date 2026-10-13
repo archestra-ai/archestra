@@ -7,15 +7,18 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
+import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
 import {
   helperUrlBase,
   openappaDeclarations,
   packageContentHash,
 } from "./declarations";
+import { parsePolicyToml } from "./policy-text";
 
 const BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 
@@ -41,7 +44,7 @@ describe("bundled batteries", () => {
     const input = (battery: (typeof bundled)[number]) => ({
       entry: `batteries/${battery.name}/appa.toml`,
       name: battery.name,
-      policy: battery.policy,
+      policy: battery.base,
       helpers:
         battery.externals.length > 0
           ? { urlBase: "http://127.0.0.1:9000/helpers/install", tokenEnv }
@@ -657,11 +660,16 @@ describe("validating against this deployment", () => {
 
     // On its own the starter composes: the archestra battery declares the
     // audience source its `internal` audience reads.
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: starter,
+    });
     const standalone = await openappaDeclarations.composeForCheck({
       root: starter,
-      resolution: await openappaDeclarations.resolve({
+      resolution,
+      deployed: await openappaBatteriesService.deployedBatteries({
         organizationId,
-        content: starter,
+        resolution,
       }),
     });
     expect(standalone.errors).toEqual([]);
@@ -767,6 +775,97 @@ describe("validating against this deployment", () => {
   });
 });
 
+describe("a battery with targets", () => {
+  const sandbox = config.daggerRuntime.enabled;
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
+  afterEach(() => {
+    config.daggerRuntime.enabled = sandbox;
+  });
+
+  test("waits for its multi-user credentials, then deploys that target only while the sandbox runs", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    config.daggerRuntime.enabled = true;
+    const { entry } = await uploadTargetedAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["acme_prod"]),
+    });
+    const acme = async () => {
+      const { batteries } =
+        await openappaBatteriesService.policyDeclarations(organizationId);
+      const policy = await openappaBatteriesService.recompile(organizationId);
+      expect(policy.lastError).toBeNull();
+      const composed = parsePolicyToml(policy.content)?.policy as
+        | { annotator?: Array<{ name: string }> }
+        | undefined;
+      const annotators = composed?.annotator?.map(
+        (annotator) => annotator.name,
+      );
+      return {
+        status: batteries.find((battery) => battery.name === "acme")?.status,
+        deploysTarget: annotators?.includes("acme.visibility") ?? false,
+      };
+    };
+    expect(await acme()).toEqual({
+      status: "missing_credentials",
+      deploysTarget: false,
+    });
+
+    await RuntimeCredentialDefinitionModel.create({
+      organizationId,
+      createdBy: userId,
+      definition: {
+        key: "acme-token",
+        name: "Acme token",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "acme-token",
+      value: "acme-token-value",
+    });
+    await openappaBatteriesService.setCredentialBinding({
+      userId,
+      organizationId,
+      variable: ACME_TOKEN,
+      key: "acme-token",
+    });
+    expect(await acme()).toEqual({ status: "active", deploysTarget: true });
+
+    config.daggerRuntime.enabled = false;
+    expect(await acme()).toEqual({ status: "active", deploysTarget: false });
+  });
+});
+
+const ACME_TOKEN = "APPA_PROVIDER_ACME_TOKEN";
+
 const BATTERY_MANIFEST = `schema = 1
 name = "acme"
 description = "Acme battery under test"
@@ -857,6 +956,55 @@ command = ["python3", "check.py"]
         path: "check.py",
         text: `print('{}')\n${params.note ? `# ${params.note}\n` : ""}`,
       },
+    ],
+  });
+}
+
+/** The acme battery with targets: its multi-user target routes to a credentialed helper. */
+async function uploadTargetedAcme(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  const empty = "[policy]\nversion = 2\n";
+  return openappaBatteriesService.uploadPackage({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    name: "acme",
+    files: [
+      {
+        path: "appa-package.toml",
+        text: `${BATTERY_MANIFEST}
+[battery.targets.single-user]
+policy = "single-user.toml"
+
+[battery.targets.multi-user]
+policy = "multi-user.toml"
+`,
+      },
+      {
+        path: "appa.toml",
+        text: `${empty}[[policy.tool]]\nname = "mcp/acme/list"\ndelta = {}\n`,
+      },
+      { path: "single-user.toml", text: empty },
+      {
+        path: "multi-user.toml",
+        text: `${empty}
+[[policy.annotator]]
+name = "acme.visibility"
+ranks = ["suspicious", "trusted"]
+audiences = ["self"]
+marks = []
+
+[[policy.tool]]
+name = "mcp/acme/get"
+annotator = "acme.visibility"
+
+[externals.annotators."acme.visibility"]
+command = ["python3", "check.py"]
+token_env = "${ACME_TOKEN}"
+`,
+      },
+      { path: "check.py", text: "print('{}')\n" },
     ],
   });
 }

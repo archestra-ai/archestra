@@ -19,6 +19,7 @@ import OrganizationModel from "@/models/organization";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
+import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { CredentialAccess } from "@/services/credential-access";
 import {
   GUARDRAILS_REVISION_CONFLICT,
@@ -45,9 +46,11 @@ import type {
   UploadedBatteryPackage,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
+import { declaredCredentials, deployBattery } from "./battery-target";
 import {
   addedGrants,
   bundledEntry,
+  type DeployedEntries,
   grantKey,
   helperUrlBase,
   openappaDeclarations,
@@ -93,7 +96,7 @@ class OpenAppaBatteriesService {
         annotators: battery.annotators,
         scope: batteryScope(battery),
         helpers: battery.helpers,
-        credentials: battery.credentials,
+        credentials: declaredCredentials(battery),
         setup: battery.setup ?? null,
         installs: installsByBattery.get(battery.name) ?? [],
       }))
@@ -111,7 +114,7 @@ class OpenAppaBatteriesService {
         {
           benefit: battery.benefit ?? null,
           setup: batterySetupSteps(battery),
-          credentials: battery.credentials,
+          credentials: declaredCredentials(battery),
         },
       ]),
     );
@@ -166,10 +169,10 @@ class OpenAppaBatteriesService {
                 }),
           description: found.package.description,
           namespaces: found.package.namespaces,
-          credentials: found.package.credentials,
+          credentials: declaredCredentials(found.package),
           benefit: found.package.benefit ?? null,
           setup: batterySetupSteps(found.package),
-          policy: found.package.policy,
+          policy: found.package.base,
         });
     }
     return result;
@@ -268,7 +271,7 @@ class OpenAppaBatteriesService {
     return {
       entry: included.entry,
       name: included.name,
-      content: included.battery.policy,
+      content: included.battery.base,
     };
   }
 
@@ -317,12 +320,38 @@ class OpenAppaBatteriesService {
     const composed = await openappaDeclarations.composeForCheck({
       root: planned.root.content,
       resolution: planned.resolution,
+      deployed: planned.deployed,
       held: new Set(held.map((battery) => battery.name)),
     });
     return {
       refusal: (composed.content ?? null) === null ? composed.errors : [],
       heldBack: held.map(heldBackNote),
     };
+  }
+
+  /**
+   * How each entry of a resolution deploys in this organization now. A
+   * stored binding counts for a variable the resolution's table leaves out, as
+   * a recompose applies it.
+   */
+  async deployedBatteries(params: {
+    organizationId: string;
+    resolution: PolicyResolution;
+  }): Promise<DeployedEntries> {
+    const { organizationId, resolution } = params;
+    const [bindable, bindings] = await Promise.all([
+      this.bindableKeys(organizationId),
+      OpenAppaCredentialBindingModel.list(organizationId),
+    ]);
+    const stored = new Map(
+      bindings.map((binding) => [binding.variable, binding.credentialKey]),
+    );
+    return deployEntries({
+      resolution,
+      keyOf: (variable) =>
+        resolution.credentials[variable] ?? stored.get(variable) ?? null,
+      bindable,
+    });
   }
 
   async recompileAll(): Promise<void> {
@@ -770,7 +799,10 @@ class OpenAppaBatteriesService {
       );
     // Helper code runs with whatever credentials get bound to it later, so
     // supplying it takes the permission binding a credential takes.
-    if (inspected.credentials.length > 0 || inspected.externals.length > 0)
+    if (
+      declaredCredentials(inspected).length > 0 ||
+      (inspected.multiUser?.externals ?? inspected.externals).length > 0
+    )
       await CredentialAccess.requireOnEvery({
         userId,
         organizationId,
@@ -813,7 +845,7 @@ class OpenAppaBatteriesService {
       namespaces: inspected.namespaces,
       annotators: inspected.annotators,
       helpers: inspected.helpers,
-      credentials: inspected.credentials,
+      credentials: declaredCredentials(inspected),
       setup: inspected.setup ?? null,
     };
   }
@@ -1040,10 +1072,11 @@ class OpenAppaBatteriesService {
     );
     return openappaDeclarations.composeInputs({
       entries: planned.resolution.entries,
-      helpers: (entry) => {
+      deployed: planned.deployed,
+      helpers: (entry, deployed) => {
         const planned = byName.get(entry.name);
         if (!planned?.composed) return "stub";
-        if (!entry.battery || entry.battery.externals.length === 0) return null;
+        if (deployed.externals.length === 0) return null;
         const owner = helperOwner(installs, entry.name);
         return owner ? { urlBase: helperUrlBase(owner.id), tokenEnv } : "stub";
       },
@@ -1111,12 +1144,19 @@ class OpenAppaBatteriesService {
       }),
       this.bindableKeys(organizationId),
     ]);
+    const deployed = deployEntries({
+      resolution,
+      keyOf: (variable) => resolution.credentials[variable] ?? null,
+      bindable,
+    });
     const aliases = new Map(
       resolution.aliases.map((alias) => [alias.namespace, alias.servers]),
     );
+    const reads = (entry: (typeof resolution.entries)[number]) =>
+      entry.battery ? declaredCredentials(entry.battery) : [];
     const readers = new Map<string, string[]>();
     for (const entry of resolution.entries)
-      for (const variable of entry.battery?.credentials ?? [])
+      for (const variable of reads(entry))
         readers.set(variable, [...(readers.get(variable) ?? []), entry.name]);
     // Two entries answering one name compose to nothing the runtime accepts and
     // derive one row apiece for the same battery. `validate` refuses such a
@@ -1142,14 +1182,14 @@ class OpenAppaBatteriesService {
           target,
           catalogs: prefixes.byPrefix.get(target) ?? new Set<string>(),
         }));
-      const credentials = (entry.battery?.credentials ?? []).map(
-        (variable) => ({
-          variable,
-          key: resolution.credentials[variable] ?? null,
-          source: credentialSource[variable] ?? null,
-          readers: readers.get(variable) ?? [],
-        }),
-      );
+      // A battery with targets is missing its credentials until every variable
+      // its multi-user target reads is bound, though its base alone composes.
+      const credentials = reads(entry).map((variable) => ({
+        variable,
+        key: resolution.credentials[variable] ?? null,
+        source: credentialSource[variable] ?? null,
+        readers: readers.get(variable) ?? [],
+      }));
       const catalogIds = [
         ...new Set(servers.flatMap(({ catalogs }) => [...catalogs])),
       ];
@@ -1175,7 +1215,9 @@ class OpenAppaBatteriesService {
       ...resolution.routedAnnotators,
       ...drafts
         .filter(composes)
-        .flatMap(({ entry }) => entry.battery?.routedAnnotators ?? []),
+        .flatMap(
+          ({ entry }) => deployed.get(entry.entry)?.routedAnnotators ?? [],
+        ),
     ]);
     const batteries: PlannedBattery[] = [];
     const rows = new Map<string, BatteryInstallRow>();
@@ -1186,7 +1228,7 @@ class OpenAppaBatteriesService {
       const status =
         organizationWide &&
         draft.status === "active" &&
-        !(entry.battery?.annotators ?? []).some((annotator) =>
+        !(deployed.get(entry.entry)?.annotators ?? []).some((annotator) =>
           routed.has(annotator),
         )
           ? "unrouted"
@@ -1231,6 +1273,7 @@ class OpenAppaBatteriesService {
     return {
       root,
       resolution,
+      deployed,
       batteries,
       rows: [...rows.values()],
       unusedAliases: resolution.aliases.filter(
@@ -1730,6 +1773,7 @@ type PlannedBattery = PolicyBatteryView;
 type PlannedComposition = {
   root: GuardrailsPolicy;
   resolution: PolicyResolution;
+  deployed: DeployedEntries;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
   unusedAliases: PolicyDeclarationsView["unusedAliases"];
@@ -1887,6 +1931,39 @@ function compositionFingerprint(params: {
 /** The native package joins its one-line setup steps with newlines. */
 function batterySetupSteps(battery: NativeBatteryPackage): string[] {
   return battery.setup?.split("\n") ?? [];
+}
+
+/**
+ * How each resolved entry deploys, given the key each variable is bound to
+ * and the keys that hold an organization value. Helpers run in the sandbox, so
+ * without it no battery deploys a target.
+ */
+function deployEntries(params: {
+  resolution: PolicyResolution;
+  keyOf: (variable: string) => string | null;
+  bindable: ReadonlySet<string>;
+}): DeployedEntries {
+  const { resolution, keyOf, bindable } = params;
+  const isBound = (variable: string) => {
+    const key = keyOf(variable);
+    return key !== null && bindable.has(key);
+  };
+  return new Map(
+    resolution.entries.flatMap((entry) =>
+      entry.battery
+        ? [
+            [
+              entry.entry,
+              deployBattery({
+                battery: entry.battery,
+                isBound,
+                sandboxEnabled: sandboxRuntimeService.isEnabled,
+              }),
+            ] as const,
+          ]
+        : [],
+    ),
+  );
 }
 
 /** A battery with no tool namespace and at least one annotator governs the organization. */

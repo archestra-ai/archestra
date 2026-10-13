@@ -50,7 +50,7 @@ class OpenAppaRemediesService {
               {
                 entry: included.name === included.entry ? null : included.entry,
                 battery: included.name,
-                text: included.battery.policy,
+                text: included.battery.base,
               },
             ]
           : [],

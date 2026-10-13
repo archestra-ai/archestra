@@ -45,7 +45,7 @@ class OpenAppaTrustAudienceService {
               name: included.name,
               entry: included.entry,
               packageHash: included.packageHash,
-              text: included.battery.policy,
+              text: included.battery.base,
             },
           ]
         : [],

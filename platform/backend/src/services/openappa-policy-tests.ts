@@ -194,6 +194,10 @@ async function evaluateOpenAppaPolicyTests(
       ? await openappaDeclarations.composeForCheck({
           root: bound.content,
           resolution: bound.resolution,
+          deployed: await openappaBatteriesService.deployedBatteries({
+            organizationId: params.organizationId,
+            resolution: bound.resolution,
+          }),
         })
       : null;
     const content = composed?.content ?? policyContent;

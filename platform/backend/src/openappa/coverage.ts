@@ -536,8 +536,8 @@ async function buildReport(
   for (const included of resolution.entries) {
     if (!included.battery) continue;
     const status = statusOf.get(included.name) ?? "unavailable";
-    const batteryEntries = toolEntries(included.battery.policy);
-    const batteryHeaderLines = toolHeaderLines(included.battery.policy);
+    const batteryEntries = toolEntries(included.battery.base);
+    const batteryHeaderLines = toolHeaderLines(included.battery.base);
     for (const [index, entry] of batteryEntries.entries()) {
       const spelled = splitSelector(entry.name);
       const canonical = CANONICAL_RULE_NAME.exec(spelled.base);

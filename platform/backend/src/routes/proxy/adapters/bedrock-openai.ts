@@ -278,6 +278,7 @@ export function makeBedrockOpenaiAdapterFactory(
 > {
   return {
     ...bedrockAdapterFactory,
+    translatesWireFormat: true,
     createResponseAdapter(response) {
       return new BedrockOpenaiResponseAdapter(response, ctx);
     },

@@ -31,9 +31,8 @@ type PendingHitlReview = {
 
 type HitlAskUserArguments = {
   question: string;
-  previewQuestion?: string;
   header: string;
-  options: Array<{ label: string; description: string; preview?: string }>;
+  options: Array<{ label: string; description: string }>;
   allowMultiple: false;
   remedy_offer_ids: [string];
 };
@@ -217,37 +216,23 @@ export async function getHitlAskUserArguments(params: {
       remedy_offer_ids: [offerId],
     };
   }
-  // Hosts with option previews (Claude Code) ask the short question and show
-  // the reviewed arguments beside each choice. Forms and other hosts ask the
-  // same call in one text. Both keep what an approval accepts besides the call.
+  // Claude Code can withhold long option previews entirely.
+  // Keep the exact call and review coverage in the question on every host.
   const args = withoutCommandAlias(
     review.tool,
     parseReviewedArguments(review.arguments) ?? {},
   );
-  const argumentLines = formatArgumentLines(args, REVIEW_PREVIEW_WIDTH);
   const accepted = acceptedCoverage(review.text);
   return {
     question:
       approvalQuestion({ tool: review.tool, args, accepted }) ??
       formatReviewQuestion(review.text),
-    previewQuestion: [
-      `Approve ${reviewedToolLabel(review.tool)}?`,
-      ...acceptedBlock(accepted),
-    ].join("\n\n"),
     header: "Approval",
-    options: options.map((option) => ({
-      ...option,
-      preview: argumentLines
-        ? `${option.label}\n\n${argumentLines}`
-        : option.label,
-    })),
+    options,
     allowMultiple: false,
     remedy_offer_ids: [offerId],
   };
 }
-
-/** Columns of Claude Code's preview pane beside the option list. */
-const REVIEW_PREVIEW_WIDTH = 56;
 
 export async function recordHitlRuling(params: {
   session: OpenAppaSession;
@@ -403,8 +388,9 @@ function approvalQuestion(params: {
   const argumentLines = formatArgumentLines(params.args);
   return [
     `Approve ${reviewedToolLabel(params.tool)}?`,
-    ...(argumentLines ? [argumentLines] : []),
+    // Native clients can truncate long questions; show review coverage first.
     ...acceptedBlock(params.accepted),
+    ...(argumentLines ? [argumentLines] : []),
     "Approve lets this exact call run. Deny keeps it blocked.",
   ].join("\n\n");
 }

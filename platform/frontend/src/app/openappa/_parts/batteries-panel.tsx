@@ -528,7 +528,7 @@ function HeldPullNotice({
   return (
     <InlineNotice variant="warning">
       <GitPullRequestArrow />
-      <span className="font-medium">Repository text held</span>
+      <span className="font-medium">Repository changes need approval</span>
       <InlineNoticeText>
         {heldPull.reasons.map((reason) => (
           <div key={reason}>{HELD_PULL_REASONS[reason]}</div>
@@ -542,7 +542,7 @@ function HeldPullNotice({
           disabled={accept.isPending}
           onClick={() => accept.mutate()}
         >
-          <span>Accept repository text</span>
+          <span>Approve</span>
         </Button>
       )}
     </InlineNotice>
@@ -1466,10 +1466,9 @@ const HELD_PULL_REASONS: Record<
   NonNullable<PolicyDeclarations["heldPull"]>["reasons"][number],
   string
 > = {
-  drops_batteries:
-    "The repository text drops batteries this deployment declared",
+  drops_batteries: "The repository's policy removes batteries added here.",
   changes_credentials:
-    "The repository text changes which credentials batteries read",
+    "The repository's policy gives batteries credentials. Approve to let them read those keys.",
 };
 
 /** Package files keyed by their path inside the picked folder. */

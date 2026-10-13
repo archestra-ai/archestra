@@ -103,8 +103,8 @@ export function useAcceptHeldPull() {
     (accepted) =>
       toast.success(
         accepted.droppedBatteries.length > 0
-          ? `Repository text accepted. Dropped: ${accepted.droppedBatteries.join(", ")}`
-          : "Repository text accepted",
+          ? `Repository changes approved. Removed: ${accepted.droppedBatteries.join(", ")}`
+          : "Repository changes approved",
       ),
   );
 }

@@ -441,9 +441,7 @@ test("a held pull naming only dropped batteries is accepted with policy permissi
     }),
   );
   show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Accept repository text" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
   await waitFor(() => expect(accepted).toBe(true));
 });
 
@@ -460,7 +458,7 @@ test("a held pull that moves credentials needs the credential permission", async
   show();
   await entry("github");
   expect(
-    screen.queryByRole("button", { name: "Accept repository text" }),
+    screen.queryByRole("button", { name: "Approve" }),
   ).not.toBeInTheDocument();
 });
 

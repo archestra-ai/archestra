@@ -129,6 +129,73 @@ test("syncs on demand and shows the server's failure while retaining the source"
   expect(toast.success).not.toHaveBeenCalled();
 });
 
+test("a held pull waits for approval, not a failure, and approves in place", async () => {
+  const message =
+    "The repository's policy gives the github battery the github-token credential.";
+  state = {
+    ...state,
+    source: {
+      ...source,
+      heldReasons: ["changes_credentials"],
+      lastSyncError: message,
+    },
+  };
+  let accepted = false;
+  server.use(
+    http.post(`${url}/accept-held`, () => {
+      accepted = true;
+      state = {
+        ...state,
+        source: { ...source, heldReasons: [], lastSyncError: null },
+      };
+      return HttpResponse.json({
+        contentHash: "a".repeat(64),
+        sourceCommit: "b".repeat(40),
+        reasons: ["changes_credentials"],
+        droppedBatteries: [],
+        changedVariables: ["APPA_PROVIDER_GITHUB_TOKEN"],
+      });
+    }),
+  );
+  show();
+  expect(await screen.findByText("Needs approval")).toBeVisible();
+  expect(screen.queryByText("Sync failed")).not.toBeInTheDocument();
+  expect(screen.getByText("Repository changes need approval")).toBeVisible();
+  expect(screen.getByText(new RegExp(message))).toBeVisible();
+  expect(screen.getByRole("link", { name: "See batteries" })).toHaveAttribute(
+    "href",
+    "/openappa/batteries",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+  await waitFor(() => expect(accepted).toBe(true));
+  expect(await screen.findByText("Connected")).toBeVisible();
+});
+
+test("only someone who may bind credentials can approve a credential change", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({ data: !permissions.credential }) as ReturnType<
+        typeof useHasPermissions
+      >,
+  );
+  state = {
+    ...state,
+    source: {
+      ...source,
+      heldReasons: ["changes_credentials"],
+      lastSyncError:
+        "The repository's policy gives the github battery the github-token credential.",
+    },
+  };
+  show();
+  expect(
+    await screen.findByText("Repository changes need approval"),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Approve" }),
+  ).not.toBeInTheDocument();
+});
+
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {
   server.use(
     http.patch(url, async ({ request }) => {

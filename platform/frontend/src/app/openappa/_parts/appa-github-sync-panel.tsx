@@ -6,8 +6,10 @@ import {
   ExternalLink,
   GitBranch,
   Github,
+  GitPullRequestArrow,
   RefreshCw,
 } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -39,6 +41,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAcceptHeldPull } from "@/lib/openappa-batteries.query";
 import { OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES } from "@/lib/openappa-github-credential";
 import {
   useAppaGithubSync,
@@ -65,6 +68,15 @@ export function AppaGithubSyncPanel() {
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
+  // Approving a held pull performs what it was held for, as on the batteries page.
+  const { data: canEditPolicy } = useHasPermissions({
+    openappaPolicy: ["update"],
+  });
+  const { data: canBindCredentials } = useHasPermissions({
+    openappaPolicy: ["update"],
+    credential: ["update"],
+  });
+  const acceptHeld = useAcceptHeldPull();
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -98,17 +110,24 @@ export function AppaGithubSyncPanel() {
       ? "Waiting for the first sync"
       : "Automatic updates stopped";
   const connected = !!source?.interval;
+  // A held pull is not a failure: it waits for someone here to approve it.
+  const held = !!source?.heldReasons.length;
+  const mayApprove = source?.heldReasons.includes("changes_credentials")
+    ? canBindCredentials === true
+    : canEditPolicy === true;
   const status = !enabled
     ? "Disabled"
-    : source?.lastSyncError
-      ? "Sync failed"
-      : connected && source?.setupPullRequestNumber
-        ? "Waiting for setup PR"
-        : connected
-          ? "Connected"
-          : hasPolicy
-            ? "Sync stopped"
-            : null;
+    : held
+      ? "Needs approval"
+      : source?.lastSyncError
+        ? "Sync failed"
+        : connected && source?.setupPullRequestNumber
+          ? "Waiting for setup PR"
+          : connected
+            ? "Connected"
+            : hasPolicy
+              ? "Sync stopped"
+              : null;
   return (
     <>
       <SettingsBlock
@@ -118,7 +137,9 @@ export function AppaGithubSyncPanel() {
             {/* No badge until sync is set up: there is no state to report. */}
             {status && (
               <Badge
-                variant={source?.lastSyncError ? "destructive" : "outline"}
+                variant={
+                  source?.lastSyncError && !held ? "destructive" : "outline"
+                }
               >
                 {status}
               </Badge>
@@ -253,7 +274,37 @@ export function AppaGithubSyncPanel() {
                     </InlineNotice>
                   </div>
                 )}
-                {source.lastSyncError && (
+                {held ? (
+                  <div className="px-4 pb-4">
+                    <InlineNotice variant="warning">
+                      <GitPullRequestArrow className="size-4 shrink-0" />
+                      <span className="font-medium">
+                        Repository changes need approval
+                      </span>
+                      <InlineNoticeText className="flex-1">
+                        {source.lastSyncError} Your current policy stays active
+                        until you approve.{" "}
+                        <Link
+                          href="/openappa/batteries"
+                          className="font-medium underline underline-offset-4"
+                        >
+                          See batteries
+                        </Link>
+                      </InlineNoticeText>
+                      {mayApprove && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="ml-auto"
+                          disabled={acceptHeld.isPending}
+                          onClick={() => acceptHeld.mutate()}
+                        >
+                          <span>Approve</span>
+                        </Button>
+                      )}
+                    </InlineNotice>
+                  </div>
+                ) : source.lastSyncError ? (
                   <div className="px-4 pb-4">
                     <InlineNotice variant="error">
                       <AlertTriangle className="size-4 shrink-0" />
@@ -263,7 +314,7 @@ export function AppaGithubSyncPanel() {
                       </InlineNoticeText>
                     </InlineNotice>
                   </div>
-                )}
+                ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t bg-muted/30 px-4 py-2">
                   <p className="text-xs leading-relaxed text-muted-foreground">
                     {hasPolicy

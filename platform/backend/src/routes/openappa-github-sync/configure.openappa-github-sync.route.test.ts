@@ -952,7 +952,10 @@ describe("APPA GitHub sync", () => {
     );
     const failure = await action({ action: "sync" });
     expect(failure.statusCode).toBe(200);
-    expect(failure.json().source.lastSyncError).toContain("404");
+    // A deleted repository reads as one, with the way out, not as a status code.
+    expect(failure.json().source.lastSyncError).toMatch(
+      /^Repository not found: example\/policies.*deleted or renamed.*Edit source/,
+    );
     expect(failure.json().source.sourceCommit).toBe(commit);
   });
 
@@ -1036,7 +1039,7 @@ describe("APPA GitHub sync", () => {
     await syncAppaGithubPolicy(organizationId);
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       content: policy,
-      lastSyncError: expect.stringContaining("404"),
+      lastSyncError: expect.stringContaining("Repository not found"),
     });
   });
   test("synced policies cannot be manually overwritten, disconnect enables editing", async () => {
@@ -1118,6 +1121,8 @@ describe("APPA GitHub sync", () => {
       heldSourceCommit: second,
       heldReasons: ["changes_credentials"],
       sourceCommit: commit,
+      lastSyncError:
+        "The repository's policy gives the github battery the github-token credential.",
     });
     const status = await app.inject({
       method: "GET",
@@ -1268,6 +1273,8 @@ describe("APPA GitHub sync", () => {
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       heldContent: pulled,
       heldReasons: ["drops_batteries"],
+      lastSyncError:
+        "The repository's policy removes batteries added here: jev.",
     });
     await OpenAppaCredentialBindingModel.upsert({
       organizationId,

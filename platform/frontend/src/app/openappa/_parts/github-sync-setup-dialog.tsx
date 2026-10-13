@@ -201,8 +201,15 @@ export function GithubSyncSetupDialog({
         : (repoLookup.data?.status ?? "checking");
   // The repository already syncing is neither seeded nor replaced: it is kept.
   const keepsSource = !!editing && repo === editing.repo;
-  const repoStatus: RepositoryStatus =
-    keepsSource && USABLE.has(lookedUp) ? "current" : lookedUp;
+  // The repository already syncing that can't be reached was most likely
+  // deleted or renamed since: say so, not just that the App lacks access.
+  const repoStatus: RepositoryStatus = !keepsSource
+    ? lookedUp
+    : USABLE.has(lookedUp)
+      ? "current"
+      : lookedUp === "unreachable"
+        ? "missing"
+        : lookedUp;
 
   // Installing saves the new App as a credential and clears it from setup, so
   // remember it to recognize it in the saved Apps and carry on with it.
@@ -834,22 +841,47 @@ export function GithubSyncSetupDialog({
             ) : repositories.data?.repositories.length ? (
               <SearchableSelect
                 id="github-sync-repo"
-                className="h-10 w-full"
+                className={cn(
+                  "h-10 w-full",
+                  repoStatus === "missing" && "border-destructive",
+                )}
                 value={repo}
                 onValueChange={setRepo}
+                aria-invalid={
+                  repoStatus === "missing" || repoStatus === "unreachable"
+                }
                 placeholder="Choose a repository"
                 searchPlaceholder="Search repositories…"
                 emptyMessage="No repository matches."
                 listClassName="max-h-72"
-                items={repositories.data.repositories.map((entry) => ({
-                  value: entry.fullName,
-                  label: entry.fullName,
-                  searchText: `${entry.fullName} ${entry.description ?? ""}`,
-                  content: <RepositoryOption repository={entry} />,
-                  selectedContent: (
-                    <RepositoryOption repository={entry} compact />
-                  ),
-                }))}
+                items={[
+                  ...repositories.data.repositories.map((entry) => ({
+                    value: entry.fullName,
+                    label: entry.fullName,
+                    searchText: `${entry.fullName} ${entry.description ?? ""}`,
+                    content: <RepositoryOption repository={entry} />,
+                    selectedContent: (
+                      <RepositoryOption repository={entry} compact />
+                    ),
+                  })),
+                  // Keep the gone repository visible, marked, but not pickable.
+                  ...(repoStatus === "missing" &&
+                  !repositories.data.repositories.some(
+                    (entry) => entry.fullName === repo,
+                  )
+                    ? [
+                        {
+                          value: repo,
+                          label: repo,
+                          disabled: true,
+                          content: <MissingRepositoryOption repo={repo} />,
+                          selectedContent: (
+                            <MissingRepositoryOption repo={repo} />
+                          ),
+                        },
+                      ]
+                    : []),
+                ]}
               />
             ) : (
               <InlineNotice
@@ -882,6 +914,7 @@ export function GithubSyncSetupDialog({
           </div>
           {repo ? (
             <RepositoryNotice
+              repo={repo}
               path={location.path ?? "appa.toml"}
               folder={validationFolder}
               status={repoStatus}
@@ -1032,11 +1065,13 @@ type RepositoryStatus =
   | "policy"
   | "other"
   | "unreachable"
+  | "missing"
   | "app_error"
   | "failed";
 
 /** What setup will do with an existing repository, once it has looked it up. */
 function RepositoryNotice({
+  repo,
   path,
   folder,
   status,
@@ -1044,6 +1079,7 @@ function RepositoryNotice({
   error,
   manageUrl,
 }: {
+  repo: string;
   path: string;
   folder: string;
   status: RepositoryStatus;
@@ -1057,6 +1093,20 @@ function RepositoryNotice({
         <LoaderCircle className="size-3 animate-spin" />
         <span>Looking for the policy…</span>
       </p>
+    );
+  if (status === "missing")
+    return (
+      <InlineNotice variant="error" aria-live="polite">
+        <AlertTriangle aria-hidden />
+        <span className="font-medium">Repository not found</span>
+        <InlineNoticeText className="flex-1">
+          {repo} may have been deleted or renamed, or the App lost access. Pick
+          another repository.
+        </InlineNoticeText>
+        {manageUrl ? (
+          <NoticeLink href={manageUrl}>Change access</NoticeLink>
+        ) : null}
+      </InlineNotice>
     );
   if (status === "unreachable" || status === "app_error" || status === "failed")
     return (
@@ -1198,6 +1248,26 @@ function NoticeLink({
 }
 
 /** A repository row: owner dimmed, name bold, a lock when private. */
+function MissingRepositoryOption({ repo }: { repo: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-2.5">
+      <AlertTriangle
+        className="size-3.5 shrink-0 text-destructive"
+        aria-hidden
+      />
+      <span className="truncate text-muted-foreground line-through">
+        {repo}
+      </span>
+      <Badge
+        variant="destructive"
+        className="h-4 shrink-0 px-1.5 text-[10px] font-normal"
+      >
+        Not found
+      </Badge>
+    </span>
+  );
+}
+
 function RepositoryOption({
   repository,
   compact = false,

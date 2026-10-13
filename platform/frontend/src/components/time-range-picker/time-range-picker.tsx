@@ -146,7 +146,7 @@ export function TimeRangePicker({
           const earlier = value && shiftTimeRange(value, -1, now);
           if (earlier) onChange(earlier);
         }}
-        className="border-r border-inherit"
+        className="border-r border-inherit max-sm:hidden"
       >
         <ChevronLeft />
       </IconButton>
@@ -167,8 +167,9 @@ export function TimeRangePicker({
                 <Clock className="size-3.5 shrink-0 text-muted-foreground" />
                 {/* One width for every label, so picking a range never moves
                     the arrows; a longer typed range is cut short, and its
-                    times show in the tooltip. */}
-                <span className="w-32 truncate text-left">{label}</span>
+                    times show in the tooltip. On a phone the arrows, zoom and
+                    reset hide, so the picker fits beside a page title. */}
+                <span className="w-24 truncate text-left sm:w-32">{label}</span>
                 <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
               </Button>
             </PopoverTrigger>
@@ -286,7 +287,7 @@ export function TimeRangePicker({
           const later = value && shiftTimeRange(value, 1, now);
           if (later) onChange(later);
         }}
-        className="border-l border-inherit"
+        className="border-l border-inherit max-sm:hidden"
       >
         <ChevronRight />
       </IconButton>
@@ -297,7 +298,7 @@ export function TimeRangePicker({
           const wider = value && zoomOutTimeRange(value, now);
           if (wider) onChange(wider);
         }}
-        className="border-l border-inherit"
+        className="border-l border-inherit max-sm:hidden"
       >
         <ZoomOut />
       </IconButton>
@@ -308,7 +309,7 @@ export function TimeRangePicker({
           label="Reset time range"
           disabled={value === null}
           onClick={onClear}
-          className="border-l border-inherit"
+          className="border-l border-inherit max-sm:hidden"
         >
           <X />
         </IconButton>

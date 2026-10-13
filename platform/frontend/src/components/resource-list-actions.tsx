@@ -72,7 +72,9 @@ export function ResourceListActions({
           onClick={() => setOpened(kind.resource)}
         >
           <Shield className="size-4" />
-          <span>{kind.label}</span>
+          {/* On a phone only the shield shows, so the header's actions still
+              fit beside its title; the name stays for screen readers. */}
+          <span className="max-sm:sr-only">{kind.label}</span>
         </Button>
       ))}
       {children && (

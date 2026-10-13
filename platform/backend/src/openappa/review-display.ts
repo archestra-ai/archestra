@@ -73,47 +73,16 @@ export function formatArgumentLines(
   const column = Math.max(...names.map((name) => name.length)) + 2;
   const valueWidth = Math.max(20, width - column);
   return names
-    .flatMap((name) =>
-      wrap(argumentText(args[name]), valueWidth).map((line, index) =>
+    .flatMap((name) => {
+      const raw = args[name];
+      const value = typeof raw === "string" ? raw : JSON.stringify(raw);
+      return wrap(value ?? "", valueWidth).map((line, index) =>
         index === 0
           ? `${name.padEnd(column)}${line}`
           : `${" ".repeat(column)}${line}`,
-      ),
-    )
+      );
+    })
     .join("\n");
-}
-
-/**
- * Argument values for a narrow pane. Names and values share a line when every
- * value fits beside the names. Otherwise each name has a line of its own and
- * its value wraps below it, indented, so a long value gets the full width.
- */
-export function formatArgumentBlock(
-  args: Record<string, unknown>,
-  width: number,
-): string {
-  const names = Object.keys(args);
-  if (names.length === 0) return "";
-  const column = Math.max(...names.map((name) => name.length)) + 2;
-  const fits = names.every((name) => {
-    const value = argumentText(args[name]);
-    return !value.includes("\n") && column + value.length <= width;
-  });
-  if (fits) return formatArgumentLines(args, width);
-  return names
-    .flatMap((name) => [
-      name,
-      ...wrap(argumentText(args[name]), width - VALUE_INDENT.length).map(
-        (line) => (line ? `${VALUE_INDENT}${line}` : ""),
-      ),
-    ])
-    .join("\n");
-}
-
-const VALUE_INDENT = "  ";
-
-function argumentText(value: unknown): string {
-  return typeof value === "string" ? value : (JSON.stringify(value) ?? "");
 }
 
 function wrap(text: string, width: number): string[] {

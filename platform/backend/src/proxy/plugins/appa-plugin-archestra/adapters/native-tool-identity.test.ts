@@ -83,9 +83,8 @@ describe("native local tool identities", () => {
 
   const shownReview: AskUserArguments = {
     question: "Full review text.",
-    shortQuestion: "Approve slack__send_message call K7Q2?",
-    callText:
-      "**slack\\_\\_send\\_message call K7Q2**\n\n```text\ntext  Hello\n```",
+    shortQuestion: "Approve the slack__send_message call?",
+    callText: "**slack\\_\\_send\\_message call**\n\n```yaml\ntext: Hello\n```",
     header: "Approval",
     options: [
       { label: "Approve", description: "Allow this exact tool call." },
@@ -99,7 +98,7 @@ describe("native local tool identities", () => {
     expect(native.fromAskUser(shownReview)).toEqual({
       questions: [
         {
-          question: "Approve slack__send_message call K7Q2?",
+          question: "Approve the slack__send_message call?",
           header: "Approval",
           options: shownReview.options,
           multiSelect: false,
@@ -116,7 +115,7 @@ describe("native local tool identities", () => {
     ]) {
       const text = JSON.stringify(converted);
       expect(text).toContain("Full review text.");
-      expect(text).not.toContain("K7Q2");
+      expect(text).not.toContain("Approve the slack__send_message call?");
     }
   });
 

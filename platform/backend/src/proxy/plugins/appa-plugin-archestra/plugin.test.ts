@@ -1400,8 +1400,8 @@ describe("asking through the client's own question tool", () => {
     // an approval: the model may write both, but no review stands behind them.
     const askUser = {
       question: "Which branch should I push?",
-      shortQuestion: "Approve Bash call K7Q2?",
-      callText: "**Bash call K7Q2**\n\n```text\ncommand\n  git status\n```",
+      shortQuestion: "Approve the Bash command?",
+      callText: "**Bash command**\n\n```sh\ngit status\n```",
       options: [{ label: "main" }, { label: "feature" }],
     };
 
@@ -1962,7 +1962,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami call {code}?"="Approve". You can now continue with these answers in mind.',
+        'Your questions have been answered: "Approve the archestra__whoami call?"="Approve". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -1974,7 +1974,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami call {code}?"="Deny". You can now continue with these answers in mind.',
+        'Your questions have been answered: "Approve the archestra__whoami call?"="Deny". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2128,14 +2128,10 @@ describe("asking through the client's own question tool", () => {
       if (client === "Claude Code") {
         // Claude Code shows the reviewed call in the reply and asks one line
         // naming it below, with no previews.
-        const code = (
-          await getHitlReview({ session: trusted.session, offerId })
-        )?.code;
-        expect(code).toMatch(/^[0-9A-Z]{4}$/);
         expect(JSON.parse(question.arguments as string)).toEqual({
           questions: [
             {
-              question: `Approve archestra__whoami call ${code}?`,
+              question: "Approve the archestra__whoami call?",
               header: "Approval",
               options: [
                 {
@@ -2152,7 +2148,7 @@ describe("asking through the client's own question tool", () => {
           ],
         });
         expect(question.leadingText).toBe(
-          `**archestra\\_\\_whoami call ${code}**\n\nThis call has no arguments.`,
+          "**archestra\\_\\_whoami call**\n\nThis call has no arguments.",
         );
       } else {
         expect(question.leadingText).toBeUndefined();
@@ -2175,12 +2171,7 @@ describe("asking through the client's own question tool", () => {
           {
             id: outerStamp.callId,
             name: nativeName,
-            // The card names the call by the staged review's code.
-            content: answer.replace(
-              "{code}",
-              (await getHitlReview({ session: trusted.session, offerId }))
-                ?.code ?? "",
-            ),
+            content: answer,
             isError: false,
           },
         ],
@@ -2514,7 +2505,7 @@ describe("asking through the client's own question tool", () => {
       // An answer with the user's note. The selection it repeats is not a
       // submitted choice, and the wording is not one the adapter reads.
       answer: JSON.stringify(
-        'The user answered: "Approve archestra__whoami call {code}?"="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
+        'The user answered: "Approve the archestra__whoami call?"="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2614,12 +2605,7 @@ describe("asking through the client's own question tool", () => {
           {
             id: outerStamp.callId,
             name: nativeName,
-            // The card names the call by the staged review's code.
-            content: answer.replace(
-              "{code}",
-              (await getHitlReview({ session: trusted.session, offerId }))
-                ?.code ?? "",
-            ),
+            content: answer,
             isError: false,
           },
         ],

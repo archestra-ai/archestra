@@ -1,12 +1,12 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
+import { dump as dumpYaml } from "js-yaml";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { sessionCallerId } from "./actor";
 import { isCommandExecutionTool } from "./command-normalization";
 import {
-  formatArgumentBlock,
   formatArgumentLines,
   parseReviewedArguments,
   reviewedToolLabel,
@@ -28,12 +28,6 @@ type PendingHitlReview = {
   tool?: string;
   arguments?: string;
   remedyArguments?: Record<string, unknown>;
-  /**
-   * Names the call in the reply's block and in the form that asks about it,
-   * so a block the agent writes itself cannot pass for this one. Minted when
-   * the review is staged; reviews staged before it existed have none.
-   */
-  code?: string;
 };
 
 type HitlAskUserArguments = {
@@ -104,7 +98,7 @@ export async function stageHitlReview(params: {
   review: PendingHitlReview;
   callId?: string;
 }): Promise<void> {
-  const review = { ...params.review, code: mintReviewCode() };
+  const { review } = params;
   await cacheManager.withLock(
     stagePresenceKey(params.session, review.offerId),
     async (cache) => {
@@ -236,13 +230,13 @@ export async function getHitlAskUserArguments(params: {
     parseReviewedArguments(review.arguments) ?? {},
   );
   const accepted = acceptedCoverage(review.text);
-  const call = `${reviewedToolLabel(review.tool)} call${review.code ? ` ${review.code}` : ""}`;
+  const preview = callPreview(review.tool, args);
   return {
     question:
       approvalQuestion({ tool: review.tool, args, accepted }) ??
       formatReviewQuestion(review.text),
-    shortQuestion: `Approve ${call}?`,
-    callText: reviewCallText({ call, args, accepted }),
+    shortQuestion: `Approve the ${preview.subject}?`,
+    callText: reviewCallText({ preview, accepted }),
     header: "Approval",
     options,
     allowMultiple: false,
@@ -462,18 +456,16 @@ const COVERAGE_HEADING = "What this ruling would cover:";
 
 /**
  * The reviewed call as Claude Code shows it in the reply: a title naming the
- * call, its arguments in a fenced block, and what an approval also accepts.
+ * call, the call in full, and what an approval also accepts.
  */
 function reviewCallText(params: {
-  call: string;
-  args: Record<string, unknown>;
+  preview: CallPreview;
   accepted: string[] | undefined;
 }): string {
-  const argumentLines = formatArgumentBlock(params.args, CALL_TEXT_WIDTH);
   const accepted = params.accepted ?? [];
   return [
-    `**${escapeMarkdown(params.call)}**`,
-    argumentLines ? codeBlock(argumentLines) : "This call has no arguments.",
+    `**${escapeMarkdown(params.preview.subject)}**`,
+    ...params.preview.body,
     ...(accepted.length > 0
       ? [
           [
@@ -485,22 +477,127 @@ function reviewCallText(params: {
   ].join("\n\n");
 }
 
-/**
- * Columns of a code block in Claude Code's VS Code chat in a 400px panel with
- * the default 14px editor font. The block cuts longer lines; the terminal
- * wraps them.
- */
-const CALL_TEXT_WIDTH = 40;
+type CallPreview = { subject: string; body: string[] };
 
-/** Four characters the agent cannot predict, without the look-alikes I, L, O, U. */
-function mintReviewCode(): string {
-  return Array.from(
-    randomBytes(4),
-    (byte) => REVIEW_CODE_ALPHABET[byte % REVIEW_CODE_ALPHABET.length],
-  ).join("");
+/**
+ * The call in the form a person reads it in. A command is shown exactly as
+ * it runs, a file write as the file's content, an edit as a diff, and any
+ * other call as its arguments in YAML. Nothing is wrapped or shortened: a
+ * code block scrolls instead, and a line break could read as a new command.
+ */
+function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
+  const label = reviewedToolLabel(tool);
+  const name = tool.replace(/^(builtin:|host\/[^/]+\/)/, "");
+  const { command, description, file_path, content, old_string, new_string } =
+    args;
+  if (isCommandExecutionTool(tool) && typeof command === "string") {
+    const summary =
+      typeof description === "string"
+        ? description.replace(/\s+/g, " ").trim()
+        : "";
+    return {
+      subject: `${label} command`,
+      body: [
+        codeBlock(command, "sh"),
+        ...(summary ? [`Description: ${escapeMarkdown(summary)}`] : []),
+        ...argumentsBlock(
+          without(args, summary ? ["command", "description"] : ["command"]),
+        ),
+      ],
+    };
+  }
+  const subject = `${label} call`;
+  if (typeof file_path === "string") {
+    const file = `File: ${escapeMarkdown(file_path)}`;
+    if (name === "Write" && typeof content === "string")
+      return {
+        subject,
+        body: [
+          file,
+          codeBlock(content, languageOf(file_path)),
+          ...argumentsBlock(without(args, ["file_path", "content"])),
+        ],
+      };
+    if (
+      name === "Edit" &&
+      typeof old_string === "string" &&
+      typeof new_string === "string"
+    )
+      return {
+        subject,
+        body: [
+          file,
+          codeBlock(diff(old_string, new_string), "diff"),
+          ...argumentsBlock(
+            without(args, ["file_path", "old_string", "new_string"]),
+          ),
+        ],
+      };
+    const edits = args.edits;
+    if (name === "MultiEdit" && Array.isArray(edits) && edits.every(isEdit))
+      return {
+        subject,
+        body: [
+          file,
+          ...edits.map((edit) =>
+            codeBlock(diff(edit.old_string, edit.new_string), "diff"),
+          ),
+          ...argumentsBlock(without(args, ["file_path", "edits"])),
+        ],
+      };
+  }
+  const body = argumentsBlock(args);
+  return {
+    subject,
+    body: body.length > 0 ? body : ["This call has no arguments."],
+  };
 }
 
-const REVIEW_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/** The arguments as YAML in a block, or nothing when there are none. */
+function argumentsBlock(args: Record<string, unknown>): string[] {
+  if (Object.keys(args).length === 0) return [];
+  // No folding: a folded line would read as a line break in the value.
+  return [
+    codeBlock(
+      dumpYaml(args, { lineWidth: -1, noRefs: true }).trimEnd(),
+      "yaml",
+    ),
+  ];
+}
+
+function without(
+  args: Record<string, unknown>,
+  names: readonly string[],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(args).filter(([name]) => !names.includes(name)),
+  );
+}
+
+function isEdit(
+  value: unknown,
+): value is { old_string: string; new_string: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).old_string === "string" &&
+    typeof (value as Record<string, unknown>).new_string === "string"
+  );
+}
+
+/** The replaced lines with "-", the new ones with "+". */
+function diff(before: string, after: string): string {
+  return [
+    ...before.split("\n").map((line) => `-${line}`),
+    ...after.split("\n").map((line) => `+${line}`),
+  ].join("\n");
+}
+
+/** A code block language from the file's extension, for highlighting only. */
+function languageOf(path: string): string {
+  const extension = /\.([A-Za-z0-9]{1,10})$/.exec(path)?.[1];
+  return extension ? extension.toLowerCase() : "text";
+}
 
 function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_[\]<>#~|]/g, "\\$&");
@@ -512,13 +609,13 @@ function escapeMarkdown(text: string): string {
  * command. The fence is longer than any backtick run in the text, so the
  * text cannot end the block early.
  */
-function codeBlock(text: string): string {
+function codeBlock(text: string, language = "text"): string {
   const longestRun = Math.max(
     0,
     ...(text.match(/`+/g) ?? []).map((run) => run.length),
   );
   const fence = "`".repeat(Math.max(3, longestRun + 1));
-  return `${fence}text\n${text}\n${fence}`;
+  return `${fence}${language}\n${text}\n${fence}`;
 }
 
 function formatReviewQuestion(text: string): string {

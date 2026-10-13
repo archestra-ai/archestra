@@ -22,6 +22,11 @@ export function parseRepoFromSourceRef(
   return origin !== DEFAULT_GIT_WEB_URLS.github ? `${origin}/${repo}` : repo;
 }
 
+/** The skill's folder in its repository; empty when the skill is the repo. */
+export function skillSourcePath(sourceRef: string | null): string {
+  return parseSourceRef(sourceRef)?.path ?? "";
+}
+
 /** A repository identity for display: `gitlab.com/group/project`, not a URL. */
 export function repositoryLabel(identity: string): string {
   return identity.replace(/^https?:\/\//i, "");

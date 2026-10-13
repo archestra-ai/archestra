@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, type Ref, useMemo } from "react";
+import { type Ref, useMemo } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import {
   SettingsSection,
@@ -38,7 +38,6 @@ export function SkillForm({
   labelsRef,
   readOnly = false,
   contentReadOnly = false,
-  contentNotice,
 }: {
   draft: SkillDraft;
   creating?: boolean;
@@ -54,8 +53,6 @@ export function SkillForm({
    * a GitHub-synced skill, whose content is owned by the repository.
    */
   contentReadOnly?: boolean;
-  /** Where a GitHub skill says where its content comes from. */
-  contentNotice?: ReactNode;
 }) {
   // Read back out of the manifest rather than kept beside it, so an edit made
   // in the editor shows up in the fields and vice versa.
@@ -88,7 +85,10 @@ export function SkillForm({
                 })
               }
               placeholder="release-checklist"
-              readOnly={readOnly || contentReadOnly}
+              readOnly={readOnly}
+              // Repository-owned content is disabled, not just read-only, so it
+              // reads as locked rather than as a field that ignores typing.
+              disabled={contentReadOnly}
               required
             />
           </div>
@@ -108,12 +108,14 @@ export function SkillForm({
               }
               placeholder="What this skill teaches agents to do"
               rows={2}
-              readOnly={readOnly || contentReadOnly}
+              readOnly={readOnly}
+              // Repository-owned content is disabled, not just read-only, so it
+              // reads as locked rather than as a field that ignores typing.
+              disabled={contentReadOnly}
               required
             />
           </div>
         </div>
-        {contentNotice}
         <SkillContentEditor
           manifest={draft.manifest}
           files={draft.files}

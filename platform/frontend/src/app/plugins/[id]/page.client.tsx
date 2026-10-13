@@ -21,7 +21,7 @@ import {
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { GitProviderLogo } from "@/components/git/git-setup-chrome";
+import { GitSourceTooltip } from "@/components/git/git-source-card";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -61,9 +61,9 @@ import {
   isPluginDraftDirty,
   type PluginDraft,
   pluginDraftFromPlugin,
-  pluginGitAuthentication,
 } from "../_parts/plugin-draft";
 import { PluginForm } from "../_parts/plugin-form";
+import { PluginGitSourceCard } from "../_parts/plugin-git-source";
 import { PluginGithubUpdatesDialog } from "../_parts/plugin-github-updates-dialog";
 import { PluginInstallDialog } from "../_parts/plugin-install-dialog";
 import {
@@ -228,25 +228,12 @@ function PluginDetailView({
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? draft.labels;
     const submitted = { ...draft, labels: finalLabels };
     setIsSaving(true);
-    const githubAuthenticationChanged =
-      submitted.gitCredential !== base.gitCredential;
+    // A Git plugin's source saves from its own dialog; the page only owns
+    // what the repository does not.
     const saved = await updatePlugin
       .mutateAsync({
         ...(isGithubPlugin
-          ? {
-              githubSource: {
-                repoUrl: submitted.githubRepoUrl.trim(),
-                ref: submitted.githubSyncRef.trim() || null,
-                syncInterval: submitted.githubSyncInterval,
-                ...(githubAuthenticationChanged
-                  ? {
-                      authentication: pluginGitAuthentication(
-                        submitted.gitCredential,
-                      ),
-                    }
-                  : {}),
-              },
-            }
+          ? {}
           : {
               displayName: submitted.displayName.trim(),
               description: submitted.description,
@@ -322,26 +309,24 @@ function PluginDetailView({
 
   return (
     <PageLayout
-      icon={<PluginSourceGlyph plugin={plugin} />}
+      icon={
+        isGithubPlugin ? (
+          <GitSourceTooltip
+            label={`${plugin.githubSyncInterval ? "Checked against" : "Imported from"} ${GIT_PROVIDER_LABELS[gitProvider]}`}
+            detail={plugin.sourceRepo}
+          >
+            <PluginSourceGlyph plugin={plugin} />
+          </GitSourceTooltip>
+        ) : (
+          <PluginSourceGlyph plugin={plugin} />
+        )
+      }
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{plugin.displayName}</span>
           <Badge variant="secondary" className="font-normal">
             {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
           </Badge>
-          {isGithubPlugin && (
-            <Badge variant="secondary" className="gap-1 font-normal">
-              <GitProviderLogo
-                provider={plugin.sourceProvider ?? "github"}
-                size={12}
-              />
-              <span>
-                {plugin.githubSyncInterval
-                  ? `Checked against ${GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"]}`
-                  : `Imported from ${GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"]}`}
-              </span>
-            </Badge>
-          )}
           {!plugin.enabled && (
             <Badge variant="outline" className="font-normal">
               Disabled
@@ -491,6 +476,19 @@ function PluginDetailView({
           )
         )}
 
+        {/* Where the files come from comes first: it is why they are locked. */}
+        {isGithubPlugin && activeSection === "general" && (
+          <PluginGitSourceCard
+            plugin={plugin}
+            source={{
+              provider: gitProvider,
+              credentials: gitCredentialOptions,
+            }}
+            canEdit={!isReadOnly}
+            onReview={() => setUpdatesOpen(true)}
+          />
+        )}
+
         <PluginForm
           draft={draft}
           onChange={patchDraft}
@@ -499,10 +497,6 @@ function PluginDetailView({
           pluginSlug={plugin.pluginSlug}
           pluginId={plugin.id}
           isGithubPlugin={isGithubPlugin}
-          gitSource={{
-            provider: gitProvider,
-            credentials: gitCredentialOptions,
-          }}
           activeSection={activeSection}
         />
 

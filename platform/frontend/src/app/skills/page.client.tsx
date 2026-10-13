@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  E2eTestId,
+  GIT_PROVIDER_LABELS,
+} from "@archestra/shared";
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   ArchiveRestore,
@@ -1357,20 +1361,23 @@ function ListedSkillName({
           {standalone?.githubSyncInterval && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Badge
-                  variant="outline"
+                <span
+                  role="img"
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard focus reveals the sync details without implying a click action
+                  tabIndex={0}
+                  aria-label={
+                    standalone.lastSyncError ? "Sync failed" : "Kept in sync"
+                  }
                   className={cn(
-                    "shrink-0 gap-1",
+                    "inline-flex size-5 shrink-0 cursor-help items-center justify-center rounded-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                     standalone.lastSyncError && "text-destructive",
                   )}
                 >
-                  <RefreshCw className="h-3 w-3" />
-                  synced
-                </Badge>
+                  <RefreshCw className="size-3.5" />
+                </span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
-                {SYNC_INTERVAL_LABELS[standalone.githubSyncInterval]} from
-                GitHub; read-only until disconnected.
+                {`${SYNC_INTERVAL_LABELS[standalone.githubSyncInterval]} from ${GIT_PROVIDER_LABELS[standalone.sourceProvider ?? "github"]}; read-only until disconnected.`}
                 {standalone.lastSyncError
                   ? ` Last sync failed: ${standalone.lastSyncError}`
                   : ` Last synced: ${formatRelativeTimeFromNow(

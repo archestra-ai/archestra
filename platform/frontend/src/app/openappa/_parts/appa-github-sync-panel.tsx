@@ -1,17 +1,17 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import {
-  AlertTriangle,
-  ExternalLink,
-  GitBranch,
-  RefreshCw,
-} from "lucide-react";
+import { AlertTriangle, ExternalLink, GitBranch } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { GitProviderLogo } from "@/components/git/git-setup-chrome";
+import {
+  GitSourceBranch,
+  GitSourceCard,
+  GitSourceError,
+  GitSourceNotice,
+} from "@/components/git/git-source-card";
 import { OpenAppaGithubAppRequirements } from "@/components/openappa-github-app-requirements";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -47,7 +47,6 @@ import {
 } from "@/lib/openappa-github-sync.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { cn } from "@/lib/utils/tailwind";
 import { appaGitHost } from "./appa-git-host";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 
@@ -151,94 +150,80 @@ export function AppaGithubSyncPanel() {
               </p>
             ) : // A row can exist for its declaration flags alone, with no source on it.
             source?.repo && source.path ? (
-              <div className="overflow-hidden rounded-lg border bg-card">
-                <div className="flex flex-wrap items-center gap-4 px-4 py-3">
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                      <GitProviderLogo
-                        provider={git.provider}
-                        size={20}
-                        className="text-muted-foreground"
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <a
-                        className="inline-flex max-w-full items-center gap-2 text-sm leading-5 font-medium hover:underline underline-offset-4"
-                        href={`${githubWebUrl}/${source.repo}${git.provider === "gitlab" ? "/-" : ""}/blob/${encodeURIComponent(source.ref ?? "HEAD")}/${source.path.split("/").map(encodeURIComponent).join("/")}`}
-                        target="_blank"
-                        rel="noreferrer"
+              <GitSourceCard
+                provider={git.provider}
+                repo={source.repo}
+                href={`${githubWebUrl}/${source.repo}${git.provider === "gitlab" ? "/-" : ""}/blob/${encodeURIComponent(source.ref ?? "HEAD")}/${source.path.split("/").map(encodeURIComponent).join("/")}`}
+                details={
+                  <>
+                    <GitSourceBranch branch={source.ref} />
+                    <span className="font-mono">{source.path}</span>
+                    {source.sourceCommit ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <a
+                            className="font-mono underline underline-offset-4"
+                            href={urls?.commit(source.sourceCommit)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {source.sourceCommit.slice(0, 7)}
+                          </a>
+                        </TooltipTrigger>
+                        <TooltipContent>{lastChecked}</TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <span>{lastChecked}</span>
+                    )}
+                  </>
+                }
+                sync={
+                  connected && canManage
+                    ? {
+                        onClick: () => update.mutate({ action: "sync" }),
+                        pending:
+                          update.isPending &&
+                          update.variables?.action === "sync",
+                        tooltip: source.interval
+                          ? `Checks ${intervals[source.interval].toLowerCase()}. ${lastChecked}.`
+                          : `${lastChecked}.`,
+                      }
+                    : undefined
+                }
+                footer={
+                  hasPolicy
+                    ? connected
+                      ? "Conversations already running keep the policy they started with."
+                      : "Automatic updates are stopped. Your last synced policy stays active."
+                    : `The current policy stays active until a valid ${git.label} policy is accepted.`
+                }
+                actions={
+                  canManage ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={() => setEditing(true)}
                       >
-                        <span className="truncate">{source.repo}</span>
-                        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
-                      </a>
-                      <div
-                        className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground"
-                        aria-live="polite"
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          <GitBranch className="size-3.5" />
-                          {source.ref ?? "Default branch"}
+                        <span>
+                          {connected ? "Edit source" : `Reconnect ${git.label}`}
                         </span>
-                        <span className="font-mono">{source.path}</span>
-                        {source.sourceCommit ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <a
-                                className="font-mono underline underline-offset-4"
-                                href={urls?.commit(source.sourceCommit)}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                {source.sourceCommit.slice(0, 7)}
-                              </a>
-                            </TooltipTrigger>
-                            <TooltipContent>{lastChecked}</TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <span>{lastChecked}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {connected && (
-                    <div className="ml-auto flex items-center gap-2">
-                      {canManage && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="xs"
-                              disabled={update.isPending}
-                              onClick={() => update.mutate({ action: "sync" })}
-                            >
-                              <RefreshCw
-                                className={cn(
-                                  "size-3.5",
-                                  update.isPending &&
-                                    update.variables?.action === "sync" &&
-                                    "animate-spin",
-                                )}
-                              />
-                              <span>
-                                {update.isPending &&
-                                update.variables?.action === "sync"
-                                  ? "Syncing…"
-                                  : "Sync now"}
-                              </span>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {source.interval
-                              ? `Checks ${intervals[source.interval].toLowerCase()}. ${lastChecked}.`
-                              : `${lastChecked}.`}
-                          </TooltipContent>
-                        </Tooltip>
+                      </Button>
+                      {connected && (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => setDisconnecting(true)}
+                        >
+                          Stop syncing
+                        </Button>
                       )}
-                    </div>
-                  )}
-                </div>
+                    </>
+                  ) : undefined
+                }
+              >
                 {connected && source.setupPullRequestNumber && (
-                  <div className="px-4 pb-4">
+                  <GitSourceNotice>
                     <InlineNotice variant="info">
                       <GitBranch aria-hidden />
                       <span className="font-medium">
@@ -260,51 +245,15 @@ export function AppaGithubSyncPanel() {
                         <ExternalLink className="size-3" aria-hidden />
                       </a>
                     </InlineNotice>
-                  </div>
+                  </GitSourceNotice>
                 )}
                 {source.lastSyncError && (
-                  <div className="px-4 pb-4">
-                    <InlineNotice variant="error">
-                      <AlertTriangle className="size-4 shrink-0" />
-                      <span className="font-medium">Could not sync policy</span>
-                      <InlineNoticeText>
-                        {source.lastSyncError}
-                      </InlineNoticeText>
-                    </InlineNotice>
-                  </div>
+                  <GitSourceError
+                    title="Could not sync policy"
+                    message={source.lastSyncError}
+                  />
                 )}
-                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t bg-muted/30 px-4 py-2">
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    {hasPolicy
-                      ? connected
-                        ? "Conversations already running keep the policy they started with."
-                        : "Automatic updates are stopped. Your last synced policy stays active."
-                      : `The current policy stays active until a valid ${git.label} policy is accepted.`}
-                  </p>
-                  {canManage && (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        onClick={() => setEditing(true)}
-                      >
-                        <span>
-                          {connected ? "Edit source" : `Reconnect ${git.label}`}
-                        </span>
-                      </Button>
-                      {connected && (
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          onClick={() => setDisconnecting(true)}
-                        >
-                          Stop syncing
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
+              </GitSourceCard>
             ) : null}
           </div>
         )}

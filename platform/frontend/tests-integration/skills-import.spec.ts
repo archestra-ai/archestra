@@ -303,7 +303,10 @@ test.describe("Skills import", () => {
     await expect(
       page.getByRole("heading", { name: "Skills", exact: true }),
     ).toBeVisible();
-    await expect(page.getByText(repoUrl, { exact: true })).toBeVisible();
+    // The list names the repository by host and path, without the scheme.
+    await expect(
+      page.getByRole("cell", { name: "git.acme.example/acme/skills" }),
+    ).toBeVisible();
     expect(publicOwnerLookups).toEqual([]);
   });
 

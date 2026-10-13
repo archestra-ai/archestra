@@ -209,7 +209,7 @@ for (const viewport of [
         bounds.x + bounds.width - card.x - card.width,
       ).toBeGreaterThanOrEqual(12);
       await choice.click();
-      await expect(dialog).toHaveAccessibleName("Set up GitHub sync");
+      await expect(dialog).toHaveAccessibleName("Set up Git sync");
       await expect(
         dialog.getByRole("button", { name: /Use an existing repository/ }),
       ).toBeVisible();

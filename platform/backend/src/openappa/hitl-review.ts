@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
+import { dump as dumpYaml } from "js-yaml";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identity";
@@ -31,6 +32,10 @@ type PendingHitlReview = {
 
 type HitlAskUserArguments = {
   question: string;
+  /** The one-line question for hosts with option previews (Claude Code). */
+  shortQuestion?: string;
+  /** The call in full, as markdown, for each option's preview. */
+  callPreview?: string;
   header: string;
   options: Array<{ label: string; description: string }>;
   allowMultiple: false;
@@ -216,17 +221,22 @@ export async function getHitlAskUserArguments(params: {
       remedy_offer_ids: [offerId],
     };
   }
-  // Claude Code can withhold long option previews entirely.
-  // Keep the exact call and review coverage in the question on every host.
+  // Claude Code shows the call in full in each option's preview and asks one
+  // line about it. Where it would withhold that preview, and on forms and
+  // other hosts, the question itself carries the exact call and what an
+  // approval accepts besides it.
   const args = withoutCommandAlias(
     review.tool,
     parseReviewedArguments(review.arguments) ?? {},
   );
   const accepted = acceptedCoverage(review.text);
+  const preview = callPreview(review.tool, args);
   return {
     question:
       approvalQuestion({ tool: review.tool, args, accepted }) ??
       formatReviewQuestion(review.text),
+    shortQuestion: `Approve the ${preview.subject}?`,
+    callPreview: previewText({ preview, accepted }),
     header: "Approval",
     options,
     allowMultiple: false,
@@ -444,6 +454,239 @@ function reviewCoverage(text: string): string[] | undefined {
 }
 
 const COVERAGE_HEADING = "What this ruling would cover:";
+
+/** Shown under the title: a command's description, or the file a call writes. */
+type CallPreview = { subject: string; summary?: string; body: string[] };
+
+/**
+ * The reviewed call as Claude Code previews it beside the choices: a title
+ * naming the call, the call in full, and what an approval also accepts. The
+ * pane neither wraps nor fits long lines, so every line is wrapped to it.
+ */
+function previewText(params: {
+  preview: CallPreview;
+  accepted: string[] | undefined;
+}): string {
+  const { subject, summary, body } = params.preview;
+  const accepted = params.accepted ?? [];
+  const heading = [
+    ...wrapText(subject).map((line) => `**${escapeMarkdown(line)}**`),
+    ...(summary
+      ? wrapText(summary).map((line) => `*${escapeMarkdown(line)}*`)
+      : []),
+  ];
+  return [
+    heading.join("\n"),
+    ...body,
+    ...(accepted.length > 0
+      ? [
+          [
+            "Approving also accepts:",
+            ...accepted.flatMap((line) => wrapText(line, "• ", "  ")),
+          ]
+            .map(escapeMarkdown)
+            .join("\n"),
+        ]
+      : []),
+  ].join("\n\n");
+}
+
+/**
+ * The call in the form a person reads it in: a command as it runs, a file
+ * write as the file's content, an edit as a diff, and any other call as its
+ * arguments in YAML. Nothing is shortened.
+ */
+function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
+  const label = reviewedToolLabel(tool);
+  const baseName = tool.replace(/^(builtin:|host\/[^/]+\/)/, "");
+  const { command, description, file_path, content, old_string, new_string } =
+    args;
+  if (isCommandExecutionTool(tool) && typeof command === "string") {
+    const summary =
+      typeof description === "string"
+        ? description.replace(/\s+/g, " ").trim()
+        : "";
+    return {
+      subject: `${label} command`,
+      ...(summary ? { summary } : {}),
+      body: [
+        codeBlock(wrapCode(command), "sh"),
+        ...argumentsBlock(
+          without(args, summary ? ["command", "description"] : ["command"]),
+        ),
+      ],
+    };
+  }
+  const subject = `${label} call`;
+  if (typeof file_path === "string") {
+    if (baseName === "Write" && typeof content === "string")
+      return {
+        subject,
+        summary: file_path,
+        body: [
+          codeBlock(wrapCode(content), languageOf(file_path)),
+          ...argumentsBlock(without(args, ["file_path", "content"])),
+        ],
+      };
+    if (
+      baseName === "Edit" &&
+      typeof old_string === "string" &&
+      typeof new_string === "string"
+    )
+      return {
+        subject,
+        summary: file_path,
+        body: [
+          codeBlock(wrapCode(diff(old_string, new_string), true), "diff"),
+          ...argumentsBlock(
+            without(args, ["file_path", "old_string", "new_string"]),
+          ),
+        ],
+      };
+    const edits = args.edits;
+    if (baseName === "MultiEdit" && Array.isArray(edits) && edits.every(isEdit))
+      return {
+        subject,
+        summary: file_path,
+        body: [
+          ...edits.map((edit) =>
+            codeBlock(
+              wrapCode(diff(edit.old_string, edit.new_string), true),
+              "diff",
+            ),
+          ),
+          ...argumentsBlock(without(args, ["file_path", "edits"])),
+        ],
+      };
+  }
+  const body = argumentsBlock(args);
+  return {
+    subject,
+    body: body.length > 0 ? body : ["This call has no arguments."],
+  };
+}
+
+/**
+ * Code wrapped to the preview pane. A wrapped line breaks at a space where it
+ * can and continues four spaces further in, so it does not read as a new
+ * line; a diff line keeps its sign.
+ */
+function wrapCode(text: string, diffLines = false): string {
+  return text
+    .split("\n")
+    .flatMap((line) => {
+      const lead = (diffLines ? /^[+-]?\s*/ : /^\s*/).exec(line)?.[0] ?? "";
+      // Past half the pane, the indent would leave too little room for the
+      // value; such a line continues four spaces in from the margin instead.
+      const continuation =
+        lead.length + 4 <= PREVIEW_WIDTH / 2
+          ? `${lead}    `
+          : `${diffLines ? lead.slice(0, 1) : ""}    `;
+      return wrapLine({ line, lead: lead.length, continuation });
+    })
+    .join("\n");
+}
+
+/** Text on as few pane-wide lines as it takes, after `first`, under `rest`. */
+function wrapText(text: string, first = "", rest = ""): string[] {
+  return wrapLine({
+    line: `${first}${text.replace(/\s+/g, " ").trim()}`,
+    lead: first.length,
+    continuation: rest,
+  });
+}
+
+function wrapLine(params: {
+  line: string;
+  /** Characters at the start that a break must not split. */
+  lead: number;
+  continuation: string;
+}): string[] {
+  const lines: string[] = [];
+  let rest = params.line;
+  let floor = params.lead;
+  while (rest.length > PREVIEW_WIDTH) {
+    const space = rest.lastIndexOf(" ", PREVIEW_WIDTH);
+    const cut = space > floor ? space : PREVIEW_WIDTH;
+    lines.push(rest.slice(0, cut));
+    rest = `${params.continuation}${rest.slice(cut === space ? cut + 1 : cut)}`;
+    floor = params.continuation.length;
+  }
+  lines.push(rest);
+  return lines;
+}
+
+/**
+ * Columns of Claude Code's narrowest preview pane: VS Code beside the option
+ * list at its 576px breakpoint, with the default 14px editor font. The pane
+ * cuts longer lines.
+ */
+const PREVIEW_WIDTH = 34;
+
+/** The arguments as YAML in a block, or nothing when there are none. */
+function argumentsBlock(args: Record<string, unknown>): string[] {
+  if (Object.keys(args).length === 0) return [];
+  // No YAML folding: wrapCode marks its own continuation lines.
+  return [
+    codeBlock(
+      wrapCode(dumpYaml(args, { lineWidth: -1, noRefs: true }).trimEnd()),
+      "yaml",
+    ),
+  ];
+}
+
+function without(
+  args: Record<string, unknown>,
+  names: readonly string[],
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(args).filter(([name]) => !names.includes(name)),
+  );
+}
+
+function isEdit(
+  value: unknown,
+): value is { old_string: string; new_string: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as Record<string, unknown>).old_string === "string" &&
+    typeof (value as Record<string, unknown>).new_string === "string"
+  );
+}
+
+/** The replaced lines with "-", the new ones with "+". */
+function diff(before: string, after: string): string {
+  return [
+    ...before.split("\n").map((line) => `-${line}`),
+    ...after.split("\n").map((line) => `+${line}`),
+  ].join("\n");
+}
+
+/** A code block language from the file's extension, for highlighting only. */
+function languageOf(path: string): string {
+  const extension = /\.([A-Za-z0-9]{1,10})$/.exec(path)?.[1];
+  return extension ? extension.toLowerCase() : "text";
+}
+
+function escapeMarkdown(text: string): string {
+  return text.replace(/[\\`*_[\]<>#~|]/g, "\\$&");
+}
+
+/**
+ * The text as a fenced block. Claude Code renders previews as markdown, so
+ * outside a block it would drop the `**`, `__` and backticks of a reviewed
+ * command. The fence is longer than any backtick run in the text, so the
+ * text cannot end the block early.
+ */
+function codeBlock(text: string, language = "text"): string {
+  const longestRun = Math.max(
+    0,
+    ...(text.match(/`+/g) ?? []).map((run) => run.length),
+  );
+  const fence = "`".repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${text}\n${fence}`;
+}
 
 function formatReviewQuestion(text: string): string {
   // Native question renderers fold/indent rows independently, breaking pixel art.

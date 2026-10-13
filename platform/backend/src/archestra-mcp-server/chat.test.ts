@@ -474,7 +474,7 @@ describe("chat tool execution", () => {
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
   });
 
-  test("accepts the proxy's rewritten review call without option previews", async () => {
+  test("accepts the proxy's rewritten review call", async () => {
     const offerId = "offer-hitl-preview";
     const session = reviewSession({
       sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
@@ -492,6 +492,7 @@ describe("chat tool execution", () => {
       session,
       offerIds: [offerId],
     });
+    expect(rewritten?.callPreview).toContain("```yaml\nvalue: 1\n```");
     const requests: Array<{ message: string }> = [];
     mockContext = {
       ...mockContext,
@@ -512,7 +513,7 @@ describe("chat tool execution", () => {
       mockContext,
     );
 
-    // MCP forms keep the full review text; they have no preview pane.
+    // MCP forms keep the full review text.
     expect(requests.map((request) => request.message)).toEqual([
       "Full review text.",
     ]);

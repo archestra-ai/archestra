@@ -1,10 +1,21 @@
 import {
   type archestraApiTypes,
   type ChatProvider,
+  EMBEDDING_ONLY_PROVIDERS,
+  type EmbeddingOnlyProvider,
   isIntegrationHidden,
   providerSupportsChat,
+  type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
+import { useMemo, useState } from "react";
+import config from "@/lib/config/config";
+
+/** A provider with its own LLM proxy endpoint: chat providers plus Jev. */
+export type ProxyEndpointProvider = Exclude<
+  SupportedProvider,
+  EmbeddingOnlyProvider
+>;
 
 export type ConnectionBaseUrl = NonNullable<
   archestraApiTypes.GetOrganizationResponses["200"]["connectionBaseUrls"]
@@ -57,6 +68,22 @@ export function getConnectableProviders(
       // Embeddings-only providers serve no chat endpoint to connect a client
       // to, so they are never offered here however the overrides are set.
       providerSupportsChat(provider) &&
+      !isIntegrationHidden(overrides, provider),
+  );
+}
+
+/**
+ * The providers the LLM Proxy page lists endpoints for: the connectable chat
+ * providers plus decisions-only ones like Jev, which serve a proxy endpoint
+ * but no chat. Embeddings-only providers have no proxy endpoint at all.
+ */
+export function getProxyEndpointProviders(
+  organization: Parameters<typeof getConnectableProviders>[0],
+): ProxyEndpointProvider[] {
+  const overrides = organization?.modelProviderOverrides ?? null;
+  return SupportedProviders.filter(
+    (provider): provider is ProxyEndpointProvider =>
+      !EMBEDDING_ONLY_PROVIDERS.has(provider) &&
       !isIntegrationHidden(overrides, provider),
   );
 }
@@ -119,4 +146,35 @@ export function resolveEffectiveId(params: {
     firstAvailable ??
     null
   );
+}
+
+/**
+ * The connection base URL for the whole page: the user's pick, then the
+ * admin default, then the first URL the deployment offers. Admins can hide
+ * env URLs from users; those never show up here.
+ */
+export function useConnectionBaseUrl(
+  metadata: readonly ConnectionBaseUrl[] | null | undefined,
+): {
+  baseUrls: readonly string[];
+  baseUrl: string;
+  selectBaseUrl: (url: string) => void;
+} {
+  const baseUrls = useMemo(
+    () =>
+      resolveCandidateBaseUrls({
+        externalProxyUrls: config.api.externalProxyUrls,
+        internalProxyUrl: config.api.internalProxyUrl,
+        metadata: metadata ?? null,
+      }),
+    [metadata],
+  );
+  const adminDefault = resolveAdminDefaultBaseUrl(metadata ?? null);
+  // Derived, not stateful, so the admin default applies once the org loads.
+  const [picked, setPicked] = useState<string | null>(null);
+  const baseUrl =
+    (picked && baseUrls.includes(picked) && picked) ||
+    (adminDefault && baseUrls.includes(adminDefault) && adminDefault) ||
+    baseUrls[0];
+  return { baseUrls, baseUrl, selectBaseUrl: setPicked };
 }

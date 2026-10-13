@@ -7,6 +7,7 @@ import {
   Folder,
   FolderOpen,
 } from "lucide-react";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   groupFilesByFolder,
   type SkillFileChange,
@@ -112,7 +113,7 @@ function FolderRow({
   onToggle: () => void;
 }) {
   return (
-    <button
+    <UnstyledButton
       type="button"
       className="flex w-full cursor-pointer items-center gap-1.5 rounded px-1 py-1 text-left hover:bg-muted/50"
       onClick={onToggle}
@@ -131,7 +132,7 @@ function FolderRow({
       {isCollapsed ? (
         <span className="text-xs text-muted-foreground">({fileCount})</span>
       ) : null}
-    </button>
+    </UnstyledButton>
   );
 }
 
@@ -161,7 +162,7 @@ function VersionFileRow({
           isManifest ? "text-foreground" : "text-muted-foreground",
         )}
       />
-      <button
+      <UnstyledButton
         type="button"
         aria-current={isActive ? "true" : undefined}
         className={cn(
@@ -171,7 +172,7 @@ function VersionFileRow({
         onClick={onSelect}
       >
         {label}
-      </button>
+      </UnstyledButton>
       {/* `unchanged` and a null change both go unbadged, for opposite reasons:
           one is a comparison that found nothing, the other is no comparison at
           all. Nothing above the tree claims otherwise in either case. */}

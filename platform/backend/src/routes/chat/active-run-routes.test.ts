@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ConversationModel, MessageModel } from "@/models";
@@ -121,6 +123,66 @@ describe("chat active-run routes", () => {
     expect((await ActiveChatRunModel.findById(run?.id ?? ""))?.status).toBe(
       "cancelled",
     );
+  });
+
+  test("stop on a run whose owner died resolves, fails the run, and unblocks the next message", async () => {
+    const run = await ActiveChatRunModel.create({
+      conversationId,
+      userId: user.id,
+      organizationId,
+    });
+    const runId = run?.id ?? "";
+    await ActiveChatRunModel.appendEvents({
+      runId,
+      seq: 1,
+      payloads: [{ type: "start-step" }, { type: "reasoning-start", id: "r1" }],
+    });
+    // The owning process was killed: its liveness touches stopped minutes ago.
+    await db
+      .update(schema.chatActiveRunsTable)
+      .set({ updatedAt: new Date(Date.now() - 5 * 60 * 1000) })
+      .where(eq(schema.chatActiveRunsTable.id, runId));
+
+    const stop = await app.inject({
+      method: "POST",
+      url: `/api/chat/conversations/${conversationId}/stop`,
+    });
+
+    expect(stop.statusCode).toBe(200);
+    expect(stop.json()).toEqual({ stopped: true });
+    expect((await ActiveChatRunModel.findById(runId))?.status).toBe("failed");
+
+    const replay = await app.inject({
+      method: "GET",
+      url: `/api/chat/conversations/${conversationId}/active-run`,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(readSsePayloads(replay.body)).toEqual([
+      { type: "start-step" },
+      { type: "reasoning-start", id: "r1" },
+    ]);
+
+    const next = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [
+          {
+            id: "msg-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+        ],
+      },
+    });
+    // Past the one-running-run guard: the new turn got its own run row.
+    expect(next.statusCode).not.toBe(409);
+    const runs = await db
+      .select({ id: schema.chatActiveRunsTable.id })
+      .from(schema.chatActiveRunsTable)
+      .where(eq(schema.chatActiveRunsTable.conversationId, conversationId));
+    expect(runs).toHaveLength(2);
   });
 
   test("stop returns 404 for an inaccessible conversation and does not mutate a running run", async ({

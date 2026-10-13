@@ -351,7 +351,7 @@ test("an included entry shows the status the declaration gives it", async () => 
     batteries: [declaredGithub({ status: "active" })],
   });
   show();
-  expect(await entry("github")).toHaveTextContent("Active");
+  expect(await entry("github")).toHaveTextContent("Enforced");
   expect(await entry("github")).toHaveTextContent("Bundled");
 });
 
@@ -373,8 +373,8 @@ test("a failed composition degrades every status and says what broke", async () 
     "line 4: unknown battery",
   );
   const row = await entry("github");
-  expect(row).toHaveTextContent("Not enforced");
-  expect(row).not.toHaveTextContent("Active");
+  expect(row).toHaveTextContent("Refused by policy");
+  expect(row).not.toHaveTextContent("Enforced");
 });
 
 test("an uploaded entry names the package bytes it is pinned to", async () => {
@@ -640,13 +640,13 @@ test("attaching a server enables credential binding and keeps saved changes visi
   expect(binding).toEqual({
     credentialBindings: { APPA_PROVIDER_GITHUB_TOKEN: "github-token" },
   });
-  await waitFor(() => expect(row).toHaveTextContent("Active"));
+  await waitFor(() => expect(row).toHaveTextContent("Enforced"));
   expect(select).toHaveTextContent("GitHub token");
   await user.click(within(row).getAllByRole("button", { name: "Close" })[0]);
   expect(
     screen.queryByText("Discard unsaved changes?"),
   ).not.toBeInTheDocument();
-  expect(await entry("github")).toHaveTextContent("Active");
+  expect(await entry("github")).toHaveTextContent("Enforced");
 });
 
 test("the credentials section links to where credentials are set up", async () => {
@@ -781,7 +781,7 @@ test("a battery governing the organization that no rule routes to says how to ro
   show();
   const row = await entry("jev");
   expect(row).toHaveTextContent("Not used by any rule");
-  expect(row).not.toHaveTextContent("Active");
+  expect(row).not.toHaveTextContent("Enforced");
   expect(within(row).getByRole("code")).toHaveTextContent(
     'annotator = "jev.tool-call"',
   );
@@ -1248,7 +1248,7 @@ test("source and status filters narrow the battery table", async () => {
     screen.queryByRole("row", { name: /github GitHub rules/ }),
   ).not.toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
-  await user.click(screen.getByRole("option", { name: "Broken" }));
+  await user.click(screen.getByRole("option", { name: "Not enforced" }));
   expect(screen.getByText("No batteries match your filters")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Clear filters" }));
   expect(
@@ -1274,7 +1274,7 @@ test("the status filter groups statuses and keeps the group in the URL", async (
   const user = userEvent.setup();
   await screen.findByRole("row", { name: /docs Knowledge rules/ });
   await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
-  await user.click(screen.getByRole("option", { name: "Broken" }));
+  await user.click(screen.getByRole("option", { name: "Not enforced" }));
   expect(url.get("status")).toBe("broken");
   // A missing credential and an unused battery are both broken.
   expect(
@@ -1306,7 +1306,7 @@ test("the available batteries split into the ones that fit a server and the rest
 
   const user = userEvent.setup();
   await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
-  await user.click(screen.getByRole("option", { name: "Other available" }));
+  await user.click(screen.getByRole("option", { name: "For other servers" }));
   expect(url.get("status")).toBe("other");
   expect(
     await screen.findByRole("row", { name: /github GitHub rules/ }),
@@ -1334,7 +1334,7 @@ test("filters in the URL apply on load, so a reload or a link keeps them", async
   ).not.toBeInTheDocument();
   expect(
     screen.getByRole("combobox", { name: "Filter by status" }),
-  ).toHaveTextContent("Active");
+  ).toHaveTextContent("Enforced");
   expect(screen.getByPlaceholderText(/Search batteries by name/)).toHaveValue(
     "github",
   );

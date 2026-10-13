@@ -30,12 +30,23 @@ const buttonVariants = cva(
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 aria-disabled:hover:bg-transparent aria-disabled:hover:text-inherit dark:aria-disabled:hover:bg-transparent",
         link: "text-primary underline-offset-4 hover:underline aria-disabled:hover:no-underline",
       },
+      // Pick the size by where the button sits, never by className overrides:
+      // - `sm` / `icon-sm` (32px): the app's standard action size — page and
+      //   detail headers, card and section actions, toolbars, filter bars,
+      //   empty states, table row actions, pagination.
+      // - `default` / `icon` (36px): dialog and sheet footers, and buttons
+      //   sharing a row with form inputs (which are 36px tall).
+      // - `xs` / `icon-xs` (28px): dense controls inside content — table cells,
+      //   list items, chat messages, code blocks, notices.
+      // `lg` / `icon-lg` are for rare standalone hero actions (auth, wizards).
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
         sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
+        xs: "h-7 rounded-md gap-1 px-2 text-xs has-[>svg]:px-1.5",
         lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
         icon: "size-9",
         "icon-sm": "size-8",
+        "icon-xs": "size-7",
         "icon-lg": "size-10",
       },
     },

@@ -19,6 +19,7 @@ import {
   useCoverageTools,
 } from "@/lib/openappa-coverage.query";
 import { GovernedByPill } from "./coverage-badges";
+import { policyLineHref } from "./policy-line-href";
 
 type ToolTableProps = {
   catalogId?: string;
@@ -229,7 +230,7 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
             source:
               tool.policySource === "not_covered" ? "not_covered" : "catchall",
           }}
-          href={line ? policyHref(line) : undefined}
+          href={line ? policyLineHref({ entry: null, line }) : undefined}
           line={line}
         />
         <div className="text-xs text-muted-foreground">
@@ -251,12 +252,9 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
     tool.rule.source === "battery" &&
     tool.rule.batteryEntry &&
     tool.rule.batteryStatus !== "refused"
-      ? `/openappa/policy?${new URLSearchParams({
-          entry: tool.rule.batteryEntry,
-          ...(tool.rule.line ? { line: String(tool.rule.line) } : {}),
-        })}`
+      ? policyLineHref({ entry: tool.rule.batteryEntry, line: tool.rule.line })
       : tool.rule.source === "root" && tool.enforced
-        ? policyHref(tool.rule.line)
+        ? policyLineHref({ entry: null, line: tool.rule.line })
         : undefined;
   return (
     <div className="space-y-1">
@@ -282,8 +280,4 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
       )}
     </div>
   );
-}
-
-function policyHref(line: number | null) {
-  return line ? `/openappa/policy?line=${line}` : "/openappa/policy";
 }

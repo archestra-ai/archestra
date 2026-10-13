@@ -12,7 +12,11 @@ import {
 import { eq, inArray, type SQL } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { accessGrants, beforeEach, describe, expect, test } from "@/test";
-import type { InsertInteraction, InteractionResponse } from "@/types";
+import type {
+  InsertInteraction,
+  InteractionResponse,
+  LimitEntityType,
+} from "@/types";
 import { SelectInteractionSchema } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import AgentModel from "./agent";
@@ -3602,6 +3606,45 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("log filter values", () => {
+    const seed = (row: { profileId: string; externalAgentId?: string }) =>
+      db.insert(schema.interactionsTable).values({
+        ...row,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        } as InteractionResponse,
+        type: "openai:chatCompletions",
+      });
+
+    test("external agent ids are the organization's distinct ids, ascending", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const otherOrg = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const otherAgent = await makeAgent({ organizationId: otherOrg.id });
+
+      for (const externalAgentId of ["zeta", "alpha", "zeta", "mid", "alpha"]) {
+        await seed({ profileId: agent.id, externalAgentId });
+      }
+      await seed({ profileId: agent.id });
+      await seed({ profileId: otherAgent.id, externalAgentId: "beta" });
+      await seed({ profileId: otherAgent.id, externalAgentId: "omega" });
+
+      const ids = await InteractionModel.getUniqueExternalAgentIds({
+        organizationId: org.id,
+      });
+
+      expect(ids.map((entry) => entry.id)).toEqual(["alpha", "mid", "zeta"]);
+    });
+  });
+
   describe("preserves interactions when profile is deleted", () => {
     test("interaction is preserved with null profileId when profile is deleted", async ({
       makeAdmin,
@@ -4471,6 +4514,345 @@ describe("InteractionModel", () => {
       expect(usage[0].model).toBe("gpt-4o");
       expect(usage[0].tokensIn).toBe(90);
       expect(usage[0].tokensOut).toBe(180);
+    });
+
+    describe("counter accumulation across limit entities", () => {
+      const usageFor = (
+        overrides: Partial<InsertInteraction> &
+          Pick<InsertInteraction, "profileId">,
+      ): InsertInteraction & { id: string } => ({
+        id: crypto.randomUUID(),
+        model: "gpt-4o",
+        request: { model: "gpt-4o", messages: [] },
+        response: {
+          id: "r1",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4o",
+          choices: [],
+        },
+        type: "openai:chatCompletions",
+        ...overrides,
+      });
+
+      const countersFor = async (limitIds: Record<string, string>) => {
+        const rows = await db
+          .select({
+            limitId: schema.limitModelUsageTable.limitId,
+            model: schema.limitModelUsageTable.model,
+            tokensIn: schema.limitModelUsageTable.currentUsageTokensIn,
+            tokensOut: schema.limitModelUsageTable.currentUsageTokensOut,
+          })
+          .from(schema.limitModelUsageTable)
+          .where(
+            inArray(
+              schema.limitModelUsageTable.limitId,
+              Object.values(limitIds),
+            ),
+          );
+        return Object.fromEntries(
+          Object.entries(limitIds).map(([name, limitId]) => [
+            name,
+            rows
+              .filter((row) => row.limitId === limitId)
+              .map(({ model, tokensIn, tokensOut }) => ({
+                model,
+                tokensIn,
+                tokensOut,
+              }))
+              .sort((a, b) => a.model.localeCompare(b.model)),
+          ]),
+        );
+      };
+
+      test("adds tokens to every matching token_cost limit and nothing else", async ({
+        makeAgent,
+        makeOrganization,
+        makeMember,
+        makeAdmin,
+        makeTeam,
+        makeUser,
+        makeVirtualApiKey,
+      }) => {
+        const org = await makeOrganization();
+        const otherOrg = await makeOrganization();
+        const admin = await makeAdmin();
+        await makeMember(admin.id, org.id, { role: "admin" });
+        const team1 = await makeTeam(org.id, admin.id);
+        const team2 = await makeTeam(org.id, admin.id);
+        const agent = await makeAgent({
+          organizationId: org.id,
+          access: { teams: [team1.id, team2.id] },
+        });
+        await AgentTeamModel.assignTeamsToAgent(agent.id, [team1.id, team2.id]);
+        const user = await makeUser();
+        const virtualKey = await makeVirtualApiKey(org.id);
+        const passthroughKey = await makeVirtualApiKey(org.id);
+        const environment = await EnvironmentModel.create({
+          organizationId: org.id,
+          name: "production",
+        });
+
+        const tokenLimit = async (
+          entityType: LimitEntityType,
+          entityId: string,
+          model: string[] | null,
+        ) =>
+          (
+            await LimitModel.create({
+              entityType,
+              entityId,
+              limitType: "token_cost",
+              limitValue: 1_000_000,
+              model,
+            })
+          ).id;
+
+        const limits = {
+          orgAll: await tokenLimit("organization", org.id, null),
+          otherOrgAll: await tokenLimit("organization", otherOrg.id, null),
+          team1Listed: await tokenLimit("team", team1.id, [
+            "gpt-4o",
+            "gpt-4o-mini",
+          ]),
+          team2All: await tokenLimit("team", team2.id, null),
+          agentGpt4o: await tokenLimit("agent", agent.id, ["gpt-4o"]),
+          agentOtherModel: await tokenLimit("agent", agent.id, [
+            "claude-sonnet",
+          ]),
+          agentToolCalls: (
+            await LimitModel.create({
+              entityType: "agent",
+              entityId: agent.id,
+              limitType: "mcp_server_calls",
+              limitValue: 100,
+              mcpServerName: "github",
+              model: ["gpt-4o"],
+            })
+          ).id,
+          userAll: await tokenLimit("user", user.id, null),
+          virtualKeyGpt4o: await tokenLimit("virtual_key", virtualKey.id, [
+            "gpt-4o",
+          ]),
+          passthroughAll: await tokenLimit(
+            "virtual_key",
+            passthroughKey.id,
+            null,
+          ),
+          environmentGpt4o: await tokenLimit("environment", environment.id, [
+            "gpt-4o",
+          ]),
+        };
+
+        await db
+          .update(schema.limitModelUsageTable)
+          .set({ updatedAt: new Date(0) })
+          .where(eq(schema.limitModelUsageTable.limitId, limits.agentGpt4o));
+
+        const refs = {
+          profileId: agent.id,
+          userId: user.id,
+          virtualKeyId: virtualKey.id,
+          passthroughVirtualKeyId: passthroughKey.id,
+          environmentId: environment.id,
+        };
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({ ...refs, inputTokens: 100, outputTokens: 200 }),
+        );
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({ ...refs, inputTokens: 1, outputTokens: 2 }),
+        );
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({
+            ...refs,
+            model: "gpt-4o-mini",
+            inputTokens: 10,
+            outputTokens: 20,
+          }),
+        );
+
+        const bothModels = [
+          { model: "gpt-4o", tokensIn: 101, tokensOut: 202 },
+          { model: "gpt-4o-mini", tokensIn: 10, tokensOut: 20 },
+        ];
+        const gpt4oOnly = [{ model: "gpt-4o", tokensIn: 101, tokensOut: 202 }];
+        expect(await countersFor(limits)).toEqual({
+          orgAll: bothModels,
+          otherOrgAll: [],
+          team1Listed: bothModels,
+          team2All: bothModels,
+          agentGpt4o: gpt4oOnly,
+          agentOtherModel: [
+            { model: "claude-sonnet", tokensIn: 0, tokensOut: 0 },
+          ],
+          agentToolCalls: [],
+          userAll: bothModels,
+          virtualKeyGpt4o: gpt4oOnly,
+          passthroughAll: bothModels,
+          environmentGpt4o: gpt4oOnly,
+        });
+
+        const [agentRow] = await db
+          .select({ updatedAt: schema.limitModelUsageTable.updatedAt })
+          .from(schema.limitModelUsageTable)
+          .where(eq(schema.limitModelUsageTable.limitId, limits.agentGpt4o));
+        expect(agentRow.updatedAt.getTime()).toBeGreaterThan(0);
+      });
+
+      test("counts a limit once per entity reference that reaches it", async ({
+        makeAgent,
+        makeOrganization,
+        makeVirtualApiKey,
+      }) => {
+        const org = await makeOrganization();
+        const agent = await makeAgent({ organizationId: org.id });
+        const virtualKey = await makeVirtualApiKey(org.id);
+        const keyLimit = await LimitModel.create({
+          entityType: "virtual_key",
+          entityId: virtualKey.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: null,
+        });
+
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({
+            profileId: agent.id,
+            virtualKeyId: virtualKey.id,
+            passthroughVirtualKeyId: virtualKey.id,
+            inputTokens: 7,
+            outputTokens: 11,
+          }),
+        );
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({
+            profileId: null,
+            virtualKeyId: virtualKey.id,
+            inputTokens: 1000,
+            outputTokens: 1000,
+          }),
+        );
+
+        expect(await countersFor({ key: keyLimit.id })).toEqual({
+          key: [{ model: "gpt-4o", tokensIn: 14, tokensOut: 22 }],
+        });
+      });
+
+      test("a teamless agent accrues to its own organization", async ({
+        makeAgent,
+        makeOrganization,
+      }) => {
+        const org = await makeOrganization();
+        const otherOrg = await makeOrganization();
+        const agent = await makeAgent({
+          organizationId: org.id,
+          access: "personal",
+        });
+        expect(await AgentTeamModel.getTeamsForAgent(agent.id)).toEqual([]);
+        const orgLimit = await LimitModel.create({
+          entityType: "organization",
+          entityId: org.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: null,
+        });
+        const otherOrgLimit = await LimitModel.create({
+          entityType: "organization",
+          entityId: otherOrg.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: null,
+        });
+
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({ profileId: agent.id, inputTokens: 3, outputTokens: 5 }),
+        );
+
+        expect(
+          await countersFor({ org: orgLimit.id, otherOrg: otherOrgLimit.id }),
+        ).toEqual({
+          org: [{ model: "gpt-4o", tokensIn: 3, tokensOut: 5 }],
+          otherOrg: [],
+        });
+      });
+
+      test("keeps accruing past the 32-bit range", async ({
+        makeAgent,
+        makeOrganization,
+        makeVirtualApiKey,
+      }) => {
+        const org = await makeOrganization();
+        const agent = await makeAgent({
+          organizationId: org.id,
+          access: "personal",
+        });
+        const orgLimit = await LimitModel.create({
+          entityType: "organization",
+          entityId: org.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: null,
+        });
+        const agentLimit = await LimitModel.create({
+          entityType: "agent",
+          entityId: agent.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: null,
+        });
+        const nearInt32Max = 2 ** 31 - 10;
+        await db.insert(schema.limitModelUsageTable).values({
+          limitId: agentLimit.id,
+          model: "gpt-4o",
+          currentUsageTokensIn: nearInt32Max,
+          currentUsageTokensOut: nearInt32Max,
+        });
+
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({
+            profileId: agent.id,
+            inputTokens: 100,
+            outputTokens: 200,
+          }),
+        );
+
+        expect(
+          await countersFor({ org: orgLimit.id, agent: agentLimit.id }),
+        ).toEqual({
+          org: [{ model: "gpt-4o", tokensIn: 100, tokensOut: 200 }],
+          agent: [
+            {
+              model: "gpt-4o",
+              tokensIn: nearInt32Max + 100,
+              tokensOut: nearInt32Max + 200,
+            },
+          ],
+        });
+
+        // Two refs to one key double an increment that alone fits in 32 bits.
+        const virtualKey = await makeVirtualApiKey(org.id);
+        const keyLimit = await LimitModel.create({
+          entityType: "virtual_key",
+          entityId: virtualKey.id,
+          limitType: "token_cost",
+          limitValue: 1_000_000,
+          model: null,
+        });
+        const halfInt32 = 2 ** 30 + 1;
+        await InteractionModel.updateUsageAfterInteraction(
+          usageFor({
+            profileId: agent.id,
+            virtualKeyId: virtualKey.id,
+            passthroughVirtualKeyId: virtualKey.id,
+            inputTokens: halfInt32,
+            outputTokens: 1,
+          }),
+        );
+
+        expect(await countersFor({ key: keyLimit.id })).toEqual({
+          key: [{ model: "gpt-4o", tokensIn: 2 * halfInt32, tokensOut: 2 }],
+        });
+      });
     });
   });
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type { OpenAiCodexPassthrough } from "@/types";
+import { openaiAdapterFactory } from "./openai";
 import {
   createOpenAiCodexPassthroughResponsesClient,
   createOpenAiCodexResponsesClient,
@@ -174,6 +175,44 @@ describe("createOpenAiCodexResponsesClient", () => {
     })) as { id: string };
 
     expect(response.id).toBe("resp_2");
+  });
+
+  describe("upstream errors", () => {
+    async function createRejection(upstream: Response) {
+      const client = createOpenAiCodexResponsesClient({
+        credential: CREDENTIAL,
+        options: { source: "api" },
+        innerFetch: vi.fn(async () => upstream),
+      }) as unknown as CodexResponsesClient;
+      return client.responses
+        .create({ model: "gpt-5.4", input: "hi", stream: true })
+        .then(
+          () => {
+            throw new Error("expected the request to fail");
+          },
+          (error: unknown) => error,
+        );
+    }
+
+    it("keeps a top-level detail as the error message", async () => {
+      const detail =
+        "The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account.";
+      const error = await createRejection(
+        Response.json({ detail }, { status: 400 }),
+      );
+
+      expect(error).toMatchObject({ status: 400 });
+      expect(openaiAdapterFactory.extractErrorMessage(error)).toBe(detail);
+    });
+
+    it("falls back to the generic message for an empty error body", async () => {
+      const error = await createRejection(new Response(null, { status: 400 }));
+
+      expect(error).toMatchObject({ status: 400 });
+      expect(openaiAdapterFactory.extractErrorMessage(error)).toBe(
+        "400 status code (no body)",
+      );
+    });
   });
 
   describe("prompt cache session", () => {
@@ -449,6 +488,22 @@ describe("createOpenAiCodexResponsesClient", () => {
     expect(capturedHeaders?.get("user-agent")).toBe("opencode/test");
     expect(capturedHeaders?.get("openai-beta")).toBe("responses=experimental");
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a top-level detail as the error message", async () => {
+    const detail = "The 'gpt-5.4' model is not supported.";
+    const client = createOpenAiCodexPassthroughResponsesClient({
+      credential: PASSTHROUGH_CREDENTIAL,
+      options: { source: "api" },
+      innerFetch: vi.fn(async () => Response.json({ detail }, { status: 400 })),
+    }) as unknown as CodexResponsesClient;
+
+    const error = await client.responses
+      .create({ model: "gpt-5.4", input: "hi", stream: true })
+      .catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ status: 400 });
+    expect(openaiAdapterFactory.extractErrorMessage(error)).toBe(detail);
   });
 
   it("relays an upstream 401 without retrying the request", async () => {

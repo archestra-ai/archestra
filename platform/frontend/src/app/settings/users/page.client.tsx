@@ -244,6 +244,7 @@ function InviteUserButton({ organizationId }: { organizationId: string }) {
     <>
       <PermissionButton
         permissions={{ invitation: ["create"] }}
+        size="sm"
         onClick={() => setInviteDialogOpen(true)}
       >
         <Plus className="h-4 w-4" />

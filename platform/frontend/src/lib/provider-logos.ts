@@ -45,6 +45,9 @@ export const providerToLogoProvider: Record<SupportedProvider, string> = {
   // models.dev has no Voyage provider; this is the monochrome mark from
   // @lobehub/icons-static-svg, same source as vllm/microsoft-365-copilot.
   voyage: "voyage",
+  // models.dev has no TypeSafe provider; this is the isometric mark from
+  // TypeSafe's own wordmark, recolored to currentColor.
+  jev: "jev",
 };
 
 export function providerLogoUrl(provider: SupportedProvider): string {

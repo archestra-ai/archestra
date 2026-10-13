@@ -134,7 +134,7 @@ export function AssignmentCombobox({
           variant="outline"
           size="sm"
           className={cn(
-            "h-8 px-3 gap-1.5 text-xs border-dashed text-muted-foreground",
+            "text-xs border-dashed text-muted-foreground",
             className,
           )}
           data-testid={testId}

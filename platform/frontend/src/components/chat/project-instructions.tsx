@@ -8,6 +8,7 @@ import { FileText } from "lucide-react";
 import { useState } from "react";
 import { ConversationArtifactPanel } from "@/components/chat/conversation-artifact";
 import { PlainTextEditor } from "@/components/chat/plain-text-editor";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useProjectInstructions,
   useSetProjectInstructions,
@@ -32,7 +33,7 @@ export function InstructionsRow({
   onSelect: () => void;
 }) {
   return (
-    <button
+    <UnstyledButton
       type="button"
       onClick={onSelect}
       className={cn(
@@ -56,7 +57,7 @@ export function InstructionsRow({
           · guidance for every chat
         </span>
       </span>
-    </button>
+    </UnstyledButton>
   );
 }
 

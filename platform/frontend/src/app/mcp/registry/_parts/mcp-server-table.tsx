@@ -476,7 +476,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
   const showChat = shouldShowMcpCardChatButton({
     toolsCount: item.toolCount ?? 0,
     isBuiltin,
-    hasInstallation: allServersForCatalog.length > 0,
+    hasInstallation: isInstalledForViewer,
   });
 
   // Reinstall visibility mirrors the card's combined admin/tenant rule: an

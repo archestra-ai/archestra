@@ -82,6 +82,7 @@ export function RuntimeCredentialsSection() {
     setActionButton(
       <PermissionButton
         permissions={{ credential: ["create"] }}
+        size="sm"
         onClick={() => setDefinitionDialog("new")}
       >
         <Plus className="size-4" />

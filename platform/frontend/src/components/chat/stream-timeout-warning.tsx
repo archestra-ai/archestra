@@ -14,10 +14,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
  * indicator instead (see `useStreamStall`).
  */
 export function StreamTimeoutWarning({ isStalled }: { isStalled: boolean }) {
-  const docsUrl = getFrontendDocsUrl(
-    "platform-deployment",
-    "cloud-provider-configuration-streaming-timeout-settings",
-  );
+  const docsUrl = getFrontendDocsUrl("admin/deployment", "keep-alive-timeouts");
 
   if (!isStalled) {
     return null;

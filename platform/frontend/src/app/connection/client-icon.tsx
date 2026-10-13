@@ -22,7 +22,7 @@ export function ClientIcon({ client, size = 36 }: ClientIconProps) {
     >
       {client.svg ? (
         <svg
-          viewBox="0 0 24 24"
+          viewBox={client.svgViewBox ?? "0 0 24 24"}
           width={size * 0.6}
           height={size * 0.6}
           role="img"
@@ -31,7 +31,11 @@ export function ClientIcon({ client, size = 36 }: ClientIconProps) {
           {client.svgAccent && (
             <path d={client.svgAccent.path} fill={client.svgAccent.color} />
           )}
-          <path d={client.svg} fill={client.iconColor || "currentColor"} />
+          <path
+            d={client.svg}
+            fill={client.iconColor || "currentColor"}
+            fillRule={client.svgFillRule}
+          />
         </svg>
       ) : client.iconOverride ? (
         <div

@@ -202,9 +202,9 @@ export function PermissionExplorer({
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="icon"
+                                size="icon-xs"
                                 aria-label={`${label} details`}
-                                className="size-6 shrink-0 text-muted-foreground"
+                                className="shrink-0 text-muted-foreground"
                               >
                                 <Info className="size-3" />
                               </Button>

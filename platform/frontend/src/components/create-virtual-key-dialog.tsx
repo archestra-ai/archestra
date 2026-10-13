@@ -3,25 +3,21 @@
 import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
-import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
 import { FormDialog } from "@/components/form-dialog";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import {
-  OwnerSelectField,
-  shouldShowOwnerField,
-} from "@/components/owner-select-field";
+import { shouldShowOwnerField } from "@/components/owner-select-field";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
-import { ProviderKeyAccessFields } from "@/components/proxy-auth-provider-key-fields";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
 import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
+import {
+  type ReviewRowName,
+  VirtualKeyReviewFields,
+} from "@/components/virtual-key-review-fields";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -36,7 +32,8 @@ export type VirtualKeyType = NonNullable<
 >;
 type VirtualKeySummary =
   archestraApiTypes.GetAllVirtualApiKeysResponses["200"]["data"][number];
-type CreatedVirtualKey = archestraApiTypes.CreateVirtualApiKeyResponses["200"];
+export type CreatedVirtualKey =
+  archestraApiTypes.CreateVirtualApiKeyResponses["200"];
 
 /**
  * Self-contained variant for resource connection surfaces: gathers the option
@@ -46,10 +43,22 @@ export function CreateVirtualKeyDialogWithData({
   open,
   onOpenChange,
   keyType,
+  initialProviderApiKeys,
+  onCreated,
+  targetLabel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   keyType: VirtualKeyType;
+  /** What the key is for, named in the title (e.g. "Model Router"). */
+  targetLabel?: string;
+  /** Provider keys the new key starts mapped to (standard keys only). */
+  initialProviderApiKeys?: ProviderApiKeyMappings;
+  /**
+   * Hands the created key to the caller, which shows its value itself; the
+   * dialog then closes instead of switching to its own reveal view.
+   */
+  onCreated?: (key: CreatedVirtualKey) => void;
 }) {
   const { data: apiKeys = [] } = useLlmProviderApiKeys({ enabled: open });
   const { data: session } = useSession();
@@ -87,6 +96,9 @@ export function CreateVirtualKeyDialogWithData({
           : null
       }
       existingKeys={existingKeys?.data ?? []}
+      initialProviderApiKeys={initialProviderApiKeys}
+      onCreated={onCreated}
+      targetLabel={targetLabel}
     />
   );
 }
@@ -101,6 +113,9 @@ export function CreateVirtualKeyDialog({
   isVirtualKeyAdmin,
   currentUser,
   existingKeys,
+  initialProviderApiKeys,
+  onCreated,
+  targetLabel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -111,6 +126,9 @@ export function CreateVirtualKeyDialog({
   isVirtualKeyAdmin: boolean;
   currentUser: { id: string; name: string | null } | null;
   existingKeys: VirtualKeySummary[];
+  initialProviderApiKeys?: ProviderApiKeyMappings;
+  onCreated?: (key: CreatedVirtualKey) => void;
+  targetLabel?: string;
 }) {
   const createMutation = useCreateVirtualApiKey();
 
@@ -121,13 +139,24 @@ export function CreateVirtualKeyDialog({
   );
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
+  // Each opening starts a fresh review, with the row that still needs input
+  // (a passthrough key's empty name, a standard key with no provider key) open.
+  const [reviewSession, setReviewSession] = useState(0);
+  const [initialOpenRow, setInitialOpenRow] = useState<ReviewRowName | null>(
+    null,
+  );
   const labelsRef = useRef<ProfileLabelsRef>(null);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
   const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
   const createdKeyValue = createdKey?.value ?? null;
 
-  const prevOpenRef = useRef(open);
+  // False so a dialog mounted already open is seeded too.
+  const prevOpenRef = useRef(false);
+  // Read when the dialog opens, not tracked: the form is seeded once per
+  // opening, and a re-render with a new array must not wipe the user's edits.
+  const initialProviderApiKeysRef = useRef(initialProviderApiKeys);
+  initialProviderApiKeysRef.current = initialProviderApiKeys;
   const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
   const generatedNameRef = useRef("");
 
@@ -163,7 +192,19 @@ export function CreateVirtualKeyDialog({
       generatedNameRef.current = generatedName;
       setExpiresAt(initialExpiresAt);
       setLabels([]);
-      setProviderApiKeyIds([]);
+      const initialMappings =
+        keyType === "passthrough"
+          ? []
+          : (initialProviderApiKeysRef.current ?? []);
+      setProviderApiKeyIds(initialMappings);
+      setInitialOpenRow(
+        keyType === "passthrough"
+          ? "name"
+          : initialMappings.length === 0
+            ? "uses"
+            : null,
+      );
+      setReviewSession((session) => session + 1);
       setOwnerId("");
       setSelectedOwnerName(null);
       initialSnapshotRef.current = {
@@ -171,7 +212,7 @@ export function CreateVirtualKeyDialog({
         newKeyName: generatedName,
         ownerId: "",
         expiresAt: initialExpiresAt,
-        providerApiKeyIds: [],
+        providerApiKeyIds: initialMappings,
         labels: [],
       };
     }
@@ -238,7 +279,12 @@ export function CreateVirtualKeyDialog({
       });
       setNewKeyName("");
       if (result?.value) {
-        setCreatedKey(result);
+        if (onCreated) {
+          onCreated(result);
+          onOpenChange(false);
+        } else {
+          setCreatedKey(result);
+        }
       }
     } catch {
       // handled by mutation
@@ -252,6 +298,8 @@ export function CreateVirtualKeyDialog({
     newKeyName,
     showOwnerField,
     ownerId,
+    onCreated,
+    onOpenChange,
   ]);
 
   // Creation stays a compact form: who else can use the key is managed from
@@ -265,16 +313,16 @@ export function CreateVirtualKeyDialog({
           ? isPassthrough
             ? "Passthrough Virtual Key Created"
             : "Standard Virtual Key Created"
-          : isPassthrough
-            ? "Create Passthrough Virtual Key"
-            : "Create Standard Virtual Key"
+          : `New ${isPassthrough ? "passthrough key" : "virtual key"}${
+              targetLabel ? ` for ${targetLabel}` : ""
+            }`
       }
       description={
         createdKeyValue
           ? undefined
           : isPassthrough
-            ? "Create an attribution key for requests that pass a provider credential through."
-            : "Map this standard virtual key to provider API keys."
+            ? "Name it, then create it. It links requests that carry your own provider key to you."
+            : "Ready to create. Change anything below, or just create it."
       }
       size={createdKeyValue ? "large" : "small"}
       className={createdKeyValue ? "max-w-4xl" : "sm:max-w-xl"}
@@ -305,54 +353,33 @@ export function CreateVirtualKeyDialog({
               })}
             />
           ) : (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="virtual-key-name">Name</Label>
-                <Input
-                  id="virtual-key-name"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  placeholder={
-                    isPassthrough ? "My passthrough key" : "My virtual key"
-                  }
-                />
-              </div>
-
-              {!isPassthrough && (
-                <ProviderKeyAccessFields
-                  providerApiKeyIds={providerApiKeyIds}
-                  onProviderApiKeyIdsChange={setProviderApiKeyIds}
-                  providerApiKeys={parentableKeys}
-                />
-              )}
-
-              <ExpirationDateTimeField
-                value={expiresAt}
-                onChange={setExpiresAt}
-                noExpirationText="Key will never expire"
-                formatExpiration={formatExpiration}
-              />
-
-              <AdvancedLabelsSection
-                ref={labelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
-              >
-                {showOwnerField && (
-                  <OwnerSelectField
-                    value={ownerId}
-                    onChange={setOwnerId}
-                    onSelectedOwnerChange={(owner) =>
-                      setSelectedOwnerName(
-                        owner.userId === currentUser?.id
-                          ? null
-                          : (owner.name ?? owner.email ?? null),
-                      )
-                    }
-                  />
-                )}
-              </AdvancedLabelsSection>
-            </>
+            <VirtualKeyReviewFields
+              key={reviewSession}
+              initialOpen={initialOpenRow}
+              keyType={keyType}
+              name={newKeyName}
+              onNameChange={setNewKeyName}
+              providerApiKeyIds={providerApiKeyIds}
+              onProviderApiKeyIdsChange={setProviderApiKeyIds}
+              providerApiKeys={parentableKeys}
+              expiresAt={expiresAt}
+              onExpiresAtChange={setExpiresAt}
+              formatExpiration={formatExpiration}
+              showOwnerField={showOwnerField}
+              ownerId={ownerId}
+              ownerName={ownerId ? selectedOwnerName : null}
+              onOwnerChange={setOwnerId}
+              onSelectedOwnerChange={(owner) =>
+                setSelectedOwnerName(
+                  owner.userId === currentUser?.id
+                    ? null
+                    : (owner.name ?? owner.email ?? null),
+                )
+              }
+              labels={labels}
+              onLabelsChange={setLabels}
+              labelsRef={labelsRef}
+            />
           )}
         </DialogBody>
         <DialogStickyFooter className="mt-0">
@@ -364,7 +391,7 @@ export function CreateVirtualKeyDialog({
               {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" />
               )}
-              <span>Create</span>
+              <span>Create key</span>
             </Button>
           )}
         </DialogStickyFooter>

@@ -121,8 +121,8 @@ export function KnowledgeSourcesEditor({
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
+              size="icon-sm"
+              className="rounded-l-none text-muted-foreground hover:text-destructive"
               onClick={() => onToggle(source.id)}
               aria-label={
                 tone === "exclude"

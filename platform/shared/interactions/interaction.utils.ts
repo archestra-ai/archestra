@@ -16,6 +16,7 @@ import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
 import GithubCopilotResponsesInteraction from "./llmProviders/github-copilot-responses";
 import GroqChatCompletionInteraction from "./llmProviders/groq";
+import JevDecisionsInteraction from "./llmProviders/jev";
 import KimiChatCompletionInteraction from "./llmProviders/kimi";
 import Microsoft365CopilotChatCompletionInteraction from "./llmProviders/microsoft-365-copilot";
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
@@ -74,6 +75,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
   "azure:chatCompletions": (i) => new AzureChatCompletionInteraction(i),
   "azure:responses": (i) => new AzureResponsesInteraction(i),
+  "jev:decisions": (i) => new JevDecisionsInteraction(i),
 };
 
 export interface CostSavingsInput {

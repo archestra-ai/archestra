@@ -4,7 +4,6 @@ import {
 } from "@archestra/shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -19,7 +18,6 @@ describe("MCP catalog alert dismissal routes", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    config.mcpServer.alertingEnabled = true;
     // A plain member: permission checks read the member role.
     vi.spyOn(betterAuth.api, "getSession").mockImplementation(
       async () => ({ user: { id: user.id } }) as never,

@@ -80,7 +80,9 @@ export function CreatedByCell({
           )}
         </span>
       </TooltipTrigger>
-      <TooltipContent>{detail}</TooltipContent>
+      <TooltipContent>
+        {isServiceAccount || label === detail ? detail : `${label} · ${detail}`}
+      </TooltipContent>
     </Tooltip>
   );
 }

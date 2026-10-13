@@ -10,7 +10,9 @@ import { z } from "zod";
 import db, { schema } from "@/database";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type PrincipalSource,
+} from "./resource-permission-subject";
 
 export default class ResourcePermissionTargetModel {
   /** Discovery only. Execution must still check the specific target. */
@@ -18,10 +20,13 @@ export default class ResourcePermissionTargetModel {
     organizationId: string;
     userId: string;
     action: ResourcePermissionAction;
+    lookups?: PrincipalSource;
   }): Promise<boolean> {
     const table = schema.internalMcpCatalogTable;
-    const principal =
-      await ResourcePermissionSubjectModel.resolvePrincipal(params);
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      params.lookups,
+      { userId: params.userId, organizationId: params.organizationId },
+    );
     const [row] = await db
       .select({ id: table.id })
       .from(table)

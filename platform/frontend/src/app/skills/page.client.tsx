@@ -884,7 +884,11 @@ function SkillsList() {
         actionButton={
           <div className="flex items-center gap-2">
             {!showEmptyState && !isInitialSkillsLoad && (
-              <PermissionButton permissions={{ skill: ["create"] }} asChild>
+              <PermissionButton
+                permissions={{ skill: ["create"] }}
+                size="sm"
+                asChild
+              >
                 <Link href="/skills/new">
                   <Plus className="h-4 w-4" />
                   Add new skill
@@ -1547,7 +1551,7 @@ function SkillsEmptyState() {
       title="No skills yet"
       description="A skill is a set of instructions and files. Agents pick the right one by name and follow it on demand."
       action={
-        <PermissionButton permissions={{ skill: ["create"] }} asChild>
+        <PermissionButton permissions={{ skill: ["create"] }} size="sm" asChild>
           <Link href="/skills/new">
             <Plus className="mr-2 h-4 w-4" />
             Add your first skill

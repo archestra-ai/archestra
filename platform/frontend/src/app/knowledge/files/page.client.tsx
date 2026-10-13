@@ -40,6 +40,7 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
   useKnowledgeFileLabelKeys,
@@ -304,7 +305,7 @@ export default function KnowledgeFilesPage() {
           if (row.original.kind === "directory") {
             const directory = row.original.directory;
             return (
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={() => {
                   setOpenDirectoryId(directory.id);
@@ -320,7 +321,7 @@ export default function KnowledgeFilesPage() {
                 <span className="shrink-0 text-muted-foreground text-xs">
                   {directory.fileCount}
                 </span>
-              </button>
+              </UnstyledButton>
             );
           }
           const file = row.original.file;
@@ -328,7 +329,7 @@ export default function KnowledgeFilesPage() {
             // Opens the document itself — PDFs in the browser's viewer, text
             // and images inline — so checking what a file says never requires
             // downloading it.
-            <button
+            <UnstyledButton
               type="button"
               className="flex w-full min-w-0 items-center gap-2 text-left"
               onClick={() =>
@@ -347,7 +348,7 @@ export default function KnowledgeFilesPage() {
                 {file.filename}
               </span>
               <LabelTags labels={file.labels} />
-            </button>
+            </UnstyledButton>
           );
         },
       },

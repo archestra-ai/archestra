@@ -181,6 +181,7 @@ function UsageDimensionCard({
                         tooltip="hover"
                         format="number"
                         subscriptionBadge="compact"
+                        precision="cents"
                         className="justify-end whitespace-nowrap"
                       />
                     </TableCell>

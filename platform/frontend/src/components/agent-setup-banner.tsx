@@ -68,8 +68,8 @@ export function AgentSetupBanner({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          className="absolute right-2 top-2 h-6 w-6 shrink-0 p-0 text-muted-foreground"
+          size="icon-xs"
+          className="absolute right-2 top-2 shrink-0 text-muted-foreground"
           onClick={() => setDismissed(true)}
           aria-label="Dismiss"
         >

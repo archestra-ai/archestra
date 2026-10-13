@@ -339,7 +339,7 @@ const TruncatedCodeBlock = ({
         >
           <Button
             variant="secondary"
-            size="sm"
+            size="xs"
             onClick={(e) => {
               e.stopPropagation();
               const el = containerRef.current;
@@ -352,7 +352,7 @@ const TruncatedCodeBlock = ({
                 });
               }
             }}
-            className="h-6 text-[10px] shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
+            className="shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
           >
             {isExpanded
               ? "Show Less"

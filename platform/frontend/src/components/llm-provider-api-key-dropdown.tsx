@@ -149,10 +149,10 @@ export function LlmProviderApiKeyDropdown({
         {triggerVariant === "button" || triggerVariant === "select" ? (
           <Button
             variant="outline"
-            size="sm"
             disabled={disabled}
             className={cn(
-              "h-9 min-w-0 justify-start gap-1.5 px-3 text-sm",
+              // Default (input) height: it stands in for a Select in forms.
+              "min-w-0 justify-start gap-1.5 px-3",
               triggerVariant === "select" && "justify-between",
               triggerClassName,
             )}

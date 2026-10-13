@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, ChevronRight } from "lucide-react";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
 export interface WizardStepDefinition<Id extends string> {
@@ -47,7 +48,7 @@ export function WizardStepper<Id extends string>({
             key={step.id}
             className={cn("flex items-center", compact ? "gap-2" : "gap-3")}
           >
-            <button
+            <UnstyledButton
               type="button"
               className={cn(
                 "flex items-center gap-2",
@@ -82,7 +83,7 @@ export function WizardStepper<Id extends string>({
               >
                 {step.title}
               </span>
-            </button>
+            </UnstyledButton>
             {index < steps.length - 1 && (
               <span
                 data-step-connector-state={isComplete ? "complete" : "upcoming"}

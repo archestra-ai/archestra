@@ -359,8 +359,8 @@ function ServerCard({
           {docsUrl && (
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground"
+              size="icon-sm"
+              className="text-muted-foreground"
               asChild
             >
               <a
@@ -377,8 +377,8 @@ function ServerCard({
           {server.github_info?.url && (
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground"
+              size="icon-sm"
+              className="text-muted-foreground"
               asChild
             >
               <a
@@ -394,8 +394,7 @@ function ServerCard({
           )}
           <Button
             variant={isInCatalog ? "ghost" : "default"}
-            size="icon"
-            className="h-8 w-8"
+            size="icon-sm"
             disabled={isInCatalog || !userAllowedToCreateCatalogItem}
             title={
               isInCatalog

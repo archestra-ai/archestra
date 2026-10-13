@@ -35,7 +35,6 @@ export function makeConfig(
       betaEnabled: false,
       orchestratorK8sRuntime: false,
       mcpIdleHibernationBetaEnabled: false,
-      mcpServerAlertingEnabled: false,
       sandbox: false,
       agentRuntime: false,
       agentRuntimeCatalogImages: getAgentCatalogImages({

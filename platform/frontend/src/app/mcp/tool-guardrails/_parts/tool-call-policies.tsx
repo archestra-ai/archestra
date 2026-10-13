@@ -182,8 +182,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
                           <TooltipTrigger asChild>
                             <Button
                               variant="secondary"
-                              size="sm"
-                              className="h-9 w-9 p-0"
+                              size="icon"
                               aria-label="Add condition"
                               onClick={() => handleConditionAdd(policy)}
                             >
@@ -263,6 +262,7 @@ export function ToolCallPolicies({ tool }: { tool: ToolForPolicies }) {
       ))}
       <ButtonWithTooltip
         variant="outline"
+        size="sm"
         className="w-full"
         onClick={() =>
           toolInvocationPolicyCreateMutation.mutate({

@@ -42,6 +42,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT,
   SHORTCUT_NEW_ENCRYPTED_CHAT,
@@ -373,8 +374,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-8 px-2"
+            size="icon-sm"
             aria-label="Change model or provider"
             onClick={expandModelSelector}
           >
@@ -383,12 +383,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         ) : (
           <Popover>
             <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2"
-              >
+              <Button type="button" variant="ghost" size="icon-sm">
                 <MoreVerticalIcon className="size-4" />
                 <span className="sr-only">More options</span>
               </Button>
@@ -415,14 +410,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                         <ComposerBadge>
                           {modelSourceLabel}
                           {modelSource === "user" && onResetModelOverride && (
-                            <button
+                            <UnstyledButton
                               type="button"
                               onClick={onResetModelOverride}
                               className="text-muted-foreground hover:text-foreground transition-colors"
                               title="Reset to default"
                             >
                               <XIcon className="size-3" />
-                            </button>
+                            </UnstyledButton>
                           )}
                         </ComposerBadge>
                       </div>
@@ -457,8 +452,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                             <Button
                               type="button"
                               variant="outline"
-                              size="sm"
-                              className="mt-2 h-7 gap-1.5 px-2 text-xs"
+                              size="xs"
+                              className="mt-2 gap-1.5"
                               onClick={onSubscriptionConnect}
                             >
                               {subscriptionSignInTitle}
@@ -506,8 +501,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
+                      size="xs"
                       onClick={onSubscriptionConnect}
                     >
                       {subscriptionSignInTitle}
@@ -527,7 +521,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       onCompact={onCompactConversation}
                       isCompacting={isContextCompacting}
                     >
-                      <button
+                      <UnstyledButton
                         type="button"
                         aria-label="Context usage"
                         data-testid={E2eTestId.ChatContextUsageTrigger}
@@ -538,7 +532,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                           maxTokens={maxContextLength}
                           size="sm"
                         />
-                      </button>
+                      </UnstyledButton>
                     </ContextWindowDialog>
                   </div>
                 )}
@@ -564,8 +558,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-8 px-2"
+              size="icon-sm"
               onClick={() => attachments.openFileDialog()}
               data-testid={E2eTestId.ChatFileUploadButton}
             >
@@ -619,12 +612,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               aria-pressed={encryptedChat}
               aria-label="Encrypted chat"
               data-testid={E2eTestId.EncryptedChatToggle}
               className={cn(
-                "h-8 px-2",
                 encryptedChat &&
                   "bg-accent text-accent-foreground hover:bg-accent/80",
               )}
@@ -648,10 +640,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
+              size="icon-sm"
               aria-label="Encrypted chat (not set up)"
               data-testid={E2eTestId.EncryptedChatSetupHint}
-              className="h-8 px-2 text-muted-foreground"
+              className="text-muted-foreground"
             >
               <EncryptedChatIcon className="size-4" />
             </Button>
@@ -710,7 +702,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-8 px-2 text-xs text-primary hover:text-primary"
+                className="text-primary hover:text-primary"
                 onClick={onSubscriptionConnect}
               >
                 {subscriptionSignInTitle}
@@ -723,8 +715,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-8 px-2"
+              size="icon-sm"
               aria-label="Change model or provider"
               onClick={expandModelSelector}
             >
@@ -761,7 +752,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-8 gap-1 px-2 text-xs text-primary hover:text-primary"
+                  className="gap-1 text-primary hover:text-primary"
                   onClick={onSubscriptionConnect}
                 >
                   {subscriptionSignInTitle}
@@ -798,14 +789,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 <ComposerBadge className="ml-1 mr-2">
                   {modelSourceLabel}
                   {modelSource === "user" && onResetModelOverride && (
-                    <button
+                    <UnstyledButton
                       type="button"
                       onClick={onResetModelOverride}
                       className="text-muted-foreground hover:text-foreground transition-colors"
                       title="Reset to default"
                     >
                       <XIcon className="size-3" />
-                    </button>
+                    </UnstyledButton>
                   )}
                 </ComposerBadge>
               )}
@@ -825,7 +816,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               onCompact={onCompactConversation}
               isCompacting={isContextCompacting}
             >
-              <button
+              <UnstyledButton
                 type="button"
                 aria-label="Context usage"
                 data-testid={E2eTestId.ChatContextUsageTrigger}
@@ -836,7 +827,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   maxTokens={maxContextLength}
                   size="sm"
                 />
-              </button>
+              </UnstyledButton>
             </ContextWindowDialog>
           )}
         </>

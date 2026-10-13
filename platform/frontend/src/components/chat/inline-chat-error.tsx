@@ -158,8 +158,8 @@ export function InlineChatError({
     chatError.isRetryable && onRetry ? (
       <Button
         variant="outline"
-        size="sm"
-        className="h-7 gap-1.5 self-start"
+        size="xs"
+        className="gap-1.5 self-start"
         disabled={isRetrying}
         onClick={() => {
           setIsRetrying(true);

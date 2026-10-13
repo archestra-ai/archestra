@@ -11,6 +11,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { alias, union } from "drizzle-orm/pg-core";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
 import { isContentEncryptionEnabled } from "@/content-encryption/index.ee";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed; no-ops when the feature is off
@@ -178,8 +179,37 @@ class ConversationModel {
       const escapedSearch = escapeLikePattern(trimmedSearch);
       const searchPattern = `%${escapedSearch}%`;
 
-      // Use a lateral join to limit messages per conversation for preview
-      // This prevents loading hundreds of messages for conversations with long histories
+      // Preview messages per conversation: the ones matching the search (for
+      // relevance) plus the first few (for context). A LATERAL picks them per
+      // conversation, so a long history is never joined in full and the
+      // first-few probe runs once per conversation rather than per message.
+      const previewSource = alias(schema.messagesTable, "preview_source");
+      const firstMessages = db
+        .select({ id: previewSource.id })
+        .from(previewSource)
+        .where(eq(previewSource.conversationId, schema.conversationsTable.id))
+        .orderBy(previewSource.createdAt)
+        .limit(ConversationModel.MESSAGES_PER_CONVERSATION_LIMIT);
+      const previewMessages = (
+        isContentEncryptionEnabled()
+          ? firstMessages
+          : union(
+              db
+                .select({ id: previewSource.id })
+                .from(previewSource)
+                .where(
+                  and(
+                    eq(
+                      previewSource.conversationId,
+                      schema.conversationsTable.id,
+                    ),
+                    sql`${previewSource.content}::text ILIKE ${searchPattern}`,
+                  ),
+                ),
+              firstMessages,
+            )
+      ).as("preview_message");
+
       const rows = await db
         .select({
           conversation: getTableColumns(schema.conversationsTable),
@@ -204,25 +234,10 @@ class ConversationModel {
           schema.agentsTable,
           eq(schema.conversationsTable.agentId, schema.agentsTable.id),
         )
+        .leftJoinLateral(previewMessages, sql`true`)
         .leftJoin(
           schema.messagesTable,
-          and(
-            eq(
-              schema.conversationsTable.id,
-              schema.messagesTable.conversationId,
-            ),
-            // Only include messages that match the search pattern (for relevance)
-            // or the first few messages (for context)
-            sql`(
-              (${isContentEncryptionEnabled() ? sql`false` : sql`${schema.messagesTable.content}::text ILIKE ${searchPattern}`})
-              OR ${schema.messagesTable.id} IN (
-                SELECT m.id FROM ${schema.messagesTable} m
-                WHERE m.conversation_id = ${schema.conversationsTable.id}
-                ORDER BY m.created_at
-                LIMIT ${ConversationModel.MESSAGES_PER_CONVERSATION_LIMIT}
-              )
-            )`,
-          ),
+          eq(schema.messagesTable.id, previewMessages.id),
         )
         .leftJoin(
           schema.projectsTable,

@@ -159,6 +159,7 @@ export function RolesList({ headerAction }: { headerAction?: ReactNode }) {
     setActionButton(
       <PermissionButton
         permissions={{ ac: ["create"] }}
+        size="sm"
         onClick={handleCreateOpen}
       >
         <Plus className="h-4 w-4" />

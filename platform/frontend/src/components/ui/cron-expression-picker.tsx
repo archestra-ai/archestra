@@ -87,7 +87,7 @@ export function CronExpressionPicker({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "border-input h-9 w-[200px] justify-between bg-transparent font-normal shadow-xs hover:bg-transparent hover:text-foreground",
+            "border-input w-[200px] justify-between bg-transparent font-normal shadow-xs hover:bg-transparent hover:text-foreground",
             !value && "text-muted-foreground",
             className,
           )}
@@ -156,7 +156,7 @@ export function CronExpressionPicker({
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 shrink-0 px-2 text-xs"
+              className="shrink-0"
               disabled={!customDraft.trim()}
               onClick={commitCustomValue}
             >

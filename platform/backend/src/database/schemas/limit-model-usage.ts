@@ -1,6 +1,6 @@
 import {
+  bigint,
   index,
-  integer,
   pgTable,
   timestamp,
   uuid,
@@ -21,10 +21,12 @@ const limitModelUsageTable = pgTable(
       .notNull()
       .references(() => limitsTable.id, { onDelete: "cascade" }),
     model: varchar("model", { length: 255 }).notNull(),
-    currentUsageTokensIn: integer("current_usage_tokens_in")
+    currentUsageTokensIn: bigint("current_usage_tokens_in", { mode: "number" })
       .notNull()
       .default(0),
-    currentUsageTokensOut: integer("current_usage_tokens_out")
+    currentUsageTokensOut: bigint("current_usage_tokens_out", {
+      mode: "number",
+    })
       .notNull()
       .default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),

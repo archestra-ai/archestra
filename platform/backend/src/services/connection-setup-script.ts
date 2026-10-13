@@ -16,7 +16,11 @@ import {
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
-import { ARCHESTRA_TOOL_PREFIX } from "@archestra/shared/archestra-mcp-server";
+import {
+  ARCHESTRA_TOOL_PREFIX,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
+} from "@archestra/shared/archestra-mcp-server";
 import type {
   ConnectionSetupClientId,
   ConnectionSetupPlatform,
@@ -238,7 +242,7 @@ export function claudeCodeAppaPermissionRules(
       "Claude MCP permission rules require literal server and tool names",
     );
   }
-  return ["get_remedy_plans", "execute_remedy_plan", "yell", "ask_user"].map(
+  return [...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES, TOOL_ASK_USER_SHORT_NAME].map(
     (name) => `mcp__${mcp.serverName}__${mcp.toolPrefix}${name}`,
   );
 }
@@ -673,15 +677,22 @@ export function legacyServerNames(mcp: SetupScriptMcpSection): string[] {
 // Internal helpers — Claude Code
 // ===================================================================
 
+// Runs before the gateway is registered so a missing interpreter leaves the client untouched.
+function claudeAppaPermissionsPreflightBash(
+  mcp: SetupScriptMcpSection,
+): string | null {
+  if (!claudeCodeAppaPermissionsAreLiteral(mcp)) return null;
+  return `if ! command -v python3 >/dev/null 2>&1; then
+  err 'python3 is required to configure Claude Code APPA tool permissions. Install it and re-run connection setup.'
+  exit 1
+fi`;
+}
+
 function claudeAppaPermissionsBash(mcp: SetupScriptMcpSection): string {
   if (!claudeCodeAppaPermissionsAreLiteral(mcp)) {
     return `warn ${sh(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING)}`;
   }
-  return `if ! command -v python3 >/dev/null 2>&1; then
-  err 'python3 is required to configure Claude Code APPA tool permissions. Install it and re-run connection setup.'
-  exit 1
-fi
-say 'Configuring exact APPA helper permissions for Claude Code'
+  return `say 'Configuring exact APPA helper permissions for Claude Code'
 ARCHESTRA_MCP_NAME=${sh(mcp.serverName)} \\
 ARCHESTRA_MCP_LEGACY_NAMES=${sh(JSON.stringify(legacyServerNames(mcp)))} \\
 ARCHESTRA_APPA_PERMISSION_RULES=${sh(JSON.stringify(claudeCodeAppaPermissionRules(mcp)))} \\
@@ -708,6 +719,8 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
         `cli claude mcp remove --scope user ${sh(name)} >/dev/null 2>&1 || true`,
       ])
       .join("\n");
+    const preflight = claudeAppaPermissionsPreflightBash(ctx.mcp);
+    if (preflight) sections.push(preflight);
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 cli claude mcp remove --scope local ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
 cli claude mcp remove --scope user ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}

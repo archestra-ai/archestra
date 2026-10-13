@@ -10,7 +10,7 @@ export function CopyButton({
   className,
   size = 14,
   behavior = "checkmark",
-  buttonSize = "sm",
+  buttonSize = "icon-xs",
   iconClassName,
   copiedIconClassName,
 }: {
@@ -18,7 +18,7 @@ export function CopyButton({
   className?: string;
   size?: number;
   behavior?: "checkmark" | "text";
-  buttonSize?: "default" | "sm" | "lg" | "icon";
+  buttonSize?: "icon" | "icon-sm" | "icon-xs";
   iconClassName?: string;
   copiedIconClassName?: string;
 }) {
@@ -41,7 +41,7 @@ export function CopyButton({
           type="button"
           variant="ghost"
           size={buttonSize}
-          className={`h-6 w-6 p-0 hover:bg-background/50 ${className ?? ""}`}
+          className={`hover:bg-background/50 ${className ?? ""}`}
           onClick={handleCopy}
         >
           <Copy size={size} className={iconClassName} />
@@ -57,7 +57,7 @@ export function CopyButton({
       type="button"
       variant="ghost"
       size={buttonSize}
-      className={`h-6 w-6 p-0 hover:bg-background/50 ${className ?? ""}`}
+      className={`hover:bg-background/50 ${className ?? ""}`}
       onClick={handleCopy}
       disabled={copied}
     >

@@ -95,6 +95,7 @@ import {
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
+import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
@@ -478,10 +479,12 @@ function CatalogItemDetails({
   // same flow and visibility gate as the registry card. The gate reads
   // `item.toolCount` (not the fetched `tools` list) to match the card exactly.
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const isInstalledForViewer =
+    isMcpServerInstalledForViewer(allServersForCatalog);
   const showChatButton = shouldShowMcpCardChatButton({
     toolsCount: item.toolCount ?? 0,
     isBuiltin: variant === "builtin",
-    hasInstallation: allServersForCatalog.length > 0,
+    hasInstallation: isInstalledForViewer,
   });
 
   const [deleteRequested, setDeleteRequested] = useState(false);
@@ -515,9 +518,7 @@ function CatalogItemDetails({
             variant={variant}
             deploymentSummary={deploymentSummary}
             deploymentFeedState={deploymentFeedState}
-            isInstalledForViewer={isMcpServerInstalledForViewer(
-              allServersForCatalog,
-            )}
+            isInstalledForViewer={isInstalledForViewer}
           />
         )
       }
@@ -532,6 +533,7 @@ function CatalogItemDetails({
           {showChatButton && (
             <Button
               variant="outline"
+              size="sm"
               disabled={isChatCreating}
               onClick={() => startChat(item)}
             >
@@ -540,7 +542,7 @@ function CatalogItemDetails({
             </Button>
           )}
           {canModify && effectiveTab !== "yaml" && (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href={mcpServerActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
                 {editAction.label}
@@ -552,7 +554,7 @@ function CatalogItemDetails({
             (canModify && !isPlaywright)) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon-sm">
                   <MoreHorizontal className="h-4 w-4" />
                   <span className="sr-only">More actions</span>
                 </Button>
@@ -677,7 +679,8 @@ function CatalogItemDetails({
                   }
                   description={
                     variant === "local"
-                      ? "Running instances of this server, for one person or shared with a team."
+                      ? getLocalInstallationCopy(item.multitenant === true)
+                          .section
                       : "The credentials this server is used with."
                   }
                 >

@@ -35,6 +35,7 @@ import { useAppRuntimeControls } from "@/components/mcp-app/use-app-runtime-cont
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useApp } from "@/lib/app.query";
 import {
   appActionDisabledReason,
@@ -532,7 +533,7 @@ export function McpAppEntryContent({
           </span>
           {isOwnedInPanel && !ownedApp.enabled ? (
             ownedAppAccess.canEdit ? (
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={() => setSettingsOpen(true)}
                 title="Disabled — only you can see this app. Click to enable."
@@ -543,7 +544,7 @@ export function McpAppEntryContent({
                 >
                   Disabled
                 </Badge>
-              </button>
+              </UnstyledButton>
             ) : (
               <Badge variant="outline">Disabled</Badge>
             )

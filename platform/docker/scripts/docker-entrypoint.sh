@@ -136,6 +136,21 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
         docker network create --ipv6=false "${KIND_NETWORK}" >/dev/null
     fi
 
+    CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
+
+    # A cluster created by an older image sits on KinD's dual-stack `kind`
+    # network. Joining it would bring the localhost reset back, so recreate it
+    # on KIND_NETWORK. MCP servers are redeployed from the database; files in
+    # the old cluster's volumes are lost.
+    if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$" \
+        && ! docker inspect -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' "${CONTROL_PLANE_CONTAINER}" 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
+        echo "KinD cluster '${CLUSTER_NAME}' is on the dual-stack 'kind' network; recreating it on '${KIND_NETWORK}'..."
+        if ! kind delete cluster --name "${CLUSTER_NAME}" >/dev/null 2>&1; then
+            echo "ERROR: Failed to delete the old KinD cluster. Remove it with: docker rm -f ${CONTROL_PLANE_CONTAINER}"
+            exit 1
+        fi
+    fi
+
     # Check if cluster already exists
     if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
         echo "KinD cluster '${CLUSTER_NAME}' already exists"
@@ -218,13 +233,6 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
     chmod 600 "${KUBECONFIG_PATH}"
 
     # Get the KinD control plane container IP address
-    CONTROL_PLANE_CONTAINER="${CLUSTER_NAME}-control-plane"
-    # A cluster left over from a run that exited uncleanly may predate
-    # KIND_NETWORK and sit on KinD's default network; join whichever network
-    # the node is actually on.
-    if ! docker inspect -f '{{range $net, $v := .NetworkSettings.Networks}}{{println $net}}{{end}}' "${CONTROL_PLANE_CONTAINER}" 2>/dev/null | grep -qx "${KIND_NETWORK}"; then
-        KIND_NETWORK="kind"
-    fi
     CONTROL_PLANE_IP=$(docker inspect -f "{{with index .NetworkSettings.Networks \"${KIND_NETWORK}\"}}{{.IPAddress}}{{end}}" "${CONTROL_PLANE_CONTAINER}")
 
     if [ -z "$CONTROL_PLANE_IP" ]; then
@@ -327,6 +335,33 @@ if [ "$ARCHESTRA_QUICKSTART" = "true" ]; then
             echo "Dagger Engine ready - code runtime enabled"
         else
             echo "WARNING: Dagger Engine did not become ready; code runtime stays disabled"
+        fi
+    fi
+
+    # Agent Runtime runs each task as a Sandbox resource of the upstream Agent
+    # Sandbox controller. Real deployments install it as a cluster
+    # prerequisite; the quickstart installs the version pinned in the
+    # Dockerfile. On failure the backend still starts and rejects runs with a
+    # message naming the missing controller.
+    if [ "${ARCHESTRA_AGENT_RUNTIME_ENABLED:-false}" = "true" ]; then
+        echo "Installing Agent Sandbox controller for Agent Runtime..."
+        if [ ! -f /app/agent-sandbox.quickstart.yaml ]; then
+            echo "WARNING: Agent Sandbox controller manifest missing from this image; Agent Runtime runs will fail"
+        elif kubectl --kubeconfig "${KUBECONFIG_PATH}" apply --server-side -f /app/agent-sandbox.quickstart.yaml >/dev/null \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" wait --for=condition=Established --timeout=60s \
+                crd/sandboxes.agents.x-k8s.io \
+                crd/sandboxtemplates.extensions.agents.x-k8s.io \
+                crd/sandboxwarmpools.extensions.agents.x-k8s.io \
+                crd/sandboxclaims.extensions.agents.x-k8s.io >/dev/null \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" create configmap agent-sandbox-config -n agent-sandbox-system \
+                --from-literal=allowed-label-domains=sandbox.users.io,archestra.io \
+                --dry-run=client -o yaml \
+                | kubectl --kubeconfig "${KUBECONFIG_PATH}" apply -f - >/dev/null \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout restart deployment/agent-sandbox-controller -n agent-sandbox-system >/dev/null \
+            && kubectl --kubeconfig "${KUBECONFIG_PATH}" rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s >/dev/null; then
+            echo "Agent Sandbox controller ready - Agent Runtime enabled"
+        else
+            echo "WARNING: Agent Sandbox controller did not become ready; Agent Runtime runs will fail until it is installed"
         fi
     fi
 fi

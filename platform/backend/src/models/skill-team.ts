@@ -4,6 +4,7 @@ import db, { schema, withDbTransaction } from "@/database";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type PrincipalSource,
 } from "./resource-permission-subject";
 
 /**
@@ -19,15 +20,16 @@ class SkillTeamModel {
   static async getUserAccessibleSkillIds(params: {
     organizationId: string;
     userId?: string;
+    lookups?: PrincipalSource;
   }): Promise<string[]> {
     const { organizationId, userId } = params;
     const principal =
       userId === undefined
         ? null
-        : await ResourcePermissionSubjectModel.resolvePrincipal({
-            organizationId,
-            userId,
-          });
+        : await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+            params.lookups,
+            { organizationId, userId },
+          );
     const rows = await db
       .select({ id: schema.skillsTable.id })
       .from(schema.skillsTable)

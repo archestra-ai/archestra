@@ -260,8 +260,7 @@ export function ConversationArtifactPanel({
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8"
+              size="icon-sm"
               onClick={handleCopy}
               title="Copy to clipboard"
             >
@@ -269,8 +268,7 @@ export function ConversationArtifactPanel({
             </Button>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8"
+              size="icon-sm"
               onClick={handleDownload}
               title="Download as PDF"
             >
@@ -278,8 +276,7 @@ export function ConversationArtifactPanel({
             </Button>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8"
+              size="icon-sm"
               onClick={onToggle}
               title="Close panel"
             >

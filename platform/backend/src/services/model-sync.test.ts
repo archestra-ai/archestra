@@ -972,6 +972,39 @@ describe("ModelSyncService", () => {
     );
   });
 
+  test("syncs Jev models as decision models that no chat picker offers", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const secret = await makeSecret({ secret: { apiKey: "jev-key" } });
+    const apiKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "jev",
+    });
+
+    const count = await modelSyncService.syncModelsForApiKey({
+      apiKeyId: apiKey.id,
+      provider: "jev",
+      apiKeyValue: "jev-key",
+    });
+
+    expect(count).toBe(1);
+    const model = await ModelModel.findByProviderAndModelId(
+      "jev",
+      "jev-1.13.0",
+    );
+    expect(model).toEqual(
+      expect.objectContaining({
+        outputModalities: [],
+        supportsToolCalling: false,
+      }),
+    );
+    if (!model) throw new Error("jev-1.13.0 was not synced");
+    expect(ModelModel.supportsTextChat(model)).toBe(false);
+    expect(ModelModel.supportsEmbeddings(model)).toBe(false);
+  });
+
   test("infers dimensions for known OpenRouter embedding models", async ({
     makeOrganization,
     makeSecret,

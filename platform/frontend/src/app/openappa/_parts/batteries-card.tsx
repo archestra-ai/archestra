@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, MessageCircle } from "lucide-react";
+import { ChevronRight, CircleCheck, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import {
   Card,
@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useBatteries } from "@/lib/openappa-batteries.query";
 import type { CoverageSummary } from "@/lib/openappa-coverage.query";
+import { cn } from "@/lib/utils/tailwind";
 import { batteryDisplayName } from "./battery-display-name";
 import {
   BATTERY_STATUS,
@@ -63,16 +64,17 @@ export function hasBatteries(batteries: Batteries): boolean {
  */
 export function BatteriesCard({
   summary,
+  className,
 }: {
   summary: CoverageSummary | undefined;
+  className?: string;
 }) {
   return (
-    <Card className="gap-4 py-5">
+    <Card className={cn("gap-4 py-5", className)}>
       <CardHeader className="gap-1 px-5">
         <CardTitle>Batteries</CardTitle>
         <CardDescription className="text-xs">
-          Ready-made rules for common MCP servers, enforced without writing them
-          yourself
+          Ready-made rules for common MCP servers.
         </CardDescription>
       </CardHeader>
       {summary ? (
@@ -107,11 +109,17 @@ function BatteriesContent({ summary }: { summary: CoverageSummary }) {
       <CardContent className="space-y-5 px-5">
         <div className="grid grid-cols-3 divide-x overflow-hidden rounded-md border">
           <StatTile
-            label="Active"
+            label="Enforced"
+            heading="Batteries enforced"
             group="active"
             color={ACTIVE_COLOR}
             count={active.length}
-            detail={`${tools(sum(active))} enforced`}
+            // The legend's Battery rule count, so the two numbers always match.
+            detail={
+              active.length === 0
+                ? "no tools covered yet"
+                : `${tools(totals.battery)} covered`
+            }
             empty="No included battery is enforced."
             rows={active.map((battery) => ({
               name: batteryDisplayName(battery.name),
@@ -119,11 +127,19 @@ function BatteriesContent({ summary }: { summary: CoverageSummary }) {
             }))}
           />
           <StatTile
-            label="Broken"
+            label="To fix"
+            heading="Batteries to fix"
             group="broken"
             color={BROKEN_COLOR}
             count={broken.length}
-            detail={`${tools(unenforced)} not enforced`}
+            done="All set"
+            detail={
+              broken.length === 0
+                ? "nothing needs fixing"
+                : unenforced === 0
+                  ? "rules not running"
+                  : `${tools(unenforced)} not enforced`
+            }
             empty="Every included battery is enforced."
             rows={broken.map((battery) => ({
               name: batteryDisplayName(battery.name),
@@ -131,12 +147,13 @@ function BatteriesContent({ summary }: { summary: CoverageSummary }) {
             }))}
           />
           <StatTile
-            label="Available"
+            label="To add"
             group="fits"
             count={available.length}
+            done="All added"
             detail={
               available.length === 0
-                ? "none fit your servers"
+                ? "none left for your servers"
                 : `+${tools(added)}`
             }
             heading="Batteries that fit your servers"
@@ -148,14 +165,14 @@ function BatteriesContent({ summary }: { summary: CoverageSummary }) {
             more={
               others
                 ? {
-                    label: `${others.toLocaleString()} more in catalog`,
+                    label: `${others.toLocaleString()} for other servers`,
                     group: "other",
                   }
                 : undefined
             }
           />
         </div>
-        {actionable ? (
+        {actionable && (
           <ReachableCoverage
             total={totals.tools}
             custom={totals.root}
@@ -164,11 +181,6 @@ function BatteriesContent({ summary }: { summary: CoverageSummary }) {
             fixable={unenforced}
             installable={added}
           />
-        ) : (
-          <p className="text-muted-foreground text-sm">
-            Every included battery is enforced, and no other battery fits your
-            MCP servers.
-          </p>
         )}
       </CardContent>
       {actionable && (
@@ -201,11 +213,17 @@ function StatTile({
   empty,
   rows,
   more,
+  done,
 }: {
   label: string;
   group: BatteryStatusGroup;
   /** Hollow when unset: a battery not included yet. */
   color?: string;
+  /**
+   * What a zero means when it is good news, shown with a check in place of
+   * the count and the dot.
+   */
+  done?: string;
   count: number;
   detail: string;
   heading?: string;
@@ -223,17 +241,29 @@ function StatTile({
             className="hover:bg-accent/50 focus-visible:ring-ring/50 flex flex-1 flex-col items-start gap-0.5 px-3 py-2.5 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-inset"
           >
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              <span
-                aria-hidden
-                className="border-muted-foreground size-2 shrink-0 rounded-full border"
-                style={
-                  color ? { backgroundColor: color, borderColor: color } : {}
-                }
-              />
+              {done && count === 0 ? (
+                <CircleCheck
+                  aria-hidden
+                  className="size-3 shrink-0 text-emerald-600 dark:text-emerald-400"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="border-muted-foreground size-2 shrink-0 rounded-full border"
+                  style={
+                    color ? { backgroundColor: color, borderColor: color } : {}
+                  }
+                />
+              )}
               <span>{label}</span>
             </span>
-            <span className="text-2xl font-semibold tabular-nums">
-              {count.toLocaleString()}
+            <span
+              className={cn(
+                "text-2xl font-semibold tabular-nums",
+                count === 0 && !done && "text-muted-foreground",
+              )}
+            >
+              {done && count === 0 ? done : count.toLocaleString()}
             </span>
             <span className="text-muted-foreground text-xs tabular-nums">
               {detail}
@@ -313,13 +343,13 @@ function ReachableCoverage({
     },
     {
       key: "fixable",
-      label: "Fixing broken batteries",
+      label: "Batteries to fix",
       count: fixable,
       fill: BROKEN_COLOR,
     },
     {
       key: "installable",
-      label: "Installing available batteries",
+      label: "Batteries to add",
       count: installable,
       fill: AVAILABLE_FILL,
     },

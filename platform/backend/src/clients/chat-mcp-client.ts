@@ -20,6 +20,7 @@ import {
   getAgentTools,
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
+import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
@@ -45,6 +46,7 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { isAppaDelegatedRun } from "@/openappa/service";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
@@ -1024,8 +1026,15 @@ export async function getChatMcpTools({
     // Tools with _meta.ui.visibility that does not include "model" are intended
     // for app-iframe use only and must not appear in the LLM's tool list.
     // Default (no visibility field) = visible to both model and app.
+    // A2A-delegated runs cannot execute OpenAPPA tools, so do not offer them.
+    const delegatedRun = isAppaDelegatedRun(agentId, delegationChain);
     const filteredMcpTools = mcpTools.filter((tool) => {
       if (isAgentTool(tool.name)) return false;
+      if (
+        delegatedRun &&
+        isOpenappaTool(archestraMcpBranding.getToolShortName(tool.name))
+      )
+        return false;
       const uiVisibility = (tool._meta as { ui?: McpUiToolMeta } | undefined)
         ?.ui?.visibility;
       return !(uiVisibility && !uiVisibility.includes("model"));

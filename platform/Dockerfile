@@ -589,6 +589,15 @@ COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # The engine IMAGE archive itself is added only in the final `unified` stage below —
 # the entrypoint falls back to a registry pull when the tar is absent.
 COPY docker/dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
+# Upstream Agent Sandbox controller, applied into the embedded KinD cluster in
+# quickstart mode when ARCHESTRA_AGENT_RUNTIME_ENABLED=true: every Agent Runtime
+# run is one of its Sandbox resources. Real deployments install it themselves;
+# keep this version in step with the Agent Runtime prerequisites in
+# docs/pages/platform-deployment.md.
+ARG AGENT_SANDBOX_VERSION=v1.0.1
+RUN wget -O /app/agent-sandbox.quickstart.yaml \
+        "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/sandbox-with-extensions.yaml" && \
+    echo "460c1e0272c793c98de82482aed57db1bddb0afcb979c19325dc6cc52289c44c  /app/agent-sandbox.quickstart.yaml" | sha256sum -c -
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 

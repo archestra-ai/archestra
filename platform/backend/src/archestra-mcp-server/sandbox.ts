@@ -246,11 +246,27 @@ const DownloadFileOutputSchema = z.object({
 const exactlyOneOf = (a: string, b: string) =>
   [
     (v: Record<string, unknown>) => (v[a] != null) !== (v[b] != null),
-    { message: `provide exactly one of \`${a}\` or \`${b}\`` },
+    {
+      message: `provide exactly one of \`${a}\` or \`${b}\`; leave the other out or empty`,
+    },
   ] as const;
 
 const ID_OR_FILENAME = exactlyOneOf("id", "filename");
 const ATTACHMENT_ID_OR_FILENAME = exactlyOneOf("attachmentId", "filename");
+
+/**
+ * An optional selector where a blank value means "not given". A model that
+ * fills every declared field sends "" or whitespace for the selector it does
+ * not mean, and that must not count as a second selector.
+ */
+const optionalSelector = (base: z.ZodString = z.string()) =>
+  base.optional().transform((value) => (value?.trim() ? value : undefined));
+
+/** `id` XOR `filename` selector fields, described per call site. */
+const idOrFilenameShape = (describe: { id: string; filename: string }) => ({
+  id: optionalSelector().describe(describe.id),
+  filename: optionalSelector().describe(describe.filename),
+});
 
 /**
  * A chat attachment as a source of bytes, shared by upload_file and copy_file.
@@ -262,24 +278,17 @@ const chatAttachmentSource = (describe: { self: string; id: string }) =>
   z
     .strictObject({
       type: z.literal("chat_attachment"),
-      attachmentId: z
-        .string()
-        .min(1)
+      attachmentId: optionalSelector()
         .refine(
-          isUuid,
+          (value) => value === undefined || isUuid(value),
           "must be the attachment's id — when you only know the name, use `filename` instead",
         )
-        .optional()
         .describe(describe.id),
-      filename: z
-        .string()
-        .min(1)
-        .optional()
-        .describe(
-          "Original filename of an attachment in this conversation (when " +
-            "you have no id). If the same name was attached more than once, " +
-            "the newest one wins.",
-        ),
+      filename: optionalSelector().describe(
+        "Original filename of an attachment in this conversation (when " +
+          "you have no id). If the same name was attached more than once, " +
+          "the newest one wins.",
+      ),
     })
     .refine(...ATTACHMENT_ID_OR_FILENAME)
     .describe(describe.self);
@@ -310,27 +319,21 @@ const UploadSourceSchema = z.discriminatedUnion("type", [
   z
     .strictObject({
       type: z.literal("my_file"),
-      id: z
-        .string()
-        .trim()
+      id: optionalSelector(z.string().trim())
         .refine(
-          (v) => isUuid(v) || v.startsWith(OBJECT_REF_PREFIX),
+          (v) =>
+            v === undefined || isUuid(v) || v.startsWith(OBJECT_REF_PREFIX),
           "must be a file id or ref from search_files",
         )
-        .optional()
         .describe(
           "Id or ref of a persistent file, as returned by search_files " +
             "(`id` for stored files, `ref` for hand-placed ones).",
         ),
-      filename: z
-        .string()
-        .min(1)
-        .optional()
-        .describe("Exact filename of a persistent file (when you have no id)."),
+      filename: optionalSelector().describe(
+        "Exact filename of a persistent file (when you have no id).",
+      ),
     })
-    .refine((v) => (v.id != null) !== (v.filename != null), {
-      message: "provide exactly one of `id` or `filename`",
-    })
+    .refine(...ID_OR_FILENAME)
     .describe(
       "Copy a file from the user's persistent files into the " +
         "sandbox. Find files with search_files first.",
@@ -438,21 +441,13 @@ const SearchFilesOutputSchema = z.object({
 
 const ReadFileSchema = z
   .strictObject({
-    id: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
+    ...idOrFilenameShape({
+      id:
         "Id or ref of the file to read — the `id` or `ref` from search_files, " +
-          "or a fileId from save_file.",
-      ),
-    filename: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
+        "or a fileId from save_file.",
+      filename:
         "Filename to read instead of `id`; rejected as ambiguous if more than one file shares the name.",
-      ),
+    }),
     offset: z
       .number()
       .int()
@@ -469,9 +464,7 @@ const ReadFileSchema = z
       ),
     project_id: PROJECT_ID_FILE_ARG,
   })
-  .refine((v) => (v.id != null) !== (v.filename != null), {
-    message: "provide exactly one of `id` or `filename`",
-  })
+  .refine(...ID_OR_FILENAME)
   .describe(
     "Read a persistent file directly, without copying it into the sandbox. Text " +
       "files come back as numbered lines (`<n>\\t<line>`); images (PNG, JPEG, " +
@@ -518,12 +511,6 @@ const ReadFileOutputSchema = z.object({
         "The numbered rendering stays in the text output, where line numbers " +
         "are what makes edit_file addressable.",
     ),
-});
-
-/** `id` XOR `filename` selector fields, described per call site. */
-const idOrFilenameShape = (describe: { id: string; filename: string }) => ({
-  id: z.string().optional().describe(describe.id),
-  filename: z.string().min(1).optional().describe(describe.filename),
 });
 
 const ReadFileRawSchema = z
@@ -686,18 +673,11 @@ const SaveFileOutputSchema = z.object({
 
 const EditFileSchema = z
   .strictObject({
-    id: z
-      .string()
-      .min(1)
-      .optional()
-      .describe("Id of the file to edit (from search_files / save_file)."),
-    filename: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
+    ...idOrFilenameShape({
+      id: "Id of the file to edit (from search_files / save_file).",
+      filename:
         "Filename to edit instead of `id`; rejected as ambiguous if more than one file shares the name.",
-      ),
+    }),
     old_string: z
       .string()
       .min(1)
@@ -719,9 +699,7 @@ const EditFileSchema = z
       ),
     project_id: PROJECT_ID_FILE_ARG,
   })
-  .refine((v) => (v.id != null) !== (v.filename != null), {
-    message: "provide exactly one of `id` or `filename`",
-  })
+  .refine(...ID_OR_FILENAME)
   .refine((v) => v.old_string !== v.new_string, {
     message: "new_string must differ from old_string",
   })
@@ -745,23 +723,14 @@ const EditFileOutputSchema = z.object({
 
 const DeleteFileSchema = z
   .strictObject({
-    id: z
-      .string()
-      .min(1)
-      .optional()
-      .describe("Id of the file to delete (from search_files / save_file)."),
-    filename: z
-      .string()
-      .min(1)
-      .optional()
-      .describe(
+    ...idOrFilenameShape({
+      id: "Id of the file to delete (from search_files / save_file).",
+      filename:
         "Filename to delete instead of `id`; rejected as ambiguous if more than one file shares the name.",
-      ),
+    }),
     project_id: PROJECT_ID_FILE_ARG,
   })
-  .refine((v) => (v.id != null) !== (v.filename != null), {
-    message: "provide exactly one of `id` or `filename`",
-  })
+  .refine(...ID_OR_FILENAME)
   .describe("Permanently delete a persistent file.");
 
 const DeleteFileOutputSchema = z.object({

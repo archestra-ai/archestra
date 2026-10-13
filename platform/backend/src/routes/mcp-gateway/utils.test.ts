@@ -1676,25 +1676,17 @@ describe("createAgentServer tools/list", () => {
       "list_guardrails_battery_fits",
       "validate_guardrails_policy",
       "preview_guardrails_policy_change",
-      "update_guardrails_policy",
       "get_guardrails_policy_change_status",
     ] as const) {
-      expect(names).toContain(archestraMcpBranding.getToolName(policyTool));
+      expect(
+        response.tools.find(
+          (tool) => tool.name === archestraMcpBranding.getToolName(policyTool),
+        )?.annotations,
+      ).toMatchObject({ readOnlyHint: true });
     }
-    expect(
-      response.tools.find(
-        (tool) =>
-          tool.name ===
-          archestraMcpBranding.getToolName("get_guardrails_policy"),
-      )?.annotations,
-    ).toMatchObject({ readOnlyHint: true });
-    expect(
-      response.tools.find(
-        (tool) =>
-          tool.name ===
-          archestraMcpBranding.getToolName("update_guardrails_policy"),
-      )?.annotations?.readOnlyHint,
-    ).not.toBe(true);
+    expect(names).not.toContain(
+      archestraMcpBranding.getToolName("update_guardrails_policy"),
+    );
   });
 
   test("hides remedy tools while the deployment switch is off and still lists policy tools", async ({

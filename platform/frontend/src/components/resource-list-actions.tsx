@@ -67,7 +67,7 @@ export function ResourceListActions({
           <Button
             type="button"
             variant="outline"
-            size="icon"
+            size="icon-sm"
             aria-label="More actions"
           >
             <MoreHorizontal className="size-4" />

@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import type { SkillVersionSummary } from "@/lib/skills/skill.query";
 import { groupVersionsByDay } from "@/lib/skills/skill-version-format";
 import { cn } from "@/lib/utils/tailwind";
@@ -68,7 +69,7 @@ export function VersionTimeline({
           {group.versions.map((version) => {
             const isActive = version.version === activeVersion;
             return (
-              <button
+              <UnstyledButton
                 key={version.id}
                 type="button"
                 aria-current={isActive ? "true" : undefined}
@@ -93,7 +94,7 @@ export function VersionTimeline({
                     {version.contentHash.slice(0, 7)}
                   </span>
                 </span>
-              </button>
+              </UnstyledButton>
             );
           })}
         </div>

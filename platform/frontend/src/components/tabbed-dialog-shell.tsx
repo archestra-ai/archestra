@@ -112,7 +112,7 @@ export function TabbedDialogShell<TSection extends string>({
                 variant="ghost"
                 data-testid={getNavItemTestId?.(navItem.id)}
                 className={cn(
-                  "justify-start h-9 px-3 font-normal w-full",
+                  "justify-start font-normal w-full",
                   activeSection === navItem.id &&
                     "bg-accent text-accent-foreground font-medium",
                 )}
@@ -146,8 +146,8 @@ export function TabbedDialogShell<TSection extends string>({
             <Button
               type="button"
               variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0 rounded-xs opacity-70 hover:opacity-100"
+              size="icon-sm"
+              className="shrink-0 rounded-xs opacity-70 hover:opacity-100"
               onClick={guard.requestClose}
             >
               <XIcon className="h-4 w-4" />

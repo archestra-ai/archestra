@@ -452,31 +452,6 @@ describe("McpServerCard uninstall permission", () => {
     expect(routerPush).toHaveBeenCalledWith("/mcp/registry/cat-1/edit");
   });
 
-  it("hides OAuth failure diagnostics while MCP alerting is disabled", () => {
-    useMcpServersMock.mockReturnValue({
-      data: [
-        {
-          ...personalInstall,
-          oauthRefreshError: "refresh_failed",
-        },
-      ],
-    });
-    renderCard(
-      <McpServerCard
-        variant="remote"
-        item={{ ...item, oauthConfig: {} } as unknown as CatalogItem}
-        installingItemId={null}
-        deploymentStatuses={{}}
-        deploymentFeedState="ready"
-        onInstallRemoteServer={vi.fn()}
-        onInstallLocalServer={vi.fn()}
-        onReinstall={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByTestId("oauth-reauth-state")).toBeNull();
-  });
-
   it("does not offer Install when a team connection already serves the viewer", () => {
     useMcpServersMock.mockReturnValue({
       data: [
@@ -514,13 +489,34 @@ describe("McpServerCard uninstall permission", () => {
     ).toBeInTheDocument();
   });
 
-  it("reports a failed OAuth refresh once when its issue badge is already shown", () => {
-    vi.mocked(useFeature).mockImplementation(
-      (flag) =>
-        (flag === "mcpServerAlertingEnabled") as unknown as ReturnType<
-          typeof useFeature
-        >,
+  it("offers Chat only once the viewer has a connection of their own", () => {
+    const colleagueInstall = {
+      ...personalInstall,
+      ownerId: "colleague",
+      users: ["colleague"],
+      canUseCredential: false,
+    };
+    useMcpServersMock.mockReturnValue({ data: [colleagueInstall] });
+    const { unmount } = renderCard(
+      cloneElement(card, { item: { ...item, toolCount: 3 } }),
     );
+
+    expect(
+      screen.queryByRole("button", { name: `Chat using ${item.name}` }),
+    ).toBeNull();
+    unmount();
+
+    useMcpServersMock.mockReturnValue({
+      data: [colleagueInstall, personalInstall],
+    });
+    renderCard(cloneElement(card, { item: { ...item, toolCount: 3 } }));
+
+    expect(
+      screen.getByRole("button", { name: `Chat using ${item.name}` }),
+    ).toBeInTheDocument();
+  });
+
+  it("reports a failed OAuth refresh once when its issue badge is already shown", () => {
     useMcpServersMock.mockReturnValue({
       data: [{ ...personalInstall, oauthRefreshError: "refresh_failed" }],
     });
@@ -777,7 +773,7 @@ describe("McpServerCard uninstall permission", () => {
           ),
         )
         .map((heading) => heading.textContent),
-    ).toEqual([alpha.name, flagged.name, personal.name, zeta.name]);
+    ).toEqual([flagged.name, personal.name, alpha.name, zeta.name]);
   });
 
   it("explains that an uninstalled card must be installed before selection", async () => {

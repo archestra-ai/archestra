@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
 interface Todo {
@@ -84,7 +85,7 @@ export function TodoWriteTool({
 
   return (
     <div className="mb-3 rounded-md border bg-card/50">
-      <button
+      <UnstyledButton
         type="button"
         className="w-full px-3 py-2 border-b bg-muted/20 cursor-pointer hover:bg-muted/30 transition-colors text-left"
         onClick={() => setIsOpen(!isOpen)}
@@ -108,7 +109,7 @@ export function TodoWriteTool({
             )}
           />
         </div>
-      </button>
+      </UnstyledButton>
       {isOpen && (
         <div id="todo-list-content" className="px-3 py-2">
           {todos.length > 0 ? (

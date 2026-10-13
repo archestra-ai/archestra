@@ -1,4 +1,5 @@
 import { SupportedProvidersSchema } from "@archestra/shared";
+import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -14,14 +15,7 @@ export const CONNECTION_SETUP_MAX_SKILLS = 500;
  * Clients whose setup can be fully scripted. n8n and "Any Client" stay on the
  * manual instructions flow and are deliberately absent.
  */
-export const ConnectionSetupClientIdSchema = z.enum([
-  "claude-code",
-  "claude-desktop",
-  "codex",
-  "copilot-cli",
-  "cursor",
-  "opencode",
-]);
+export const ConnectionSetupClientIdSchema = z.enum(INSTALLER_CLIENT_IDS);
 
 export type ConnectionSetupClientId = z.infer<
   typeof ConnectionSetupClientIdSchema

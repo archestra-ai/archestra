@@ -204,6 +204,25 @@ export function isK8sNotFoundError(error: unknown): boolean {
 }
 
 /**
+ * A one-line summary of a Kubernetes API error, or `undefined` when `error`
+ * is not one. The client's own message embeds every response header, which
+ * buries the status and the API server's reason when shown to a user.
+ */
+export function describeK8sApiError(error: unknown): string | undefined {
+  // `body` marks the client's ApiException; our own ApiError also carries a
+  // numeric `statusCode` and must keep its message.
+  if (!error || typeof error !== "object" || !("body" in error)) {
+    return undefined;
+  }
+  const status = getK8sErrorStatusCode(error);
+  if (status === undefined) return undefined;
+  const reason = getK8sErrorReason((error as { body?: unknown }).body);
+  return reason
+    ? `Kubernetes API returned ${status}: ${reason}`
+    : `Kubernetes API returned ${status}`;
+}
+
+/**
  * Whether a Kubernetes API call failed for a reason that says nothing about
  * the workload itself: the API server throttled the request (429, API
  * Priority & Fairness) or was itself unavailable/overloaded (5xx). Such
@@ -458,6 +477,24 @@ function getK8sErrorStatusCode(error: unknown): number | undefined {
   }
 
   return undefined;
+}
+
+/** The API server's reason: a `Status` object's message, or a plain-text body. */
+function getK8sErrorReason(body: unknown): string | undefined {
+  let parsed = body;
+  if (typeof body === "string") {
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      parsed = body;
+    }
+  }
+  if (parsed && typeof parsed === "object" && "message" in parsed) {
+    parsed = (parsed as { message?: unknown }).message;
+  }
+  if (typeof parsed !== "string") return undefined;
+  const reason = parsed.trim().slice(0, 500);
+  return reason || undefined;
 }
 
 /**

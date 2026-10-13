@@ -1,4 +1,5 @@
 import { RouteId } from "@archestra/shared";
+import { CONNECT_SETUP_PARTS } from "@archestra/shared/connection-setup";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
@@ -38,6 +39,10 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         body: z.object({
           clientId: ConnectionSetupClientIdSchema,
           platform: ConnectionSetupPlatformSchema,
+          /** Parts the copied prompt left out; the approval cannot add them back. */
+          exclude: z.array(z.enum(CONNECT_SETUP_PARTS)).max(4).optional(),
+          /** Hostname of the machine running the installer, shown on approval. */
+          deviceName: z.string().trim().min(1).max(64).optional(),
         }),
         response: constructResponseSchema(
           z.object({
@@ -90,6 +95,8 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           z.object({
             clientId: ConnectionSetupClientIdSchema,
             platform: ConnectionSetupPlatformSchema,
+            exclude: z.array(z.enum(CONNECT_SETUP_PARTS)),
+            deviceName: z.string().nullable(),
             userCode: z.string(),
             expiresAt: z.string(),
           }),

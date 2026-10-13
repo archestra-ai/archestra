@@ -169,3 +169,24 @@ describe("terminal surface contrast", () => {
     );
   });
 });
+
+describe("sidebar emphasis contrast", () => {
+  const themes = themeTokens();
+
+  it.each(themes)("keeps %s legible", (name, tokens) => {
+    const sidebar = parse(tokens["--sidebar"]);
+    const emphasis = mix(
+      parse(tokens["--sidebar-foreground"]),
+      parse(name.endsWith("dark") ? "white" : "black"),
+      mixPercent("--sidebar-emphasis"),
+    );
+
+    // Outlined "New"/"Beta" chips: emphasis text and edge on the sidebar.
+    // The selected AI/Studio segment: sidebar text on an emphasis fill, set
+    // against the muted track the unselected segment shares.
+    expect(contrast(emphasis, sidebar)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(emphasis, parse(tokens["--muted"]))).toBeGreaterThanOrEqual(
+      4.5,
+    );
+  });
+});

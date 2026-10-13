@@ -10,9 +10,12 @@ import {
   ModelModel,
   OrganizationModel,
 } from "@/models";
-import { expect, test } from "@/test";
+import { afterEach, expect, test, vi } from "@/test";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
+import { kubernetesAgentRuntimeBackendDriver } from "./backends/kubernetes";
 import { preflightAgentRuntimeModelCompatibility } from "./model-compatibility";
+
+afterEach(() => vi.restoreAllMocks());
 
 test("refuses an incompatible Gemini runtime before creating a detached task", async ({
   makeAgent,
@@ -42,6 +45,10 @@ test("refuses an incompatible Gemini runtime before creating a detached task", a
   });
   const previousRuntimeEnabled = config.agentRuntime.enabled;
   config.agentRuntime.enabled = true;
+  vi.spyOn(
+    kubernetesAgentRuntimeBackendDriver,
+    "assertReady",
+  ).mockResolvedValue();
   const actor = {
     id: user.id,
     kind: "user" as const,

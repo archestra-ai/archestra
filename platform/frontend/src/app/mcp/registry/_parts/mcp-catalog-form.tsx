@@ -84,6 +84,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
@@ -2305,7 +2306,7 @@ export function McpCatalogForm({
 
               <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
                 <CollapsibleTrigger asChild>
-                  <button
+                  <UnstyledButton
                     type="button"
                     className="group flex w-full items-center gap-3 py-6 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   >
@@ -2321,7 +2322,7 @@ export function McpCatalogForm({
                       aria-hidden="true"
                       className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
                     />
-                  </button>
+                  </UnstyledButton>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <SettingsSectionGroup className="border-t pt-8">
@@ -2709,7 +2710,7 @@ function AuthMethodCard(params: {
 }) {
   const isDisabled = Boolean(params.disabled);
   return (
-    <button
+    <UnstyledButton
       type="button"
       aria-pressed={params.selected}
       aria-disabled={isDisabled}
@@ -2754,7 +2755,7 @@ function AuthMethodCard(params: {
           ) : null}
         </div>
       </div>
-    </button>
+    </UnstyledButton>
   );
 }
 
@@ -2958,7 +2959,7 @@ function OAuthOverrides({
       className="rounded-md border"
     >
       <CollapsibleTrigger asChild>
-        <button
+        <UnstyledButton
           type="button"
           className="group flex w-full items-center gap-3 rounded-md px-4 py-3 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
@@ -2976,7 +2977,7 @@ function OAuthOverrides({
             aria-hidden="true"
             className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180"
           />
-        </button>
+        </UnstyledButton>
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-4 border-t px-4 py-4">
         {children}

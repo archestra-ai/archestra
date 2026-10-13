@@ -28,6 +28,7 @@ export const SupportedProvidersSchema = z.enum([
   "microsoft-365-copilot",
   "archestra",
   "voyage",
+  "jev",
 ]);
 
 export const SupportedProvidersDiscriminatorSchema = z.enum([
@@ -69,6 +70,7 @@ export const SupportedProvidersDiscriminatorSchema = z.enum([
   "microsoft-365-copilot:chatCompletions",
   "archestra:chatCompletions",
   "voyage:embeddings",
+  "jev:decisions",
 ]);
 
 export const SupportedProviders = Object.values(SupportedProvidersSchema.enum);
@@ -190,6 +192,7 @@ export const providerDisplayNames: Record<SupportedProvider, string> = {
   // white-label-ok: names the `archestra` upstream LLM provider a deployment connects to, not this deployment's own brand
   archestra: "Archestra",
   voyage: "Voyage AI",
+  jev: "Jev",
 };
 
 /**
@@ -257,23 +260,47 @@ export type EmbeddingOnlyProvider =
   (typeof EMBEDDING_ONLY_PROVIDER_LIST)[number];
 
 /**
- * The providers that can actually hold a conversation — `SupportedProvider`
- * minus the embeddings-only ones. Chat-shaped exhaustive maps key off this so
- * adding a *chat* provider still breaks them (the point of those maps), while
- * an embeddings-only provider is not forced to invent a chat implementation it
- * does not have.
+ * Providers that serve classification decisions only: a model answers typed
+ * questions (choice, yes/no, score) about a piece of state, with probabilities,
+ * instead of holding a conversation. Jev is TypeSafe's tool-call classifier;
+ * OpenRouter serves the same wire format at `/api/alpha/decisions`, so a Jev key
+ * pointed at that endpoint works unchanged. The LLM proxy forwards decisions
+ * requests (`/v1/jev`), and no chat or embedding surface offers these providers.
  */
-export type ChatProvider = Exclude<SupportedProvider, EmbeddingOnlyProvider>;
+const DECISIONS_ONLY_PROVIDER_LIST = [
+  "jev",
+] as const satisfies ReadonlyArray<SupportedProvider>;
+
+const DECISIONS_ONLY_PROVIDERS = new Set<SupportedProvider>(
+  DECISIONS_ONLY_PROVIDER_LIST,
+);
+
+type DecisionsOnlyProvider = (typeof DECISIONS_ONLY_PROVIDER_LIST)[number];
+
+/**
+ * The providers that can actually hold a conversation — `SupportedProvider`
+ * minus the embeddings-only and decisions-only ones. Chat-shaped exhaustive
+ * maps key off this so adding a *chat* provider still breaks them (the point of
+ * those maps), while a non-chat provider is not forced to invent a chat
+ * implementation it does not have.
+ */
+export type ChatProvider = Exclude<
+  SupportedProvider,
+  EmbeddingOnlyProvider | DecisionsOnlyProvider
+>;
 
 /**
  * True when the provider publishes a chat/completion API. Chat-only surfaces
- * gate on this so an embeddings-only provider is never offered for a
- * conversation, a proxy endpoint, or a model-router mapping.
+ * gate on this so a non-chat provider is never offered for a conversation, a
+ * chat proxy endpoint, or a model-router mapping.
  */
 export function providerSupportsChat(
   provider: SupportedProvider,
 ): provider is ChatProvider {
-  return !EMBEDDING_ONLY_PROVIDERS.has(provider);
+  return (
+    !EMBEDDING_ONLY_PROVIDERS.has(provider) &&
+    !DECISIONS_ONLY_PROVIDERS.has(provider)
+  );
 }
 
 /**
@@ -800,6 +827,10 @@ export const DEFAULT_PROVIDER_BASE_URLS: Record<SupportedProvider, string> = {
   // No default: the upstream is another Archestra instance's proxy endpoint,
   // supplied per key (e.g. https://your-archestra/v1/proxy/openai/<agentId>).
   archestra: "",
+  // The full decisions endpoint, not a root: TypeSafe and OpenRouter
+  // (https://openrouter.ai/api/alpha/decisions) serve the format at different
+  // paths, so a key stores the whole URL and the proxy posts to it as is.
+  jev: "https://api.typesafe.ai/v1/systemone",
 };
 
 /**
@@ -939,6 +970,7 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   // Embeddings-only, so these mark the best *embedding* model rather than a
   // chat one — the retrieval-quality flagship first.
   voyage: ["voyage-4-large", "voyage-multimodal-3.5", "voyage-4"],
+  jev: ["jev"],
 };
 
 /**
@@ -949,6 +981,7 @@ export const DEFAULT_MODELS: Record<SupportedProvider, string> = {
   // Embeddings-only: never used to start a conversation, only as the fallback
   // embedding model when no synced "best" row exists.
   voyage: "voyage-4",
+  jev: "jev-1.13.0",
   anthropic: "claude-opus-4-8",
   openai: "gpt-5.5",
   openrouter: "openrouter/auto",

@@ -31,6 +31,7 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-sidebar-emphasis: var(--sidebar-emphasis);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -141,10 +142,16 @@
      theme's surface while still reading as green/red. */
   --terminal-success: color-mix(in oklab, #22c55e 42%, var(--terminal-foreground));
   --terminal-destructive: color-mix(in oklab, #ef4444 40%, var(--terminal-foreground));
+
+  /* High-contrast ink for small sidebar chips and selected segments, pushed
+     past --sidebar-foreground so it clears 4.5:1 against --sidebar on themes
+     whose own sidebar text does not. terminal-surface.test.ts checks it. */
+  --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, black);
 }
 
 html.dark {
   --terminal-anchor: white;
+  --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, white);
 }
 
 @layer base {

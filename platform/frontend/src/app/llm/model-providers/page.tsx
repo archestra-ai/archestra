@@ -124,7 +124,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 };
 
 export default function ApiKeysPage() {
-  const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
+  const docsUrl = getFrontendDocsUrl("llm-proxy/providers");
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
@@ -361,6 +361,7 @@ export default function ApiKeysPage() {
   const addApiKeyButton = (
     <div className="flex items-center gap-2">
       <Button
+        size="sm"
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}
       >

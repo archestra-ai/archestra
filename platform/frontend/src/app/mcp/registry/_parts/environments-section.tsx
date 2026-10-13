@@ -60,6 +60,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import {
@@ -1058,7 +1059,7 @@ function EnvironmentEditorDialog({
                           className="gap-1 font-mono"
                         >
                           {registry}
-                          <button
+                          <UnstyledButton
                             type="button"
                             onClick={() => removeTrustedRegistry(registry)}
                             disabled={isPending}
@@ -1066,7 +1067,7 @@ function EnvironmentEditorDialog({
                             className="rounded-full text-muted-foreground hover:text-foreground"
                           >
                             <X className="h-3 w-3" />
-                          </button>
+                          </UnstyledButton>
                         </Badge>
                       ))}
                     </div>

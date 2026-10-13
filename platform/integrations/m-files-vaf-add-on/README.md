@@ -7,7 +7,7 @@ The GA add-on v1.0 is the server-side half of the Archestra M-Files knowledge co
 - Minimum declared M-Files version: `25.3`
 - Compatibility build target: `26.6.16115.13`
 
-The public documentation is the [M-Files VAF Add On section](../../docs/pages/platform-knowledge.md#m-files-vaf-add-on) of the Knowledge page.
+The public documentation is the [M-Files VAF Add On section](../../docs/pages/knowledge/connectors/index.md#m-files-vaf-add-on) of the Knowledge Connectors page.
 
 ## Security model
 

@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import { matchesSearchTokens } from "@/lib/search-tokens";
 import { cn } from "@/lib/utils/tailwind";
@@ -177,7 +178,7 @@ export function SearchableMultiSelect({
                 {visibleBadges.map((item) => (
                   <Badge key={item.value} variant="secondary">
                     {item.selectedContent ?? item.label}
-                    <button
+                    <UnstyledButton
                       type="button"
                       aria-label="Remove selected item"
                       disabled={disabled || value.length <= minSelected}
@@ -194,7 +195,7 @@ export function SearchableMultiSelect({
                       onClick={(e) => handleRemoveItem(item.value, e)}
                     >
                       <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                    </button>
+                    </UnstyledButton>
                   </Badge>
                 ))}
                 {hiddenCount > 0 && (
@@ -257,7 +258,7 @@ export function SearchableMultiSelect({
             filteredItems.map((item) => {
               const isSelected = value.includes(item.value);
               return (
-                <button
+                <UnstyledButton
                   key={item.value}
                   {...navigation.getOptionProps(item.value)}
                   role="option"
@@ -292,7 +293,7 @@ export function SearchableMultiSelect({
                       isSelected ? "opacity-100" : "opacity-0",
                     )}
                   />
-                </button>
+                </UnstyledButton>
               );
             })
           )}

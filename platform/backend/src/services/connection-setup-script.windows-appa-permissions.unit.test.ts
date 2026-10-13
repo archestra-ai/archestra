@@ -166,6 +166,7 @@ $json = ConvertTo-ArchAppaJson ([psobject]::AsPSObject($wrapped))
 
   test("adds only missing helper rules, preserves ask/deny/other settings, and does not claim preexisting rules", async () => {
     const rules = rulesFor(MCP);
+    const added = rules.filter((rule) => rule !== rules[3]);
     const existing = {
       permissions: {
         allow: ["Read", rules[3]],
@@ -194,12 +195,12 @@ $json = ConvertTo-ArchAppaJson ([psobject]::AsPSObject($wrapped))
       ...existing,
       permissions: {
         ...existing.permissions,
-        allow: ["Read", rules[3], ...rules.slice(0, 3)],
+        allow: ["Read", rules[3], ...added],
       },
     });
     expect(JSON.parse(first.ownershipRaw ?? "")).toEqual({
       other_gateway: ["mcp__other__keep"],
-      prod_gateway: rules.slice(0, 3),
+      prod_gateway: added,
     });
     expect(first.backupRaw).toBe(JSON.stringify(existing));
     expect(first.stdout).toContain(NOTICE);

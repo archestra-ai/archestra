@@ -213,8 +213,7 @@ export function OnboardingWizardEditor({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
+                    size="icon-sm"
                     onClick={() => handleRemovePage(index)}
                     aria-label={`Remove page ${index + 1}`}
                   >

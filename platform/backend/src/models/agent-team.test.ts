@@ -1,5 +1,6 @@
 // These junction-table tests exercise pre-migration compatibility. Scoped grants and revocation are covered by the migration and scoped route suites.
 import type { ResourcePermissionGrant } from "@archestra/shared";
+import { RequestLookups } from "@/auth/request-lookups";
 import { describe, expect, test } from "@/test";
 import AgentTeamModel from "./agent-team";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -43,6 +44,32 @@ describe("AgentTeamModel", () => {
       const agent = await makeAgent();
       const info = await AgentTeamModel.getTeamLabelInfoForAgent(agent.id);
       expect(info).toEqual([]);
+    });
+
+    test("a request's team source yields the same teams", async ({
+      makeAgent,
+      makeTeam,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team1 = await makeTeam(org.id, user.id, { name: "Platform" });
+      const team2 = await makeTeam(org.id, user.id, { name: "Security" });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        access: { teams: [team1.id, team2.id] },
+      });
+      await TeamLabelModel.syncTeamLabels(team2.id, [
+        { key: "env", value: "prod", keyId: "", valueId: "" },
+      ]);
+
+      expect(
+        await AgentTeamModel.getTeamLabelInfoForAgent(
+          agent.id,
+          new RequestLookups(),
+        ),
+      ).toEqual(await AgentTeamModel.getTeamLabelInfoForAgent(agent.id));
     });
   });
 

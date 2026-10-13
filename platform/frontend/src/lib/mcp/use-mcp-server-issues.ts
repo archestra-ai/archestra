@@ -3,7 +3,6 @@
 import type { McpDeploymentStatusEntry } from "@archestra/shared";
 import { useMemo } from "react";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
@@ -45,7 +44,6 @@ export function useMcpServerIssues(
   facetCounts: McpServerFacetCounts;
 } {
   const { data: catalogItems } = useInternalMcpCatalog();
-  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const { data: servers } = useMcpServers();
   const { data: session } = useSession();
   const userId = session?.user?.id ?? null;
@@ -57,18 +55,16 @@ export function useMcpServerIssues(
 
   const issuesByCatalog = useMemo(
     () =>
-      alertingEnabled
-        ? computeMcpServerIssues({
-            items: catalogItems ?? [],
-            servers: servers ?? [],
-            deploymentStatuses,
-            viewer: {
-              userId,
-              canReauthenticate,
-              canManageInstalls: !!canManageInstalls,
-            },
-          })
-        : new Map(),
+      computeMcpServerIssues({
+        items: catalogItems ?? [],
+        servers: servers ?? [],
+        deploymentStatuses,
+        viewer: {
+          userId,
+          canReauthenticate,
+          canManageInstalls: !!canManageInstalls,
+        },
+      }),
     [
       catalogItems,
       servers,
@@ -76,7 +72,6 @@ export function useMcpServerIssues(
       userId,
       canReauthenticate,
       canManageInstalls,
-      alertingEnabled,
     ],
   );
   const facetCounts = useMemo(

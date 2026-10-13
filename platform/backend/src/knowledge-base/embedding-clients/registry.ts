@@ -123,6 +123,7 @@ export const EMBEDDING_ADAPTERS: Record<
   // through the OpenAI-compatible `ollama` provider above, so reject here.
   "ollama-native": null,
   anthropic: null,
+  jev: null,
   cerebras: null,
   deepseek: null,
   groq: null,

@@ -1,5 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { readFileAsBase64 } from "@/lib/files/file-upload";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
@@ -44,7 +45,10 @@ export function useResolveOpenAppaYell() {
       }
       return data;
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: ["openappa-yells"] }),
+    onSuccess: (_data, { resolved }) => {
+      toast.success(resolved ? "Yell marked resolved" : "Yell reopened");
+      return client.invalidateQueries({ queryKey: ["openappa-yells"] });
+    },
   });
 }
 

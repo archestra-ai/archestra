@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useMyStatistics } from "@/lib/statistics.query";
+import { formatCurrency } from "@/lib/utils/format-currency";
 
 const spendChartConfig = {
   value: { label: "Your spend", color: "var(--chart-1)" },
@@ -98,6 +99,7 @@ export function MyUsageSummary({
                   subscriptionCost={String(stats.subscriptionCost)}
                   baselineCost={String(stats.billedCost)}
                   tooltip="hover"
+                  precision="cents"
                   className="flex-wrap text-2xl font-semibold"
                 />
               </SummaryTile>
@@ -163,7 +165,7 @@ export function MyUsageSummary({
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
-                    tickFormatter={(value) => `$${value}`}
+                    tickFormatter={(value) => formatCurrency(Number(value))}
                   />
                   <ChartTooltip
                     content={
@@ -171,7 +173,7 @@ export function MyUsageSummary({
                         indicator="dot"
                         formatter={(value) => (
                           <span className="text-foreground font-mono font-medium tabular-nums">
-                            ${Number(value).toFixed(2)}
+                            {formatCurrency(Number(value))}
                           </span>
                         )}
                       />

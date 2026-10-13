@@ -249,8 +249,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="outline"
-                      size="icon"
-                      className="size-8"
+                      size="icon-sm"
                       aria-label="More run actions"
                     >
                       {continuation.isPending ? (

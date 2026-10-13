@@ -50,9 +50,9 @@ export function AgentConnectionNotice({ agentId }: { agentId: string }) {
       {/* Connecting is per server; with several outstanding this opens the
           first and the notice re-offers whatever is still missing. */}
       <Button
-        size="sm"
+        size="xs"
         variant="outline"
-        className="ml-auto h-6 shrink-0 px-2 text-[11px]"
+        className="ml-auto shrink-0"
         onClick={() => {
           const next = missing[0];
           if (next) orchestrator.triggerInstallByCatalogId(next.catalogId);

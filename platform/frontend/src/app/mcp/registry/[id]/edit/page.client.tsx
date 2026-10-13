@@ -157,6 +157,7 @@ function SetupWizard({
                   <div>
                     {(isDirty || isSaving) && (
                       <Button
+                        size="sm"
                         variant="outline"
                         type="button"
                         onClick={onReset}
@@ -172,11 +173,17 @@ function SetupWizard({
                       mid-save. */}
                   <div className="flex items-center gap-2">
                     {savingWith === "finish" ? (
-                      <Button type="submit" variant="outline" disabled>
+                      <Button
+                        size="sm"
+                        type="submit"
+                        variant="outline"
+                        disabled
+                      >
                         <span>Saving...</span>
                       </Button>
                     ) : isDirty || isSaving ? (
                       <Button
+                        size="sm"
                         type="submit"
                         variant="outline"
                         disabled={hasBlockingErrors || isSaving}
@@ -188,6 +195,7 @@ function SetupWizard({
                       </Button>
                     ) : (
                       <Button
+                        size="sm"
                         type="button"
                         variant="outline"
                         onClick={() => router.push(detailHref)}
@@ -196,11 +204,12 @@ function SetupWizard({
                       </Button>
                     )}
                     {savingWith === "continue" ? (
-                      <Button type="submit" disabled>
+                      <Button size="sm" type="submit" disabled>
                         <span>Saving...</span>
                       </Button>
                     ) : isDirty || isSaving ? (
                       <Button
+                        size="sm"
                         type="submit"
                         disabled={hasBlockingErrors || isSaving}
                         onClick={() => {
@@ -211,7 +220,11 @@ function SetupWizard({
                         <ArrowRight className="h-4 w-4" />
                       </Button>
                     ) : (
-                      <Button type="button" onClick={() => goToStep("test")}>
+                      <Button
+                        size="sm"
+                        type="button"
+                        onClick={() => goToStep("test")}
+                      >
                         <span>Test Connection</span>
                         <ArrowRight className="h-4 w-4" />
                       </Button>
@@ -233,7 +246,11 @@ function SetupWizard({
         <WizardFooter>
           <div>
             {prevStep && (
-              <Button variant="outline" onClick={() => goToStep(prevStep.id)}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => goToStep(prevStep.id)}
+              >
                 <ArrowLeft className="h-4 w-4" />
                 {prevStep.title}
               </Button>
@@ -241,13 +258,15 @@ function SetupWizard({
           </div>
           {nextStep ? (
             !hideNext && (
-              <Button onClick={() => goToStep(nextStep.id)}>
+              <Button size="sm" onClick={() => goToStep(nextStep.id)}>
                 {nextStep.title}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             )
           ) : (
-            <Button onClick={() => router.push(detailHref)}>Finish</Button>
+            <Button size="sm" onClick={() => router.push(detailHref)}>
+              Finish
+            </Button>
           )}
         </WizardFooter>
       )}

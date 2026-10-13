@@ -474,6 +474,8 @@ export class ModelsDevClient {
       // Voyage models come from the KB's own static table, never from
       // models.dev, so there is no source to prefer.
       voyage: [],
+      // Jev models come from a static table, never from models.dev.
+      jev: [],
       gemini: ["google/"], // Prefer google over google-vertex
       openai: ["openai/"], // Prefer direct providers over aggregators
       openrouter: ["openrouter/"],

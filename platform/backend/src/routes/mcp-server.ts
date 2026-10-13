@@ -82,7 +82,6 @@ import {
   LocalMcpServerInstallationStatusSchema,
   type McpServer,
   McpServerAgentUsageSchema,
-  type McpServerAlertMute,
   McpServerAlertMuteSchema,
   type McpServerDismissibleAlertKind,
   // SPDX-SnippetEnd
@@ -255,14 +254,12 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const [alertMutesByCatalogId, credentialUsableIds] = await Promise.all([
-        config.mcpServer.alertingEnabled
-          ? McpServerAlertMuteModel.findForViewer({
-              userId: user.id,
-              catalogIds: [
-                ...new Set(allServers.map((server) => server.catalogId)),
-              ],
-            })
-          : new Map<string, McpServerAlertMute[]>(),
+        McpServerAlertMuteModel.findForViewer({
+          userId: user.id,
+          catalogIds: [
+            ...new Set(allServers.map((server) => server.catalogId)),
+          ],
+        }),
         McpServerModel.getCredentialUsableServerIds(
           user.id,
           allServers.map((server) => server.id),
@@ -1904,7 +1901,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      assertMcpServerAlertingEnabled();
       const {
         params: { id: mcpServerId, kind },
         body: { issueFingerprint, reason },
@@ -1961,7 +1957,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      assertMcpServerAlertingEnabled();
       const {
         params: { id: mcpServerId, kind },
         query: { issueFingerprint },
@@ -3180,12 +3175,6 @@ function currentRuntimeAlert(mcpServer: McpServer): {
 // =============================================================================
 // Internal helpers
 // =============================================================================
-
-function assertMcpServerAlertingEnabled(): void {
-  if (!config.mcpServer.alertingEnabled) {
-    throw new ApiError(404, "Not found");
-  }
-}
 
 /**
  * The runtime's handle on a reset that is under way. Taken from the method

@@ -3,13 +3,14 @@ import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
 import { resolveGithubAppInstallationToken } from "@/skills/github-app-token";
 import { ApiError } from "@/types";
+import type { GuardrailsPolicyProposal } from "@/types/guardrails-policy-proposal";
 
-type ChangeRequest = {
+type ChangeRequest = GuardrailsPolicyProposal & {
   organizationId: string;
   userId: string;
-  content: string;
   expectedRevision: number;
   title: string;
   summary: string;
@@ -27,15 +28,18 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       409,
       "The policy changed. Read it again before proposing changes.",
     );
+  const content = resolveProposedPolicy({ current: before, proposal: params });
   // Revision 0 is an unsaved starter, even when its text needs no edits.
-  if (
-    before.content === params.content &&
-    (before.revision > 0 || source?.interval)
-  )
+  if (before.content === content && (before.revision > 0 || source?.interval))
     throw new ApiError(400, "The proposed policy has no changes");
 
   if (!source?.interval) {
-    const saved = await guardrailsPolicyService.update(params);
+    const saved = await guardrailsPolicyService.update({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      content,
+      expectedRevision: params.expectedRevision,
+    });
     return {
       delivery: "revision" as const,
       revision: saved.revision,
@@ -59,7 +63,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
   )
     throw new ApiError(403, "GitHub credential read permission is required");
 
-  const validation = await guardrailsPolicyService.validate(params.content, {
+  const validation = await guardrailsPolicyService.validate(content, {
     organizationId: params.organizationId,
     previous: before.content,
   });
@@ -115,7 +119,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     token,
     body: {
       message: params.title,
-      content: Buffer.from(params.content).toString("base64"),
+      content: Buffer.from(content).toString("base64"),
       sha: file.sha,
       branch: head,
     },
@@ -140,7 +144,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     path: source.path,
     warnings: validation.warnings,
     before: before.content,
-    after: params.content,
+    after: content,
   };
 }
 

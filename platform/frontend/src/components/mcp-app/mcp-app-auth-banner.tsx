@@ -44,8 +44,8 @@ export function McpAppAuthBanner({
       </InlineNoticeText>
       <Button
         variant="ghost"
-        size="icon"
-        className="ml-auto size-6 flex-none text-muted-foreground"
+        size="icon-xs"
+        className="ml-auto flex-none text-muted-foreground"
         onClick={onDismiss}
         aria-label="Dismiss"
       >

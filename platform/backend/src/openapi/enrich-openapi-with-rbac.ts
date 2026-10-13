@@ -233,7 +233,7 @@ function createLlmProxyAuthenticationSection(): string {
   return [
     "Authentication:",
     "",
-    "This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+    "This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
   ].join("\n");
 }
 

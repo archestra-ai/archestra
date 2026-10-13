@@ -10,6 +10,7 @@ import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
+import type { RequestLookups } from "@/auth/request-lookups";
 import {
   evaluateSingleMcpToolInvocationPolicy,
   policyBlockToToolError,
@@ -22,6 +23,7 @@ import {
   AgentTeamModel,
   ToolModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { executeOutboundA2aDelegation } from "@/services/a2a-outbound-client";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
@@ -72,14 +74,17 @@ export async function getAgentTools(context: {
   userId?: string;
   /** Skip user access check (for A2A/ChatOps flows where caller has elevated permissions) */
   skipAccessCheck?: boolean;
+  lookups?: RequestLookups;
 }): Promise<Tool[]> {
-  const { agentId, organizationId, userId, skipAccessCheck } = context;
+  const { agentId, organizationId, userId, skipAccessCheck, lookups } = context;
 
   // Delegation never crosses environment boundaries (null is the Default
   // environment), mirroring tool isolation: in both modes only same-environment
   // targets are advertised. The advisor is the one exception — its org-wide
   // (env-less) row is reachable from every environment.
-  const environmentId = await AgentModel.findEnvironmentId(agentId);
+  const environmentId = lookups
+    ? await lookups.agentEnvironmentId(agentId)
+    : await AgentModel.findEnvironmentId(agentId);
 
   // External A2A targets are always explicit, including when local subagents
   // use Auto mode. Assigning an external credential is an egress decision and
@@ -109,7 +114,12 @@ export async function getAgentTools(context: {
   // Auto mode only expands for a real authenticated user; system/token flows
   // (chatops, scheduled triggers, A2A) fall back to explicit delegations. This
   // fail-closed gate mirrors the Auto-tool `dynamicAccessContext` gate.
-  if (realUserId && (await AgentModel.getAccessAllSubagents(agentId))) {
+  if (
+    realUserId &&
+    (lookups
+      ? await lookups.agentAccessAllSubagents(agentId)
+      : await AgentModel.getAccessAllSubagents(agentId))
+  ) {
     const localTools = await buildAutoDelegationTools({
       agentId,
       organizationId,
@@ -135,10 +145,19 @@ export async function getAgentTools(context: {
       resource: "agent",
       scope: "*",
       action: "update",
+      lookups,
     });
 
     const userAccessibleAgentIds =
-      await AgentTeamModel.getUserAccessibleAgentIds(userId, isAgentAdmin);
+      await AgentTeamModel.getUserAccessibleAgentIds(
+        userId,
+        isAgentAdmin,
+        lookups &&
+          (await ResourcePermissionSubjectModel.resolvePrincipals({
+            userId,
+            lookups,
+          })),
+      );
     accessibleTools = allToolsWithDetails.filter((t) =>
       userAccessibleAgentIds.includes(t.targetAgent.id),
     );

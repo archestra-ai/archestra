@@ -59,8 +59,8 @@ export function CopyableCode({
       </div>
       <Button
         variant="ghost"
-        size="icon"
-        className="h-6 w-6 shrink-0"
+        size="icon-xs"
+        className="shrink-0"
         onClick={handleCopy}
       >
         {copied ? (

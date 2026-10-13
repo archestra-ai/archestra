@@ -56,6 +56,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -177,7 +178,6 @@ export function McpServerCard({
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
 
   const isByosEnabled = useFeature("byosEnabled");
-  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
@@ -406,9 +406,8 @@ export function McpServerCard({
   // connections have failed, prefer one the caller can re-authenticate so the
   // marker stays actionable regardless of row order.
   const canReauthenticate = useCanReauthenticate();
-  const oauthFailedServers = alertingEnabled
-    ? (mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [])
-    : [];
+  const oauthFailedServers =
+    mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [];
   const oauthFailedServer =
     oauthFailedServers.find((s) => canReauthenticate(s)) ??
     oauthFailedServers[0];
@@ -547,7 +546,7 @@ export function McpServerCard({
   const chatButton = shouldShowMcpCardChatButton({
     toolsCount,
     isBuiltin: isBuiltinVariant,
-    hasInstallation: allServersForCatalog.length > 0,
+    hasInstallation: isInstalledForViewer,
   }) ? (
     <Button
       variant="outline"
@@ -755,7 +754,7 @@ export function McpServerCard({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button
+                      <UnstyledButton
                         type="button"
                         aria-label={`Installed organization-wide, manage credentials for ${item.name}`}
                         onClick={() => goToItemPage("credentials")}
@@ -765,7 +764,7 @@ export function McpServerCard({
                             <Globe className="h-3 w-3" />
                           </AvatarFallback>
                         </Avatar>
-                      </button>
+                      </UnstyledButton>
                     </TooltipTrigger>
                     <TooltipContent>
                       Installed organization-wide. Manage credentials to review.
@@ -821,7 +820,7 @@ export function McpServerCard({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
+                    <UnstyledButton
                       type="button"
                       aria-label={`Manage credentials for ${item.name}`}
                       onClick={() => goToItemPage("credentials")}
@@ -832,7 +831,7 @@ export function McpServerCard({
                           <Plus className="h-3 w-3" />
                         </AvatarFallback>
                       </Avatar>
-                    </button>
+                    </UnstyledButton>
                   </TooltipTrigger>
                   <TooltipContent>Manage credentials</TooltipContent>
                 </Tooltip>

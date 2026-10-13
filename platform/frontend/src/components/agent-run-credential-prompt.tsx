@@ -79,9 +79,9 @@ export function AgentRuntimeCredentialPrompt({
         <InlineNoticeText>{helperText}</InlineNoticeText>
         <Button
           type="button"
-          size="sm"
+          size="xs"
           variant="outline"
-          className="ml-auto h-6 shrink-0 bg-background px-2 text-xs"
+          className="ml-auto shrink-0 bg-background"
           onClick={() => setConnecting(true)}
         >
           Connect

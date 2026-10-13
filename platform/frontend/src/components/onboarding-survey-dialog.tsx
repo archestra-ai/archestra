@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -258,7 +259,7 @@ function SurveyQuestion({
           {options.map((option) => {
             const selected = value === option;
             return (
-              <button
+              <UnstyledButton
                 key={option}
                 type="button"
                 aria-pressed={selected}
@@ -272,7 +273,7 @@ function SurveyQuestion({
                 )}
               >
                 {option}
-              </button>
+              </UnstyledButton>
             );
           })}
         </div>

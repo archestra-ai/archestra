@@ -8,6 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 
 interface Label {
   key: string;
@@ -25,14 +26,14 @@ export function LabelTags({ labels }: LabelTagsProps) {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             className="inline-flex shrink-0"
             aria-label={`View ${labels.length} ${labels.length === 1 ? "label" : "labels"}`}
             onClick={(event) => event.stopPropagation()}
           >
             <Tag className="h-4 w-4 text-muted-foreground" />
-          </button>
+          </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent>
           <div className="flex flex-wrap gap-1 max-w-xs">

@@ -47,6 +47,7 @@ export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
 export { default as ChatOpsThreadContextModel } from "./chatops-thread-context";
+export { default as ConnectedClientModel } from "./connected-client";
 export { default as ConnectionSetupModel } from "./connection-setup";
 export { default as ConnectorRunModel } from "./connector-run";
 export { default as ConversationModel } from "./conversation";

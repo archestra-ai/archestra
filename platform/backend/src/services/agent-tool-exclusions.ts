@@ -236,8 +236,12 @@ class AgentToolExclusionsService {
    */
   async getActiveExclusionSets(
     agentId: string,
+    /** The agent's setting, when the caller already read the agent. */
+    known?: { accessAllTools: boolean },
   ): Promise<AgentToolExclusionSets> {
-    const accessAllTools = await AgentModel.getAccessAllTools(agentId);
+    const accessAllTools = known
+      ? known.accessAllTools
+      : await AgentModel.getAccessAllTools(agentId);
     if (!accessAllTools) {
       return EMPTY_EXCLUSION_SETS;
     }
@@ -300,10 +304,12 @@ class AgentToolExclusionsService {
   async getFilteredMcpToolsByAgent(
     agentId: string,
     preloadedExclusionSets?: AgentToolExclusionSets,
+    /** The agent row, when the caller already read it for this request. */
+    agent?: { environmentId: string | null; accessAllTools: boolean },
   ): Promise<{ tools: Tool[]; exclusionSets: AgentToolExclusionSets }> {
     const [rows, exclusionSets] = await Promise.all([
-      ToolModel.getMcpToolsByAgent(agentId),
-      preloadedExclusionSets ?? this.getActiveExclusionSets(agentId),
+      ToolModel.getMcpToolsByAgent(agentId, agent),
+      preloadedExclusionSets ?? this.getActiveExclusionSets(agentId, agent),
     ]);
     return {
       tools: rows.filter((tool) => !isToolRowExcluded(tool, exclusionSets)),

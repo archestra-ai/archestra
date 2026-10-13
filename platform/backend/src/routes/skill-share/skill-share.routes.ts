@@ -8,6 +8,7 @@ import logger from "@/logging";
 import { PluginModel, SkillModel, SkillShareLinkModel } from "@/models";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { dropRevokedSkillShareLinkRepo } from "@/services/skill-share-link";
 import { marketplaceMaterializer } from "@/skills/marketplace";
 import { isReservedMarketplaceName } from "@/skills/marketplace/manifest";
 import {
@@ -389,18 +390,7 @@ const skillShareRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       await SkillShareLinkModel.revoke({ id, organizationId });
-
-      // best-effort cleanup of the materialized repo; failures must not surface
-      // to the user — revocation already took effect in the DB.
-      void marketplaceMaterializer
-        .get()
-        .revoke({ kind: "link", id })
-        .catch((err: unknown) => {
-          logger.warn(
-            { err, shareLinkId: id },
-            "skill-share: failed to drop materialized repo after revoke",
-          );
-        });
+      dropRevokedSkillShareLinkRepo(id);
 
       logger.info(
         { shareLinkId: id, organizationId, revokedByUserId: user.id },

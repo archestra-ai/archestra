@@ -30,7 +30,7 @@ import {
   useHasPermissions,
   useScopedCapabilities,
 } from "@/lib/auth/auth.query";
-import { useDeferredEnabled } from "@/lib/hooks/use-deferred-enabled";
+import { fetchAllSkills } from "@/lib/skills/skill.query";
 import {
   type SkillShareLink,
   useCreateSkillShareLink,
@@ -40,9 +40,9 @@ import {
   useSkillMarketplace,
 } from "@/lib/skills/skill-share.query";
 import { useFetchUserTokenValue } from "@/lib/user-token.query";
-import { handleApiError, throwOnApiError } from "@/lib/utils/api";
+import { handleApiError } from "@/lib/utils/api";
 import { cn } from "@/lib/utils/tailwind";
-import type { ConnectClient } from "./clients";
+import { type ConnectClient, usesGenericInstructions } from "./clients";
 import {
   computeSkillMarketplaceExpiresAt,
   SKILL_MARKETPLACE_CLIENTS,
@@ -766,7 +766,7 @@ function isClientSupported(client: ConnectClient | null): boolean {
     client.id === "copilot-cli" ||
     client.id === "cursor" ||
     client.id === "opencode" ||
-    client.id === "generic"
+    usesGenericInstructions(client)
   );
 }
 
@@ -774,101 +774,12 @@ function pickClientsFor(client: ConnectClient): SkillMarketplaceClient[] {
   // "Any client" → user explicitly picked something other than the listed
   // ones, so showing Claude / Codex / Cursor install snippets is just noise.
   // Callers fall back to a generic clone-path guide instead.
-  if (client.id === "generic") return [];
+  if (usesGenericInstructions(client)) return [];
   return SKILL_MARKETPLACE_CLIENTS.filter((c) => c.id === client.id);
 }
 
 function firstActiveLink(links: SkillShareLink[]): SkillShareLink | null {
   return links.find((l) => l.status === "active") ?? null;
-}
-
-/**
- * The slice of a skill the connection flow needs to list, attribute, and share
- * it. Derived from the API response so the fields can't drift from it.
- */
-export type ConnectSkill = Pick<
-  archestraApiTypes.GetSkillsResponses["200"]["data"][number],
-  "id" | "name" | "scope" | "authorId" | "authorName" | "teams" | "users"
->;
-
-/**
- * Query over the org's full skill set, for the connect-command step's
- * per-skill picker. Callers that prepare an artifact containing an explicit
- * skill snapshot can opt into a loud error, rather than silently producing an
- * artifact without the selected skills.
- *
- * `forAgentId` narrows the set to skills visible from a supported skill agent's
- * environment. LLM proxies do not expose skills and must not be passed here.
- */
-export function useAllSkills(params?: {
-  enabled?: boolean;
-  forAgentId?: string | null;
-  /** Surface a catalog failure to the caller instead of returning an empty list. */
-  throwOnError?: boolean;
-  /**
-   * Hold the fetch back until the page has settled.
-   *
-   * This walks the whole skill catalogue a page at a time, and every row
-   * carries the skill's full `content`, so it is the heaviest thing the
-   * connection page asks for by a wide margin — and it feeds the review step,
-   * which nobody reads before the step above it. Deferring keeps it out of the
-   * burst that renders the part of the page people act on first.
-   */
-  deferMs?: number;
-}) {
-  const forAgentId = params?.forAgentId ?? null;
-  const enabled = useDeferredEnabled(
-    params?.enabled ?? true,
-    params?.deferMs ?? 0,
-  );
-
-  return useQuery({
-    queryKey: [
-      "skills",
-      "connect-all",
-      forAgentId,
-      { throwOnError: params?.throwOnError ?? false },
-    ],
-    queryFn: () => fetchAllSkills(forAgentId, params?.throwOnError ?? false),
-    enabled,
-  });
-}
-
-/** Fetch every skill page by page. */
-async function fetchAllSkills(
-  forAgentId: string | null = null,
-  throwOnError = false,
-): Promise<ConnectSkill[]> {
-  const skills: ConnectSkill[] = [];
-  const limit = 100;
-  let offset = 0;
-  while (true) {
-    const { data, error } = await archestraApiSdk.getSkills({
-      query: { limit, offset, forAgentId: forAgentId ?? undefined },
-    });
-    if (error) {
-      if (throwOnError) {
-        throwOnApiError(error, { toastOnError: false });
-      }
-      handleApiError(error);
-      return [];
-    }
-    if (!data) break;
-    for (const skill of data.data) {
-      skills.push({
-        id: skill.id,
-        name: skill.name,
-        scope: skill.scope,
-        authorId: skill.authorId,
-        authorName: skill.authorName,
-        teams: skill.teams,
-        users: skill.users,
-      });
-    }
-    if (data.data.length < limit) break;
-    offset += limit;
-  }
-  return skills;
 }
 
 function useTotalSkillCount() {

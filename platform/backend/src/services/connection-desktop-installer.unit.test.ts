@@ -5,7 +5,9 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
+import { CLAUDE_DESKTOP_PROFILE_ID } from "@archestra/shared/connection-setup";
 import { expect, test } from "vitest";
+import { uuidv5 } from "@/utils/uuid";
 import { DESKTOP_CONNECTION_INSTALLER } from "./connection-desktop-installer";
 
 const require = createRequire(import.meta.url);
@@ -330,4 +332,17 @@ test.each([
     installer.close();
     await rm(home, { recursive: true, force: true });
   }
+});
+
+test("the Desktop profile id disconnect.md names is the one the installer writes", () => {
+  // The installer derives it at runtime: uuid5(NAMESPACE_URL, name).
+  expect(DESKTOP_CONNECTION_INSTALLER).toContain(
+    "uuid('archestra-desktop:managed')",
+  );
+  expect(DESKTOP_CONNECTION_INSTALLER).toContain(
+    "6ba7b8119dad11d180b400c04fd430c8",
+  );
+  expect(
+    uuidv5("archestra-desktop:managed", "6ba7b811-9dad-11d1-80b4-00c04fd430c8"),
+  ).toBe(CLAUDE_DESKTOP_PROFILE_ID);
 });

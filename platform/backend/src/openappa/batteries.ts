@@ -4,7 +4,7 @@ import type {
   BatteryPackage as NativeBatteryPackage,
   PolicyEditInput,
 } from "@archestra/openappa-rs";
-import { parseFullToolName } from "@archestra/shared";
+import { matchBatteries, parseFullToolName } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
@@ -44,7 +44,6 @@ import type {
   UploadedBatteryPackage,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
-import { matchBatteries } from "./battery-match";
 import {
   addedGrants,
   bundledEntry,

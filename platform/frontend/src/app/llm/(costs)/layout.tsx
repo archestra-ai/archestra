@@ -58,10 +58,7 @@ export default function CostsLayout({
   const pathname = usePathname();
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
   const permissionMap = usePermissionMap(requiredPagePermissionsMap);
-  const prometheusDocsUrl = getFrontendDocsUrl(
-    "platform-deployment",
-    "prometheus-metrics",
-  );
+  const prometheusDocsUrl = getFrontendDocsUrl("admin/observability/metrics");
 
   // Wait for the permission answer rather than flashing tabs that would only
   // render a forbidden page.

@@ -46,6 +46,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   ClientFilterSelect,
   UserFilterSelect,
@@ -500,7 +501,7 @@ export function AssignedToolsTable({
                 size="sm"
                 // 119px is the exact width of the call policy picker this
                 // stands in for, so the column reads as one stack of controls.
-                className="h-8 w-[119px] justify-start bg-muted px-3 text-xs"
+                className="w-[119px] justify-start bg-muted"
                 onClick={(event) => {
                   event.stopPropagation();
                   onToolClick(row.original);
@@ -563,7 +564,7 @@ export function AssignedToolsTable({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-[150px] justify-start bg-muted px-3 text-xs"
+                className="w-[150px] justify-start bg-muted"
                 onClick={(event) => {
                   event.stopPropagation();
                   onToolClick(row.original);
@@ -886,7 +887,7 @@ function ToolIdentityCell({
       </TooltipProvider>
 
       <div className="min-w-0">
-        <button
+        <UnstyledButton
           type="button"
           className="block max-w-full text-left text-sm font-medium hover:underline"
           aria-label={`View policies for ${displayName}`}
@@ -900,7 +901,7 @@ function ToolIdentityCell({
             className="block truncate"
             maxLength={60}
           />
-        </button>
+        </UnstyledButton>
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <span className="truncate">{sourceLabel}</span>
           <span aria-hidden className="shrink-0 text-border">

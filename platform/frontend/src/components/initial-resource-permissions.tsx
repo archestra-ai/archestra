@@ -199,8 +199,8 @@ export function InitialResourcePermissions({
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
-                className="size-8 shrink-0 text-muted-foreground"
+                size="icon-sm"
+                className="shrink-0 text-muted-foreground"
                 aria-label={`Remove access for ${grant.name}`}
                 onClick={() =>
                   onChange(
@@ -232,7 +232,8 @@ export function InitialResourcePermissions({
                     <Button
                       type="button"
                       variant="ghost"
-                      className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
+                      size="xs"
+                      className="font-normal text-muted-foreground"
                       aria-label={`Why ${grant.name} has access: every ${scopedResourceNouns[resource]}`}
                     >
                       <span>Every {scopedResourceNouns[resource]}</span>

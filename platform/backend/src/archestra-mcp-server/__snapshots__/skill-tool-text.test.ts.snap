@@ -17,7 +17,6 @@ exports[`skill and sandbox tool text > archestra__copy_file 1`] = `
             "properties": {
               "filename": {
                 "description": "Filename instead of \`id\`; ambiguous names rejected.",
-                "minLength": 1,
                 "type": "string",
               },
               "id": {
@@ -40,12 +39,10 @@ exports[`skill and sandbox tool text > archestra__copy_file 1`] = `
             "properties": {
               "attachmentId": {
                 "description": "Id of an attachment uploaded to THIS conversation.",
-                "minLength": 1,
                 "type": "string",
               },
               "filename": {
                 "description": "Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins.",
-                "minLength": 1,
                 "type": "string",
               },
               "type": {
@@ -64,7 +61,6 @@ exports[`skill and sandbox tool text > archestra__copy_file 1`] = `
             "properties": {
               "filename": {
                 "description": "Filename instead of \`id\`.",
-                "minLength": 1,
                 "type": "string",
               },
               "id": {
@@ -307,12 +303,10 @@ exports[`skill and sandbox tool text > archestra__delete_file 1`] = `
     "properties": {
       "filename": {
         "description": "Filename to delete instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
-        "minLength": 1,
         "type": "string",
       },
       "id": {
         "description": "Id of the file to delete (from search_files / save_file).",
-        "minLength": 1,
         "type": "string",
       },
       "project_id": {
@@ -386,12 +380,10 @@ exports[`skill and sandbox tool text > archestra__edit_file 1`] = `
     "properties": {
       "filename": {
         "description": "Filename to edit instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
-        "minLength": 1,
         "type": "string",
       },
       "id": {
         "description": "Id of the file to edit (from search_files / save_file).",
-        "minLength": 1,
         "type": "string",
       },
       "new_string": {
@@ -535,12 +527,10 @@ exports[`skill and sandbox tool text > archestra__read_file 1`] = `
     "properties": {
       "filename": {
         "description": "Filename to read instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
-        "minLength": 1,
         "type": "string",
       },
       "id": {
         "description": "Id or ref of the file to read — the \`id\` or \`ref\` from search_files, or a fileId from save_file.",
-        "minLength": 1,
         "type": "string",
       },
       "limit": {
@@ -577,7 +567,6 @@ exports[`skill and sandbox tool text > archestra__read_file_raw 1`] = `
     "properties": {
       "filename": {
         "description": "Filename to read instead of \`id\`; rejected as ambiguous if more than one file shares the name.",
-        "minLength": 1,
         "type": "string",
       },
       "id": {
@@ -806,12 +795,10 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
             "properties": {
               "attachmentId": {
                 "description": "Id of an attachment in the current conversation. The bytes are copied directly and never enter your context.",
-                "minLength": 1,
                 "type": "string",
               },
               "filename": {
                 "description": "Original filename of an attachment in this conversation (when you have no id). If the same name was attached more than once, the newest one wins.",
-                "minLength": 1,
                 "type": "string",
               },
               "type": {
@@ -885,7 +872,6 @@ exports[`skill and sandbox tool text > archestra__upload_file 1`] = `
             "properties": {
               "filename": {
                 "description": "Exact filename of a persistent file (when you have no id).",
-                "minLength": 1,
                 "type": "string",
               },
               "id": {

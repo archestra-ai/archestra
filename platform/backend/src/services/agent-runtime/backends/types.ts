@@ -85,6 +85,9 @@ export interface AgentRuntimeBackendDriver {
     organizationScope?: string | null;
   }): string;
 
+  /** Throw an actionable error when the backend's infrastructure is missing. */
+  assertReady(): Promise<void>;
+
   /** Schedule the workload. Returns once accepted, not once running. */
   launch(spec: AgentRunLaunchSpec): Promise<void>;
 

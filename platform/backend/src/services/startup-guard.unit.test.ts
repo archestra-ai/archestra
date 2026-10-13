@@ -1179,3 +1179,64 @@ describe("buildStartupGuardInstallSection", () => {
     expect(stderr).toBe("");
   });
 });
+
+describe("startup guard disconnect mode (/disconnect.md)", () => {
+  const DISCONNECT_ENV = { ARCHESTRA_GUARD_ACTION: "disconnect" };
+
+  test("reverses every remote, then removes itself, with plain output", async () => {
+    const { stdout, guardHome } = await runGuardNonInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      // The platform being unreachable must not matter to a local cleanup.
+      curlExitCode: 7,
+      env: DISCONNECT_ENV,
+    });
+    try {
+      expect(stdout).not.toContain("\u001b[");
+      expect(stdout.match(/^Disconnected /gm)).toHaveLength(3);
+      expect(stdout).toContain(
+        "Removed the Claude Code startup check and its shell profile blocks.",
+      );
+
+      const calls = await readFile(guardHome.claudeLog, "utf8");
+      expect(calls).toContain("mcp remove --scope user prod_gateway");
+      expect(calls).toContain("plugin marketplace remove acme-skills");
+
+      const settings = JSON.parse(
+        await readFile(guardHome.settingsFile, "utf8"),
+      );
+      expect(settings.env).toEqual({ USER_OWNED_KEY: "keep-me" });
+
+      expect(existsSync(guardHome.guardFile)).toBe(false);
+      const zshrc = await readFile(path.join(guardHome.home, ".zshrc"), "utf8");
+      expect(zshrc).toBe(`${PROFILE_SENTINEL}\n`);
+    } finally {
+      await rm(guardHome.dir, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps the guard and exits 1 when a removal cannot be proven", async () => {
+    const guardHome = await makeGuardHome({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+    });
+    try {
+      // The claude stub removes nothing, so the user-scope entry survives.
+      await writeFile(
+        path.join(guardHome.home, ".claude.json"),
+        JSON.stringify({ mcpServers: { prod_gateway: { url: "x" } } }),
+        "utf8",
+      );
+      const result = await execFileAsync("bash", [guardHome.guardFile], {
+        env: { ...guardHome.env, ...DISCONNECT_ENV },
+      }).catch((error: { code: number; stdout: string }) => error);
+      expect(result).toMatchObject({ code: 1 });
+      expect(result.stdout).toMatch(/^Could not disconnect /m);
+      expect(result.stdout).toContain(
+        "Kept the Claude Code startup check so the failed steps can be retried.",
+      );
+      expect(existsSync(guardHome.guardFile)).toBe(true);
+    } finally {
+      await rm(guardHome.dir, { recursive: true, force: true });
+    }
+  });
+});

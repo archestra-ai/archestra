@@ -273,7 +273,7 @@ function StaticValueEditor({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 px-2 text-xs font-mono text-green-600 hover:text-green-700"
+              className="font-mono text-green-600 hover:text-green-700"
               onClick={onOpenVault}
             >
               <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -285,7 +285,6 @@ function StaticValueEditor({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 text-xs"
               onClick={onClearVault}
             >
               Clear
@@ -296,7 +295,6 @@ function StaticValueEditor({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 text-xs"
             onClick={onOpenVault}
           >
             <Key className="h-3 w-3 mr-1" />

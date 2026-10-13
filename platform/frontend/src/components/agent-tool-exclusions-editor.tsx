@@ -538,7 +538,7 @@ function ExclusionPill({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 rounded-r-none border-r-0 px-3 gap-1.5 text-xs"
+            className="rounded-r-none border-r-0 text-xs"
           >
             <McpCatalogIcon
               icon={catalogItem.icon}
@@ -554,8 +554,8 @@ function ExclusionPill({
         </PopoverTrigger>
         <Button
           variant="outline"
-          size="sm"
-          className="h-8 w-8 p-0 rounded-l-none"
+          size="icon-sm"
+          className="rounded-l-none"
           onClick={() => onRemove(catalogItem.id)}
           aria-label={`Re-enable all ${displayName} tools`}
         >
@@ -579,8 +579,8 @@ function ExclusionPill({
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             onClick={() => setOpen(false)}
             aria-label="Close"
           >

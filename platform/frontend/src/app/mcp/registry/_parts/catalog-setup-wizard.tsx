@@ -309,7 +309,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
           </EmptyHeader>
           <EmptyContent className="flex-row justify-center">
             {needsRegistryHandoff ? (
-              <Button asChild>
+              <Button size="sm" asChild>
                 <Link
                   href={`/mcp/registry?${MCP_CATALOG_INSTALL_QUERY_PARAM}=${item.id}`}
                 >
@@ -317,7 +317,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
                 </Link>
               </Button>
             ) : (
-              <Button onClick={startInstall} disabled={isInstalling}>
+              <Button size="sm" onClick={startInstall} disabled={isInstalling}>
                 Install
               </Button>
             )}
@@ -795,12 +795,7 @@ function ToolReviewCard({
               <div className="space-y-1">
                 <div className="text-xs text-muted-foreground">Call policy</div>
                 {hasCustomCallPolicy ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={onOpenDetails}
-                  >
+                  <Button variant="outline" size="sm" onClick={onOpenDetails}>
                     Custom
                   </Button>
                 ) : (
@@ -821,12 +816,7 @@ function ToolReviewCard({
               <div className="space-y-1">
                 <div className="text-xs text-muted-foreground">Results are</div>
                 {hasCustomResultPolicy ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={onOpenDetails}
-                  >
+                  <Button variant="outline" size="sm" onClick={onOpenDetails}>
                     Custom
                   </Button>
                 ) : (

@@ -41,3 +41,6 @@ backend/src/database/migrations/meta/*.json -diff
 # PostgreSQL dashboard variants (generated from application-metrics.json)
 dev/grafana/dashboards/pg-variants/*.json linguist-generated=true
 dev/grafana/dashboards/pg-variants/*.json -diff
+
+# Verbatim OpenAPPA copies (pnpm codegen:appa-guide)
+backend/src/skills/appa-guide.*.generated.md linguist-generated=true

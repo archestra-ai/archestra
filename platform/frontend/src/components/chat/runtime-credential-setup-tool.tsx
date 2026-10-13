@@ -43,9 +43,9 @@ export function RuntimeCredentialSetupTool({
           Contents, and Pull requests Read &amp; write.
         </InlineNoticeText>
         <Button
-          size="sm"
+          size="xs"
           variant="outline"
-          className="ml-auto h-6 px-2 text-xs"
+          className="ml-auto"
           onClick={() => setStep("define")}
         >
           <span>Connect GitHub App</span>

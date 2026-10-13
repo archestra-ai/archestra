@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TabsContent } from "@/components/ui/tabs";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
 import websocketService from "@/lib/websocket/websocket";
@@ -784,13 +785,13 @@ function InstanceSelector({
     <div className="flex-shrink-0">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             className="w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
             aria-label="Switch instance"
           >
             {card}
-          </button>
+          </UnstyledButton>
         </PopoverTrigger>
         <PopoverContent
           align="start"
@@ -821,7 +822,7 @@ function InstanceSelector({
               const isActive = install.id === serverId;
 
               return (
-                <button
+                <UnstyledButton
                   key={install.id}
                   type="button"
                   onClick={() => {
@@ -848,7 +849,7 @@ function InstanceSelector({
                   {isActive && (
                     <Check className="h-3.5 w-3.5 text-foreground/70 flex-shrink-0" />
                   )}
-                </button>
+                </UnstyledButton>
               );
             })}
           </div>

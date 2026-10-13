@@ -67,6 +67,32 @@ class FakeCacheManager {
     return entries;
   }
 
+  async getMany<T>(keys: string[]): Promise<Map<string, T>> {
+    const entries = new Map<string, T>();
+    for (const key of keys) {
+      if (this.store.has(key)) entries.set(key, this.store.get(key) as T);
+    }
+    return entries;
+  }
+
+  async incrementFixedWindows(params: {
+    keys: string[];
+    windowMs: number;
+  }): Promise<void> {
+    const now = Date.now();
+    for (const key of new Set(params.keys)) {
+      const entry = this.store.get(key) as
+        | { count: number; windowEndsAt?: number }
+        | undefined;
+      this.store.set(
+        key,
+        typeof entry?.windowEndsAt === "number" && entry.windowEndsAt > now
+          ? { count: entry.count + 1, windowEndsAt: entry.windowEndsAt }
+          : { count: 1, windowEndsAt: now + params.windowMs },
+      );
+    }
+  }
+
   async deleteExpiredByPrefix(_prefix: string): Promise<void> {}
 
   async deleteByPrefix(prefix: string): Promise<number> {

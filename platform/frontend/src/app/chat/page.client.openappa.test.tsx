@@ -198,7 +198,10 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   const user = userEvent.setup();
   renderChat();
 
-  await waitFor(() => expect(sent).toHaveLength(1));
+  // The opening prompt sends only after the session, agent, model, and
+  // conversation-create requests resolve, which can exceed the default 1s
+  // under a loaded CI runner.
+  await waitFor(() => expect(sent).toHaveLength(1), { timeout: 5000 });
   expect(createBodies).toEqual([
     expect.objectContaining({
       agentId: agent.id,

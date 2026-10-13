@@ -3766,6 +3766,31 @@ describe("AgentModel", () => {
       expect(await lastUsedOf("Interaction later")).toEqual(at("20"));
     });
 
+    test("takes each agent's newest row, not its last inserted", async ({
+      makeAgent,
+    }) => {
+      const first = await makeAgent({ name: "First" });
+      const second = await makeAgent({ name: "Second" });
+      const tied = await makeAgent({ name: "Tied" });
+      await makeAgent({ name: "Idle" });
+
+      await seedInteraction(first.id, at("05"));
+      await seedInteraction(first.id, at("15"));
+      await seedInteraction(first.id, at("09"));
+      await seedMcpCall(first.id, at("12"));
+      await seedMcpCall(first.id, at("03"));
+      await seedMcpCall(second.id, at("18"));
+      await seedMcpCall(second.id, at("21"));
+      await seedMcpCall(second.id, at("02"));
+      await seedInteraction(tied.id, at("07"));
+      await seedMcpCall(tied.id, at("07"));
+
+      expect(await lastUsedOf("First")).toEqual(at("15"));
+      expect(await lastUsedOf("Second")).toEqual(at("21"));
+      expect(await lastUsedOf("Tied")).toEqual(at("07"));
+      expect(await lastUsedOf("Idle")).toBeNull();
+    });
+
     test("sorts by the same value the rows report", async ({ makeAgent }) => {
       const oldest = await makeAgent({
         name: "Oldest",

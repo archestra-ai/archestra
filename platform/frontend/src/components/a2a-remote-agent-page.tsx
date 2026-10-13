@@ -9,6 +9,7 @@ import {
 } from "@/components/a2a-remote-agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentPageShell } from "@/components/agent-pages/agent-page-shell";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -190,46 +191,64 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
               </Badge>
             </div>
           ),
-          description: agent.description || "External A2A agent",
-          action: canManage ? (
-            <div className="flex items-center gap-2">
-              <TableRowActions
-                dropdownContent={ownership.menuItem}
-                itemName={agent.name}
-                actions={[]}
-                dropdownActions={[
-                  {
-                    icon: <Power className="h-4 w-4" />,
-                    label: agent.connection.enabled
-                      ? "Disable delegation"
-                      : "Enable delegation",
-                    tooltip: agent.connection.enabled
-                      ? "Pause this connection everywhere without removing its agent assignments."
-                      : "Make this connection available to its assigned agents again.",
-                    disabled: updateMutation.isPending || formDirty,
-                    disabledTooltip: formDirty
-                      ? "Save or discard your changes before changing delegation availability."
-                      : undefined,
-                    onClick: () =>
-                      updateMutation.mutate({
-                        enabled: !agent.connection.enabled,
-                      }),
-                  },
-                  {
-                    icon: <Trash2 className="h-4 w-4" />,
-                    label: "Delete",
-                    variant: "destructive",
-                    disabled: deleteMutation.isPending || formDirty,
-                    disabledTooltip: formDirty
-                      ? "Save or discard your changes before deleting this external agent."
-                      : undefined,
-                    onClick: () => setDeleteOpen(true),
-                  },
-                ]}
-              />
-              {ownership.dialog}
-            </div>
-          ) : undefined,
+          description: (
+            <span className="block truncate md:pr-6">
+              {agent.description || "External A2A agent"}
+            </span>
+          ),
+          action:
+            canManage || agent.createdBy ? (
+              <div className="flex min-w-0 shrink-0 items-center gap-2">
+                {agent.createdBy && (
+                  <p className="mr-1 hidden min-w-0 max-w-56 items-center gap-1.5 text-xs text-muted-foreground md:flex">
+                    <span className="shrink-0">Created by</span>
+                    <CreatedByCell
+                      createdBy={agent.createdBy}
+                      className="flex-1"
+                    />
+                  </p>
+                )}
+                {canManage && (
+                  <>
+                    <TableRowActions
+                      dropdownContent={ownership.menuItem}
+                      itemName={agent.name}
+                      actions={[]}
+                      dropdownActions={[
+                        {
+                          icon: <Power className="h-4 w-4" />,
+                          label: agent.connection.enabled
+                            ? "Disable delegation"
+                            : "Enable delegation",
+                          tooltip: agent.connection.enabled
+                            ? "Pause this connection everywhere without removing its agent assignments."
+                            : "Make this connection available to its assigned agents again.",
+                          disabled: updateMutation.isPending || formDirty,
+                          disabledTooltip: formDirty
+                            ? "Save or discard your changes before changing delegation availability."
+                            : undefined,
+                          onClick: () =>
+                            updateMutation.mutate({
+                              enabled: !agent.connection.enabled,
+                            }),
+                        },
+                        {
+                          icon: <Trash2 className="h-4 w-4" />,
+                          label: "Delete",
+                          variant: "destructive",
+                          disabled: deleteMutation.isPending || formDirty,
+                          disabledTooltip: formDirty
+                            ? "Save or discard your changes before deleting this external agent."
+                            : undefined,
+                          onClick: () => setDeleteOpen(true),
+                        },
+                      ]}
+                    />
+                    {ownership.dialog}
+                  </>
+                )}
+              </div>
+            ) : undefined,
         }}
       >
         <A2aRemoteAgentForm

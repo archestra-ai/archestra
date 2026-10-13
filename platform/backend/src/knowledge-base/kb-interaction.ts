@@ -258,6 +258,8 @@ const PROVIDER_CHAT_INTERACTION_TYPE: Record<
   // Embeddings-only provider: it has no chat discriminator, and its only
   // interactions are embedding calls, which are logged under this one.
   voyage: "voyage:embeddings",
+  // Decisions-only provider: never a knowledge-base chat or embedding model.
+  jev: "jev:decisions",
   openai: "openai:chatCompletions",
   archestra: "archestra:chatCompletions",
   gemini: "gemini:generateContent",

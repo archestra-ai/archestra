@@ -47,10 +47,7 @@ export function ConnectionClientMultiSelect({
           variant="outline"
           role="combobox"
           aria-label={ariaLabel}
-          className={cn(
-            "h-9 w-full justify-between px-3 font-normal",
-            className,
-          )}
+          className={cn("w-full justify-between px-3 font-normal", className)}
         >
           <span className="flex min-w-0 items-center gap-2 truncate">
             {selected.map((client) => (

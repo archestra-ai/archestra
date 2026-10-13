@@ -159,9 +159,9 @@ test("the Policy page selects an included battery source and searches its status
   );
   await userEvent.type(
     await screen.findByPlaceholderText("Search included batteries"),
-    "active",
+    "enforced",
   );
-  expect(screen.getByRole("option", { name: /GitHubActive/ })).toBeVisible();
+  expect(screen.getByRole("option", { name: /GitHubEnforced/ })).toBeVisible();
   expect(
     screen.queryByRole("option", { name: /pendingNeeds a credential/ }),
   ).not.toBeInTheDocument();

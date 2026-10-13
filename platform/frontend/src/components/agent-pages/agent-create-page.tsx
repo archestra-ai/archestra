@@ -250,6 +250,7 @@ export function AgentCreatePage({
               <div>
                 {prevStep ? (
                   <Button
+                    size="sm"
                     type="button"
                     variant="outline"
                     disabled={isSaving}
@@ -260,6 +261,7 @@ export function AgentCreatePage({
                   </Button>
                 ) : sourceChooserEnabled ? (
                   <Button
+                    size="sm"
                     type="button"
                     variant="outline"
                     onClick={() => {
@@ -273,6 +275,7 @@ export function AgentCreatePage({
                   </Button>
                 ) : (
                   <Button
+                    size="sm"
                     type="button"
                     variant="outline"
                     onClick={guard.requestClose}
@@ -285,6 +288,7 @@ export function AgentCreatePage({
               <div className="flex items-center gap-2">
                 {kind === "agent" && step === "configuration" && (
                   <Button
+                    size="sm"
                     type="submit"
                     disabled={!canSubmit}
                     data-testid={E2eTestId.AgentSetupSubmitButton}
@@ -311,6 +315,7 @@ export function AgentCreatePage({
                   // the submit button while the click is still dispatching,
                   // and a reused DOM button would then submit the form.
                   <Button
+                    size="sm"
                     key="next"
                     variant={
                       kind === "agent" && step === "configuration"
@@ -334,6 +339,7 @@ export function AgentCreatePage({
                   </Button>
                 ) : (
                   <Button
+                    size="sm"
                     key="create"
                     type="submit"
                     disabled={!canSubmit}

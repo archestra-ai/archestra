@@ -31,6 +31,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import {
   type PinAppTarget,
@@ -252,7 +253,7 @@ function OwnedAppCard({
         icon={<AppTypeIcon owned icon={app.icon} />}
         title={
           <span className="flex min-w-0 items-center gap-1.5">
-            <button
+            <UnstyledButton
               type="button"
               className="truncate text-left"
               disabled={isOpening}
@@ -260,7 +261,7 @@ function OwnedAppCard({
               onClick={() => void handleOpen()}
             >
               {app.name}
-            </button>
+            </UnstyledButton>
             <LabelTags labels={app.labels} />
           </span>
         }
@@ -421,7 +422,7 @@ function ExternalAppCard({
       icon={<AppTypeIcon owned={false} icon={app.icon} />}
       title={
         <span className="flex min-w-0 items-center gap-1.5">
-          <button
+          <UnstyledButton
             type="button"
             className="truncate text-left"
             disabled={isOpening}
@@ -429,7 +430,7 @@ function ExternalAppCard({
             onClick={() => void handleOpen()}
           >
             {app.name}
-          </button>
+          </UnstyledButton>
           <LabelTags labels={app.labels} />
         </span>
       }

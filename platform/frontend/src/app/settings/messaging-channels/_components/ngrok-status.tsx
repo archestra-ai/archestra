@@ -23,7 +23,7 @@ export function NgrokStatus({ domain }: { domain: string }) {
       <Button
         variant="outline"
         size="sm"
-        className="shrink-0 text-xs"
+        className="shrink-0"
         disabled={disconnect.isPending}
         onClick={() => disconnect.mutate()}
       >

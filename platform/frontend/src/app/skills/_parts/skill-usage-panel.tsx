@@ -29,6 +29,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   type SkillUsageReference,
   useSkillUsageStatistics,
@@ -340,7 +341,7 @@ function SortButton({
 }) {
   const Icon = dir === "asc" ? ArrowUp : ArrowDown;
   return (
-    <button
+    <UnstyledButton
       type="button"
       onClick={onClick}
       // The sort state belongs on the header cell for assistive tech, but this
@@ -359,7 +360,7 @@ function SortButton({
         aria-hidden
         className={cn("size-3.5", active ? "opacity-100" : "opacity-0")}
       />
-    </button>
+    </UnstyledButton>
   );
 }
 

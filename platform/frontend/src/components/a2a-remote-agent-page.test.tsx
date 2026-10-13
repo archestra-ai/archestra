@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -324,6 +324,7 @@ describe("external A2A agent routed pages", () => {
       expect(createdBody).toEqual({
         source: { type: "well_known", url: remoteAgent.discoveryUrl },
         auth: expectedAuth,
+        name: "Fixture Agent",
         scope: "personal",
         teams: [],
         users: [],
@@ -380,6 +381,177 @@ describe("external A2A agent routed pages", () => {
       },
       auth: { type: "none" },
     });
+  });
+
+  it("previews the checked Agent Card and fills empty details from it", async () => {
+    const user = userEvent.setup();
+    let createdBody: unknown;
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json(
+          inspectionFor({
+            name: "Fixture Agent",
+            description: "A deterministic external agent",
+            agentCard: {
+              name: "Fixture Agent",
+              version: "2.1.0",
+              provider: { organization: "Example Org", url: "https://x.test" },
+              skills: [
+                {
+                  id: "refunds",
+                  name: "Refunds",
+                  description: "Issues refunds for orders",
+                },
+                { id: "invoices", name: "Invoices" },
+              ],
+            },
+          }),
+        ),
+      ),
+      http.post(REGISTRY_URL, async ({ request }) => {
+        createdBody = await request.json();
+        return HttpResponse.json(remoteAgent);
+      }),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.click(screen.getByLabelText("Agent base URL"));
+    await user.paste(remoteAgent.discoveryUrl);
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+
+    const preview = await screen.findByRole("status", {
+      name: "Agent Card found",
+    });
+    expect(preview).toHaveTextContent(
+      "by Example Org · v2.1.0 · A2A 1.0 over JSONRPC",
+    );
+    // The description is shown once, in the prefilled field below.
+    expect(preview).not.toHaveTextContent("A deterministic external agent");
+    const skills = within(preview).getByRole("list", {
+      name: "What this agent can do",
+    });
+    expect(
+      within(skills)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["RefundsIssues refunds for orders", "Invoices"]);
+    expect(screen.getByLabelText("Display name (optional)")).toHaveValue(
+      "Fixture Agent",
+    );
+    expect(screen.getByLabelText("Description (optional)")).toHaveValue(
+      "A deterministic external agent",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+    await waitFor(() =>
+      expect(createdBody).toMatchObject({
+        name: "Fixture Agent",
+        description: "A deterministic external agent",
+      }),
+    );
+  });
+
+  it("leaves out Agent Card skills and versions that add no information", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json(
+          inspectionFor({
+            name: "QA Tools",
+            description: "Runs QA checks",
+            agentCard: {
+              name: "QA Tools",
+              version: "1791292336",
+              skills: [
+                { id: "qa", name: "qa tools", description: "Runs QA checks" },
+                { id: "lint", name: "Lint", description: "Runs QA checks" },
+              ],
+            },
+          }),
+        ),
+      ),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.click(screen.getByLabelText("Agent base URL"));
+    await user.paste(remoteAgent.discoveryUrl);
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+
+    const preview = await screen.findByRole("status", {
+      name: "Agent Card found",
+    });
+    expect(preview).not.toHaveTextContent("1791292336");
+    expect(preview).not.toHaveTextContent("Runs QA checks");
+    const skills = within(preview).getByRole("list", {
+      name: "What this agent can do",
+    });
+    expect(
+      within(skills)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Lint"]);
+  });
+
+  it("refreshes Agent Card details on recheck without overwriting user edits", async () => {
+    const user = userEvent.setup();
+    const cards: Record<string, { name: string; description: string | null }> =
+      {
+        "https://first.example.com": {
+          name: "First Agent",
+          description: "First description",
+        },
+        "https://second.example.com": {
+          name: "Second Agent",
+          description: "Second description",
+        },
+        "https://third.example.com": {
+          name: "Third Agent",
+          description: null,
+        },
+      };
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, async ({ request }) => {
+        const body = (await request.json()) as { source: { url: string } };
+        const card = cards[body.source.url];
+        return HttpResponse.json(
+          inspectionFor({ ...card, agentCard: { name: card.name } }),
+        );
+      }),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    const baseUrlInput = screen.getByLabelText("Agent base URL");
+    const nameInput = screen.getByLabelText("Display name (optional)");
+    const descriptionInput = screen.getByLabelText("Description (optional)");
+    const checkCard = async (url: string, expectedName: string) => {
+      await user.clear(baseUrlInput);
+      await user.click(baseUrlInput);
+      await user.paste(url);
+      await user.click(
+        screen.getByRole("button", { name: "Check Agent Card" }),
+      );
+      expect(
+        await screen.findByRole("status", { name: "Agent Card found" }),
+      ).toHaveTextContent(expectedName);
+    };
+
+    // A name typed before checking is never replaced.
+    await user.type(nameInput, "My Agent");
+    await checkCard("https://first.example.com", "First Agent");
+    expect(nameInput).toHaveValue("My Agent");
+    expect(descriptionInput).toHaveValue("First description");
+
+    // An untouched pre-filled description follows the newly checked card.
+    await checkCard("https://second.example.com", "Second Agent");
+    expect(nameInput).toHaveValue("My Agent");
+    expect(descriptionInput).toHaveValue("Second description");
+
+    // Clearing the name lets the card fill it; an edited description stays.
+    await user.clear(nameInput);
+    await user.type(descriptionInput, " (edited)");
+    await checkCard("https://third.example.com", "Third Agent");
+    expect(nameInput).toHaveValue("Third Agent");
+    expect(descriptionInput).toHaveValue("Second description (edited)");
   });
 
   it("requires a selected user or team for explicit access choices", async () => {
@@ -882,6 +1054,20 @@ describe("external A2A agent routed pages", () => {
     expect(screen.queryByLabelText("Agent base URL")).toBeNull();
   });
 });
+
+function inspectionFor(card: {
+  name: string;
+  description: string | null;
+  agentCard: Record<string, unknown>;
+}) {
+  return {
+    ...card,
+    cardHash: remoteAgent.cardHash,
+    selectedInterface: remoteAgent.connection.selectedInterface,
+    supportedAuthTypes: ["none"],
+    selectedSecurityRequirement: null,
+  };
+}
 
 function renderPage(children: React.ReactNode) {
   const queryClient = new QueryClient({

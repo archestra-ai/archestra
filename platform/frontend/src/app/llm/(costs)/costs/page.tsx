@@ -584,7 +584,7 @@ export default function StatisticsPage() {
             }
           }}
         >
-          <SelectTrigger className="w-[320px]">
+          <SelectTrigger size="sm" className="w-[320px]">
             <CalendarIcon className="mr-2 h-4 w-4" />
             <SelectValue>
               {timeframe.startsWith("custom:")
@@ -606,7 +606,7 @@ export default function StatisticsPage() {
             <SelectItem value="12m">Last 12 months</SelectItem>
             <SelectItem value="all">All time</SelectItem>
             <SelectItem value="custom">
-              <Clock className="mr-2 h-4 w-4 inline" />
+              <Clock className="h-4 w-4" />
               Custom timeframe...
             </SelectItem>
           </SelectContent>
@@ -1276,6 +1276,7 @@ export default function StatisticsPage() {
                           subscriptionCost={String(user.subscriptionCost)}
                           baselineCost={String(user.billedCost)}
                           tooltip="hover"
+                          precision="cents"
                           className="flex-wrap"
                         />
                       </TableCell>

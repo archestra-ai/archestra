@@ -468,8 +468,7 @@ export function EditModelDialog({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-7 text-xs gap-1"
+              size="xs"
               onClick={handleResetPricing}
             >
               <RotateCcw className="h-3 w-3" />

@@ -123,8 +123,8 @@ export function KnowledgeBaseCard({
         {connectors.length === 0 ? (
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+            size="xs"
+            className="text-muted-foreground"
             onClick={onAddConnector}
           >
             <Plus className="h-3.5 w-3.5" />

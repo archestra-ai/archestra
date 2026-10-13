@@ -660,8 +660,10 @@ test("drops a model the ChatGPT plan rejects from the key's model list, and only
   });
   expect(rejected.status).toBe(400);
   expect(await rejected.json()).toEqual({
-    detail:
-      "The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account.",
+    error: {
+      message:
+        "The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account.",
+    },
   });
   expect(await linkedModelIds()).toEqual(["gpt-5.6-sol"]);
 });

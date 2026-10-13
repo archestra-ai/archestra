@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 
 function hasReservedChars(value: string): boolean {
   return LABEL_RESERVED_CHARS.some((c) => value.includes(c));
@@ -197,14 +198,14 @@ export const ProfileLabels = forwardRef<ProfileLabelsRef, ProfileLabelsProps>(
               >
                 <span className="font-semibold">{label.key}:</span>
                 <span>{label.value}</span>
-                <button
+                <UnstyledButton
                   type="button"
                   onClick={() => handleRemoveLabel(label.key)}
                   className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                   aria-label="Remove label"
                 >
                   <X className="h-3 w-3" />
-                </button>
+                </UnstyledButton>
               </Badge>
             ))}
           </div>

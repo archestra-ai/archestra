@@ -19,7 +19,7 @@ export function OrganizationTokenSection() {
   const searchParams = useSearchParams();
   const highlight = searchParams.get("highlight");
   const orgTokenExists = !!orgToken;
-  const authDocsUrl = getFrontendDocsUrl("mcp-authentication", "bearer-token");
+  const authDocsUrl = getFrontendDocsUrl("mcp/authentication", "bearer-token");
 
   // Deep link from connection instructions ("Manage your organization
   // token"): ?highlight=organization-token opens the token dialog once the

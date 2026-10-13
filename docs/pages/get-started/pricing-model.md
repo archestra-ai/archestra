@@ -1,0 +1,34 @@
+---
+title: Pricing Model
+order: 5
+description: How Archestra Platform is priced and licensed
+lastUpdated: 2026-09-21
+---
+
+<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
+
+Archestra is Open Core software. The base platform is licensed under AGPL-3.0; a subset of Enterprise features is licensed under the Archestra Enterprise License. See the repository [LICENSE router](https://github.com/archestra-ai/archestra/blob/main/LICENSE.md) for how each file, directory, or in-file region is licensed.
+
+## Free for teams under 30 users
+
+If the total number of Archestra.AI users across your entire company is **fewer than 30**, you may use the Enterprise features listed below in production without a paid subscription or Enterprise license.
+
+Once your total user count reaches 30 or more, this exception ceases to apply and continued production use of Enterprise features requires a valid Enterprise license.
+
+Please don't hesitate to talk to sales@archestra.ai for the quote.
+
+## Enterprise features
+
+The following components are licensed under the Enterprise License and are not part of the AGPL-licensed open source build (subject to the Small Team Clause above):
+
+- Role-based access control, including custom roles
+- Granular access control: per-resource permissions for people, teams, roles, and service accounts
+- SSO & OIDC
+- Knowledge Base and RAG with access control
+- Data retention windows (automatic deletion of LLM logs, MCP logs, idle chats, and audit logs)
+- Real User Monitoring (product-usage and web-performance telemetry exported to your own OTLP collector)
+- Content encryption at rest (LLM logs and chat messages under a separate, operator-held key)
+- Two-factor authentication (TOTP enrollment, organization-wide enforcement, and session lifetime caps)
+- Idle hibernation for self-hosted MCP servers, in beta (scale-to-zero of unused servers with wake on demand)
+
+If you'd like to pilot the Enterprise feature set, reach out to sales@archestra.ai for a PoC license.

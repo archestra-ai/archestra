@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { AgentModel, SkillModel, SkillTeamModel } from "@/models";
+import type { PrincipalSource } from "@/models/resource-permission-subject";
 import type { Skill } from "@/types";
 import { escapeXmlAttr, neutralizeFrameTags } from "./skill-activation";
 import { isSkillSandboxAvailableForAgent } from "./skill-sandbox-availability";
@@ -15,6 +16,7 @@ interface SkillCatalogContext {
   agentId?: string;
   /** Draft or pending-edit environment override; takes precedence over agentId. */
   environmentId?: string | null;
+  lookups?: PrincipalSource;
 }
 
 /**
@@ -97,6 +99,7 @@ export async function listAccessibleCatalogSkills(
   const accessibleSkillIds = await SkillTeamModel.getUserAccessibleSkillIds({
     organizationId,
     userId,
+    lookups: params.lookups,
   });
 
   // Skills are environment-scoped like tools and connectors: the catalog only

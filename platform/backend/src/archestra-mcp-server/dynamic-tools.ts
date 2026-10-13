@@ -7,6 +7,7 @@ import {
   TOOL_SEARCH_TOOLS_SHORT_NAME,
 } from "@archestra/shared";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
+import type { RequestLookups } from "@/auth/request-lookups";
 import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import {
@@ -184,6 +185,7 @@ export async function isDynamicallyAvailableArchestraTool(params: {
   /** Pre-loaded per-agent exclusion sets, so a handler that already fetched
    * them (executeArchestraTool's assignment gate) does not re-query. */
   exclusionSets?: AgentToolExclusionSets;
+  lookups?: RequestLookups;
 }): Promise<boolean> {
   const shortName = archestraMcpBranding.getToolShortName(params.toolName);
   if (shortName == null) {
@@ -232,14 +234,24 @@ export async function isArchestraToolAvailableToAgent(params: {
   userId?: string;
   organizationId?: string;
   exclusionSets?: AgentToolExclusionSets;
+  lookups?: RequestLookups;
 }): Promise<boolean> {
   const shortName = archestraMcpBranding.getToolShortName(params.toolName);
   if (shortName == null) return false;
 
+  const agent =
+    (params.lookups && (await params.lookups.gatewayAgent(params.agentId))) ??
+    undefined;
   const exclusionSets =
     params.exclusionSets ??
-    (await agentToolExclusionsService.getActiveExclusionSets(params.agentId));
-  const assignedTools = await ToolModel.getMcpToolsByAgent(params.agentId);
+    (await agentToolExclusionsService.getActiveExclusionSets(
+      params.agentId,
+      agent,
+    ));
+  const assignedTools = await ToolModel.getMcpToolsByAgent(
+    params.agentId,
+    agent,
+  );
   if (
     assignedTools.some(
       (tool) =>
@@ -270,6 +282,7 @@ export async function getUnassignedDiscoverableTools(params: {
   /** Pre-loaded per-agent exclusion sets, so a handler that already fetched
    * them (search_tools, run_tool recovery) does not re-query. */
   exclusionSets?: AgentToolExclusionSets;
+  lookups?: RequestLookups;
 }): Promise<Tool[]> {
   const { assignedToolNames } = params;
   const ctx = await dynamicAccessContext(params);
@@ -315,18 +328,23 @@ export async function dynamicAccessContext(params: {
   agentId: string;
   userId?: string;
   organizationId?: string;
+  lookups?: RequestLookups;
 }): Promise<{
   userId: string;
   organizationId: string;
   agentEnvironmentId: string | null;
 } | null> {
-  const { agentId, organizationId, userId } = params;
+  const { agentId, organizationId, userId, lookups } = params;
   if (!userId || !organizationId || userId === "system") {
     return null;
   }
   const [accessAllTools, agentEnvironmentId] = await Promise.all([
-    AgentModel.getAccessAllTools(agentId),
-    AgentModel.findEnvironmentId(agentId),
+    lookups
+      ? lookups.agentAccessAllTools(agentId)
+      : AgentModel.getAccessAllTools(agentId),
+    lookups
+      ? lookups.agentEnvironmentId(agentId)
+      : AgentModel.findEnvironmentId(agentId),
   ]);
   if (!accessAllTools) {
     return null;

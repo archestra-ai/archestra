@@ -84,6 +84,7 @@ const tokenizerCache: Record<SupportedProvider, () => Tokenizer> = {
   // Embeddings-only provider: Voyage publishes no tokenizer, and this is only
   // ever reached for local token estimates, so the generic one applies.
   voyage: getTiktokenTokenizer,
+  jev: getTiktokenTokenizer,
   anthropic: getAnthropicTokenizer,
   archestra: getTiktokenTokenizer,
   azure: getTiktokenTokenizer,

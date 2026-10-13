@@ -6,6 +6,7 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { isArchestraToolAvailableToAgent } from "@/archestra-mcp-server/dynamic-tools";
 import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
+import type { RequestLookups } from "@/auth/request-lookups";
 import { escapeXmlAttr } from "@/skills/skill-activation";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
 import { listAvailableAgentSkills } from "./agent-activation-skills";
@@ -15,12 +16,14 @@ export async function buildSkillDiscoveryPreview(params: {
   agentId: string;
   organizationId: string;
   userId?: string;
+  lookups?: RequestLookups;
 }): Promise<string | null> {
   const loadTool = archestraMcpBranding.getToolName(TOOL_LOAD_SKILL_SHORT_NAME);
   const permitted = await filterToolNamesByPermission(
     [loadTool],
     params.userId,
     params.organizationId,
+    params.lookups,
   );
   if (
     !permitted.has(loadTool) ||
@@ -31,9 +34,14 @@ export async function buildSkillDiscoveryPreview(params: {
 
   // Keep precedence, environment, policy and plugin/external activation names
   // identical to list_skills. Never cache this across calling principals.
-  const skills = (await listAvailableAgentSkills(params)).sort((a, b) =>
-    a.activationName.localeCompare(b.activationName),
-  );
+  const skills = (
+    await listAvailableAgentSkills({
+      ...params,
+      ...(params.lookups && {
+        environmentId: await params.lookups.agentEnvironmentId(params.agentId),
+      }),
+    })
+  ).sort((a, b) => a.activationName.localeCompare(b.activationName));
   if (skills.length === 0) return null;
 
   const lines: string[] = [];

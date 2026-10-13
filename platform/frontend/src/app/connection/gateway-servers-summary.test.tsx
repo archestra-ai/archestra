@@ -9,6 +9,8 @@ import { GatewayServersSummary } from "./gateway-servers-summary";
 vi.mock("@/lib/agent.query", () => ({ useProfile: vi.fn() }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useInternalMcpCatalog: vi.fn(),
+  useAllCatalogTools: () => ({ data: undefined }),
+  groupCatalogTools: () => new Map(),
 }));
 vi.mock("@/lib/auth/use-can-manage-gateway", () => ({
   useCanManageGateway: vi.fn(),

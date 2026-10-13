@@ -13,6 +13,7 @@ import { fetchCohereModels } from "./cohere";
 import { fetchDeepSeekModels } from "./deepseek";
 import { fetchGeminiModels } from "./gemini";
 import { fetchGithubCopilotModels } from "./github-copilot";
+import { fetchJevModels } from "./jev";
 import { fetchMicrosoft365CopilotModels } from "./microsoft-365-copilot";
 import { fetchOllamaModels, fetchOllamaNativeModels } from "./ollama";
 import { fetchOpenAiModels } from "./openai";
@@ -92,6 +93,7 @@ const fetchZhipuaiModels = makeBearerFetcher({
 
 export const modelFetchers: Record<SupportedProvider, ModelFetcher> = {
   voyage: fetchVoyageModels,
+  jev: fetchJevModels,
   anthropic: fetchAnthropicModels,
   archestra: fetchArchestraModels,
   azure: fetchAzureModels,

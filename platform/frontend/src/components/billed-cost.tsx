@@ -5,6 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatCurrency } from "@/lib/utils/format-currency";
 import { formatCost } from "./cost";
 import { Savings } from "./savings";
 
@@ -34,6 +35,7 @@ export function BilledCost({
   tooltip = "never",
   variant = "default",
   subscriptionBadge = "full",
+  precision = "exact",
   className,
 }: {
   /** Full list-price estimate (all rows). */
@@ -56,6 +58,11 @@ export function BilledCost({
   variant?: "default" | "session" | "interaction";
   /** Shorter label for dense tables; the tooltip retains the full meaning. */
   subscriptionBadge?: "full" | "compact";
+  /**
+   * `exact` keeps sub-cent digits (per-interaction logs); `cents` rounds to
+   * two decimals with thousands grouping (spend totals and summaries).
+   */
+  precision?: "exact" | "cents";
   className?: string;
 }) {
   // Derive the split from billingMode when explicit sums aren't supplied.
@@ -78,6 +85,7 @@ export function BilledCost({
         format={format}
         tooltip={tooltip}
         variant={variant}
+        precision={precision}
         className={className}
       />
     );
@@ -89,6 +97,7 @@ export function BilledCost({
   // billed spend is $0. Falling back to the full `cost` here would re-show the
   // phantom cost this feature exists to remove.
   const billed = derivedBilled != null ? Number.parseFloat(derivedBilled) : 0;
+  const formatAmount = precision === "cents" ? formatCurrency : formatCost;
 
   return (
     <Tooltip>
@@ -96,7 +105,7 @@ export function BilledCost({
         <span
           className={`${className || ""} inline-flex items-center gap-1.5 cursor-default`}
         >
-          {formatCost(billed)}
+          {formatAmount(billed)}
           <Badge
             variant="secondary"
             className="px-1.5 py-0 text-[10px]"
@@ -108,9 +117,9 @@ export function BilledCost({
       </TooltipTrigger>
       <TooltipContent className="max-w-xs">
         <div className="space-y-0.5 text-sm">
-          <div>Billed: {formatCost(billed)}</div>
+          <div>Billed: {formatAmount(billed)}</div>
           <div className="text-muted-foreground">
-            Subscription-covered (not billed): {formatCost(subscription)} est.
+            Subscription-covered (not billed): {formatAmount(subscription)} est.
             at list price
           </div>
         </div>

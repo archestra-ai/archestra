@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -105,14 +106,14 @@ export function SecretCopyButton({
 
   const trigger =
     variant === "terminal" ? (
-      <button
+      <UnstyledButton
         type="button"
         disabled={isCopying || disabled}
         aria-label="Copy"
         className={cn(terminalActionClass, "size-7")}
       >
         {icon}
-      </button>
+      </UnstyledButton>
     ) : (
       <Button
         variant="ghost"
@@ -127,7 +128,7 @@ export function SecretCopyButton({
   if (!getSecretText) {
     // No secret to offer — a plain copy of the placeholder needs no menu.
     return variant === "terminal" ? (
-      <button
+      <UnstyledButton
         type="button"
         onClick={handleCopyPlaceholder}
         disabled={disabled}
@@ -135,7 +136,7 @@ export function SecretCopyButton({
         className={cn(terminalActionClass, "size-7")}
       >
         {icon}
-      </button>
+      </UnstyledButton>
     ) : (
       <Button
         variant="ghost"

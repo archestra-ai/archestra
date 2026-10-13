@@ -271,8 +271,7 @@ export function BrowserPreviewContent({
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
+                  size="icon-xs"
                   disabled={!isConnected || isInteracting}
                   title="Type text into focused input"
                 >
@@ -297,8 +296,8 @@ export function BrowserPreviewContent({
                   />
                   <Button
                     type="submit"
-                    size="sm"
-                    className="w-full h-7 text-xs"
+                    size="xs"
+                    className="w-full"
                     disabled={!typeText}
                   >
                     Type
@@ -312,8 +311,7 @@ export function BrowserPreviewContent({
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
+                  size="icon-xs"
                   disabled={!isConnected || isInteracting}
                   title="Press key"
                 >
@@ -325,33 +323,29 @@ export function BrowserPreviewContent({
                   <div className="text-xs font-medium">Press Key</div>
                   <div className="grid grid-cols-2 gap-1">
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="outline"
-                      className="h-7 text-xs"
                       onClick={() => pressKey("Enter")}
                     >
                       Enter
                     </Button>
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="outline"
-                      className="h-7 text-xs"
                       onClick={() => pressKey("Tab")}
                     >
                       Tab
                     </Button>
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="outline"
-                      className="h-7 text-xs"
                       onClick={() => pressKey("Escape")}
                     >
                       Escape
                     </Button>
                     <Button
-                      size="sm"
+                      size="xs"
                       variant="outline"
-                      className="h-7 text-xs"
                       onClick={() => pressKey("Backspace")}
                     >
                       Backspace
@@ -364,8 +358,7 @@ export function BrowserPreviewContent({
             {/* Scroll buttons */}
             <Button
               variant="ghost"
-              size="icon"
-              className="h-6 w-6"
+              size="icon-xs"
               onClick={() => pressKey("PageUp")}
               disabled={!isConnected || isInteracting}
               title="Scroll up"
@@ -374,8 +367,7 @@ export function BrowserPreviewContent({
             </Button>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-6 w-6"
+              size="icon-xs"
               onClick={() => pressKey("PageDown")}
               disabled={!isConnected || isInteracting}
               title="Scroll down"
@@ -393,8 +385,8 @@ export function BrowserPreviewContent({
           <Button
             type="button"
             variant="outline"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
+            size="icon-xs"
+            className="flex-shrink-0"
             onClick={navigateBack}
             disabled={isNavigating || !isConnected || !canGoBack}
             title="Go back"
@@ -416,8 +408,7 @@ export function BrowserPreviewContent({
           />
           <Button
             type="submit"
-            size="sm"
-            className="h-7 px-3 text-xs"
+            size="xs"
             disabled={
               isNavigating ||
               isCreatingConversation ||
@@ -482,7 +473,7 @@ export function BrowserPreviewContent({
             <div className="text-center space-y-4">
               {isAssigningTools && !hasPlaywrightMcpTools ? (
                 <>
-                  <Button disabled className="mt-10">
+                  <Button size="sm" disabled className="mt-10">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Assigning tools
                   </Button>
@@ -493,6 +484,7 @@ export function BrowserPreviewContent({
               ) : !hasPlaywrightMcpTools ? (
                 <>
                   <Button
+                    size="sm"
                     onClick={() => {
                       if (!resolvedAgentId) return;
                       const action = () =>

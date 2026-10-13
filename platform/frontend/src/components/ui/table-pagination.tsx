@@ -73,7 +73,8 @@ function RowsPerPageSelect({
       >
         <SelectTrigger
           aria-label="Rows per page"
-          className={compact ? "h-7 w-[68px] text-xs" : "h-8 w-[90px]"}
+          size="sm"
+          className={compact ? "w-[68px] text-xs" : "w-[90px]"}
         >
           <SelectValue placeholder={pageSize} />
         </SelectTrigger>
@@ -107,8 +108,8 @@ function PaginationNavButtons({
     <>
       <Button
         variant="outline"
-        size="icon"
-        className={className ?? "size-8"}
+        size="icon-sm"
+        className={className}
         onClick={onPrevious}
         disabled={!canGoPrevious}
       >
@@ -117,8 +118,8 @@ function PaginationNavButtons({
       </Button>
       <Button
         variant="outline"
-        size="icon"
-        className={className ?? "size-8"}
+        size="icon-sm"
+        className={className}
         onClick={onNext}
         disabled={!canGoNext}
       >
@@ -181,8 +182,8 @@ export function TablePagination({
             )}
             <Button
               variant="outline"
-              size="icon"
-              className="hidden size-8 lg:flex"
+              size="icon-sm"
+              className="hidden lg:flex"
               onClick={goFirst}
               disabled={!canGoPrevious}
             >
@@ -197,8 +198,8 @@ export function TablePagination({
             />
             <Button
               variant="outline"
-              size="icon"
-              className="hidden size-8 lg:flex"
+              size="icon-sm"
+              className="hidden lg:flex"
               onClick={goLast}
               disabled={!canGoNext}
             >
@@ -230,8 +231,8 @@ export function TablePagination({
           <div className="flex items-center gap-3">
             <Button
               variant="outline"
-              size="icon"
-              className="size-8 disabled:opacity-25"
+              size="icon-sm"
+              className="disabled:opacity-25"
               onClick={goPrevious}
               disabled={!canGoPrevious}
             >
@@ -243,8 +244,8 @@ export function TablePagination({
             </span>
             <Button
               variant="outline"
-              size="icon"
-              className="size-8 disabled:opacity-25"
+              size="icon-sm"
+              className="disabled:opacity-25"
               onClick={goNext}
               disabled={!canGoNext}
             >

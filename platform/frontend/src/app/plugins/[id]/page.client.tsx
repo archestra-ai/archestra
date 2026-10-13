@@ -411,6 +411,7 @@ function PluginDetailView({
               permissions={installAction.permissions}
               permissionScope={installAction.permissionScope}
               variant="outline"
+              size="sm"
               onClick={() => setInstallOpen(true)}
             >
               <PackagePlus className="h-4 w-4" />
@@ -419,7 +420,7 @@ function PluginDetailView({
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon-sm">
                 <MoreHorizontal className="h-4 w-4" />
                 <span className="sr-only">More actions</span>
               </Button>

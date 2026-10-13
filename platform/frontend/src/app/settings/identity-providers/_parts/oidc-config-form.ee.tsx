@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { AllowedEmailDomainsField } from "./allowed-email-domains-field.ee";
@@ -456,14 +457,14 @@ export function OidcConfigForm({
                     className="flex items-center gap-1"
                   >
                     {scope}
-                    <button
+                    <UnstyledButton
                       type="button"
                       aria-label="Remove scope"
                       onClick={() => removeScope(scope)}
                       className="ml-1 hover:bg-destructive/20 rounded-full p-0.5"
                     >
                       <X className="h-3 w-3" />
-                    </button>
+                    </UnstyledButton>
                   </Badge>
                 ))}
               </div>

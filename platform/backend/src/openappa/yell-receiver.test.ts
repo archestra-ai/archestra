@@ -1,12 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import { vi } from "vitest";
+import { afterEach, vi } from "vitest";
 import config from "@/config";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { expect, test } from "@/test";
-import { captureYellReport } from "./yell-receiver";
+import { captureYellReport, REPORT_ENDPOINT } from "./yell-receiver";
 
 const realFetch = globalThis.fetch;
+const analyticsEnabled = config.analytics.enabled;
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  config.analytics.enabled = analyticsEnabled;
+});
 
 test.for([
   false,
@@ -28,7 +34,7 @@ test.for([
     JSON.stringify({ message: yell.message, trajectory: [] }),
   );
   const outbound = vi.fn(
-    async () =>
+    async (_url: string | URL | Request, _init?: RequestInit) =>
       new Response(JSON.stringify({ receipt_id: "external-receipt" }), {
         status: 200,
       }),
@@ -52,10 +58,13 @@ test.for([
   expect(
     await OpenAppaYellModel.findArchive({ id: yell.id, organizationId }),
   ).toEqual(archive);
-  expect(outbound).toHaveBeenCalledTimes(enabled ? 1 : 0);
+  // Other files sharing this non-isolated worker may fetch concurrently; count only report forwards.
+  const forwards = outbound.mock.calls.filter(
+    ([url]) => url === REPORT_ENDPOINT,
+  );
+  expect(forwards).toHaveLength(enabled ? 1 : 0);
   if (enabled)
-    expect(outbound).toHaveBeenCalledWith(
-      expect.stringMatching(/^https:/),
+    expect(forwards[0]?.[1]).toEqual(
       expect.objectContaining({
         body: new Uint8Array(archive),
         headers: expect.objectContaining({

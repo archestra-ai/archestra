@@ -36,7 +36,7 @@ export const RULE_BUCKETS = [
     key: "notEnforced",
     label: "Not enforced",
     description:
-      "A rule names these tools but does not run, usually because its battery is broken.",
+      "A rule names these tools but does not run, usually because its battery is not enforced.",
     color: "var(--chart-4)",
     count: (counts: CoverageRuleCounts) => counts.notEnforced,
   },

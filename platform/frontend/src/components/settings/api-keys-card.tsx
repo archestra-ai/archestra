@@ -275,6 +275,7 @@ function ApiKeysCardContent() {
       <AccountPageAction>
         <PermissionButton
           permissions={{ apiKey: ["create"] }}
+          size="sm"
           onClick={() => setIsCreateDialogOpen(true)}
         >
           <Plus className="h-4 w-4" />

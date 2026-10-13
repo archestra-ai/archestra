@@ -10,6 +10,7 @@ import {
 import { isScheduleTriggerRunActive } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { StatusBadge } from "@/components/scheduled-tasks/status-badge";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   type ScheduleTriggerRun,
   useScheduleTriggerRuns,
@@ -130,7 +131,7 @@ function RunRow({
   if (kind === "resolve") {
     // Legacy run without a conversation: create one on click, then open it.
     return (
-      <button
+      <UnstyledButton
         type="button"
         disabled={isResolving}
         className={cn(
@@ -140,7 +141,7 @@ function RunRow({
         onClick={() => resolve(triggerId, run.id)}
       >
         {rowContent}
-      </button>
+      </UnstyledButton>
     );
   }
 

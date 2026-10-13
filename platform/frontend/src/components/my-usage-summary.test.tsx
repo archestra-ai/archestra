@@ -84,15 +84,19 @@ describe("MyUsageSummary", () => {
   });
 
   it("does not present subscription-covered usage as money spent", () => {
-    mockStats({ ...baseStats, billedCost: 2, subscriptionCost: 40 });
+    mockStats({
+      ...baseStats,
+      billedCost: 43.9675,
+      subscriptionCost: 2054.4463,
+    });
 
     render(<MyUsageSummary timeframe="30d" />);
 
-    // The billed figure stands alone, flagged as partly subscription-covered;
-    // the $42 list price is never shown as spend.
-    expect(screen.getByText("$2.0000")).toBeInTheDocument();
+    // The billed figure stands alone, rounded to cents and flagged as partly
+    // subscription-covered; the $2,098.41 list price is never shown as spend.
+    expect(screen.getByText("$43.97")).toBeInTheDocument();
     expect(screen.getByText("Subscription")).toBeInTheDocument();
-    expect(screen.queryByText("$42.0000")).not.toBeInTheDocument();
+    expect(screen.queryByText("$2,098.41")).not.toBeInTheDocument();
   });
 
   it("says so plainly when the timeframe holds no activity", () => {

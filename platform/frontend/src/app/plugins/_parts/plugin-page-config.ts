@@ -1,7 +1,10 @@
+import type { PluginClientType } from "./plugin-content-fields";
+
 export const PLUGIN_DESCRIPTION_FALLBACK = "No description.";
 
 export const CLIENT_LABELS: Record<string, string> = {
   "claude-code": "Claude Code",
+  "claude-desktop": "Claude Desktop",
   "copilot-cli": "Copilot CLI",
   codex: "Codex",
   cursor: "Cursor",
@@ -16,12 +19,12 @@ export const pluginEditHref = (id: string) => pluginDetailHref(id);
 
 export function resolvePluginInstallSelection(
   plugins: readonly {
-    clientType: "claude-code" | "codex" | "copilot-cli" | "cursor";
+    clientType: PluginClientType;
     supportedPlatforms: readonly ("posix" | "windows")[];
     enabled?: boolean;
   }[],
 ): {
-  clientType: "claude-code" | "codex" | "copilot-cli" | "cursor" | null;
+  clientType: PluginClientType | null;
   supportedPlatforms: ("posix" | "windows")[];
   error: string | null;
 } {

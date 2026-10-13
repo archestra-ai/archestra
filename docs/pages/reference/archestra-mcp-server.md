@@ -3907,7 +3907,7 @@ Required RBAC permission: [`plugin:create`](/docs/reference/permissions#plugin:c
 | `initialGrants[].actions` | `string[]` | Yes |  |
 | `displayName` | `string` | Yes | Human-readable plugin name. |
 | `description` | `string` | No | What the plugin does. |
-| `clientType` | `"claude-code" \| "copilot-cli" \| "codex" \| "cursor"` | Yes | The coding client the payload targets: claude-code, codex, copilot-cli, or cursor. |
+| `clientType` | `"claude-code" \| "claude-desktop" \| "copilot-cli" \| "codex" \| "cursor"` | Yes | The client the payload targets: claude-code, claude-desktop, codex, copilot-cli, or cursor. |
 | `supportedPlatforms` | `string[]` | No | Operating systems the payload supports. |
 | `files` | `object[]` | Yes | The plugin's files as { path, content, encoding?, mode? }. Hook configuration bytes are stored verbatim — review them as code, they execute on developer machines. |
 | `files[].path` | `string` | Yes |  |

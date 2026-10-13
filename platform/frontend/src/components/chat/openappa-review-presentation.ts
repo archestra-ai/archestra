@@ -122,13 +122,14 @@ export const REVIEW_STATUS_DESCRIPTION =
 export type ReviewCardView = {
   /** Present when the review names a tool or carries arguments. */
   toolCard?: { title?: string; input?: unknown };
-  /** Status-row text: the standard prompt, or the review text when no tool parsed. */
+  /** Visible review text, including any additional approval scope. */
   description: string;
 };
 
 /**
  * What the approval card shows. A review with a parseable tool gets the tool
- * card with the standard prompt; one without falls back to its own text.
+ * card and the standard prompt; accepted coverage is appended when the review
+ * states it. One without a tool falls back to its own text.
  */
 export function getReviewCardView({
   message,
@@ -145,6 +146,16 @@ export function getReviewCardView({
     ...(reviewedArguments ? { reviewedArguments } : {}),
   });
   if (presentation.tool || presentation.arguments !== undefined) {
+    const accepted = acceptedCoverage(presentation.rest);
+    const description = accepted?.length
+      ? [
+          REVIEW_STATUS_DESCRIPTION,
+          [
+            "Approving also accepts:",
+            ...accepted.map((line) => `  - ${line}`),
+          ].join("\n"),
+        ].join("\n\n")
+      : REVIEW_STATUS_DESCRIPTION;
     return {
       toolCard: {
         ...(presentation.tool ? { title: presentation.tool } : {}),
@@ -152,10 +163,25 @@ export function getReviewCardView({
           ? { input: presentation.arguments }
           : {}),
       },
-      description: REVIEW_STATUS_DESCRIPTION,
+      description,
     };
   }
   return { description: message.trim() || REVIEW_STATUS_DESCRIPTION };
+}
+
+const COVERAGE_HEADING = "What this ruling would cover:";
+
+/** Non-attention coverage; undefined for an unrecognized section. */
+function acceptedCoverage(rest: string): string[] | undefined {
+  if (!rest.startsWith(COVERAGE_HEADING)) return undefined;
+  const coverage: string[] = [];
+  for (const line of rest.split("\n").slice(1)) {
+    if (line === "") break;
+    if (line === "  (none)") continue;
+    if (!line.startsWith("  - ")) return undefined;
+    coverage.push(line.slice("  - ".length));
+  }
+  return coverage.filter((line) => !line.startsWith("attention: "));
 }
 
 /**

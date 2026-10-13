@@ -103,6 +103,30 @@ describe("McpElicitationCard", () => {
     });
   });
 
+  it("shows accepted review coverage without opening the arguments", () => {
+    render(
+      <McpElicitationCard
+        requests={[
+          openappaReview({
+            coverage: [
+              "  - attention: human-approval",
+              "  - the readers must be the public audience",
+            ].join("\n"),
+          }),
+        ]}
+        onRespond={vi.fn()}
+      />,
+    );
+
+    const card = screen.getByTestId("mcp-elicitation-card");
+    expect(card).toHaveTextContent("Approving also accepts:");
+    expect(card).toHaveTextContent("the readers must be the public audience");
+    expect(card).not.toHaveTextContent("What this ruling would cover");
+    expect(card).not.toHaveTextContent("attention: human-approval");
+    expect(card).not.toHaveTextContent("APPA asks you to rule");
+    expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
+  });
+
   it("submits an all-optional multi-choice question with nothing checked", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
@@ -1169,7 +1193,9 @@ function singleChoice(params: {
   };
 }
 
-function openappaReview(): ChatMcpElicitationRequest {
+function openappaReview(params?: {
+  coverage?: string;
+}): ChatMcpElicitationRequest {
   return {
     id: "review-1",
     conversationId: CONVERSATION_ID,
@@ -1182,7 +1208,7 @@ function openappaReview(): ChatMcpElicitationRequest {
       '{"todos":"[{\\"id\\":1,\\"content\\":\\"qa-hitl\\",\\"status\\":\\"pending\\"}]"}',
       "",
       "What this ruling would cover:",
-      "  attention: signoff",
+      params?.coverage ?? "  attention: signoff",
     ].join("\n"),
     mode: "form",
     kind: "openappa_review",

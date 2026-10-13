@@ -1910,7 +1910,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami?"="Approve" selected preview:\nApprove. You can now continue with these answers in mind.',
+        'Your questions have been answered: "Canonical HITL review."="Approve". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -1922,7 +1922,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami?"="Deny" selected preview:\nDeny. You can now continue with these answers in mind.',
+        'Your questions have been answered: "Canonical HITL review."="Deny". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2074,22 +2074,20 @@ describe("asking through the client's own question tool", () => {
       expect(question.name).toBe(nativeName);
       expect(question.namespace).toBe("");
       if (client === "Claude Code") {
-        // Claude Code asks the short question and previews the reviewed call.
+        // Claude Code does not depend on a preview that it may withhold.
         expect(JSON.parse(question.arguments as string)).toEqual({
           questions: [
             {
-              question: "Approve archestra__whoami?",
+              question: "Canonical HITL review.",
               header: "Approval",
               options: [
                 {
                   label: "Approve",
                   description: "Allow this exact tool call.",
-                  preview: "Approve",
                 },
                 {
                   label: "Deny",
                   description: "Keep this tool call blocked.",
-                  preview: "Deny",
                 },
               ],
               multiSelect: false,
@@ -2450,7 +2448,7 @@ describe("asking through the client's own question tool", () => {
       // An answer with the user's note. The selection it repeats is not a
       // submitted choice, and the wording is not one the adapter reads.
       answer: JSON.stringify(
-        'The user answered: "Approve archestra__whoami?"="Approve" selected preview:\nApprove notes: only once. Read the answers carefully and follow what they actually say.',
+        'The user answered: "Canonical HITL review."="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,

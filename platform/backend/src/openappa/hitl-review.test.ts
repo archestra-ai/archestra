@@ -530,10 +530,15 @@ test.each([
 });
 
 describe.each([
-  { adapter: new AppaClaudeCodeAdapter(), tool: "Bash" },
-  { adapter: new AppaCodexAdapter(), tool: "exec_command" },
-  { adapter: new AppaOpenCodeAdapter(), tool: "bash" },
-])("$tool approval questions", ({ adapter, tool }) => {
+  // `title` is the tool label as the preview's markdown writes it.
+  { adapter: new AppaClaudeCodeAdapter(), tool: "Bash", title: "Bash" },
+  {
+    adapter: new AppaCodexAdapter(),
+    tool: "exec_command",
+    title: "exec\\_command",
+  },
+  { adapter: new AppaOpenCodeAdapter(), tool: "bash", title: "bash" },
+])("$tool approval questions", ({ adapter, tool, title }) => {
   test.each([
     { label: "Approve", ruling: "approve" },
     { label: "Deny", ruling: "deny" },
@@ -567,7 +572,7 @@ describe.each([
       `Approve ${tool}?\n\nApproving also accepts:\n  - the readers must be the public audience\n\n${argumentLines}\n\nApprove lets this exact call run. Deny keeps it blocked.`,
     );
     expect(question?.callPreview).toBe(
-      `**${tool.replace(/_/g, "\\_")} command**\n*Push the branch*\n\n\`\`\`sh\ngit push -u origin "feature"\n\`\`\`\n\nApproving also accepts:\n• the readers must be the public\n  audience`,
+      `**${title} command**\n*Push the branch*\n\n\`\`\`sh\ngit push -u origin "feature"\n\`\`\`\n\nApproving also accepts:\n• the readers must be the public\n  audience`,
     );
     if (!question) throw new Error("Missing review question");
     const nativeQuestion = adapter.nativeQuestion;

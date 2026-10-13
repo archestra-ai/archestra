@@ -275,6 +275,16 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } else if (tokenAuth.serviceAccountId) {
         // Service account token - the turn runs as the account itself
         userId = serviceAccountUserId(tokenAuth.serviceAccountId);
+      } else if (tokenAuth.oauthClientId) {
+        return reply.send({
+          jsonrpc: "2.0" as const,
+          id,
+          error: {
+            code: -32600,
+            message:
+              "Bind the client_credentials OAuth client to a service account before using A2A.",
+          },
+        });
       } else {
         // Team/org token - we don't have a specific user, use a system context
         // The LLM client will work without user-specific API key resolution

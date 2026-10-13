@@ -285,6 +285,7 @@ export interface LLMProxyContext<TRequest> {
   /** Team the authenticating credential's spend is charged to. */
   billingTeamId?: string;
   userId?: string;
+  serviceAccountId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   virtualKeyId?: string;
   passthroughVirtualKeyId?: string;
@@ -754,6 +755,7 @@ export async function handleLLMProxy<
     );
   // The X-Archestra-User-Id header is an unauthenticated hint; it does not
   // participate in the cross-credential user-consistency check below.
+  let serviceAccountId: string | undefined;
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
@@ -1053,6 +1055,7 @@ export async function handleLLMProxy<
       authMethod = oauthResult.authMethod;
       authenticatedApp = oauthResult.authenticatedApp;
       billingTeamId ??= oauthResult.billingTeamId;
+      serviceAccountId = oauthResult.serviceAccountId;
       if (oauthResult.userId) {
         oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
@@ -1083,6 +1086,7 @@ export async function handleLLMProxy<
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
       virtualKeyId = virtualResult.virtualKeyId;
+      serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
@@ -1230,6 +1234,17 @@ export async function handleLLMProxy<
   // whose author is the acting user (Codex ChatGPT subscription, Claude Code
   // virtual key). Consistency with any other authenticated identity was just
   // asserted, so this can never disagree with them.
+  if (serviceAccountId && authenticatedUserId) {
+    throw new ApiError(
+      401,
+      "Credentials identify both a user and a service account.",
+    );
+  }
+  if (serviceAccountId) {
+    // A caller-supplied user hint cannot change the credential's principal.
+    userId = undefined;
+    resolvedUser = null;
+  }
   if (!userId && regularVirtualKeyUserId) {
     userId = regularVirtualKeyUserId;
     resolvedUser = await UserModel.getById(userId);
@@ -2336,6 +2351,7 @@ export async function handleLLMProxy<
       authenticatedApp,
       billingTeamId,
       userId,
+      serviceAccountId,
       resolvedUser,
       virtualKeyId,
       passthroughVirtualKeyId,
@@ -2411,6 +2427,7 @@ export async function handleLLMProxy<
         externalAgentId,
         runId,
         userId,
+        serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
         appId: attributedAppId,
@@ -2544,6 +2561,7 @@ async function handleStreaming<
     authenticatedApp,
     billingTeamId,
     userId,
+    serviceAccountId,
     virtualKeyId,
     passthroughVirtualKeyId,
     resolvedUser,
@@ -2706,6 +2724,7 @@ async function handleStreaming<
         externalAgentId,
         runId,
         userId,
+        serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
         appId,
@@ -3410,6 +3429,7 @@ async function handleStreaming<
           billingTeamId,
           runId,
           userId,
+          serviceAccountId,
           virtualKeyId,
           passthroughVirtualKeyId,
           appId,
@@ -3483,6 +3503,7 @@ async function handleNonStreaming<
     authenticatedApp,
     billingTeamId,
     userId,
+    serviceAccountId,
     virtualKeyId,
     passthroughVirtualKeyId,
     resolvedUser,
@@ -3831,6 +3852,7 @@ async function handleNonStreaming<
         billingTeamId,
         runId,
         userId,
+        serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
         appId,
@@ -3975,6 +3997,7 @@ async function handleNonStreaming<
       billingTeamId,
       runId,
       userId,
+      serviceAccountId,
       virtualKeyId,
       passthroughVirtualKeyId,
       appId,

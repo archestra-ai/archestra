@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { assert, vi } from "vitest";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -2103,6 +2104,111 @@ describe("Agent Runtime routes", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  test("service accounts read, update, cancel and delete only their own run workspace", async ({
+    makeServiceAccount,
+  }) => {
+    const account = await makeServiceAccount(organizationId);
+    const other = await makeServiceAccount(organizationId);
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({
+          actorKind: "serviceAccount",
+          actorId: account.id,
+        })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      actorUserId: null,
+      workloadName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+    });
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "suspended",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    const human = user;
+    user = { ...human, id: serviceAccountUserId(other.id) };
+    for (const [method, suffix, payload] of [
+      ["GET", "", undefined],
+      ["PATCH", "", { title: "forbidden" }],
+      ["POST", "/cancel", undefined],
+      ["DELETE", "/workspace", undefined],
+    ] as const) {
+      const denied = await app.inject({
+        method,
+        url: `/api/agent-runs/${task.id}${suffix}`,
+        payload,
+      });
+      expect(denied.statusCode, denied.body).toBe(404);
+    }
+    user = { ...human, id: serviceAccountUserId(account.id) };
+    const listed = await app.inject({ method: "GET", url: "/api/agent-runs" });
+    expect(listed.statusCode, listed.body).toBe(200);
+    expect(
+      listed.json().data.map((row: { taskId: string }) => row.taskId),
+    ).toContain(task.id);
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/agent-runs/${task.id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/agent-runs/${task.id}`,
+      payload: { title: "worker run" },
+    });
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    expect((await AgentRunModel.findByTaskId(task.id))?.title).toBe(
+      "worker run",
+    );
+    vi.mocked(cancelDetachedAgentTask).mockResolvedValue({
+      id: task.id,
+      contextId: task.contextId,
+      status: { state: "TASK_STATE_CANCELED" },
+    });
+    const canceled = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/cancel`,
+    });
+    expect(canceled.statusCode, canceled.body).toBe(200);
+    expect(cancelDetachedAgentTask).toHaveBeenCalledWith({
+      actor: { kind: "serviceAccount", id: account.id, organizationId },
+      agentId: agent.id,
+      taskId: task.id,
+    });
+    await AgentRunModel.close({ id: run.id, logs: "retained transcript" });
+    vi.spyOn(agentRuntimeManager, "deleteWorkspace").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-runs/${task.id}/workspace`,
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect((await AgentWorkspaceModel.findById(workspace.id))?.state).toBe(
+      "deleted",
+    );
+    expect((await AgentRunModel.findByTaskId(task.id))?.logs).toBe(
+      "retained transcript",
+    );
+  });
   async function createTask(agentId: string) {
     const context = await A2AContextModel.create({
       actorKind: "user",

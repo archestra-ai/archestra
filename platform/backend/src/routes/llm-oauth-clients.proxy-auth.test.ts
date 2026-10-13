@@ -264,4 +264,57 @@ describe("LLM OAuth authorization_code proxy authorization", () => {
     expect(result?.userId).toBe(user.id);
     expect(result?.apiKey).toBe("sk-user-openai");
   });
+  test("bound client credentials identify the service account and cannot reach a proxy outside its grants", async ({
+    makeOrganization,
+    makeServiceAccount,
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      access: "org",
+      isDefault: true,
+    });
+    const privateProxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      access: "personal",
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: org.id,
+      authorId: crypto.randomUUID(),
+      name: "worker",
+      serviceAccountId: account.id,
+      providerApiKeys: [{ provider: "openai", providerApiKeyId: key.id }],
+    });
+    const token = randomBytes(32).toString("base64url");
+    await OAuthAccessTokenModel.createClientCredentialsToken({
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(token),
+      clientId: oauthClient.clientId,
+      expiresAt: new Date(Date.now() + 3600000),
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
+    });
+    const result = await validateLlmOAuthAccessToken({
+      tokenValue: token,
+      expectedProvider: "openai",
+      agent: proxy,
+    });
+    expect(result?.serviceAccountId).toBe(account.id);
+    expect(result?.userId).toBeUndefined();
+    await expect(
+      validateLlmOAuthAccessToken({
+        tokenValue: token,
+        expectedProvider: "openai",
+        agent: privateProxy,
+      }),
+    ).rejects.toThrow("Service account cannot access");
+  });
 });

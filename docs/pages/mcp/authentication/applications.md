@@ -3,7 +3,7 @@ title: Gateway Access for Apps
 sidebarTitle: Apps and Services
 description: Let your own app or service call an MCP Gateway with an OAuth client
 order: 2
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,7 +25,7 @@ Create either one under **Settings → OAuth Clients → Create OAuth Client**, 
 
 No person signs in, so the app uses the gateway's shared accounts. Give its tools a shared service account in [Choose Its Tools](/docs/mcp/gateway#choose-its-tools).
 
-1. Create an OAuth client. Pick **As itself**, then check the gateways and agents it may reach.
+1. Create an OAuth client. Pick **As itself**. For A2A, choose **Act as service account**, then check the gateways and agents it may reach.
 2. Save the client ID and secret in your secret store. The secret shows only once.
 3. Get a token:
 
@@ -38,6 +38,12 @@ No person signs in, so the app uses the gateway's shared accounts. Give its tool
    ```
 
 4. Call the gateway with `Authorization: Bearer <access_token>`. Get a new token when it expires.
+
+A client bound to a service account and that account's own key start runs as the same identity. The account can read and cancel its runs and delete its retained workspaces. Another account cannot use those run URLs without an explicit share. An unbound client can call an MCP Gateway, but cannot start or manage A2A runs.
+
+- The selected account must be enabled and able to use the agent or gateway. The client's gateway list narrows that access further.
+- You must be able to manage an account to bind a client to it. Clients created through a service account's API key bind to that account automatically.
+- Changing the binding revokes issued access tokens. Mint a new token after saving.
 
 <span id="oauth-authorization-code-on-behalf-of-users"></span>
 

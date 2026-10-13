@@ -19,6 +19,7 @@ import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
+  A2ATaskModel,
   McpOauthClientModel,
   OAuthAccessTokenModel,
   UserTokenModel,
@@ -84,11 +85,13 @@ async function makeClientCredentialsToken(params: {
   organizationId: string;
   authorId: string;
   allowedGatewayIds: string[];
+  serviceAccountId?: string;
 }): Promise<string> {
   const { oauthClient } = await McpOauthClientModel.create({
     organizationId: params.organizationId,
     authorId: params.authorId,
     name: "service",
+    serviceAccountId: params.serviceAccountId,
     allowedGatewayIds: params.allowedGatewayIds,
   });
   const raw = `mcp_at_${randomBytes(32).toString("base64url")}`;
@@ -260,24 +263,54 @@ describe("a2a route-level authentication", () => {
   test("v2 SendMessage accepts a client-credentials OAuth token scoped to the agent", async ({
     makeOrganization,
     makeInternalAgent,
+    makeServiceAccount,
   }) => {
     const org = await makeOrganization();
     const agent = await makeInternalAgent({ organizationId: org.id });
+    const account = await makeServiceAccount(org.id);
     const raw = await makeClientCredentialsToken({
       organizationId: org.id,
       authorId: crypto.randomUUID(),
       allowedGatewayIds: [agent.id],
+      serviceAccountId: account.id,
     });
 
     const res = await app.inject({
       method: "POST",
       url: `/v2/a2a/${agent.id}`,
       headers: bearer(raw),
-      payload: v2Payload(),
+      payload: { ...v2Payload(), params: { ...v2Payload().params, configuration: { returnImmediately: true } } },
     });
 
     expect(res.json().error).toBeUndefined();
     expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
+    const taskId = res.json().result.task.id;
+    const persisted = await A2ATaskModel.findById(taskId);
+    expect(persisted?.contextId).toBeTruthy();
+    const otherAccount = await makeServiceAccount(org.id);
+    const otherToken = await makeClientCredentialsToken({
+      organizationId: org.id,
+      authorId: crypto.randomUUID(),
+      allowedGatewayIds: [agent.id],
+      serviceAccountId: otherAccount.id,
+    });
+    for (const method of ["GetTask", "CancelTask"]) {
+      const denied = await app.inject({
+        method: "POST",
+        url: `/v2/a2a/${agent.id}`,
+        headers: bearer(otherToken),
+        payload: { jsonrpc: "2.0", id: method, method, params: { id: taskId } },
+      });
+      expect(denied.json().error).toBeDefined();
+      const owned = await app.inject({
+        method: "POST",
+        url: `/v2/a2a/${agent.id}`,
+        headers: bearer(raw),
+        payload: { jsonrpc: "2.0", id: method, method, params: { id: taskId } },
+      });
+      if (method === "GetTask")
+        expect(owned.json().error, owned.body).toBeUndefined();
+    }
   });
 
   test("v2 SendMessage accepts a user-bound OAuth access token", async ({
@@ -458,6 +491,31 @@ describe("a2a route-level authentication", () => {
     });
 
     expect(res.json().error).toBeDefined();
+    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+  });
+  test("unbound client_credentials callers cannot share the system actor", async ({
+    makeOrganization,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const token = await makeClientCredentialsToken({
+      organizationId: org.id,
+      authorId: crypto.randomUUID(),
+      allowedGatewayIds: [agent.id],
+    });
+    for (const [url, payload] of [
+      [`/v2/a2a/${agent.id}`, v2Payload()],
+      [`/v1/a2a/${agent.id}`, v1Payload()],
+    ] as const) {
+      const response = await app.inject({
+        method: "POST",
+        url,
+        payload,
+        headers: bearer(token),
+      });
+      expect(response.json().error).toBeDefined();
+    }
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
 });

@@ -119,6 +119,7 @@ import {
 import { jwksValidator } from "@/services/jwks-validator";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
+import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
@@ -1800,7 +1801,7 @@ async function validateOAuthTokenByHash(params: {
     if (
       accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
     ) {
-      return validateMcpClientAccessToken({
+      return await validateMcpClientAccessToken({
         accessToken,
         profileId: params.profileId,
         organizationId: agent.organizationId,
@@ -1940,12 +1941,29 @@ async function validateMcpClientAccessToken(params: {
     return null;
   }
 
+  const account = oauthClient.serviceAccountId
+    ? await resolveOauthServiceAccount({
+        serviceAccountId: oauthClient.serviceAccountId,
+        organizationId,
+      })
+    : null;
+  if (
+    account &&
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId: serviceAccountUserId(account.id),
+      agentId: profileId,
+      action: "use",
+      isAgentAdmin: false,
+    }))
+  )
+    return null;
   return {
     tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-    teamId: null,
+    teamId: account?.teamId ?? null,
     isOrganizationToken: false,
     organizationId,
     oauthClientId: accessToken.clientId,
+    ...(account ? { serviceAccountId: account.id } : {}),
   };
 }
 
@@ -2363,7 +2381,8 @@ function cacheTokenAuthResult(
 ): void {
   // Identity lookup may be cached separately, but a user's authorization must
   // reflect resource grants and team/role membership on every request.
-  if (result?.userId) return;
+  if (result?.userId || result?.serviceAccountId || result?.oauthClientId)
+    return;
   // Negative results are intentionally NOT cached. Caching auth failures
   // creates a "cache treadmill" where every retry refreshes the negative
   // entry: a transient race during agent/IdP creation fails the first
@@ -2395,7 +2414,7 @@ function cacheRawArchestraToken(
   // Same rationale as cacheTokenAuthResult: don't cache failures, to
   // avoid the negative-cache treadmill that turns a transient creation
   // race into a sticky 5-second window of 401s.
-  if (result === null) {
+  if (result === null || result.type === "serviceAccount") {
     return;
   }
   rawArchestraTokenCache.set(rawTokenHash, result, TOKEN_AUTH_CACHE_TTL_MS);

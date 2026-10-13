@@ -653,7 +653,7 @@ function virtualKeyVisibility(actor: A2AActor): {
   if (actor.kind === "serviceAccount") {
     return {
       scope: "org",
-      authorId: null,
+      authorId: serviceAccountUserId(actor.id),
       initialPermissionGrants: [
         {
           subject: { type: "serviceAccount", id: actor.id },

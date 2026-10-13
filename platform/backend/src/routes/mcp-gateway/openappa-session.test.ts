@@ -423,6 +423,45 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       id: "runtime-remedy",
     };
 
+    // Discovery still works when guardrail enforcement and observation are disabled.
+    config.openappa.enabled = false;
+    for (const method of [
+      "initialize",
+      "tools/list",
+      "resources/list",
+      "prompts/list",
+    ]) {
+      const discovered = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers,
+        payload: {
+          jsonrpc: "2.0",
+          id: method,
+          method,
+          ...(method === "initialize"
+            ? {
+                params: {
+                  protocolVersion: "2025-03-26",
+                  capabilities: {},
+                  clientInfo: { name: "test", version: "1" },
+                },
+              }
+            : {}),
+        },
+      });
+      expect(discovered.statusCode, discovered.body).toBe(200);
+      expect(discovered.json().error).toBeUndefined();
+    }
+    const invalidBinding = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: { ...headers, [RUNTIME_BINDING_HEADER]: `${binding}invalid` },
+      payload: { jsonrpc: "2.0", id: "invalid", method: "tools/list" },
+    });
+    expect(invalidBinding.statusCode).toBe(400);
+    config.openappa.enabled = true;
+
     const accepted = await app.inject({
       method: "POST",
       url: `/v1/mcp/${agent.id}`,

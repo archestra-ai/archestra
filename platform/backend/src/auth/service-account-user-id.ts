@@ -18,3 +18,12 @@ export const serviceAccountIdFromUserId = (userId: string): string | null =>
   isServiceAccountUserId(userId)
     ? userId.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length)
     : null;
+
+/** Runtime ownership uses an actor pair rather than a human-only user FK. */
+export function actorFromUserId(userId: string): {
+  kind: "user" | "serviceAccount";
+  id: string;
+} {
+  const id = serviceAccountIdFromUserId(userId);
+  return id ? { kind: "serviceAccount", id } : { kind: "user", id: userId };
+}

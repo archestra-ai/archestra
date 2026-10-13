@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""Classify a failed gateway discovery without printing credentials or raw replies."""
+import json
+import os
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, build_opener, HTTPRedirectHandler
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        return None
+
+
+def diagnose():
+    url = os.environ.get("ARCHESTRA_MCP_GATEWAY_URL")
+    token = os.environ.get("ARCHESTRA_MCP_GATEWAY_TOKEN")
+    if not url or not token:
+        return ""
+    headers = {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        "mcp-method": "tools/list",
+    }
+    for env, header in [
+        ("ARCHESTRA_AGENT_RUNTIME_TASK_ID", "X-Archestra-Run-Id"),
+        ("ARCHESTRA_AGENT_RUNTIME_BINDING", "X-Archestra-Runtime-Binding"),
+        ("ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID", "X-Appa-Session-ID"),
+    ]:
+        if os.environ.get(env):
+            headers[header] = os.environ[env]
+    headers.setdefault("X-Appa-Session-ID", os.environ.get("ARCHESTRA_AGENT_RUNTIME_TASK_ID", ""))
+    request = Request(url, data=b'{"jsonrpc":"2.0","id":"startup-diagnostic","method":"tools/list"}', headers=headers)
+    try:
+        with build_opener(NoRedirect).open(request, timeout=3) as response:
+            response.read(4096)
+    except HTTPError as error:
+        with error:
+            if error.code in (401, 403):
+                return "Gateway authentication or access was denied."
+            if error.code == 400:
+                try:
+                    message = json.loads(error.read(4096)).get("error", {}).get("message")
+                except (ValueError, AttributeError, OSError):
+                    message = None
+                if message in ("Invalid runtime binding", "OpenAPPA runtime credential does not match this workspace", "The runtime gateway request has no bound workspace"):
+                    return "Gateway rejected the runtime workspace binding."
+                return "Gateway rejected the tool discovery request."
+            return "Gateway returned an HTTP error during tool discovery."
+    except (URLError, OSError, ValueError):
+        return "Gateway could not be reached for tool discovery."
+    return ""
+
+
+if __name__ == "__main__":
+    print(diagnose())

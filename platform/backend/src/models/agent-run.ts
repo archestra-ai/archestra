@@ -13,6 +13,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { actorFromUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
@@ -110,6 +111,7 @@ class AgentRunModel {
     actorUserId: string;
     organizationId: string;
   }): Promise<AgentRunSession | null> {
+    const actor = actorFromUserId(params.actorUserId);
     const workspaces = schema.agentWorkspacesTable;
     const [workspace] = await db
       .select()
@@ -117,14 +119,14 @@ class AgentRunModel {
       .where(
         and(
           eq(workspaces.organizationId, params.organizationId),
-          eq(workspaces.actorKind, "user"),
-          eq(workspaces.actorId, params.actorUserId),
+          eq(workspaces.actorKind, actor.kind),
+          eq(workspaces.actorId, actor.id),
           or(
             eq(workspaces.id, params.taskId),
             sql`${workspaces.workloadName} IN (
           SELECT workload_name FROM agent_runs WHERE task_id = ${params.taskId}::uuid
           AND organization_id = ${params.organizationId}
-          AND actor_kind = 'user' AND actor_id = ${params.actorUserId}
+          AND actor_kind = ${actor.kind} AND actor_id = ${actor.id}
         )`,
           ),
         ),
@@ -495,9 +497,10 @@ class AgentRunModel {
     organizationId: string;
     pagination: PaginationQuery;
   }) {
+    const actor = actorFromUserId(params.actorUserId);
     const conditions = [
-      eq(schema.agentRunsTable.actorKind, "user"),
-      eq(schema.agentRunsTable.actorId, params.actorUserId),
+      eq(schema.agentRunsTable.actorKind, actor.kind),
+      eq(schema.agentRunsTable.actorId, actor.id),
       eq(schema.agentRunsTable.organizationId, params.organizationId),
       sql`NOT EXISTS (SELECT 1 FROM agent_workspaces w
         WHERE w.workload_name = ${schema.agentRunsTable.workloadName}
@@ -594,6 +597,7 @@ class AgentRunModel {
     pinnedAt?: Date | null;
     projectId?: string | null;
   }): Promise<AgentRunSession | null> {
+    const actor = actorFromUserId(params.actorUserId);
     const updated = await db
       .update(schema.agentRunsTable)
       .set({
@@ -604,7 +608,8 @@ class AgentRunModel {
       .where(
         and(
           eq(schema.agentRunsTable.taskId, params.taskId),
-          eq(schema.agentRunsTable.actorUserId, params.actorUserId),
+          eq(schema.agentRunsTable.actorKind, actor.kind),
+          eq(schema.agentRunsTable.actorId, actor.id),
           eq(schema.agentRunsTable.organizationId, params.organizationId),
         ),
       )
@@ -697,10 +702,11 @@ class AgentRunModel {
     organizationId: string;
     taskId?: string;
   }) {
+    const actor = actorFromUserId(params.actorUserId);
     return AgentRunModel.selectRunSessionsWhere({
       conditions: [
-        eq(schema.agentRunsTable.actorKind, "user"),
-        eq(schema.agentRunsTable.actorId, params.actorUserId),
+        eq(schema.agentRunsTable.actorKind, actor.kind),
+        eq(schema.agentRunsTable.actorId, actor.id),
         eq(schema.agentRunsTable.organizationId, params.organizationId),
         ...(params.taskId
           ? [eq(schema.agentRunsTable.taskId, params.taskId)]

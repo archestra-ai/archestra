@@ -13,6 +13,7 @@ import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
 import {
   APPA_SESSION_HEADER,
   isWellFormedAppaId,
+  openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
 import {
@@ -411,7 +412,7 @@ async function handleMcpPostRequest(
               scope: `user:${tokenAuthContext.userId}`,
             })
           : undefined;
-    if (runtimeSession.kind === "session") {
+    if (runtimeSession.kind === "session" && openappaEnabled()) {
       const workspace = await resolveRuntimeSessionForWorkspace({
         organizationId: runtimeSession.identity.organizationId,
         workspaceId: runtimeSession.identity.workspaceId,
@@ -429,6 +430,10 @@ async function handleMcpPostRequest(
     }
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
+    fastify.log.warn(
+      { profileId, method: body?.method, reason: error.message },
+      "MCP gateway runtime session rejected",
+    );
     reply.status(error.statusCode);
     return {
       jsonrpc: "2.0",

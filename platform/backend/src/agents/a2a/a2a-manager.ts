@@ -1841,6 +1841,12 @@ export class A2AManager {
       };
     }
 
+    if (tokenAuth.oauthClientId)
+      throw new A2AError(
+        A2AErrorKind.InvalidToken,
+        "Bind the client_credentials OAuth client to a service account before using A2A.",
+      );
+
     return {
       id: "system",
       kind: "system",

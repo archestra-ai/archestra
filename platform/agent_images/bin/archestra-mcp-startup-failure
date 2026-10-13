@@ -1,8 +1,10 @@
 #!/bin/sh
 set -eu
 
-# All callers use this image-owned message. Never expose upstream diagnostics.
+# All callers use image-owned text. Classify the gateway failure without exposing upstream diagnostics.
 message="The Agent could not load its MCP gateway tools. Check gateway availability and access, then retry."
+detail=$(python3 "$(dirname "$0")/archestra-mcp-startup-diagnostic" 2>/dev/null || true)
+if [ -n "$detail" ]; then message="$message $detail"; fi
 "$(dirname "$0")/archestra-agent-failure" mcp_startup "$message"
 printf 'archestra: %s\n' "$message" >&2
 if [ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" = one_shot ]; then

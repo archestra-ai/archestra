@@ -16,6 +16,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyRequest } from "fastify";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -32,6 +33,7 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { ApiError, type GatewayAgent } from "@/types";
@@ -100,6 +102,7 @@ export async function resolveAgent(
 // =========================================================================
 
 export interface VirtualKeyValidationResult {
+  serviceAccountId?: string;
   apiKey?: string;
   baseUrl?: string;
   /** Parent chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
@@ -179,6 +182,11 @@ export async function validateVirtualApiKey(params: {
       "Virtual API key does not belong to this organization.",
     );
   }
+  if (resolved.virtualKey.createdByServiceAccountId)
+    await resolveOauthServiceAccount({
+      serviceAccountId: resolved.virtualKey.createdByServiceAccountId,
+      organizationId: resolved.virtualKey.organizationId,
+    });
   if (resolved.virtualKey.keyType === "passthrough") {
     throw new ApiError(
       400,
@@ -272,6 +280,8 @@ export async function validateVirtualApiKey(params: {
       resolved.virtualKey,
     ),
     virtualKeyAuthorId: resolved.virtualKey.authorId,
+    serviceAccountId:
+      resolved.virtualKey.createdByServiceAccountId ?? undefined,
     billingTeamId: resolved.virtualKey.billingTeamId ?? undefined,
   };
 }
@@ -392,6 +402,7 @@ export type LlmOAuthAccessTokenValidationResult = {
     clientId: string;
   };
   userId?: string;
+  serviceAccountId?: string;
   /** Team a client-credentials client's spend is charged to, when it has one. */
   billingTeamId?: string;
 };
@@ -953,6 +964,29 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   if (oauthClient.organizationId !== params.agent.organizationId) {
     throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
   }
+  const account = oauthClient.serviceAccountId
+    ? await resolveOauthServiceAccount({
+        serviceAccountId: oauthClient.serviceAccountId,
+        organizationId: params.agent.organizationId,
+      })
+    : null;
+  if (
+    account &&
+    !(params.agent.agentType === "llm_proxy" && params.agent.isDefault) &&
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId: serviceAccountUserId(account.id),
+      agentId: params.agent.id,
+      action: "use",
+      isAgentAdmin: await ResourcePermissions.allows({
+        userId: serviceAccountUserId(account.id),
+        organizationId: params.agent.organizationId,
+        resource: "agent",
+        scope: "*",
+        action: "update",
+      }),
+    }))
+  )
+    throw new ApiError(403, "Service account cannot access this LLM proxy.");
   const mappedProviderKey = isSupportedProvider(params.expectedProvider)
     ? await selectMappedProviderKey({
         mappings: oauthClient.providerApiKeys,
@@ -1016,6 +1050,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   return {
     ...resolvedKey,
     billingTeamId: oauthClient.billingTeamId ?? undefined,
+    serviceAccountId: account?.id,
   };
 }
 

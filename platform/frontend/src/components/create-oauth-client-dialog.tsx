@@ -20,6 +20,7 @@ import { FormDialog } from "@/components/form-dialog";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ChoiceCards } from "@/components/oauth-client/choice-cards";
 import { GatewayPicker } from "@/components/oauth-client/gateway-picker";
+import { OAuthServiceAccountField } from "@/components/oauth-client/service-account-field";
 import {
   parseRedirectUris,
   RedirectUrisField,
@@ -72,6 +73,7 @@ export function CreateOAuthClientDialog({
   const [clientType, setClientType] =
     useState<OAuthClientType>(defaultClientType);
   const [name, setName] = useState("");
+  const [serviceAccountId, setServiceAccountId] = useState<string | null>(null);
   const [grantType, setGrantType] = useState<GrantType>("client_credentials");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
   const [grantsGateways, setGrantsGateways] = useState(false);
@@ -87,6 +89,7 @@ export function CreateOAuthClientDialog({
       setStep("kind");
       setClientType(fixedClientType ?? defaultClientType);
       setName("");
+      setServiceAccountId(null);
       setGrantType("client_credentials");
       setSelectedGatewayIds(defaultAllowedGatewayIds ?? []);
       setGrantsGateways(false);
@@ -123,6 +126,7 @@ export function CreateOAuthClientDialog({
     const shared = {
       name: name.trim(),
       grantType,
+      ...(!isAuthorizationCode && serviceAccountId && { serviceAccountId }),
       initialGrants: [],
       labels: [],
     };
@@ -328,6 +332,13 @@ export function CreateOAuthClientDialog({
                 onSpendCapChange={setSpendCap}
               />
             </>
+          )}
+
+          {!isAuthorizationCode && step === "kind" && (
+            <OAuthServiceAccountField
+              value={serviceAccountId}
+              onChange={setServiceAccountId}
+            />
           )}
 
           {step === "review" && (

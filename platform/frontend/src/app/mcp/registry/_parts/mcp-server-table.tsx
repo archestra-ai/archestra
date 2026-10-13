@@ -61,6 +61,11 @@ import type { DismissAlertTarget } from "./dismiss-alert-dialog";
 import { DismissAlertDialog } from "./dismiss-alert-dialog";
 import { McpCapabilityBadges } from "./mcp-capability-badges";
 import {
+  InstallBlockedTooltip,
+  installBlockedSummary,
+  useMcpInstallBlockers,
+} from "./mcp-credential-blockers";
+import {
   getMcpServerActionModel,
   mcpServerAction,
 } from "./mcp-server-actions-model";
@@ -427,6 +432,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
   onCancelInstallation?: (serverId: string) => void;
 }) {
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
+  const installBlockers = useMcpInstallBlockers(item);
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
@@ -549,7 +555,12 @@ const McpServerRowActions = memo(function McpServerRowActions({
     return install
       ? [
           {
-            server: { id: install.id, name: install.name },
+            server: {
+              id: install.id,
+              name: install.name,
+              scope: install.scope,
+              teamId: install.teamId,
+            },
             assignedAgents: install.assignedAgents ?? [],
           },
         ]
@@ -634,11 +645,17 @@ const McpServerRowActions = memo(function McpServerRowActions({
         ),
         label: "Install",
         permissions: { mcpServerInstallation: ["create"] },
-        disabled: isLocal && !isLocalMcpEnabled,
+        disabled: (isLocal && !isLocalMcpEnabled) || installBlockers.length > 0,
         disabledTooltip:
           isLocal && !isLocalMcpEnabled
             ? LOCAL_MCP_DISABLED_TOOLTIP
-            : undefined,
+            : installBlockers.length > 0
+              ? installBlockedSummary(installBlockers)
+              : undefined,
+        disabledTooltipContent:
+          installBlockers.length > 0 && !(isLocal && !isLocalMcpEnabled) ? (
+            <InstallBlockedTooltip blockers={installBlockers} />
+          ) : undefined,
         onClick: () => onInstall(item),
       });
     }

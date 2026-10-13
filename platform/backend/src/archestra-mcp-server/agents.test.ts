@@ -25,6 +25,7 @@ import {
   OrganizationModel,
   ToolModel,
 } from "@/models";
+import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
@@ -1239,6 +1240,58 @@ describe("agent runtime and model tools", () => {
     });
     expect(created?.systemPrompt).toBe("Own prompt");
     expect(created?.accessAllTools).toBe(false);
+  });
+
+  test("create_agent refuses to read a saved credential the caller cannot use", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const define = (key: string, initialGrants?: []) =>
+      createRuntimeCredentialDefinition({
+        organizationId,
+        userId: mockContext.userId as string,
+        definition: {
+          key,
+          name: key === "shared" ? "Shared key" : "Restricted key",
+          kind: "secret",
+          description: "",
+          icon: null,
+          allowPersonal: false,
+          allowOrganization: true,
+        },
+        initialGrants,
+      });
+    // Shared with the organization, as a new credential is by default.
+    await define("shared");
+    // Kept to admins: its value would reach every run of the new Agent.
+    await define("restricted", []);
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    mockContext = { ...mockContext, userId: member.id };
+    const create = (credentialId: string) =>
+      call(TOOL_CREATE_AGENT_SHORT_NAME, {
+        name: `Reads ${credentialId}`,
+        runtime: {
+          template: "claude-code",
+          credentials: [
+            {
+              key: "GITHUB_TOKEN",
+              credentialId,
+              scope: "shared",
+              label: "GitHub token",
+              required: true,
+            },
+          ],
+        },
+      });
+
+    const refused = await create("restricted");
+    expect(refused.isError).toBe(true);
+    expect((refused.content[0] as any).text).toContain(
+      `You don't have access to the "Restricted key" credential, so you can't attach it.`,
+    );
+    const allowed = await create("shared");
+    expect(allowed.isError, (allowed.content[0] as any).text).toBe(false);
   });
 
   test("create_agent fills a custom image's runtime with the page defaults", async () => {

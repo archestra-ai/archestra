@@ -26,6 +26,8 @@ export async function callOpenAIEmbedding(params: {
   baseUrl?: string | null;
   dimensions?: number;
   headers?: Record<string, string>;
+  /** Reads the billed cost from the raw `usage` block, for providers that report one. */
+  readReportedCost?: (rawUsage: unknown) => number | undefined;
 }): Promise<EmbeddingApiResponse> {
   const { inputs, model, apiKey, baseUrl, dimensions, headers } = params;
   // OpenAI-compatible APIs are text-only: reject non-text inputs.
@@ -61,6 +63,7 @@ export async function callOpenAIEmbedding(params: {
     // `response.data.map` crash) — return what is present and let the dispatcher's
     // central validation raise a typed, actionable error.
     const data = Array.isArray(response.data) ? response.data : [];
+    const reportedCost = params.readReportedCost?.(response.usage);
     return {
       object: response.object ?? "list",
       data: data.map((item) => ({
@@ -72,6 +75,7 @@ export async function callOpenAIEmbedding(params: {
       usage: {
         prompt_tokens: response.usage?.prompt_tokens ?? 0,
         total_tokens: response.usage?.total_tokens ?? 0,
+        ...(reportedCost === undefined ? {} : { cost: reportedCost }),
       },
     };
   } catch (err: unknown) {

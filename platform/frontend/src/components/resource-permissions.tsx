@@ -11,6 +11,7 @@ import {
   type ScopedResource,
 } from "@archestra/shared";
 import { AlertCircle, AlertTriangle, Info, Loader2, X } from "lucide-react";
+import Link from "next/link";
 import {
   createContext,
   type ReactNode,
@@ -153,6 +154,17 @@ export function ResourcePermissions({
       lockedReason={lockedReason}
     />
   );
+}
+
+/**
+ * Whether an object's permissions show its audience chip (Personal,
+ * Team-wide, Org-wide). A credential already has an audience of its own, the
+ * person or organization that provides its value, and every credential
+ * reaches members through the grants on all credentials, so a chip read off
+ * its own grants alone would contradict both.
+ */
+export function showsAudience(resource: ScopedResource): boolean {
+  return resource !== "credential";
 }
 
 /** Shared by resource lists and the explanation of inherited access. */
@@ -368,12 +380,16 @@ function PermissionsEditor({
   // An object's own grants decide its audience. The organization-wide policy
   // has no audience of its own, so it shows no chip.
   const audience =
-    policy.scope === "*" ? null : grantsAudience(draftGrants ?? []);
+    policy.scope === "*" || !showsAudience(policy.resource)
+      ? null
+      : grantsAudience(draftGrants ?? []);
   const Container = embedded ? "div" : "form";
   const noun = scopedResourceNouns[policy.resource];
   const explanation =
     description === undefined
-      ? `Applies to every ${scopedResourceNouns[policy.resource]}, including ones created later.`
+      ? policy.scope === "*"
+        ? `Applies to every ${scopedResourceNouns[policy.resource]}, including ones created later.`
+        : null
       : description;
   const presetOptions = Object.entries(presets).map(([value, preset]) => ({
     value,
@@ -543,6 +559,7 @@ function PermissionsEditor({
         <InheritedAccessNote
           resource={policy.resource}
           grants={policy.inheritedGrants}
+          editable={!!canUpdateGlobal}
         />
       )}
     </>
@@ -830,10 +847,13 @@ function OwnerPill() {
 /**
  * Access every object of the type gives anyway, as plain muted text under the
  * grant list: "Admin and Platform Admin roles have Full access to every agent."
+ * When `editable`, it links to the list page's Permissions dialog, where that
+ * access is set.
  */
 export function InheritedAccessNote({
   resource,
   grants,
+  editable = false,
 }: {
   resource: ScopedResource;
   grants: ReadonlyArray<{
@@ -841,6 +861,7 @@ export function InheritedAccessNote({
     subject: PermissionSubject;
     actions: ResourcePermissionAction[];
   }>;
+  editable?: boolean;
 }) {
   if (grants.length === 0) return null;
   const byLevel = new Map<string, typeof grants>();
@@ -849,6 +870,7 @@ export function InheritedAccessNote({
     byLevel.set(level, [...(byLevel.get(level) ?? []), grant]);
   }
   const noun = scopedResourceNouns[resource];
+  const listPath = listPermissionsPaths[resource];
   const sentences = [...byLevel].map(([level, holders]) => {
     const names = joinNames(holders.map((holder) => holder.name));
     const allRoles = holders.every((holder) => holder.subject.type === "role");
@@ -863,6 +885,17 @@ export function InheritedAccessNote({
       data-testid="inherited-access-note"
     >
       {sentences.join(" ")}
+      {editable && listPath && (
+        <>
+          {" "}
+          <Link
+            href={`${listPath}?permissions=all`}
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Edit access to every {noun}
+          </Link>
+        </>
+      )}
     </p>
   );
 }
@@ -915,6 +948,8 @@ export function presetDescription(preset: string, resource: ScopedResource) {
     if (preset === "manage")
       return "Also delete the client and manage permissions";
   }
+  if (preset === "use" && resource === "credential")
+    return "View the credential and connect or bind its value";
   if (preset === "deploy" && resource === "mcpRegistry")
     return "Also view and change how the server is deployed";
   if (
@@ -951,6 +986,7 @@ export const scopedResourceNouns: Record<ScopedResource, string> = {
   log: "log",
   auditLog: "audit log entry",
   serviceAccount: "service account",
+  credential: "credential",
 };
 /** @public - shared with initial-resource-permissions.tsx */
 export const subjectLabels: Record<PermissionSubject["type"], string> = {
@@ -1002,6 +1038,7 @@ export const resourcePluralNames: Record<ScopedResource, string> = {
   log: "LLM and MCP logs",
   auditLog: "audit logs",
   serviceAccount: "service accounts",
+  credential: "credentials",
 };
 
 const ResourcePermissionsDialogContext = createContext<{
@@ -1012,3 +1049,25 @@ function joinNames(names: string[]) {
   if (names.length < 2) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
+
+// List pages whose actions menu opens the type-wide Permissions dialog from
+// `?permissions=all` (see ResourceListActions). A type missing here has no
+// such page, or its dialog is not the page's first kind.
+const listPermissionsPaths: Partial<Record<ScopedResource, string>> = {
+  agent: "/agents",
+  app: "/apps",
+  environment: "/settings/environments",
+  knowledgeBase: "/knowledge/knowledge-bases",
+  knowledgeConnector: "/knowledge/connectors",
+  knowledgeFile: "/knowledge/files",
+  llmModel: "/llm/models",
+  llmOauthClient: "/settings/oauth-clients",
+  llmProviderApiKey: "/llm/model-providers",
+  llmVirtualKey: "/llm/proxy/virtual-keys",
+  mcpGateway: "/mcp/gateways",
+  mcpRegistry: "/mcp/registry",
+  plugin: "/plugins",
+  project: "/projects",
+  serviceAccount: "/settings/service-accounts",
+  skill: "/skills",
+};

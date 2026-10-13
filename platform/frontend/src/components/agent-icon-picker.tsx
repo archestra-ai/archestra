@@ -7,9 +7,11 @@ import {
   ImageIcon,
   Layers,
   Network,
+  Puzzle,
   Route,
   Server,
   SmileIcon,
+  Sparkles,
   Upload,
   X,
 } from "lucide-react";
@@ -48,7 +50,9 @@ export type AgentIconPickerFallback =
   | AgentIconVariant
   | "server"
   | "project"
-  | "app";
+  | "app"
+  | "skill"
+  | "plugin";
 
 interface AgentIconPickerProps {
   value: string | null;
@@ -139,7 +143,11 @@ export function AgentIconPicker({
             ? Folder
             : fallbackType === "app"
               ? AppWindow
-              : Bot;
+              : fallbackType === "skill"
+                ? Sparkles
+                : fallbackType === "plugin"
+                  ? Puzzle
+                  : Bot;
 
   return (
     <Popover

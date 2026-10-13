@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   githubSourceUrlAtCommit,
   parseRepoFromSourceRef,
+  repositoryLabel,
 } from "./skill-source";
 
 const COMMIT = "6500e3659dd2a3ceeb745b03eb6ab2d169d4e1e7";
@@ -20,6 +21,17 @@ describe("parseRepoFromSourceRef", () => {
     expect(
       parseRepoFromSourceRef("acme/skills@main:pdf", "https://github.com"),
     ).toBe("acme/skills");
+  });
+
+  it("names a gitlab.com project by its host, like the repository filter", () => {
+    const repo = parseRepoFromSourceRef(
+      "gitlab-org/cli@main:skills/glab",
+      null,
+      "gitlab",
+    );
+    expect(repo).toBe("https://gitlab.com/gitlab-org/cli");
+    expect(repositoryLabel(repo as string)).toBe("gitlab.com/gitlab-org/cli");
+    expect(repositoryLabel("acme/skills")).toBe("acme/skills");
   });
 
   it("ignores the internal ref built-in skills carry", () => {

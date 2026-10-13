@@ -3,6 +3,7 @@ import type {
   SupportedProviderDiscriminator,
 } from "@archestra/shared";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
+import { getOpenRouterReportedCost } from "@/clients/openrouter-reported-cost";
 import { callAzureEmbedding } from "./azure";
 import { callBedrockEmbedding } from "./bedrock";
 import { callCohereEmbedding } from "./cohere";
@@ -59,6 +60,7 @@ const OPENROUTER_WIRE: EmbeddingAdapter = {
       ...params,
       apiKey: params.apiKey ?? KEYLESS_PLACEHOLDER,
       headers: openRouterAttributionHeaders(),
+      readReportedCost: getOpenRouterReportedCost,
     }),
   discriminator: "openai:embeddings",
 };

@@ -219,6 +219,32 @@ export default class ResourcePermissionTargetModel {
           CreatedByModel.id({ createdByServiceAccountId }, createdBy) ?? null,
       };
     }
+    if (params.resource === "credential") {
+      const table = schema.runtimeCredentialDefinitionsTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          createdBy: table.createdBy,
+          createdByServiceAccountId: table.createdByServiceAccountId,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      if (!target) return null;
+      // Organization-owned, like a service account: the creator is reported
+      // so the permissions editor can name them, not because they own it.
+      const { createdBy, createdByServiceAccountId, ...rest } = target;
+      return {
+        ...rest,
+        authorId:
+          CreatedByModel.id({ createdByServiceAccountId }, createdBy) ?? null,
+      };
+    }
     if (params.resource === "llmVirtualKey") {
       const table = schema.virtualApiKeysTable;
       const [target] = await db

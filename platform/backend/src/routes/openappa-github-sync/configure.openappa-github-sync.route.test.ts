@@ -1052,7 +1052,7 @@ describe("APPA GitHub sync", () => {
         content: `${policy}# manual`,
         expectedRevision: 1,
       });
-    await expect(write()).rejects.toThrow("Stop GitHub syncing");
+    await expect(write()).rejects.toThrow("Stop Git sync");
     expect(
       await GuardrailsPolicyModel.findLatest(organizationId),
     ).toMatchObject({ content: policy, revision: 1 });

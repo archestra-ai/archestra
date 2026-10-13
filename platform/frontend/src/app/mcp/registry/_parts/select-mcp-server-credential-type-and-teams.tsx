@@ -268,7 +268,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
         icon: Users,
         disabled: isTeamDisabled,
         disabledReason: !hasMcpServerUpdate
-          ? "You need mcpServerInstallation:update to share with a team"
+          ? "Ask an admin for permission to share with a team"
           : blockTeamForCatalogAccess
             ? "Sharing this server with a team needs write access to it."
             : availableTeams.length === 0
@@ -287,7 +287,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
         icon: Globe,
         disabled: isOrgDisabled,
         disabledReason: !isMcpServerAdmin
-          ? "You need mcpServerInstallation:admin to install organization-wide"
+          ? "Ask an admin for permission to install organization-wide"
           : hasOrgInstallation
             ? "An organization-wide installation already exists"
             : undefined,
@@ -422,7 +422,7 @@ export function SelectMcpServerCredentialTypeAndTeams({
         <div className="space-y-2">
           <Label htmlFor="connection-owner">Connection owner</Label>
           <Select value={scope} onValueChange={handleScopeChange}>
-            <SelectTrigger id="connection-owner">
+            <SelectTrigger id="connection-owner" className="w-full">
               <SelectValue>
                 {
                   visibilityOptions.find((option) => option.value === scope)
@@ -430,20 +430,16 @@ export function SelectMcpServerCredentialTypeAndTeams({
                 }
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="popper">
               {visibilityOptions.map((option) => (
                 <SelectItem
                   key={option.value}
                   value={option.value}
                   disabled={option.disabled}
+                  icon={<option.icon />}
+                  description={option.disabledReason ?? option.description}
                 >
-                  <option.icon className="size-4" />
-                  <div className="text-left">
-                    <div>{option.label}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {option.disabledReason ?? option.description}
-                    </div>
-                  </div>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -465,12 +461,12 @@ export function SelectMcpServerCredentialTypeAndTeams({
             onValueChange={(value) => setSelectedTeamId(value)}
             disabled={isLoadingTeams || isReinstall}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue
                 placeholder={isLoadingTeams ? "Loading..." : "Select a team"}
               />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent position="popper">
               {(isReinstall ? (teams ?? []) : availableTeams).map((team) => (
                 <SelectItem key={team.id} value={team.id}>
                   {team.name}

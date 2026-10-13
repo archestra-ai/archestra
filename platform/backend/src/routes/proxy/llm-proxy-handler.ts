@@ -114,8 +114,22 @@ import {
   verifySubagentBinding,
 } from "@/openappa/subagent-binding";
 import {
+  APPA_THREAD_RECORD,
+  clientKeepsThreadPairing,
+  echoedCallsMessage,
+  readThreadRequest,
+  type ThreadRecord,
+  threadAlreadyContinuedBody,
+  threadNotFoundBody,
+  threadStates,
+  threadToolsOf,
+  threadUnsupportedBody,
+  toolSkeletonOf,
+} from "@/openappa/thread-state";
+import {
   restoreTrajectoryStampText,
   stampedSessions,
+  withoutTrajectoryStamp,
 } from "@/openappa/trajectory-stamp";
 import { startedUnenforced } from "@/openappa/unenforced";
 import {
@@ -1499,6 +1513,11 @@ export async function handleLLMProxy<
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
+    // Set when a thread continue was given its tools back for the ruling.
+    let hydratedThreadTools = false;
+    let continuingThread = false;
+    let threadDeltaSystem: unknown;
+    let threadEchoedCalls: object | undefined;
     // The session a request has while enforcement is off, for the records
     // OpenAPPA reads once it turns on. Nothing governs it.
     let observedSession: OpenAppaSession | undefined;
@@ -2008,11 +2027,120 @@ export async function handleLLMProxy<
         // request and the tool results are built from it.
         // Unsupported declarations are rejected; proxy-only clients without
         // gateway remedies are still governed and receive text refusals.
+        // A provider-side thread continue carries no tools: the proxy rules
+        // with the ones the thread was created with, and never sends them.
+        let appaToolIdentity = toolIdentity;
+        // A stored response keeps the conversation (and tools) at the provider,
+        // so the request in hand is only a delta that the ruling cannot read.
+        // Refused rather than ruled on blind.
+        if (
+          provider.interactionType.endsWith(":responses") &&
+          (body as { previous_response_id?: unknown }).previous_response_id
+        ) {
+          throw new ApiError(
+            400,
+            "OpenAPPA cannot govern a Responses request that continues a stored response (previous_response_id). Send the whole conversation as input instead.",
+          );
+        }
+        const threadRequest =
+          provider.interactionType === "anthropic:messages"
+            ? readThreadRequest(body)
+            : undefined;
+        if (threadRequest) {
+          const declaresTools = declaredToolEntries(body).length > 0;
+          const previousMessageId =
+            threadRequest.type === "continue"
+              ? threadRequest.previousMessageId
+              : undefined;
+          const found =
+            threadRequest.type === "continue"
+              ? await threadStates.forContinue({
+                  organizationId: resolvedAgent.organizationId,
+                  sessionId: openappaSession.session_id,
+                  previousMessageId: threadRequest.previousMessageId,
+                })
+              : undefined;
+          if (found && !found.ok) {
+            logger.info(
+              {
+                sessionId: openappaSession.session_id,
+                reason: found.reason,
+                proxyRequestId: `req_archestra_${request.id}`,
+              },
+              "OpenAPPA forces a governed thread to replay",
+            );
+            // Sent as is: the client reads the provider's own error shape,
+            // which the route's error schema would reduce to message and type.
+            // A store that cannot be read makes the client go stateless.
+            const serialize = (payload: unknown) => JSON.stringify(payload);
+            if (found.reason === "unavailable")
+              return reply
+                .status(400)
+                .serializer(serialize)
+                .send(threadUnsupportedBody(request.id));
+            if (found.reason === "consumed")
+              return reply
+                .status(400)
+                .serializer(serialize)
+                .send(threadAlreadyContinuedBody(request.id));
+            return reply
+              .status(404)
+              .serializer(serialize)
+              .send(threadNotFoundBody(request.id));
+          }
+          const state = found?.ok ? found : undefined;
+          let threadRecord: ThreadRecord;
+          if (state) {
+            // The system prompt of a continue is the client's own delta.
+            continuingThread = true;
+            threadDeltaSystem = structuredClone(
+              (body as { system?: unknown }).system,
+            );
+            // The results answer calls the thread holds: put them back, as a
+            // full request would carry them, for the ruling only.
+            const messages = (body as { messages?: unknown }).messages;
+            if (state.calls.length > 0 && Array.isArray(messages)) {
+              threadEchoedCalls = echoedCallsMessage(state.calls);
+              messages.unshift(threadEchoedCalls);
+            }
+          }
+          if (state && !declaresTools) {
+            (body as { tools?: unknown }).tools = toolSkeletonOf(state.tools);
+            hydratedThreadTools = true;
+            appaToolIdentity =
+              await utils.gatewayToolNames.resolveGatewayToolIdentity({
+                organizationId: resolvedAgent.organizationId,
+                declarations: state.tools,
+                internalChat: isInternalChat,
+              });
+            threadRecord = {
+              organizationId: resolvedAgent.organizationId,
+              sessionId: openappaSession.session_id,
+              rootMessageId: state.rootMessageId,
+              ...(previousMessageId ? { previousMessageId } : {}),
+            };
+          } else {
+            // A create, or a continue that sends changed tools: they become
+            // the thread's tools from this response on.
+            threadRecord = {
+              organizationId: resolvedAgent.organizationId,
+              sessionId: openappaSession.session_id,
+              tools: threadToolsOf({
+                declarations: gatewayToolDeclarations,
+                types: declaredToolEntries(body).map(
+                  (entry) => (entry.tool as { type?: string } | null)?.type,
+                ),
+              }),
+              ...(previousMessageId ? { previousMessageId } : {}),
+            };
+          }
+          pluginContext.resources.set(APPA_THREAD_RECORD, threadRecord);
+        }
         const appaRequest = prepareAppaRequest({
           body,
           interactionType: provider.interactionType,
           session: appaIdentity,
-          identity: toolIdentity,
+          identity: appaToolIdentity,
           trustBarePlatformTools: isInternalChat,
           ...(delegationMarkers ? { delegationMarkers } : {}),
           ...(childReturns ? { childReturns } : {}),
@@ -2023,12 +2151,13 @@ export async function handleLLMProxy<
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
           session: openappaSession,
           profileId: resolvedAgent.id,
-          toolIdentity,
+          toolIdentity: appaToolIdentity,
           request: appaRequest,
           claims: appaClaims,
           ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "active",
+          ...(threadRequest ? { thread: threadRequest.type } : {}),
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
       } else if (observedSession) {
@@ -2263,6 +2392,24 @@ export async function handleLLMProxy<
 
     // Build final request
     const builtRequest = requestAdapter.toProviderRequest();
+    // The provider thread owns the tools of a continue; the ruling only borrowed them.
+    if (continuingThread) {
+      const thread = builtRequest as {
+        tools?: unknown;
+        system?: unknown;
+        messages: unknown[];
+      };
+      if (hydratedThreadTools) delete thread.tools;
+      // The thread keeps the system prompt it was created with, guidance
+      // included. A continue sends only its own system blocks, as the client
+      // wrote them: guidance the ruling added to them would repeat in the thread.
+      if (threadDeltaSystem === undefined) delete thread.system;
+      else thread.system = threadDeltaSystem;
+      // The adapters may hand back copies, so the echo is found by its place
+      // (first) and its content (the same call ids), not by identity.
+      if (threadEchoedCalls && isEchoOf(thread.messages[0], threadEchoedCalls))
+        thread.messages = thread.messages.slice(1);
+    }
 
     // Repair unpaired UTF-16 surrogates before the body leaves for the
     // provider. Half a surrogate pair has no UTF-8 encoding, so a provider
@@ -3043,6 +3190,17 @@ async function handleStreaming<
       toolCallBlock = toToolCallBlock(toolInvocationRefusal);
     }
 
+    await recordGovernedThreadResponse({
+      context: ctx.pluginContext,
+      messageId: streamAdapter.state.responseId,
+      providerCalls: toolCalls,
+      clientCalls: toolInvocationRefusal
+        ? []
+        : (rewrittenToolCalls ?? toolCalls),
+      refused: toolInvocationRefusal !== null,
+      held: !!hostedHold,
+    });
+
     if (toolInvocationRefusal) {
       const { contentMessage, reason, allToolCallNames } =
         toolInvocationRefusal;
@@ -3702,6 +3860,16 @@ async function handleNonStreaming<
 
   // Let the proxy plugins rule on the response's tool calls
   let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
+  if (toolCalls.length === 0) {
+    await recordGovernedThreadResponse({
+      context: ctx.pluginContext,
+      messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
+      providerCalls: [],
+      clientCalls: [],
+      refused: false,
+      held: !!hostedHold,
+    });
+  }
   if (toolCalls.length > 0) {
     const emittedToolCalls = toolCalls.map((toolCall) => ({
       id: toolCall.id,
@@ -3727,6 +3895,16 @@ async function handleNonStreaming<
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
     const toolInvocationRefusal = policyOutcome.refusal;
+    await recordGovernedThreadResponse({
+      context: ctx.pluginContext,
+      messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
+      providerCalls: toolCalls,
+      clientCalls: toolInvocationRefusal
+        ? []
+        : (rewrittenToolCalls ?? emittedToolCalls),
+      refused: toolInvocationRefusal !== null,
+      held: !!hostedHold,
+    });
     // Record metrics for tool calls substituted with denial notices.
     for (const blocked of policyOutcome.blocked) {
       recordBlockedToolCallMetrics({
@@ -4258,6 +4436,77 @@ function observedAppaSession(params: {
       );
     return undefined;
   }
+}
+
+/**
+ * Whether `message` is the echoed calls the ruling borrowed: an assistant
+ * message with the same tool call ids, in the same order.
+ */
+function isEchoOf(message: unknown, echo: object): boolean {
+  const ids = (value: unknown): unknown[] => {
+    const content = (value as { content?: unknown } | undefined)?.content;
+    return Array.isArray(content)
+      ? content.map((block) => (block as { id?: unknown } | undefined)?.id)
+      : [];
+  };
+  if ((message as { role?: string } | undefined)?.role !== "assistant")
+    return false;
+  const found = ids(message);
+  const expected = ids(echo);
+  return (
+    expected.length > 0 &&
+    found.length === expected.length &&
+    found.every((id, index) => id === expected[index])
+  );
+}
+
+function parseCallArguments(args: unknown): Record<string, unknown> {
+  if (args && typeof args === "object") return args as Record<string, unknown>;
+  try {
+    const parsed = typeof args === "string" ? JSON.parse(args) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Keeps what a governed provider thread was ruled on, so its next continue can
+ * be ruled on too. A response the client holds a rewrite of that the provider
+ * cannot continue from is kept as diverged: the continue is answered with a
+ * replay request.
+ */
+async function recordGovernedThreadResponse(params: {
+  context: LlmProxyRequestContext | undefined;
+  messageId: string | undefined;
+  providerCalls: readonly { id: string }[];
+  clientCalls: readonly { id: string; name: string; arguments?: unknown }[];
+  refused: boolean;
+  held: boolean;
+}): Promise<void> {
+  const record = params.context?.resources.get(APPA_THREAD_RECORD) as
+    | ThreadRecord
+    | undefined;
+  if (!record) return;
+  await threadStates.record({
+    record,
+    messageId: params.messageId,
+    calls: params.refused
+      ? []
+      : params.clientCalls.map((call) => ({
+          id: call.id,
+          name: call.name,
+          input: parseCallArguments(call.arguments),
+        })),
+    diverged: !clientKeepsThreadPairing({
+      providerCallIds: params.providerCalls.map((call) => call.id),
+      clientCallIds: params.clientCalls.map((call) =>
+        withoutTrajectoryStamp(call.id),
+      ),
+      refused: params.refused,
+      held: params.held,
+    }),
+  });
 }
 
 async function evaluateProxyPluginToolCalls(

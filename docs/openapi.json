@@ -74571,6 +74571,9 @@
                           },
                           "description": {
                             "type": "string"
+                          },
+                          "canConnect": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -74596,6 +74599,9 @@
                           },
                           "description": {
                             "type": "string"
+                          },
+                          "canConnect": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -122099,6 +122105,7 @@
                               "llmOauthClient",
                               "environment",
                               "serviceAccount",
+                              "credential",
                               "scheduledTask"
                             ]
                           },
@@ -160893,13 +160900,1220 @@
         }
       }
     },
+    "/api/git-credentials": {
+      "get": {
+        "operationId": "listGitCredentials",
+        "tags": [
+          "Git credentials"
+        ],
+        "description": "List the organization's GitHub Apps and GitLab access tokens. Token values are never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string",
+                        "enum": [
+                          "github",
+                          "gitlab"
+                        ]
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "github_app",
+                          "gitlab_token"
+                        ]
+                      },
+                      "webUrl": {
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "provider",
+                      "kind",
+                      "webUrl",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "credential:read"
+          ]
+        }
+      }
+    },
+    "/api/git-credentials/gitlab": {
+      "post": {
+        "operationId": "createGitlabToken",
+        "tags": [
+          "Git credentials"
+        ],
+        "description": "Save a GitLab access token after GitLab confirms it can read the API. The token is stored as a secret and never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:create`: Create saved credentials",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "gitlabUrl": {
+                    "default": "https://gitlab.com",
+                    "description": "GitLab web address, e.g. https://gitlab.com",
+                    "type": "string"
+                  },
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A project, group, or personal access token. Write-only: never returned."
+                  }
+                },
+                "required": [
+                  "name",
+                  "token"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "github",
+                        "gitlab"
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "github_app",
+                        "gitlab_token"
+                      ]
+                    },
+                    "webUrl": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "provider",
+                    "kind",
+                    "webUrl",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "credential:create"
+          ]
+        }
+      }
+    },
+    "/api/git-credentials/{id}/repositories": {
+      "get": {
+        "operationId": "listGitCredentialRepositories",
+        "tags": [
+          "Git credentials"
+        ],
+        "description": "Repositories a Git credential can reach: the GitHub App's installed repositories, or the GitLab projects the token is a member of.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "private": {
+                        "type": "boolean"
+                      },
+                      "defaultBranch": {
+                        "nullable": true,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "path",
+                      "private",
+                      "defaultBranch"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "credential:read"
+          ]
+        }
+      }
+    },
+    "/api/git-credentials/{id}/namespaces": {
+      "get": {
+        "operationId": "listGitCredentialNamespaces",
+        "tags": [
+          "Git credentials"
+        ],
+        "description": "Where a Git credential can create repositories: the GitHub App's account, or the GitLab groups the token can create projects in. An empty string is the GitLab token owner's own namespace.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "credential:read"
+          ]
+        }
+      }
+    },
     "/api/github-app-configs": {
       "get": {
         "operationId": "listGithubAppConfigs",
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "List organization GitHub App configurations. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List organization GitHub App configurations. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -161539,7 +162753,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Get a GitHub App configuration. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Get a GitHub App configuration. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -161838,10 +163052,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "put": {
@@ -161849,7 +163062,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Update a GitHub App configuration. Provide a private key only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Update a GitHub App configuration. Provide a private key only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -162181,10 +163394,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -162192,7 +163404,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Delete a GitHub App configuration and its stored private key.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
+        "description": "Delete a GitHub App configuration and its stored private key.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -162459,10 +163671,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -167978,7 +169189,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "List organization GitHub personal access tokens. The token value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List organization GitHub personal access tokens. The token value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -168580,7 +169791,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "Rename a stored GitHub token. Provide a token only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Rename a stored GitHub token. Provide a token only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -168888,10 +170099,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -168899,7 +170109,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "Delete a stored GitHub token and its secret. Rejected while synced skills authenticate with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
+        "description": "Delete a stored GitHub token and its secret. Rejected while synced skills authenticate with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -169166,10 +170376,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -246611,6 +247820,328 @@
         }
       }
     },
+    "/api/internal_mcp_catalog/{id}/credential-preflight": {
+      "get": {
+        "operationId": "getInternalMcpCatalogCredentialPreflight",
+        "tags": [
+          "MCP Catalog"
+        ],
+        "description": "List the saved credentials that would stop the caller installing this MCP server, and why\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "org"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "blockers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "envKey": {
+                            "type": "string"
+                          },
+                          "credentialId": {
+                            "type": "string"
+                          },
+                          "credentialName": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "no_access",
+                              "not_connected",
+                              "not_set_up",
+                              "personal_only"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "envKey",
+                          "credentialId",
+                          "credentialName",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "blockers"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
     "/api/internal_mcp_catalog/tools": {
       "get": {
         "operationId": "getInternalMcpCatalogToolsBatch",
@@ -302658,6 +304189,9 @@
                             "ownerEmail": {
                               "nullable": true,
                               "type": "string"
+                            },
+                            "pinned": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -302666,7 +304200,8 @@
                             "agentType",
                             "scope",
                             "ownerId",
-                            "ownerEmail"
+                            "ownerEmail",
+                            "pinned"
                           ],
                           "additionalProperties": false
                         }
@@ -303366,6 +304901,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -303374,7 +304912,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }
@@ -303941,6 +305480,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -303949,7 +305491,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }
@@ -304829,6 +306372,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -304837,7 +306383,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }
@@ -305740,6 +307287,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -305748,7 +307298,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }
@@ -307920,6 +309471,9 @@
                           "ownerEmail": {
                             "nullable": true,
                             "type": "string"
+                          },
+                          "pinned": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -307928,7 +309482,8 @@
                           "agentType",
                           "scope",
                           "ownerId",
-                          "ownerEmail"
+                          "ownerEmail",
+                          "pinned"
                         ],
                         "additionalProperties": false
                       }
@@ -333947,11 +335502,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "credential:update",
             "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/battery-packages/{name}": {
@@ -336775,6 +338329,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "gitlabTokenId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "revision": {
                           "type": "string",
                           "format": "uuid",
@@ -336829,6 +338389,7 @@
                         "interval",
                         "githubPatId",
                         "githubAppConfigId",
+                        "gitlabTokenId",
                         "revision",
                         "sourceCommit",
                         "setupPullRequestNumber",
@@ -336849,6 +338410,13 @@
                     },
                     "githubWebUrl": {
                       "type": "string"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "github",
+                        "gitlab"
+                      ]
                     }
                   },
                   "required": [
@@ -336856,7 +338424,8 @@
                     "source",
                     "hasPolicy",
                     "validationDirectory",
-                    "githubWebUrl"
+                    "githubWebUrl",
+                    "provider"
                   ],
                   "additionalProperties": false
                 }
@@ -337118,8 +338687,8 @@
                 "properties": {
                   "repo": {
                     "type": "string",
-                    "maxLength": 200,
-                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]*\\/[a-zA-Z0-9_.-]+$"
+                    "maxLength": 400,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*(\\/[a-zA-Z0-9_.-]+)+$"
                   },
                   "ref": {
                     "default": null,
@@ -337166,6 +338735,13 @@
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "githubAppConfigId": {
+                    "default": null,
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
                     "default": null,
                     "nullable": true,
                     "type": "string",
@@ -337244,6 +338820,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "gitlabTokenId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "revision": {
                           "type": "string",
                           "format": "uuid",
@@ -337298,6 +338880,7 @@
                         "interval",
                         "githubPatId",
                         "githubAppConfigId",
+                        "gitlabTokenId",
                         "revision",
                         "sourceCommit",
                         "setupPullRequestNumber",
@@ -337318,6 +338901,13 @@
                     },
                     "githubWebUrl": {
                       "type": "string"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "github",
+                        "gitlab"
+                      ]
                     }
                   },
                   "required": [
@@ -337325,7 +338915,8 @@
                     "source",
                     "hasPolicy",
                     "validationDirectory",
-                    "githubWebUrl"
+                    "githubWebUrl",
+                    "provider"
                   ],
                   "additionalProperties": false
                 }
@@ -337704,6 +339295,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "gitlabTokenId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "revision": {
                           "type": "string",
                           "format": "uuid",
@@ -337758,6 +339355,7 @@
                         "interval",
                         "githubPatId",
                         "githubAppConfigId",
+                        "gitlabTokenId",
                         "revision",
                         "sourceCommit",
                         "setupPullRequestNumber",
@@ -337778,6 +339376,13 @@
                     },
                     "githubWebUrl": {
                       "type": "string"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "github",
+                        "gitlab"
+                      ]
                     }
                   },
                   "required": [
@@ -337785,7 +339390,8 @@
                     "source",
                     "hasPolicy",
                     "validationDirectory",
-                    "githubWebUrl"
+                    "githubWebUrl",
+                    "provider"
                   ],
                   "additionalProperties": false
                 }
@@ -338049,8 +339655,8 @@
                 "properties": {
                   "owner": {
                     "type": "string",
-                    "maxLength": 39,
-                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]*$"
+                    "maxLength": 255,
+                    "pattern": "^([a-zA-Z0-9][a-zA-Z0-9_.-]*(\\/[a-zA-Z0-9_.-]+)*)?$"
                   },
                   "name": {
                     "type": "string",
@@ -338058,6 +339664,11 @@
                     "pattern": "^[a-zA-Z0-9_.-]+$"
                   },
                   "githubAppConfigId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -338099,7 +339710,6 @@
                 "required": [
                   "owner",
                   "name",
-                  "githubAppConfigId",
                   "interval"
                 ],
                 "additionalProperties": false
@@ -338168,6 +339778,12 @@
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
+                        "gitlabTokenId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "revision": {
                           "type": "string",
                           "format": "uuid",
@@ -338222,6 +339838,7 @@
                         "interval",
                         "githubPatId",
                         "githubAppConfigId",
+                        "gitlabTokenId",
                         "revision",
                         "sourceCommit",
                         "setupPullRequestNumber",
@@ -338242,6 +339859,13 @@
                     },
                     "githubWebUrl": {
                       "type": "string"
+                    },
+                    "provider": {
+                      "type": "string",
+                      "enum": [
+                        "github",
+                        "gitlab"
+                      ]
                     }
                   },
                   "required": [
@@ -338249,7 +339873,8 @@
                     "source",
                     "hasPolicy",
                     "validationDirectory",
-                    "githubWebUrl"
+                    "githubWebUrl",
+                    "provider"
                   ],
                   "additionalProperties": false
                 }
@@ -340006,8 +341631,8 @@
           {
             "schema": {
               "type": "string",
-              "maxLength": 140,
-              "pattern": "^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*\\/[a-zA-Z0-9_.-]+$"
+              "maxLength": 400,
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*(?:\\/[a-zA-Z0-9_.-]+)+$"
             },
             "in": "query",
             "name": "repo",
@@ -340325,7 +341950,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "The GitHub account each organization GitHub App is installed on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "The GitHub account each organization GitHub App is installed on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -341317,6 +342942,12 @@
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             },
+                            "gitlabTokenId": {
+                              "nullable": true,
+                              "type": "string",
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
                             "revision": {
                               "type": "string",
                               "format": "uuid",
@@ -341371,6 +343002,7 @@
                             "interval",
                             "githubPatId",
                             "githubAppConfigId",
+                            "gitlabTokenId",
                             "revision",
                             "sourceCommit",
                             "setupPullRequestNumber",
@@ -341391,6 +343023,13 @@
                         },
                         "githubWebUrl": {
                           "type": "string"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
                         }
                       },
                       "required": [
@@ -341398,7 +343037,8 @@
                         "source",
                         "hasPolicy",
                         "validationDirectory",
-                        "githubWebUrl"
+                        "githubWebUrl",
+                        "provider"
                       ],
                       "additionalProperties": false
                     }
@@ -368273,6 +369913,10 @@
                       "description": {
                         "type": "string"
                       },
+                      "icon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "contentHash": {
                         "type": "string"
                       },
@@ -368337,6 +369981,28 @@
                         ]
                       },
                       "githubSyncRef": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "sourceProvider": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "github",
+                              "gitlab"
+                            ]
+                          },
+                          {
+                            "type": "string",
+                            "nullable": true,
+                            "enum": [
+                              null
+                            ]
+                          }
+                        ]
+                      },
+                      "sourceOrigin": {
                         "nullable": true,
                         "type": "string"
                       },
@@ -368516,6 +370182,7 @@
                       "pluginSlug",
                       "displayName",
                       "description",
+                      "icon",
                       "contentHash",
                       "sourceKind",
                       "sourceRepo",
@@ -368528,6 +370195,8 @@
                       "sourceMarketplacePluginName",
                       "githubSyncInterval",
                       "githubSyncRef",
+                      "sourceProvider",
+                      "sourceOrigin",
                       "lastSyncedAt",
                       "pendingSourceSha",
                       "pendingContentHash",
@@ -368815,6 +370484,11 @@
                     "default": "",
                     "type": "string",
                     "maxLength": 1000
+                  },
+                  "icon": {
+                    "description": "Emoji or base64 image data URL shown with the name.",
+                    "nullable": true,
+                    "type": "string"
                   },
                   "clientType": {
                     "type": "string",
@@ -369104,6 +370778,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -369178,6 +370856,34 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -369409,6 +371115,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -369423,6 +371130,9 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "sourceOrigin",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "pendingSourceSha",
@@ -369712,14 +371422,12 @@
                     "type": "string",
                     "minLength": 1
                   },
-                  "marketplacePath": {
+                  "provider": {
+                    "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
                     "type": "string",
                     "enum": [
-                      ".claude-plugin/marketplace.json",
-                      ".github/plugin/marketplace.json",
-                      ".agents/plugins/marketplace.json",
-                      ".cursor-plugin/marketplace.json",
-                      "marketplace.json"
+                      "github",
+                      "gitlab"
                     ]
                   },
                   "githubToken": {
@@ -369735,6 +371443,21 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "marketplacePath": {
+                    "type": "string",
+                    "enum": [
+                      ".claude-plugin/marketplace.json",
+                      ".github/plugin/marketplace.json",
+                      ".agents/plugins/marketplace.json",
+                      ".cursor-plugin/marketplace.json",
+                      "marketplace.json"
+                    ]
                   }
                 },
                 "required": [
@@ -370109,307 +371832,301 @@
           "content": {
             "application/json": {
               "schema": {
-                "allOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "repoUrl": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "ref": {
-                        "nullable": true,
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "marketplacePath": {
-                        "type": "string",
-                        "enum": [
-                          ".claude-plugin/marketplace.json",
-                          ".github/plugin/marketplace.json",
-                          ".agents/plugins/marketplace.json",
-                          ".cursor-plugin/marketplace.json",
-                          "marketplace.json"
-                        ]
-                      },
-                      "githubToken": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "githubAppConfigId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "githubPatId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      }
-                    },
-                    "required": [
-                      "repoUrl"
+                "type": "object",
+                "properties": {
+                  "repoUrl": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "ref": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "provider": {
+                    "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "gitlab"
                     ]
                   },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "marketplacePath": {
-                        "type": "string",
-                        "enum": [
-                          ".claude-plugin/marketplace.json",
-                          ".github/plugin/marketplace.json",
-                          ".agents/plugins/marketplace.json",
-                          ".cursor-plugin/marketplace.json",
-                          "marketplace.json"
-                        ]
-                      },
-                      "approvedCommitSha": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{40}$"
-                      },
-                      "trackingRef": {
-                        "nullable": true,
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "selected": {
-                        "minItems": 1,
-                        "maxItems": 10,
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "name": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "displayName": {
-                              "type": "string",
-                              "minLength": 1,
-                              "maxLength": 120
-                            },
-                            "description": {
-                              "default": "",
-                              "type": "string",
-                              "maxLength": 1000
-                            },
-                            "clientType": {
-                              "type": "string",
-                              "enum": [
-                                "claude-code",
-                                "copilot-cli",
-                                "codex",
-                                "cursor"
-                              ]
-                            },
-                            "supportedPlatforms": {
-                              "minItems": 1,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "enum": [
-                                  "posix",
-                                  "windows"
-                                ]
-                              }
-                            },
-                            "sourceRepoUrl": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "sourceRef": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "sourceSubdir": {
-                              "type": "string"
-                            },
-                            "approvedSourceSha": {
-                              "type": "string",
-                              "pattern": "^[a-f0-9]{40}$"
-                            },
-                            "exclude": {
-                              "default": [],
-                              "maxItems": 50,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "minLength": 1
-                              }
-                            }
-                          },
-                          "required": [
-                            "name",
-                            "displayName",
-                            "clientType",
-                            "supportedPlatforms",
-                            "sourceRepoUrl",
-                            "sourceRef",
-                            "sourceSubdir",
-                            "approvedSourceSha"
+                  "githubToken": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "githubAppConfigId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "marketplacePath": {
+                    "nullable": true,
+                    "description": "The reviewed manifest path, or null to import plugin folders discovered in a repository without a marketplace manifest",
+                    "type": "string",
+                    "enum": [
+                      ".claude-plugin/marketplace.json",
+                      ".github/plugin/marketplace.json",
+                      ".agents/plugins/marketplace.json",
+                      ".cursor-plugin/marketplace.json",
+                      "marketplace.json"
+                    ]
+                  },
+                  "approvedCommitSha": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{40}$"
+                  },
+                  "trackingRef": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "selected": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "displayName": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "description": {
+                          "default": "",
+                          "type": "string",
+                          "maxLength": 1000
+                        },
+                        "clientType": {
+                          "type": "string",
+                          "enum": [
+                            "claude-code",
+                            "copilot-cli",
+                            "codex",
+                            "cursor"
                           ]
-                        }
-                      },
-                      "initialGrants": {
-                        "maxItems": 200,
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "subject": {
-                              "oneOf": [
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "user"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "minLength": 1
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "team"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "minLength": 1
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "serviceAccount"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "format": "uuid",
-                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "role"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "minLength": 1
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
-                                  ]
-                                },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "type": {
-                                      "type": "string",
-                                      "enum": [
-                                        "organization"
-                                      ]
-                                    },
-                                    "id": {
-                                      "type": "string",
-                                      "enum": [
-                                        "*"
-                                      ]
-                                    }
-                                  },
-                                  "required": [
-                                    "type",
-                                    "id"
-                                  ]
-                                }
-                              ]
-                            },
-                            "actions": {
-                              "minItems": 1,
-                              "maxItems": 6,
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "enum": [
-                                  "read",
-                                  "use",
-                                  "update",
-                                  "delete",
-                                  "manage-permissions",
-                                  "configure-deployment-spec"
-                                ]
-                              }
-                            }
-                          },
-                          "required": [
-                            "subject",
-                            "actions"
-                          ]
-                        }
-                      },
-                      "syncInterval": {
-                        "default": "1d",
-                        "anyOf": [
-                          {
+                        },
+                        "supportedPlatforms": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
                             "type": "string",
                             "enum": [
-                              "15m",
-                              "1h",
-                              "1d"
-                            ]
-                          },
-                          {
-                            "type": "string",
-                            "nullable": true,
-                            "enum": [
-                              null
+                              "posix",
+                              "windows"
                             ]
                           }
+                        },
+                        "sourceRepoUrl": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "sourceRef": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "sourceSubdir": {
+                          "type": "string"
+                        },
+                        "approvedSourceSha": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{40}$"
+                        },
+                        "exclude": {
+                          "default": [],
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "displayName",
+                        "clientType",
+                        "supportedPlatforms",
+                        "sourceRepoUrl",
+                        "sourceRef",
+                        "sourceSubdir",
+                        "approvedSourceSha"
+                      ]
+                    }
+                  },
+                  "initialGrants": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 6,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions",
+                              "configure-deployment-spec"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "actions"
+                      ]
+                    }
+                  },
+                  "syncInterval": {
+                    "default": "1d",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "15m",
+                          "1h",
+                          "1d"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "nullable": true,
+                        "enum": [
+                          null
                         ]
                       }
-                    },
-                    "required": [
-                      "marketplacePath",
-                      "approvedCommitSha",
-                      "trackingRef",
-                      "selected"
                     ]
                   }
+                },
+                "required": [
+                  "repoUrl",
+                  "marketplacePath",
+                  "approvedCommitSha",
+                  "trackingRef",
+                  "selected"
                 ]
               }
             }
@@ -370475,6 +372192,10 @@
                             "type": "string"
                           },
                           "description": {
+                            "type": "string"
+                          },
+                          "icon": {
+                            "nullable": true,
                             "type": "string"
                           },
                           "contentHash": {
@@ -370551,6 +372272,34 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "githubPatId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "sourceProvider": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "github",
+                                  "gitlab"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          "sourceOrigin": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "gitlabTokenId": {
                             "nullable": true,
                             "type": "string",
                             "format": "uuid",
@@ -370782,6 +372531,7 @@
                           "pluginSlug",
                           "displayName",
                           "description",
+                          "icon",
                           "contentHash",
                           "sourceKind",
                           "sourceRepo",
@@ -370796,6 +372546,9 @@
                           "githubSyncRef",
                           "githubAppConfigId",
                           "githubPatId",
+                          "sourceProvider",
+                          "sourceOrigin",
+                          "gitlabTokenId",
                           "lastSyncedAt",
                           "lastSyncError",
                           "pendingSourceSha",
@@ -371125,6 +372878,14 @@
                       "minLength": 1
                     }
                   },
+                  "provider": {
+                    "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "gitlab"
+                    ]
+                  },
                   "githubToken": {
                     "type": "string",
                     "minLength": 1
@@ -371135,6 +372896,11 @@
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -371156,6 +372922,17 @@
                   "type": "object",
                   "properties": {
                     "repo": {
+                      "type": "string"
+                    },
+                    "sourceProvider": {
+                      "type": "string",
+                      "enum": [
+                        "github",
+                        "gitlab"
+                      ]
+                    },
+                    "sourceOrigin": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "requestedRef": {
@@ -371212,6 +372989,8 @@
                   },
                   "required": [
                     "repo",
+                    "sourceProvider",
+                    "sourceOrigin",
                     "requestedRef",
                     "commitSha",
                     "subdir",
@@ -371502,6 +373281,14 @@
                           "minLength": 1
                         }
                       },
+                      "provider": {
+                        "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                        "type": "string",
+                        "enum": [
+                          "github",
+                          "gitlab"
+                        ]
+                      },
                       "githubToken": {
                         "type": "string",
                         "minLength": 1
@@ -371512,6 +373299,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
                       "githubPatId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "gitlabTokenId": {
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -371763,6 +373555,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -371837,6 +373633,34 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -372068,6 +373892,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -372082,6 +373907,9 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "sourceOrigin",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "pendingSourceSha",
@@ -372362,6 +374190,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "provider": {
+                    "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "gitlab"
+                    ]
+                  },
                   "githubToken": {
                     "type": "string",
                     "minLength": 1
@@ -372372,6 +374208,11 @@
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -372402,6 +374243,17 @@
                   "type": "object",
                   "properties": {
                     "repo": {
+                      "type": "string"
+                    },
+                    "sourceProvider": {
+                      "type": "string",
+                      "enum": [
+                        "github",
+                        "gitlab"
+                      ]
+                    },
+                    "sourceOrigin": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "requestedRef": {
@@ -372458,6 +374310,8 @@
                   },
                   "required": [
                     "repo",
+                    "sourceProvider",
+                    "sourceOrigin",
                     "requestedRef",
                     "commitSha",
                     "subdir",
@@ -372726,6 +374580,14 @@
                   {
                     "type": "object",
                     "properties": {
+                      "provider": {
+                        "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                        "type": "string",
+                        "enum": [
+                          "github",
+                          "gitlab"
+                        ]
+                      },
                       "githubToken": {
                         "type": "string",
                         "minLength": 1
@@ -372736,6 +374598,11 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       },
                       "githubPatId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "gitlabTokenId": {
                         "type": "string",
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -372828,6 +374695,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -372902,6 +374773,34 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -373133,6 +375032,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -373147,6 +375047,9 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "sourceOrigin",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "pendingSourceSha",
@@ -373419,7 +375322,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Change or pause a Plugin GitHub sync schedule\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Change or pause a Plugin Git sync schedule\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -373523,6 +375426,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -373597,6 +375504,34 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -373828,6 +375763,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -373842,6 +375778,9 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "sourceOrigin",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "pendingSourceSha",
@@ -374114,7 +376053,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Queue an immediate Plugin GitHub source check\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Queue an immediate Plugin Git source check\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "parameters": [
           {
             "schema": {
@@ -374464,6 +376403,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -374538,6 +376481,34 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -374769,6 +376740,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -374783,6 +376755,9 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "sourceOrigin",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "pendingSourceSha",
@@ -375070,6 +377045,11 @@
                     "type": "string",
                     "maxLength": 1000
                   },
+                  "icon": {
+                    "description": "Emoji or base64 image data URL shown with the name.",
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "enabled": {
                     "type": "boolean"
                   },
@@ -375167,6 +377147,12 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "githubPatId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "gitlabTokenId": {
                             "nullable": true,
                             "type": "string",
                             "format": "uuid",
@@ -375299,6 +377285,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -375373,6 +377363,34 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "sourceOrigin": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -375604,6 +377622,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -375618,6 +377637,9 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "sourceOrigin",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "pendingSourceSha",
@@ -385819,12 +387841,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
       }
     },
     "/api/credentials/github/callback": {
@@ -386129,7 +388150,7 @@
             "credential:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials"
       }
     },
     "/api/credentials": {
@@ -386138,7 +388159,55 @@
         "tags": [
           "Credentials"
         ],
-        "description": "List reusable credentials available to platform integrations\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List reusable credentials available to platform integrations\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
+        "parameters": [
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -386159,7 +388228,8 @@
                         "enum": [
                           "secret",
                           "github_app",
-                          "github_app_user"
+                          "github_app_user",
+                          "gitlab_token"
                         ]
                       },
                       "githubUrl": {
@@ -386507,7 +388577,8 @@
                     "enum": [
                       "secret",
                       "github_app",
-                      "github_app_user"
+                      "github_app_user",
+                      "gitlab_token"
                     ]
                   },
                   "githubUrl": {
@@ -386530,6 +388601,10 @@
                     "nullable": true,
                     "type": "string"
                   },
+                  "gitlabUrl": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "description": {
                     "type": "string",
                     "maxLength": 1000
@@ -386544,6 +388619,137 @@
                   },
                   "allowOrganization": {
                     "type": "boolean"
+                  },
+                  "initialGrants": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 6,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions",
+                              "configure-deployment-spec"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "actions"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -386581,7 +388787,8 @@
                       "enum": [
                         "secret",
                         "github_app",
-                        "github_app_user"
+                        "github_app_user",
+                        "gitlab_token"
                       ]
                     },
                     "githubUrl": {
@@ -386601,6 +388808,10 @@
                       "type": "string"
                     },
                     "githubAppCredentialKey": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "gitlabUrl": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -386647,6 +388858,7 @@
                     "installationId",
                     "githubClientId",
                     "githubAppCredentialKey",
+                    "gitlabUrl",
                     "description",
                     "icon",
                     "allowPersonal",
@@ -386908,7 +389120,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "List resources using a saved credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List resources using a saved credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -387225,10 +389437,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -387238,7 +389449,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Update a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Update a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -387322,7 +389533,8 @@
                       "enum": [
                         "secret",
                         "github_app",
-                        "github_app_user"
+                        "github_app_user",
+                        "gitlab_token"
                       ]
                     },
                     "githubUrl": {
@@ -387342,6 +389554,10 @@
                       "type": "string"
                     },
                     "githubAppCredentialKey": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "gitlabUrl": {
                       "nullable": true,
                       "type": "string"
                     },
@@ -387388,6 +389604,7 @@
                     "installationId",
                     "githubClientId",
                     "githubAppCredentialKey",
+                    "gitlabUrl",
                     "description",
                     "icon",
                     "allowPersonal",
@@ -387636,10 +389853,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -387647,7 +389863,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Delete a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
+        "description": "Delete a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -387917,10 +390133,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -387930,7 +390145,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Connect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Connect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -388220,10 +390435,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -388231,7 +390445,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Disconnect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Disconnect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -388498,10 +390712,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -388511,7 +390724,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Connect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Connect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -388801,10 +391014,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -388812,7 +391024,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Disconnect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Disconnect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -389079,10 +391291,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -402254,6 +404465,10 @@
                           "description": {
                             "type": "string"
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "content": {
                             "type": "string"
                           },
@@ -402341,6 +404556,30 @@
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
                           "githubPatId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "sourceProvider": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "github",
+                                  "gitlab"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          "gitlabTokenId": {
                             "nullable": true,
                             "type": "string",
                             "format": "uuid",
@@ -402527,6 +404766,7 @@
                           "scope",
                           "name",
                           "description",
+                          "icon",
                           "content",
                           "digest",
                           "latestVersion",
@@ -402544,6 +404784,8 @@
                           "githubSyncRef",
                           "githubAppConfigId",
                           "githubPatId",
+                          "sourceProvider",
+                          "gitlabTokenId",
                           "lastSyncedAt",
                           "lastSyncError",
                           "usageCount",
@@ -402872,6 +405114,11 @@
                     "maxLength": 10485760,
                     "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
                   },
+                  "icon": {
+                    "description": "Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.",
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "files": {
                     "maxItems": 500,
                     "type": "array",
@@ -403123,6 +405370,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "content": {
                       "type": "string"
                     },
@@ -403210,6 +405461,30 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -403441,6 +405716,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -403458,6 +405734,8 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "usageCount",
@@ -403772,6 +406050,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "content": {
                       "type": "string"
                     },
@@ -403859,6 +406141,30 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -404090,6 +406396,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -404107,6 +406414,8 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "usageCount",
@@ -404385,6 +406694,11 @@
                     "maxLength": 10485760,
                     "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
                   },
+                  "icon": {
+                    "description": "Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.",
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "files": {
                     "maxItems": 500,
                     "type": "array",
@@ -404522,6 +406836,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "content": {
                       "type": "string"
                     },
@@ -404609,6 +406927,30 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -404840,6 +407182,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -404857,6 +407200,8 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "usageCount",
@@ -406498,7 +408843,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List distinct GitHub repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
+        "description": "List distinct GitHub and GitLab repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -407150,6 +409495,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "content": {
                       "type": "string"
                     },
@@ -407237,6 +409586,30 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -407468,6 +409841,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -407485,6 +409859,8 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "usageCount",
@@ -408077,6 +410453,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "content": {
                       "type": "string"
                     },
@@ -408164,6 +410544,30 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -408395,6 +410799,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -408412,6 +410817,8 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "usageCount",
@@ -408678,7 +411085,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Manage a GitHub-synced skill: change its pull frequency, trigger an immediate pull, or disconnect it from the GitHub source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Manage a Git-synced skill: change its pull frequency or its source (repository, branch, folder, credential), trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -408694,6 +411101,54 @@
                       "1h",
                       "1d"
                     ]
+                  },
+                  "source": {
+                    "description": "Pull the skill from another repository, branch, folder, or credential. It is fetched before anything changes, so a location without the skill is refused.",
+                    "type": "object",
+                    "properties": {
+                      "repoUrl": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                        "type": "string",
+                        "enum": [
+                          "github",
+                          "gitlab"
+                        ]
+                      },
+                      "githubToken": {
+                        "type": "string"
+                      },
+                      "githubAppConfigId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "githubPatId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "gitlabTokenId": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "skillPath": {
+                        "type": "string",
+                        "description": "The skill's folder from the repository root; empty when the skill is the repository."
+                      }
+                    },
+                    "required": [
+                      "repoUrl",
+                      "skillPath"
+                    ],
+                    "additionalProperties": false
                   },
                   "syncNow": {
                     "description": "Trigger an immediate pull from the source repo.",
@@ -408758,6 +411213,10 @@
                       "type": "string"
                     },
                     "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "content": {
@@ -408847,6 +411306,30 @@
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
                     "githubPatId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "sourceProvider": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "github",
+                            "gitlab"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "nullable": true,
+                          "enum": [
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "gitlabTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -409078,6 +411561,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -409095,6 +411579,8 @@
                     "githubSyncRef",
                     "githubAppConfigId",
                     "githubPatId",
+                    "sourceProvider",
+                    "gitlabTokenId",
                     "lastSyncedAt",
                     "lastSyncError",
                     "usageCount",
@@ -409963,7 +412449,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Discover skills in a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
+        "description": "Discover skills in a GitHub or GitLab repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -409978,6 +412464,14 @@
                   "path": {
                     "type": "string"
                   },
+                  "provider": {
+                    "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "gitlab"
+                    ]
+                  },
                   "githubToken": {
                     "type": "string"
                   },
@@ -409987,6 +412481,11 @@
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -410316,7 +412815,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Fetch a single skill's manifest and files from GitHub without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
+        "description": "Fetch a single skill's manifest and files from GitHub or GitLab without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -410331,6 +412830,14 @@
                   "path": {
                     "type": "string"
                   },
+                  "provider": {
+                    "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "gitlab"
+                    ]
+                  },
                   "githubToken": {
                     "type": "string"
                   },
@@ -410340,6 +412847,11 @@
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -410715,7 +413227,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Import selected skills from a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:create`: Create new agent skills",
+        "description": "Import selected skills from a GitHub or GitLab repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:create`: Create new agent skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -410730,6 +413242,14 @@
                   "path": {
                     "type": "string"
                   },
+                  "provider": {
+                    "description": "Git host of a public repository; defaults to github. Ignored when a credential is given.",
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "gitlab"
+                    ]
+                  },
                   "githubToken": {
                     "type": "string"
                   },
@@ -410739,6 +413259,11 @@
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
                   "githubPatId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "gitlabTokenId": {
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -410950,6 +413475,10 @@
                           "description": {
                             "type": "string"
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "content": {
                             "type": "string"
                           },
@@ -411042,6 +413571,30 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "sourceProvider": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "github",
+                                  "gitlab"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          "gitlabTokenId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
                           "lastSyncedAt": {
                             "nullable": true,
                             "type": "string",
@@ -411088,6 +413641,7 @@
                           "scope",
                           "name",
                           "description",
+                          "icon",
                           "content",
                           "digest",
                           "latestVersion",
@@ -411105,6 +413659,8 @@
                           "githubSyncRef",
                           "githubAppConfigId",
                           "githubPatId",
+                          "sourceProvider",
+                          "gitlabTokenId",
                           "lastSyncedAt",
                           "lastSyncError",
                           "usageCount",
@@ -441325,6 +443881,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -441714,7 +444271,7 @@
         "tags": [
           "Permissions"
         ],
-        "description": "The signed-in actor's explicit scoped capabilities. Used for discovery; each operation still authorizes its target.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "The signed-in actor's explicit scoped capabilities. Single-object grants that a `*` grant for the same resource and action covers are left out. Used for discovery; each operation still authorizes its target.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -441751,6 +444308,7 @@
                           "llmOauthClient",
                           "environment",
                           "serviceAccount",
+                          "credential",
                           "scheduledTask"
                         ]
                       },
@@ -442074,6 +444632,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -442509,6 +445068,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -442568,6 +445128,7 @@
                         "llmOauthClient",
                         "environment",
                         "serviceAccount",
+                        "credential",
                         "scheduledTask"
                       ]
                     },
@@ -443456,6 +446017,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -443515,6 +446077,7 @@
                         "llmOauthClient",
                         "environment",
                         "serviceAccount",
+                        "credential",
                         "scheduledTask"
                       ]
                     },

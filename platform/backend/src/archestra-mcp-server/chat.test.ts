@@ -317,7 +317,7 @@ describe("chat tool execution", () => {
     ]);
   });
 
-  test("ask_user with allowText returns what the user typed instead of a pick", async () => {
+  test("ask_user always offers a typed answer and returns it instead of a pick", async () => {
     const asked: Array<{ requestedSchema?: unknown }> = [];
     mockContext = {
       ...mockContext,
@@ -343,7 +343,6 @@ describe("chat tool execution", () => {
       {
         question: "Which owner and repository?",
         options: [{ label: "My account" }, { label: "The organization" }],
-        allowText: true,
       },
       mockContext,
     );
@@ -352,7 +351,10 @@ describe("chat tool execution", () => {
     expect(asked[0]?.requestedSchema).toMatchObject({
       properties: {
         choice: { enum: ["My account", "The organization"] },
-        [ASK_USER_OTHER_ANSWER_FIELD]: { type: "string", title: "Other" },
+        [ASK_USER_OTHER_ANSWER_FIELD]: {
+          type: "string",
+          title: "Type something",
+        },
       },
       required: [],
     });
@@ -360,36 +362,6 @@ describe("chat tool execution", () => {
       action: "accept",
       selected: [],
       text: "acme/openappa-policy",
-    });
-  });
-
-  test("ask_user without allowText ignores typed text", async () => {
-    mockContext = {
-      ...mockContext,
-      elicitation: {
-        elicit: async () => {
-          return {
-            status: "answered" as const,
-            result: {
-              action: "accept" as const,
-              content: {
-                choice: "Yes",
-                [ASK_USER_OTHER_ANSWER_FIELD]: "something else",
-              },
-            },
-          };
-        },
-      },
-    };
-
-    const result = await executeArchestraTool(
-      TOOL_ASK_USER_FULL_NAME,
-      { question: "Continue?", options: [{ label: "Yes" }, { label: "No" }] },
-      mockContext,
-    );
-    expect(result.structuredContent).toEqual({
-      action: "accept",
-      selected: ["Yes"],
     });
   });
 

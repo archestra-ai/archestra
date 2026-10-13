@@ -22,7 +22,7 @@ describe("McpElicitationCard", () => {
     vi.useRealTimers();
   });
 
-  it("shows a single question with only Submit, no header, tabs or navigation", async () => {
+  it("answers a single question on the click itself, with no Submit, header, tabs or navigation", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
 
@@ -54,13 +54,13 @@ describe("McpElicitationCard", () => {
       screen.queryByText("1 of 1", { exact: false }),
     ).not.toBeInTheDocument();
 
-    const submit = screen.getByRole("button", { name: "Submit" });
-    expect(submit).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     await user.click(
-      screen.getByRole("radio", { name: "Accept for this session" }),
+      screen.getByRole("button", { name: "Accept for this session" }),
     );
-    expect(submit).toBeEnabled();
-    await user.click(submit);
 
     expect(onRespond).toHaveBeenCalledTimes(1);
     expect(onRespond).toHaveBeenCalledWith({
@@ -178,8 +178,13 @@ describe("McpElicitationCard", () => {
       screen.queryByTestId("mcp-elicitation-submit"),
     ).not.toBeInTheDocument();
 
-    // Picking a single-choice option answers the tab and moves on.
+    // Picking an option only selects it; Next moves on.
     await user.click(screen.getByRole("radio", { name: "My team" }));
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveAttribute(
         "aria-selected",
@@ -241,7 +246,10 @@ describe("McpElicitationCard", () => {
             title: "Choice",
             enum: ["my-user", "my-org"],
           },
-          [ASK_USER_OTHER_ANSWER_FIELD]: { type: "string", title: "Other" },
+          [ASK_USER_OTHER_ANSWER_FIELD]: {
+            type: "string",
+            title: "Type something",
+          },
         },
         required: [],
       },
@@ -264,10 +272,12 @@ describe("McpElicitationCard", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("textbox", { name: "Other" }),
+      screen.queryByRole("textbox", { name: "Type something" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("radio", { name: "Other" }));
-    expect(screen.getByRole("textbox", { name: "Other" })).toHaveFocus();
+    await user.click(screen.getByRole("radio", { name: "Type something" }));
+    expect(
+      screen.getByRole("textbox", { name: "Type something" }),
+    ).toHaveFocus();
     await user.keyboard("acme");
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
@@ -318,8 +328,11 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "my-org" }));
-    await user.click(screen.getByRole("radio", { name: "Other" }));
-    await user.type(screen.getByRole("textbox", { name: "Other" }), "a");
+    await user.click(screen.getByRole("radio", { name: "Type something" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Type something" }),
+      "a",
+    );
     await new Promise((resolve) => setTimeout(resolve, 400));
 
     expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
@@ -347,14 +360,20 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("checkbox", { name: "Run tests" }));
-    await user.click(screen.getByRole("checkbox", { name: "Other" }));
-    await user.type(screen.getByRole("textbox", { name: "Other" }), "lint");
-    await user.click(screen.getByRole("checkbox", { name: "Other" }));
+    await user.click(screen.getByRole("checkbox", { name: "Type something" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Type something" }),
+      "lint",
+    );
+    await user.click(screen.getByRole("checkbox", { name: "Type something" }));
     expect(
-      screen.queryByRole("textbox", { name: "Other" }),
+      screen.queryByRole("textbox", { name: "Type something" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("checkbox", { name: "Other" }));
-    await user.type(screen.getByRole("textbox", { name: "Other" }), "build");
+    await user.click(screen.getByRole("checkbox", { name: "Type something" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Type something" }),
+      "build",
+    );
     await user.click(screen.getByRole("button", { name: "Submit" }));
 
     expect(onRespond).toHaveBeenCalledExactlyOnceWith({
@@ -389,7 +408,7 @@ describe("McpElicitationCard", () => {
     expect(isChoiceElicitationRequest(request)).toBe(false);
   });
 
-  it("clears a typed Other answer when an option is picked instead", async () => {
+  it("leaves a lone question's typed answer to the chat composer", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
     render(
@@ -407,7 +426,7 @@ describe("McpElicitationCard", () => {
                 choice: { type: "string", enum: ["my-user", "my-org"] },
                 [ASK_USER_OTHER_ANSWER_FIELD]: {
                   type: "string",
-                  title: "Other",
+                  title: "Type something",
                 },
               },
               required: [],
@@ -418,16 +437,11 @@ describe("McpElicitationCard", () => {
       />,
     );
 
-    const submit = screen.getByRole("button", { name: "Submit" });
-    expect(submit).toBeDisabled();
-    await user.click(screen.getByRole("radio", { name: "Other" }));
-    expect(submit).toBeDisabled();
-    await user.type(screen.getByRole("textbox", { name: "Other" }), "acme");
-    await user.click(screen.getByRole("radio", { name: "my-org" }));
     expect(
-      screen.queryByRole("textbox", { name: "Other" }),
+      screen.queryByRole("button", { name: /Type something/ }),
     ).not.toBeInTheDocument();
-    await user.click(submit);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "my-org" }));
 
     expect(onRespond).toHaveBeenCalledExactlyOnceWith({
       id: "q-owner",
@@ -461,7 +475,7 @@ describe("McpElicitationCard", () => {
     expect(footerButtons()).toEqual(["Back", "Submit"]);
   });
 
-  it("moves on when the already-picked option is clicked again", async () => {
+  it("stays on the tab when an option is picked, until Next is clicked", async () => {
     const user = userEvent.setup();
 
     render(
@@ -475,19 +489,14 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "A" }));
-    await waitFor(() =>
-      expect(screen.getByText("Second?")).toBeInTheDocument(),
-    );
-    await user.click(screen.getByTestId("mcp-elicitation-back"));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.getByText("First?")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "A" })).toBeChecked();
 
-    // Confirming the answer it already has moves on, like the first pick.
-    await user.click(screen.getByRole("radio", { name: "A" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveAttribute(
-        "aria-selected",
-        "true",
-      ),
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
+    expect(screen.getByTestId("mcp-elicitation-tab-1")).toHaveAttribute(
+      "aria-selected",
+      "true",
     );
   });
 
@@ -589,6 +598,7 @@ describe("McpElicitationCard", () => {
     await user.click(screen.getByTestId("mcp-elicitation-back"));
     expect(screen.getByText("First?")).toBeInTheDocument();
     await user.click(screen.getByRole("radio", { name: "A" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByTestId("mcp-elicitation-submit")).toBeEnabled(),
     );
@@ -695,6 +705,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "B" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Second?")).toBeInTheDocument(),
     );
@@ -742,6 +753,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "A" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Second?")).toBeInTheDocument(),
     );
@@ -752,10 +764,12 @@ describe("McpElicitationCard", () => {
     rerender(<McpElicitationCard requests={[second]} onRespond={onRespond} />);
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "D" })).toBeChecked();
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled(),
-    );
+    await user.click(screen.getByRole("button", { name: "D" }));
+    expect(onRespond).toHaveBeenLastCalledWith({
+      id: "q-2",
+      action: "accept",
+      content: { choice: "D" },
+    });
   });
 
   it("keeps one group container through acknowledgement and the final summary", async () => {
@@ -873,6 +887,7 @@ describe("McpElicitationCard", () => {
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: "Only me" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() => {
       expect(
         screen.getByRole("radio", { name: "Staging" }),
@@ -913,6 +928,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Blue" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Pick a fruit")).toBeInTheDocument(),
     );
@@ -996,7 +1012,7 @@ describe("McpElicitationCard", () => {
       />,
     );
 
-    expect(screen.getByRole("radio", { name: "Blue" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Blue" })).toBeEnabled();
 
     rerender(
       <McpElicitationCard
@@ -1074,6 +1090,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "Blue" }));
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
     await waitFor(() =>
       expect(screen.getByText("Pick a fruit")).toBeInTheDocument(),
     );
@@ -1096,8 +1113,7 @@ describe("McpElicitationCard", () => {
       />,
     );
 
-    expect(screen.getByRole("radio", { name: "Apple" })).toBeChecked();
-    await user.click(screen.getByRole("button", { name: "Submit" }));
+    await user.click(screen.getByRole("button", { name: "Apple" }));
     expect(onRespond).toHaveBeenLastCalledWith({
       id: "q-2",
       action: "accept",
@@ -1118,7 +1134,10 @@ function withOther(
       type: "object",
       properties: {
         ...schema.properties,
-        [ASK_USER_OTHER_ANSWER_FIELD]: { type: "string", title: "Other" },
+        [ASK_USER_OTHER_ANSWER_FIELD]: {
+          type: "string",
+          title: "Type something",
+        },
       },
       required: [],
     },

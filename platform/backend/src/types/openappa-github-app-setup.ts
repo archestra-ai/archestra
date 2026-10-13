@@ -5,9 +5,10 @@ import { PolicyTestDirectorySchema } from "./openappa-policy-tests";
 const GithubRepositorySchema = z
   .string()
   .trim()
-  .max(140)
+  .max(400)
   .regex(
-    /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9]))*\/[a-zA-Z0-9_.-]+$/,
+    // GitHub owner/name, or a GitLab project under nested groups.
+    /^[a-zA-Z0-9][a-zA-Z0-9_.-]*(?:\/[a-zA-Z0-9_.-]+)+$/,
     "Use owner/name",
   );
 

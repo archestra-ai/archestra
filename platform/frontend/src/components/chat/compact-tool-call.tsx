@@ -10,7 +10,7 @@ import {
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon, WebhookIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Tool,
   ToolContent,
@@ -56,6 +56,7 @@ import {
   useElapsedSince,
 } from "./mcp-task-status";
 import {
+  getOpenAppaSaveResult,
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
@@ -379,9 +380,35 @@ export function CompactToolGroup({
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const { isToolName, getToolShortName } = useArchestraMcpIdentity();
   const { isAppOpen, toggleAppOpen, portalTarget } = useApps();
+  // A saved guardrails change opens its circle once, so its result shows
+  // without a click; a circle the user picked is left alone.
+  const userToggledRef = useRef(false);
+  const autoOpenedRef = useRef(new Set<string>());
+  const savedChangeKey = canExpandToolCalls
+    ? tools.findLast(
+        (entry) =>
+          entry.kind !== "hook" &&
+          !entry.errorText &&
+          !autoOpenedRef.current.has(entry.key) &&
+          getOpenAppaSaveResult({
+            shortName: getToolShortName(
+              resolveRunToolTargetName(entry.part, entry.toolName, {
+                getToolShortName,
+              }),
+            ),
+            output: entry.toolResultPart?.output ?? entry.part.output,
+          }) !== null,
+      )?.key
+    : undefined;
+  useEffect(() => {
+    if (!savedChangeKey) return;
+    autoOpenedRef.current.add(savedChangeKey);
+    if (!userToggledRef.current) setExpandedKey(savedChangeKey);
+  }, [savedChangeKey]);
 
   const handleToggle = (key: string) => {
     if (!canExpandToolCalls) return;
+    userToggledRef.current = true;
     // Expanding a tool card collapses any inline app open in this row — the
     // mirror of an app pill collapsing an expanded tool card, so only one
     // thing unfolds under the row at a time. Panel-hosted apps are untouched
@@ -559,29 +586,6 @@ export function CompactToolGroup({
         const name = resolveRunToolTargetName(entry.part, entry.toolName, {
           getToolShortName,
         });
-        if (getToolShortName(name) === "publish_openappa_validation_change") {
-          if (entry.part.state !== "output-available" && !entry.toolResultPart)
-            return null;
-          return (
-            <OpenAppaValidationCompletion
-              key={entry.key}
-              output={entry.toolResultPart?.output ?? entry.part.output}
-            />
-          );
-        }
-        if (getToolShortName(name) !== "update_guardrails_policy") return null;
-        return (
-          <OpenAppaPolicyCompletion
-            key={entry.key}
-            output={entry.toolResultPart?.output ?? entry.part.output}
-          />
-        );
-      })}
-      {tools.map((entry) => {
-        if (entry.kind === "hook" || entry.errorText) return null;
-        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
-          getToolShortName,
-        });
         if (
           getToolShortName(name) !== "request_runtime_credential_setup" ||
           (entry.part.state !== "output-available" && !entry.toolResultPart)
@@ -706,7 +710,15 @@ function ExpandedToolCard({
     "preview_openappa_validation_change",
     "publish_openappa_validation_change",
   ].includes(getToolShortName(resolvedPolicyToolName) ?? "");
+  // A save reports its result in one line, not the diff it saved.
+  const saveResult = errorText
+    ? null
+    : getOpenAppaSaveResult({
+        shortName: getToolShortName(resolvedPolicyToolName),
+        output: policyOutput,
+      });
   const policyChange =
+    !saveResult &&
     (validationChange ||
       ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
         policyToolName,
@@ -771,7 +783,7 @@ function ExpandedToolCard({
             isCancelling={isCancellingTask}
           />
         ) : null}
-        {hasInput && !policyChange ? (
+        {hasInput && !policyChange && !saveResult ? (
           <ToolInput input={input} defaultOpen />
         ) : null}
         {nestedToolCalls}
@@ -816,20 +828,28 @@ function ExpandedToolCard({
             validationChange={validationChange}
           />
         )}
-        {toolResultPart && !policyChange && (
+        {saveResult === "validation" ? (
+          <OpenAppaValidationCompletion output={policyOutput} />
+        ) : saveResult === "policy" ? (
+          <OpenAppaPolicyCompletion output={policyOutput} />
+        ) : null}
+        {toolResultPart && !policyChange && !saveResult && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}
             output={toolResultPart.output}
             errorText={errorText}
           />
         )}
-        {!toolResultPart && !policyChange && Boolean(part.output) && (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={part.output}
-            errorText={errorText}
-          />
-        )}
+        {!toolResultPart &&
+          !policyChange &&
+          !saveResult &&
+          Boolean(part.output) && (
+            <ToolOutput
+              label={errorText ? "Error" : "Result"}
+              output={part.output}
+              errorText={errorText}
+            />
+          )}
       </ToolContent>
     </Tool>
   );

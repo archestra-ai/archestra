@@ -662,7 +662,11 @@ class ToolModel {
    * Get all tools for an agent.
    * All tools are linked via the agent_tools junction table.
    */
-  static async getToolsByAgent(agentId: string): Promise<AssignedTool[]> {
+  static async getToolsByAgent(
+    agentId: string,
+    /** Only tools from this catalog item. */
+    catalogId?: string,
+  ): Promise<AssignedTool[]> {
     const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
@@ -686,6 +690,7 @@ class ToolModel {
           ne(schema.toolsTable.name, brandedKnowledgeToolName),
           // Hide tools whose catalog was soft-deleted (retained binding).
           notDeleted(schema.toolsTable),
+          catalogId ? eq(schema.toolsTable.catalogId, catalogId) : undefined,
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));

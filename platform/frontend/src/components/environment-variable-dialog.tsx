@@ -5,7 +5,7 @@ import {
   EnvironmentVariableSchema,
   parseVaultReference,
 } from "@archestra/shared";
-import { CheckCircle2, Key, Plus } from "lucide-react";
+import { CheckCircle2, Key, Lock, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ExternalSecretReferenceDialog } from "@/components/external-secret-reference-dialog";
@@ -54,6 +54,8 @@ export interface CredentialBindingOption {
   sourceLabel?: string;
   defaultKey: string;
   allowedScopes: readonly FieldScopeValue[];
+  /** False when the caller may not use it, so it cannot be newly attached. */
+  canAttach?: boolean;
 }
 
 export type EnvironmentVariableDialogMode = "add" | "edit";
@@ -505,28 +507,47 @@ function CredentialBindingEditor({
           position="popper"
           className="w-[var(--radix-select-trigger-width)]"
         >
-          {options.map((option) => (
-            <SelectItem
-              key={option.id}
-              value={option.id}
-              description={
-                <span className="line-clamp-2 whitespace-normal">
-                  <span>
-                    {option.sourceLabel ??
-                      (option.allowedScopes.includes("static")
-                        ? "Organization credential"
-                        : "Personal credential")}
-                  </span>
-                  {option.description && (
-                    <span>{` · ${option.description}`}</span>
-                  )}
-                </span>
-              }
-              icon={<RuntimeCredentialIcon icon={option.icon ?? null} />}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
+          {options.map((option) => {
+            // Keeping a credential already attached is fine; adding one the
+            // caller cannot use is refused on save.
+            const blocked =
+              option.canAttach === false && option.id !== draft.credentialId;
+            return (
+              <SelectItem
+                key={option.id}
+                value={option.id}
+                disabled={blocked}
+                icon={
+                  blocked ? (
+                    <Lock className="size-4" />
+                  ) : (
+                    <RuntimeCredentialIcon icon={option.icon ?? null} />
+                  )
+                }
+                description={
+                  blocked ? (
+                    <span className="line-clamp-2 whitespace-normal">
+                      You don't have access. Ask an admin to share it with you.
+                    </span>
+                  ) : (
+                    <span className="line-clamp-2 whitespace-normal">
+                      <span>
+                        {option.sourceLabel ??
+                          (option.allowedScopes.includes("static")
+                            ? "Organization credential"
+                            : "Personal credential")}
+                      </span>
+                      {option.description && (
+                        <span>{` · ${option.description}`}</span>
+                      )}
+                    </span>
+                  )
+                }
+              >
+                {option.label}
+              </SelectItem>
+            );
+          })}
           <SelectItem
             value="one-off"
             description={

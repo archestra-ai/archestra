@@ -70,7 +70,7 @@ test.each([
       <GithubManagedPolicyNotice validationDirectory={validationDirectory} />
     </QueryClientProvider>,
   );
-  expect(await screen.findByText("GitHub sync failed")).toBeVisible();
+  expect(await screen.findByText("Git sync failed")).toBeVisible();
   expect(
     screen.getByRole("link", { name: "Review sync settings" }),
   ).toHaveAttribute("href", "/settings/guardrails");
@@ -85,7 +85,7 @@ test.each([
   lastSyncError = null;
   await client.invalidateQueries();
   await waitFor(() =>
-    expect(screen.queryByText("GitHub sync failed")).not.toBeInTheDocument(),
+    expect(screen.queryByText("Git sync failed")).not.toBeInTheDocument(),
   );
   expect(
     screen.queryByRole("link", { name: "Review sync settings" }),
@@ -131,7 +131,7 @@ test("a pending setup pull request asks for the merge on the configured GitHub h
   // A failed sync outranks the merge request: the error is what to act on.
   lastSyncError = "GitHub returned HTTP 403";
   await client.invalidateQueries();
-  expect(await screen.findByText("GitHub sync failed")).toBeVisible();
+  expect(await screen.findByText("Git sync failed")).toBeVisible();
   expect(
     screen.queryByRole("link", { name: "Review and merge PR" }),
   ).not.toBeInTheDocument();

@@ -640,12 +640,12 @@ export function AppSidebar() {
               />
               {/* Keep sessions scrollable while the navigation and community
                   links stay in place. The fade hints at more sessions below. */}
-              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
+              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-4 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
                 {/* group-data-[collapsible=icon]:overflow-hidden keeps this
                     scroller out of the tab order while collapsed — Chrome makes
                     scrollable containers keyboard-focusable, which otherwise
                     leaves an invisible tab stop on the icon rail (WCAG 2.4.3). */}
-                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
+                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden pb-4 [scrollbar-gutter:stable] scrollbar-sidebar">
                   <ChatSidebarSection slots={15} flat fadeIn={chatListFadeIn} />
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -835,11 +835,8 @@ function SidebarSearchItem() {
         className="text-muted-foreground"
         onClick={() => {
           if (isMobile) setOpenMobile(false);
-          window.dispatchEvent(
-            new CustomEvent("open-conversation-search", {
-              detail: { recentChatsView: true },
-            }),
-          );
+          // The same palette as Cmd+K, which the row advertises.
+          window.dispatchEvent(new CustomEvent("open-conversation-search"));
         }}
       >
         <Search />

@@ -8,6 +8,7 @@ import { GatewayServersSummary } from "./gateway-servers-summary";
 
 vi.mock("@/lib/agent.query", () => ({ useProfile: vi.fn() }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: vi.fn(),
   useAllCatalogTools: () => ({ data: undefined }),
   groupCatalogTools: () => new Map(),

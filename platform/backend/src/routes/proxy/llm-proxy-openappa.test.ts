@@ -46,7 +46,10 @@ import {
 import { mintDelegationMarker } from "@/openappa/delegation";
 import {
   consumeHitlRuling,
+  getHitlAskUserArguments,
+  getHitlReview,
   getHitlReviewResult,
+  peekHitlDecision,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments } from "@/openappa/notice";
@@ -512,9 +515,35 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         offerId,
       }),
     ).toBeUndefined();
+    const closure =
+      outcome === "review_unanswered" ? "unanswered" : "cancelled";
+    expect(await consumeHitlRuling({ session: runtimeSession, offerId })).toBe(
+      "none",
+    );
     expect(
-      await consumeHitlRuling({ session: runtimeSession, offerId }),
+      await peekHitlDecision({ session: runtimeSession, offerId }),
+    ).toEqual({ ruling: "none", closure });
+    expect(
+      await getHitlReview({ session: runtimeSession, offerId }),
     ).toBeUndefined();
+    expect(await consumeHitlRuling({ session: runtimeSession, offerId })).toBe(
+      "none",
+    );
+    expect(
+      await stageHitlReview({
+        session: runtimeSession,
+        review: { offerId, text: "Review this call" },
+        callId: "late-restage",
+      }),
+    ).toEqual({ status: "none", closure });
+    expect(
+      await getHitlAskUserArguments({
+        session: runtimeSession,
+        offerIds: [offerId],
+      }),
+    ).toBeUndefined();
+    expect(executeNative).not.toHaveBeenCalled();
+    expect(extractMcpHumanRuling(rawResult)).toBeNull();
     providerCalls = [];
     const nextBody = {
       ...body,
@@ -535,8 +564,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(visible.instruction).toContain(
       outcome === "review_unanswered"
         ? "expired without an answer"
-        : "cancelled the approval review",
+        : "canceled the approval review",
     );
+    expect(visible.instruction).toContain("no ruling was granted");
     expect(String(resultMessage?.content)).not.toMatch(
       /withheld|cannot be reached|Authorized|Denied:/,
     );

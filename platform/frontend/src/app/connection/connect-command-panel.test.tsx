@@ -1748,10 +1748,13 @@ describe("ConnectCommandPanel", () => {
         { key: "ArrowDown" },
       );
       expect(screen.getByRole("option", { name: "Anthropic" })).toBeVisible();
-      expect(
-        screen.getByRole("option", { name: "Microsoft 365 Copilot" }),
-      ).toBeVisible();
-      for (const name of ["GitHub Copilot", "OpenAI", "OpenAI-compatible"]) {
+      for (const name of [
+        "GitHub Copilot",
+        "OpenAI",
+        "OpenAI-compatible",
+        // Its proxy adapter rejects tool calls, which OpenCode always sends.
+        "Microsoft 365 Copilot",
+      ]) {
         expect(screen.queryByRole("option", { name })).not.toBeInTheDocument();
       }
     });

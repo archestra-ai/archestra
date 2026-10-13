@@ -1,4 +1,6 @@
 import {
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
+  BUILT_IN_AGENT_IDS,
   E2eTestId,
   getAgentCatalogImages,
   type SupportedProvider,
@@ -547,12 +549,15 @@ vi.mock("@/components/system-prompt-editor", () => ({
   SystemPromptEditor: ({
     value,
     onChange,
+    headerExtra,
   }: {
     value?: string;
     onChange?: (value: string) => void;
+    headerExtra?: React.ReactNode;
   }) => (
     <div>
       Mock Instruction Editor
+      {headerExtra}
       <textarea
         aria-label="Instructions"
         value={value ?? ""}
@@ -2739,6 +2744,71 @@ describe("AgentForm save payload and failure handling", () => {
    * is what gates the button, and it only stays true while the awaited
    * mutation is still in flight.
    */
+
+  describe("a built-in agent", () => {
+    const builtInName = BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION;
+    const defaultPrompt = BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[builtInName];
+    const builtInAgent = {
+      ...baseAgent,
+      builtIn: true,
+      builtInAgentConfig: { name: builtInName },
+      systemPrompt: "Customized title prompt",
+    };
+
+    const renderBuiltIn = () =>
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={builtInAgent}
+          sections={["configuration"]}
+        />,
+      );
+
+    beforeEach(() => {
+      useProfileMock.mockReturnValue({ data: builtInAgent, refetch: vi.fn() });
+      updateAgent.mockResolvedValue(builtInAgent);
+    });
+
+    it("saves an edited prompt", async () => {
+      const user = userEvent.setup();
+      renderBuiltIn();
+
+      const editor = await screen.findByLabelText("Instructions");
+      await user.clear(editor);
+      await user.type(editor, "Write short titles");
+      await user.click(screen.getByRole("button", { name: /update/i }));
+
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody()).toMatchObject({
+        builtInAgentConfig: { name: builtInName },
+        systemPrompt: "Write short titles",
+      });
+    });
+
+    it("saves the shipped prompt after Reset to default", async () => {
+      const user = userEvent.setup();
+      renderBuiltIn();
+
+      await user.click(
+        await screen.findByRole("button", { name: /reset to default/i }),
+      );
+      expect(screen.getByLabelText("Instructions")).toHaveValue(defaultPrompt);
+      expect(
+        screen.getByRole("button", { name: /reset to default/i }),
+      ).toBeDisabled();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().systemPrompt).toBe(defaultPrompt.trim());
+    });
+
+    it("offers no labels", async () => {
+      renderBuiltIn();
+
+      await screen.findByLabelText("Instructions");
+      expect(screen.queryByText("Labels", { exact: true })).toBeNull();
+    });
+  });
   it("keeps Update disabled while a save is in flight", async () => {
     const user = userEvent.setup();
     let releaseSave: (agent: unknown) => void = () => {};

@@ -418,6 +418,7 @@ test.each([
     coverage: "  - attention: human-approval",
     expected:
       "Approve send_report?\n\nto  finance@example.com\n\nApprove lets this exact call run. Deny keeps it blocked.",
+    expectedPreview: "Approve send_report?",
   },
   {
     case: "more than the person's attention",
@@ -425,10 +426,13 @@ test.each([
       "  - attention: human-approval\n  - the readers must be the public audience",
     expected:
       "Approve send_report?\n\nto  finance@example.com\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
+    expectedPreview:
+      "Approve send_report?\n\nApproving also accepts:\n  - the readers must be the public audience",
   },
-])("asks forms about the call itself when the ruling covers $case", async ({
+])("asks about the call itself when the ruling covers $case", async ({
   coverage,
   expected,
+  expectedPreview,
 }) => {
   const active = session("form-question");
   await stageHitlReview({
@@ -446,6 +450,57 @@ test.each([
     offerIds: ["offer-1"],
   });
   expect(question?.question).toBe(expected);
+  expect(question?.previewQuestion).toBe(expectedPreview);
+});
+
+test("shows a command once although the proxy reviews it under both spellings", async () => {
+  const active = session("command-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview("  - the readers must be the public audience"),
+      tool: "Bash",
+      // The runtime returns the arguments as the proxy evaluated them.
+      arguments: JSON.stringify({
+        cmd: "git push -u origin feature",
+        command: "git push -u origin feature",
+        description: "Push the branch",
+      }),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  const argumentLines =
+    "command      git push -u origin feature\ndescription  Push the branch";
+  expect(question?.options[0].preview).toBe(`Approve\n\n${argumentLines}`);
+  expect(question?.question).toBe(
+    `Approve Bash?\n\n${argumentLines}\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.`,
+  );
+});
+
+test("keeps both arguments when a command tool's cmd and command differ", async () => {
+  const active = session("distinct-command-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "exec_command",
+      arguments: JSON.stringify({ cmd: "ls", command: "rm -rf build" }),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.options[0].preview).toBe(
+    "Approve\n\ncmd      ls\ncommand  rm -rf build",
+  );
 });
 
 test("keeps the full review text when its coverage is in an unknown shape", async () => {

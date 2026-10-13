@@ -4,6 +4,7 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { sessionCallerId } from "./actor";
+import { isCommandExecutionTool } from "./command-normalization";
 import {
   formatArgumentLines,
   parseReviewedArguments,
@@ -218,14 +219,21 @@ export async function getHitlAskUserArguments(params: {
   }
   // Hosts with option previews (Claude Code) ask the short question and show
   // the reviewed arguments beside each choice. Forms and other hosts ask the
-  // same call in one text.
-  const args = parseReviewedArguments(review.arguments) ?? {};
+  // same call in one text. Both keep what an approval accepts besides the call.
+  const args = withoutCommandAlias(
+    review.tool,
+    parseReviewedArguments(review.arguments) ?? {},
+  );
   const argumentLines = formatArgumentLines(args, REVIEW_PREVIEW_WIDTH);
+  const accepted = acceptedCoverage(review.text);
   return {
     question:
-      approvalQuestion({ review, tool: review.tool, args }) ??
+      approvalQuestion({ tool: review.tool, args, accepted }) ??
       formatReviewQuestion(review.text),
-    previewQuestion: `Approve ${reviewedToolLabel(review.tool)}?`,
+    previewQuestion: [
+      `Approve ${reviewedToolLabel(review.tool)}?`,
+      ...acceptedBlock(accepted),
+    ].join("\n\n"),
     header: "Approval",
     options: options.map((option) => ({
       ...option,
@@ -387,27 +395,51 @@ export function hitlRulingFromLabels(
  * and nothing it covers is left out.
  */
 function approvalQuestion(params: {
-  review: PendingHitlReview;
   tool: string;
   args: Record<string, unknown>;
+  accepted: string[] | undefined;
 }): string | undefined {
-  const coverage = reviewCoverage(params.review.text);
-  if (!coverage) return undefined;
-  const accepted = coverage.filter((line) => !line.startsWith("attention: "));
+  if (!params.accepted) return undefined;
   const argumentLines = formatArgumentLines(params.args);
   return [
     `Approve ${reviewedToolLabel(params.tool)}?`,
     ...(argumentLines ? [argumentLines] : []),
-    ...(accepted.length > 0
-      ? [
-          [
-            "Approving also accepts:",
-            ...accepted.map((line) => `  - ${line}`),
-          ].join("\n"),
-        ]
-      : []),
+    ...acceptedBlock(params.accepted),
     "Approve lets this exact call run. Deny keeps it blocked.",
   ].join("\n\n");
+}
+
+/**
+ * What an approval accepts besides the person's attention, or undefined when
+ * the review text's coverage is not in the shape read here.
+ */
+function acceptedCoverage(text: string): string[] | undefined {
+  return reviewCoverage(text)?.filter(
+    (line) => !line.startsWith("attention: "),
+  );
+}
+
+function acceptedBlock(accepted: string[] | undefined): string[] {
+  if (!accepted || accepted.length === 0) return [];
+  return [
+    ["Approving also accepts:", ...accepted.map((line) => `  - ${line}`)].join(
+      "\n",
+    ),
+  ];
+}
+
+/**
+ * The proxy evaluates command tools with `command` and `cmd` set to one value,
+ * so policies match either spelling. The reviewer sees that value once.
+ */
+function withoutCommandAlias(
+  tool: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!isCommandExecutionTool(tool) || args.cmd !== args.command) return args;
+  return Object.fromEntries(
+    Object.entries(args).filter(([name]) => name !== "cmd"),
+  );
 }
 
 /** The runtime's "What this ruling would cover" lines, or undefined. */

@@ -100,6 +100,32 @@ describe("Claude Code approval answers", () => {
     ).toBe("deny");
   });
 
+  test("reads the answer to a short question that lists what an approval accepts", () => {
+    const question =
+      "Approve send_report?\n\nApproving also accepts:\n  - the readers must be the public audience";
+    const asked = {
+      ...review("send the Q3 report"),
+      previewQuestion: question,
+    };
+
+    expect(
+      new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(asked).questions[0]
+        .question,
+    ).toBe(question);
+    expect(
+      ruling(
+        {
+          content: claudeCodeAnswer({
+            question,
+            label: "Approve",
+            preview: "Approve\n\nnote  send the Q3 report",
+          }),
+        },
+        asked,
+      ),
+    ).toBe("approve");
+  });
+
   test("reads the answer when the preview comes back changed", () => {
     // Claude Code returns the preview with each tab expanded to spaces.
     expect(

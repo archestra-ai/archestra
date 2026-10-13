@@ -873,7 +873,7 @@ export function ConnectCommandPanel({
             {allPrimaryProviders ? (
               <span>
                 {providers.length
-                  ? `Create a personal virtual key for all primary model providers you can access, and make their models available in ${client.label}.`
+                  ? `Create a personal virtual key for all primary model providers you can access, and make their models available in ${client.label}. Providers you sign in to from ${client.label} itself, such as a ChatGPT or Claude subscription, go through the proxy too.`
                   : "No usable primary model providers are available. Mark a compatible model provider key as primary."}
               </span>
             ) : effectiveProxyAuth === "provider-key" ? (

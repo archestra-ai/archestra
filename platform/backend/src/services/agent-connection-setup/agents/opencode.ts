@@ -63,6 +63,17 @@ function opencodeProviderTarget(
   };
 }
 
+/**
+ * Primary-providers mode: the Archestra providers authenticate with the
+ * virtual key, so the passthrough key goes only on the user's own sign-ins
+ * (see `routeHeaders`); every route carries the client id.
+ */
+function opencodePrimaryHeaders(
+  client: OpenCodeFamilyClient,
+): Record<string, string> {
+  return { [EXTERNAL_AGENT_ID_HEADER]: client.clientId };
+}
+
 /** Headers the client sends on every proxied request (attribution). */
 function opencodeProxyHeaders(
   client: OpenCodeFamilyClient,
@@ -240,6 +251,7 @@ function opencodeRoutingPluginBash(params: {
   client: OpenCodeFamilyClient;
   routes: Record<string, string>;
   headers: Record<string, string>;
+  routeHeaders?: Record<string, Record<string, string>>;
 }): string {
   const encoded = Buffer.from(
     renderOpenCodeRoutingPlugin(params),
@@ -284,6 +296,7 @@ function opencodeRoutingPluginPowerShell(params: {
   client: OpenCodeFamilyClient;
   routes: Record<string, string>;
   headers: Record<string, string>;
+  routeHeaders?: Record<string, Record<string, string>>;
 }): string {
   const encoded = Buffer.from(
     renderOpenCodeRoutingPlugin(params),
@@ -351,12 +364,18 @@ ${opencodeOwnedMergeBash(
 
   if (ctx.proxy) {
     if (ctx.proxy.primaryProviders) {
-      const { routes, providers, nativeProviders, appName } =
-        openCodePrimaryConfig(ctx.proxy, ctx.appName);
+      const {
+        routes,
+        routeHeaders,
+        providers,
+        nativeProviders,
+        nativeRoutes,
+        appName,
+      } = openCodePrimaryConfig(ctx.proxy, ctx.appName);
       sections.push(`say "Configuring model providers in ${client.label}"
 command -v node >/dev/null 2>&1 || { err "Node.js is required to configure model providers"; exit 1; }
 ARCHESTRA_OC_NOTICES="$(ARCHESTRA_OC_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" ARCHESTRA_OC_KEY=${sh(ctx.proxy.virtualKey ?? "")} ARCHESTRA_OC_PRIMARY=stdin node -e ${sh(openCodePrimaryConfigScript(client))} <<'ARCHESTRA_PRIMARY_CATALOG'
-${JSON.stringify({ providers, nativeProviders, appName })}
+${JSON.stringify({ providers, nativeProviders, nativeRoutes, appName })}
 ARCHESTRA_PRIMARY_CATALOG
 )"
 [ -z "$ARCHESTRA_OC_NOTICES" ] || printf '%s\\n' "$ARCHESTRA_OC_NOTICES" | while IFS= read -r archNotice; do
@@ -365,7 +384,7 @@ ARCHESTRA_PRIMARY_CATALOG
     warn:*) warn "\${archNotice#warn:}" ;;
   esac
 done
-${opencodeRoutingPluginBash({ client, routes, headers: opencodeProxyHeaders(client, ctx.proxy) })}`);
+${opencodeRoutingPluginBash({ client, routes, routeHeaders, headers: opencodePrimaryHeaders(client) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const routes = Object.fromEntries(
         OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
@@ -482,13 +501,19 @@ finally { Remove-Item Env:ARCHESTRA_OC_PRIMARY -ErrorAction SilentlyContinue }
   }
   if (ctx.proxy) {
     if (ctx.proxy.primaryProviders) {
-      const { routes, providers, nativeProviders, appName } =
-        openCodePrimaryConfig(ctx.proxy, ctx.appName);
+      const {
+        routes,
+        routeHeaders,
+        providers,
+        nativeProviders,
+        nativeRoutes,
+        appName,
+      } = openCodePrimaryConfig(ctx.proxy, ctx.appName);
       sections.push(`Say ${psq(`Configuring model providers in ${client.label}`)}
 $env:ARCHESTRA_OC_MAJOR = [string]$archOcMajor
 $env:ARCHESTRA_OC_KEY = ${psq(ctx.proxy.virtualKey ?? "")}
 $env:ARCHESTRA_OC_PRIMARY = 'stdin'
-$archPrimaryCatalog = ${psq(JSON.stringify({ providers, nativeProviders, appName }))}
+$archPrimaryCatalog = ${psq(JSON.stringify({ providers, nativeProviders, nativeRoutes, appName }))}
 $archPrimaryScript = @'
 ${openCodePrimaryConfigScript(client)}
 '@
@@ -507,7 +532,7 @@ finally {
   Remove-Item -Force -ErrorAction SilentlyContinue $archPrimaryFile
   Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHESTRA_OC_MAJOR -ErrorAction SilentlyContinue
 }
-${opencodeRoutingPluginPowerShell({ client, routes, headers: opencodeProxyHeaders(client, ctx.proxy) })}`);
+${opencodeRoutingPluginPowerShell({ client, routes, routeHeaders, headers: opencodePrimaryHeaders(client) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const headers = opencodeProxyHeaders(client, ctx.proxy);
       const legacyTarget = opencodeProviderTarget(client, ctx);

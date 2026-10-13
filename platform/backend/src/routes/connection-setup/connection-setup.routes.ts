@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
+  isIntegrationHidden,
   legacyMcpClientServerNames,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   OPENCODE_PRIMARY_PROVIDERS,
@@ -37,6 +38,7 @@ import {
   SkillModel,
   SkillShareLinkModel,
   TeamModel,
+  UserModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
@@ -1142,6 +1144,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
         throw GONE();
       }
       virtualKeyName = virtualKey.name;
+      if (
+        isOpenCodeFamilyClient(setup.clientId) &&
+        setup.proxyAuth === "primary-providers"
+      ) {
+        passthroughVirtualKey = await openCodeFamilyPassthroughKey(setup);
+      }
     } else if (setup.proxyAuth === "provider-key" && setup.virtualApiKeyId) {
       // Passthrough attribution key (provider-key mode reuses virtualApiKeyId).
       // Best-effort: a revoked key just drops the header — never throw GONE(),
@@ -1197,6 +1205,11 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
               userTeamIds: await TeamModel.getUserTeamIds(setup.userId),
               virtualApiKeyId: setup.virtualApiKeyId,
             })
+          : undefined,
+      passthroughProviders:
+        isOpenCodeFamilyClient(setup.clientId) &&
+        setup.proxyAuth === "primary-providers"
+          ? await openCodeFamilyPassthroughProviders(setup.organizationId)
           : undefined,
       authMode: setup.proxyAuth,
       provider: setup.provider,
@@ -1688,4 +1701,43 @@ async function getCursorModels(params: {
     ids: models.map(buildRoutableModelId),
     defaultId: defaultModel ? buildRoutableModelId(defaultModel) : null,
   };
+}
+
+/**
+ * In primary-providers mode the user's own sign-ins in an OpenCode-family
+ * client route through the proxy next to the Archestra providers; this key
+ * attributes those requests to the user. Best effort: without the permission
+ * to mint one they still pass, unattributed.
+ */
+async function openCodeFamilyPassthroughKey(
+  setup: ConnectionSetup,
+): Promise<string | null> {
+  const canCreateVirtualKey = await userHasPermission(
+    setup.userId,
+    setup.organizationId,
+    "llmVirtualKey",
+    "create",
+  );
+  if (!canCreateVirtualKey) return null;
+  const user = await UserModel.getById(setup.userId);
+  if (!user) return null;
+  const passthroughKeyId = await ensureConnectionPassthroughKey({
+    organizationId: setup.organizationId,
+    userId: setup.userId,
+    userEmail: user.email,
+  });
+  return readVirtualKeyValue(passthroughKeyId);
+}
+
+/** The native providers an admin has not turned off for the organization. */
+async function openCodeFamilyPassthroughProviders(
+  organizationId: string,
+): Promise<SupportedProvider[]> {
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(organizationId);
+  return OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
+    (route) => route.provider,
+  ).filter(
+    (provider) => !isIntegrationHidden(modelProviderOverrides, provider),
+  );
 }

@@ -500,3 +500,85 @@ test("Kilo Code gets the same providers in its own config, key file and state", 
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+test("routes the user's own sign-ins next to the Archestra providers and keeps a native pin", () => {
+  const home = mkdtempSync(path.join(tmpdir(), "opencode-native-"));
+  const configPath = path.join(home, ".config/opencode/opencode.json");
+  const proxy: SetupScriptProxySection = {
+    authMode: "primary-providers",
+    provider: "anthropic",
+    providerLabel: "Anthropic",
+    baseUrl: "https://proxy.example/v1",
+    url: "https://proxy.example/v1/anthropic",
+    proxyName: "proxy",
+    virtualKey: "arch_test",
+    virtualKeyName: "Primary providers",
+    passthroughVirtualKey: "arch_passthrough",
+    passthroughProviders: ["anthropic", "openai", "gemini"],
+    model: null,
+    primaryProviders: [
+      {
+        provider: "anthropic",
+        name: "Anthropic",
+        models: [
+          { id: "claude-test", name: "Claude", context: null, output: null },
+        ],
+      },
+    ],
+  };
+  const payload = openCodePrimaryConfig(proxy, "Acme");
+  expect(payload.routes).toEqual({
+    "archestra-anthropic": "https://proxy.example/v1/model-router",
+    anthropic: "https://proxy.example/v1/anthropic/v1",
+    google: "https://proxy.example/v1/gemini/v1beta",
+    openai: "https://proxy.example/v1/openai",
+  });
+  // The passthrough key goes only on the user's own sign-ins: the Archestra
+  // providers already authenticate with the virtual key.
+  expect(payload.routeHeaders).toEqual({
+    anthropic: { "X-Archestra-Virtual-Key": "arch_passthrough" },
+    google: { "X-Archestra-Virtual-Key": "arch_passthrough" },
+    openai: { "X-Archestra-Virtual-Key": "arch_passthrough" },
+  });
+  expect(payload.nativeRoutes).toEqual(["anthropic", "google", "openai"]);
+  expect(
+    openCodePrimaryConfig({ ...proxy, passthroughVirtualKey: null }, "Acme")
+      .routeHeaders,
+  ).toEqual({});
+  try {
+    mkdirSync(path.dirname(configPath), { recursive: true });
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        model: "openai/gpt-own",
+        small_model: "anthropic/claude-test",
+      }),
+    );
+    const output = execFileSync(
+      process.execPath,
+      ["-e", OPENCODE_PRIMARY_CONFIG_SCRIPT],
+      {
+        input: JSON.stringify(payload),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          HOME: home,
+          XDG_CONFIG_HOME: path.join(home, ".config"),
+          ARCHESTRA_OC_MAJOR: "1",
+          ARCHESTRA_OC_KEY: "arch_test",
+          ARCHESTRA_OC_PRIMARY: "stdin",
+        },
+      },
+    );
+    expect(output).toBe("");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    // A pin on a provider the user signs in to stays, even when an Archestra
+    // provider offers the same model.
+    expect(config.model).toBe("openai/gpt-own");
+    expect(config.small_model).toBe("anthropic/claude-test");
+    // The file lists the Archestra providers; the plugin lists the rest.
+    expect(config.enabled_providers).toEqual(["archestra-anthropic"]);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

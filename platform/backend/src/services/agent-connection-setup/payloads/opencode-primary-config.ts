@@ -1,8 +1,12 @@
+import { VIRTUAL_KEY_HEADER } from "@archestra/shared/consts";
 import {
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   type SupportedProvider,
 } from "@archestra/shared/model-constants";
-import { OPENCODE_PASSTHROUGH_PROVIDER_ROUTES } from "@archestra/shared/opencode-provider-routes";
+import {
+  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  openCodePassthroughBaseUrl,
+} from "@archestra/shared/opencode-provider-routes";
 import type { OpenCodeFamilyClient } from "../opencode-family";
 import type { SetupScriptProxySection } from "../types";
 
@@ -42,7 +46,34 @@ export function openCodePrimaryConfig(
         [route.openCodeProviderId, `archestra-${route.provider}`] as const,
     ).filter(([, id]) => id in providers),
   );
-  return { routes, providers, nativeProviders, appName };
+  // The user's own sign-ins route through the proxy too, with their own
+  // credential; the passthrough key attributes those requests to the user.
+  const passthroughRoutes = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.filter(
+    (route) => proxy.passthroughProviders?.includes(route.provider),
+  );
+  const routeHeaders: Record<string, Record<string, string>> = {};
+  for (const route of passthroughRoutes) {
+    routes[route.openCodeProviderId] = openCodePassthroughBaseUrl(
+      proxy.baseUrl,
+      route,
+    );
+    if (proxy.passthroughVirtualKey) {
+      routeHeaders[route.openCodeProviderId] = {
+        [VIRTUAL_KEY_HEADER]: proxy.passthroughVirtualKey,
+      };
+    }
+  }
+  const nativeRoutes = passthroughRoutes.map(
+    (route) => route.openCodeProviderId,
+  );
+  return {
+    routes,
+    routeHeaders,
+    providers,
+    nativeProviders,
+    nativeRoutes,
+    appName,
+  };
 }
 
 /** Runs in Node on both platforms; restores only the fields this mode owns. */
@@ -96,17 +127,18 @@ if (input) {
   }
   const ids = Object.keys(input.providers);
   const inCatalog = (providerId, modelId) => Boolean(input.providers[providerId]?.models.some(model => model.id === modelId));
-  // Never add a pin. Keep one that is already served here, move a native one
-  // to the catalog provider with the same model id, and drop the rest so
-  // OpenCode falls back to the first provider below instead of an account it
-  // cannot use.
+  // Never add a pin. Keep one that is already served here or on a native
+  // provider the user signs in to, move a native one to the catalog provider
+  // with the same model id, and drop the rest so OpenCode falls back to the
+  // first provider below instead of an account it cannot use.
   const notices = [];
+  const nativeRoutes = Array.isArray(input.nativeRoutes) ? input.nativeRoutes : [];
   for (const field of ["model", "small_model"]) {
     const pin = config[field];
     if (typeof pin !== "string") continue;
     const slash = pin.indexOf("/");
     const providerId = pin.slice(0, slash), modelId = pin.slice(slash + 1);
-    if (slash > 0 && inCatalog(providerId, modelId)) continue;
+    if (slash > 0 && (inCatalog(providerId, modelId) || nativeRoutes.includes(providerId))) continue;
     const twin = slash > 0 ? input.nativeProviders?.[providerId] : undefined;
     if (twin && inCatalog(twin, modelId)) {
       config[field] = twin + "/" + modelId;

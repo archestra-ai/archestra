@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { OPENCODE_AGENT_HEADER } from "@archestra/shared/consts";
 import { describe, expect, test, vi } from "vitest";
+import { KILO_CLIENT } from "../opencode-family";
 import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
@@ -73,8 +74,16 @@ describe("OpenCode routing plugin", () => {
       };
 
       await hooks.config(config);
+      // zhipuai has no credential: listed so the user can connect it from the
+      // client, but not configured or routed until they do.
       expect(config).toMatchObject({
-        enabled_providers: ["anthropic", "google", "openai", "cerebras"],
+        enabled_providers: [
+          "anthropic",
+          "google",
+          "openai",
+          "cerebras",
+          "zhipuai",
+        ],
         disabled_providers: ["direct"],
         small_model: "google/gemini-model",
         provider: {
@@ -252,6 +261,142 @@ describe("OpenCode routing plugin", () => {
       delete (globalThis as unknown as Record<PropertyKey, unknown>)[
         Symbol.for("archestra.opencode.llmProxyFetchGuard")
       ];
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("lists every routed provider, keys only the user's own sign-ins, and sees a sign-in made after load", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-plugin-native-"));
+    const file = path.join(root, "archestra-llm-proxy.mjs");
+    const dataDir = path.join(root, "data");
+    const routes = {
+      "archestra-anthropic": "https://example.com/v1/model-router",
+      anthropic: "https://example.com/v1/anthropic/v1",
+      openai: "https://example.com/v1/openai",
+    };
+    const headers = { "X-Archestra-Agent-Id": "kilo" };
+    const routeHeaders = {
+      anthropic: { "X-Archestra-Virtual-Key": "arch_passthroughcafe" },
+      openai: { "X-Archestra-Virtual-Key": "arch_passthroughcafe" },
+    };
+    const originalFetch = globalThis.fetch;
+    const originalDataHome = process.env.XDG_DATA_HOME;
+    const outboundFetch = vi.fn().mockResolvedValue(new Response("ok"));
+    const globals = globalThis as unknown as Record<PropertyKey, unknown>;
+    try {
+      // The plugin keeps the first fetch it saw; forget an earlier test's.
+      delete globals[Symbol.for("archestra.opencode.directFetch")];
+      globalThis.fetch = outboundFetch;
+      process.env.XDG_DATA_HOME = dataDir;
+      await mkdir(path.join(dataDir, "kilo"), { recursive: true });
+      await writeFile(
+        file,
+        renderOpenCodeRoutingPlugin({
+          routes,
+          headers,
+          routeHeaders,
+          client: KILO_CLIENT,
+        }),
+      );
+      const module = await import(
+        `${pathToFileURL(file).href}?t=${Date.now()}`
+      );
+      const hooks = await module.ArchestraLlmProxy();
+      const config: {
+        enabled_providers?: string[];
+        provider: Record<string, { options: Record<string, unknown> }>;
+      } = {
+        provider: {
+          "archestra-anthropic": {
+            options: {
+              apiKey: "{file:~/.archestra/kilo-primary.key}",
+              baseURL: routes["archestra-anthropic"],
+            },
+          },
+        },
+      };
+      await hooks.config(config);
+      // Every routed provider is listed so the user can connect one from the
+      // client; only the one with a credential is configured.
+      expect(config.enabled_providers).toEqual([
+        "archestra-anthropic",
+        "anthropic",
+        "openai",
+      ]);
+      expect(config.provider).not.toHaveProperty("anthropic");
+      expect(config.provider).not.toHaveProperty("openai");
+      expect(config.provider["archestra-anthropic"].options.headers).toEqual(
+        headers,
+      );
+      const archestraOutput: { headers: Record<string, string> } = {
+        headers: {},
+      };
+      await hooks["chat.headers"](
+        {
+          sessionID: "ses_1",
+          agent: "build",
+          provider: {
+            id: "archestra-anthropic",
+            options: { baseURL: routes["archestra-anthropic"] },
+          },
+        },
+        archestraOutput,
+      );
+      expect(archestraOutput.headers).not.toHaveProperty(
+        "X-Archestra-Virtual-Key",
+      );
+      await expect(
+        hooks["chat.params"]({ provider: { id: "openai", options: {} } }),
+      ).rejects.toThrow("is not supported");
+
+      // The user signs in to ChatGPT from the client after the plugin loaded.
+      await writeFile(
+        path.join(dataDir, "kilo", "auth.json"),
+        JSON.stringify({
+          openai: {
+            type: "oauth",
+            access: "openai-access",
+            refresh: "openai-refresh",
+            accountId: "acct",
+          },
+        }),
+      );
+      await globalThis.fetch(
+        new Request("https://chatgpt.com/backend-api/codex/responses", {
+          method: "POST",
+          headers: { Authorization: "Bearer openai-access" },
+          body: "{}",
+        }),
+      );
+      const bridged = outboundFetch.mock.calls.at(-1)?.[0] as Request;
+      expect(bridged.url).toBe(`${routes.openai}/responses`);
+      expect(bridged.headers.get("x-archestra-virtual-key")).toBe(
+        "arch_passthroughcafe",
+      );
+      expect(bridged.headers.get("x-archestra-agent-id")).toBe("kilo");
+      expect(bridged.headers.get("chatgpt-account-id")).toBe("acct");
+
+      // The next config pass routes the sign-in and keys it.
+      const reloaded: typeof config = { provider: { ...config.provider } };
+      await hooks.config(reloaded);
+      expect(reloaded.provider.openai.options).toEqual({
+        baseURL: "https://api.openai.com/v1",
+        headers: { ...headers, ...routeHeaders.openai },
+      });
+      await expect(
+        hooks["chat.params"]({
+          provider: {
+            id: "openai",
+            options: { baseURL: "https://api.openai.com/v1" },
+          },
+        }),
+      ).resolves.toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalDataHome === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = originalDataHome;
+      delete globals[Symbol.for("archestra.opencode.llmProxyFetchGuard")];
+      delete globals[Symbol.for("archestra.opencode.directFetch")];
       await rm(root, { recursive: true, force: true });
     }
   });

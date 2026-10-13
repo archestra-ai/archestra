@@ -171,6 +171,14 @@ packageExtensions:
       zod: ^4.3.4
 
 patchedDependencies:
+  # Grok can think, start its answer, and think again in one response. The chat
+  # model named every reasoning run `reasoning-<completion id>` and sent the
+  # second run's deltas to the part it had already closed, so chat stopped with
+  # "Received reasoning-delta for missing reasoning part". The patch opens a new
+  # part for each run of reasoning or text. Pinned by
+  # backend/src/clients/xai-interleaved-reasoning.unit.test.ts; drop it after an
+  # upgrade passes that test unpatched.
+  '@ai-sdk/xai@3.0.67': patches/@ai-sdk__xai@3.0.67.patch
   # OAuth-only SSO (GitHub) has userinfo but no JWKS/discovery document.
   # Skip runtime discovery only with explicit non-OIDC scopes and complete
   # OAuth endpoints; retain OIDC discovery and URL/SSRF validation.

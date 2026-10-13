@@ -6,6 +6,7 @@ import {
   configureAppaGithubSync,
   createAppaGithubRepository,
   getAppaGithubSync,
+  getHeldAppaGithubPull,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import { constructResponseSchema, DeleteObjectResponseSchema } from "@/types";
@@ -27,6 +28,7 @@ import {
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
   CreateAppaGithubRepositorySchema,
+  HeldPullDetailsSchema,
 } from "@/types/openappa-github-sync";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -265,6 +267,20 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         }),
       );
     },
+  );
+  app.get(
+    "/api/openappa/github-sync/held",
+    {
+      schema: {
+        operationId: RouteId.GetHeldAppaGithubPull,
+        description:
+          "Itemize the pull waiting for approval: the credentials it gives batteries and the batteries it removes",
+        tags: ["OpenAPPA"],
+        response: constructResponseSchema(HeldPullDetailsSchema.nullable()),
+      },
+    },
+    async (request, reply) =>
+      reply.send(await getHeldAppaGithubPull(request.organizationId)),
   );
   app.post(
     "/api/openappa/github-sync/accept-held",

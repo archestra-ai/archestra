@@ -103,6 +103,7 @@ import {
   BATTERY_STATUS_GROUPS,
   type BatteryStatusGroup,
 } from "./battery-status";
+import { DialogSection } from "./dialog-section";
 import {
   GithubManagedPolicyNotice,
   githubPolicyFileUrl,
@@ -729,33 +730,6 @@ function BatteryDialog({
         />
       )}
     </StandardDialog>
-  );
-}
-
-function DialogSection({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description?: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section aria-label={title} className="space-y-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h3 className="text-sm font-medium">{title}</h3>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
-          )}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
   );
 }
 

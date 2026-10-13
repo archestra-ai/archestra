@@ -90062,6 +90062,99 @@ export type GetAppaGithubAppRepositoriesResponses = {
 
 export type GetAppaGithubAppRepositoriesResponse = GetAppaGithubAppRepositoriesResponses[keyof GetAppaGithubAppRepositoriesResponses];
 
+export type GetHeldAppaGithubPullData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/held';
+};
+
+export type GetHeldAppaGithubPullErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetHeldAppaGithubPullError = GetHeldAppaGithubPullErrors[keyof GetHeldAppaGithubPullErrors];
+
+export type GetHeldAppaGithubPullResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        sourceCommit: string | null;
+        reasons: Array<'drops_batteries' | 'changes_credentials'>;
+        grants: Array<{
+            battery: string;
+            variable: string;
+            key: string;
+        }>;
+        droppedBatteries: Array<string>;
+    } | null;
+};
+
+export type GetHeldAppaGithubPullResponse = GetHeldAppaGithubPullResponses[keyof GetHeldAppaGithubPullResponses];
+
 export type AcceptHeldAppaGithubPullData = {
     body?: never;
     path?: never;

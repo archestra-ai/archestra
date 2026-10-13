@@ -398,6 +398,29 @@ export async function updateAppaGithubSync(params: {
  * cannot give itself: `drops_batteries` takes the permissions a policy write
  * takes, `changes_credentials` the one a credential grant takes.
  */
+export async function getHeldAppaGithubPull(organizationId: string) {
+  assertEnabled();
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!row?.heldContent) return null;
+  const local = await guardrailsPolicyService.get(organizationId);
+  const changes = heldChanges({
+    ...(await resolvePair({
+      organizationId,
+      local: local.content,
+      pulled: row.heldContent,
+    })),
+    pendingPublish:
+      row.declarationsPendingPublish ||
+      row.heldReasons.includes("drops_batteries"),
+  });
+  return {
+    sourceCommit: row.heldSourceCommit,
+    reasons: row.heldReasons,
+    grants: changes.granted,
+    droppedBatteries: changes.dropped,
+  };
+}
+
 export async function acceptHeldAppaGithubPull(params: {
   organizationId: string;
   userId: string;

@@ -2,6 +2,7 @@
 
 import { GitPullRequestArrow } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   InlineNotice,
@@ -9,8 +10,8 @@ import {
   InlineNoticeText,
 } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAcceptHeldPull } from "@/lib/openappa-batteries.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { HeldPullReviewDialog } from "./held-pull-review-dialog";
 
 /**
  * A pulled policy that changes what the repository can't authorize on its own
@@ -28,7 +29,7 @@ export function HeldPullNotice({
   // Names the host when the viewer may read sync settings; reading the policy is enough for the rest.
   const { data } = useAppaGithubSync();
   const host = data ? "GitHub" : "the repository";
-  const accept = useAcceptHeldPull();
+  const [reviewing, setReviewing] = useState(false);
   // Approving performs what the pull was held for: rebinding a credential hands
   // its value to other code, dropping a battery is a policy edit.
   const { data: canEditPolicy } = useHasPermissions({
@@ -64,16 +65,19 @@ export function HeldPullNotice({
           )}
         </InlineNoticeText>
       </InlineNoticeBody>
-      {mayApprove && (
-        <Button
-          size="xs"
-          variant="outline"
-          className="ml-auto shrink-0"
-          disabled={accept.isPending}
-          onClick={() => accept.mutate()}
-        >
-          <span>Approve</span>
-        </Button>
+      <Button
+        size="xs"
+        variant="outline"
+        className="ml-auto shrink-0"
+        onClick={() => setReviewing(true)}
+      >
+        <span>Review</span>
+      </Button>
+      {reviewing && (
+        <HeldPullReviewDialog
+          mayApprove={mayApprove}
+          onClose={() => setReviewing(false)}
+        />
       )}
     </InlineNotice>
   );

@@ -92,6 +92,35 @@ afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
+/** The held pull itemized, and the reads its review dialog names things with. */
+function serveHeld(credentials: Array<{ key: string; name: string }> = []) {
+  server.use(
+    http.get(`${url}/held`, () =>
+      HttpResponse.json({
+        sourceCommit: "c".repeat(40),
+        reasons: ["changes_credentials"],
+        grants: [
+          {
+            battery: "github",
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+          },
+        ],
+        droppedBatteries: [],
+      }),
+    ),
+    http.get("http://localhost:9000/api/openappa/batteries", () =>
+      HttpResponse.json([]),
+    ),
+    http.get("http://localhost:9000/api/internal_mcp_catalog", () =>
+      HttpResponse.json([]),
+    ),
+    http.get("http://localhost:9000/api/credentials", () =>
+      HttpResponse.json(credentials),
+    ),
+  );
+}
+
 function show(content = <AppaGithubSyncPanel />) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -129,7 +158,7 @@ test("syncs on demand and shows the server's failure while retaining the source"
   expect(toast.success).not.toHaveBeenCalled();
 });
 
-test("a held pull waits for approval, not a failure, and approves in place", async () => {
+test("a held pull waits for approval, not a failure, and is approved from its review", async () => {
   const message =
     "The repository's policy gives the github battery the github-token credential.";
   state = {
@@ -166,7 +195,23 @@ test("a held pull waits for approval, not a failure, and approves in place", asy
     "href",
     "/openappa/batteries",
   );
-  fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+  serveHeld();
+  fireEvent.click(screen.getByRole("button", { name: "Review" }));
+  const dialog = await screen.findByRole("dialog");
+  // Each grant reads as the battery, the credential it gets and the variable it fills.
+  expect(await within(dialog).findByText("github")).toBeVisible();
+  expect(within(dialog).getByText("github-token")).toBeVisible();
+  expect(within(dialog).getByText("APPA_PROVIDER_GITHUB_TOKEN")).toBeVisible();
+  // No credential holds that key yet, and the dialog says so.
+  expect(await within(dialog).findByLabelText("Not saved yet")).toBeVisible();
+  // Declining happens in the repository; the dialog points there.
+  expect(
+    within(dialog).getByRole("link", { name: /Edit appa\.toml in GitHub/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/blob/main/appa.toml",
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "Approve" }));
   await waitFor(() => expect(accepted).toBe(true));
   expect(await screen.findByText("Connected")).toBeVisible();
 });
@@ -187,13 +232,20 @@ test("only someone who may bind credentials can approve a credential change", as
         "The repository's policy gives the github battery the github-token credential.",
     },
   };
+  serveHeld();
   show();
+  fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+  const dialog = await screen.findByRole("dialog");
+  // Without access to the credentials list, the key itself names it.
+  expect(await within(dialog).findByText("github-token")).toBeVisible();
   expect(
-    await screen.findByText("A change from GitHub needs approval"),
+    within(dialog).getByRole("button", { name: "Approve" }),
+  ).toBeDisabled();
+  expect(
+    within(dialog).getByText(
+      "Approving takes permission to update guardrails and credentials.",
+    ),
   ).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "Approve" }),
-  ).not.toBeInTheDocument();
 });
 
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {

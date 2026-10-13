@@ -103,8 +103,12 @@ def probe(token, headers, model):
 def pinned_revision(clone_url):
     # Desktop auto-installs a marketplace only when it is pinned to a commit.
     url = clone_url.rstrip('/') + '/info/refs?service=git-upload-pack'
-    with urllib.request.urlopen(url, timeout=60) as response:
-        refs = response.read().decode('utf-8', 'replace')
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            refs = response.read().decode('utf-8', 'replace')
+    except (urllib.error.URLError, OSError):
+        raise RuntimeError('Could not reach the shared marketplace. Check your connection to Archestra, then run setup again. '
+                           'Desktop configuration was not changed.') from None
     head = re.search(r'[0-9a-f]{4}([0-9a-f]{40}) HEAD(?:\x00|\n)', refs)
     if not head:
         raise RuntimeError('The shared marketplace did not provide a valid Git revision. Desktop configuration was not changed.')

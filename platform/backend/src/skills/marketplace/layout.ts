@@ -130,7 +130,10 @@ export function computeLayout(
         description: plugin.description,
         version,
       }),
-      name: desktopEntryNames.get(plugin.pluginSlug) ?? pluginName,
+      name:
+        plugin.clientType === "claude-desktop"
+          ? (desktopEntryNames.get(plugin.pluginSlug) ?? pluginName)
+          : pluginName,
     };
     // Claude Desktop reads the same `.claude-plugin` marketplace as Claude
     // Code. A share link carries one client's plugins, so the two never mix.

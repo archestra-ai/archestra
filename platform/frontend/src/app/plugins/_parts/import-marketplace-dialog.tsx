@@ -924,9 +924,15 @@ function marketplaceEntryKey(
  * so each Claude Code entry also gets a Claude Desktop row.
  */
 function importRows(entries: readonly MarketplaceEntry[]): ImportRow[] {
+  const desktopNames = new Set(
+    entries
+      .filter((entry) => entry.clientType === "claude-desktop")
+      .map((entry) => entry.name),
+  );
   return entries.flatMap((entry) => {
     const row = { ...entry, key: `${entry.clientType}:${entry.name}` };
-    return entry.clientType === "claude-code"
+    // A marketplace's own Desktop entry wins over the copy made from Claude Code.
+    return entry.clientType === "claude-code" && !desktopNames.has(entry.name)
       ? [
           row,
           {

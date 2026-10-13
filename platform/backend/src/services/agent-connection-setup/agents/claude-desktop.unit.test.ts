@@ -208,3 +208,98 @@ with patch('sys.platform', target_os), patch.dict(os.environ, {'LOCALAPPDATA': s
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test.each([
+  { reachable: true },
+  { reachable: false },
+])("Desktop pins the shared marketplace for auto-install (reachable=$reachable)", async ({
+  reachable,
+}) => {
+  const directory = await mkdtemp(path.join(tmpdir(), "desktop-installer-"));
+  const context: SetupScriptContext = {
+    clientId: "claude-desktop",
+    platform: "macos",
+    appName: "Test Platform",
+    proxy: {
+      authMode: "virtual-key",
+      provider: "anthropic",
+      providerLabel: "Anthropic",
+      baseUrl: "https://proxy.example/v1",
+      url: "https://proxy.example/v1/anthropic",
+      proxyName: "default",
+      virtualKey: "archestra-test-key",
+      virtualKeyName: null,
+      passthroughVirtualKey: null,
+      model: null,
+    },
+    mcp: null,
+    skills: {
+      cloneUrl: "https://proxy.example/skills/m/token/repo.git",
+      marketplaceName: "acme-plugins",
+      hasSkills: false,
+      pluginNames: ["productivity"],
+    },
+  };
+  const script = renderSetupScript(context)
+    .split("python3 <<'ARCHESTRA_DESKTOP_PY'\n")[1]
+    .split("\nARCHESTRA_DESKTOP_PY")[0];
+  try {
+    await writeFile(path.join(directory, "installer.py"), script);
+    await writeFile(
+      path.join(directory, "test.py"),
+      `
+import io, json, os, pathlib, runpy, subprocess, urllib.error
+from unittest.mock import patch
+root = pathlib.Path(__file__).parent
+home = root / 'home'
+(home / 'Applications/Claude.app').mkdir(parents=True)
+library = home / 'Library/Application Support/Claude-3p/configLibrary'
+library.mkdir(parents=True)
+original = {'appliedId': 'previous', 'entries': [{'id': 'previous', 'name': 'Existing profile'}]}
+(library / '_meta.json').write_text(json.dumps(original))
+revision = 'a' * 40
+calls = []
+def native(args, **kwargs):
+    calls.append(args)
+    status = (0 if sum(call[0] == 'pgrep' for call in calls) == 1 else 1) if args[0] == 'pgrep' else 0
+    return subprocess.CompletedProcess(args, status, stdout='')
+def network(request, **kwargs):
+    url = request if isinstance(request, str) else request.full_url
+    if url.endswith('/info/refs?service=git-upload-pack'):
+        assert url == 'https://proxy.example/skills/m/token/repo.git/info/refs?service=git-upload-pack'
+        if not ${reachable ? "True" : "False"}:
+            raise urllib.error.URLError('connection refused')
+        return io.BytesIO(('001e# service=git-upload-pack\\n0000' + '0048' + revision + ' HEAD\\x00side-band-64k\\n0000').encode())
+    return io.StringIO(json.dumps({'type':'message','content':[{'type':'text','text':'OK'}]}))
+with patch('sys.platform', 'darwin'), patch('subprocess.Popen') as desktop_process, patch('time.sleep'), patch('pathlib.Path.home', return_value=home), patch('subprocess.run', side_effect=native), patch('urllib.request.urlopen', side_effect=network):
+    desktop_process.return_value.wait.return_value = 0
+    if ${reachable ? "True" : "False"}:
+        runpy.run_path(str(root / 'installer.py'))
+        metadata = json.loads((library / '_meta.json').read_text())
+        profile = json.loads((library / (metadata['appliedId'] + '.json')).read_text())
+        assert profile['allowedPluginMarketplaces'] == [{
+            'source': 'git', 'url': 'https://proxy.example/skills/m/token/repo.git',
+            'expectedName': 'acme-plugins', 'ref': revision, 'installationPreference': 'auto_install'}]
+    else:
+        try:
+            runpy.run_path(str(root / 'installer.py'))
+            raise AssertionError('Expected an unreachable marketplace to fail setup')
+        except SystemExit as error:
+            assert error.code == 1
+        assert json.loads((library / '_meta.json').read_text()) == original
+        assert sorted(os.listdir(library)) == ['_meta.json']
+`,
+    );
+    const result = await exec("python3", [path.join(directory, "test.py")]);
+    if (reachable) {
+      expect(result.stdout).toContain(
+        "Your shared skills and plugins install automatically",
+      );
+    } else {
+      expect(result.stderr).toContain("Could not reach the shared marketplace");
+      expect(result.stderr).not.toContain("Traceback");
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

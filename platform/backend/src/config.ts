@@ -1061,6 +1061,23 @@ const parsePositiveInt = (
 };
 
 /**
+ * A whole number of milliseconds that `setTimeout` can schedule, or 0 to
+ * disable the timer. Delays above 2^31-1 collapse to 1ms, so invalid and
+ * oversized values use the default instead.
+ */
+const parseBoundedTimeoutMs = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue || !/^[0-9]+$/.test(envValue)) return defaultValue;
+  const parsed = Number(envValue);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 2_147_483_647) {
+    return defaultValue;
+  }
+  return parsed;
+};
+
+/**
  * Like {@link parsePositiveInt} but accepts 0, for knobs where zero is a
  * meaningful setting rather than a missing one — a retention window of 0
  * means "keep forever", not "use the default".
@@ -2383,6 +2400,20 @@ const config = {
       30_000,
     ),
     // SPDX-SnippetEnd
+    /**
+     * How long (ms) one `subscriptions/listen` stream stays open before the
+     * gateway ends it with a complete result. 0, the default, leaves the
+     * stream open until the client disconnects. A positive value is a limited
+     * mitigation for a proxy hard cap, not a universal fix: a client may open
+     * another listen, but the protocol does not require it, and a client can
+     * stop after repeated ends. This process does not know the proxy maximum.
+     * Keep a positive value strictly below that cap. Invalid and oversized
+     * values fall back to 0 rather than collapsing to 1ms.
+     */
+    subscriptionMaxDurationMs: parseBoundedTimeoutMs(
+      process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS,
+      0,
+    ),
     /**
      * Both directions of the draft MCP Skills extension: publishing local
      * Skills through gateways and projecting external Skills from installed

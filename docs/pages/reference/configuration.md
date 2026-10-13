@@ -738,6 +738,13 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Default: `30000` (30 seconds)
   - Keep it below your clients' own request timeouts. Otherwise the client aborts first and sees a transport error.
 
+- **`ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS`** - Optional limit, in milliseconds, on how long one notification stream stays open before the gateway ends it with a complete result.
+  - Default: `0` (no expiry). The stream stays open until the client disconnects.
+  - This is not a universal fix. Enable it only when the proxy's maximum request duration is known and the client's behavior has been checked, and only if that tradeoff is acceptable.
+  - An abrupt proxy close can fail a form that is still open. A clean end does not guarantee tool-list change notifications continue. A client may open another listen, but current clients can stop after repeated ends.
+  - Set a positive value below the proxy maximum. Heartbeats do not extend that maximum, and Archestra does not read the live proxy timeout. A GKE Ingress backend with no `timeoutSec` uses 30 seconds.
+  - `0` disables expiry. Values above `2147483647`, and values that are not a whole number from 0 up, stay disabled. A larger delay cannot be scheduled and would otherwise fire immediately.
+
 ## MCP Servers
 
 - **`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`** - Re-syncs every installed MCP server's tools and Skills from the live server at this interval, in minutes.

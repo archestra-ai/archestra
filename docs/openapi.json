@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.37"
+    "version": "1.4.0-rc.38"
   },
   "components": {
     "schemas": {
@@ -246554,6 +246554,9 @@
                   },
                   "teams": {
                     "not": {}
+                  },
+                  "multitenant": {
+                    "type": "boolean"
                   },
                   "oauthClientSecretVaultPath": {
                     "type": "string"

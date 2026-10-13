@@ -70,6 +70,8 @@ A warm pool keeps spare containers ready, so runs start faster. Agents in the sa
 
 After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=1`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) to keep one spare per group. Up to four groups are prepared by default; change this with [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS).
 
+Pools go to the Agents with the most recent runs. Agents with no run in the last 7 days get no spare, so idle Agents don't hold cluster capacity.
+
 Assigned containers never return to the pool. Without a spare, a run starts a new container. Setting the size to `0` removes unused spares and preserves assigned runs.
 
 ## Privileged Containers

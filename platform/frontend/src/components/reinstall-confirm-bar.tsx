@@ -111,19 +111,21 @@ export function ReinstallConfirmBar({
         immediately; no server restarts. {clientReloadWarning}
       </>
     ) : mode === "manual" ? (
+      // Manual mode covers both a plain runtime-config edit on a
+      // single-tenant server and a change that needs a new value, so the
+      // copy must not assume there is a value to provide.
       isMultitenant ? (
         <>
-          Your change needs a new value. The deployment keeps running on the old
-          config until someone clicks <strong>Reinstall</strong> and provides
-          the value.
+          The deployment keeps running on the old config until someone clicks{" "}
+          <strong>Reinstall</strong>, which asks for any new values the change
+          needs.
         </>
       ) : (
         <>
-          Your change needs a new value. The {installNoun}{" "}
-          {isPlural ? "keep" : "keeps"} running on the old config until someone
-          clicks <strong>Reinstall</strong>
+          The {installNoun} {isPlural ? "keep" : "keeps"} running on the old
+          config until someone clicks <strong>Reinstall</strong>
           {isPlural ? <span>{" on each"}</span> : null}
-          <span>{" and provides the value."}</span>
+          <span>{", which asks for any new values the change needs."}</span>
         </>
       )
     ) : (

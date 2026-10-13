@@ -2364,6 +2364,7 @@ export async function handleLLMProxy<
         false,
         provider.extractInternalCode.bind(provider),
         provider.formatStreamErrorFrame,
+        provider.translatesWireFormat,
       );
     }
     if (pluginContext && pluginSessionInitialized) {
@@ -2431,6 +2432,7 @@ export async function handleLLMProxy<
       requestAdapter.isStreaming(),
       provider.extractInternalCode.bind(provider),
       provider.formatStreamErrorFrame,
+      provider.translatesWireFormat,
     );
   }
 }
@@ -3298,6 +3300,7 @@ async function handleStreaming<
             });
           }
         : formatStreamErrorFrame,
+      provider.translatesWireFormat,
     );
   } finally {
     keepAlive.stop();

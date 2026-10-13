@@ -661,6 +661,13 @@ export function handleError(
   ) => ArchestraInternalErrorCode | undefined,
   /** Provider-specific mid-stream error framing; defaults to SSE. */
   formatStreamErrorFrame?: (event: unknown) => string,
+  /**
+   * True when the route translates the upstream provider's wire format into
+   * the client's (e.g. an OpenAI-format client served by an Anthropic
+   * upstream). The upstream's error body would be foreign to the client, so
+   * it is not relayed.
+   */
+  translatesWireFormat?: boolean,
 ): FastifyReply | never {
   logger.error(error);
 
@@ -750,18 +757,35 @@ export function handleError(
       ? ArchestraInternalErrorCode.ProviderOverloaded
       : undefined);
 
-  // Provider rate limits and overloads are relayed uncorrupted. Rewrapping
-  // them in the Archestra error envelope rewrites the provider's error type
-  // (e.g. Anthropic's `rate_limit_error` became `unknown_api_error`), which
-  // makes native clients misclassify the failure — a subscription usage-limit
-  // 429 gets reported to the user as server-side throttling. Internal
-  // ApiErrors (Archestra's own limit blocks) and errors the adapter
-  // intentionally reclassifies (adapterInternalCode) keep the envelope.
-  const upstreamPassthroughBody =
+  // Provider errors reach native clients unchanged. The Archestra envelope
+  // drops the provider's error type and details, which clients read to decide
+  // how to recover: Anthropic's `rate_limit_error` became `unknown_api_error`,
+  // so a subscription usage limit looked like throttling, and a
+  // `thread_not_found` 404 lost the code Claude Code needs to replay an
+  // expired server-side thread. These keep the envelope: Archestra's own
+  // ApiErrors (e.g. limit blocks), errors the adapter reclassifies
+  // (adapterInternalCode), routes that translate the wire format (the
+  // provider's body would be foreign to the client), and errors without a
+  // trustworthy provider body.
+  const relayable =
     !(error instanceof ApiError) &&
     adapterInternalCode === undefined &&
-    (statusCode === 429 || statusCode === 529)
+    !translatesWireFormat;
+  const isRateLimitOrOverload = statusCode === 429 || statusCode === 529;
+  // Rate limits and overloads keep the old rule and relay any parsed body,
+  // including the `{ error: { message } }` that fetch-based adapters
+  // synthesize. Other statuses need a body that is recognizably the
+  // provider's own.
+  const upstreamBody = !relayable
+    ? undefined
+    : isRateLimitOrOverload
       ? extractUpstreamErrorBody(error)
+      : extractTrustedProviderErrorBody(error);
+  const upstreamPassthroughBody =
+    upstreamBody !== undefined &&
+    statusCode >= 400 &&
+    (hasExplicitStatus || isRateLimitOrOverload)
+      ? upstreamBody
       : undefined;
 
   // Headers cannot be changed after streaming starts.
@@ -784,13 +808,16 @@ export function handleError(
     const errorEvent = {
       type: "error",
       error: {
-        // Keep the provider's own error type for rate limits/overloads so
-        // native streaming clients classify the failure correctly.
+        // Keep the provider's own error type (and details) so native
+        // streaming clients classify the failure correctly.
         type:
-          (upstreamPassthroughBody !== undefined && error instanceof Error
+          (upstreamBody !== undefined && error instanceof Error
             ? nestedProviderErrorType(error)
             : undefined) ?? "api_error",
         message: errorMessage,
+        ...(upstreamBody !== undefined
+          ? providerErrorDetails(upstreamBody)
+          : {}),
         // Surface the normalized code (e.g. provider_insufficient_balance)
         // mid-stream too, so a failure after headers commit stays classifiable.
         ...(internalCode ? { internal_code: internalCode } : {}),
@@ -813,13 +840,16 @@ export function handleError(
     return reply;
   }
 
-  // Provider rate-limit/overload body is relayed verbatim (bypassing the
-  // Archestra envelope the central handler would build): the proxy's provider
-  // routes speak each provider's wire format, and native clients parse this
-  // body for the error type. Statuses 429/529 have no response schema entry,
-  // so the payload is serialized as-is.
+  // Provider error body is relayed verbatim (bypassing the Archestra envelope
+  // the central handler would build): the proxy's provider routes speak each
+  // provider's wire format, and native clients parse this body for the error
+  // type. Sent pre-serialized so a route's per-status response schema cannot
+  // reshape it.
   if (upstreamPassthroughBody !== undefined) {
-    return reply.status(statusCode).send(upstreamPassthroughBody);
+    return reply
+      .status(statusCode)
+      .type("application/json; charset=utf-8")
+      .send(JSON.stringify(upstreamPassthroughBody));
   }
 
   // Headers not sent yet - throw ApiError to let central handler return proper status code
@@ -980,6 +1010,32 @@ function extractUpstreamErrorBody(error: unknown): object | undefined {
   }
   if ("error" in body) return body;
   return { error: body };
+}
+
+/**
+ * The parsed provider error body, only when it is recognizably the provider's
+ * own: an object whose error member carries a string `type` or `code`.
+ * Synthetic errors (a bare message from a fetch-based adapter, a status-less
+ * SDK failure) carry neither and keep the Archestra envelope.
+ */
+function extractTrustedProviderErrorBody(error: unknown): object | undefined {
+  const body = extractUpstreamErrorBody(error) as
+    | { error?: unknown }
+    | undefined;
+  const inner = body?.error;
+  if (!inner || typeof inner !== "object" || Array.isArray(inner)) {
+    return undefined;
+  }
+  const { type, code } = inner as { type?: unknown; code?: unknown };
+  return typeof type === "string" || typeof code === "string"
+    ? body
+    : undefined;
+}
+
+/** The provider's `details` member of its error object, for mid-stream frames. */
+function providerErrorDetails(body: object): { details?: unknown } {
+  const details = (body as { error?: { details?: unknown } }).error?.details;
+  return details && typeof details === "object" ? { details } : {};
 }
 
 /**

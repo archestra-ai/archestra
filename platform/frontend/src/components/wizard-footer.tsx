@@ -33,20 +33,20 @@ export function WizardFooter({
           above. */}
       <div
         className={cn(
-          "flex min-w-0 flex-col items-stretch gap-2 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:py-3 [&>button]:w-full [&>div]:w-full [&>div]:flex-col [&>div>button]:w-full sm:[&>button]:w-auto sm:[&>div]:w-auto sm:[&>div]:flex-row sm:[&>div>button]:w-auto",
+          "flex min-w-0 flex-col items-stretch gap-2 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:[&>*]:order-2 lg:[&>*:first-child]:order-0 [&>button]:w-full [&>div]:w-full [&>div]:flex-col [&>div>button]:w-full sm:[&>button]:w-auto sm:[&>div]:w-auto sm:[&>div]:flex-row sm:[&>div>button]:w-auto",
           className,
         )}
       >
         {children}
+        {/* The version takes the space between the first button group and the
+            rest, centred on the buttons' line, so it shows in screenshots
+            without crowding them; it truncates rather than pushing them. Where
+            the groups can wrap it gets its own line under the buttons. */}
+        <div
+          {...{ [VERSION_SLOT_ATTRIBUTE]: "" }}
+          className="min-w-0 basis-full text-center empty:hidden lg:order-1! lg:flex-1 lg:basis-0 [&>div]:truncate"
+        />
       </div>
-      {/* The version is a centred caption under the buttons, where the page's
-          own version line used to sit, rather than competing with them. It
-          pulls up into the row's bottom padding and keeps the same padding
-          below itself, so the buttons and caption sit centred in the bar. */}
-      <div
-        {...{ [VERSION_SLOT_ATTRIBUTE]: "" }}
-        className="-mt-2 pb-4 text-center empty:hidden sm:-mt-1.5 sm:pb-3"
-      />
     </div>
   );
 }

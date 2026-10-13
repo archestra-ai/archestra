@@ -1,4 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
+import * as fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   ADMIN_ROLE_NAME,
   PROJECT_INSTRUCTIONS_FILENAME,
@@ -3207,6 +3210,161 @@ describe("edit_file / delete_file", () => {
     );
     expect(result.isError).toBe(true);
     expect(await FileModel.findById(personal.id)).not.toBeNull();
+  });
+
+  test("delete_file in a project chat removes a project file by filename", async () => {
+    const { project, ctx } = await makeProjectChatCtx("project-del");
+    const file = await fileStore.put({
+      organizationId,
+      userId,
+      projectId: project.id,
+      conversationId: ctx.conversationId,
+      filename: "stale.txt",
+      mimeType: "text/plain",
+      sizeBytes: 3,
+      data: Buffer.from("old"),
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_DELETE_FILE_FULL_NAME,
+      { filename: "stale.txt" },
+      ctx,
+    );
+    expect(result.isError).toBe(false);
+    expect(await FileModel.findById(file.id)).toBeNull();
+  });
+
+  // With an external object store, a project folder can hold objects placed
+  // there by hand (no `files` row). search_files lists them with an `obj_` ref
+  // and the Files panel deletes them, so delete_file must reach them too.
+  describe("hand-placed project files (filesystem provider)", () => {
+    let root: string;
+    let savedProvider: typeof config.fileStorage.provider;
+    let savedRoot: string;
+
+    beforeEach(async () => {
+      root = await fs.mkdtemp(path.join(os.tmpdir(), "delete-file-overlay-"));
+      savedProvider = config.fileStorage.provider;
+      savedRoot = config.fileStorage.filesystemRoot;
+      config.fileStorage.provider = "filesystem";
+      config.fileStorage.filesystemRoot = root;
+    });
+    afterEach(async () => {
+      config.fileStorage.provider = savedProvider;
+      config.fileStorage.filesystemRoot = savedRoot;
+      await fs.rm(root, { recursive: true, force: true });
+    });
+
+    async function drop(folder: string, name: string, content: string) {
+      const dir = path.join(root, folder);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, name), content);
+      return path.join(dir, name);
+    }
+
+    async function exists(file: string) {
+      return fs.access(file).then(
+        () => true,
+        () => false,
+      );
+    }
+
+    async function refOf(ctx: ArchestraContext, filename: string) {
+      const listed = await executeArchestraTool(
+        TOOL_SEARCH_FILES_FULL_NAME,
+        {},
+        ctx,
+      );
+      const files = structuredOf<{
+        files: { id: string | null; ref: string; filename: string }[];
+      }>(listed).files;
+      const match = files.find((f) => f.filename === filename);
+      expect(match?.id).toBeNull();
+      return match?.ref ?? "";
+    }
+
+    test("deletes one by the ref search_files returned", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-ref");
+      const onDisk = await drop(project.slug, "dropped.txt", "by hand");
+      const ref = await refOf(ctx, "dropped.txt");
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { id: ref },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(structuredOf<{ filename: string }>(result).filename).toBe(
+        "dropped.txt",
+      );
+      expect(await exists(onDisk)).toBe(false);
+    });
+
+    test("deletes one by filename", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-name");
+      const onDisk = await drop(project.slug, "dropped.txt", "by hand");
+      const kept = await drop(project.slug, "keep.txt", "stays");
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { filename: "dropped.txt" },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(await exists(onDisk)).toBe(false);
+      expect(await exists(kept)).toBe(true);
+    });
+
+    test("deletes one outside a chat with project_id", async () => {
+      const project = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "hand-headless",
+        description: null,
+      });
+      const onDisk = await drop(project.slug, "dropped.txt", "by hand");
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { filename: "dropped.txt", project_id: project.id },
+        context,
+      );
+      expect(result.isError).toBe(false);
+      expect(await exists(onDisk)).toBe(false);
+    });
+
+    test("a project chat cannot delete another project's object by its ref", async () => {
+      const { ctx: otherCtx, project: other } =
+        await makeProjectChatCtx("hand-other");
+      const onDisk = await drop(other.slug, "theirs.txt", "not yours");
+      const foreignRef = await refOf(otherCtx, "theirs.txt");
+      const { ctx } = await makeProjectChatCtx("hand-mine");
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { id: foreignRef },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(await exists(onDisk)).toBe(true);
+    });
+
+    test("refuses a hand-placed instructions file", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-instructions");
+      const onDisk = await drop(
+        project.slug,
+        PROJECT_INSTRUCTIONS_FILENAME,
+        "guidance",
+      );
+
+      const result = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { filename: PROJECT_INSTRUCTIONS_FILENAME },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(await exists(onDisk)).toBe(true);
+    });
   });
 });
 

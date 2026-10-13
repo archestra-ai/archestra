@@ -724,7 +724,7 @@ const EditFileOutputSchema = z.object({
 const DeleteFileSchema = z
   .strictObject({
     ...idOrFilenameShape({
-      id: "Id of the file to delete (from search_files / save_file).",
+      id: "Id of the file to delete — the `id` or `ref` from search_files, or a fileId from save_file.",
       filename:
         "Filename to delete instead of `id`; rejected as ambiguous if more than one file shares the name.",
     }),
@@ -734,7 +734,9 @@ const DeleteFileSchema = z
   .describe("Permanently delete a persistent file.");
 
 const DeleteFileOutputSchema = z.object({
-  fileId: z.string(),
+  fileId: z
+    .string()
+    .describe("The deleted file's id, or its `ref` for a rowless file."),
   filename: z.string(),
   deleted: z.literal(true),
 });
@@ -1606,8 +1608,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_DELETE_FILE_SHORT_NAME,
     title: "Delete File",
     description:
-      "Permanently delete a persistent file, identified by `id` " +
-      "(from search_files / save_file) or by `filename`. Pass project_id to " +
+      "Permanently delete a persistent file, identified by `id` (the `id` or " +
+      "`ref` from search_files, or a fileId from save_file) or by `filename`. " +
+      "Pass project_id to " +
       "delete a project's file when working outside a chat.",
     schema: DeleteFileSchema,
     outputSchema: DeleteFileOutputSchema,
@@ -1632,7 +1635,9 @@ const registry = defineArchestraTools([
       if (!fileScope) {
         return errorResult(describeMyFileError("not_found", ref));
       }
-      const resolved = await fileStore.resolveMyFileRef({
+      // Covers a project's hand-placed objects too (no row, `obj_` ref), so
+      // anything search_files lists can be deleted here.
+      const resolved = await fileStore.resolveMyFileDeletion({
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
         id: args.id,
@@ -1655,7 +1660,7 @@ const registry = defineArchestraTools([
       }
 
       const deleted = await fileStore.delete({
-        ref: resolved.id,
+        ref: resolved.ref,
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
       });
@@ -1664,12 +1669,12 @@ const registry = defineArchestraTools([
       }
 
       logger.info(
-        { fileId: resolved.id, projectScoped: fileScope.kind === "project" },
+        { fileId: resolved.ref, projectScoped: fileScope.kind === "project" },
         "[Sandbox] file deleted from PFS",
       );
 
       return structuredSuccessResult(
-        { fileId: resolved.id, filename: resolved.filename, deleted: true },
+        { fileId: resolved.ref, filename: resolved.filename, deleted: true },
         `Deleted ${resolved.filename}.`,
       );
     },

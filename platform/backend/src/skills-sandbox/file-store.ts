@@ -561,6 +561,48 @@ class FileStore {
   }
 
   /**
+   * Resolve a `my_file` ref (id, filename, or `obj_` ref) to the ref that
+   * {@link delete} takes. Rows resolve exactly as {@link resolveMyFileRef}; for a
+   * project scope a hand-placed object (no row) is matched too, so whatever
+   * `search_files` lists can be deleted. The returned object ref is re-minted
+   * from the scope's own project, never echoed from the caller, so a ref naming
+   * another project resolves to not-found here.
+   */
+  async resolveMyFileDeletion(params: {
+    organizationId: string;
+    userId: string;
+    id?: string;
+    filename?: string;
+    scope: MyFileScope;
+  }): Promise<
+    | { ref: string; filename: string; projectId: string | null }
+    | MyFileResolutionError
+  > {
+    const parsed = params.id ? parseObjectRef(params.id) : null;
+    if (params.id && parsed) {
+      if (params.scope.kind !== "project") return { error: "not_found" };
+      return (
+        (await this.findUntrackedObject({
+          projectId: params.scope.projectId,
+          matches: (o) => o.key === parsed.key,
+        })) ?? { error: "not_found" }
+      );
+    }
+    const row = await this.findMyFileRow(params);
+    if (row === null) {
+      if (params.scope.kind !== "project") return { error: "not_found" };
+      return (
+        (await this.findUntrackedObject({
+          projectId: params.scope.projectId,
+          matches: (o) => o.name === params.filename,
+        })) ?? { error: "not_found" }
+      );
+    }
+    if ("error" in row) return row;
+    return { ref: row.id, filename: row.filename, projectId: row.projectId };
+  }
+
+  /**
    * Resolve a headless (no-project, no-conversation) file by name, for a
    * headless `save_file` overwrite — there is no conversation/project scope to
    * resolve within, so this targets the orphan bucket directly.
@@ -845,6 +887,28 @@ class FileStore {
       if (error instanceof UnsafePathError) return { error: "not_found" };
       throw error;
     }
+  }
+
+  /** A project's hand-placed object (no row), as an `obj_` ref for {@link delete}. */
+  private async findUntrackedObject(params: {
+    projectId: string;
+    matches: (object: { key: string; name: string }) => boolean;
+  }): Promise<{ ref: string; filename: string; projectId: string } | null> {
+    const store = getObjectStore();
+    if (!store) return null;
+    const ownerScope = await this.projectScope(params.projectId);
+    if (!ownerScope) return null;
+    const objects = await store.enumerate(ownerScope);
+    const match = objects.find(params.matches);
+    if (!match) return null;
+    return {
+      ref: encodeObjectRef(
+        { kind: "project", projectId: params.projectId },
+        match.key,
+      ),
+      filename: match.name,
+      projectId: params.projectId,
+    };
   }
 
   /** An untracked object matched by filename within a project upload scope. */

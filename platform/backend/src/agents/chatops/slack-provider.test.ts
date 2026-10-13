@@ -4012,6 +4012,34 @@ describe("SlackProvider bot handle", () => {
 
     expect(handle).toBe("archestra_staging_my_assistant");
   });
+
+  test("falls back to the bot's real name when its display name is empty", async () => {
+    const provider = createProvider();
+    Object.assign(provider, {
+      client: {
+        users: {
+          info: vi.fn().mockResolvedValue({
+            user: {
+              name: "archestraclaudecode",
+              real_name: "archestra_claude_code",
+              profile: {
+                display_name: "",
+                real_name: "archestra_claude_code",
+              },
+            },
+          }),
+        },
+      },
+    });
+
+    const handle = await (
+      provider as unknown as {
+        fetchUserHandle: (userId: string) => Promise<string | null>;
+      }
+    ).fetchUserHandle("U1");
+
+    expect(handle).toBe("archestra_claude_code");
+  });
 });
 
 describe("plainSlackText", () => {

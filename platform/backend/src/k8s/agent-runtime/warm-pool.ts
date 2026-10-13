@@ -1,4 +1,4 @@
-import { TimeInMs } from "@archestra/shared";
+import { followAgentCatalogImage, TimeInMs } from "@archestra/shared";
 import type { CustomObjectsApi } from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import config from "@/config";
@@ -128,7 +128,14 @@ class AgentWarmPoolManager {
         ),
       ]);
       for (const agent of candidates) {
-        const runtime = agent.runtime;
+        // Pool the image a launch resolves to, or no claim would ever match.
+        const runtime = agent.runtime && {
+          ...agent.runtime,
+          image: followAgentCatalogImage({
+            image: agent.runtime.image,
+            catalogImages: config.agentRuntime.catalogImages,
+          }),
+        };
         if (
           !runtime ||
           runtime.backend !== "kubernetes" ||

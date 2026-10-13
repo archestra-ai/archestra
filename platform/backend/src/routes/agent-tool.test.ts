@@ -1555,6 +1555,13 @@ describe("GET /api/agents/:agentId/tools", () => {
       url: `/api/agents/${agent.id}/tools`,
     });
     expect(all.json()).toHaveLength(2);
+
+    const malformed = await app.inject({
+      method: "GET",
+      url: `/api/agents/${agent.id}/tools?catalogId=not-a-uuid`,
+    });
+    expect(malformed.statusCode).toBe(200);
+    expect(malformed.json()).toEqual([]);
   });
 
   test("allows a team member to read tools for a team-scoped MCP gateway in their team", async ({

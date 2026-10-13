@@ -4821,7 +4821,9 @@ async function pendingNativeHitlOfferIds(params: {
 }): Promise<string[]> {
   const control = params.binding.request.tools?.control;
   if (!control) return [];
-  const offerIds = new Set<string>();
+  // The newest result that asked for this review, per offer: the history is
+  // in order, so a later execute_remedy_plan call replaces an earlier one.
+  const offerIds = new Map<string, string>();
   for (const result of params.results) {
     if (result.isError) continue;
     const canonicalResult = params.binding.identity.canonicalize(
@@ -4841,20 +4843,55 @@ async function pendingNativeHitlOfferIds(params: {
     )
       continue;
     const offerId = reviewRequiredOfferId(result, 0);
-    if (offerId && !params.resolvedOfferIds.has(offerId)) offerIds.add(offerId);
+    if (offerId && !params.resolvedOfferIds.has(offerId)) {
+      offerIds.set(offerId, result.id);
+    }
   }
   const pending = await Promise.all(
-    [...offerIds].map(async (offerId) => ({
+    [...offerIds].map(async ([offerId, resultId]) => ({
       offerId,
+      resultId,
       review: await getHitlReview({
         session: params.binding.session,
         offerId,
       }),
     })),
   );
-  return pending
-    .filter((entry) => entry.review !== undefined)
-    .map((entry) => entry.offerId);
+  const asked: string[] = [];
+  for (const entry of pending) {
+    if (entry.review === undefined) continue;
+    // A client that resends the whole conversation (Codex) carries this
+    // result in every later request. The question is asked once per result:
+    // asking again for a review the client cannot show forces Codex into
+    // another ask_user call on every turn, with no way to end its turn.
+    if (
+      await reviewQuestionAskedBefore({
+        session: params.binding.session,
+        resultId: entry.resultId,
+      })
+    ) {
+      continue;
+    }
+    asked.push(entry.offerId);
+  }
+  return asked;
+}
+
+/**
+ * Whether the proxy already asked for the user's approval after this
+ * review_required result. Records the current ask so the next one counts.
+ */
+async function reviewQuestionAskedBefore(params: {
+  session: OpenAppaSession;
+  resultId: string;
+}): Promise<boolean> {
+  const key: AllowedCacheKey = `${CacheKey.OpenAppaHitlQuestionAsked}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.resultId)}`,
+  ).toString("base64url")}`;
+  if (await cacheManager.get<boolean>(key)) return true;
+  // Outlives the review it asked about, which expires after ten minutes.
+  await cacheManager.set(key, true, TimeInMs.Hour);
+  return false;
 }
 
 async function hasRemedyOfferResult(params: {

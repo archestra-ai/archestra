@@ -19,6 +19,8 @@ import {
   packageContentHash,
 } from "./declarations";
 import { parsePolicyToml } from "./policy-text";
+import { openappaRemediesService } from "./remedies";
+import { openappaTrustAudienceService } from "./trust-audience";
 
 const BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 
@@ -843,6 +845,66 @@ describe("a battery with targets", () => {
     expect(await acme()).toEqual({ status: "active", deploysTarget: false });
   });
 
+  test("the remedies and audience views read a deployed target's rule in place of the base rule it shadows", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    config.daggerRuntime.enabled = true;
+    const { entry } = await uploadTargetedAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["acme_prod"]),
+    });
+    await bindOrganizationCredential({
+      organizationId,
+      userId,
+      variable: ACME_TOKEN,
+      key: "acme-token",
+    });
+    const views = async () => {
+      const remedies = await openappaRemediesService.view({
+        organizationId,
+        userId,
+      });
+      const audience = await openappaTrustAudienceService.view({
+        organizationId,
+        userId,
+      });
+      return {
+        blocks: remedies.blocks
+          .filter((block) => block.kind === "approvals")
+          .map((block) => ({
+            kind: block.kind,
+            unservedMarks: block.unservedMarks,
+          })),
+        self: audience.audiences.find((level) => level.name === "self")?.kind,
+      };
+    };
+    expect(await views()).toEqual({ blocks: [], self: "builtin" });
+
+    config.daggerRuntime.enabled = false;
+    expect(await views()).toEqual({
+      blocks: [{ kind: "approvals", unservedMarks: ["acme-review"] }],
+      self: "unmapped",
+    });
+  });
+
   test("a deployed target's member roster is declared by the host until the root declares its own", async ({
     makeOrganization,
     makeUser,
@@ -1058,7 +1120,11 @@ policy = "multi-user.toml"
       },
       {
         path: "appa.toml",
-        text: `${empty}[[policy.tool]]\nname = "mcp/acme/list"\ndelta = {}\n`,
+        text: `${empty}
+[[policy.tool]]
+name = "mcp/acme/list"
+requires = { attention = ["acme-review"], audience = { contains = ["self"] } }
+`,
       },
       { path: "single-user.toml", text: empty },
       {
@@ -1073,6 +1139,10 @@ marks = []
 [[policy.tool]]
 name = "mcp/acme/get"
 annotator = "acme.visibility"
+
+[[policy.tool]]
+name = "mcp/acme/list"
+delta = {}
 
 [externals.annotators."acme.visibility"]
 command = ["python3", "check.py"]

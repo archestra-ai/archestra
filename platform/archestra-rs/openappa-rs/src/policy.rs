@@ -203,11 +203,32 @@ fn with_member_rosters(
     let mut edited = root
         .parse::<toml_edit::DocumentMut>()
         .map_err(|error| format!("root policy: {error}"))?;
+    // A root whose `externals` or `externals.audience` is not a table is
+    // malformed; it is left as written for the policy check to name.
+    let Some(audience) = child_table(edited.as_table_mut(), "externals")
+        .and_then(|externals| child_table(externals, "audience"))
+    else {
+        return Ok(root.to_owned());
+    };
     for roster in rosters {
-        edited["externals"]["audience"][roster]["readers"] =
-            toml_edit::value(toml_edit::InlineTable::new());
+        let mut entry = toml_edit::InlineTable::new();
+        entry.insert("readers", toml_edit::InlineTable::new().into());
+        audience.insert(roster, toml_edit::value(entry));
     }
     Ok(edited.to_string())
+}
+
+/// The table under `key`, created when absent; `None` when `key` holds anything else.
+fn child_table<'a>(
+    parent: &'a mut dyn toml_edit::TableLike,
+    key: &str,
+) -> Option<&'a mut dyn toml_edit::TableLike> {
+    if !parent.contains_key(key) {
+        let mut table = toml_edit::Table::new();
+        table.set_implicit(true);
+        parent.insert(key, toml_edit::Item::Table(table));
+    }
+    parent.get_mut(key)?.as_table_like_mut()
 }
 
 /// Every `[externals.audience.<name>]` entry a document declares.
@@ -966,6 +987,20 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         // The base alone looks nobody up, so no roster is written.
         let base_only = compose(&root, &[battery(None)]).unwrap();
         assert_eq!(roster(&base_only.content), None);
+        // An inline parent takes the roster too.
+        let inline = compose(
+            &format!("externals = {{ audience = {{}} }}\n{root}"),
+            &[battery(Some(target.policy.clone()))],
+        )
+        .unwrap();
+        assert!(roster(&inline.content).is_some());
+        // A malformed parent is refused by the policy check, not a panic in the roster.
+        for text in [
+            format!("externals = 1\n{root}"),
+            format!("{root}[externals]\naudience = 1\n"),
+        ] {
+            assert!(compose(&text, &[battery(Some(target.policy.clone()))]).is_err());
+        }
     }
 
     #[test]

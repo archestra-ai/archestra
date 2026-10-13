@@ -1,5 +1,6 @@
 import type { BatteryExternal, BatteryPackage } from "@archestra/openappa-rs";
 import type { BatteryTargetName } from "@/types/openappa-batteries";
+import { type ToolEntry, toolEntries, toolHeaderLines } from "./policy-text";
 
 /** A battery as this deployment composes it: its base, and the target before it. */
 export type DeployedBattery = {
@@ -69,6 +70,28 @@ export function deployedFiles(deployed: DeployedBattery): DeployedFile[] {
     const file = { text, firstLine };
     firstLine += terminated(text).split("\n").length - 1;
     return file;
+  });
+}
+
+/**
+ * A deployment's tool rules in compose order, each with the line it starts at
+ * in the deployment's shown text; a target's rule shadows its base's.
+ */
+export function effectiveToolRules(
+  files: DeployedFile[],
+): Array<{ entry: ToolEntry; line: number | null }> {
+  const seen = new Set<string>();
+  return files.flatMap(({ text, firstLine }) => {
+    const entries = toolEntries(text);
+    const lines = toolHeaderLines(text);
+    return entries.flatMap((entry, index) => {
+      if (seen.has(entry.name)) return [];
+      seen.add(entry.name);
+      const line = lines.length === entries.length ? lines[index] : undefined;
+      return [
+        { entry, line: line === undefined ? null : firstLine - 1 + line },
+      ];
+    });
   });
 }
 

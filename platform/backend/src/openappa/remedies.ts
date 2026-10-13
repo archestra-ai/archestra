@@ -13,11 +13,17 @@ import type {
   SanitizerPermits,
 } from "@/types/openappa-remedies";
 import { openappaBatteriesService } from "./batteries";
-import { type DeployedFile, deployedFiles, shownLine } from "./battery-target";
+import {
+  type DeployedFile,
+  deployedFiles,
+  effectiveToolRules,
+  shownLine,
+} from "./battery-target";
 import {
   arrayHeaderLines,
   asRecord,
   parsePolicyToml,
+  type ToolEntry,
   toolEntries,
 } from "./policy-text";
 import { policyLevels } from "./trust-audience";
@@ -57,6 +63,17 @@ class OpenAppaRemediesService {
           : [];
       }),
     ];
+    const rules = [
+      ...toolEntries(rootContent),
+      ...resolution.entries.flatMap((included) => {
+        const deployed = viewed.get(included.entry);
+        return deployed
+          ? effectiveToolRules(deployedFiles(deployed)).map(
+              ({ entry }) => entry,
+            )
+          : [];
+      }),
+    ];
     const externals = declaredExternals(files);
     const authorities = files.flatMap((file) =>
       declaredAuthorities(file, externals.authorities),
@@ -88,7 +105,7 @@ class OpenAppaRemediesService {
         ...sanitizer,
         lastConsult: consultOf(sanitizerConsults, sanitizer.name),
       })),
-      blocks: blockCoverage(files, authorities, sanitizers),
+      blocks: blockCoverage(files, rules, authorities, sanitizers),
     };
   }
 
@@ -306,18 +323,18 @@ function sanitizerPermits(value: unknown): SanitizerPermits | null {
  */
 function blockCoverage(
   files: PolicyFile[],
+  rules: ToolEntry[],
   authorities: Omit<Authority, "lastConsult">[],
   sanitizers: Omit<Sanitizer, "lastConsult">[],
 ): BlockCoverage[] {
   const levels = policyLevels(files);
   let excludes = 0;
   const marks = new Set<string>();
-  for (const file of files)
-    for (const entry of toolEntries(file.text)) {
-      if ((entry.excludes?.length ?? 0) > 0) excludes += 1;
-      for (const mark of strings(asRecord(entry.requires)?.attention) ?? [])
-        if (mark !== BLOCKED_MARK) marks.add(mark);
-    }
+  for (const entry of rules) {
+    if ((entry.excludes?.length ?? 0) > 0) excludes += 1;
+    for (const mark of strings(asRecord(entry.requires)?.attention) ?? [])
+      if (mark !== BLOCKED_MARK) marks.add(mark);
+  }
   const wiredAuthorities = authorities.filter((each) => each.implementation);
   const wiredSanitizers = sanitizers.filter((each) => each.implementation);
   const entry = (

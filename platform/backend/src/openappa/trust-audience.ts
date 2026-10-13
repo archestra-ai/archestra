@@ -8,12 +8,18 @@ import type {
 } from "@/types/openappa-trust-audience";
 import { archestraAudience } from "./archestra-audience";
 import { openappaBatteriesService } from "./batteries";
-import { type DeployedFile, deployedFiles, shownLine } from "./battery-target";
+import {
+  type DeployedFile,
+  deployedFiles,
+  effectiveToolRules,
+  shownLine,
+} from "./battery-target";
 import {
   asRecord,
   assignsKey,
   lineInTable,
   parsePolicyToml,
+  type ToolEntry,
   tableHeaderLine,
   toolEntries,
 } from "./policy-text";
@@ -54,8 +60,15 @@ class OpenAppaTrustAudienceService {
     const policy = asRecord(parsePolicyToml(rootContent)?.policy);
     const declared = declaredSources(batteries);
     const named = audiencesNamedByRules([
-      { entry: null, text: rootContent },
-      ...batteries,
+      ...toolEntries(rootContent),
+      ...resolution.entries.flatMap((included) => {
+        const deployed = viewed.get(included.entry);
+        return deployed
+          ? effectiveToolRules(deployedFiles(deployed)).map(
+              ({ entry }) => entry,
+            )
+          : [];
+      }),
     ]);
     const mappings = audienceMappings(rootContent, policy);
     const latest = canSeeAllConsults
@@ -302,17 +315,16 @@ function templateMatches(template: string, selector: string): boolean {
 }
 
 /** Every audience some rule names in its `delta`, `forwards` or `requires`. */
-function audiencesNamedByRules(files: PolicyFile[]): Set<string> {
+function audiencesNamedByRules(rules: ToolEntry[]): Set<string> {
   const named = new Set<string>();
-  for (const file of files)
-    for (const entry of toolEntries(file.text)) {
-      for (const name of audienceNames(asRecord(entry.delta)?.audience))
-        named.add(name);
-      for (const name of audienceNames(asRecord(entry.forwards)?.audience))
-        named.add(name);
-      for (const name of audienceNames(asRecord(entry.requires)?.audience))
-        named.add(name);
-    }
+  for (const entry of rules) {
+    for (const name of audienceNames(asRecord(entry.delta)?.audience))
+      named.add(name);
+    for (const name of audienceNames(asRecord(entry.forwards)?.audience))
+      named.add(name);
+    for (const name of audienceNames(asRecord(entry.requires)?.audience))
+      named.add(name);
+  }
   return named;
 }
 

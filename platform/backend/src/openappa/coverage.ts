@@ -25,7 +25,11 @@ import type {
   CoverageToolsQuery,
 } from "@/types/openappa-coverage";
 import { openappaBatteriesService } from "./batteries";
-import { type DeployedFile, deployedFiles } from "./battery-target";
+import {
+  type DeployedFile,
+  deployedFiles,
+  effectiveToolRules,
+} from "./battery-target";
 import {
   asRecord,
   type ToolEntry,
@@ -339,7 +343,7 @@ async function listedTools(
  */
 function wouldGovern(files: DeployedFile[], tools: CoverageTool[]): number {
   const named = new Set(
-    deployedRules(files).flatMap(({ entry }) => {
+    effectiveToolRules(files).flatMap(({ entry }) => {
       const spelled = splitSelector(entry.name);
       const canonical =
         spelled.selector === null && CANONICAL_RULE_NAME.exec(spelled.base);
@@ -360,7 +364,7 @@ function batteryRules(
   tools: CoverageTool[],
 ): CoverageBatteryFit["rules"] {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
-  return deployedRules(files).flatMap(({ entry }) => {
+  return effectiveToolRules(files).flatMap(({ entry }) => {
     const spelled = splitSelector(entry.name);
     const canonical = CANONICAL_RULE_NAME.exec(spelled.base);
     const tool = canonical && byName.get(canonical[2]);
@@ -392,28 +396,6 @@ function batteryRules(
             : (tool.rule?.source ?? null),
       },
     ];
-  });
-}
-
-/**
- * A deployment's tool rules in compose order, each with the line it starts at
- * in the deployment's shown text; a target's rule shadows its base's.
- */
-function deployedRules(
-  files: DeployedFile[],
-): Array<{ entry: ToolEntry; line: number | null }> {
-  const seen = new Set<string>();
-  return files.flatMap(({ text, firstLine }) => {
-    const entries = toolEntries(text);
-    const lines = toolHeaderLines(text);
-    return entries.flatMap((entry, index) => {
-      if (seen.has(entry.name)) return [];
-      seen.add(entry.name);
-      const line = lines.length === entries.length ? lines[index] : undefined;
-      return [
-        { entry, line: line === undefined ? null : firstLine - 1 + line },
-      ];
-    });
   });
 }
 
@@ -561,7 +543,7 @@ async function buildReport(
     const status = statusOf.get(included.name) ?? "unavailable";
     const deployed = viewed.get(included.entry);
     if (!deployed) continue;
-    for (const { entry, line } of deployedRules(deployedFiles(deployed))) {
+    for (const { entry, line } of effectiveToolRules(deployedFiles(deployed))) {
       const spelled = splitSelector(entry.name);
       const canonical = CANONICAL_RULE_NAME.exec(spelled.base);
       if (!canonical) continue;

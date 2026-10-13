@@ -1011,7 +1011,7 @@ export function buildWindowsStartupGuardInstallSection(
         ? handoffEnabled
           ? `$null = New-Item -ItemType Directory -Force ($archGuardPath + '.instructions')\nif (Test-Path (Join-Path $env:USERPROFILE ${psq(promptRelpath)})) { Copy-Item -Force (Join-Path $env:USERPROFILE ${psq(promptRelpath)}) ($archGuardPath + '.instructions/AGENTS.md') } else { Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions/AGENTS.md') }`
           : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions/AGENTS.md')`
-        : client.clientId === "opencode"
+        : client.inlineConfigEnv
           ? handoffEnabled
             ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.mjs'), [Convert]::FromBase64String('${Buffer.from(OPENCODE_HANDOFF_PLUGIN).toString("base64")}'))`
             : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.handoff.mjs')`
@@ -1024,7 +1024,7 @@ export function buildWindowsStartupGuardInstallSection(
       } catch { Write-Warning 'Runtime handoff instructions skipped: could not read Codex configuration.' }`
       : client.clientId === "copilot-cli"
         ? `$archInstructionsDir = $archGuard + '.instructions'`
-        : client.clientId === "opencode"
+        : client.inlineConfigEnv
           ? `if (Test-Path ($archGuard + '.handoff.mjs')) { $archOpencodeHandoff = [Uri]::new(($archGuard + '.handoff.mjs'), [UriKind]::Absolute).AbsoluteUri }`
           : `$archLaunchArgs = @('--append-system-prompt-file', $archPromptPath) + $archLaunchArgs`;
   const promptArgs = handoffEnabled
@@ -1033,7 +1033,7 @@ export function buildWindowsStartupGuardInstallSection(
     $archInstructionsDir = $null
     $archOpencodeHandoff = $null
     $archAddPrompt = $true
-    if ($args.Count -gt 0 -and $args[0] -in @('auth', 'mcp', 'plugin', 'plugins', 'install', 'uninstall', 'update', 'upgrade', 'doctor', 'setup-token', 'completion', 'completions', 'config', 'agents', 'login', 'logout', 'mcp-server', 'app-server', 'remote-control', 'app', 'sandbox', 'debug', 'apply', 'a', 'archive', 'delete', 'unarchive', 'cloud', 'exec-server', 'features', 'help'${client.clientId === "opencode" ? ", 'serve', 'web', 'acp', 'models', 'stats', 'export', 'import', 'github', 'session', 'attach', 'providers', 'db', 'pr', 'agent'" : ""})) { $archAddPrompt = $false }
+    if ($args.Count -gt 0 -and $args[0] -in @('auth', 'mcp', 'plugin', 'plugins', 'install', 'uninstall', 'update', 'upgrade', 'doctor', 'setup-token', 'completion', 'completions', 'config', 'agents', 'login', 'logout', 'mcp-server', 'app-server', 'remote-control', 'app', 'sandbox', 'debug', 'apply', 'a', 'archive', 'delete', 'unarchive', 'cloud', 'exec-server', 'features', 'help'${(client.handoffSkipSubcommands ?? []).map((command) => `, '${command}'`).join("")})) { $archAddPrompt = $false }
     foreach ($archArg in $args) {
       if ($archArg -eq '--') { break }
       if ($archArg -match '^--(system-prompt|system-prompt-file|append-system-prompt|append-system-prompt-file)(=|$)' -or $archArg -in @('--help', '-h', '--version', '-v')) { $archAddPrompt = $false }
@@ -1148,10 +1148,10 @@ function ${client.binary} {
         ? `$archPreviousDirs = $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS
     try {
       if ($archInstructionsDir) { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = (@($archPreviousDirs, $archInstructionsDir) | Where-Object { $_ }) -join ',' }`
-        : handoffEnabled && client.clientId === "opencode"
-          ? `$archPreviousConfigContent = $env:OPENCODE_CONFIG_CONTENT
+        : handoffEnabled && client.inlineConfigEnv
+          ? `$archPreviousConfigContent = $env:${client.inlineConfigEnv}
     try {
-      if ($archOpencodeHandoff -and -not $archPreviousConfigContent) { $env:OPENCODE_CONFIG_CONTENT = (@{ plugin = @($archOpencodeHandoff) } | ConvertTo-Json -Compress) }`
+      if ($archOpencodeHandoff -and -not $archPreviousConfigContent) { $env:${client.inlineConfigEnv} = (@{ plugin = @($archOpencodeHandoff) } | ConvertTo-Json -Compress) }`
           : ""
     }
     ${
@@ -1185,7 +1185,7 @@ function ${client.binary} {
     }`
         : `& $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}`
     }
-    ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.clientId === "opencode" ? `} finally { $env:OPENCODE_CONFIG_CONTENT = $archPreviousConfigContent }` : ""}
+    ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.inlineConfigEnv ? `} finally { $env:${client.inlineConfigEnv} = $archPreviousConfigContent }` : ""}
     ${refreshCall}
   }
   else { Write-Error "${client.binary} executable not found on PATH" }

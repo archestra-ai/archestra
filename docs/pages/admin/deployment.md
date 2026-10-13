@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-14
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -284,7 +284,7 @@ Admins configure the page under **Settings → Connect Page**, or with **Connect
 | Default provider keys | The provider key a setup's virtual key maps to, per provider. |
 | Managed instructions | Appends your organization’s instructions to an agent’s system prompt when users connect through the Connect page. CLI wrappers fetch saved changes before the next launch. |
 
-Claude Code, Codex, Copilot CLI, and OpenCode refresh managed instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
+Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code refresh managed instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
 
 - **Existing connections:** Run setup once to install the refresh capability. Unix wrappers require Python 3 to fetch updates.
 - **Temporary outages:** The client uses its last fetched copy.

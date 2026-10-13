@@ -758,12 +758,7 @@ function ConnectArea({
           className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300"
         >
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
-            <span>
-              {client.mcp.kind === "custom" &&
-              client.mcp.configFile === "terminal"
-                ? "Run the commands in a terminal and paste the snippets where each step says, top to bottom."
-                : `Copy each block into ${nameOf(client)}, top to bottom.`}
-            </span>
+            <span>Copy each block into {nameOf(client)}, top to bottom.</span>
           </div>
           <ManualSteps client={client} data={data} />
         </div>
@@ -942,6 +937,11 @@ function scriptNextSteps(client: ConnectClient): string[] {
         "Say yes when the terminal offers to sign you in to the gateway.",
         "Close OpenCode if it's open, then run the opencode command it prints in a new terminal.",
       ];
+    case "kilo":
+      return [
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Close Kilo Code if it's open, then run the kilo command it prints in a new terminal.",
+      ];
     default:
       return [`Restart ${nameOf(client)}.`];
   }
@@ -1051,8 +1051,8 @@ function ManualSteps({
 // === Guardrails status ===
 
 /**
- * Agents OpenAPPA follows natively (the Claude Code, Codex and OpenCode
- * adapters in backend/src/proxy/plugins/appa-plugin-archestra/
+ * Agents OpenAPPA follows natively (the Claude Code, Codex, OpenCode and
+ * Kilo Code adapters in backend/src/proxy/plugins/appa-plugin-archestra/
  * session-identity.ts). Others count as unsupported unless they send OpenAPPA
  * session headers, which the agents on this page don't.
  */

@@ -7,7 +7,7 @@ import {
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
-import { AppaOpenCodeAdapter } from "./adapters/opencode";
+import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import type {
   AppaChildTrajectory,
   AppaClientAdapter,
@@ -24,6 +24,8 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
   [
     new AppaClaudeCodeAdapter(),
     new AppaCodexAdapter(),
+    // Before OpenCode: Kilo's setup also sends OpenCode's session header.
+    new AppaKiloAdapter(),
     new AppaOpenCodeAdapter(),
     new AppaChatAdapter(),
   ],

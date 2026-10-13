@@ -718,7 +718,9 @@ export async function handleLLMProxy<
       }),
     )?.id;
     childReturns = collectAndStripChildReturns(body, {
-      openCodeBackgroundReturns: nativeClient === "opencode",
+      // Kilo Code frames its background tasks as OpenCode does.
+      openCodeBackgroundReturns:
+        nativeClient === "opencode" || nativeClient === "kilo",
       codexMailboxReturns: nativeClient === "codex",
       onRefusal: (refusal) => {
         childReturnRefusal ??= refusal;

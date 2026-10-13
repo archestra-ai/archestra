@@ -9,7 +9,10 @@ import {
   resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
-import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
+import {
+  type ConnectSetupPart,
+  isOpenCodeFamilyClient,
+} from "@archestra/shared/connection-setup";
 import {
   Download,
   KeyRound,
@@ -282,13 +285,15 @@ export function ConnectCommandPanel({
     Record<string, ConnectProxyAuth>
   >({});
   const [openCodeUseAllProviders, setOpenCodeUseAllProviders] = useState(true);
+  // OpenCode and Kilo Code (an OpenCode fork) share one setup and its options.
+  const openCodeFamily = isOpenCodeFamilyClient(client.id);
   const proxyAuth =
     proxyAuthByClient[client.id] ??
-    (client.id === "opencode" ? "primary-providers" : "provider-key");
+    (openCodeFamily ? "primary-providers" : "provider-key");
   const setProxyAuth = (value: ConnectProxyAuth) =>
     setProxyAuthByClient((current) => ({ ...current, [client.id]: value }));
   const allPrimaryProviders =
-    client.id === "opencode" && proxyAuth === "primary-providers";
+    openCodeFamily && proxyAuth === "primary-providers";
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
   // user can override it in the review step.
@@ -383,19 +388,18 @@ export function ConnectCommandPanel({
   const configuredProviders = useMemo(
     () =>
       new Set(
-        (client.id === "opencode"
-          ? usableOpenCodeKeys
-          : (availableKeys ?? [])
-        ).map((key) => key.provider),
+        (openCodeFamily ? usableOpenCodeKeys : (availableKeys ?? [])).map(
+          (key) => key.provider,
+        ),
       ),
-    [client.id, availableKeys, usableOpenCodeKeys],
+    [openCodeFamily, availableKeys, usableOpenCodeKeys],
   );
 
   // Providers this client can be wired to at all, narrowed by the admin
   // allow-list (independent of auth mode — used to explain the empty state).
   const supportedProviders = useMemo(() => {
     const supported =
-      client.id === "opencode" && proxyAuth !== "provider-key"
+      openCodeFamily && proxyAuth !== "provider-key"
         ? [...OPENCODE_PRIMARY_PROVIDERS]
         : client.proxy.kind === "custom"
           ? client.proxy.supportedProviders
@@ -404,22 +408,27 @@ export function ConnectCommandPanel({
     return shown && !allPrimaryProviders
       ? supported.filter((p) => shown.has(p))
       : supported;
-  }, [client.id, client.proxy, shownProviders, allPrimaryProviders, proxyAuth]);
+  }, [
+    openCodeFamily,
+    client.proxy,
+    shownProviders,
+    allPrimaryProviders,
+    proxyAuth,
+  ]);
 
   const singleVirtualKeyProviders = useMemo(() => {
-    const supported =
-      client.id === "opencode"
-        ? [...OPENCODE_PRIMARY_PROVIDERS]
-        : client.proxy.kind === "custom"
-          ? client.proxy.supportedProviders
-          : [];
+    const supported = openCodeFamily
+      ? [...OPENCODE_PRIMARY_PROVIDERS]
+      : client.proxy.kind === "custom"
+        ? client.proxy.supportedProviders
+        : [];
     return supported.filter(
       (p) =>
         (!shownProviders || shownProviders.includes(p)) &&
         (configuredProviders.has(p) ||
-          (client.id !== "opencode" && providerRequiresPerUserCredential(p))),
+          (!openCodeFamily && providerRequiresPerUserCredential(p))),
     );
-  }, [client.id, client.proxy, shownProviders, configuredProviders]);
+  }, [openCodeFamily, client.proxy, shownProviders, configuredProviders]);
 
   // In virtual-key mode we further restrict to providers the user actually has
   // a key for — a virtual key can only be minted against a configured key — so
@@ -442,7 +451,7 @@ export function ConnectCommandPanel({
     return supportedProviders.filter(
       (p) =>
         configuredProviders.has(p) ||
-        (client.id !== "opencode" && providerRequiresPerUserCredential(p)),
+        (!openCodeFamily && providerRequiresPerUserCredential(p)),
     );
   }, [
     supportedProviders,
@@ -450,7 +459,7 @@ export function ConnectCommandPanel({
     configuredProviders,
     allPrimaryProviders,
     usableOpenCodeKeys,
-    client.id,
+    openCodeFamily,
   ]);
   const provider =
     urlProvider && providers.includes(urlProvider)
@@ -503,7 +512,7 @@ export function ConnectCommandPanel({
     ? "virtual-key"
     : proxyAuth;
   const openCodeProviderPassthrough =
-    client.id === "opencode" && effectiveProxyAuth === "provider-key";
+    openCodeFamily && effectiveProxyAuth === "provider-key";
 
   const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
   // The LLM Proxy may be available without a usable provider (e.g. virtual-key
@@ -605,7 +614,7 @@ export function ConnectCommandPanel({
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
       (client.id === "codex" && provider === "openai") ||
-      client.id === "opencode");
+      openCodeFamily);
 
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup();
   // Creating the personal key invalidates the available-keys query, so once the
@@ -809,9 +818,7 @@ export function ConnectCommandPanel({
   // as well, so the toggle can never strand the user in the per-user state.
   const handleProxyAuthChange = (value: string) => {
     const next =
-      client.id === "opencode" &&
-      value === "virtual-key" &&
-      openCodeUseAllProviders
+      openCodeFamily && value === "virtual-key" && openCodeUseAllProviders
         ? "primary-providers"
         : (value as ConnectProxyAuth);
     setProxyAuth(next);
@@ -825,7 +832,7 @@ export function ConnectCommandPanel({
 
   const proxyEditor = hasProxy ? (
     <div className="grid gap-3">
-      {client.id !== "opencode" &&
+      {!openCodeFamily &&
         providers.length > 1 &&
         !openCodeProviderPassthrough &&
         !allPrimaryProviders && (
@@ -849,7 +856,7 @@ export function ConnectCommandPanel({
             </Select>
           </EditorField>
         )}
-      <EditorField label={client.id === "opencode" ? "Model routing" : "Auth"}>
+      <EditorField label={openCodeFamily ? "Model routing" : "Auth"}>
         <div className="grid gap-1.5">
           {/* The toggle stays visible even for a per-user provider (GitHub
               Copilot), which forces virtual-key auth. Hiding it there stranded
@@ -861,7 +868,7 @@ export function ConnectCommandPanel({
             onValueChange={handleProxyAuthChange}
           >
             <TabsList size="sm">
-              {client.id === "opencode" && (
+              {openCodeFamily && (
                 <TabsTrigger value="virtual-key">Virtual key</TabsTrigger>
               )}
               <TabsTrigger value="provider-key">
@@ -869,14 +876,14 @@ export function ConnectCommandPanel({
                   ? "Claude subscription"
                   : "Your provider key"}
               </TabsTrigger>
-              {client.id !== "opencode" && (
+              {!openCodeFamily && (
                 <TabsTrigger value="virtual-key">
                   {client.id === "claude-desktop" ? "API key" : "Virtual key"}
                 </TabsTrigger>
               )}
             </TabsList>
           </Tabs>
-          {client.id === "opencode" && !openCodeProviderPassthrough && (
+          {openCodeFamily && !openCodeProviderPassthrough && (
             <Select
               value={
                 allPrimaryProviders ? "all-primary" : (provider ?? undefined)
@@ -912,7 +919,7 @@ export function ConnectCommandPanel({
             {allPrimaryProviders ? (
               <span>
                 {providers.length
-                  ? "Create a personal virtual key for all primary model providers you can access, and make their models available in OpenCode."
+                  ? `Create a personal virtual key for all primary model providers you can access, and make their models available in ${client.label}.`
                   : "No usable primary model providers are available. Mark a compatible model provider key as primary, or choose another routing option."}
               </span>
             ) : effectiveProxyAuth === "provider-key" ? (
@@ -923,8 +930,8 @@ export function ConnectCommandPanel({
                 </span>
               ) : openCodeProviderPassthrough ? (
                 <span>
-                  Supported OpenCode providers keep their model IDs and local
-                  credentials. Only their base URLs change, and a personal
+                  Supported {client.label} providers keep their model IDs and
+                  local credentials. Only their base URLs change, and a personal
                   passthrough key attributes requests to you.
                 </span>
               ) : client.id === "cursor" ? (
@@ -1186,7 +1193,7 @@ export function ConnectCommandPanel({
                   <span>
                     {providers.length
                       ? `Route all primary model providers (${providers.length}) through the LLM Proxy using a virtual key`
-                      : "No usable primary model providers available for OpenCode"}
+                      : `No usable primary model providers available for ${client.label}`}
                   </span>
                 ) : !provider ? (
                   noVirtualKeyMessage
@@ -1210,7 +1217,7 @@ export function ConnectCommandPanel({
                   </>
                 ) : openCodeProviderPassthrough ? (
                   <span>
-                    Route supported OpenCode providers through{" "}
+                    Route supported {client.label} providers through{" "}
                     <span className="font-medium text-foreground">
                       the LLM Proxy
                     </span>{" "}

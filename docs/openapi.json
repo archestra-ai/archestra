@@ -146821,7 +146821,8 @@
                       "codex",
                       "claude-desktop",
                       "copilot-cli",
-                      "opencode"
+                      "opencode",
+                      "kilo"
                     ]
                   },
                   "platform": {
@@ -147477,7 +147478,8 @@
                         "codex",
                         "claude-desktop",
                         "copilot-cli",
-                        "opencode"
+                        "opencode",
+                        "kilo"
                       ]
                     },
                     "platform": {
@@ -147863,7 +147865,8 @@
                         "codex",
                         "claude-desktop",
                         "copilot-cli",
-                        "opencode"
+                        "opencode",
+                        "kilo"
                       ]
                     },
                     "platform": {
@@ -151742,7 +151745,8 @@
                       "codex",
                       "claude-desktop",
                       "copilot-cli",
-                      "opencode"
+                      "opencode",
+                      "kilo"
                     ]
                   },
                   "platform": {
@@ -151930,7 +151934,8 @@
                               "codex",
                               "claude-desktop",
                               "copilot-cli",
-                              "opencode"
+                              "opencode",
+                              "kilo"
                             ]
                           }
                         },

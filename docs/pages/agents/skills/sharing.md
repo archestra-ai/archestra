@@ -2,7 +2,7 @@
 title: Sharing Skills
 description: Install Archestra skills in your coding agents from one shared marketplace
 order: 3
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

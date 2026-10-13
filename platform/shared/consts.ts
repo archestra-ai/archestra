@@ -292,6 +292,13 @@ export const STARTUP_GUARD_INSTALL = {
     markerStart: "# >>> archestra opencode guard >>>",
     markerEnd: "# <<< archestra opencode guard <<<",
   },
+  kilo: {
+    scriptRelpath: ".archestra/kilo-startup-guard.sh",
+    psScriptRelpath: ".archestra/kilo-startup-guard.ps1",
+    skipRelpath: ".archestra/kilo-startup-guard.skip",
+    markerStart: "# >>> archestra kilo guard >>>",
+    markerEnd: "# <<< archestra kilo guard <<<",
+  },
 } as const;
 
 /** Client ids that get a startup guard (keys of {@link STARTUP_GUARD_INSTALL}). */

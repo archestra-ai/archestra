@@ -5,6 +5,7 @@ export const NATIVE_SESSION_CLIENT_LABELS = {
   "claude-code": "Claude Code",
   codex: "Codex",
   opencode: "OpenCode",
+  kilo: "Kilo Code",
 } as const;
 
 export type NativeSessionClientId = keyof typeof NATIVE_SESSION_CLIENT_LABELS;
@@ -41,6 +42,7 @@ export const INSTALLER_CLIENT_IDS = [
   "claude-desktop",
   "copilot-cli",
   "opencode",
+  "kilo",
 ] as const;
 
 export type InstallerClientId = (typeof INSTALLER_CLIENT_IDS)[number];
@@ -52,10 +54,23 @@ export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
   codex: "Codex",
   "copilot-cli": "Copilot CLI",
   opencode: "OpenCode",
+  kilo: "Kilo Code",
 };
 
 export function isInstallerClientId(id: string): id is InstallerClientId {
   return (INSTALLER_CLIENT_IDS as readonly string[]).includes(id);
+}
+
+/**
+ * OpenCode and Kilo Code, an OpenCode fork: one installer with the same
+ * options (model providers, a routing plugin, no Archestra plugins).
+ */
+export type OpenCodeFamilyClientId = "opencode" | "kilo";
+
+export function isOpenCodeFamilyClient(
+  id: string,
+): id is OpenCodeFamilyClientId {
+  return id === "opencode" || id === "kilo";
 }
 
 /**
@@ -98,6 +113,13 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
   opencode: [
     "opencode.json (gateway and model routing)",
     "Skills folder in ~/.config/opencode/skills/",
+    "Routing plugin archestra-llm-proxy.js",
+    "~/.archestra state file",
+    "Startup check in your shell profile",
+  ],
+  kilo: [
+    "kilo.json (gateway and model routing)",
+    "Skills folder in ~/.config/kilo/skills/",
     "Routing plugin archestra-llm-proxy.js",
     "~/.archestra state file",
     "Startup check in your shell profile",

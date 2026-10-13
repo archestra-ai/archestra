@@ -3,6 +3,7 @@ import {
   type SupportedProvider,
 } from "@archestra/shared/model-constants";
 import { OPENCODE_PASSTHROUGH_PROVIDER_ROUTES } from "@archestra/shared/opencode-provider-routes";
+import type { OpenCodeFamilyClient } from "../opencode-family";
 import type { SetupScriptProxySection } from "../types";
 
 /** Custom providers keep the platform's catalog separate from local accounts. */
@@ -45,12 +46,13 @@ export function openCodePrimaryConfig(
 }
 
 /** Runs in Node on both platforms; restores only the fields this mode owns. */
-export const OPENCODE_PRIMARY_CONFIG_SCRIPT = String.raw`
+export const openCodePrimaryConfigScript = (client: OpenCodeFamilyClient) =>
+  String.raw`
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
-const configPath = path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode", "opencode.json");
-const statePath = path.join(home, ".archestra", "opencode-primary-state.json");
-const keyPath = path.join(home, ".archestra", "opencode-primary.key");
+const configPath = path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), ${JSON.stringify(client.dir)}, ${JSON.stringify(client.configFile)});
+const statePath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-primary-state.json`)});
+const keyPath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-primary.key`)});
 const input = JSON.parse(process.env.ARCHESTRA_OC_PRIMARY === "stdin" ? fs.readFileSync(0, "utf8") : process.env.ARCHESTRA_OC_PRIMARY || "null");
 if (!input && !fs.existsSync(statePath)) process.exit(0);
 const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf8")) : {};
@@ -70,13 +72,13 @@ if (fs.existsSync(statePath)) {
 if (input) {
   // A previous single-provider setup owns native provider overrides. Restore
   // its original values before taking this mode's snapshot.
-  const legacyStatePath = path.join(home, ".archestra", "opencode-connection-state.json");
+  const legacyStatePath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-connection-state.json`)});
   if (fs.existsSync(legacyStatePath)) {
     const legacy = JSON.parse(fs.readFileSync(legacyStatePath, "utf8"));
     config.provider ??= {};
     for (const [id, previous] of Object.entries(legacy.providerState || {})) {
       if (previous === null) delete config.provider[id]; else config.provider[id] = previous;
-      fs.rmSync(path.join(home, ".archestra", "opencode-" + id + ".key"), { force: true });
+      fs.rmSync(path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-`)} + id + ".key"), { force: true });
     }
     if (!Object.keys(config.provider).length) delete config.provider;
     if (legacy.enabledProvidersPresent) config.enabled_providers = legacy.enabledProviders;
@@ -108,10 +110,10 @@ if (input) {
     const twin = slash > 0 ? input.nativeProviders?.[providerId] : undefined;
     if (twin && inCatalog(twin, modelId)) {
       config[field] = twin + "/" + modelId;
-      notices.push("info:OpenCode " + field + " " + pin + " now uses " + config[field] + " from " + input.appName + ". Disconnect restores " + pin + ".");
+      notices.push(${JSON.stringify(`info:${client.label} `)} + field + " " + pin + " now uses " + config[field] + " from " + input.appName + ". Disconnect restores " + pin + ".");
     } else {
       delete config[field];
-      notices.push("warn:" + input.appName + " does not offer OpenCode " + field + " " + pin + ", so setup removed it. Choose a model in OpenCode with /models. Disconnect restores " + pin + ".");
+      notices.push("warn:" + input.appName + ${JSON.stringify(` does not offer ${client.label} `)} + field + " " + pin + ${JSON.stringify(`, so setup removed it. Choose a model in ${client.label} with /models. Disconnect restores `)} + pin + ".");
     }
   }
   config.enabled_providers = ids;
@@ -126,7 +128,7 @@ if (input) {
       return [model.id, { name: model.name, [v2 ? "modelID" : "id"]: model.wireId,
         ...(context || output ? { limit: { context, output } } : {}) }];
     }));
-    const settings = { baseURL: provider.baseURL, apiKey: "{file:~/.archestra/opencode-primary.key}" };
+    const settings = { baseURL: provider.baseURL, apiKey: ${JSON.stringify(`{file:~/.archestra/${client.stateName}-primary.key}`)} };
     config[section][id] = v2
       ? { name: provider.name, package: provider.responses ? "@opencode/ai/providers/openai-compatible/responses" : "@opencode/ai/providers/openai-compatible", settings, models }
       : { name: provider.name, npm: provider.responses ? "@ai-sdk/openai" : "@ai-sdk/openai-compatible", options: settings, models };

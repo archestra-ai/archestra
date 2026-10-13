@@ -881,13 +881,14 @@ function windowsSetupVariants(): Array<{
     "copilot-cli",
     "cursor",
     "opencode",
+    "kilo",
   ] as const) {
     const provider = clientId === "claude-code" ? "anthropic" : "openai";
     const proxies: Array<[string, SetupScriptProxySection | null]> = [
       ["no-proxy", null],
       ["provider-key", proxy(provider, "provider-key")],
       ["virtual-key", proxy(provider, "virtual-key")],
-      ...(clientId === "opencode"
+      ...(clientId === "opencode" || clientId === "kilo"
         ? ([
             ["virtual-key-catalog", proxy("openai", "virtual-key", catalog)],
             [

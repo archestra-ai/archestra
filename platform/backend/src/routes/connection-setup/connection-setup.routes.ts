@@ -13,6 +13,11 @@ import {
   SupportedProvidersSchema,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import {
+  INSTALLER_CLIENT_LABELS,
+  isOpenCodeFamilyClient,
+  type OpenCodeFamilyClientId,
+} from "@archestra/shared/connection-setup";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
@@ -112,6 +117,8 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   opencode: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
     ({ provider }) => provider,
   ),
+  // Kilo Code, an OpenCode fork, runs the same plugin.
+  kilo: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ provider }) => provider),
 };
 
 const CreateConnectionSetupBodySchema = z.object({
@@ -374,10 +381,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = body;
       let provider = requestedProvider;
       const allPrimary = proxyAuth === "primary-providers";
-      if (allPrimary && clientId !== "opencode") {
+      if (allPrimary && !isOpenCodeFamilyClient(clientId)) {
         throw new ApiError(
           400,
-          "All primary providers is only supported for OpenCode setups",
+          "All primary providers is only supported for OpenCode and Kilo Code setups",
         );
       }
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
@@ -386,7 +393,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !allPrimary &&
         provider &&
         !(
-          clientId === "opencode" && proxyAuth === "virtual-key"
+          isOpenCodeFamilyClient(clientId) && proxyAuth === "virtual-key"
             ? OPENCODE_PRIMARY_PROVIDERS
             : CLIENT_SUPPORTED_PROVIDERS[clientId]
         ).includes(provider)
@@ -494,9 +501,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
           // Fail here, where the Connect page shows the message, rather than
           // when the installer downloads its script.
-          if (clientId === "opencode" && virtualApiKeyId && provider) {
+          if (isOpenCodeFamilyClient(clientId) && virtualApiKeyId && provider) {
             await getVirtualKeyProviderCatalog({
               supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              clientLabel: INSTALLER_CLIENT_LABELS[clientId],
               provider: allPrimary ? undefined : provider,
               organizationId,
               userId: user.id,
@@ -518,7 +526,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (provider === "anthropic" || provider === "bedrock")) ||
             (clientId === "codex" && provider === "openai") ||
             (clientId === "copilot-cli" && provider === "github-copilot") ||
-            clientId === "opencode")
+            isOpenCodeFamilyClient(clientId))
         ) {
           const canCreateVirtualKey = await userHasPermission(
             user.id,
@@ -599,7 +607,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else if (
         clientId !== "claude-desktop" &&
-        clientId !== "opencode" &&
+        !isOpenCodeFamilyClient(clientId) &&
         config.plugins.enabled &&
         organization.connectionPluginsEnabled
       ) {
@@ -1027,7 +1035,7 @@ interface MarketplaceRenderContext {
   pluginNames: string[];
   pluginClientType: Exclude<
     ConnectionSetupClientId,
-    "claude-desktop" | "opencode"
+    "claude-desktop" | OpenCodeFamilyClientId
   > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
@@ -1140,11 +1148,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       : proxyApiPrefix;
     proxy = {
       primaryProviders:
-        setup.clientId === "opencode" &&
+        isOpenCodeFamilyClient(setup.clientId) &&
         setup.proxyAuth !== "provider-key" &&
         setup.virtualApiKeyId
           ? await getVirtualKeyProviderCatalog({
               supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              clientLabel: INSTALLER_CLIENT_LABELS[setup.clientId],
               provider:
                 setup.proxyAuth === "virtual-key" ? setup.provider : undefined,
               organizationId: setup.organizationId,
@@ -1265,7 +1274,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       pluginClientType:
         pluginIds.length > 0 &&
         setup.clientId !== "claude-desktop" &&
-        setup.clientId !== "opencode"
+        !isOpenCodeFamilyClient(setup.clientId)
           ? setup.clientId
           : null,
       pluginPlatform:
@@ -1284,7 +1293,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       proxy,
       managedInstructionsSource:
         mcp &&
-        ["claude-code", "codex", "copilot-cli", "opencode"].includes(
+        ["claude-code", "codex", "copilot-cli", "opencode", "kilo"].includes(
           setup.clientId,
         )
           ? {

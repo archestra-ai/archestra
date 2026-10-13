@@ -10,11 +10,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { SupportedProvider } from "@archestra/shared/model-constants";
 import { describe, expect, test } from "vitest";
+import { KILO_CLIENT, OPENCODE_CLIENT } from "../opencode-family";
 import type { SetupScriptProxySection } from "../types";
 import {
-  OPENCODE_PRIMARY_CONFIG_SCRIPT,
   openCodePrimaryConfig,
+  openCodePrimaryConfigScript,
 } from "./opencode-primary-config";
+
+const OPENCODE_PRIMARY_CONFIG_SCRIPT =
+  openCodePrimaryConfigScript(OPENCODE_CLIENT);
 
 test.each([
   1, 2,
@@ -424,4 +428,75 @@ describe.each([1, 2])("OpenCode %i default model after connect", (major) => {
       rmSync(home, { recursive: true, force: true });
     }
   });
+});
+
+test("Kilo Code gets the same providers in its own config, key file and state", () => {
+  const home = mkdtempSync(path.join(tmpdir(), "kilo-primary-"));
+  const proxy: SetupScriptProxySection = {
+    authMode: "primary-providers",
+    provider: "anthropic",
+    providerLabel: "Anthropic",
+    baseUrl: "https://proxy.example/v1",
+    url: "https://proxy.example/v1/anthropic",
+    proxyName: "proxy",
+    virtualKey: "arch_test",
+    virtualKeyName: "Primary providers",
+    passthroughVirtualKey: null,
+    model: null,
+    primaryProviders: [
+      {
+        provider: "anthropic",
+        name: "Anthropic",
+        models: [
+          { id: "claude-test", name: "Claude", context: 200000, output: 8192 },
+        ],
+      },
+    ],
+  };
+  const run = (input: ReturnType<typeof openCodePrimaryConfig> | null) =>
+    execFileSync(
+      process.execPath,
+      ["-e", openCodePrimaryConfigScript(KILO_CLIENT)],
+      {
+        input: JSON.stringify(input),
+        env: {
+          ...process.env,
+          HOME: home,
+          XDG_CONFIG_HOME: path.join(home, ".config"),
+          // Kilo's setup always passes OpenCode 1's plugin API.
+          ARCHESTRA_OC_MAJOR: "1",
+          ARCHESTRA_OC_KEY: "arch_test",
+          ARCHESTRA_OC_PRIMARY: "stdin",
+        },
+      },
+    );
+  try {
+    run(openCodePrimaryConfig(proxy, "Archestra"));
+    const config = JSON.parse(
+      readFileSync(path.join(home, ".config/kilo/kilo.json"), "utf8"),
+    );
+    expect(config.enabled_providers).toEqual(["archestra-anthropic"]);
+    expect(config.provider["archestra-anthropic"].options).toEqual({
+      baseURL: "https://proxy.example/v1/model-router",
+      apiKey: "{file:~/.archestra/kilo-primary.key}",
+    });
+    expect(
+      readFileSync(path.join(home, ".archestra/kilo-primary.key"), "utf8"),
+    ).toBe("arch_test");
+    expect(() =>
+      readFileSync(path.join(home, ".config/opencode/opencode.json")),
+    ).toThrow();
+
+    run(null);
+    expect(
+      JSON.parse(
+        readFileSync(path.join(home, ".config/kilo/kilo.json"), "utf8"),
+      ),
+    ).toEqual({});
+    expect(() =>
+      readFileSync(path.join(home, ".archestra/kilo-primary.key")),
+    ).toThrow();
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });

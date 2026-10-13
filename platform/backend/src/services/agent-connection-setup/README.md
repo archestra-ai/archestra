@@ -43,13 +43,14 @@ extension bundle that runs the reviewed setup from inside the app.
 ```
 index.ts            renderSetupScript and the agent dispatch map
 types.ts            SetupScriptContext and the agent module interface
+opencode-family.ts  where OpenCode and Kilo Code (an OpenCode fork) keep their files
 setup-command.ts    the one-line Connect command and URL helpers
 agents/             one module per agent
   claude-code.ts    bash and PowerShell steps side by side, plus its ending
   codex.ts
   copilot-cli.ts
   cursor.ts
-  opencode.ts
+  opencode.ts       OpenCode and Kilo Code, from one profile each
   claude-desktop.ts Python installer for Claude Desktop (separate path)
 steps/              building blocks shared by agents
   script-frame.ts   header, banner, footer and logging helpers (bash + PowerShell)

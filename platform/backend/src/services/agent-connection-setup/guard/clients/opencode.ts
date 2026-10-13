@@ -9,7 +9,12 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import logger from "@/logging";
-import { OPENCODE_PRIMARY_CONFIG_SCRIPT } from "../../payloads/opencode-primary-config";
+import {
+  KILO_CLIENT,
+  OPENCODE_CLIENT,
+  type OpenCodeFamilyClient,
+} from "../../opencode-family";
+import { openCodePrimaryConfigScript } from "../../payloads/opencode-primary-config";
 import { psq, sh } from "../../steps/quoting";
 import type { StartupGuardClient, StartupGuardContext } from "../startup-guard";
 
@@ -18,7 +23,8 @@ import type { StartupGuardClient, StartupGuardContext } from "../startup-guard";
  * documented global config, writes a key file under ~/.archestra in
  * virtual-key mode, and clones skills separately. Disconnect removes only
  * those entries; OpenCode's auth store is never
- * touched, so local keys and subscriptions remain available.
+ * touched, so local keys and subscriptions remain available. Kilo Code, an
+ * OpenCode fork, takes the same guard with its own paths and names.
  */
 function opencodeProviderId(provider: string): string {
   return (
@@ -50,10 +56,11 @@ function opencodePassthroughRoutes(
 }
 
 function opencodeManagedHeaders(
+  client: OpenCodeFamilyClient,
   ctx: StartupGuardContext,
 ): Record<string, string> {
   const headers: Record<string, string> = {
-    [EXTERNAL_AGENT_ID_HEADER]: "opencode",
+    [EXTERNAL_AGENT_ID_HEADER]: client.clientId,
   };
   if (ctx.proxy?.passthroughVirtualKey) {
     headers[VIRTUAL_KEY_HEADER] = ctx.proxy.passthroughVirtualKey;
@@ -62,8 +69,10 @@ function opencodeManagedHeaders(
 }
 
 // Drops `<section>.<name>` from the global config. Inputs arrive via env, never argv.
-const OPENCODE_OWNED_STRIP_PY = `import json, os, pathlib
-p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / "opencode" / "opencode.json"
+const opencodeOwnedStripPy = (
+  client: OpenCodeFamilyClient,
+) => `import json, os, pathlib
+p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / ${JSON.stringify(client.dir)} / ${JSON.stringify(client.configFile)}
 if p.exists():
     d = json.loads(p.read_text() or "{}")
     section = os.environ["ARCH_OC_SECTION"]
@@ -74,7 +83,7 @@ if p.exists():
         if not entries:
             d.pop(section, None)
     if section == "provider":
-        state_path = pathlib.Path(os.path.expanduser("~/.archestra/opencode-connection-state.json"))
+        state_path = pathlib.Path(os.path.expanduser(${JSON.stringify(`~/.archestra/${client.stateName}-connection-state.json`)}))
         if state_path.exists():
             state = json.loads(state_path.read_text())
             provider_state = state.get("providerState") or {}
@@ -95,21 +104,25 @@ if p.exists():
         p.unlink()`;
 
 // Exit 0 when `<section>.<name>` is still in the global config.
-const OPENCODE_OWNED_HAS_PY = `import json, os, pathlib, sys
-p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / "opencode" / "opencode.json"
+const opencodeOwnedHasPy = (
+  client: OpenCodeFamilyClient,
+) => `import json, os, pathlib, sys
+p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / ${JSON.stringify(client.dir)} / ${JSON.stringify(client.configFile)}
 d = json.loads(p.read_text() or "{}") if p.exists() else {}
 sys.exit(0 if os.environ["ARCH_OC_NAME"] in (d.get(os.environ["ARCH_OC_SECTION"]) or {}) else 1)`;
 
-const OPENCODE_OWNED_STRIP_NODE = `const fs=require("fs"),path=require("path"),os=require("os");
+const opencodeOwnedStripNode = (
+  client: OpenCodeFamilyClient,
+) => `const fs=require("fs"),path=require("path"),os=require("os");
 const home=process.env.HOME||os.homedir();
-const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),"opencode","opencode.json");
+const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),${JSON.stringify(client.dir)},${JSON.stringify(client.configFile)});
 if(fs.existsSync(p)){
   const d=JSON.parse(fs.readFileSync(p,"utf8")||"{}");
   const section=process.env.ARCH_OC_SECTION,name=process.env.ARCH_OC_NAME;
   const entries=d[section];
   if(entries&&typeof entries==="object") { delete entries[name]; if(Object.keys(entries).length===0) delete d[section]; }
   if(section==="provider"){
-    const statePath=path.join(home,".archestra","opencode-connection-state.json");
+    const statePath=path.join(home,".archestra",${JSON.stringify(`${client.stateName}-connection-state.json`)});
     if(fs.existsSync(statePath)){
       const state=JSON.parse(fs.readFileSync(statePath,"utf8"));
       const providerState=state.providerState||{};
@@ -128,14 +141,18 @@ if(fs.existsSync(p)){
   else fs.rmSync(p,{force:true});
 }`;
 
-const OPENCODE_OWNED_HAS_NODE = `const fs=require("fs"),path=require("path"),os=require("os");
+const opencodeOwnedHasNode = (
+  client: OpenCodeFamilyClient,
+) => `const fs=require("fs"),path=require("path"),os=require("os");
 const home=process.env.HOME||os.homedir();
-const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),"opencode","opencode.json");
+const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),${JSON.stringify(client.dir)},${JSON.stringify(client.configFile)});
 const d=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,"utf8")||"{}"):{};
 process.exit(Object.hasOwn(d[process.env.ARCH_OC_SECTION]||{},process.env.ARCH_OC_NAME)?0:1);`;
 
-const OPENCODE_PASSTHROUGH_STRIP_PY = `import json, os, pathlib
-p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / "opencode" / "opencode.json"
+const opencodePassthroughStripPy = (
+  client: OpenCodeFamilyClient,
+) => `import json, os, pathlib
+p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / ${JSON.stringify(client.dir)} / ${JSON.stringify(client.configFile)}
 if p.exists():
     d = json.loads(p.read_text() or "{}")
     providers = d.get("provider")
@@ -156,7 +173,7 @@ if p.exists():
             if not options: entry.pop("options", None)
             if not entry: providers.pop(provider_id, None)
         if not providers: d.pop("provider", None)
-    state_path = pathlib.Path(os.path.expanduser("~/.archestra/opencode-connection-state.json"))
+    state_path = pathlib.Path(os.path.expanduser(${JSON.stringify(`~/.archestra/${client.stateName}-connection-state.json`)}))
     if state_path.exists():
         state = json.loads(state_path.read_text())
         provider_state = state.get("providerState") or {}
@@ -173,9 +190,11 @@ if p.exists():
         state_path.unlink()
     p.write_text(json.dumps(d, indent=2) + "\\n")`;
 
-const OPENCODE_PASSTHROUGH_STRIP_NODE = `const fs=require("fs"),path=require("path"),os=require("os");
+const opencodePassthroughStripNode = (
+  client: OpenCodeFamilyClient,
+) => `const fs=require("fs"),path=require("path"),os=require("os");
 const home=process.env.HOME||os.homedir();
-const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),"opencode","opencode.json");
+const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),${JSON.stringify(client.dir)},${JSON.stringify(client.configFile)});
 if(fs.existsSync(p)){
   const d=JSON.parse(fs.readFileSync(p,"utf8")||"{}");
   const providers=d.provider,expected=JSON.parse(process.env.ARCH_OC_PROVIDER_ROUTES),managed=JSON.parse(process.env.ARCH_OC_HEADERS);
@@ -193,7 +212,7 @@ if(fs.existsSync(p)){
     }
     if(Object.keys(providers).length===0) delete d.provider;
   }
-  const statePath=path.join(home,".archestra","opencode-connection-state.json");
+  const statePath=path.join(home,".archestra",${JSON.stringify(`${client.stateName}-connection-state.json`)});
   if(fs.existsSync(statePath)){
     const state=JSON.parse(fs.readFileSync(statePath,"utf8"));
     d.provider??={};
@@ -237,12 +256,12 @@ try:
 except Exception:
     plugin.unlink(missing_ok=True)`;
 
-const OPENCODE_SKILLS_DIR_SH =
-  '"${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills/$SKILLS_MARKETPLACE_NAME"';
+const opencodeSkillsDirSh = (client: OpenCodeFamilyClient) =>
+  `"\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/skills/$SKILLS_MARKETPLACE_NAME"`;
 
-function opencodeRestoreRoutingPluginSh(): string {
-  return `arch_oc_plugin="\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/archestra-llm-proxy.js"
-  arch_oc_plugin_state="$HOME/.archestra/opencode-routing-plugin-state.json"
+function opencodeRestoreRoutingPluginSh(client: OpenCodeFamilyClient): string {
+  return `arch_oc_plugin="\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/plugins/archestra-llm-proxy.js"
+  arch_oc_plugin_state="$HOME/.archestra/${client.stateName}-routing-plugin-state.json"
   if command -v node >/dev/null 2>&1; then
     node -e ${sh(OPENCODE_PLUGIN_RESTORE_NODE)} "$arch_oc_plugin" "$arch_oc_plugin_state"
   elif command -v python3 >/dev/null 2>&1; then
@@ -253,14 +272,17 @@ function opencodeRestoreRoutingPluginSh(): string {
   fi`;
 }
 
-function opencodeProxyDisconnect(ctx: StartupGuardContext): string {
+function opencodeProxyDisconnect(
+  client: OpenCodeFamilyClient,
+  ctx: StartupGuardContext,
+): string {
   if (
     ctx.proxy?.usesModelCatalog ||
     ctx.proxy?.authMode === "primary-providers"
   ) {
     return `disconnect_proxy() {
-  ARCHESTRA_OC_PRIMARY=null node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)} || return 1
-  ${opencodeRestoreRoutingPluginSh()}
+  ARCHESTRA_OC_PRIMARY=null node -e ${sh(openCodePrimaryConfigScript(client))} || return 1
+  ${opencodeRestoreRoutingPluginSh(client)}
 }
 proxy_disconnect_notes() {
   printf '%s\\n' 'Restored the provider configuration from before model-provider setup.'
@@ -269,53 +291,57 @@ proxy_disconnect_notes() {
 
   if (ctx.proxy?.authMode === "provider-key") {
     const routes = opencodePassthroughRoutes(ctx);
-    const headers = opencodeManagedHeaders(ctx);
+    const headers = opencodeManagedHeaders(client, ctx);
     return `disconnect_proxy() {
-  ${opencodeRestoreRoutingPluginSh()}
+  ${opencodeRestoreRoutingPluginSh(client)}
   if command -v node >/dev/null 2>&1; then
-    ARCH_OC_PROVIDER_ROUTES=${sh(JSON.stringify(routes))} ARCH_OC_HEADERS=${sh(JSON.stringify(headers))} node -e ${sh(OPENCODE_PASSTHROUGH_STRIP_NODE)} >/dev/null 2>&1 || true
+    ARCH_OC_PROVIDER_ROUTES=${sh(JSON.stringify(routes))} ARCH_OC_HEADERS=${sh(JSON.stringify(headers))} node -e ${sh(opencodePassthroughStripNode(client))} >/dev/null 2>&1 || true
   elif command -v python3 >/dev/null 2>&1; then
-    ARCH_OC_PROVIDER_ROUTES=${sh(JSON.stringify(routes))} ARCH_OC_HEADERS=${sh(JSON.stringify(headers))} python3 -c ${sh(OPENCODE_PASSTHROUGH_STRIP_PY)} >/dev/null 2>&1 || true
+    ARCH_OC_PROVIDER_ROUTES=${sh(JSON.stringify(routes))} ARCH_OC_HEADERS=${sh(JSON.stringify(headers))} python3 -c ${sh(opencodePassthroughStripPy(client))} >/dev/null 2>&1 || true
   fi
-  rm -f "\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json.archestra-backup"
+  rm -f "\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/${client.configFile}.archestra-backup"
 }
 
 proxy_disconnect_notes() {
   line_reset
-  printf '%s  Removed ${ctx.appName} route overrides from supported OpenCode providers. Local authentication and model selection are unchanged.%s\n' "$C_DIM" "$C_RESET"
+  printf '%s  Removed ${ctx.appName} route overrides from supported ${client.label} providers. Local authentication and model selection are unchanged.%s\n' "$C_DIM" "$C_RESET"
   return 0
 }`;
   }
   const id = opencodeProviderId(ctx.proxy?.provider ?? "");
   return `disconnect_proxy() {
-  ${opencodeRestoreRoutingPluginSh()}
+  ${opencodeRestoreRoutingPluginSh(client)}
   if command -v node >/dev/null 2>&1; then
-    ARCH_OC_SECTION=provider ARCH_OC_NAME=${sh(id)} node -e ${sh(OPENCODE_OWNED_STRIP_NODE)} >/dev/null 2>&1 || true
+    ARCH_OC_SECTION=provider ARCH_OC_NAME=${sh(id)} node -e ${sh(opencodeOwnedStripNode(client))} >/dev/null 2>&1 || true
   elif command -v python3 >/dev/null 2>&1; then
-    ARCH_OC_SECTION=provider ARCH_OC_NAME=${sh(id)} python3 -c ${sh(OPENCODE_OWNED_STRIP_PY)} >/dev/null 2>&1 || true
+    ARCH_OC_SECTION=provider ARCH_OC_NAME=${sh(id)} python3 -c ${sh(opencodeOwnedStripPy(client))} >/dev/null 2>&1 || true
   fi
-  rm -f "$HOME/.archestra/opencode-${id}.key"
-  rm -f "\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json.archestra-backup"
+  rm -f "$HOME/.archestra/${client.stateName}-${id}.key"
+  rm -f "\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/${client.configFile}.archestra-backup"
 }
 
 proxy_disconnect_notes() {
   line_reset
   if command -v node >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1; then
-    printf '%s  Removed the ${ctx.appName} provider settings from ~/.config/opencode/opencode.json. Local provider authentication is unchanged.%s\n' "$C_DIM" "$C_RESET"
+    printf '%s  Removed the ${ctx.appName} provider settings from ~/.config/${client.dir}/${client.configFile}. Local provider authentication is unchanged.%s\n' "$C_DIM" "$C_RESET"
   else
-    printf '%s  Node.js and python3 are unavailable. Delete provider.${id} from ~/.config/opencode/opencode.json yourself.%s\n' "$C_WARN" "$C_RESET"
+    printf '%s  Node.js and python3 are unavailable. Delete provider.${id} from ~/.config/${client.dir}/${client.configFile} yourself.%s\n' "$C_WARN" "$C_RESET"
   fi
   return 0
 }`;
 }
 
-function opencodeConfigDirPs(): string {
-  return "$(if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME 'opencode' } else { Join-Path $env:USERPROFILE '.config/opencode' })";
+function opencodeConfigDirPs(client: OpenCodeFamilyClient): string {
+  return `$(if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME ${psq(client.dir)} } else { Join-Path $env:USERPROFILE ${psq(`.config/${client.dir}`)} })`;
 }
 
 /** PowerShell: drop `<section>.<name>` from the global config (BOM-free write). */
-function opencodeWindowsStrip(section: string, nameExpr: string): string {
-  return `    $archOc = Join-Path ${opencodeConfigDirPs()} 'opencode.json'
+function opencodeWindowsStrip(
+  client: OpenCodeFamilyClient,
+  section: string,
+  nameExpr: string,
+): string {
+  return `    $archOc = Join-Path ${opencodeConfigDirPs(client)} ${psq(client.configFile)}
     if (Test-Path $archOc) {
       try {
         $archCfg = Get-Content -Raw -Path $archOc | ConvertFrom-Json
@@ -324,7 +350,7 @@ function opencodeWindowsStrip(section: string, nameExpr: string): string {
           $archSection.Value.PSObject.Properties.Remove(${nameExpr})
           if (@($archSection.Value.PSObject.Properties).Count -eq 0) { $archCfg.PSObject.Properties.Remove(${psq(section)}) }
         }
-        ${section === "provider" ? opencodeWindowsRestoreProviderCatalog() : ""}
+        ${section === "provider" ? opencodeWindowsRestoreProviderCatalog(client) : ""}
         $archBackup = $archOc + '.archestra-backup'
         if (@($archCfg.PSObject.Properties | Where-Object { $_.Name -ne '$schema' }).Count -eq 0 -and -not (Test-Path $archBackup)) { Remove-Item -Force $archOc }
         else { [IO.File]::WriteAllText($archOc, ($archCfg | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false)) }
@@ -332,8 +358,12 @@ function opencodeWindowsStrip(section: string, nameExpr: string): string {
     }`;
 }
 
-function opencodeWindowsVerifyGone(section: string, nameExpr: string): string {
-  return `    $archOc = Join-Path ${opencodeConfigDirPs()} 'opencode.json'
+function opencodeWindowsVerifyGone(
+  client: OpenCodeFamilyClient,
+  section: string,
+  nameExpr: string,
+): string {
+  return `    $archOc = Join-Path ${opencodeConfigDirPs(client)} ${psq(client.configFile)}
     if (Test-Path $archOc) {
       try {
         $archCfg = Get-Content -Raw -Path $archOc | ConvertFrom-Json
@@ -346,8 +376,10 @@ function opencodeWindowsVerifyGone(section: string, nameExpr: string): string {
     }`;
 }
 
-function opencodeWindowsRestoreProviderCatalog(): string {
-  return `$archStateFile = Join-Path $env:USERPROFILE '.archestra/opencode-connection-state.json'
+function opencodeWindowsRestoreProviderCatalog(
+  client: OpenCodeFamilyClient,
+): string {
+  return `$archStateFile = Join-Path $env:USERPROFILE ${psq(`.archestra/${client.stateName}-connection-state.json`)}
         if (Test-Path $archStateFile) {
           $archState = Get-Content -Raw -Path $archStateFile | ConvertFrom-Json
           if ($archState.PSObject.Properties['providerState']) {
@@ -377,9 +409,11 @@ function opencodeWindowsRestoreProviderCatalog(): string {
         }`;
 }
 
-function opencodeWindowsRestoreRoutingPlugin(): string {
-  return `$archPluginFile = Join-Path ${opencodeConfigDirPs()} 'plugins/archestra-llm-proxy.js'
-  $archPluginState = Join-Path $env:USERPROFILE '.archestra/opencode-routing-plugin-state.json'
+function opencodeWindowsRestoreRoutingPlugin(
+  client: OpenCodeFamilyClient,
+): string {
+  return `$archPluginFile = Join-Path ${opencodeConfigDirPs(client)} 'plugins/archestra-llm-proxy.js'
+  $archPluginState = Join-Path $env:USERPROFILE ${psq(`.archestra/${client.stateName}-routing-plugin-state.json`)}
   if (Test-Path $archPluginState) {
     try {
       $archSavedPlugin = Get-Content -Raw -Path $archPluginState | ConvertFrom-Json
@@ -390,32 +424,37 @@ function opencodeWindowsRestoreRoutingPlugin(): string {
   } else { Remove-Item -Force -ErrorAction SilentlyContinue $archPluginFile }`;
 }
 
-function opencodeWindowsRemoveConfigBackup(): string {
+function opencodeWindowsRemoveConfigBackup(
+  client: OpenCodeFamilyClient,
+): string {
   // After plugin restore and proxy strip, matching Bash disconnect_proxy.
-  return `  Remove-Item -Force -ErrorAction SilentlyContinue ((Join-Path ${opencodeConfigDirPs()} 'opencode.json') + '.archestra-backup')`;
+  return `  Remove-Item -Force -ErrorAction SilentlyContinue ((Join-Path ${opencodeConfigDirPs(client)} ${psq(client.configFile)}) + '.archestra-backup')`;
 }
 
-function opencodeWindowsProxyDisconnect(ctx: StartupGuardContext): string {
+function opencodeWindowsProxyDisconnect(
+  client: OpenCodeFamilyClient,
+  ctx: StartupGuardContext,
+): string {
   if (
     ctx.proxy?.usesModelCatalog ||
     ctx.proxy?.authMode === "primary-providers"
   ) {
     return `function Disconnect-ArchProxy {
 $env:ARCHESTRA_OC_PRIMARY = 'null'
-try { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${psq(Buffer.from(OPENCODE_PRIMARY_CONFIG_SCRIPT).toString("base64"))})) | & node -; if ($LASTEXITCODE -ne 0) { throw 'Could not restore provider configuration' } }
+try { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${psq(Buffer.from(openCodePrimaryConfigScript(client)).toString("base64"))})) | & node -; if ($LASTEXITCODE -ne 0) { throw 'Could not restore provider configuration' } }
 finally { Remove-Item Env:ARCHESTRA_OC_PRIMARY -ErrorAction SilentlyContinue }
-${opencodeWindowsRestoreRoutingPlugin()}
+${opencodeWindowsRestoreRoutingPlugin(client)}
 }`;
   }
 
   if (ctx.proxy?.authMode === "provider-key") {
     const routes = opencodePassthroughRoutes(ctx);
-    const headers = opencodeManagedHeaders(ctx);
+    const headers = opencodeManagedHeaders(client, ctx);
     const routeJson = psq(JSON.stringify(routes));
     const headerJson = psq(JSON.stringify(headers));
     return `function Disconnect-ArchProxy {
-  ${opencodeWindowsRestoreRoutingPlugin()}
-  $archOc = Join-Path ${opencodeConfigDirPs()} 'opencode.json'
+  ${opencodeWindowsRestoreRoutingPlugin(client)}
+  $archOc = Join-Path ${opencodeConfigDirPs(client)} ${psq(client.configFile)}
   if (Test-Path $archOc) {
     try {
       $archCfg = Get-Content -Raw -Path $archOc | ConvertFrom-Json
@@ -437,34 +476,170 @@ ${opencodeWindowsRestoreRoutingPlugin()}
         if (@($archOptions.Value.PSObject.Properties).Count -eq 0) { $archEntry.Value.PSObject.Properties.Remove('options') }
         if (@($archEntry.Value.PSObject.Properties).Count -eq 0) { $archCfg.provider.PSObject.Properties.Remove($archRoute.Name) }
       }
-      ${opencodeWindowsRestoreProviderCatalog()}
+      ${opencodeWindowsRestoreProviderCatalog(client)}
       [IO.File]::WriteAllText($archOc, ($archCfg | ConvertTo-Json -Depth 32), (New-Object System.Text.UTF8Encoding $false))
     } catch { }
   }
-${opencodeWindowsRemoveConfigBackup()}
+${opencodeWindowsRemoveConfigBackup(client)}
 }`;
   }
   const id = opencodeProviderId(ctx.proxy?.provider ?? "");
   return `function Disconnect-ArchProxy {
-  ${opencodeWindowsRestoreRoutingPlugin()}
-${opencodeWindowsStrip("provider", psq(id))}
-  Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(`.archestra/opencode-${id}.key`)})
-${opencodeWindowsRemoveConfigBackup()}
+  ${opencodeWindowsRestoreRoutingPlugin(client)}
+${opencodeWindowsStrip(client, "provider", psq(id))}
+  Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $env:USERPROFILE ${psq(`.archestra/${client.stateName}-${id}.key`)})
+${opencodeWindowsRemoveConfigBackup(client)}
 }`;
 }
 
-export const OPENCODE_GUARD_CLIENT: StartupGuardClient = {
-  clientId: "opencode",
-  binary: "opencode",
-  label: "OpenCode",
-  promptName: "OpenCode",
-  disableEnvVar: "ARCHESTRA_OPENCODE_GUARD",
-  ...STARTUP_GUARD_INSTALL.opencode,
-  // One-shot and headless subcommands: warn on stderr, skip the pre-loader.
+function openCodeFamilyGuardClient(
+  client: OpenCodeFamilyClient,
+  commands: Pick<
+    StartupGuardClient,
+    | "disableEnvVar"
+    | "nonInteractiveArgPatterns"
+    | "utilitySubcommands"
+    | "handoffSkipSubcommands"
+  >,
+): StartupGuardClient {
+  const skillsDir = opencodeSkillsDirSh(client);
+  const configPath = `~/.config/${client.dir}/${client.configFile}`;
+  return {
+    clientId: client.clientId,
+    binary: client.binary,
+    label: client.label,
+    promptName: client.label,
+    ...commands,
+    inlineConfigEnv: client.inlineConfigEnv,
+    ...STARTUP_GUARD_INSTALL[client.clientId],
+    mcpDisconnectCommands: `      command ${client.binary} mcp logout "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
+      if command -v node >/dev/null 2>&1; then
+        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" node -e ${sh(opencodeOwnedStripNode(client))} >/dev/null 2>&1 || true
+      elif command -v python3 >/dev/null 2>&1; then
+        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" python3 -c ${sh(opencodeOwnedStripPy(client))} >/dev/null 2>&1 || true
+      fi`,
+    skillsDisconnectCommands: `      [ -n "$SKILLS_MARKETPLACE_NAME" ] && rm -rf ${skillsDir}`,
+    skillsRefreshCommands: `  arch_oc_skills="\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/skills/$arch_refresh_marketplace"
+  [ -d "$arch_oc_skills/.git" ] || return 0
+  command -v git >/dev/null 2>&1 || return 1
+  git -C "$arch_oc_skills" pull --ff-only -q </dev/null >/dev/null 2>&1 || return 1`,
+    mcpDisconnectVerify: `      arch_oc_mcp_present=1
+      if command -v node >/dev/null 2>&1; then
+        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" node -e ${sh(opencodeOwnedHasNode(client))} 2>/dev/null && arch_oc_mcp_present=0
+      elif command -v python3 >/dev/null 2>&1; then
+        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" python3 -c ${sh(opencodeOwnedHasPy(client))} 2>/dev/null && arch_oc_mcp_present=0
+      fi
+      if [ -f "\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/${client.configFile}" ] && [ "$arch_oc_mcp_present" -eq 0 ]; then
+        line_reset
+        printf '%s  "%s" is still in ${configPath} — remove it from the mcp block yourself.%s\\n' "$C_WARN" "$MCP_SERVER_NAME" "$C_RESET"
+        return 1
+      fi`,
+    skillsDisconnectVerify: `      if [ -n "$SKILLS_MARKETPLACE_NAME" ] && [ -d ${skillsDir} ]; then
+        line_reset
+        printf '%s  %s is still there — delete it yourself.%s\\n' "$C_WARN" ${skillsDir} "$C_RESET"
+        return 1
+      fi`,
+    renderProxyDisconnect: (ctx) => opencodeProxyDisconnect(client, ctx),
+    windows: {
+      mcpDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source mcp logout $McpServerName 2>$null | Out-Null } catch { } }
+${opencodeWindowsStrip(client, "mcp", "$McpServerName")}`,
+      skillsDisconnect: `      if ($SkillsMarketplaceName) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path ${opencodeConfigDirPs(client)} ('skills/' + $SkillsMarketplaceName)) }`,
+      skillsRefreshCommands: `  $archOcSkills = Join-Path ${opencodeConfigDirPs(client)} ('skills/' + $ArchRefreshMarketplace)
+  if (-not (Test-Path (Join-Path $archOcSkills '.git'))) { return $true }
+  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return $false }
+  try { & git -C $archOcSkills pull --ff-only -q 2>$null | Out-Null } catch { return $false }
+  if ($LASTEXITCODE -ne 0) { return $false }`,
+      mcpDisconnectVerify: opencodeWindowsVerifyGone(
+        client,
+        "mcp",
+        "$McpServerName",
+      ),
+      skillsDisconnectVerify: `    $archOcSkills = Join-Path ${opencodeConfigDirPs(client)} ('skills/' + $SkillsMarketplaceName)
+    if ($SkillsMarketplaceName -and (Test-Path $archOcSkills)) {
+      $Script:ArchDisconnectReason = $archOcSkills + ' is still there — delete it yourself.'
+      return $false
+    }`,
+      renderProxyDisconnect: (ctx) =>
+        opencodeWindowsProxyDisconnect(client, ctx),
+      proxyDisconnectNote: (ctx) =>
+        ctx.proxy?.authMode === "provider-key"
+          ? `Removed ${ctx.appName} route overrides from supported ${client.label} providers. Local authentication and model selection were preserved.`
+          : `Removed the ${ctx.appName} provider settings from ${client.configFile}. Local provider authentication was preserved.`,
+    },
+  };
+}
+
+export const OPENCODE_GUARD_CLIENT = openCodeFamilyGuardClient(
+  OPENCODE_CLIENT,
+  {
+    disableEnvVar: "ARCHESTRA_OPENCODE_GUARD",
+    // One-shot and headless subcommands: warn on stderr, skip the pre-loader.
+    nonInteractiveArgPatterns: [
+      "run",
+      "serve",
+      "web",
+      "acp",
+      "mcp",
+      "auth",
+      "debug",
+      "models",
+      "export",
+      "import",
+      "stats",
+      "upgrade",
+      "uninstall",
+    ],
+    utilitySubcommands: [
+      "auth",
+      "mcp",
+      "plugin",
+      "plugins",
+      "install",
+      "uninstall",
+      "update",
+      "upgrade",
+      "doctor",
+      "completion",
+      "completions",
+      "config",
+      "login",
+      "logout",
+      "debug",
+      "models",
+      "stats",
+      "export",
+      "import",
+      "github",
+      "session",
+      "providers",
+      "db",
+      "help",
+    ],
+    handoffSkipSubcommands: [
+      "serve",
+      "web",
+      "acp",
+      "models",
+      "stats",
+      "export",
+      "import",
+      "github",
+      "session",
+      "attach",
+      "providers",
+      "db",
+      "pr",
+      "agent",
+    ],
+  },
+);
+
+// Kilo's commands (kilo 7.8.8): OpenCode's, without `web`, plus its own.
+export const KILO_GUARD_CLIENT = openCodeFamilyGuardClient(KILO_CLIENT, {
+  disableEnvVar: "ARCHESTRA_KILO_GUARD",
   nonInteractiveArgPatterns: [
     "run",
     "serve",
-    "web",
     "acp",
     "mcp",
     "auth",
@@ -475,22 +650,17 @@ export const OPENCODE_GUARD_CLIENT: StartupGuardClient = {
     "stats",
     "upgrade",
     "uninstall",
+    "daemon",
+    "roll-call",
   ],
   utilitySubcommands: [
     "auth",
     "mcp",
     "plugin",
-    "plugins",
-    "install",
     "uninstall",
-    "update",
     "upgrade",
-    "doctor",
     "completion",
-    "completions",
     "config",
-    "login",
-    "logout",
     "debug",
     "models",
     "stats",
@@ -501,54 +671,34 @@ export const OPENCODE_GUARD_CLIENT: StartupGuardClient = {
     "providers",
     "db",
     "help",
+    "console",
+    "cloud",
+    "profile",
+    "remote",
+    "daemon",
+    "worktree",
+    "roll-call",
   ],
-  mcpDisconnectCommands: `      command opencode mcp logout "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
-      if command -v node >/dev/null 2>&1; then
-        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" node -e ${sh(OPENCODE_OWNED_STRIP_NODE)} >/dev/null 2>&1 || true
-      elif command -v python3 >/dev/null 2>&1; then
-        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" python3 -c ${sh(OPENCODE_OWNED_STRIP_PY)} >/dev/null 2>&1 || true
-      fi`,
-  skillsDisconnectCommands: `      [ -n "$SKILLS_MARKETPLACE_NAME" ] && rm -rf ${OPENCODE_SKILLS_DIR_SH}`,
-  skillsRefreshCommands: `  arch_oc_skills="\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/skills/$arch_refresh_marketplace"
-  [ -d "$arch_oc_skills/.git" ] || return 0
-  command -v git >/dev/null 2>&1 || return 1
-  git -C "$arch_oc_skills" pull --ff-only -q </dev/null >/dev/null 2>&1 || return 1`,
-  mcpDisconnectVerify: `      arch_oc_mcp_present=1
-      if command -v node >/dev/null 2>&1; then
-        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" node -e ${sh(OPENCODE_OWNED_HAS_NODE)} 2>/dev/null && arch_oc_mcp_present=0
-      elif command -v python3 >/dev/null 2>&1; then
-        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" python3 -c ${sh(OPENCODE_OWNED_HAS_PY)} 2>/dev/null && arch_oc_mcp_present=0
-      fi
-      if [ -f "\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json" ] && [ "$arch_oc_mcp_present" -eq 0 ]; then
-        line_reset
-        printf '%s  "%s" is still in ~/.config/opencode/opencode.json — remove it from the mcp block yourself.%s\\n' "$C_WARN" "$MCP_SERVER_NAME" "$C_RESET"
-        return 1
-      fi`,
-  skillsDisconnectVerify: `      if [ -n "$SKILLS_MARKETPLACE_NAME" ] && [ -d ${OPENCODE_SKILLS_DIR_SH} ]; then
-        line_reset
-        printf '%s  %s is still there — delete it yourself.%s\\n' "$C_WARN" ${OPENCODE_SKILLS_DIR_SH} "$C_RESET"
-        return 1
-      fi`,
-  renderProxyDisconnect: opencodeProxyDisconnect,
-  windows: {
-    mcpDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source mcp logout $McpServerName 2>$null | Out-Null } catch { } }
-${opencodeWindowsStrip("mcp", "$McpServerName")}`,
-    skillsDisconnect: `      if ($SkillsMarketplaceName) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path ${opencodeConfigDirPs()} ('skills/' + $SkillsMarketplaceName)) }`,
-    skillsRefreshCommands: `  $archOcSkills = Join-Path ${opencodeConfigDirPs()} ('skills/' + $ArchRefreshMarketplace)
-  if (-not (Test-Path (Join-Path $archOcSkills '.git'))) { return $true }
-  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return $false }
-  try { & git -C $archOcSkills pull --ff-only -q 2>$null | Out-Null } catch { return $false }
-  if ($LASTEXITCODE -ne 0) { return $false }`,
-    mcpDisconnectVerify: opencodeWindowsVerifyGone("mcp", "$McpServerName"),
-    skillsDisconnectVerify: `    $archOcSkills = Join-Path ${opencodeConfigDirPs()} ('skills/' + $SkillsMarketplaceName)
-    if ($SkillsMarketplaceName -and (Test-Path $archOcSkills)) {
-      $Script:ArchDisconnectReason = $archOcSkills + ' is still there — delete it yourself.'
-      return $false
-    }`,
-    renderProxyDisconnect: opencodeWindowsProxyDisconnect,
-    proxyDisconnectNote: (ctx) =>
-      ctx.proxy?.authMode === "provider-key"
-        ? `Removed ${ctx.appName} route overrides from supported OpenCode providers. Local authentication and model selection were preserved.`
-        : `Removed the ${ctx.appName} provider settings from opencode.json. Local provider authentication was preserved.`,
-  },
-};
+  handoffSkipSubcommands: [
+    "serve",
+    "acp",
+    "models",
+    "stats",
+    "export",
+    "import",
+    "github",
+    "session",
+    "attach",
+    "providers",
+    "db",
+    "pr",
+    "agent",
+    "console",
+    "cloud",
+    "profile",
+    "remote",
+    "daemon",
+    "worktree",
+    "roll-call",
+  ],
+});

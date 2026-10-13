@@ -96,6 +96,8 @@ export async function getVirtualKeyProviderCatalog(
   params: PrimaryProviderContext & {
     virtualApiKeyId: string;
     provider?: SupportedProvider;
+    /** The client named when no model can run in it. */
+    clientLabel?: string;
   },
 ): Promise<NonNullable<SetupScriptProxySection["primaryProviders"]>> {
   const [keys, mappings] = await Promise.all([
@@ -163,10 +165,11 @@ export async function getVirtualKeyProviderCatalog(
         })),
     }))
     .filter((entry) => entry.models.length > 0);
+  const clientLabel = params.clientLabel ?? "OpenCode";
   if (!entries.length)
     throw new ApiError(
       400,
-      "No model from the selected providers can run in OpenCode. OpenCode needs models that support tool calling. Sync the provider's models or choose another provider.",
+      `No model from the selected providers can run in ${clientLabel}. ${clientLabel} needs models that support tool calling. Sync the provider's models or choose another provider.`,
     );
   const preferred = await getPreferredModels(params);
   const lead = preferred.find(({ provider, modelId }) =>

@@ -3,7 +3,7 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -53,7 +53,7 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 
 Use your own subscription or key, and still show up in costs and logs. Claude Code on a Claude subscription is the common case.
 
-[Connect](/docs/get-started/connect) sets this up for Claude Code, Claude Desktop, Codex, and OpenCode. For any other client:
+[Connect](/docs/get-started/connect) sets this up for Claude Code, Claude Desktop, Codex, OpenCode, and Kilo Code. For any other client:
 
 1. Go to **LLM Proxy** and click **Create passthrough virtual key**. Copy the key.
 2. Send it in `X-Archestra-Virtual-Key`, next to the provider's own credential:

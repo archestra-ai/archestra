@@ -94,15 +94,17 @@ describe("Disconnect agent instructions", () => {
     expect(instructions).toContain("Do not force it to close.");
   });
 
-  it("undoes Kilo Code's manual setup in its own config and skills folder", async () => {
+  it("undoes Kilo Code's setup in its own config, plugin and skills folders", async () => {
     const instructions = await read("?client=kilo");
     expect(instructions).toContain("# Disconnect Kilo Code");
-    expect(instructions).toContain("~/.config/kilo/kilo.jsonc");
     expect(instructions).toContain(
-      'the entry under "mcp" whose url starts with http://localhost:3000/v1/mcp/',
+      "ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/kilo-startup-guard.sh",
     );
+    expect(instructions).toContain("~/.config}/kilo/kilo.json");
     expect(instructions).toContain("kilo mcp logout SERVER_NAME");
-    expect(instructions).toContain("~/.config/kilo/skills/");
-    expect(instructions).not.toContain("startup check");
+    expect(instructions).toContain(
+      "~/.archestra/kilo-routing-plugin-state.json",
+    );
+    expect(instructions).not.toContain("opencode");
   });
 });

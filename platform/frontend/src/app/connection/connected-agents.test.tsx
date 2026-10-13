@@ -179,7 +179,7 @@ describe("DisconnectLine", () => {
     ).toBeInTheDocument();
   });
 
-  it("gives Kilo Code a cleanup prompt although it has no installer", () => {
+  it("gives Kilo Code its own cleanup prompt", () => {
     render(<DisconnectLine data={data} picked={client("kilo")} agents={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "How it works" }));
     expect(

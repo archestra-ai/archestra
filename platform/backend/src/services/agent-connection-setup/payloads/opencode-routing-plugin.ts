@@ -1,8 +1,11 @@
 import { OPENCODE_AGENT_HEADER } from "@archestra/shared";
+import { OPENCODE_CLIENT, type OpenCodeFamilyClient } from "../opencode-family";
 
 interface RenderOpenCodeRoutingPluginParams {
   routes: Record<string, string>;
   headers: Record<string, string>;
+  /** The client the plugin runs in; OpenCode when omitted. */
+  client?: OpenCodeFamilyClient;
 }
 
 /**
@@ -14,6 +17,9 @@ interface RenderOpenCodeRoutingPluginParams {
 export function renderOpenCodeRoutingPlugin(
   params: RenderOpenCodeRoutingPluginParams,
 ): string {
+  const { dir, label } = params.client ?? OPENCODE_CLIENT;
+  // The client values go in before the wire-header constant below, so every
+  // later line stays covered by its white-label waiver.
   return `import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -27,11 +33,13 @@ const directInferencePath = /(?:\\/(?:messages|responses|chat\\/completions)|\\/
 const fetchGuardSymbol = Symbol.for("archestra.opencode.llmProxyFetchGuard");
 const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
 const openAiApiBaseUrl = "https://api.openai.com/v1";
+const clientLabel = ${JSON.stringify(label)};
+const clientDir = ${JSON.stringify(dir)};
 // white-label-ok: This constant is a stable wire header identifier.
 const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
 const chatGptResponsesUrl = "https://chatgpt.com/backend-api/codex/responses";
 
-const authPath = join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "opencode", "auth.json");
+const authPath = join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), clientDir, "auth.json");
 let localAuth = {};
 try { localAuth = JSON.parse(readFileSync(authPath, "utf8")); } catch {}
 const openAiOAuth = localAuth.openai?.type === "oauth" ? localAuth.openai : null;
@@ -59,14 +67,14 @@ if (!globalThis[fetchGuardSymbol]) {
       if (!target) throw new Error("OpenAI OAuth is not supported by the connected Archestra LLM proxy.");
       const headers = new Headers(request.headers);
       for (const [name, value] of Object.entries(managedHeaders)) headers.set(name, value);
-      if (!headers.has("Authorization")) throw new Error("OpenAI OAuth request is missing its current bearer token. Refresh the OpenCode OpenAI connection and try again.");
+      if (!headers.has("Authorization")) throw new Error("OpenAI OAuth request is missing its current bearer token. Refresh the " + clientLabel + " OpenAI connection and try again.");
       if (!headers.has("ChatGPT-Account-Id") && openAiOAuth.accountId) headers.set("ChatGPT-Account-Id", openAiOAuth.accountId);
       headers.set(openAiOAuthBridgeHeader, "true");
       return directFetch(new Request(target + "/responses", { method: request.method, headers, body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined }));
     }
     if (!proxyOrigins.has(url.origin) && directInferencePath.test(url.pathname)) {
       throw new Error(
-        'Blocked a direct provider inference request to "' + url.origin + '" while OpenCode is connected to the Archestra LLM proxy.',
+        'Blocked a direct provider inference request to "' + url.origin + '" while ' + clientLabel + ' is connected to the Archestra LLM proxy.',
       );
     }
     return directFetch(request);
@@ -111,14 +119,14 @@ export const ArchestraLlmProxy = async () => ({
     const expected = activeRoutes[providerId];
     if (!expected) {
       throw new Error(
-        'OpenCode provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
+        clientLabel + ' provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
       );
     }
     const actual = input.provider.options?.baseURL;
     const expectedResolved = providerId === "openai" && openAiOAuth ? openAiApiBaseUrl : expected;
     if (normalizeUrl(actual) !== normalizeUrl(expectedResolved)) {
       throw new Error(
-        'OpenCode provider "' + providerId + '" resolved to "' + (actual ?? 'no base URL') + '" instead of the connected Archestra endpoint. Re-run the connection setup.',
+        clientLabel + ' provider "' + providerId + '" resolved to "' + (actual ?? 'no base URL') + '" instead of the connected Archestra endpoint. Re-run the connection setup.',
       );
     }
   },
@@ -140,7 +148,7 @@ export const ArchestraLlmProxy = async () => ({
           apiKey: "archestra-oauth-bridge",
           fetch: async (input, init) => {
             if (credential.expires && credential.expires <= Date.now()) {
-              throw new Error("Google OAuth access token expired. Refresh the OpenCode Google connection and try again.");
+              throw new Error("Google OAuth access token expired. Refresh the " + clientLabel + " Google connection and try again.");
             }
             const request = new Request(input, init);
             const headers = new Headers(request.headers);
@@ -165,12 +173,12 @@ export const ArchestraOpenAiOAuth = async () => ({
         const credential = await auth();
         if (!credential || credential.type !== "oauth" || !credential.access) return {};
         const accountId = credential.accountId ?? openAiOAuth.accountId;
-        if (!accountId) throw new Error("OpenAI OAuth account ID is missing. Refresh the OpenCode OpenAI connection and try again.");
+        if (!accountId) throw new Error("OpenAI OAuth account ID is missing. Refresh the " + clientLabel + " OpenAI connection and try again.");
         return {
           apiKey: "archestra-oauth-bridge",
           fetch: async (input, init) => {
             if (credential.expires && credential.expires <= Date.now()) {
-              throw new Error("OpenAI OAuth access token expired. Refresh the OpenCode OpenAI connection and try again.");
+              throw new Error("OpenAI OAuth access token expired. Refresh the " + clientLabel + " OpenAI connection and try again.");
             }
             const request = new Request(input, init);
             const headers = new Headers(request.headers);

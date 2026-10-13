@@ -43,7 +43,10 @@ import { userHasPermission } from "@/auth";
 import config, { parseOpenAppaConfig } from "@/config";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { clientConnectionService } from "@/services/client-connection";
-import { verifyConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
+import {
+  connectionSetupReference,
+  verifyConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
 import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
@@ -197,6 +200,16 @@ describe("GET /api/connection-setups/script/:token", () => {
             secret: config.auth.secret,
           }),
         ).toBe(false);
+        if (clientId !== "claude-desktop") {
+          // The installer prints the reference the proxy looks for in the
+          // conversation that ran it, as plain text in its ending.
+          expect(response.body).toContain(
+            `Setup reference   ${connectionSetupReference({
+              setupId: setup.id,
+              secret: config.auth.secret,
+            })}`,
+          );
+        }
       });
     }
   }

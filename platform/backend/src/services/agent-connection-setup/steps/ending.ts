@@ -53,6 +53,11 @@ export function buildEnding(
     });
   }
   parts.push(...(agent.parts ?? []));
+  if (ctx.proxy?.setupReference) {
+    // An agent that runs the installer reads this in its conversation. The
+    // proxy lets that conversation finish the setup without Guardrails.
+    parts.push({ name: "Setup reference", detail: ctx.proxy.setupReference });
+  }
 
   const quote = (command: string[]) => quoteCommand(ctx, command);
   const signIn =

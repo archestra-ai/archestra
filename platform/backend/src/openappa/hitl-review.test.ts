@@ -394,6 +394,80 @@ test.each([
   ]);
 });
 
+/** A review as the OpenAPPA runtime writes it, with the given coverage lines. */
+function runtimeReview(coverage: string): string {
+  return [
+    "[OpenAPPA] Approve this call?",
+    'APPA asks you to rule as the authority "hitl".',
+    "Ask the person running this session to approve this exact call.",
+    "",
+    "Tool: host/archestra/send_report",
+    "Arguments:",
+    '{\n  "to": "finance@example.com"\n}',
+    "",
+    "What this ruling would cover:",
+    coverage,
+    "",
+    "Accept only if this exact call, with these exact arguments, may run. Decline refuses it.",
+  ].join("\n");
+}
+
+test.each([
+  {
+    case: "the person's attention only",
+    coverage: "  - attention: human-approval",
+    expected:
+      "Approve send_report?\n\nto  finance@example.com\n\nApprove lets this exact call run. Deny keeps it blocked.",
+  },
+  {
+    case: "more than the person's attention",
+    coverage:
+      "  - attention: human-approval\n  - the readers must be the public audience",
+    expected:
+      "Approve send_report?\n\nto  finance@example.com\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
+  },
+])("asks forms about the call itself when the ruling covers $case", async ({
+  coverage,
+  expected,
+}) => {
+  const active = session("form-question");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview(coverage),
+      tool: "send_report",
+      arguments: '{"to":"finance@example.com"}',
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.question).toBe(expected);
+});
+
+test("keeps the full review text when its coverage is in an unknown shape", async () => {
+  const active = session("unknown-coverage");
+  const text = runtimeReview("  * the readers must be the public audience");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text,
+      tool: "send_report",
+      arguments: '{"to":"finance@example.com"}',
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.question).toBe(text);
+});
+
 test("renders a terminal-safe heading without changing the reviewed payload", async () => {
   const active = session("terminal-review");
   const graphicHeading =

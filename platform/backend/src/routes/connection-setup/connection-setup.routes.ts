@@ -48,7 +48,10 @@ import {
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
 import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
-import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
+import {
+  connectionSetupReference,
+  issueConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
 import {
   type ConnectionCreditWarning,
   ensureConnectionPassthroughKey,
@@ -1103,7 +1106,9 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 
     // The approved installer can change settings in a running conversation.
     // Carry server-authorized setup scope on the URL, independent of client
-    // headers, prompt history, session IDs, or declared tools.
+    // headers, session IDs, or declared tools. The installer also prints the
+    // setup reference; the proxy honors the scope only in the conversation
+    // that holds it, so sessions started after the setup are governed.
     const setupProxyContext =
       setup.virtualApiKeyId && (virtualKeyValue || passthroughVirtualKey)
         ? issueConnectionProxySetupContext({
@@ -1140,6 +1145,14 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       provider: setup.provider,
       providerLabel: providerDisplayNames[setup.provider] ?? setup.provider,
       baseUrl: proxyBaseUrl,
+      ...(setupProxyContext
+        ? {
+            setupReference: connectionSetupReference({
+              setupId: setup.id,
+              secret: config.auth.secret,
+            }),
+          }
+        : {}),
       url: `${proxyBaseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,

@@ -454,13 +454,18 @@ const registry = defineArchestraTools([
     title: "Connect existing OpenAPPA policy repository",
     description:
       "Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and pass either an organization GitHub App installed on the repository owner (githubAppConfigId) or a GitLab access token that can read the project (gitlabTokenId). Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
-    // `ref` and `path` stay plain strings here and are checked against the
-    // source schema in the handler: its `ref` pattern uses a Unicode property
-    // escape, which OpenAI refuses in a function schema.
+    // `repo`, `ref` and `path` stay plain strings here and are checked against
+    // the source schema in the handler. OpenAI refuses the source schema's
+    // patterns in a function schema: `ref` uses a Unicode property escape, and
+    // a model offered the `repo` pattern's repeated group ends its turn with
+    // no reply.
     schema: z.strictObject({
-      repo: AppaGithubSourceSchema.shape.repo.describe(
-        "The existing repository, as owner/name (GitLab: group/subgroup/project).",
-      ),
+      repo: z
+        .string()
+        .max(400)
+        .describe(
+          "The existing repository, as owner/name (GitLab: group/subgroup/project).",
+        ),
       path: z
         .string()
         .default("appa.toml")

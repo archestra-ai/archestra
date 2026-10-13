@@ -122099,6 +122099,7 @@
                               "llmOauthClient",
                               "environment",
                               "serviceAccount",
+                              "credential",
                               "scheduledTask"
                             ]
                           },
@@ -160899,7 +160900,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "List organization GitHub App configurations. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List organization GitHub App configurations. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -161539,7 +161540,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Get a GitHub App configuration. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Get a GitHub App configuration. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -161838,10 +161839,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "put": {
@@ -161849,7 +161849,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Update a GitHub App configuration. Provide a private key only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Update a GitHub App configuration. Provide a private key only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -162181,10 +162181,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -162192,7 +162191,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Delete a GitHub App configuration and its stored private key.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
+        "description": "Delete a GitHub App configuration and its stored private key.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -162459,10 +162458,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -167978,7 +167976,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "List organization GitHub personal access tokens. The token value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List organization GitHub personal access tokens. The token value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -168580,7 +168578,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "Rename a stored GitHub token. Provide a token only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Rename a stored GitHub token. Provide a token only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -168888,10 +168886,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -168899,7 +168896,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "Delete a stored GitHub token and its secret. Rejected while synced skills authenticate with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
+        "description": "Delete a stored GitHub token and its secret. Rejected while synced skills authenticate with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -169166,10 +169163,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -333937,11 +333933,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "credential:update",
             "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/battery-packages/{name}": {
@@ -340315,7 +340310,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "The GitHub account each organization GitHub App is installed on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "The GitHub account each organization GitHub App is installed on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -385497,12 +385492,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
       }
     },
     "/api/credentials/github/callback": {
@@ -385807,7 +385801,7 @@
             "credential:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials"
       }
     },
     "/api/credentials": {
@@ -385816,7 +385810,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "List reusable credentials available to platform integrations\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List reusable credentials available to platform integrations\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -386222,6 +386216,137 @@
                   },
                   "allowOrganization": {
                     "type": "boolean"
+                  },
+                  "initialGrants": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 6,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions",
+                              "configure-deployment-spec"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "actions"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -386586,7 +386711,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "List resources using a saved credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List resources using a saved credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -386903,10 +387028,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -386916,7 +387040,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Update a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Update a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -387314,10 +387438,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -387325,7 +387448,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Delete a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
+        "description": "Delete a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -387595,10 +387718,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -387608,7 +387730,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Connect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Connect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -387898,10 +388020,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -387909,7 +388030,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Disconnect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Disconnect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -388176,10 +388297,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -388189,7 +388309,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Connect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Connect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -388479,10 +388599,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -388490,7 +388609,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Disconnect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Disconnect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -388757,10 +388876,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -441004,6 +441122,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -441430,6 +441549,7 @@
                           "llmOauthClient",
                           "environment",
                           "serviceAccount",
+                          "credential",
                           "scheduledTask"
                         ]
                       },
@@ -441753,6 +441873,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -442188,6 +442309,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -442247,6 +442369,7 @@
                         "llmOauthClient",
                         "environment",
                         "serviceAccount",
+                        "credential",
                         "scheduledTask"
                       ]
                     },
@@ -443135,6 +443258,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -443194,6 +443318,7 @@
                         "llmOauthClient",
                         "environment",
                         "serviceAccount",
+                        "credential",
                         "scheduledTask"
                       ]
                     },

@@ -919,7 +919,7 @@ describe("guardrails batteries", () => {
     ).toBe(200);
   });
 
-  test("binding a credential needs credential update permission on top of organization management", async ({
+  test("binding a credential needs use on it on top of organization management", async ({
     makeUser,
     makeCustomRole,
     makeMember,
@@ -964,12 +964,14 @@ describe("guardrails batteries", () => {
           url: "/api/openappa/credential-bindings/APPA_PROVIDER_GITHUB_TOKEN",
           payload: { key },
         });
-      expect((await bindAs(managerApp, "github-token")).statusCode).toBe(403);
+      // Without a grant the credential is not even visible to them.
+      expect((await bindAs(managerApp, "github-token")).statusCode).toBe(404);
       const boundByAdmin = await bindAs(app, "github-token");
       expect(batteryIn(boundByAdmin, "github")).toMatchObject({
         status: "active",
       });
-      // The binding is a credential write either way, so unbinding takes it too.
+      // The binding hands over a credential either way, so unbinding takes
+      // use on the bound one too.
       expect((await bindAs(managerApp, null)).statusCode).toBe(403);
       expect(
         (await declarations()).batteries.map(

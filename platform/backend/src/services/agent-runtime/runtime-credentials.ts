@@ -1,11 +1,16 @@
-import { isVaultReference } from "@archestra/shared";
+import {
+  isVaultReference,
+  type ResourcePermissionGrant,
+} from "@archestra/shared";
 import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled } from "@/secrets-manager";
+import { CredentialAccess } from "@/services/credential-access";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type {
   InsertRuntimeCredentialDefinition,
   RuntimeCredentialConnectionScope,
@@ -18,10 +23,14 @@ export async function listRuntimeCredentialDefinitions(params: {
   organizationId: string;
   userId: string;
 }): Promise<RuntimeCredentialDefinitionView[]> {
-  const [custom, configured] = await Promise.all([
+  const [all, configured] = await Promise.all([
     RuntimeCredentialDefinitionModel.list(params.organizationId),
     RuntimeCredentialConnectionModel.listConfigured(params),
   ]);
+  const custom = await CredentialAccess.filterReadable({
+    ...params,
+    items: all,
+  });
   const personal = new Set(
     configured
       .filter(({ scope }) => scope === "personal")
@@ -66,6 +75,8 @@ export async function createRuntimeCredentialDefinition(params: {
   organizationId: string;
   userId: string;
   definition: InsertRuntimeCredentialDefinition;
+  /** Who else may reach it from the start; its creator always may. */
+  initialGrants?: ResourcePermissionGrant[];
 }) {
   if (params.definition.key === "claude-code") {
     throw new ApiError(
@@ -87,10 +98,23 @@ export async function createRuntimeCredentialDefinition(params: {
   ) {
     throw new ApiError(409, "A credential with this name already exists");
   }
+  if (params.initialGrants?.length)
+    await ResourcePermissions.validateInitialGrants({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "credential",
+      grants: params.initialGrants,
+      target: {
+        id: crypto.randomUUID(),
+        name: params.definition.name,
+        authorId: params.userId,
+      },
+    });
   return RuntimeCredentialDefinitionModel.create({
     organizationId: params.organizationId,
     createdBy: params.userId,
     definition: params.definition,
+    initialPermissionGrants: params.initialGrants,
   });
 }
 
@@ -308,7 +332,7 @@ function assertProviderConfiguration(definition: {
     )
       throw new ApiError(
         400,
-        "GitHub user connections require personal ownership and an organization GitHub App",
+        "GitHub user credentials require personal ownership and an organization GitHub App",
       );
     return;
   }

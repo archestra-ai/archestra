@@ -23,6 +23,7 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceListActions } from "@/components/resource-list-actions";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
@@ -33,6 +34,8 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { useScopedCapabilities } from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type RuntimeCredentialDefinition,
@@ -41,10 +44,6 @@ import {
   useRuntimeCredentials,
   useRuntimeCredentialUsage,
 } from "@/lib/runtime-credentials.query";
-
-const MANAGE_CREDENTIALS_PERMISSION: Permissions = {
-  credential: ["update"],
-};
 
 export function RuntimeCredentialsSection() {
   const definitions = useRuntimeCredentials();
@@ -80,14 +79,17 @@ export function RuntimeCredentialsSection() {
 
   useEffect(() => {
     setActionButton(
-      <PermissionButton
-        permissions={{ credential: ["create"] }}
-        size="sm"
-        onClick={() => setDefinitionDialog("new")}
-      >
-        <Plus className="size-4" />
-        <span>Add credential</span>
-      </PermissionButton>,
+      <div className="flex items-center gap-2">
+        <PermissionButton
+          permissions={{ credential: ["create"] }}
+          size="sm"
+          onClick={() => setDefinitionDialog("new")}
+        >
+          <Plus className="size-4" />
+          <span>Add credential</span>
+        </PermissionButton>
+        <ResourceListActions resource="credential" />
+      </div>,
     );
     return () => setActionButton(null);
   }, [setActionButton]);
@@ -331,9 +333,22 @@ function CredentialActions({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { data: scopedGrants } = useScopedCapabilities();
+  const holds = (action: "update" | "manage-permissions") =>
+    holdsItemGrant({
+      grants: scopedGrants,
+      resource: "credential",
+      action,
+      id: definition.id,
+    });
   const connected = definition.allowOrganization
     ? definition.organizationConfigured
     : definition.personalConfigured;
+  // An organization value is the credential itself, so setting it is an
+  // edit. A personal value is the caller's own, so connecting one is use.
+  const connectPermission = definition.allowOrganization
+    ? { credential: ["update"] }
+    : { credential: ["use"] };
   const primaryActions = [
     {
       icon: connected ? (
@@ -343,19 +358,19 @@ function CredentialActions({
       ),
       label: connected ? "Replace" : "Connect",
       onClick: onConnect,
-      permissions: definition.allowOrganization
-        ? MANAGE_CREDENTIALS_PERMISSION
-        : ({ credential: ["read"] } as Permissions),
+      permissions: connectPermission,
+      permissionScope: definition.id,
     },
   ];
   const dropdownActions = [
-    ...(!definition.builtIn
+    // The dialog also holds the Permissions tab, so managing who has access
+    // opens it even without the right to edit the credential itself.
+    ...(!definition.builtIn && (holds("update") || holds("manage-permissions"))
       ? [
           {
             icon: <Pencil className="size-4" />,
             label: "Edit",
             onClick: onEdit,
-            permissions: MANAGE_CREDENTIALS_PERMISSION,
           },
         ]
       : []),
@@ -365,9 +380,11 @@ function CredentialActions({
             icon: <Unplug className="size-4" />,
             label: "Disconnect",
             onClick: onDisconnect,
+            // Clearing your own personal value needs nothing beyond seeing it.
             permissions: definition.allowOrganization
-              ? MANAGE_CREDENTIALS_PERMISSION
-              : ({ credential: ["read"] } as Permissions),
+              ? ({ credential: ["update"] } as Permissions)
+              : undefined,
+            permissionScope: definition.id,
             variant: "destructive" as const,
           },
         ]
@@ -379,6 +396,7 @@ function CredentialActions({
             label: "Delete",
             onClick: onDelete,
             permissions: { credential: ["delete"] } as Permissions,
+            permissionScope: definition.id,
             variant: "destructive" as const,
           },
         ]
@@ -485,5 +503,5 @@ const CREDENTIAL_KIND_LABELS: Record<
 > = {
   secret: "Custom secret",
   github_app: "GitHub App",
-  github_app_user: "GitHub user connection",
+  github_app_user: "GitHub user credential",
 };

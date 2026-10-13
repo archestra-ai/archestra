@@ -2,7 +2,7 @@
 title: Credentials and Secrets
 description: Save credentials once, reuse them across integrations, and configure encrypted secrets storage
 order: 1
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-12
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,11 +19,11 @@ A **GitHub App** always belongs to the organization. It holds an API URL, app ID
 
 Install the GitHub App on the repositories it needs. Its installation permissions determine the token's access. Individual integrations describe their required permissions.
 
-A **GitHub user connection** links your account to an organization-managed App. Authorize once through GitHub. Every harness using that credential acts as your GitHub user. Access is limited to permissions held by both you and the App.
+A **GitHub user credential** links your account to an organization-managed App. Authorize once through GitHub. Every harness using that credential acts as your GitHub user. Access is limited to permissions held by both you and the App.
 
 The organization App needs an OAuth client ID and client secret for personal authorization. Register `<frontend URL>/settings/credentials/github/callback` as its callback URL. Keep expiring user authorization tokens enabled. Personal authorization requires writable secret storage.
 
-User connections and bot installation credentials have separate ownership policies. Interactive coding agents can use personal connections. Unattended agents can use the organization's installation credential.
+GitHub user credentials and installation credentials have separate ownership policies. Interactive coding agents can use personal credentials. Unattended agents can use the organization's installation credential.
 
 ## Ownership
 
@@ -31,11 +31,31 @@ Every credential definition has a name, description, type, and owner policy. Its
 
 **Each user** means every person connects their own private value. Agent Runtime uses the person acting on the run. MCP servers use the owner of a personal installation. Another user's value is never substituted.
 
-With Agent Runtime enabled, **Account → Connections** appears when a personal credential is available. Installed Claude Code agents also make the page available.
+With Agent Runtime enabled, **Account → Credentials** appears when a personal credential is available. Installed Claude Code agents also make the page available.
 
 **The organization** means an administrator connects one shared value. Scheduled skill, plugin, and Knowledge syncs use organization credentials.
 
 Create separate definitions when the same service needs both ownership policies. A personal MCP credential cannot be used by an organization installation.
+
+## Who Can Manage a Credential
+
+Decide, credential by credential, who sees it, connects to it, and changes its shared value. For example, let the platform team rotate one GitHub App's private key without reaching any other credential.
+
+- **One credential:** click **Edit** on its row, then open **Permissions**.
+- **Every credential:** open **More actions** beside **Add credential**, then choose **Permissions**.
+
+Each recipient gets a level:
+
+- **Can view:** sees the credential and where it is used.
+- **Can use:** also connects a personal value, and binds it to a [guardrails battery](/docs/agents/guardrails/batteries).
+- **Can edit:** also changes its details and its organization value.
+- **Full access:** also deletes it and manages who else can reach it.
+
+What to know:
+
+- Opening **Settings → Credentials** needs [`credential:read`](/docs/reference/permissions#credential:read). Adding one needs [`credential:create`](/docs/reference/permissions#credential:create), and its creator gets **Full access**.
+- By default, admins and editors have **Full access** to every credential. Members can view and use them.
+- Grants decide who manages a credential, not who runs with it. Agents, MCP servers, and syncs that reference a credential keep resolving it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ## Secrets Storage
 
@@ -114,7 +134,7 @@ GitHub skill and plugin imports accept saved secrets as tokens or saved GitHub A
 
 Replacing a value updates future resolutions wherever the credential is referenced. For static secrets, restart MCP processes or start a new Agent Runtime run.
 
-Skill and Knowledge operations resolve GitHub App tokens when they authenticate. Managed runtime tokens also renew during execution. Personal GitHub connections refresh automatically while their authorization remains valid. Expired or revoked authorization requires reconnecting through GitHub.
+Skill and Knowledge operations resolve GitHub App tokens when they authenticate. Managed runtime tokens also renew during execution. Personal GitHub credentials refresh automatically while their authorization remains valid. Expired or revoked authorization requires reconnecting through GitHub.
 
 Disconnecting removes a saved value without removing its definition. Required bindings need a connected value before execution. Deleting a definition is blocked while a resource references it.
 
@@ -136,7 +156,7 @@ Save a GitHub token as an organization **Custom secret** named **Repository acce
 
 Select **Repository access** for a coding Agent's `GITHUB_TOKEN` environment variable. Select it again for a GitHub MCP server's `GITHUB_PERSONAL_ACCESS_TOKEN` variable. Use the same credential for private skill imports or a GitHub Knowledge connector.
 
-For personal repository access, create a **GitHub user connection** referencing the organization App. Each person authorizes GitHub once. Select that connection for each coding harness and personal MCP installation.
+For personal repository access, create a **GitHub user credential** referencing the organization App. Each person authorizes GitHub once. Select that credential for each coding harness and personal MCP installation.
 
 A GitHub App follows the same reuse pattern. Save its installation details, connect the private key, and select the credential in each integration.
 

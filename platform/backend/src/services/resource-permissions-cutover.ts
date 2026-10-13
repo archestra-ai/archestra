@@ -645,6 +645,79 @@ ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
+  // ---------------------------------------------------------------------
+  // convertCredentialAuthority
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- A saved credential has no audience of its own either: the organization owns
+-- every one, and who could see, change or delete one was decided entirely by
+-- the caller's \`credential\` role actions. Those actions become grants at \`*\`,
+-- for the same reason convertServiceAccountAuthority above writes there and
+-- not onto each credential: a copy on every object could not be revoked from
+-- the object's own Permissions tab, and \`*\` also covers credentials created
+-- after the upgrade.
+--
+-- Members held \`credential:read\`, which let them connect their own value to a
+-- personal credential. Connecting is \`use\` now, so read carries use with it.
+WITH role_actions AS (
+  -- Built-in roles keep their permissions in code, not in this table.
+  SELECT o.id AS organization_id, builtin.id AS subject_id, action
+  FROM organization o
+  CROSS JOIN (VALUES
+    ('admin', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']),
+    ('platform_admin', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']),
+    ('editor', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']),
+    ('member', ARRAY['read', 'use'])
+  ) builtin(id, actions)
+  CROSS JOIN LATERAL unnest(builtin.actions) action
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = 'credential'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
+  UNION ALL
+  SELECT roles.organization_id, roles.id, expanded.action
+  FROM organization_role roles
+  CROSS JOIN LATERAL (
+    SELECT action FROM jsonb_array_elements_text(
+      COALESCE(roles.permission::jsonb->'credential', '[]'::jsonb)) action
+    WHERE action IN ('read', 'update', 'delete')
+    UNION
+    SELECT 'use' WHERE COALESCE(roles.permission::jsonb->'credential', '[]'::jsonb) ? 'read'
+    UNION
+    SELECT 'manage-permissions' WHERE COALESCE(roles.permission::jsonb->'credential', '[]'::jsonb) ? 'update'
+  ) expanded
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = roles.organization_id AND p.resource = 'credential'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
+), entries AS (
+  -- Merged with what is stored and compared before writing, as above.
+  SELECT organization_id, 'role' AS subject_type, subject_id, action FROM role_actions
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'credential' AND p.scope = '*'
+    AND p.organization_id IN (SELECT organization_id FROM role_actions)
+), subjects AS (
+  SELECT organization_id, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, subject_type, subject_id
+), policies AS (
+  SELECT organization_id,
+    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
+      ORDER BY subject_type, subject_id) AS grants
+  FROM subjects GROUP BY organization_id
+)
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
+SELECT organization_id, 'credential', '*', grants, true FROM policies
+ON CONFLICT (organization_id, resource, scope) DO UPDATE
+SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
+WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
+`),
 ];
 
 /** @public — read by resource-permissions-cutover.roles.test.ts */
@@ -933,7 +1006,8 @@ WHERE NOT resource_permission_policies.legacy_sharing_migrated
 -- object grants before these flags retire. \`project:share-org\` converts to
 -- nothing: sharing a project with the organization is a grant written by
 -- whoever manages the project's permissions, and its holders already hold
--- their project grants. Preserve unrelated permissions and role IDs.
+-- their project grants. \`credential:update\` and \`credential:delete\` became
+-- grants at \`*\`. Preserve unrelated permissions and role IDs.
 WITH converted AS (
   SELECT r.id, COALESCE((
     SELECT jsonb_object_agg(resource, CASE
@@ -949,6 +1023,12 @@ WITH converted AS (
             '"admin"'::jsonb, '"team-admin"'::jsonb, '"deploy-to-restricted"'::jsonb,
             '"read-all"'::jsonb, '"share-org"'::jsonb
           )), '[]'::jsonb)
+      -- Editing and deleting a credential are grants now
+      -- (convertCredentialAuthority); only opening the page and creating stay.
+      WHEN resource = 'credential' THEN
+        COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)
+          FROM jsonb_array_elements(actions) WITH ORDINALITY AS items(action, ordinal)
+          WHERE action NOT IN ('"update"'::jsonb, '"delete"'::jsonb)), '[]'::jsonb)
       ELSE actions END)
     FROM jsonb_each(r.permission::jsonb) AS resources(resource, actions)
   ), '{}'::jsonb) AS permission

@@ -53,8 +53,23 @@ vi.mock("@/components/roles/with-permissions", () => ({
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: true }),
+  // Full access to every credential, as an administrator holds it.
+  useScopedCapabilities: () => ({
+    data: ["read", "use", "update", "delete", "manage-permissions"].map(
+      (action) => ({
+        organizationId: "org",
+        resource: "credential",
+        scope: "*",
+        action,
+      }),
+    ),
+  }),
 }));
 vi.mock("@/lib/config/config.query", () => ({ useFeature: () => false }));
+// The type-wide Permissions menu has its own tests.
+vi.mock("@/components/resource-list-actions", () => ({
+  ResourceListActions: () => null,
+}));
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({
     data: mocks.definitions,

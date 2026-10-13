@@ -915,6 +915,8 @@ export function presetDescription(preset: string, resource: ScopedResource) {
     if (preset === "manage")
       return "Also delete the client and manage permissions";
   }
+  if (preset === "use" && resource === "credential")
+    return "View the credential and connect or bind its value";
   if (preset === "deploy" && resource === "mcpRegistry")
     return "Also view and change how the server is deployed";
   if (
@@ -951,6 +953,7 @@ export const scopedResourceNouns: Record<ScopedResource, string> = {
   log: "log",
   auditLog: "audit log entry",
   serviceAccount: "service account",
+  credential: "credential",
 };
 /** @public - shared with initial-resource-permissions.tsx */
 export const subjectLabels: Record<PermissionSubject["type"], string> = {
@@ -1002,6 +1005,7 @@ export const resourcePluralNames: Record<ScopedResource, string> = {
   log: "LLM and MCP logs",
   auditLog: "audit logs",
   serviceAccount: "service accounts",
+  credential: "credentials",
 };
 
 const ResourcePermissionsDialogContext = createContext<{

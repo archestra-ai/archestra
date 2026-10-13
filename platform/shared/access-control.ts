@@ -55,7 +55,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
-  credential: ["read", "create", "update", "delete"],
+  credential: ["read", "create"],
 
   // OpenAPPA
   openappaPolicy: ["read", "update"],
@@ -114,7 +114,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
   mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
-  credential: ["read", "create", "update", "delete"],
+  credential: ["read", "create"],
 
   // OpenAPPA
   openappaPolicy: ["read", "update"],
@@ -177,8 +177,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   environment: ["read"],
-  // minting installation tokens from a stored App credential is privileged;
-  // default members get no access — editors and admins manage/use App configs
+  // Opening the Credentials page. Which credentials a member sees, connects
+  // or changes is decided by grants on each one.
   credential: ["read"],
 
   // OpenAPPA
@@ -387,10 +387,8 @@ export const permissionDescriptions: Record<string, string> = {
   "environment:update":
     "Modify deployment environments, including the org default environment",
   "environment:delete": "Delete deployment environments",
-  "credential:read": "View saved credentials",
+  "credential:read": "Open Credentials",
   "credential:create": "Create saved credentials",
-  "credential:update": "Modify saved credentials",
-  "credential:delete": "Delete saved credentials",
 
   // LLM
   "llmProxy:read": "View the LLM Proxy and its connection details",
@@ -518,6 +516,8 @@ export const requiredEndpointPermissionsMap: Partial<
   // Agent Runtime belongs to Agents. Read access is enough to view
   // runs and manage one's own declared credentials; shared credential writes
   // additionally enforce Agent update + scope ownership inside the route.
+  // Saved credentials: the routes below without a role action check the
+  // caller's grant on the one credential they name.
   [RouteId.GetAgentRuntimePreflight]: {},
   [RouteId.GetClaudeCodeAccount]: {},
   [RouteId.StartClaudeCodeSignIn]: {},
@@ -527,20 +527,16 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.SetAgentRuntimeCredential]: {},
   [RouteId.DeleteAgentRuntimeCredential]: {},
   [RouteId.ListRuntimeCredentials]: { credential: ["read"] },
-  [RouteId.StartGitHubUserConnection]: { credential: ["read"] },
+  [RouteId.StartGitHubUserConnection]: {},
   [RouteId.CompleteGitHubUserConnection]: { credential: ["read"] },
   [RouteId.CreateRuntimeCredential]: { credential: ["create"] },
-  [RouteId.GetRuntimeCredentialUsage]: { credential: ["read"] },
-  [RouteId.UpdateRuntimeCredential]: { credential: ["update"] },
-  [RouteId.DeleteRuntimeCredential]: { credential: ["delete"] },
-  [RouteId.SetPersonalRuntimeCredentialConnection]: { credential: ["read"] },
-  [RouteId.DeletePersonalRuntimeCredentialConnection]: { credential: ["read"] },
-  [RouteId.SetOrganizationRuntimeCredentialConnection]: {
-    credential: ["update"],
-  },
-  [RouteId.DeleteOrganizationRuntimeCredentialConnection]: {
-    credential: ["update"],
-  },
+  [RouteId.GetRuntimeCredentialUsage]: {},
+  [RouteId.UpdateRuntimeCredential]: {},
+  [RouteId.DeleteRuntimeCredential]: {},
+  [RouteId.SetPersonalRuntimeCredentialConnection]: {},
+  [RouteId.DeletePersonalRuntimeCredentialConnection]: {},
+  [RouteId.SetOrganizationRuntimeCredentialConnection]: {},
+  [RouteId.DeleteOrganizationRuntimeCredentialConnection]: {},
   [RouteId.GetAgentRuns]: {},
   [RouteId.StartAgentRun]: {},
   [RouteId.GetMyAgentRuns]: {},
@@ -1242,18 +1238,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListGithubAppConfigs]: {
     credential: ["read"],
   },
-  [RouteId.GetGithubAppConfig]: {
-    credential: ["read"],
-  },
+  [RouteId.GetGithubAppConfig]: {},
   [RouteId.CreateGithubAppConfig]: {
     credential: ["create"],
   },
-  [RouteId.UpdateGithubAppConfig]: {
-    credential: ["update"],
-  },
-  [RouteId.DeleteGithubAppConfig]: {
-    credential: ["delete"],
-  },
+  [RouteId.UpdateGithubAppConfig]: {},
+  [RouteId.DeleteGithubAppConfig]: {},
   // stored PATs share the githubAppConfig resource: both are org GitHub
   // credentials managed on the same settings page by the same audience
   [RouteId.ListGithubPats]: {
@@ -1262,12 +1252,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateGithubPat]: {
     credential: ["create"],
   },
-  [RouteId.UpdateGithubPat]: {
-    credential: ["update"],
-  },
-  [RouteId.DeleteGithubPat]: {
-    credential: ["delete"],
-  },
+  [RouteId.UpdateGithubPat]: {},
+  [RouteId.DeleteGithubPat]: {},
   [RouteId.UpdateKnowledgeSettings]: {
     organizationSettings: ["update"],
   },
@@ -1685,10 +1671,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteOpenappaBatteryInclude]: { openappaPolicy: ["update"] },
   [RouteId.UploadOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
-  // Binding hands an organization credential's value to helper code.
+  // Binding hands an organization credential's value to helper code, so the
+  // route also requires `use` on that credential.
   [RouteId.SetOpenappaCredentialBinding]: {
     openappaPolicy: ["update"],
-    credential: ["update"],
   },
   [RouteId.GetOpenappaPolicyDeclarations]: { openappaPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its

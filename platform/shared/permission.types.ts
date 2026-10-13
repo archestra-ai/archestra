@@ -138,7 +138,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   mcpServerInstallation: "Installed MCP servers and their runtime",
   environment: "Deployment environments (namespace) for catalog items",
   credential:
-    "Reusable custom secrets, GitHub tokens, and GitHub Apps across the platform",
+    "Reusable custom secrets, GitHub tokens, and GitHub Apps across the platform. Who can view, connect, edit and delete each one is granted per credential, on its Permissions tab.",
   member:
     "People in the organization: inviting them, changing their roles, and removing them",
   ac: "Custom RBAC roles",

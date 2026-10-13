@@ -193,6 +193,20 @@ export default class ResourcePermissionPolicyModel {
               // Editors could always deploy into a restricted environment, back
               // when that was a `deploy-to-restricted` action on each kind of
               // thing deployed. `use` on every environment is that same reach.
+              // Editors managed every credential and members connected their
+              // own value to one: the same reach the role actions gave.
+              ...(resource === "credential"
+                ? [
+                    {
+                      subject: { type: "role" as const, id: "editor" },
+                      actions: [...topResourcePermissionPreset(resource).actions],
+                    },
+                    {
+                      subject: { type: "role" as const, id: "member" },
+                      actions: ["read", "use"] as ResourcePermissionAction[],
+                    },
+                  ]
+                : []),
               ...(resource === "environment"
                 ? [
                     {

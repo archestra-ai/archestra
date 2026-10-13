@@ -154,6 +154,10 @@ MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfigura
 
 Provider keys and virtual keys can have personal, team, or organization scope. Personal records are limited to their owner. Team records require membership. Team admins can manage their team's records. Organization records require an update grant on `*` for that kind.
 
+### Saved Credentials
+
+[Credentials](/docs/admin/security/credentials#who-can-manage-a-credential) take grants like any other resource. **Can use** lets a person connect their own value or bind the credential to a guardrails battery. Editing or deleting a credential needs **Can edit** or **Full access** on it, not a role permission.
+
 ### Models
 
 Read grants control model discovery. Use grants control invocation through the LLM Proxy. A wildcard use grant covers future models and uncatalogued model IDs. Refreshing the catalog preserves grants and revocations.

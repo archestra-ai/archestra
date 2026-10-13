@@ -32,6 +32,10 @@ export const ScopedResourceSchema = z.enum([
   // to manage, so it is scoped by id like the rest rather than being
   // organization-wide.
   "serviceAccount",
+  // A saved credential: a secret, a GitHub App, or a GitHub user credential.
+  // Like a service account the organization owns it; who may see, connect,
+  // change or delete one is a grant on it, or at \`*\` for every credential.
+  "credential",
   // Authority over a whole class of thing, with no object to sit on. These
   // replace the `admin` role actions that let someone read rows they did not
   // create. They are granted at `*` and nowhere else, so they appear on the

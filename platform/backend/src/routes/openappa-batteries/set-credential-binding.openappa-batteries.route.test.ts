@@ -12,6 +12,7 @@ import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
@@ -117,7 +118,7 @@ describe("binding a battery credential", () => {
     return created;
   };
 
-  test("takes both policy update and credential update", async ({
+  test("takes both policy update and use on the credential", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -126,15 +127,10 @@ describe("binding a battery credential", () => {
     const policyOnly = await makeCustomRole(organizationId, {
       permission: { openappaPolicy: ["read", "update"] },
     });
-    const policyAndCredential = await makeCustomRole(organizationId, {
-      permission: {
-        openappaPolicy: ["read", "update"],
-        credential: ["update"],
-      },
-    });
     actor = await makeUser();
     await makeMember(actor.id, organizationId, { role: policyOnly.role });
-    expect((await bind("github-token")).statusCode).toBe(403);
+    // Without a grant the credential is not even visible to them.
+    expect((await bind("github-token")).statusCode).toBe(404);
     expect(
       await OpenAppaCredentialBindingModel.find({
         organizationId,
@@ -143,8 +139,11 @@ describe("binding a battery credential", () => {
     ).toBeNull();
 
     actor = await makeUser();
-    await makeMember(actor.id, organizationId, {
-      role: policyAndCredential.role,
+    await makeMember(actor.id, organizationId, { role: policyOnly.role });
+    await grantCredentialUse({
+      organizationId,
+      key: "github-token",
+      userId: actor.id,
     });
     const bound = await bind("github-token");
     expect(bound.statusCode, bound.body).toBe(200);
@@ -331,3 +330,30 @@ describe("binding a battery credential", () => {
     );
   });
 });
+
+/** Grant one person `use` on a credential, the way its Permissions tab would. */
+async function grantCredentialUse(params: {
+  organizationId: string;
+  key: string;
+  userId: string;
+}) {
+  const definition = await RuntimeCredentialDefinitionModel.find(params);
+  if (!definition) throw new Error(`No credential ${params.key}`);
+  const scope = {
+    organizationId: params.organizationId,
+    resource: "credential" as const,
+    scope: definition.id,
+  };
+  const policy = await ResourcePermissionPolicyModel.find(scope);
+  await ResourcePermissionPolicyModel.replace({
+    ...scope,
+    revision: policy?.revision ?? 0,
+    grants: [
+      ...(policy?.grants ?? []),
+      {
+        subject: { type: "user", id: params.userId },
+        actions: ["read", "use"],
+      },
+    ],
+  });
+}

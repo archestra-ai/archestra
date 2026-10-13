@@ -14,6 +14,7 @@ import {
 } from "@/openappa/declarations";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
+import { CredentialAccess } from "@/services/credential-access";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { resolveOpenAppaGithubAccess } from "@/services/openappa-github-access";
 import { ApiError } from "@/types";
@@ -423,14 +424,16 @@ export async function acceptHeldAppaGithubPull(params: {
   // Bindings can change while a pull is held, so the grants are judged as they
   // stand now as well as by the reasons recorded at hold time.
   if (
-    (row.heldReasons.includes("changes_credentials") ||
-      changes.granted.length > 0) &&
-    !(await userHasPermission(userId, organizationId, "credential", "update"))
+    row.heldReasons.includes("changes_credentials") ||
+    changes.granted.length > 0
   )
-    throw new ApiError(
-      403,
-      "Credential update permission is required: this pull changes which credentials batteries or the root policy read",
-    );
+    await CredentialAccess.requireOnEvery({
+      organizationId,
+      userId,
+      action: "use",
+      message:
+        "Use access to every credential is required: this pull changes which credentials batteries or the root policy read",
+    });
   const published = await OpenAppaGithubSyncModel.publishHeld({
     organizationId,
     userId,

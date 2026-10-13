@@ -104,16 +104,17 @@ export const Version = memo(function Version({ inline = false }: VersionProps) {
     // late would shift that content — including the auth surface's loading
     // indicator — up by half this height.
     return inline || footerSlot ? null : (
-      <div aria-hidden="true" className="py-4 text-xs">
+      <div aria-hidden="true" className="py-4 text-[11px]">
         &nbsp;
       </div>
     );
   }
 
-  const className =
-    inline || footerSlot
-      ? "text-xs text-muted-foreground"
-      : "text-xs text-muted-foreground text-center py-4";
+  const className = inline
+    ? "text-xs text-muted-foreground"
+    : footerSlot
+      ? "text-[11px] leading-none tabular-nums text-muted-foreground"
+      : "text-[11px] tabular-nums text-muted-foreground text-center py-4";
 
   // Custom footer text: show text with version, no upgrade link
   if (footerText) {

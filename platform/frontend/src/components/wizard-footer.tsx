@@ -1,7 +1,6 @@
 "use client";
 
 import { type ReactNode, useEffect } from "react";
-import { WizardFooterArena } from "@/components/__arena__"; // design-arena: do not commit
 import {
   VERSION_IN_FOOTER_CLASS,
   VERSION_SLOT_ATTRIBUTE,
@@ -23,51 +22,31 @@ export function WizardFooter({
 }) {
   useOffersVersionSlot();
   return (
-    <WizardFooterArena
-      className={className}
-      slotProps={{ [VERSION_SLOT_ATTRIBUTE]: "" }}
-      current={
-        <CurrentWizardFooter className={className}>
-          {children}
-        </CurrentWizardFooter>
-      }
-    >
-      {children}
-    </WizardFooterArena>
-  );
-}
-
-function CurrentWizardFooter({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
     <div
       data-wizard-footer
       // The negative margin takes back the page's bottom padding, so at the
       // end of the scroll the bar still meets the window's edge, as it does
       // while it sticks, instead of floating on a strip of background.
-      className="flex flex-col border-t bg-background sm:sticky sm:bottom-0 sm:z-10 sm:-mb-6 sm:flex-row sm:items-center sm:gap-x-4"
+      className="flex flex-col border-t bg-background sm:sticky sm:bottom-0 sm:z-10 sm:-mb-6"
     >
-      {/* The version shares the buttons' line to keep the bar short; on a
-          phone, where the bar does not stick, it goes under them. */}
-      <div
-        {...{ [VERSION_SLOT_ATTRIBUTE]: "" }}
-        className="order-last shrink-0 pb-3 text-center empty:hidden sm:order-first sm:pb-0 sm:text-left"
-      />
       {/* No side padding: the buttons line up with the edges of the fields
           above. */}
       <div
         className={cn(
-          "flex min-w-0 flex-1 flex-col items-stretch gap-2 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between [&>button]:w-full [&>div]:w-full [&>div]:flex-col [&>div>button]:w-full sm:[&>button]:w-auto sm:[&>div]:w-auto sm:[&>div]:flex-row sm:[&>div>button]:w-auto",
+          "flex min-w-0 flex-col items-stretch gap-2 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:py-3 [&>button]:w-full [&>div]:w-full [&>div]:flex-col [&>div>button]:w-full sm:[&>button]:w-auto sm:[&>div]:w-auto sm:[&>div]:flex-row sm:[&>div>button]:w-auto",
           className,
         )}
       >
         {children}
       </div>
+      {/* The version is a centred caption under the buttons, where the page's
+          own version line used to sit, rather than competing with them. It
+          pulls up into the row's bottom padding and keeps the same padding
+          below itself, so the buttons and caption sit centred in the bar. */}
+      <div
+        {...{ [VERSION_SLOT_ATTRIBUTE]: "" }}
+        className="-mt-2 pb-4 text-center empty:hidden sm:-mt-1.5 sm:pb-3"
+      />
     </div>
   );
 }

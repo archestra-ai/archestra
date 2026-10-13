@@ -101,6 +101,47 @@ export class CredentialAccess {
   }
 
   /**
+   * Require `use` on each credential a save newly references. Attaching one to
+   * an MCP server or an Agent hands its value to whatever that runs, so the
+   * person attaching it must be able to use it. References the item already
+   * had are left alone, so editing anything else keeps working.
+   */
+  static async requireUseOfNewKeys(params: {
+    organizationId: string;
+    userId: string;
+    previous: Iterable<string>;
+    next: Iterable<string>;
+  }): Promise<void> {
+    const before = new Set(params.previous);
+    const added = [...new Set(params.next)].filter((key) => !before.has(key));
+    const usable = await CredentialAccess.usableKeys({
+      ...params,
+      keys: added,
+    });
+    const refused = added.filter((key) => !usable.has(key));
+    if (refused.length === 0) return;
+    const definitions = await RuntimeCredentialDefinitionModel.findByKeys({
+      organizationId: params.organizationId,
+      keys: refused,
+    });
+    for (const key of refused) {
+      const definition = definitions.get(key);
+      if (definition)
+        throw new ApiError(
+          403,
+          `You don't have access to the "${definition.name}" credential, so you can't attach it. Ask an admin to share it with you.`,
+        );
+      // A key no credential has yet would hand over whichever one is created
+      // under it later.
+      await CredentialAccess.requireOnEvery({
+        ...params,
+        action: "use",
+        message: `There is no saved credential "${key}". Save it in Settings → Credentials first.`,
+      });
+    }
+  }
+
+  /**
    * The keys, of those given, whose credential the caller may `use`. A key
    * with no credential behind it is never usable.
    */

@@ -55,6 +55,7 @@ import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
+import { CredentialAccess } from "@/services/credential-access";
 import { preflightMcpCredentials } from "@/services/credentials";
 import {
   assertCanAssignEnvironment,
@@ -473,6 +474,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await CredentialAccess.requireUseOfNewKeys({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        previous: [],
+        next: boundCredentialKeys(restBody.localConfig),
+      });
+      // SPDX-SnippetEnd
 
       // Secret FK columns are server-managed: clients submit secret values, never
       // ids. Trusting an inbound id would let a caller point the row at another
@@ -1081,6 +1092,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         current: originalCatalogItem.deploymentSpecYaml,
         currentLocalConfig: originalCatalogItem.localConfig,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (restBody.localConfig !== undefined)
+        await CredentialAccess.requireUseOfNewKeys({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          previous: boundCredentialKeys(originalCatalogItem.localConfig),
+          next: boundCredentialKeys(restBody.localConfig),
+        });
+      // SPDX-SnippetEnd
 
       const clientSecretRecovery = {
         requiredKeys: [
@@ -2832,4 +2854,16 @@ async function requireCatalogRead({
   });
   if (!readable) throw new ApiError(404, "Catalog item not found");
   // SPDX-SnippetEnd
+}
+
+/** The saved credentials a catalog item's environment variables read. */
+function boundCredentialKeys(
+  localConfig:
+    | { environment?: { credentialId?: string | null }[] }
+    | null
+    | undefined,
+): string[] {
+  return (localConfig?.environment ?? []).flatMap((variable) =>
+    variable.credentialId ? [variable.credentialId] : [],
+  );
 }

@@ -47,6 +47,7 @@ import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type RuntimeCredentialDefinition,
+  useCanAttachCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -253,6 +254,7 @@ export function AgentRuntimeEnvironmentFields({
     onChange({ ...config, ...patch });
   const runtimeEnabled = useFeature("agentRuntime");
   const runtimeCredentials = useRuntimeCredentials(runtimeEnabled === true);
+  const canAttach = useCanAttachCredential();
   const { data: canCreateCredential } = useHasPermissions({
     credential: ["create"],
   });
@@ -328,7 +330,10 @@ export function AgentRuntimeEnvironmentFields({
         allowRequiredStaticSecret
         normalizeKey={uppercase}
         credentialBindingOptions={(runtimeCredentials.data ?? []).map(
-          toCredentialBindingOption,
+          (definition) => ({
+            ...toCredentialBindingOption(definition),
+            canAttach: canAttach(definition.id),
+          }),
         )}
       />
 

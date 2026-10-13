@@ -10,7 +10,11 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { rememberGitHubConnectionReturn } from "@/lib/github-connection-return";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
@@ -267,4 +271,19 @@ export function useCanUseEveryCredential() {
     >[0],
     "*",
   );
+}
+
+/**
+ * Whether the caller may attach each saved credential, by its id. Attaching
+ * one hands its value to every run of the server or Agent, so it takes `use`.
+ */
+export function useCanAttachCredential() {
+  const { data: grants } = useScopedCapabilities();
+  return (credentialId: string) =>
+    holdsItemGrant({
+      grants,
+      resource: "credential",
+      action: "use",
+      id: credentialId,
+    });
 }

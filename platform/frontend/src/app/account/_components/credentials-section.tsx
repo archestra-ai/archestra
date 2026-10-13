@@ -2,7 +2,7 @@
 
 import { Plug, RefreshCw, Unplug } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useAccountConnections } from "@/app/account/_components/use-account-connections";
+import { useAccountCredentials } from "@/app/account/_components/use-account-credentials";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -22,9 +22,9 @@ import {
  * something to connect (or the lookup failed, so the error is not hidden
  * behind a missing section).
  *
- * `/account#connections` is its address; GitHub sign-in comes back here.
+ * `/account#credentials` is its address; GitHub sign-in comes back here.
  */
-export function ConnectionsSection() {
+export function CredentialsSection() {
   const byosEnabled = useFeature("byosEnabled");
   const {
     definitions,
@@ -33,7 +33,7 @@ export function ConnectionsSection() {
     claudeAgent,
     isError,
     isApplicable,
-  } = useAccountConnections();
+  } = useAccountCredentials();
   const [connecting, setConnecting] =
     useState<RuntimeCredentialDefinition | null>(null);
   const [disconnecting, setDisconnecting] =
@@ -42,12 +42,12 @@ export function ConnectionsSection() {
   const isVisible = isApplicable === true || isError;
 
   // The section mounts only after its data settles, which is after the
-  // browser has already given up looking for the `#connections` anchor, so
+  // browser has already given up looking for the `#credentials` anchor, so
   // a deep link (or the return from GitHub sign-in) scrolls here itself.
   useEffect(() => {
-    if (isVisible && window.location.hash === `#${CONNECTIONS_SECTION_ID}`) {
+    if (isVisible && window.location.hash === `#${CREDENTIALS_SECTION_ID}`) {
       document
-        .getElementById(CONNECTIONS_SECTION_ID)
+        .getElementById(CREDENTIALS_SECTION_ID)
         ?.scrollIntoView({ block: "start" });
     }
   }, [isVisible]);
@@ -56,15 +56,15 @@ export function ConnectionsSection() {
 
   return (
     <SettingsSection
-      id={CONNECTIONS_SECTION_ID}
-      title="Connections"
+      id={CREDENTIALS_SECTION_ID}
+      title="Credentials"
       description="Credentials your agents use on your behalf. Values stay private to you."
       className="scroll-mt-6"
     >
       <div>
         {isError ? (
           <QueryLoadError
-            title="Couldn't load Agent connections"
+            title="Couldn't load Agent credentials"
             onRetry={() => {
               void definitions.refetch();
               void agents.refetch();
@@ -152,4 +152,4 @@ export function ConnectionsSection() {
   );
 }
 
-const CONNECTIONS_SECTION_ID = "connections";
+const CREDENTIALS_SECTION_ID = "credentials";

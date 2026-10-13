@@ -2,7 +2,7 @@ import { useInternalAgents } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 
-export function useAccountConnections() {
+export function useAccountCredentials() {
   const runtimeEnabled = useFeature("agentRuntime");
   const enabled = runtimeEnabled === true;
   const definitions = useRuntimeCredentials(enabled);

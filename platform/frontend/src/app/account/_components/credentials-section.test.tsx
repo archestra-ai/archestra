@@ -21,7 +21,7 @@ import {
   type RuntimeCredentialDefinition,
   runtimeCredentialsQueryKey,
 } from "@/lib/runtime-credentials.query";
-import { ConnectionsSection } from "./connections-section";
+import { CredentialsSection } from "./credentials-section";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
@@ -52,9 +52,9 @@ beforeEach(() => {
     refresh: vi.fn(),
     push: vi.fn(),
     prefetch: vi.fn(),
-    bfcacheId: "account-connections",
+    bfcacheId: "account-credentials",
   });
-  vi.mocked(usePathname).mockReturnValue("/account/connections");
+  vi.mocked(usePathname).mockReturnValue("/account");
   vi.mocked(useFeature).mockImplementation(
     (feature) => feature === "agentRuntime",
   );
@@ -85,12 +85,12 @@ beforeEach(() => {
 function renderPage() {
   return render(
     <QueryClientProvider client={client}>
-      <ConnectionsSection />
+      <CredentialsSection />
     </QueryClientProvider>,
   );
 }
 
-describe("ConnectionsSection", () => {
+describe("CredentialsSection", () => {
   it("opens GitHub sign-in from the row action", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -157,7 +157,7 @@ describe("ConnectionsSection", () => {
     );
     renderPage();
     expect(await screen.findAllByText("Claude Code")).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "Connections" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Credentials" })).toBeVisible();
     await user.click(await screen.findByRole("button", { name: "Sign in" }));
     await user.click(
       screen.getByRole("button", { name: "Sign in with Claude" }),
@@ -168,7 +168,7 @@ describe("ConnectionsSection", () => {
     expect(screen.getByLabelText("Authorization code")).toBeVisible();
   });
 
-  it("does not hide a failed Agent lookup as an empty connections list", async () => {
+  it("does not hide a failed Agent lookup as an empty credentials list", async () => {
     server.use(
       http.get(`${origin}/api/credentials`, () => HttpResponse.json([])),
       http.get(
@@ -178,12 +178,12 @@ describe("ConnectionsSection", () => {
     );
     renderPage();
     expect(
-      await screen.findByText("Couldn't load Agent connections"),
+      await screen.findByText("Couldn't load Agent credentials"),
     ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Sign in" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Connections" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Credentials" })).toBeVisible();
   });
 
   it("waits for a confirmed empty result, then hides the section", async () => {
@@ -210,14 +210,14 @@ describe("ConnectionsSection", () => {
       ),
     );
     expect(
-      screen.queryByRole("heading", { name: "Connections" }),
+      screen.queryByRole("heading", { name: "Credentials" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(/An administrator can add a personal credential/),
     ).not.toBeInTheDocument();
   });
 
-  it("revalidates an empty cache before deciding whether connections are applicable", async () => {
+  it("revalidates an empty cache before deciding whether credentials are applicable", async () => {
     client.setQueryData(runtimeCredentialsQueryKey, []);
     let finish!: () => void;
     let requested = false;
@@ -259,7 +259,7 @@ describe("ConnectionsSection", () => {
     expect(
       await screen.findByRole("button", { name: "Connect Repository token" }),
     ).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Connections" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Credentials" })).toBeVisible();
   });
 
   it("hides Connections without fetching runtime data when the runtime is disabled", async () => {
@@ -277,7 +277,7 @@ describe("ConnectionsSection", () => {
     );
     renderPage();
     expect(
-      screen.queryByRole("heading", { name: "Connections" }),
+      screen.queryByRole("heading", { name: "Credentials" }),
     ).not.toBeInTheDocument();
     expect(requests).toBe(0);
   });

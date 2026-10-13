@@ -7,7 +7,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import {
-  CLIENT_APPROVED_OPENAPPA_TOOL_SHORT_NAMES,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared/archestra-mcp-server";
@@ -92,7 +92,7 @@ export function claudeCodeAppaPermissionRules(
   }
   return [
     TOOL_RUN_TOOL_SHORT_NAME,
-    ...CLIENT_APPROVED_OPENAPPA_TOOL_SHORT_NAMES,
+    ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
     TOOL_ASK_USER_SHORT_NAME,
   ].map((name) => `mcp__${mcp.serverName}__${mcp.toolPrefix}${name}`);
 }

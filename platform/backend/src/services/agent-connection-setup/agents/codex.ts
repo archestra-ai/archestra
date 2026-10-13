@@ -1,7 +1,7 @@
 import {
-  CLIENT_APPROVED_OPENAPPA_TOOL_SHORT_NAMES,
   CODEX_CLIENT_ID,
   EXTERNAL_AGENT_ID_HEADER,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
@@ -70,10 +70,7 @@ const CODEX_HELPER_APPROVALS_NOTICE =
  * @public — asserted by the setup script unit tests, which knip --production ignores.
  */
 export function codexHelperApprovalTables(mcp: SetupScriptMcpSection): string {
-  return [
-    ...CLIENT_APPROVED_OPENAPPA_TOOL_SHORT_NAMES,
-    TOOL_ASK_USER_SHORT_NAME,
-  ]
+  return [...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES, TOOL_ASK_USER_SHORT_NAME]
     .map(
       (name) =>
         `[mcp_servers.${tomlBasicString(mcp.serverName)}.tools.${tomlBasicString(`${mcp.toolPrefix}${name}`)}]\napproval_mode = "approve"`,

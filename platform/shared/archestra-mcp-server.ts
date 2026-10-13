@@ -848,13 +848,6 @@ export function isYellToolShortName(
   return (YELL_TOOL_SHORT_NAMES as readonly string[]).includes(shortName ?? "");
 }
 
-/**
- * The required OpenAPPA tools a client connection approves up front. superyell
- * turns OpenAPPA off for a session, so the client keeps asking before it too.
- */
-export const CLIENT_APPROVED_OPENAPPA_TOOL_SHORT_NAMES =
-  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES.filter((name) => name !== "superyell");
-
 export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
   return (REQUIRED_OPENAPPA_TOOL_SHORT_NAMES as readonly string[]).includes(
     shortName,

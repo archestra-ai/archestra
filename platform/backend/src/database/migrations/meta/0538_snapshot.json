@@ -1,5 +1,5 @@
 {
-  "id": "e9a2ec8e-84a8-4519-b046-ebe0d2d92bff",
+  "id": "ec593e84-99a8-4350-8ae6-5a0d1c4b5dbb",
   "prevId": "0245252c-5ce0-448d-b316-50f5dd685aaa",
   "version": "7",
   "dialect": "postgresql",
@@ -27574,6 +27574,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now() + interval '15 minutes'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -27640,6 +27653,25 @@
           "value": "(\"openappa_operations\".\"status\" = 'pending' AND \"openappa_operations\".\"decision\" IS NULL) OR (\"openappa_operations\".\"status\" = 'complete' AND \"openappa_operations\".\"decision\" IS NOT NULL)"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.openappa_peer_inboxes": {
+      "name": "openappa_peer_inboxes",
+      "schema": "",
+      "columns": {
+        "receiver": {
+          "name": "receiver",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.openappa_policy_files": {
@@ -27719,6 +27751,25 @@
           "primaryKey": false,
           "notNull": false
         },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now() + interval '15 minutes'"
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -27764,6 +27815,25 @@
           "value": "(\"openappa_processed_results\".\"status\" = 'pending' AND \"openappa_processed_results\".\"approved_output\" IS NULL AND \"openappa_processed_results\".\"decision\" IS NULL) OR (\"openappa_processed_results\".\"status\" = 'complete' AND \"openappa_processed_results\".\"approved_output\" IS NOT NULL AND \"openappa_processed_results\".\"decision\" IS NOT NULL)"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.openappa_roots": {
+      "name": "openappa_roots",
+      "schema": "",
+      "columns": {
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.openappa_sessions": {
@@ -28100,13 +28170,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'enforcement_off'"
         },
         "created_at": {
           "name": "created_at",

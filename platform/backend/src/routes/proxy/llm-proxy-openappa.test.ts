@@ -5497,12 +5497,32 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(starts[0].parent_id).toBeUndefined();
   });
 
-  test("has Claude Code wait for the gateway when its first request has no remedy tools, then delivers the ruling", async () => {
+  test.each([
+    {
+      outcome: "succeeds",
+      waitResult: {
+        content:
+          "ready: true Connected (their tools are now available — call them directly): archestra",
+      },
+      failure: undefined,
+    },
+    {
+      outcome: "fails",
+      waitResult: {
+        content: "ready: false\nFailed to connect: plugin:appa-runtime:appa",
+        is_error: true,
+      },
+      failure: "Failed to connect: plugin:appa-runtime:appa",
+    },
+  ])("has Claude Code wait for the gateway when its first request has no remedy tools, then delivers the ruling when the wait $outcome", async ({
+    waitResult,
+    failure,
+  }) => {
     // Claude Code sends its first request while the gateway is still
     // connecting: no remedy tools yet, but its own WaitForMcpServers. The
     // denied call goes back as that wait, so the turn continues. The next
     // request declares the remedy tools and reads the runtime's ruling where
-    // the wait's output was.
+    // the wait's output was, with the client's error when the wait failed.
     block = true;
     options.nonStreamingToolUse = {
       name: "Read",
@@ -5556,8 +5576,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               type: "tool_result",
               tool_use_id: wait.id,
-              content:
-                "ready: true Connected (their tools are now available — call them directly): archestra",
+              ...waitResult,
             },
           ],
         },
@@ -5572,6 +5591,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
     expect(forwarded).toContain("[appa] NATIVE REFUSAL");
     expect(forwarded).not.toContain("ready: true");
+    if (failure) expect(forwarded).toContain(failure);
     expect(
       second
         .json()

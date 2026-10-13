@@ -2,6 +2,7 @@ import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import { InternalMcpCatalogModel, McpServerModel, ToolModel } from "@/models";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { secretManager } from "@/secrets-manager";
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -764,7 +765,77 @@ export async function reinstallMultitenantCatalog(
   });
 }
 
+/**
+ * Clear "new-input" flags that a later catalog edit made stale. A flag records
+ * a value the install lacked when it was set; once the catalog stops requiring
+ * that value (a required field demoted to optional, or removed), the install
+ * owes nothing and its owner would be asked to reinstall for no reason. An
+ * install keeps its flag while any required install-time value is still
+ * missing, judged the way the reinstall endpoint validates them.
+ */
+export async function clearSatisfiedNewInputFlags(
+  catalogItem: InternalMcpCatalog,
+  installs: McpServer[],
+): Promise<void> {
+  const flagged = installs.filter(
+    (install) =>
+      install.reinstallRequired && install.reinstallReason === "new-input",
+  );
+  for (const install of flagged) {
+    if (!(await holdsRequiredInstallValues(catalogItem, install))) continue;
+    await McpServerModel.update(install.id, {
+      reinstallRequired: false,
+      reinstallReason: null,
+    });
+    logger.info(
+      { catalogId: catalogItem.id, serverId: install.id },
+      "Install no longer owes new values - cleared reinstall flag",
+    );
+  }
+}
+
 // ===== Internal helpers =====
+
+async function holdsRequiredInstallValues(
+  catalogItem: InternalMcpCatalog,
+  install: McpServer,
+): Promise<boolean> {
+  const requiredEnv = (catalogItem.localConfig?.environment ?? []).filter(
+    (env) => env.promptOnInstallation && env.required && !env.credentialId,
+  );
+  const requiredUserConfigKeys = Object.entries(catalogItem.userConfig ?? {})
+    .filter(([, field]) => field.promptOnInstallation && field.required)
+    .map(([key]) => key);
+  const needsBag =
+    requiredUserConfigKeys.length > 0 ||
+    requiredEnv.some((env) => env.type === "secret");
+
+  let bag: Record<string, unknown> = {};
+  if (needsBag) {
+    if (!install.secretId) return false;
+    try {
+      bag = ((await secretManager().getSecret(install.secretId))?.secret ??
+        {}) as Record<string, unknown>;
+    } catch (error) {
+      logger.warn(
+        { err: error, serverId: install.id },
+        "Could not read install secret - keeping reinstall flag",
+      );
+      return false;
+    }
+  }
+
+  const present = (value: unknown) =>
+    typeof value === "string" && value.trim() !== "";
+  const plainEnv = install.environmentValues ?? {};
+  return (
+    requiredEnv.every((env) =>
+      env.type === "secret"
+        ? present(bag[env.key])
+        : present(plainEnv[env.key]),
+    ) && requiredUserConfigKeys.every((key) => present(bag[key]))
+  );
+}
 
 type PromptedEnvVarInfo = {
   required: boolean;

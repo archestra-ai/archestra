@@ -44,6 +44,13 @@ export const openappaEventsTable = pgTable(
   ],
 );
 
+// One row per trajectory family. The family's writers lock it for one
+// read-decide-append step of the event log, so they take turns on the log
+// instead of losing the append to each other. Nothing else is stored here.
+export const openappaRootsTable = pgTable("openappa_roots", {
+  root: text().primaryKey(),
+});
+
 export const openappaHostKeysTable = pgTable(
   "openappa_host_keys",
   {
@@ -81,6 +88,12 @@ export const openappaHeldPeerMessagesTable = pgTable(
     ),
   ],
 );
+
+// One row per receiver of held peer messages. Writers of one receiver's held
+// messages lock it for one transaction, so the receiver's quota holds.
+export const openappaPeerInboxesTable = pgTable("openappa_peer_inboxes", {
+  receiver: text().primaryKey(),
+});
 
 /** Runtime-owned peer values. Label capture and admission stay inside OpenAPPA. */
 export const openappaEmbeddedPeerMessagesTable = pgTable(
@@ -175,6 +188,15 @@ export const openappaOperationsTable = pgTable(
     status: text().notNull(),
     input: jsonb().notNull(),
     decision: jsonb(),
+    // The dispatch working on a pending receipt, and when its lease ends unless
+    // it renews it. Another dispatch takes the receipt over only after that.
+    // OpenAPPA sets both on every claim. The default covers a backend from
+    // before leases that still claims receipts during an upgrade: its work is
+    // treated as live for as long as such a dispatch can run.
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", {
+      withTimezone: true,
+    }).default(sql`now() + interval '15 minutes'`),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -208,6 +230,13 @@ export const openappaProcessedResultsTable = pgTable(
     status: text().notNull(),
     approvedOutput: text("approved_output"),
     decision: jsonb(),
+    // As on `openappa_operations`.
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", {
+      withTimezone: true,
+    }).default(sql`now() + interval '15 minutes'`),
+    // A fork inherits only results completed before it opened.
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -227,11 +256,9 @@ export const openappaProcessedResultsTable = pgTable(
   ],
 );
 
-// The lease a dispatch holds on one trajectory family while it claims and
-// completes receipts. It names the owning dispatch and where the family's event
-// log ended when the dispatch began. A later dispatch recovers pending receipts
-// under the same lock. A failed dispatch may release only its own receipts,
-// and only when the log still ends at `event_seq`.
+// The family lease earlier backends take for a whole dispatch. Receipts now
+// carry their own leases and nothing here reads it; it stays while a backend
+// that writes it may still run beside this one during an upgrade.
 export const openappaDispatchLeasesTable = pgTable(
   "openappa_dispatch_leases",
   {

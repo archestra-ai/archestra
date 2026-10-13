@@ -154,7 +154,13 @@ export function parseGitRepoUrl(params: {
 }
 
 export function normalizeGitSubpath(path: string): string {
-  return path.replace(/^\.?\/+/, "").replace(/\/+$/, "");
+  // Trimmed by index, not a trailing `\/+$` pattern, which backtracks
+  // quadratically on a long run of slashes that does not end the string.
+  let start = path.startsWith("./") ? 1 : 0;
+  while (path[start] === "/") start++;
+  let end = path.length;
+  while (end > start && path[end - 1] === "/") end--;
+  return path.slice(start, end);
 }
 
 /** Browser links for a repository, its files, commits, and change requests. */

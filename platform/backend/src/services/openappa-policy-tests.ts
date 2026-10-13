@@ -136,7 +136,7 @@ export async function updateOpenAppaPolicyTests(params: {
   if (!saved)
     throw new ApiError(
       409,
-      "The validation files changed or GitHub sync is enabled; reload before saving",
+      "The validation files changed or Git sync is enabled; reload before saving",
     );
   return {
     source: "local" as const,

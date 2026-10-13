@@ -117,7 +117,7 @@ export function AppaGithubSyncPanel() {
       <SettingsBlock
         title={
           <span className="inline-flex items-center gap-2">
-            <span>{source?.repo ? `${git.label} sync` : "Git sync"}</span>
+            <span>Git sync</span>
             {/* No badge until sync is set up: there is no state to report. */}
             {status && (
               <Badge
@@ -560,7 +560,7 @@ export function OpenAppaSourceForm({
           initialValues={OPENAPPA_GITHUB_CREDENTIAL_INITIAL_VALUES}
           setupNotice={<OpenAppaGithubAppRequirements />}
           hideProvidedBy
-          backLabel="Back to GitHub sync"
+          backLabel="Back to Git sync"
           size="medium"
           onClose={() => setCredentialStep("source")}
           onCreated={(id) => {

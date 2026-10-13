@@ -266,7 +266,7 @@ test("a failed sync shows its error", async () => {
     source: { ...source, lastSyncError: "appa.toml was not found" },
   };
   show();
-  expect(await screen.findByText("GitHub sync failed")).toBeVisible();
+  expect(await screen.findByText("Git sync failed")).toBeVisible();
   expect(
     within(screen.getByRole("alert")).getByRole("link", {
       name: "Review sync settings",

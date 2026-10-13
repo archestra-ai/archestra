@@ -562,7 +562,7 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. A `[credentials]` line in the text overrides that binding; do not add one. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without GitHub sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. A `[credentials]` line in the text overrides that binding; do not add one. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       const organizationId = organization(context);
@@ -584,7 +584,7 @@ const registry = defineArchestraTools([
             }
           : {
               mode: "revision",
-              // GitHub sync is set up in the guardrails settings, not in chat.
+              // Git sync is set up in the guardrails settings, not in chat.
               githubSyncSetupUrl: `${config.frontendBaseUrl}/settings/guardrails?setup=github-sync`,
             },
       });
@@ -839,7 +839,7 @@ const registry = defineArchestraTools([
     shortName: "update_guardrails_policy",
     title: "Publish OpenAPPA policy change",
     description:
-      "Publish a change to organization.appa.toml. Call preview_guardrails_policy_change first, explain what the change does and its warnings, then send the same `edits` or `content` and the same expectedRevision that were previewed. Use `edits` to change an existing policy and `content` only for a first policy or a full rewrite. The result carries the published `diff` and `changed` line counts. When GitHub sync is configured, this creates a pull request using the configured GitHub App or PAT; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
+      "Publish a change to organization.appa.toml. Call preview_guardrails_policy_change first, explain what the change does and its warnings, then send the same `edits` or `content` and the same expectedRevision that were previewed. Use `edits` to change an existing policy and `content` only for a first policy or a full rewrite. The result carries the published `diff` and `changed` line counts. When Git sync is configured, this opens a pull request (a merge request on GitLab) through the configured credential; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
     schema: ProposedGuardrailsPolicySchema.extend({
       title: z
         .string()
@@ -865,7 +865,7 @@ const registry = defineArchestraTools([
     shortName: "bind_guardrails_credential",
     title: "Bind OpenAPPA battery credential",
     description:
-      "Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. The binding is stored beside the policy, not in its text, so it needs no policy change and works while GitHub sync owns the policy. One variable has one key for the whole organization: every battery whose `credentials` list it is in reads that key. Use the variable names list_guardrails_battery_fits returns and keys from list_runtime_credentials that have an organization value. A variable bound by a `[credentials]` line in the policy text is refused; that line wins until a policy change removes it (update_guardrails_policy; with GitHub sync, through the repository). Returns every declared battery with its credentials and their source.",
+      "Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. The binding is stored beside the policy, not in its text, so it needs no policy change and works while Git sync owns the policy. One variable has one key for the whole organization: every battery whose `credentials` list it is in reads that key. Use the variable names list_guardrails_battery_fits returns and keys from list_runtime_credentials that have an organization value. A variable bound by a `[credentials]` line in the policy text is refused; that line wins until a policy change removes it (update_guardrails_policy; with Git sync, through the repository). Returns every declared battery with its credentials and their source.",
     schema: z.strictObject({
       variable: z
         .string()
@@ -1039,7 +1039,7 @@ const registry = defineArchestraTools([
     title: "Check OpenAPPA policy pull request",
     annotations: { readOnlyHint: true },
     description:
-      "Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. Use the pull request number returned by update_guardrails_policy.",
+      "Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. Use the pull request number returned by update_guardrails_policy.",
     schema: z.strictObject({ number: z.number().int().positive() }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(

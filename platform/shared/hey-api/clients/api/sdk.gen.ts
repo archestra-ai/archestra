@@ -9437,7 +9437,7 @@ export const applyGithubPluginUpdate = <ThrowOnError extends boolean = false>(op
 });
 
 /**
- * Change or pause a Plugin GitHub sync schedule
+ * Change or pause a Plugin Git sync schedule
  *
  * Authentication:
  *
@@ -9457,7 +9457,7 @@ export const updatePluginGithubSync = <ThrowOnError extends boolean = false>(opt
 });
 
 /**
- * Queue an immediate Plugin GitHub source check
+ * Queue an immediate Plugin Git source check
  *
  * Authentication:
  *
@@ -10761,7 +10761,7 @@ export const getSkillVersions = <ThrowOnError extends boolean = false>(options: 
 export const getSkillVersion = <ThrowOnError extends boolean = false>(options: Options<GetSkillVersionData, ThrowOnError>) => (options.client ?? client).get<GetSkillVersionResponses, GetSkillVersionErrors, ThrowOnError>({ url: '/api/skills/{id}/versions/{version}', ...options });
 
 /**
- * List distinct GitHub repositories that skills in this organization were imported from
+ * List distinct GitHub and GitLab repositories that skills in this organization were imported from
  *
  * Authentication:
  *
@@ -10833,7 +10833,7 @@ export const permanentlyDeleteSkill = <ThrowOnError extends boolean = false>(opt
 export const resetSkill = <ThrowOnError extends boolean = false>(options: Options<ResetSkillData, ThrowOnError>) => (options.client ?? client).post<ResetSkillResponses, ResetSkillErrors, ThrowOnError>({ url: '/api/skills/{id}/reset', ...options });
 
 /**
- * Manage a GitHub-synced skill: change its pull frequency, trigger an immediate pull, or disconnect it from the GitHub source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.
+ * Manage a Git-synced skill: change its pull frequency, trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.
  *
  * Authentication:
  *
@@ -10879,7 +10879,7 @@ export const enableSkillToolDefaults = <ThrowOnError extends boolean = false>(op
 export const searchSkillCatalog = <ThrowOnError extends boolean = false>(options?: Options<SearchSkillCatalogData, ThrowOnError>) => (options?.client ?? client).get<SearchSkillCatalogResponses, SearchSkillCatalogErrors, ThrowOnError>({ url: '/api/skills/catalog/search', ...options });
 
 /**
- * Discover skills in a GitHub repository
+ * Discover skills in a GitHub or GitLab repository
  *
  * Authentication:
  *
@@ -10899,7 +10899,7 @@ export const discoverGithubSkills = <ThrowOnError extends boolean = false>(optio
 });
 
 /**
- * Fetch a single skill's manifest and files from GitHub without persisting it.
+ * Fetch a single skill's manifest and files from GitHub or GitLab without persisting it.
  *
  * Authentication:
  *
@@ -10919,7 +10919,7 @@ export const previewGithubSkill = <ThrowOnError extends boolean = false>(options
 });
 
 /**
- * Import selected skills from a GitHub repository
+ * Import selected skills from a GitHub or GitLab repository
  *
  * Authentication:
  *

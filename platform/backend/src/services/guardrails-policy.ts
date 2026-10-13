@@ -236,10 +236,7 @@ export const guardrailsPolicyService = {
     requireEnabled();
     const { organizationId, userId, content } = params;
     if ((await OpenAppaGithubSyncModel.find(organizationId))?.interval)
-      throw new ApiError(
-        409,
-        "Stop GitHub syncing before editing this policy.",
-      );
+      throw new ApiError(409, "Stop Git sync before editing this policy.");
     const latest = await this.get(organizationId);
     const resolved = await resolveBoth({
       organizationId,

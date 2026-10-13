@@ -86,7 +86,7 @@ If repository rules block the commit, setup opens an initial pull request instea
 
 ### GitLab
 
-GitLab sync works with gitlab.com and self-managed GitLab, through an access token with the `api` scope.
+Git sync works with gitlab.com and self-managed GitLab, through an access token with the `api` scope.
 
 1. Pick a saved token, or click [**Add a GitLab token**](/docs/agents/skills/importing#private-repositories).
 2. Choose the policy project. To change the branch, policy file, validations folder, or schedule, open **Advanced** first.

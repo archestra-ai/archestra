@@ -400,7 +400,7 @@ class OpenAppaGithubAppSetup {
     if (!enterpriseTier.isOpenappaActive())
       throw new ApiError(
         409,
-        "Enable OpenAPPA on the server before configuring GitHub sync",
+        "Enable OpenAPPA on the server before configuring Git sync",
       );
     if (isByosEnabled())
       throw new ApiError(

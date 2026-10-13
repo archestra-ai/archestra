@@ -673,7 +673,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.UpdatePluginGithubSync,
-        description: "Change or pause a Plugin GitHub sync schedule",
+        description: "Change or pause a Plugin Git sync schedule",
         tags: ["Plugins"],
         params: PluginParamsSchema,
         body: z.object({
@@ -710,7 +710,7 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.TriggerPluginGithubSync,
-        description: "Queue an immediate Plugin GitHub source check",
+        description: "Queue an immediate Plugin Git source check",
         tags: ["Plugins"],
         params: PluginParamsSchema,
         response: constructResponseSchema(z.object({ queued: z.boolean() })),

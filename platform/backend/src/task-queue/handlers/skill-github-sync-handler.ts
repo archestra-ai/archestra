@@ -23,7 +23,7 @@ export async function handleSkillGithubSync(
 ): Promise<void> {
   const skillId = typeof payload.skillId === "string" ? payload.skillId : null;
   if (!skillId) {
-    throw new Error("Missing skillId in skill GitHub sync payload");
+    throw new Error("Missing skillId in skill Git sync payload");
   }
 
   const skill = await SkillModel.findById(skillId);
@@ -37,7 +37,7 @@ export async function handleSkillGithubSync(
     const message = syncErrorMessage(error);
     logger.warn(
       { skillId: skill.id, skillName: skill.name, error: message },
-      "[Skills] GitHub sync failed; keeping last synced content",
+      "[Skills] Git sync failed; keeping last synced content",
     );
     await SkillModel.markGithubSyncResult(skill.id, message);
   }
@@ -82,7 +82,7 @@ async function syncSkill(skill: Skill): Promise<void> {
   if (imported.sourceCommit === skill.sourceCommit) {
     logger.debug(
       { skillId: skill.id, commit: skill.sourceCommit },
-      "[Skills] GitHub sync: source unchanged",
+      "[Skills] Git sync: source unchanged",
     );
     return;
   }
@@ -115,7 +115,7 @@ async function syncSkill(skill: Skill): Promise<void> {
       commit: imported.sourceCommit,
       skippedFiles: imported.skippedFiles.length,
     },
-    "[Skills] GitHub sync: skill updated from source",
+    "[Skills] Git sync: skill updated from source",
   );
 }
 

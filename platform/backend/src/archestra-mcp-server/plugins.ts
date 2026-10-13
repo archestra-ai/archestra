@@ -577,7 +577,7 @@ const registry = defineArchestraTools([
     title: "Delete Plugin",
     description:
       "Delete a plugin. The plugin disappears from the catalog and future " +
-      "setup commands, and its GitHub sync stops. Copies already installed " +
+      "setup commands, and its Git sync stops. Copies already installed " +
       "on developer machines are not removed.",
     schema: DeletePluginSchema,
     async handler({ args, context }) {

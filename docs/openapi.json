@@ -374623,7 +374623,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Change or pause a Plugin GitHub sync schedule\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Change or pause a Plugin Git sync schedule\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "requestBody": {
           "required": true,
           "content": {
@@ -375349,7 +375349,7 @@
         "tags": [
           "Plugins"
         ],
-        "description": "Queue an immediate Plugin GitHub source check\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
+        "description": "Queue an immediate Plugin Git source check\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`plugin:update`: Modify plugin metadata and files",
         "parameters": [
           {
             "schema": {
@@ -407923,7 +407923,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "List distinct GitHub repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
+        "description": "List distinct GitHub and GitLab repositories that skills in this organization were imported from\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -410155,7 +410155,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Manage a GitHub-synced skill: change its pull frequency, trigger an immediate pull, or disconnect it from the GitHub source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Manage a Git-synced skill: change its pull frequency, trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -411466,7 +411466,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Discover skills in a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
+        "description": "Discover skills in a GitHub or GitLab repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -411832,7 +411832,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Fetch a single skill's manifest and files from GitHub without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
+        "description": "Fetch a single skill's manifest and files from GitHub or GitLab without persisting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:read`: Open Skills",
         "requestBody": {
           "required": true,
           "content": {
@@ -412244,7 +412244,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Import selected skills from a GitHub repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:create`: Create new agent skills",
+        "description": "Import selected skills from a GitHub or GitLab repository\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`skill:create`: Create new agent skills",
         "requestBody": {
           "required": true,
           "content": {

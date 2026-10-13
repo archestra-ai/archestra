@@ -1706,7 +1706,7 @@ function headerFor(params: {
       };
     if (params.editing && (params.step === "repo" || params.step === "connect"))
       return {
-        title: "Edit GitLab sync",
+        title: "Edit Git sync",
         description: "Change the project or how it syncs.",
       };
     if (params.step === "repo")
@@ -1728,7 +1728,7 @@ function headerFor(params: {
             : `Once it is connected, ${params.appName} adds the OpenAPPA files.`,
         }
       : {
-          title: "Set up GitHub sync",
+          title: "Set up Git sync",
           description: `Where should your policy live? ${params.appName} only ever gets access to that one repository.`,
         };
   if (params.step === "app") {
@@ -1749,7 +1749,7 @@ function headerFor(params: {
   }
   if (params.editing && (params.step === "repo" || params.step === "connect"))
     return {
-      title: "Edit GitHub sync",
+      title: "Edit Git sync",
       description: "Change the repository or how it syncs.",
     };
   if (params.step === "repo")

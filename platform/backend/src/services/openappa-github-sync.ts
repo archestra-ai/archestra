@@ -168,7 +168,7 @@ export async function createAppaGithubRepository(params: {
   if (Buffer.byteLength(policy.content) > 1024 * 1024)
     throw new ApiError(
       400,
-      "The current policy exceeds the 1 MiB GitHub sync limit",
+      "The current policy exceeds the 1 MiB Git sync limit",
     );
 
   let created: {
@@ -932,7 +932,7 @@ function assertEnabled() {
   if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(
       409,
-      "Enable OpenAPPA on the server before configuring GitHub sync",
+      "Enable OpenAPPA on the server before configuring Git sync",
     );
 }
 async function githubFetch(url: string, headers: Record<string, string>) {

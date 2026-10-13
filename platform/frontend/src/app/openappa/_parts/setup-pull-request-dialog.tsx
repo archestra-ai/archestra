@@ -58,7 +58,7 @@ export function OpenAppaSetupPullRequestDialog({
     <StandardDialog
       open
       onOpenChange={onOpenChange}
-      title={merged ? "Setup finished" : `Finish ${git.label} sync`}
+      title={merged ? "Setup finished" : "Finish Git sync"}
       description={
         merged
           ? `Your policy now comes from ${git.label}.`

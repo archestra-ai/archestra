@@ -1005,7 +1005,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetSkillSourceRepos,
         description:
-          "List distinct GitHub repositories that skills in this organization were imported from",
+          "List distinct GitHub and GitLab repositories that skills in this organization were imported from",
         tags: ["Skills"],
         response: constructResponseSchema(
           z.object({ repos: z.array(z.string()) }),
@@ -1316,8 +1316,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateSkillGithubSync,
         description:
-          "Manage a GitHub-synced skill: change its pull frequency, trigger " +
-          "an immediate pull, or disconnect it from the GitHub source " +
+          "Manage a Git-synced skill: change its pull frequency, trigger " +
+          "an immediate pull, or disconnect it from the Git source " +
           "(interval null) — a disconnected skill keeps its content and " +
           "provenance and becomes editable in the app.",
         tags: ["Skills"],
@@ -1397,7 +1397,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         { skillId: id, organizationId, interval: body.interval ?? null },
         body.disconnect
           ? "[Skills] Skill disconnected from GitHub source"
-          : "[Skills] GitHub sync frequency changed",
+          : "[Skills] Git sync frequency changed",
       );
       return reply.send(await loadSkillDetail(updated));
     },
@@ -1472,7 +1472,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.DiscoverGithubSkills,
-        description: "Discover skills in a GitHub repository",
+        description: "Discover skills in a GitHub or GitLab repository",
         tags: ["Skills"],
         body: GithubSkillSourceSchema,
         response: constructResponseSchema(
@@ -1532,7 +1532,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.PreviewGithubSkill,
         description:
-          "Fetch a single skill's manifest and files from GitHub without persisting it.",
+          "Fetch a single skill's manifest and files from GitHub or GitLab without persisting it.",
         tags: ["Skills"],
         body: z
           .object({ ...githubSkillSourceShape, skillPath: z.string() })
@@ -1604,7 +1604,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.ImportGithubSkills,
-        description: "Import selected skills from a GitHub repository",
+        description:
+          "Import selected skills from a GitHub or GitLab repository",
         tags: ["Skills"],
         body: z
           .object({

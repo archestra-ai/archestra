@@ -58,7 +58,7 @@ export function GithubManagedPolicyNotice({
     <InlineNotice variant={failed ? "error" : "neutral"}>
       {failed ? <AlertTriangle /> : <LockKeyhole />}
       <span className="font-medium">
-        {failed ? `${git.label} sync failed` : `Managed in ${git.label}`}
+        {failed ? "Git sync failed" : `Managed in ${git.label}`}
       </span>
       <InlineNoticeText>
         The{" "}

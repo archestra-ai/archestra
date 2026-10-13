@@ -10,7 +10,7 @@ export const ARCHESTRA_REFERENCE = `# OpenAPPA in Archestra
 
 ## The policy document
 
-Archestra stores one root policy per organization, \`organization.appa.toml\`. With GitHub sync the repository owns the text: publishing opens a pull request, and Archestra enforces it only after merge and a successful sync. Without sync, publishing saves a local revision in the database.
+Archestra stores one root policy per organization, \`organization.appa.toml\`. With Git sync the repository owns the text: publishing opens a pull request (a merge request on GitLab), and Archestra enforces it only after merge and a successful sync. Without sync, publishing saves a local revision in the database.
 
 The document's \`[policy] version = 2\` names the format. The API \`revision\` is a separate save number that prevents overwriting concurrent edits. Change a saved policy with \`edits\` that name only the text you replace; send the complete text only for a first policy or a full rewrite. Merge rules into the existing document and never add a second \`[policy]\` header.
 

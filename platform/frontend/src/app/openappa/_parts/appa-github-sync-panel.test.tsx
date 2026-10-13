@@ -374,7 +374,7 @@ test("starts fresh from the template, connects it through a chosen App and finis
   ).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Connect repository" }));
   // Repository rules require a pull request: the dialog waits on it.
-  expect(await screen.findByText("Finish GitHub sync")).toBeVisible();
+  expect(await screen.findByText("Finish Git sync")).toBeVisible();
   expect(screen.getByText("Merge the setup PR")).toBeVisible();
   expect(
     within(screen.getByRole("dialog")).getByRole("link", {
@@ -398,7 +398,7 @@ test("starts fresh from the template, connects it through a chosen App and finis
     expect(screen.queryByText("Checking…")).not.toBeInTheDocument(),
   );
   expect(toast.info).not.toHaveBeenCalled();
-  expect(screen.getByText("Finish GitHub sync")).toBeVisible();
+  expect(screen.getByText("Finish Git sync")).toBeVisible();
   server.use(
     http.patch(url, async ({ request }) => {
       expect(await request.json()).toEqual({ action: "sync" });
@@ -447,7 +447,7 @@ test("editing an App-backed source keeps its repository and only warns about mis
   );
   show();
   fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
-  expect(await screen.findByText("Edit GitHub sync")).toBeVisible();
+  expect(await screen.findByText("Edit Git sync")).toBeVisible();
   expect(
     await screen.findByText("No traces/ folder", {}, { timeout: 3000 }),
   ).toBeVisible();
@@ -536,7 +536,7 @@ test("creates a private GitLab project in a group with the saved token", async (
       existing: false,
     }),
   );
-  expect(await screen.findByText("GitLab sync")).toBeVisible();
+  expect(await screen.findByText("Git sync")).toBeVisible();
 });
 
 test("moving a GitHub sync to a new GitLab project starts GitLab fresh and replaces the running sync", async () => {
@@ -572,7 +572,7 @@ test("moving a GitHub sync to a new GitLab project starts GitLab fresh and repla
   );
   show();
   fireEvent.click(await screen.findByRole("button", { name: "Edit source" }));
-  expect(await screen.findByText("Edit GitHub sync")).toBeVisible();
+  expect(await screen.findByText("Edit Git sync")).toBeVisible();
   // Back to the host step, then over to GitLab.
   while (!screen.queryByRole("button", { name: /^GitLab/ }))
     fireEvent.click(screen.getByRole("button", { name: "Back" }));

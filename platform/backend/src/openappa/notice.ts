@@ -125,10 +125,16 @@ export function buildNoticeArguments(
     arguments: Record<string, unknown> | string;
   },
 ): z.infer<typeof NoticeArguments> {
-  const original = normalizeOriginalCall({
-    custom: notice.custom,
-    arguments: notice.arguments,
-  });
+  const original =
+    normalizeOriginalCall({
+      custom: notice.custom,
+      arguments: notice.arguments,
+    }) ??
+    // Arguments that are not a JSON object (often a truncated stream) are
+    // denied before evaluation and never run. The notice records the call
+    // with no arguments, as the Anthropic adapter does for such input, so the
+    // ruling still reaches the client and restores on later turns.
+    (notice.custom ? undefined : { kind: "function" as const, arguments: {} });
   if (!original) {
     throw new TypeError("OpenAPPA custom notice requires a string input");
   }

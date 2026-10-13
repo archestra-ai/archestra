@@ -1,4 +1,9 @@
 import { STARTUP_GUARD_INSTALL } from "./consts";
+import {
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  type SupportedProvider,
+} from "./model-constants";
+import { OPENCODE_PRIMARY_PROVIDERS } from "./opencode-provider-routes";
 
 /** Clients whose proxy requests carry a native conversation identity. */
 export const NATIVE_SESSION_CLIENT_LABELS = {
@@ -52,6 +57,34 @@ export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
   codex: "Codex",
   "copilot-cli": "Copilot CLI",
   opencode: "OpenCode",
+};
+
+/**
+ * Providers whose keys an admin can map to the virtual key a client's setup
+ * mints. Cursor sends every model through the Model Router, so any of its
+ * providers can back the key; OpenCode can also take every primary provider.
+ */
+export const INSTALLER_CLIENT_KEY_PROVIDERS: Record<
+  InstallerClientId,
+  readonly SupportedProvider[]
+> = {
+  "claude-code": ["anthropic", "bedrock"],
+  "claude-desktop": ["anthropic"],
+  cursor: MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  codex: ["openai"],
+  "copilot-cli": [
+    "openai",
+    "azure",
+    "openrouter",
+    "vllm",
+    "ollama",
+    "groq",
+    "mistral",
+    "deepseek",
+    "xai",
+    "cerebras",
+  ],
+  opencode: OPENCODE_PRIMARY_PROVIDERS,
 };
 
 export function isInstallerClientId(id: string): id is InstallerClientId {

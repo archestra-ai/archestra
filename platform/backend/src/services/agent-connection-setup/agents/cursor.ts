@@ -5,13 +5,18 @@ import { psq, sh } from "../steps/quoting";
 import type {
   AgentEnding,
   SetupScriptContext,
+  SetupScriptProxySection,
   ShellAgentSetup,
 } from "../types";
 
+/** Cursor's settings-store row behind Settings > Models > API Keys. */
+const CURSOR_APPLICATION_USER_KEY =
+  "src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser";
+
 // Cursor setup. Cursor has no CLI to drive: the script merges ~/.cursor/mcp.json,
-// clones the skills, and prints the model settings to paste. Bash and
-// PowerShell versions sit side by side, then the agent module the dispatcher in
-// ../index.ts uses.
+// clones the skills, and writes the model settings into Cursor's settings
+// database. Bash and PowerShell versions sit side by side, then the agent module
+// the dispatcher in ../index.ts uses.
 
 const CURSOR_MCP_MERGE_PY = `import json, os, pathlib
 path = pathlib.Path(os.path.expanduser("~/.cursor/mcp.json"))
@@ -30,6 +35,39 @@ servers[os.environ["ARCHESTRA_MCP_SERVER_NAME"]] = {
 }
 path.write_text(json.dumps(config, indent=2) + "\\n")
 print(f"Updated {path}")`;
+
+// Cursor keeps its API key settings in a SQLite store rather than a JSON file.
+// The Settings > Models > API Keys toggles live in the applicationUser blob and
+// the key in its own row. Values arrive through the child process env.
+const CURSOR_MODEL_SETTINGS_PY = `import json, os, sqlite3
+path = os.environ["ARCHESTRA_CURSOR_STATE_DB"]
+backup = path + ".archestra-backup"
+db = sqlite3.connect(path, timeout=5)
+try:
+    # Back up once, so a re-run keeps the pre-Archestra copy.
+    if not os.path.exists(backup):
+        copy = sqlite3.connect(backup)
+        db.backup(copy)
+        copy.close()
+    row = db.execute(
+        "SELECT key, value FROM ItemTable WHERE key LIKE ?",
+        ("%persistentStorage.applicationUser",),
+    ).fetchone()
+    key = row[0] if row else "${CURSOR_APPLICATION_USER_KEY}"
+    user = json.loads(row[1]) if row and row[1] else {}
+    user["openAIBaseUrl"] = os.environ["ARCHESTRA_CURSOR_BASE_URL"]
+    user["useOpenAIKey"] = True
+    db.execute(
+        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+        (key, json.dumps(user)),
+    )
+    db.execute(
+        "INSERT OR REPLACE INTO ItemTable (key, value) VALUES (?, ?)",
+        ("cursorAuth/openAIKey", os.environ["ARCHESTRA_CURSOR_API_KEY"]),
+    )
+    db.commit()
+finally:
+    db.close()`;
 
 function cursorBashSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
@@ -60,19 +98,7 @@ ${mergeJsonFileBash({
   }
 
   if (ctx.proxy) {
-    // Cursor's model settings are UI-only; print everything needed for paste.
-    sections.push(`say ${sh("Cursor model settings (manual step)")}
-cat <<'ARCHESTRA_CURSOR'
-
-In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
-  1. Turn on "Override OpenAI Base URL" and paste: ${ctx.proxy.url}
-  2. ${
-    ctx.proxy.virtualKey
-      ? `Paste this key into the API Key field and turn on "Use OpenAI API Key":
-     ${ctx.proxy.virtualKey}`
-      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and turn on "Use OpenAI API Key". A Cursor subscription cannot be used as a provider credential.`
-  }
-ARCHESTRA_CURSOR`);
+    sections.push(cursorModelSettingsBash(ctx, ctx.proxy));
   }
 
   if (ctx.skills) {
@@ -147,18 +173,7 @@ Write-Host ('Updated ' + $arch_path)`);
   }
 
   if (ctx.proxy) {
-    sections.push(`Say ${psq("Cursor model settings (manual step)")}
-Write-Host @'
-
-In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
-  1. Turn on "Override OpenAI Base URL" and paste: ${ctx.proxy.url}
-  2. ${
-    ctx.proxy.virtualKey
-      ? `Paste this key into the API Key field and turn on "Use OpenAI API Key":
-     ${ctx.proxy.virtualKey}`
-      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and turn on "Use OpenAI API Key". A Cursor subscription cannot be used as a provider credential.`
-  }
-'@`);
+    sections.push(cursorModelSettingsPowerShell(ctx, ctx.proxy));
   }
 
   if (ctx.skills) {
@@ -209,6 +224,94 @@ Then install these plugins from Customize -> Plugins:
   return sections;
 }
 
+function cursorModelSettingsBash(
+  ctx: SetupScriptContext,
+  proxy: SetupScriptProxySection,
+): string {
+  if (!proxy.virtualKey) {
+    return `say ${sh("Cursor model settings")}
+warn ${sh("This setup has no virtual key for Cursor. Generate a new setup command to route Cursor's models.")}`;
+  }
+  const manual = manualModelSettings({
+    url: proxy.url,
+    virtualKey: proxy.virtualKey,
+  });
+  return `say ${sh(`Routing Cursor's models through ${ctx.appName}`)}
+cursor_state_db=""
+for arch_candidate in "$HOME/Library/Application Support/Cursor/User/globalStorage/state.vscdb" "\${XDG_CONFIG_HOME:-$HOME/.config}/Cursor/User/globalStorage/state.vscdb"; do
+  if [ -f "$arch_candidate" ]; then cursor_state_db="$arch_candidate"; break; fi
+done
+cursor_models_set=0
+if [ -n "$cursor_state_db" ] && command -v python3 >/dev/null 2>&1; then
+  if ARCHESTRA_CURSOR_STATE_DB="$cursor_state_db" ARCHESTRA_CURSOR_BASE_URL=${sh(proxy.url)} ARCHESTRA_CURSOR_API_KEY=${sh(proxy.virtualKey)} python3 - <<'ARCHESTRA_CURSOR_PY'
+${CURSOR_MODEL_SETTINGS_PY}
+ARCHESTRA_CURSOR_PY
+  then
+    cursor_models_set=1
+  fi
+fi
+if [ "$cursor_models_set" -eq 1 ]; then
+  ok ${sh(`Cursor's OpenAI API key settings now point at ${ctx.appName}.`)}
+  if pgrep -x Cursor >/dev/null 2>&1 || pgrep -x cursor >/dev/null 2>&1; then
+    warn ${sh("Quit and reopen Cursor to load the new model settings.")}
+  fi
+else
+  warn ${sh("Could not update Cursor's settings automatically (open Cursor once first, and install python3). Enter them by hand:")}
+cat <<'ARCHESTRA_CURSOR'
+${manual}
+ARCHESTRA_CURSOR
+fi`;
+}
+
+function cursorModelSettingsPowerShell(
+  ctx: SetupScriptContext,
+  proxy: SetupScriptProxySection,
+): string {
+  if (!proxy.virtualKey) {
+    return `Say ${psq("Cursor model settings")}
+Warn ${psq("This setup has no virtual key for Cursor. Generate a new setup command to route Cursor's models.")}`;
+  }
+  const manual = manualModelSettings({
+    url: proxy.url,
+    virtualKey: proxy.virtualKey,
+  });
+  return `Say ${psq(`Routing Cursor's models through ${ctx.appName}`)}
+$cursorStateDb = Join-Path $env:APPDATA 'Cursor/User/globalStorage/state.vscdb'
+$cursorPython = @('python3', 'python', 'py') | Where-Object { Get-Command $_ -ErrorAction SilentlyContinue } | Select-Object -First 1
+$cursorModelsSet = $false
+if ((Test-Path $cursorStateDb) -and $cursorPython) {
+  $env:ARCHESTRA_CURSOR_STATE_DB = $cursorStateDb
+  $env:ARCHESTRA_CURSOR_BASE_URL = ${psq(proxy.url)}
+  $env:ARCHESTRA_CURSOR_API_KEY = ${psq(proxy.virtualKey)}
+  [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(CURSOR_MODEL_SETTINGS_PY).toString("base64")}')) | & $cursorPython - *> $null
+  $cursorModelsSet = $LASTEXITCODE -eq 0
+  Remove-Item Env:ARCHESTRA_CURSOR_API_KEY -ErrorAction SilentlyContinue
+}
+if ($cursorModelsSet) {
+  Ok ${psq(`Cursor's OpenAI API key settings now point at ${ctx.appName}.`)}
+  if (Get-Process -Name 'Cursor' -ErrorAction SilentlyContinue) {
+    Warn ${psq("Quit and reopen Cursor to load the new model settings.")}
+  }
+} else {
+  Warn ${psq("Could not update Cursor's settings automatically (open Cursor once first, and install Python). Enter them by hand:")}
+Write-Host @'
+${manual}
+'@
+}`;
+}
+
+/** The fallback when the settings store can't be written. */
+function manualModelSettings(params: {
+  url: string;
+  virtualKey: string;
+}): string {
+  return `
+In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
+  1. Turn on "Override OpenAI Base URL" and paste: ${params.url}
+  2. Paste this key into the API Key field and turn on "Use OpenAI API Key":
+     ${params.virtualKey}`;
+}
+
 function cursorEnding(ctx: SetupScriptContext): AgentEnding {
   const notes: string[] = [];
   if (ctx.skills) {
@@ -224,9 +327,13 @@ function cursorEnding(ctx: SetupScriptContext): AgentEnding {
       ? "Paste the handoff instructions printed above into Cursor Customize > Rules > User Rules, next to your own rules."
       : `If you pasted ${ctx.appName} handoff instructions into Cursor User Rules before, you can remove them.`,
   );
+  if (ctx.proxy?.virtualKey) {
+    notes.push(
+      `Add models in Cursor Settings > Models by their ${ctx.appName} id, such as anthropic:<model>. ${ctx.proxy.url}/models lists them.`,
+    );
+  }
   return {
-    proxyDetail:
-      "Paste the model settings printed above into Cursor Settings > Models",
+    proxyDetail: `Cursor's models use the ${ctx.appName} Model Router (Settings > Models > API Keys)`,
     signIn: ctx.mcp
       ? {
           command: null,

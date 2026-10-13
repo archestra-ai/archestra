@@ -2587,7 +2587,7 @@ if (process.argv[2] === 'debug') {
   test.each([
     "macos",
     "windows",
-  ] as const)("cursor (%s): prints the working plugin and model setup steps", (platform) => {
+  ] as const)("cursor (%s): writes the model settings, with steps to enter them by hand as a fallback", (platform) => {
     const script = renderSetupScript(fullContext("cursor", platform));
     expect(script).toContain(
       platform === "windows"
@@ -2595,6 +2595,7 @@ if (process.argv[2] === 'debug') {
         : "ARCHESTRA_MCP_SERVER_NAME",
     );
     expect(script).not.toContain("Authorization");
+    expect(script).toContain("Cursor/User/globalStorage/state.vscdb");
     expect(script).toContain("Override OpenAI Base URL");
     expect(script).toContain("open Customize > MCPs");
     expect(script).toContain('turn on "Use OpenAI API Key"');
@@ -2608,13 +2609,13 @@ if (process.argv[2] === 'debug') {
   test.each([
     "macos",
     "windows",
-  ] as const)("cursor (%s): requires an API key for passthrough", (platform) => {
+  ] as const)("cursor (%s): asks for a new setup when it has no virtual key", (platform) => {
     const script = renderSetupScript({
       ...fullContext("cursor", platform),
       proxy: OPENAI_PASSTHROUGH_PROXY,
     });
-    expect(script).toContain("Paste your own OpenAI API key");
-    expect(script).toContain("A Cursor subscription cannot be used");
+    expect(script).toContain("Generate a new setup command");
+    expect(script).not.toContain("state.vscdb");
   });
 
   test("cursor: setup preserves MCP servers and installs discoverable skills from a Git repository", async () => {
@@ -2654,6 +2655,16 @@ if (process.argv[2] === 'debug') {
           mcpServers: { existing: { url: "https://example.test/mcp" } },
         }),
       );
+      const stateDb = path.join(
+        home,
+        "Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+      );
+      await mkdir(path.dirname(stateDb), { recursive: true });
+      await sqlite(
+        stateDb,
+        `db.execute("CREATE TABLE ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)")
+db.execute("INSERT INTO ItemTable VALUES (?, ?)", ("${CURSOR_APPLICATION_USER_KEY}", '{"theme": "dark"}'))`,
+      );
       const scriptPath = path.join(home, "connect.sh");
       const context = fullContext("cursor");
       if (!context.skills) throw new Error("Missing skills");
@@ -2679,8 +2690,29 @@ if (process.argv[2] === 'debug') {
         [MCP.serverName]: { url: MCP.url },
       });
       expect(stdout).toContain("Reload Cursor and open Customize > Skills");
-      expect(stdout).toContain('turn on "Use OpenAI API Key"');
+      expect(stdout).toContain("settings now point at Archestra");
+      expect(stdout).not.toContain('turn on "Use OpenAI API Key"');
       expect(stdout).not.toContain(source);
+      const rows = JSON.parse(
+        await sqlite(
+          stateDb,
+          `print(json.dumps(dict(db.execute("SELECT key, value FROM ItemTable").fetchall())))`,
+        ),
+      );
+      expect(JSON.parse(rows[CURSOR_APPLICATION_USER_KEY])).toEqual({
+        theme: "dark",
+        openAIBaseUrl: context.proxy?.url,
+        useOpenAIKey: true,
+      });
+      expect(rows["cursorAuth/openAIKey"]).toBe(context.proxy?.virtualKey);
+      expect(
+        JSON.parse(
+          await sqlite(
+            `${stateDb}.archestra-backup`,
+            `print(json.dumps(db.execute("SELECT COUNT(*) FROM ItemTable").fetchone()[0]))`,
+          ),
+        ),
+      ).toBe(1);
       expect(
         await readFile(
           path.join(
@@ -3314,3 +3346,19 @@ describe("ending", () => {
     });
   });
 });
+
+const CURSOR_APPLICATION_USER_KEY =
+  "src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser";
+
+/** Run Python against a SQLite file, as the Cursor step does; returns stdout. */
+async function sqlite(file: string, statements: string): Promise<string> {
+  const { stdout } = await execFileAsync("python3", [
+    "-c",
+    `import json, sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+${statements}
+db.commit()`,
+    file,
+  ]);
+  return stdout;
+}

@@ -23,6 +23,7 @@ import {
 } from "@/models";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
 import ModelModel from "@/models/model";
+import { readVirtualKeyValue } from "@/services/connection-setup";
 import {
   accessGrants,
   afterEach,
@@ -116,12 +117,40 @@ describe("GET /api/connection-setups/script/:token", () => {
     });
   }
 
+  test("cursor installer points Cursor at the Model Router with its virtual key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
+      provider: "anthropic",
+      isPrimary: true,
+    });
+    const { rawToken } = await createSetup({
+      clientId: "cursor",
+      baseUrl: "http://localhost:9000/v1",
+      proxyAuth: "primary-providers",
+    });
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    const virtualKey = await readVirtualKeyValue(
+      setup?.virtualApiKeyId as string,
+    );
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain(
+      "ARCHESTRA_CURSOR_BASE_URL='http://localhost:9000/v1/model-router'",
+    );
+    expect(response.body).toContain(`ARCHESTRA_CURSOR_API_KEY='${virtualKey}'`);
+    expect(response.body).not.toContain("/connection-setup/");
+  });
+
+  // Cursor has no single-provider proxy setup; its Model Router setup is
+  // covered on its own below.
   for (const clientId of [
     "claude-code",
     "claude-desktop",
     "codex",
     "copilot-cli",
-    "cursor",
     "opencode",
   ] as const) {
     for (const proxyAuth of ["virtual-key", "provider-key"] as const) {
@@ -136,7 +165,7 @@ describe("GET /api/connection-setups/script/:token", () => {
           name: "Main Proxy",
         });
         const provider =
-          clientId === "codex" || clientId === "cursor"
+          clientId === "codex"
             ? "openai"
             : clientId === "copilot-cli" && proxyAuth === "provider-key"
               ? "github-copilot"

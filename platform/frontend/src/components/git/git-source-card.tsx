@@ -17,6 +17,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -69,17 +70,20 @@ export function GitSourceCard({
       <span>{sync.pending ? "Syncing…" : (sync.label ?? "Sync now")}</span>
     </Button>
   );
+  const isMobile = useIsMobile();
   const card = (
     <div
       className={cn(
         "overflow-hidden rounded-lg border bg-card",
         // The ring of page background hides what scrolls underneath.
-        sticky && "shadow-md shadow-background ring-12 ring-background",
+        sticky &&
+          !isMobile &&
+          "shadow-md shadow-background ring-12 ring-background",
       )}
     >
       <div className="flex flex-wrap items-center gap-4 px-4 py-3">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
+        <div className="flex min-w-0 flex-1 basis-64 items-center gap-3">
+          <div className="hidden size-10 shrink-0 items-center justify-center rounded-md bg-muted sm:flex">
             <GitProviderLogo
               provider={provider}
               size={20}
@@ -109,7 +113,7 @@ export function GitSourceCard({
           </div>
         </div>
         {syncButton && (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:ml-auto">
             {sync?.tooltip ? (
               <Tooltip>
                 <TooltipTrigger asChild>{syncButton}</TooltipTrigger>
@@ -132,8 +136,13 @@ export function GitSourceCard({
       )}
     </div>
   );
-  // Sticky: in the page banner slot, just under the sticky page header.
-  return sticky ? <PageHeaderBanner>{card}</PageHeaderBanner> : card;
+  // Sticky: in the page banner slot, just under the sticky page header. Not
+  // on a phone, where a pinned card would take much of the screen.
+  return sticky && !isMobile ? (
+    <PageHeaderBanner>{card}</PageHeaderBanner>
+  ) : (
+    card
+  );
 }
 
 /** The branch a source follows, or its default branch. */

@@ -67,7 +67,12 @@ export function PluginGitSourceCard({
           <>
             <GitSourceBranch branch={ref} />
             {plugin.sourceSubdir && (
-              <span className="font-mono">{plugin.sourceSubdir}</span>
+              <span
+                className="max-w-full truncate font-mono"
+                title={plugin.sourceSubdir}
+              >
+                {plugin.sourceSubdir}
+              </span>
             )}
             <span>{lastChecked}</span>
           </>

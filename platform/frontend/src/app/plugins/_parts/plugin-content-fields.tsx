@@ -190,12 +190,12 @@ function PluginIdentityHint({ slug }: { slug: string }) {
           <Info className="size-3.5" />
         </UnstyledButton>
       </TooltipTrigger>
-      <TooltipContent className="max-w-xs">
+      {/* Short enough for one line: a wrapped, balanced paragraph leaves the
+          box at its max width with dead space beside the lines. */}
+      <TooltipContent>
         <p className="font-medium">Plugin identity</p>
-        <p className="font-mono text-xs">{slug}</p>
-        <p className="opacity-80">
-          Clients install the plugin by this name. It stays when you rename it.
-        </p>
+        <p className="font-mono">{slug}</p>
+        <p className="opacity-80">Clients install by it. Renaming keeps it.</p>
       </TooltipContent>
     </Tooltip>
   );

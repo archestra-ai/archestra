@@ -99,7 +99,11 @@ export function GithubSyncPanel({
         details={
           <>
             <GitSourceBranch branch={skill.githubSyncRef} />
-            {folder && <span className="font-mono">{folder}</span>}
+            {folder && (
+              <span className="max-w-full truncate font-mono" title={folder}>
+                {folder}
+              </span>
+            )}
             <span>{lastSynced}</span>
           </>
         }

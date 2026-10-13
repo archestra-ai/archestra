@@ -209,9 +209,10 @@ export function ManageUsersContent({
     return "You can only re-authenticate connections for teams you are a member of";
   };
 
-  // Check if user can revoke (delete) a credential
-  // Personal: owner OR mcpServer:update. Team: team admin role OR (mcpServer:update AND membership).
-  // Org: mcpServerInstallation:admin.
+  // Check if user can revoke (delete) a credential. Mirrors the backend's
+  // assertScopedLifecycleAuthorization:
+  // Personal: owner OR mcpServer:update. Team: installation admin OR team
+  // admin role OR (mcpServer:update AND membership). Org: installation admin.
   const canRevoke = (mcpServer: (typeof allServers)[number]) => {
     const scope = resolveServerScope(mcpServer);
     if (scope === "org") return !!hasMcpServerAdminPermission;
@@ -220,6 +221,7 @@ export function ManageUsersContent({
         mcpServer.ownerId === currentUserId || !!hasMcpServerUpdatePermission
       );
     }
+    if (hasMcpServerAdminPermission) return true;
     if (isCurrentUserTeamAdmin(mcpServer.teamId)) return true;
     if (!hasMcpServerUpdatePermission) return false;
     return userTeams?.some((team) => team.id === mcpServer.teamId) ?? false;

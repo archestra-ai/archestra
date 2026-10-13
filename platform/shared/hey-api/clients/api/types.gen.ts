@@ -64182,6 +64182,7 @@ export type UpdateInternalMcpCatalogItemData = {
         }>;
         scope?: unknown;
         teams?: unknown;
+        multitenant?: boolean;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;

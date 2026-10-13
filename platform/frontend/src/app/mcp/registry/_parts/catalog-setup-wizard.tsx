@@ -329,6 +329,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             status={isInstalling && !status ? "pending" : (status ?? null)}
             serverId={target?.id}
             deploymentStatuses={deploymentStatuses}
+            serverType={item.serverType}
           />
         </div>
       )}

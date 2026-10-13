@@ -246555,6 +246555,9 @@
                   "teams": {
                     "not": {}
                   },
+                  "multitenant": {
+                    "type": "boolean"
+                  },
                   "oauthClientSecretVaultPath": {
                     "type": "string"
                   },

@@ -4439,10 +4439,8 @@ function observedAppaSession(params: {
 }
 
 /**
- * Keeps what a governed provider thread was ruled on, so its next continue can
- * be ruled on too. A response the client holds a rewrite of that the provider
- * cannot continue from is kept as diverged: the continue is answered with a
- * replay request.
+ * Whether `message` is the echoed calls the ruling borrowed: an assistant
+ * message with the same tool call ids, in the same order.
  */
 function isEchoOf(message: unknown, echo: object): boolean {
   const ids = (value: unknown): unknown[] => {
@@ -4472,6 +4470,12 @@ function parseCallArguments(args: unknown): Record<string, unknown> {
   }
 }
 
+/**
+ * Keeps what a governed provider thread was ruled on, so its next continue can
+ * be ruled on too. A response the client holds a rewrite of that the provider
+ * cannot continue from is kept as diverged: the continue is answered with a
+ * replay request.
+ */
 async function recordGovernedThreadResponse(params: {
   context: LlmProxyRequestContext | undefined;
   messageId: string | undefined;

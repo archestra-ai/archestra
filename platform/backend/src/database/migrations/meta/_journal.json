@@ -3750,8 +3750,15 @@
     {
       "idx": 535,
       "version": "7",
-      "when": 1791922458495,
-      "tag": "0535_sad_veda",
+      "when": 1791921477945,
+      "tag": "0535_cool_power_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 536,
+      "version": "7",
+      "when": 1791922883907,
+      "tag": "0536_parched_warlock",
       "breakpoints": true
     }
   ]

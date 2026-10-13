@@ -1,5 +1,5 @@
 {
-  "id": "4930f7c4-a961-419a-aa89-991c4ed7d8fa",
+  "id": "96af2c48-3a45-4aa6-af45-143e674b7033",
   "prevId": "b79379c2-1da1-4a37-8a06-8888396e90a2",
   "version": "7",
   "dialect": "postgresql",
@@ -6589,6 +6589,52 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.browser_storage_states": {
+      "name": "browser_storage_states",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "encrypted_state": {
+          "name": "encrypted_state",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "browser_storage_states_user_id_user_id_fk": {
+          "name": "browser_storage_states_user_id_user_id_fk",
+          "tableFrom": "browser_storage_states",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -27516,19 +27562,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "lease_owner": {
-          "name": "lease_owner",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lease_expires_at": {
-          "name": "lease_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now() + interval '15 minutes'"
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -27595,25 +27628,6 @@
           "value": "(\"openappa_operations\".\"status\" = 'pending' AND \"openappa_operations\".\"decision\" IS NULL) OR (\"openappa_operations\".\"status\" = 'complete' AND \"openappa_operations\".\"decision\" IS NOT NULL)"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.openappa_peer_inboxes": {
-      "name": "openappa_peer_inboxes",
-      "schema": "",
-      "columns": {
-        "receiver": {
-          "name": "receiver",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.openappa_policy_files": {
@@ -27693,25 +27707,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "lease_owner": {
-          "name": "lease_owner",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lease_expires_at": {
-          "name": "lease_expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now() + interval '15 minutes'"
-        },
-        "completed_at": {
-          "name": "completed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -27757,25 +27752,6 @@
           "value": "(\"openappa_processed_results\".\"status\" = 'pending' AND \"openappa_processed_results\".\"approved_output\" IS NULL AND \"openappa_processed_results\".\"decision\" IS NULL) OR (\"openappa_processed_results\".\"status\" = 'complete' AND \"openappa_processed_results\".\"approved_output\" IS NOT NULL AND \"openappa_processed_results\".\"decision\" IS NOT NULL)"
         }
       },
-      "isRLSEnabled": false
-    },
-    "public.openappa_roots": {
-      "name": "openappa_roots",
-      "schema": "",
-      "columns": {
-        "root": {
-          "name": "root",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.openappa_sessions": {

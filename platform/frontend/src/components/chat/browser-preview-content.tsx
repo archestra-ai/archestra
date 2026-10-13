@@ -15,7 +15,10 @@ import {
 } from "lucide-react";
 import {
   type FormEvent,
+  type ClipboardEvent as ReactClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
   useRef,
@@ -96,6 +99,17 @@ export function BrowserPreviewContent({
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const initialNavigateTriggeredRef = useRef(false);
+  // Clicks and keystrokes on the screenshot wait here while a previous browser
+  // action is in flight; consecutive characters merge into one type call.
+  const inputQueueRef = useRef<BrowserInputOp[]>([]);
+  const inputOpInFlightRef = useRef(false);
+  const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
+  const urlJustFocusedRef = useRef(false);
+  // What the remote browser is doing now, shown instead of a bare spinner
+  const [activeInput, setActiveInput] = useState<{
+    label: string;
+    queued: number;
+  } | null>(null);
 
   const {
     screenshot,
@@ -111,6 +125,8 @@ export function BrowserPreviewContent({
     click,
     type,
     pressKey,
+    scroll,
+    reconnect,
     setUrlInput,
     setIsEditingUrl,
   } = useBrowserStream({
@@ -155,13 +171,79 @@ export function BrowserPreviewContent({
     [typeText, type],
   );
 
-  const handleImageClick = useCallback(
-    (e: ReactMouseEvent<HTMLDivElement>) => {
-      if (!isConnected || isInteracting) return;
+  const drainInputQueue = useCallback(() => {
+    if (!isConnected || isInteracting || inputOpInFlightRef.current) return;
+    const next = inputQueueRef.current.shift();
+    if (!next) return;
+    inputOpInFlightRef.current = true;
+    setActiveInput({
+      label: describeInputOp(next),
+      queued: inputQueueRef.current.length,
+    });
+    if (next.kind === "click") {
+      click(next.x, next.y);
+    } else if (next.kind === "scroll") {
+      scroll(next);
+    } else if (next.kind === "text") {
+      type(next.value);
+    } else {
+      pressKey(next.value);
+    }
+  }, [isConnected, isInteracting, click, scroll, type, pressKey]);
 
-      const img = imageRef.current;
+  const enqueueInputOp = useCallback(
+    (op: BrowserInputOp) => {
+      const queue = inputQueueRef.current;
+      const last = queue.at(-1);
+      if (op.kind === "text" && last?.kind === "text") {
+        last.value += op.value;
+      } else if (op.kind === "scroll" && last?.kind === "scroll") {
+        last.deltaX += op.deltaX;
+        last.deltaY += op.deltaY;
+        last.x = op.x;
+        last.y = op.y;
+      } else {
+        queue.push(op);
+      }
+      drainInputQueue();
+    },
+    [drainInputQueue],
+  );
+
+  const handleOverlayKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!isConnected) return;
+      // Leave browser shortcuts (copy, paste, tab switching) to the host page;
+      // Shift+Tab moves focus out of the preview instead of into the page.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "Tab" && e.shiftKey) return;
+      if (e.key.length === 1) {
+        e.preventDefault();
+        enqueueInputOp({ kind: "text", value: e.key });
+      } else if (FORWARDED_KEYS.has(e.key)) {
+        e.preventDefault();
+        enqueueInputOp({ kind: "key", value: e.key });
+      }
+    },
+    [isConnected, enqueueInputOp],
+  );
+
+  const handleOverlayPaste = useCallback(
+    (e: ReactClipboardEvent<HTMLDivElement>) => {
+      if (!isConnected) return;
+      const text = e.clipboardData.getData("text/plain");
+      if (!text) return;
+      e.preventDefault();
+      enqueueInputOp({ kind: "text", value: text });
+    },
+    [isConnected, enqueueInputOp],
+  );
+
+  /** Map a pointer position on the screenshot to remote viewport coordinates. */
+  const toViewportPoint = useCallback(
+    (clientX: number, clientY: number): { x: number; y: number } | null => {
       const container = containerRef.current;
-      if (!img || !container) return;
+      if (!imageRef.current || !container) return null;
 
       const containerRect = container.getBoundingClientRect();
 
@@ -171,44 +253,93 @@ export function BrowserPreviewContent({
 
       // Calculate how the image is displayed with object-contain
       // Scale is determined by whichever dimension constrains the fit
-      const scaleX = containerRect.width / viewportW;
-      const scaleY = containerRect.height / viewportH;
-      const scale = Math.min(scaleX, scaleY);
+      const scale = Math.min(
+        containerRect.width / viewportW,
+        containerRect.height / viewportH,
+      );
 
       // Actual displayed image size
       const displayedW = viewportW * scale;
       const displayedH = viewportH * scale;
 
-      // Offset from container edges (centering - object-contain centers by default)
+      // The image is centered horizontally but pinned to the top
+      // (object-top), so letterboxing is only beside and below it
       const offsetX = (containerRect.width - displayedW) / 2;
-      const offsetY = (containerRect.height - displayedH) / 2;
 
-      // Click position relative to container
-      const clickX = e.clientX - containerRect.left;
-      const clickY = e.clientY - containerRect.top;
+      // Pointer position relative to the displayed image
+      const imageX = clientX - containerRect.left - offsetX;
+      const imageY = clientY - containerRect.top;
 
-      // Convert to image-relative coordinates (accounting for letterboxing)
-      const imageClickX = clickX - offsetX;
-      const imageClickY = clickY - offsetY;
-
-      // Check if click is within the actual image area (not in letterboxing)
+      // Outside the actual image area (in letterboxing)
       if (
-        imageClickX < 0 ||
-        imageClickX > displayedW ||
-        imageClickY < 0 ||
-        imageClickY > displayedH
+        imageX < 0 ||
+        imageX > displayedW ||
+        imageY < 0 ||
+        imageY > displayedH
       ) {
-        return;
+        return null;
       }
 
-      // Convert to viewport coordinates
-      const x = imageClickX / scale;
-      const y = imageClickY / scale;
-
-      click(x, y);
+      return { x: imageX / scale, y: imageY / scale };
     },
-    [isConnected, isInteracting, click],
+    [],
   );
+
+  const handleImageClick = useCallback(
+    (e: ReactMouseEvent<HTMLDivElement>) => {
+      if (!isConnected) return;
+      const point = toViewportPoint(e.clientX, e.clientY);
+      if (point) enqueueInputOp({ kind: "click", ...point });
+    },
+    [isConnected, toViewportPoint, enqueueInputOp],
+  );
+
+  const handleOverlayWheel = useCallback(
+    (e: ReactWheelEvent<HTMLDivElement>) => {
+      if (!isConnected) return;
+      const point = toViewportPoint(e.clientX, e.clientY);
+      if (!point) return;
+      // deltaMode 1 = lines; convert to pixels like browsers do
+      const factor = e.deltaMode === 1 ? 40 : 1;
+      enqueueInputOp({
+        kind: "scroll",
+        ...point,
+        deltaX: e.deltaX * factor,
+        deltaY: e.deltaY * factor,
+      });
+    },
+    [isConnected, toViewportPoint, enqueueInputOp],
+  );
+
+  /** Header scroll buttons: wheel at the viewport center. */
+  const scrollPage = useCallback(
+    (deltaY: number) => {
+      enqueueInputOp({
+        kind: "scroll",
+        x: DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH / 2,
+        y: DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT / 2,
+        deltaX: 0,
+        deltaY,
+      });
+    },
+    [enqueueInputOp],
+  );
+
+  // Send the next queued input once the previous browser action finishes
+  useEffect(() => {
+    if (!isInteracting) {
+      inputOpInFlightRef.current = false;
+      setActiveInput(null);
+      drainInputQueue();
+    }
+  }, [isInteracting, drainInputQueue]);
+
+  // Drop queued input when the session changes or disconnects
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset queue when conversationId changes
+  useEffect(() => {
+    inputQueueRef.current = [];
+    inputOpInFlightRef.current = false;
+  }, [conversationId, isConnected]);
 
   // Clear initial URL state once connected (backend handles initial navigation via subscription)
   useEffect(() => {
@@ -359,8 +490,8 @@ export function BrowserPreviewContent({
             <Button
               variant="ghost"
               size="icon-xs"
-              onClick={() => pressKey("PageUp")}
-              disabled={!isConnected || isInteracting}
+              onClick={() => scrollPage(-600)}
+              disabled={!isConnected}
               title="Scroll up"
             >
               <ChevronUp className="h-3 w-3" />
@@ -368,8 +499,8 @@ export function BrowserPreviewContent({
             <Button
               variant="ghost"
               size="icon-xs"
-              onClick={() => pressKey("PageDown")}
-              disabled={!isConnected || isInteracting}
+              onClick={() => scrollPage(600)}
+              disabled={!isConnected}
               title="Scroll down"
             >
               <ChevronDown className="h-3 w-3" />
@@ -402,7 +533,19 @@ export function BrowserPreviewContent({
               setIsEditingUrl(true);
               setUrlInput(e.target.value);
             }}
-            onFocus={() => setIsEditingUrl(true)}
+            onFocus={(e) => {
+              setIsEditingUrl(true);
+              // Like a browser address bar: the first click selects the
+              // whole URL; the mouseup below keeps it from collapsing
+              e.currentTarget.select();
+              urlJustFocusedRef.current = true;
+            }}
+            onMouseUp={(e) => {
+              if (urlJustFocusedRef.current) {
+                urlJustFocusedRef.current = false;
+                e.preventDefault();
+              }
+            }}
             className="h-7 text-xs!"
             disabled={isNavigating || isCreatingConversation}
           />
@@ -426,8 +569,24 @@ export function BrowserPreviewContent({
       </div>
 
       {error && (
-        <div className="text-xs text-destructive bg-destructive/10 border-b border-destructive/20 px-2 py-1">
-          {error}
+        <div className="flex items-center justify-between gap-2 text-xs text-destructive bg-destructive/10 border-b border-destructive/20 px-2 py-1">
+          <span className="min-w-0">{error}</span>
+          {conversationId && (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="shrink-0"
+              onClick={() => {
+                inputQueueRef.current = [];
+                inputOpInFlightRef.current = false;
+                setActiveInput(null);
+                reconnect();
+              }}
+            >
+              Reconnect
+            </Button>
+          )}
         </div>
       )}
 
@@ -450,22 +609,31 @@ export function BrowserPreviewContent({
               className="block w-full h-full object-contain object-top"
             />
             {/*
-              Pointer-coordinate overlay: forwards the exact click position to
-              the remote browser (see handleImageClick, which maps clientX/clientY
-              to a viewport coordinate). It is intentionally mouse/pointer-only and
-              is NOT a focusable control — a keyboard Enter/Space has no (x,y) to
-              forward, so exposing role="button"/tabIndex here would advertise a
-              keyboard interaction we cannot fulfil (a worse a11y outcome than
-              omitting it). Full keyboard control of the embedded browser would
-              require forwarding key events to the remote session — a separate
-              feature tracked outside this accessibility pass.
+              Interaction overlay: clicks forward the exact pointer position to
+              the remote browser (see handleImageClick), and once focused,
+              keystrokes and pastes are forwarded to whatever is focused in the
+              remote page. Shift+Tab or clicking elsewhere leaves it.
             */}
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: pointer-coordinate overlay for the remote browser; no keyboard equivalent by design (see comment above) */}
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-coordinate overlay for the remote browser; no keyboard equivalent by design (see comment above) */}
             <div
-              className="absolute inset-0 cursor-pointer"
+              role="application"
+              aria-label="Remote browser. Click to focus a field, then type. Shift+Tab to leave."
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: role="application" surface must take focus to forward keystrokes to the remote browser
+              tabIndex={0}
+              className="absolute inset-0 cursor-pointer outline-none"
               onClick={handleImageClick}
+              onKeyDown={handleOverlayKeyDown}
+              onPaste={handleOverlayPaste}
+              onWheel={handleOverlayWheel}
+              onFocus={() => setIsKeyboardFocused(true)}
+              onBlur={() => setIsKeyboardFocused(false)}
             />
+            {isKeyboardFocused && (
+              <div className="pointer-events-none absolute inset-0 ring-2 ring-inset ring-primary">
+                <span className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded bg-primary px-2 py-0.5 text-[10px] text-primary-foreground">
+                  Typing goes to the page · Shift+Tab to leave
+                </span>
+              </div>
+            )}
           </div>
         )}
         {!isConnecting && !screenshot && (
@@ -519,10 +687,14 @@ export function BrowserPreviewContent({
           </div>
         )}
 
-        {/* Loading overlay */}
+        {/* Status: what the remote browser is doing; non-blocking, input queues */}
         {isInteracting && (
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center pointer-events-none">
-            <Loader2 className="h-8 w-8 animate-spin text-white" />
+          <div className="absolute top-2 right-2 flex max-w-[70%] items-center gap-1.5 rounded-full bg-background/90 px-2.5 py-1 text-xs text-muted-foreground shadow pointer-events-none">
+            <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+            <span className="truncate">{activeInput?.label ?? "Working…"}</span>
+            {!!activeInput?.queued && (
+              <span className="shrink-0">· {activeInput.queued} queued</span>
+            )}
           </div>
         )}
       </div>
@@ -564,3 +736,40 @@ export function BrowserPreviewContent({
     </div>
   );
 }
+
+// ===
+
+type BrowserInputOp =
+  | { kind: "click"; x: number; y: number }
+  | { kind: "scroll"; x: number; y: number; deltaX: number; deltaY: number }
+  | { kind: "text" | "key"; value: string };
+
+function describeInputOp(op: BrowserInputOp): string {
+  switch (op.kind) {
+    case "click":
+      return "Clicking…";
+    case "scroll":
+      return "Scrolling…";
+    case "key":
+      return `Pressing ${op.value}…`;
+    case "text":
+      return `Typing “${op.value.length > 24 ? `${op.value.slice(0, 24)}…` : op.value}”`;
+  }
+}
+
+/** Non-character keys forwarded to the remote page as Playwright key presses. */
+const FORWARDED_KEYS = new Set([
+  "Enter",
+  "Tab",
+  "Backspace",
+  "Delete",
+  "Escape",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);

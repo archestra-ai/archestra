@@ -1,6 +1,11 @@
 "use client";
 
-import { DocsPage, getGithubApiBaseUrl } from "@archestra/shared";
+import {
+  DocsPage,
+  type GitProvider,
+  getGithubApiBaseUrl,
+  gitChangeRequestNoun,
+} from "@archestra/shared";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -16,6 +21,13 @@ import {
 } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { GitAccessStep } from "@/components/git/git-access-step";
+import { GitProviderStep } from "@/components/git/git-provider-step";
+import {
+  ChoiceTile,
+  GitProviderLogo,
+  SetupStepper,
+} from "@/components/git/git-setup-chrome";
 import { GitHubConnectButton } from "@/components/github-connect-button";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -47,9 +59,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
+import {
+  useGitCredentialNamespaces,
+  useGitCredentials,
+} from "@/lib/git-credentials.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
@@ -69,10 +84,16 @@ import { onGithubAppSetup } from "./github-app-channel";
 import { OpenAppaSetupPullRequestDialog } from "./setup-pull-request-dialog";
 
 /**
- * Sets up GitHub sync with the least access GitHub allows: the admin starts a
- * policy repository (or uses one they have) on github.com or GitHub Enterprise
+ * Sets up Git sync for the policy. The admin first picks GitHub or GitLab.
+ *
+ * GitHub gets the least access GitHub allows: the admin starts a policy
+ * repository (or uses one they have) on github.com or GitHub Enterprise
  * Server, creates a GitHub App on the organization that owns it, installs the
  * App on just that repository, and picks the repository from what it can see.
+ *
+ * GitLab (cloud or self-managed) uses a saved token: the admin picks or adds
+ * one, then creates a private project in a group the token can reach, or
+ * picks an existing project.
  */
 export function GithubSyncSetupDialog({
   onOpenChange,
@@ -90,8 +111,12 @@ export function GithubSyncSetupDialog({
     credential: ["create"],
   });
   const credentials = useRuntimeCredentials(!!canReadCredentials);
+  const [provider, setProvider] = useState<GitProvider | null>(
+    editing?.provider ?? null,
+  );
+  const gitlab = provider === "gitlab";
   const [githubUrl, setGithubUrl] = useState(
-    editing?.githubWebUrl ?? DOT_COM_WEB,
+    editing?.provider === "github" ? editing.webUrl : DOT_COM_WEB,
   );
   const github = parseGithubUrl(githubUrl);
   const [ownerInput, setOwnerInput] = useState(
@@ -117,7 +142,7 @@ export function GithubSyncSetupDialog({
   const create = useCreateAppaGithubRepository();
   const configure = useConfigureAppaGithubSync();
 
-  const [step, setStep] = useState<Step>(editing ? "repo" : "start");
+  const [step, setStep] = useState<Step>(editing ? "repo" : "provider");
   const [origin, setOrigin] = useState<Origin | null>(
     editing ? "existing" : null,
   );
@@ -125,7 +150,27 @@ export function GithubSyncSetupDialog({
   const [chosenMode, setMode] = useState<AppMode | null>(
     editing ? "pick" : null,
   );
-  const [pickedId, setPickedId] = useState(editing?.githubAppConfigId ?? "");
+  const [pickedId, setPickedId] = useState(
+    editing?.provider === "github" ? editing.credentialId : "",
+  );
+  // GitLab: the saved token, then a new project in a group or an existing one.
+  const [gitlabTokenId, setGitlabTokenId] = useState(
+    editing?.provider === "gitlab" ? editing.credentialId : "",
+  );
+  const gitCredentials = useGitCredentials(!!canReadCredentials && gitlab);
+  const gitlabToken =
+    gitCredentials.data?.find((entry) => entry.id === gitlabTokenId) ?? null;
+  const [projectMode, setProjectMode] = useState<"create" | "existing">(
+    editing ? "existing" : "create",
+  );
+  const namespaces = useGitCredentialNamespaces(
+    gitlab && step === "repo" && projectMode === "create"
+      ? gitlabTokenId || null
+      : null,
+  );
+  const [group, setGroup] = useState<string | null>(null);
+  const chosenGroup = group ?? namespaces.data?.[1] ?? namespaces.data?.[0];
+  const [projectName, setProjectName] = useState(FRESH_NAME);
   const [waiting, setWaiting] = useState<"create" | "install" | null>(null);
   const [installed, setInstalled] = useState<{
     id: string;
@@ -150,6 +195,7 @@ export function GithubSyncSetupDialog({
 
   const accounts = useAppaGithubAppAccounts(
     (step === "app" || step === "repo") &&
+      !gitlab &&
       !!canReadCredentials &&
       apps.length > 0,
   );
@@ -157,13 +203,18 @@ export function GithubSyncSetupDialog({
   // An App created earlier still awaits installation: pick up where setup stopped.
   const mode: AppMode =
     chosenMode ?? (createdApp || !apps.length ? "create" : "fork");
-  const appId = mode === "pick" ? pickedId || null : (installed?.id ?? null);
+  const appId = gitlab
+    ? gitlabTokenId || null
+    : mode === "pick"
+      ? pickedId || null
+      : (installed?.id ?? null);
+  const creatingProject = gitlab && projectMode === "create";
   const appLabel =
     mode === "pick"
       ? apps.find((app) => app.id === pickedId)?.name
       : installed?.name;
   const repositories = useAppaGithubAppRepositories(
-    step === "repo" ? appId : null,
+    step === "repo" && !creatingProject ? appId : null,
   );
   // A fresh setup just created the repository; offer it without a search.
   const repo =
@@ -193,7 +244,7 @@ export function GithubSyncSetupDialog({
     repo && locationValid ? JSON.stringify([repo, location]) : null;
   const checked = useDebouncedValue(lookupKey, 400);
   const repoLookup = useAppaGithubRepositoryStatus(
-    step === "repo" && appId && checked && lookupKey
+    step === "repo" && !creatingProject && appId && checked && lookupKey
       ? { credentialId: appId, repo, ...location }
       : null,
   );
@@ -204,9 +255,10 @@ export function GithubSyncSetupDialog({
         ? "failed"
         : (repoLookup.data?.status ?? "checking");
   // The repository already syncing is neither seeded nor replaced: it is kept.
-  const keepsSource = !!editing && repo === editing.repo;
+  const keepsSource =
+    !!editing && provider === editing.provider && repo === editing.repo;
   // The repository already syncing that can't be reached was most likely
-  // deleted or renamed since: say so, not just that the App lacks access.
+  // deleted or renamed since: say so, not just that access is missing.
   const repoStatus: RepositoryStatus = !keepsSource
     ? lookedUp
     : USABLE.has(lookedUp)
@@ -325,8 +377,11 @@ export function GithubSyncSetupDialog({
   }
 
   function connect() {
-    if (!appId || !repo) return;
+    if (!appId || (!repo && !creatingProject)) return;
     const onError = () => setStep("repo");
+    const credential = gitlab
+      ? { gitlabTokenId: appId }
+      : { githubAppConfigId: appId };
     setStep("connect");
     if (keepsSource) {
       configure.mutate(
@@ -337,22 +392,26 @@ export function GithubSyncSetupDialog({
           interval,
           validationDirectory: validationFolder,
           githubPatId: null,
-          githubAppConfigId: appId,
+          githubAppConfigId: null,
+          gitlabTokenId: null,
+          ...credential,
         },
         { onSuccess: () => onOpenChange(false), onError },
       );
       return;
     }
-    const [repoOwner, repoName] = repo.split("/");
+    // GitLab nests groups: the project is the last segment, its group the rest.
+    const slash = repo.lastIndexOf("/");
     create.mutate(
       {
-        owner: repoOwner,
-        name: repoName,
-        githubAppConfigId: appId,
+        ...(creatingProject
+          ? { owner: chosenGroup ?? "", name: projectName.trim() }
+          : { owner: repo.slice(0, slash), name: repo.slice(slash + 1) }),
+        ...credential,
         interval,
-        existing: true,
-        // Editing moves the running sync to the new repository.
-        replace: !!editing,
+        existing: !creatingProject,
+        // Editing moves the running sync to the new repository, created or not.
+        ...((!creatingProject || editing) && { replace: !!editing }),
         ...location,
       },
       {
@@ -368,7 +427,11 @@ export function GithubSyncSetupDialog({
   }
 
   function back() {
-    if (step === "start") return setOrigin(null);
+    if (gitlab) return setStep(step === "repo" ? "app" : "provider");
+    if (step === "start") {
+      if (origin) return setOrigin(null);
+      return setStep("provider");
+    }
     if (step === "repo") {
       setStep("app");
       // A lone App was picked for the admin; go back to the choice, not a list of one.
@@ -401,6 +464,7 @@ export function GithubSyncSetupDialog({
     mode,
     appName,
     dotCom: github?.dotCom ?? true,
+    gitlab,
   });
   const loadingApps =
     credentials.isPending || (!!canCreateCredentials && pending.isPending);
@@ -415,7 +479,7 @@ export function GithubSyncSetupDialog({
       bodyClassName="space-y-5"
       footer={
         <>
-          {step !== "connect" && (step !== "start" || origin) ? (
+          {step !== "connect" && step !== "provider" ? (
             <Button
               type="button"
               variant="ghost"
@@ -439,7 +503,7 @@ export function GithubSyncSetupDialog({
               <span>Continue</span>
             </Button>
           ) : null}
-          {step === "app" && mode !== "fork" ? (
+          {step === "app" && (gitlab || mode !== "fork") ? (
             <Button
               type="button"
               disabled={!appId}
@@ -451,16 +515,73 @@ export function GithubSyncSetupDialog({
           {step === "repo" ? (
             <Button
               type="button"
-              disabled={!repo || !locationValid || !USABLE.has(repoStatus)}
+              disabled={
+                creatingProject
+                  ? !locationValid ||
+                    !PROJECT_NAME.test(projectName.trim()) ||
+                    chosenGroup === undefined
+                  : !repo || !locationValid || !USABLE.has(repoStatus)
+              }
               onClick={connect}
             >
-              <span>{editing ? "Save" : "Connect repository"}</span>
+              <span>
+                {editing
+                  ? "Save"
+                  : creatingProject
+                    ? "Create project"
+                    : gitlab
+                      ? "Connect project"
+                      : "Connect repository"}
+              </span>
             </Button>
           ) : null}
         </>
       }
     >
-      <Stepper step={step} />
+      <SetupStepper
+        steps={(gitlab ? GITLAB_STEPS : GITHUB_STEPS).map(
+          (entry) => entry.label,
+        )}
+        current={
+          step === "connect"
+            ? (gitlab ? GITLAB_STEPS : GITHUB_STEPS).length
+            : (gitlab ? GITLAB_STEPS : GITHUB_STEPS).findIndex(
+                (entry) => entry.id === step,
+              )
+        }
+      />
+
+      {step === "provider" ? (
+        <GitProviderStep
+          onPick={(picked) => {
+            // Moving an edited source to the other host starts that host fresh:
+            // the old repository means nothing there.
+            const sameHost = editing?.provider === picked;
+            setRepo(sameHost ? editing.repo : "");
+            setOwnerInput(sameHost ? editing.repo.split("/")[0] : "");
+            setRef(sameHost ? (editing.ref ?? "") : "");
+            setOrigin(sameHost ? "existing" : null);
+            setProjectMode(sameHost ? "existing" : "create");
+            setProvider(picked);
+            setStep(picked === "gitlab" ? "app" : "start");
+          }}
+        />
+      ) : null}
+
+      {step === "app" && gitlab ? (
+        <GitAccessStep
+          provider="gitlab"
+          allowPublic={false}
+          access={
+            gitlabToken ? { kind: "credential", credential: gitlabToken } : null
+          }
+          onAccessChange={(access) =>
+            setGitlabTokenId(
+              access?.kind === "credential" ? access.credential.id : "",
+            )
+          }
+        />
+      ) : null}
 
       {step === "start" && !origin ? (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -501,7 +622,7 @@ export function GithubSyncSetupDialog({
 
       {step === "start" && !origin ? (
         <div className="grid gap-3 sm:grid-cols-2">
-          <ForkCard
+          <ChoiceTile
             disabled={!ready}
             onClick={() => setOrigin("fresh")}
             visual={
@@ -516,7 +637,7 @@ export function GithubSyncSetupDialog({
                 : "Create a private repository from the OpenAPPA template."
             }
           />
-          <ForkCard
+          <ChoiceTile
             disabled={!ready}
             onClick={() => {
               setOrigin("existing");
@@ -576,16 +697,16 @@ export function GithubSyncSetupDialog({
         </div>
       ) : null}
 
-      {step === "app" && loadingApps ? (
+      {step === "app" && !gitlab && loadingApps ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <LoaderCircle className="size-3 animate-spin" />
           <span>Loading GitHub Apps…</span>
         </p>
       ) : null}
 
-      {step === "app" && !loadingApps && mode === "fork" ? (
+      {step === "app" && !gitlab && !loadingApps && mode === "fork" ? (
         <div className="grid gap-3 sm:grid-cols-2">
-          <ForkCard
+          <ChoiceTile
             onClick={() => {
               setMode("pick");
               // With one App there is nothing to choose: use it.
@@ -598,7 +719,7 @@ export function GithubSyncSetupDialog({
             title="Use an App I already have"
             body={`${apps.length} connected to ${appName}.`}
           />
-          <ForkCard
+          <ChoiceTile
             onClick={() => setMode("create")}
             disabled={!canCreateCredentials}
             visual={
@@ -616,7 +737,7 @@ export function GithubSyncSetupDialog({
         </div>
       ) : null}
 
-      {step === "app" && !loadingApps && mode === "pick" ? (
+      {step === "app" && !gitlab && !loadingApps && mode === "pick" ? (
         <RadioGroup
           value={pickedId}
           onValueChange={setPickedId}
@@ -655,7 +776,7 @@ export function GithubSyncSetupDialog({
         </RadioGroup>
       ) : null}
 
-      {step === "app" && !loadingApps && mode === "create" ? (
+      {step === "app" && !gitlab && !loadingApps && mode === "create" ? (
         canCreateCredentials ? (
           <div className="space-y-4">
             <ol className="overflow-hidden rounded-lg border bg-card">
@@ -766,157 +887,273 @@ export function GithubSyncSetupDialog({
 
       {step === "repo" ? (
         <div className="space-y-4">
-          <SelectedAppBar
-            name={appLabel ?? "GitHub App"}
-            icon={
-              mode === "pick"
-                ? (apps.find((app) => app.id === pickedId)?.icon ?? null)
-                : (apps.find((app) => app.id === installed?.id)?.icon ?? null)
-            }
-            account={
-              mode === "pick"
-                ? (accounts.data?.find((entry) => entry.id === pickedId)
-                    ?.account ?? null)
-                : (installed?.account ?? null)
-            }
-            onChange={back}
-          />
-          <div className="space-y-2">
-            <Label htmlFor="github-sync-repo">Repository</Label>
-            <FieldDescription>
-              The repositories the selected App can access.
-              {repositories.data?.manageUrl ? (
-                <>
-                  {" "}
-                  <span>Don't see yours?</span>{" "}
-                  <a
-                    href={repositories.data.manageUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-4 hover:underline"
+          {gitlab ? (
+            <SelectedAppBar
+              provider="gitlab"
+              name={gitlabToken?.name ?? "GitLab token"}
+              icon="logo:gitlab"
+              account={gitlabToken ? new URL(gitlabToken.webUrl).host : null}
+              onChange={back}
+            />
+          ) : (
+            <SelectedAppBar
+              provider="github"
+              name={appLabel ?? "GitHub App"}
+              icon={
+                mode === "pick"
+                  ? (apps.find((app) => app.id === pickedId)?.icon ?? null)
+                  : (apps.find((app) => app.id === installed?.id)?.icon ?? null)
+              }
+              account={
+                mode === "pick"
+                  ? (accounts.data?.find((entry) => entry.id === pickedId)
+                      ?.account ?? null)
+                  : (installed?.account ?? null)
+              }
+              onChange={back}
+            />
+          )}
+          {gitlab && editing?.provider !== "gitlab" ? (
+            <RadioGroup
+              value={projectMode}
+              onValueChange={(value) =>
+                setProjectMode(value as "create" | "existing")
+              }
+              className="grid-cols-2 gap-2"
+              aria-label="Policy project"
+            >
+              {(
+                [
+                  ["create", "New project"],
+                  ["existing", "Existing project"],
+                ] as const
+              ).map(([value, label]) => (
+                <Label
+                  key={value}
+                  htmlFor={`gitlab-project-${value}`}
+                  className={cn(
+                    radioCardClass(),
+                    "flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2.5 font-normal",
+                  )}
+                >
+                  <RadioGroupItem
+                    value={value}
+                    id={`gitlab-project-${value}`}
+                  />
+                  <span className="text-sm font-medium">{label}</span>
+                </Label>
+              ))}
+            </RadioGroup>
+          ) : null}
+          {creatingProject ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="gitlab-project-group">Group</Label>
+                {namespaces.isPending ? (
+                  <div className="flex h-9 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                    <span>Loading…</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={chosenGroup === "" ? PERSONAL : (chosenGroup ?? "")}
+                    onValueChange={(value) =>
+                      setGroup(value === PERSONAL ? "" : value)
+                    }
                   >
-                    <span>Change its access on GitHub</span>
-                    <ExternalLink className="size-3" aria-hidden />
-                  </a>
-                  <span>, then </span>
+                    <SelectTrigger id="gitlab-project-group" className="w-full">
+                      <SelectValue placeholder="Choose a group" />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      {(namespaces.data ?? []).map((entry) => (
+                        <SelectItem
+                          key={entry || PERSONAL}
+                          value={entry || PERSONAL}
+                        >
+                          {entry || "Your namespace"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="gitlab-project-name">Project name</Label>
+                <Input
+                  id="gitlab-project-name"
+                  value={projectName}
+                  autoComplete="off"
+                  data-1p-ignore
+                  spellCheck={false}
+                  aria-invalid={!PROJECT_NAME.test(projectName.trim())}
+                  onChange={(event) => setProjectName(event.target.value)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Private. {appName} adds the OpenAPPA files.
+              </p>
+              {namespaces.isError ? (
+                <InlineNotice variant="error" className="sm:col-span-2">
+                  <AlertTriangle aria-hidden />
+                  <span className="font-medium">Couldn't load groups</span>
+                  <InlineNoticeText className="flex-1">
+                    {namespaces.error.message}
+                  </InlineNoticeText>
+                </InlineNotice>
+              ) : null}
+            </div>
+          ) : null}
+          {creatingProject ? null : (
+            <div className="space-y-2">
+              <Label htmlFor="github-sync-repo">
+                {gitlab ? "Project" : "Repository"}
+              </Label>
+              <FieldDescription>
+                {gitlab
+                  ? "Projects the token can reach."
+                  : "The repositories the selected App can access."}
+                {repositories.data?.manageUrl ? (
+                  <>
+                    {" "}
+                    <span>Don't see yours?</span>{" "}
+                    <a
+                      href={repositories.data.manageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      <span>Change its access on GitHub</span>
+                      <ExternalLink className="size-3" aria-hidden />
+                    </a>
+                    <span>, then </span>
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="xs"
+                      className="h-auto gap-1 px-0 align-baseline text-xs font-medium text-foreground"
+                      disabled={repositories.isFetching}
+                      onClick={refreshRepositories}
+                      aria-live="polite"
+                    >
+                      {/* The word never changes width, or the link would wrap
+                        onto its own line: a spinner covers it while loading,
+                        and it turns green for a moment once done. */}
+                      <span className="relative">
+                        <span
+                          className={cn(
+                            repositories.isFetching && "invisible",
+                            refreshed &&
+                              "text-emerald-600 dark:text-emerald-500",
+                          )}
+                        >
+                          refresh
+                        </span>
+                        {repositories.isFetching && (
+                          <LoaderCircle
+                            className="absolute inset-0 m-auto size-3 animate-spin"
+                            aria-hidden
+                          />
+                        )}
+                      </span>
+                      {repositories.isFetching ? (
+                        <span className="sr-only">Refreshing</span>
+                      ) : refreshed ? (
+                        <span className="sr-only">Refreshed</span>
+                      ) : null}
+                    </Button>
+                    <span>.</span>
+                  </>
+                ) : null}
+              </FieldDescription>
+              {repositories.isPending ? (
+                <div className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                  <span>Loading repositories…</span>
+                </div>
+              ) : repositories.data?.repositories.length ? (
+                <SearchableSelect
+                  id="github-sync-repo"
+                  className={cn(
+                    "h-10 w-full",
+                    repoStatus === "missing" && "border-destructive",
+                  )}
+                  value={repo}
+                  onValueChange={setRepo}
+                  aria-invalid={
+                    repoStatus === "missing" || repoStatus === "unreachable"
+                  }
+                  placeholder={
+                    gitlab ? "Choose a project" : "Choose a repository"
+                  }
+                  searchPlaceholder={
+                    gitlab ? "Search projects…" : "Search repositories…"
+                  }
+                  emptyMessage={
+                    gitlab ? "No project matches." : "No repository matches."
+                  }
+                  listClassName="max-h-72"
+                  items={[
+                    ...repositories.data.repositories.map((entry) => ({
+                      value: entry.fullName,
+                      label: entry.fullName,
+                      searchText: `${entry.fullName} ${entry.description ?? ""}`,
+                      content: <RepositoryOption repository={entry} />,
+                      selectedContent: (
+                        <RepositoryOption repository={entry} compact />
+                      ),
+                    })),
+                    // Keep the gone repository visible, marked, but not pickable.
+                    ...(repoStatus === "missing" &&
+                    !repositories.data.repositories.some(
+                      (entry) => entry.fullName === repo,
+                    )
+                      ? [
+                          {
+                            value: repo,
+                            label: repo,
+                            disabled: true,
+                            content: <MissingRepositoryOption repo={repo} />,
+                            selectedContent: (
+                              <MissingRepositoryOption repo={repo} />
+                            ),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              ) : (
+                <InlineNotice
+                  variant={repositories.isError ? "error" : "warning"}
+                >
+                  <AlertTriangle aria-hidden />
+                  <span className="font-medium">
+                    {repositories.isError
+                      ? "Couldn't load repositories"
+                      : "No repositories yet"}
+                  </span>
+                  <InlineNoticeText className="flex-1">
+                    {repositories.isError
+                      ? repositories.error.message
+                      : gitlab
+                        ? "The token can't reach any project."
+                        : `${appLabel ?? "The App"} can't access any. Give it access on GitHub.`}
+                  </InlineNoticeText>
                   <Button
                     type="button"
                     variant="link"
                     size="xs"
-                    className="h-auto gap-1 px-0 align-baseline text-xs font-medium text-foreground"
+                    className="ml-auto h-auto px-0 text-xs text-inherit"
+                    data-slot="inline-notice-action"
                     disabled={repositories.isFetching}
-                    onClick={refreshRepositories}
-                    aria-live="polite"
+                    onClick={() => repositories.refetch()}
                   >
-                    {/* The word never changes width, or the link would wrap
-                        onto its own line: a spinner covers it while loading,
-                        and it turns green for a moment once done. */}
-                    <span className="relative">
-                      <span
-                        className={cn(
-                          repositories.isFetching && "invisible",
-                          refreshed && "text-emerald-600 dark:text-emerald-500",
-                        )}
-                      >
-                        refresh
-                      </span>
-                      {repositories.isFetching && (
-                        <LoaderCircle
-                          className="absolute inset-0 m-auto size-3 animate-spin"
-                          aria-hidden
-                        />
-                      )}
-                    </span>
-                    {repositories.isFetching ? (
-                      <span className="sr-only">Refreshing</span>
-                    ) : refreshed ? (
-                      <span className="sr-only">Refreshed</span>
-                    ) : null}
+                    <span>Try again</span>
                   </Button>
-                  <span>.</span>
-                </>
-              ) : null}
-            </FieldDescription>
-            {repositories.isPending ? (
-              <div className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm text-muted-foreground">
-                <LoaderCircle className="size-3.5 animate-spin" />
-                <span>Loading repositories…</span>
-              </div>
-            ) : repositories.data?.repositories.length ? (
-              <SearchableSelect
-                id="github-sync-repo"
-                className={cn(
-                  "h-10 w-full",
-                  repoStatus === "missing" && "border-destructive",
-                )}
-                value={repo}
-                onValueChange={setRepo}
-                aria-invalid={
-                  repoStatus === "missing" || repoStatus === "unreachable"
-                }
-                placeholder="Choose a repository"
-                searchPlaceholder="Search repositories…"
-                emptyMessage="No repository matches."
-                listClassName="max-h-72"
-                items={[
-                  ...repositories.data.repositories.map((entry) => ({
-                    value: entry.fullName,
-                    label: entry.fullName,
-                    searchText: `${entry.fullName} ${entry.description ?? ""}`,
-                    content: <RepositoryOption repository={entry} />,
-                    selectedContent: (
-                      <RepositoryOption repository={entry} compact />
-                    ),
-                  })),
-                  // Keep the gone repository visible, marked, but not pickable.
-                  ...(repoStatus === "missing" &&
-                  !repositories.data.repositories.some(
-                    (entry) => entry.fullName === repo,
-                  )
-                    ? [
-                        {
-                          value: repo,
-                          label: repo,
-                          disabled: true,
-                          content: <MissingRepositoryOption repo={repo} />,
-                          selectedContent: (
-                            <MissingRepositoryOption repo={repo} />
-                          ),
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            ) : (
-              <InlineNotice
-                variant={repositories.isError ? "error" : "warning"}
-              >
-                <AlertTriangle aria-hidden />
-                <span className="font-medium">
-                  {repositories.isError
-                    ? "Couldn't load repositories"
-                    : "No repositories yet"}
-                </span>
-                <InlineNoticeText className="flex-1">
-                  {repositories.isError
-                    ? repositories.error.message
-                    : `${appLabel ?? "The App"} can't access any. Give it access on GitHub.`}
-                </InlineNoticeText>
-                <Button
-                  type="button"
-                  variant="link"
-                  size="xs"
-                  className="ml-auto h-auto px-0 text-xs text-inherit"
-                  data-slot="inline-notice-action"
-                  disabled={repositories.isFetching}
-                  onClick={() => repositories.refetch()}
-                >
-                  <span>Try again</span>
-                </Button>
-              </InlineNotice>
-            )}
-          </div>
-          {repo ? (
+                </InlineNotice>
+              )}
+            </div>
+          )}
+          {repo && !creatingProject ? (
             <RepositoryNotice
               repo={repo}
               path={location.path ?? "appa.toml"}
@@ -925,6 +1162,7 @@ export function GithubSyncSetupDialog({
               validations={repoLookup.data?.validations ?? null}
               error={repoLookup.error?.message}
               manageUrl={repositories.data?.manageUrl ?? null}
+              gitlab={gitlab}
             />
           ) : null}
           <Collapsible open={advanced} onOpenChange={setAdvanced}>
@@ -1021,7 +1259,9 @@ export function GithubSyncSetupDialog({
             <InlineNotice variant="error">
               <AlertTriangle aria-hidden />
               <span className="font-medium">
-                {keepsSource ? "Couldn't save" : `Couldn't connect ${repo}`}
+                {keepsSource
+                  ? "Couldn't save"
+                  : `Couldn't connect ${creatingProject ? projectName.trim() : repo}`}
               </span>
               <InlineNoticeText className="basis-full pl-5">
                 {(keepsSource ? configure.error : create.error)?.message}
@@ -1036,7 +1276,11 @@ export function GithubSyncSetupDialog({
           className="space-y-3 rounded-lg border bg-card p-4"
           aria-live="polite"
         >
-          {CONNECT_STEPS.map((label, index) => (
+          {[
+            gitlab ? "Check the project" : "Check the repository",
+            "Sync the policy",
+            `Open a setup ${gitChangeRequestNoun(gitlab ? "gitlab" : "github")} if rules require one`,
+          ].map((label, index) => (
             <li key={label} className="flex items-center gap-3 text-sm">
               {index === 0 ? (
                 <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
@@ -1058,7 +1302,7 @@ export function GithubSyncSetupDialog({
 
 // ===================== Internals =====================
 
-type Step = "start" | "app" | "repo" | "connect";
+type Step = "provider" | "start" | "app" | "repo" | "connect";
 type AppMode = "fork" | "pick" | "create";
 type Origin = "fresh" | "existing";
 type RepositoryStatus =
@@ -1082,6 +1326,7 @@ function RepositoryNotice({
   validations,
   error,
   manageUrl,
+  gitlab = false,
 }: {
   repo: string;
   path: string;
@@ -1090,6 +1335,7 @@ function RepositoryNotice({
   validations: boolean | null;
   error?: string;
   manageUrl: string | null;
+  gitlab?: boolean;
 }) {
   if (status === "checking")
     return (
@@ -1103,10 +1349,13 @@ function RepositoryNotice({
       <InlineNotice variant="error" aria-live="polite">
         <AlertTriangle aria-hidden />
         <InlineNoticeBody>
-          <span className="font-medium">Repository not found</span>
+          <span className="font-medium">
+            {gitlab ? "Project not found" : "Repository not found"}
+          </span>
           <InlineNoticeText>
-            {repo} may have been deleted or renamed, or the App lost access.
-            Pick another repository.
+            {gitlab
+              ? `${repo} may have been deleted or renamed, or the token lost access. Pick another project.`
+              : `${repo} may have been deleted or renamed, or the App lost access. Pick another repository.`}
           </InlineNoticeText>
         </InlineNoticeBody>
         {manageUrl ? (
@@ -1121,16 +1370,22 @@ function RepositoryNotice({
         <InlineNoticeBody>
           <span className="font-medium">
             {status === "app_error"
-              ? "The App can't sign in"
+              ? gitlab
+                ? "The token can't sign in"
+                : "The App can't sign in"
               : status === "unreachable"
                 ? "No access"
                 : "Couldn't check it"}
           </span>
           <InlineNoticeText>
             {status === "app_error"
-              ? "It may be uninstalled on GitHub. Change it above."
+              ? gitlab
+                ? "It may be revoked or expired. Change it above."
+                : "It may be uninstalled on GitHub. Change it above."
               : status === "unreachable"
-                ? "The selected App can't read this repository."
+                ? gitlab
+                  ? "The token can't read this project."
+                  : "The selected App can't read this repository."
                 : (error ?? "Try again in a moment.")}
           </InlineNoticeText>
         </InlineNoticeBody>
@@ -1150,7 +1405,9 @@ function RepositoryNotice({
             {status === "template"
               ? "OpenAPPA template"
               : status === "empty"
-                ? "Empty repository"
+                ? gitlab
+                  ? "Empty project"
+                  : "Empty repository"
                 : status === "policy"
                   ? `Found ${path}`
                   : `No ${path}`}
@@ -1162,7 +1419,7 @@ function RepositoryNotice({
                 ? "Setup adds the OpenAPPA files and your current policy."
                 : status === "policy"
                   ? "It becomes your policy, in place of the current one."
-                  : "Pick another repository, or set the policy's location under Advanced."}
+                  : `Pick another ${gitlab ? "project" : "repository"}, or set the policy's location under Advanced.`}
           </InlineNoticeText>
         </InlineNotice>
       )}
@@ -1183,11 +1440,13 @@ function RepositoryNotice({
 
 /** The App the repository list comes from, with a way back to change it. */
 function SelectedAppBar({
+  provider,
   name,
   icon,
   account,
   onChange,
 }: {
+  provider: GitProvider;
   name: string;
   icon: string | null;
   account: string | null;
@@ -1201,7 +1460,7 @@ function SelectedAppBar({
         size={14}
       />
       <span className="min-w-0 truncate font-medium">{name}</span>
-      {account ? <AccountChip account={account} /> : null}
+      {account ? <AccountChip account={account} provider={provider} /> : null}
       <Button
         type="button"
         variant="link"
@@ -1288,7 +1547,10 @@ function RepositoryOption({
   };
   compact?: boolean;
 }) {
-  const [owner, name] = repository.fullName.split("/");
+  // GitLab nests groups: the name is the last segment, the rest its group.
+  const slash = repository.fullName.lastIndexOf("/");
+  const owner = repository.fullName.slice(0, slash);
+  const name = repository.fullName.slice(slash + 1);
   const Icon = repository.private ? Lock : BookMarked;
   return (
     <span className="flex min-w-0 items-center gap-2.5">
@@ -1315,81 +1577,6 @@ function RepositoryOption({
         ) : null}
       </span>
     </span>
-  );
-}
-
-function Stepper({ step }: { step: Step }) {
-  const current =
-    step === "connect"
-      ? STEPS.length
-      : STEPS.findIndex((entry) => entry.id === step);
-  return (
-    <ol className="grid grid-cols-3 gap-2" aria-label="Setup progress">
-      {STEPS.map((entry, index) => {
-        const complete = index < current;
-        const active = index === current;
-        return (
-          <li
-            key={entry.id}
-            aria-current={active ? "step" : undefined}
-            className="space-y-1.5"
-          >
-            <span
-              className={cn(
-                "block h-0.5 rounded-full transition-colors duration-300",
-                complete || active ? "bg-primary" : "bg-border",
-              )}
-            />
-            <span
-              className={cn(
-                "flex items-center gap-1.5 text-xs",
-                active
-                  ? "font-medium text-foreground"
-                  : "text-muted-foreground",
-              )}
-            >
-              {complete ? (
-                <Check className="size-3 text-primary" />
-              ) : (
-                <span className="tabular-nums">{index + 1}</span>
-              )}
-              <span>{entry.label}</span>
-            </span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function ForkCard({
-  onClick,
-  disabled = false,
-  visual,
-  title,
-  body,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  visual: React.ReactNode;
-  title: string;
-  body: string;
-}) {
-  return (
-    <UnstyledButton
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        radioCardClass(),
-        "group flex flex-col items-start gap-6 rounded-lg p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60",
-      )}
-    >
-      {visual}
-      <span className="space-y-1">
-        <span className="block text-sm font-medium">{title}</span>
-        <span className="block text-xs text-muted-foreground">{body}</span>
-      </span>
-    </UnstyledButton>
   );
 }
 
@@ -1568,10 +1755,16 @@ function AccessSummary({ workflows }: { workflows: boolean }) {
   );
 }
 
-function AccountChip({ account }: { account: string }) {
+function AccountChip({
+  account,
+  provider = "github",
+}: {
+  account: string;
+  provider?: GitProvider;
+}) {
   return (
     <Badge variant="outline" className="bg-background font-mono font-normal">
-      <Github />
+      <GitProviderLogo provider={provider} size={12} />
       <span>{account}</span>
     </Badge>
   );
@@ -1584,7 +1777,35 @@ function headerFor(params: {
   mode: AppMode;
   appName: string;
   dotCom: boolean;
+  gitlab: boolean;
 }) {
+  if (params.step === "provider")
+    return {
+      title: "Set up Git sync",
+      description: `GitHub or GitLab. ${params.appName} only gets access to the one policy repository.`,
+    };
+  if (params.gitlab) {
+    if (params.step === "app")
+      return {
+        title: "Choose a GitLab token",
+        description:
+          "It needs the api scope on the policy project. A project or group token is best.",
+      };
+    if (params.editing && (params.step === "repo" || params.step === "connect"))
+      return {
+        title: "Edit Git sync",
+        description: "Change the project or how it syncs.",
+      };
+    if (params.step === "repo")
+      return {
+        title: "Choose the policy project",
+        description: "Create a private one, or use one you have.",
+      };
+    return {
+      title: "Connecting the project",
+      description: "This takes a few seconds.",
+    };
+  }
   if (params.step === "start")
     return params.origin === "fresh"
       ? {
@@ -1594,7 +1815,7 @@ function headerFor(params: {
             : `Once it is connected, ${params.appName} adds the OpenAPPA files.`,
         }
       : {
-          title: "Set up GitHub sync",
+          title: "Set up Git sync",
           description: `Where should your policy live? ${params.appName} only ever gets access to that one repository.`,
         };
   if (params.step === "app") {
@@ -1615,7 +1836,7 @@ function headerFor(params: {
   }
   if (params.editing && (params.step === "repo" || params.step === "connect"))
     return {
-      title: "Edit GitHub sync",
+      title: "Edit Git sync",
       description: "Change the repository or how it syncs.",
     };
   if (params.step === "repo")
@@ -1652,17 +1873,20 @@ function postManifest(params: { url: string; manifest: string }) {
 
 const GITHUB_WINDOW = "openappa-github-app";
 
-const STEPS: { id: Step; label: string }[] = [
+const GITHUB_STEPS: { id: Step; label: string }[] = [
+  { id: "provider", label: "Host" },
   { id: "start", label: "Start" },
   { id: "app", label: "GitHub App" },
   { id: "repo", label: "Repository" },
 ];
-
-const CONNECT_STEPS = [
-  "Check the repository",
-  "Sync the policy",
-  "Open a setup pull request if rules require one",
+const GITLAB_STEPS: { id: Step; label: string }[] = [
+  { id: "provider", label: "Host" },
+  { id: "app", label: "Token" },
+  { id: "repo", label: "Project" },
 ];
+const PERSONAL = "__personal__";
+/** GitLab project names: letters, digits, and `_ . -`, starting with one of the first two. */
+const PROJECT_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,99}$/;
 
 const TEMPLATE = { owner: "archestra-ai", name: "openappa-config" };
 const OWNER_PATTERN = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
@@ -1719,14 +1943,17 @@ const SYNC_INTERVALS: { value: SyncInterval; label: string }[] = [
 ];
 
 type EditedSource = {
+  provider: GitProvider;
+  /** The GitHub App or GitLab token the source reads with. */
+  credentialId: string;
   repo: string;
   ref: string | null;
   path: string;
   interval: SyncInterval;
   /** Empty when validations are off; they then default to traces here. */
   validationDirectory: string;
-  githubAppConfigId: string;
-  githubWebUrl: string;
+  /** The host's web address, e.g. https://github.com. */
+  webUrl: string;
 };
 const VALIDATION_GUIDE_URL = "https://www.openappa.com/validation";
 const DIRECTORY_PATH = /^[a-zA-Z0-9_.-]+(?:\/[a-zA-Z0-9_.-]+)*$/;

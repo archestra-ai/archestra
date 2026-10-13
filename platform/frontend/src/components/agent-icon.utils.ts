@@ -1,4 +1,4 @@
-import { siAnthropic, siGithub } from "simple-icons";
+import { siAnthropic, siGithub, siGitlab } from "simple-icons";
 
 /** Values the shared Agent icon controls render as images rather than emoji. */
 export function isAgentImageIcon(
@@ -31,5 +31,6 @@ export function isBuiltInServiceIcon(
  */
 const BUILT_IN_SERVICE_ICON_PATHS: Record<string, string> = {
   "logo:github": siGithub.path,
+  "logo:gitlab": siGitlab.path,
   "logo:anthropic": siAnthropic.path,
 };

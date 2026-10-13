@@ -47,17 +47,14 @@ export function OpenAppaPolicyChange({
   // Previewing the unsaved starter changes no line.
   const unchanged = change.before === change.after;
   const pullUrl =
-    change.delivery === "pull_request" &&
-    change.url?.startsWith("https://github.com/")
-      ? change.url
-      : null;
+    change.delivery === "pull_request" ? changeRequestUrl(change.url) : null;
   return (
     <div className="space-y-3 p-3">
       {pullUrl && (
         <div className="flex justify-end">
           <Button variant="outline" size="sm" asChild>
             <a href={pullUrl} target="_blank" rel="noreferrer">
-              <span>Review pull request</span>
+              <span>Review {changeRequestNoun(pullUrl)}</span>
               <ArrowUpRight className="size-3.5" />
             </a>
           </Button>
@@ -176,7 +173,7 @@ type SaveResult = {
   title: string;
   detail: string;
   action: { label: string; href: string; external: boolean };
-  /** A local save, so the GitHub sync tip may apply. */
+  /** A local save, so the Git sync tip may apply. */
   local: boolean;
 };
 
@@ -187,18 +184,18 @@ type SaveResult = {
  */
 export function getPolicySaveResult(output: unknown): SaveResult | null {
   const change = parsePolicyChange(output);
-  if (
-    change?.stage !== "preview" &&
-    change?.delivery === "pull_request" &&
-    change.url?.startsWith("https://github.com/")
-  ) {
+  const url =
+    change?.stage !== "preview" && change?.delivery === "pull_request"
+      ? changeRequestUrl(change.url)
+      : null;
+  if (change && url) {
     return {
       tone: "success",
-      title: `Opened PR #${change.number}`,
+      title: `Opened ${changeRequestShort(url)} #${change.number}`,
       detail: "merge it to apply",
       action: {
-        label: "Review pull request",
-        href: change.url,
+        label: `Review ${changeRequestNoun(url)}`,
+        href: url,
         external: true,
       },
       local: false,
@@ -312,7 +309,7 @@ function SaveResultLine({
 }
 
 /**
- * In a locally saved revision's banner: GitHub sync is set up in the guardrails
+ * In a locally saved revision's banner: Git sync is set up in the guardrails
  * settings, opened in a new tab so the chat stays put and the operator sees
  * what setup leaves to do (such as merging its pull request).
  */
@@ -325,14 +322,14 @@ function GithubSyncTip() {
   return (
     // Its own line under the result.
     <p className="basis-full text-xs text-muted-foreground">
-      Tip: keep the policy in GitHub, so changes go through pull requests.{" "}
+      Tip: keep the policy in GitHub or GitLab, so every change gets reviewed.{" "}
       <a
         href="/settings/guardrails?setup=github-sync"
         target="_blank"
         rel="noreferrer"
         className="inline-flex items-center gap-0.5 font-medium underline underline-offset-4"
       >
-        Set up GitHub sync
+        <span>Set up Git sync</span>
         <ArrowUpRight className="size-3" aria-hidden />
       </a>
     </p>
@@ -350,11 +347,9 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
   if (!counts) return null;
   const pullUrl =
     change.delivery === "pull_request" &&
-    typeof change.url === "string" &&
-    change.url.startsWith("https://github.com/") &&
     Number.isSafeInteger(change.number) &&
     (change.number as number) > 0
-      ? change.url
+      ? changeRequestUrl(change.url)
       : null;
   if (
     !pullUrl &&
@@ -368,9 +363,13 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
   if (pullUrl) {
     return {
       tone,
-      title: `Opened PR #${change.number}`,
+      title: `Opened ${changeRequestShort(pullUrl)} #${change.number}`,
       detail: `merge it to apply · ${replay}`,
-      action: { label: "Review pull request", href: pullUrl, external: true },
+      action: {
+        label: `Review ${changeRequestNoun(pullUrl)}`,
+        href: pullUrl,
+        external: true,
+      },
       local: false,
     };
   }
@@ -533,4 +532,29 @@ function policyDiff(before: string, after: string, path: string): string {
     }
   }
   return lines.join("\n");
+}
+
+/**
+ * A GitHub pull request or GitLab merge request link, on any host: an https
+ * URL whose path ends in `/pull/<n>` or `/-/merge_requests/<n>`.
+ */
+function changeRequestUrl(url: unknown): string | null {
+  if (typeof url !== "string") return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" &&
+      /\/(?:pull|-\/merge_requests)\/\d+\/?$/.test(parsed.pathname)
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function changeRequestNoun(url: string) {
+  return url.includes("/-/merge_requests/") ? "merge request" : "pull request";
+}
+
+function changeRequestShort(url: string) {
+  return url.includes("/-/merge_requests/") ? "MR" : "PR";
 }

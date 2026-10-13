@@ -1,3 +1,4 @@
+import { gitHostFromUrl } from "@archestra/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   STUB_COMMIT_SHA as COMMIT_SHA,
@@ -230,7 +231,10 @@ describe("discoverSkills", () => {
     await discoverSkills({ repoUrl: "disc-tokeniso/skills" });
     await discoverSkills({
       repoUrl: "disc-tokeniso/skills",
-      githubToken: "ghp_other",
+      access: {
+        host: gitHostFromUrl({ provider: "github" }),
+        token: "ghp_other",
+      },
     });
 
     const treeCalls = fetchMock.mock.calls.filter(([input]) =>
@@ -589,7 +593,7 @@ describe("repository URL parsing", () => {
     "www.github.com/some-owner/skills",
   ])("rejects the non-GitHub host in %s with a clear error", async (repoUrl) => {
     await expect(discoverSkills({ repoUrl })).rejects.toThrow(
-      /Only github\.com repositories are supported/,
+      /Repository URL must belong to https:\/\/github\.com/,
     );
   });
 });

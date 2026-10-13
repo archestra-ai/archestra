@@ -9,7 +9,7 @@ for (const viewport of [
   test.describe(`OpenAPPA at ${viewport.width}px`, () => {
     test.use({ viewport });
 
-    test("shows the read-only policy and keeps the GitHub setup dialog padded and its actions reachable", async ({
+    test("shows the read-only policy and keeps the Git setup dialog padded and its actions reachable", async ({
       page,
       mswControl,
       request,
@@ -186,18 +186,15 @@ for (const viewport of [
       await expect(
         page.getByRole("switch", { name: "Enforce the policy" }),
       ).toBeVisible();
-      await page
-        .getByRole("button", { name: "Create GitHub repository" })
-        .click();
-      const dialog = page.getByRole("dialog", { name: "Set up GitHub sync" });
-      await expect(dialog).toBeVisible();
+      await page.getByRole("button", { name: "Set up Git sync" }).click();
+      // The title follows the step, so hold the dialog by its role.
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toHaveAccessibleName("Set up Git sync");
       // Measure the settled dialog, not a frame of its zoom-in animation.
       await dialog.evaluate((element) =>
         Promise.all(element.getAnimations().map((a) => a.finished)),
       );
-      const choice = dialog.getByRole("button", {
-        name: /Use an existing repository/,
-      });
+      const choice = dialog.getByRole("button", { name: /^GitHub/ });
       const bounds = await dialog.boundingBox();
       const card = await choice.boundingBox();
       if (!bounds || !card)
@@ -211,6 +208,11 @@ for (const viewport of [
       expect(
         bounds.x + bounds.width - card.x - card.width,
       ).toBeGreaterThanOrEqual(12);
+      await choice.click();
+      await expect(dialog).toHaveAccessibleName("Set up Git sync");
+      await expect(
+        dialog.getByRole("button", { name: /Use an existing repository/ }),
+      ).toBeVisible();
       await expect(
         dialog.getByRole("button", { name: "Cancel", exact: true }),
       ).toBeInViewport();

@@ -269,6 +269,10 @@ export const handlers: HttpHandler[] = [
     },
   ]),
   ...getJson("/api/credentials", []),
+  // GitHub Apps and GitLab tokens offered by the Git setup steps.
+  ...getJson("/api/git-credentials", []),
+  ...getJson("/api/git-credentials/:id/repositories", []),
+  ...getJson("/api/git-credentials/:id/namespaces", []),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/api/guardrails-deployment", {
@@ -580,8 +584,10 @@ export const handlers: HttpHandler[] = [
         repoUrl?: string;
         skillPaths?: string[];
       };
+      // The dialog sends the repository's full address.
       const isExpectedPayload =
-        body.repoUrl === catalogSkillSeed.repo &&
+        body.repoUrl?.replace(/^https:\/\/github\.com\//, "") ===
+          catalogSkillSeed.repo &&
         body.skillPaths?.length === 1 &&
         body.skillPaths[0] === catalogSkillSeed.skillPath;
       return HttpResponse.json(

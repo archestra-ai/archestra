@@ -13,7 +13,11 @@ import {
   requireGrantPermission,
 } from "@/services/guardrails-policy";
 import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
-import { resolveOpenAppaGithubAccess } from "@/services/openappa-github-access";
+import {
+  resolveOpenAppaGithubAccess,
+  resolveOpenAppaGitlabAccess,
+} from "@/services/openappa-github-access";
+import { openappaGitlab } from "@/services/openappa-gitlab";
 import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicyProposal } from "@/types/guardrails-policy-proposal";
@@ -99,11 +103,11 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
   if (
     !source.repo ||
     !source.path ||
-    !(source.githubAppConfigId || source.githubPatId)
+    !(source.githubAppConfigId || source.githubPatId || source.gitlabTokenId)
   )
     throw new ApiError(
       409,
-      "Connect a GitHub credential and policy file before proposing changes.",
+      "Connect a Git credential and policy file before proposing changes.",
     );
   if (
     !(await userHasPermission(
@@ -120,6 +124,17 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     previous: before.content,
   });
   if (!validation.valid) throw new ApiError(400, validation.errors.join("\n"));
+
+  if (source.gitlabTokenId)
+    return publishGitlabChange({
+      params,
+      source: { ...source, repo: source.repo, path: source.path },
+      gitlabTokenId: source.gitlabTokenId,
+      includePolicy,
+      content,
+      before: before.content,
+      warnings: validation.warnings,
+    });
 
   const { token, api, web } = await resolveWriteToken(source);
   const base = `${api}/repos/${source.repo}`;
@@ -285,9 +300,9 @@ export async function getOpenAppaPolicyChangeStatus(params: {
   if (
     !source?.interval ||
     !source.repo ||
-    !(source.githubAppConfigId || source.githubPatId)
+    !(source.githubAppConfigId || source.githubPatId || source.gitlabTokenId)
   )
-    throw new ApiError(409, "GitHub sync with a credential is not configured");
+    throw new ApiError(409, "Git sync with a credential is not configured");
   if (
     !(await userHasPermission(
       params.userId,
@@ -297,6 +312,27 @@ export async function getOpenAppaPolicyChangeStatus(params: {
     ))
   )
     throw new ApiError(403, "GitHub credential read permission is required");
+  if (source.gitlabTokenId) {
+    const request = await openappaGitlab.changeStatus({
+      access: await resolveOpenAppaGitlabAccess({
+        organizationId: params.organizationId,
+        gitlabTokenId: source.gitlabTokenId,
+      }),
+      repo: source.repo,
+      iid: params.number,
+    });
+    return {
+      number: request.iid,
+      url: request.webUrl,
+      state: request.state,
+      mergeable: request.mergeable,
+      sync: {
+        sourceCommit: source.sourceCommit,
+        lastSyncedAt: source.lastSyncedAt,
+        lastSyncError: source.lastSyncError,
+      },
+    };
+  }
   const { token, api, web } = await resolveWriteToken(source);
   const pull = await githubJson<{
     number: number;
@@ -455,6 +491,7 @@ async function assertPublishSource(params: {
     current.path !== params.source.path ||
     current.githubAppConfigId !== params.source.githubAppConfigId ||
     current.githubPatId !== params.source.githubPatId ||
+    current.gitlabTokenId !== params.source.gitlabTokenId ||
     policy.revision !== params.params.expectedRevision ||
     (params.params.validationChanges &&
       ((suite?.directory ?? "traces") !==
@@ -465,6 +502,70 @@ async function assertPublishSource(params: {
       409,
       "The policy or GitHub source changed. Read it again before proposing changes.",
     );
+}
+
+/**
+ * The GitLab write path: one commit on a new branch from the synced commit,
+ * then a merge request. The same freshness checks as GitHub guard it, and
+ * GitLab's `start_sha` refuses the commit if the branch moved meanwhile.
+ */
+async function publishGitlabChange(args: {
+  params: ChangeRequest;
+  source: NonNullable<
+    Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>
+  > & { repo: string; path: string };
+  gitlabTokenId: string;
+  includePolicy: boolean;
+  content: string;
+  before: string;
+  warnings: string[];
+}) {
+  const { params, source } = args;
+  const access = await resolveOpenAppaGitlabAccess({
+    organizationId: params.organizationId,
+    gitlabTokenId: args.gitlabTokenId,
+  });
+  const branch =
+    source.ref ??
+    (await openappaGitlab.defaultBranch({ access, repo: source.repo }));
+  const baseSha = await openappaGitlab.branchCommit({
+    access,
+    repo: source.repo,
+    branch,
+  });
+  if (!source.sourceCommit || source.sourceCommit !== baseSha)
+    throw new ApiError(
+      409,
+      "GitLab has changed since the last policy sync. Sync the policy, then review the new revision.",
+    );
+  if (params.validationChanges) await assertValidationSource(params);
+  await assertPublishSource({ params, source });
+  const changes = params.validationChanges;
+  const request = await openappaGitlab.proposeChange({
+    access,
+    repo: source.repo,
+    branch,
+    baseSha,
+    title: params.title,
+    summary: params.summary,
+    upsert: [
+      ...(changes?.upsert ?? []),
+      ...(args.includePolicy
+        ? [{ path: source.path, content: args.content }]
+        : []),
+    ],
+    delete: changes?.delete ?? [],
+  });
+  return {
+    delivery: "pull_request" as const,
+    number: request.iid,
+    url: request.webUrl,
+    repo: source.repo,
+    path: source.path,
+    warnings: args.warnings,
+    before: args.before,
+    after: args.content,
+  };
 }
 
 async function resolveWriteToken(source: {

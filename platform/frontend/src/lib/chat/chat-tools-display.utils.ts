@@ -3,13 +3,17 @@ import {
   extractMcpHumanRuling,
   extractMcpToolError,
   type McpHumanRuling,
-  OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { parseAuthRequired, parseExpiredAuth } from "@/lib/chat/mcp-error-ui";
 import type { PendingToolAction } from "@/lib/chat/pending-tool-state";
+
+const POLICY_PREVIEW_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  "preview_guardrails_policy_change",
+  "preview_openappa_validation_change",
+]);
 
 /**
  * Compute the default set of enabled tool IDs for a conversation.
@@ -185,14 +189,10 @@ export function isCompactEligible(params: {
     return true;
   }
 
-  // A proposed policy is what the operator is asked to approve: its card
-  // stays open in the reply instead of folding into a circle.
-  if (
-    shortName &&
-    (OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES as readonly string[]).includes(
-      shortName,
-    )
-  ) {
+  // A proposed policy is what the operator is asked to approve: its preview
+  // stays open in the reply instead of folding into a circle. A saved change
+  // folds as usual; its banner reports the save.
+  if (shortName && POLICY_PREVIEW_TOOL_SHORT_NAMES.has(shortName)) {
     return false;
   }
 

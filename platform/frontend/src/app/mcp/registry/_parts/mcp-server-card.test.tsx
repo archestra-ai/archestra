@@ -492,7 +492,7 @@ describe("McpServerCard uninstall permission", () => {
     expect(routerPush).toHaveBeenCalledWith("/mcp/registry/cat-1/edit");
   });
 
-  it("does not offer Install when a team connection already serves the viewer", () => {
+  it("still offers a personal Install when a team connection serves the viewer", () => {
     useMcpServersMock.mockReturnValue({
       data: [
         {
@@ -507,8 +507,8 @@ describe("McpServerCard uninstall permission", () => {
     renderCard(card);
 
     expect(
-      screen.queryByRole("button", { name: `Install ${item.name}` }),
-    ).toBeNull();
+      screen.getByRole("button", { name: `Install ${item.name}` }),
+    ).toBeInTheDocument();
   });
 
   it("offers Install when only a colleague's personal connection exists", () => {

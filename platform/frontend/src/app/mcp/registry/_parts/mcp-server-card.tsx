@@ -886,7 +886,7 @@ export function McpServerCard({
         {!isInstalling && (
           <>
             {uninstallButton}
-            {!isInstalledForViewer && remoteInstallButton}
+            {!hasPersonalConnection && remoteInstallButton}
           </>
         )}
       </div>
@@ -979,7 +979,7 @@ export function McpServerCard({
         {!isInstalling && (
           <>
             {uninstallButton}
-            {!isInstalledForViewer && localInstallButton}
+            {!hasPersonalConnection && localInstallButton}
           </>
         )}
       </div>

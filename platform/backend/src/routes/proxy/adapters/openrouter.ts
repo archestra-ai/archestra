@@ -24,6 +24,7 @@ import type {
   LLMStreamAdapter,
   Openrouter,
   StreamAccumulatorState,
+  UsageView,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -213,7 +214,10 @@ class OpenrouterResponseAdapter
     return this.delegate.hasToolCalls();
   }
   getUsage() {
-    return this.delegate.getUsage();
+    return withReportedCost(
+      this.delegate.getUsage(),
+      this.delegate.getOriginalResponse().usage,
+    );
   }
   getOriginalResponse() {
     return this.delegate.getOriginalResponse();
@@ -247,7 +251,11 @@ class OpenrouterStreamAdapter
 
   processChunk(chunk: OpenrouterStreamChunk) {
     const result = this.delegate.processChunk(chunk);
-    assertOpenrouterStreamChunkHasOutput(this.delegate.state, chunk);
+    const { state } = this.delegate;
+    if (chunk.usage && state.usage) {
+      state.usage = withReportedCost(state.usage, chunk.usage);
+    }
+    assertOpenrouterStreamChunkHasOutput(state, chunk);
     return result;
   }
   getSSEHeaders() {
@@ -451,6 +459,27 @@ function assertOpenrouterStreamChunkHasOutput(
   }
 
   throwEmptyOpenrouterResponseError();
+}
+
+// OpenRouter reports what it billed on every response (usage accounting is
+// always on). Prices vary by the upstream provider OpenRouter routed to, so
+// this is the real spend; the synced $/MTok list price is only an estimate.
+// Under BYOK `cost` is just OpenRouter's fee and the upstream provider's charge
+// to the user's own key comes back separately.
+// @see https://openrouter.ai/docs/use-cases/usage-accounting
+function withReportedCost(usage: UsageView, rawUsage: unknown): UsageView {
+  const cost = get(rawUsage, "cost");
+  if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) {
+    return usage;
+  }
+  const upstreamCost = get(rawUsage, "cost_details.upstream_inference_cost");
+  const providerReportedCost =
+    get(rawUsage, "is_byok") === true &&
+    typeof upstreamCost === "number" &&
+    Number.isFinite(upstreamCost)
+      ? cost + upstreamCost
+      : cost;
+  return { ...usage, providerReportedCost };
 }
 
 function hasText(content: string | null | undefined): boolean {

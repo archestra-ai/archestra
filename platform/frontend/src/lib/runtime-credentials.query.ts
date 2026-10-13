@@ -10,6 +10,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { rememberGitHubConnectionReturn } from "@/lib/github-connection-return";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
@@ -249,4 +250,21 @@ export function useCompleteGitHubUserConnection() {
       toast.success(`Connected GitHub${data ? ` as ${data.login}` : ""}`);
     },
   });
+}
+
+/**
+ * Whether the caller holds `use` on every credential: a grant at `*`, not one
+ * gathered credential by credential. Binding a credential to guardrails helper
+ * code, uploading a package, or approving a pull that rebinds one hands a
+ * credential's value to code, so each needs it.
+ */
+export function useCanUseEveryCredential() {
+  // `use` is a grant action, not a role action, so the role-permission type
+  // does not list it; the scoped check below reads grants.
+  return useHasPermissions(
+    { credential: ["use"] } as unknown as Parameters<
+      typeof useHasPermissions
+    >[0],
+    "*",
+  );
 }

@@ -219,9 +219,7 @@ export async function preflightMcpCredentials(params: {
 
 // === internals ===
 /** The sentence an install refusal shows for one blocker. */
-function describeMcpCredentialBlocker(
-  blocker: McpCredentialBlocker,
-): string {
+function describeMcpCredentialBlocker(blocker: McpCredentialBlocker): string {
   const name = `"${blocker.credentialName}"`;
   switch (blocker.reason) {
     case "no_access":

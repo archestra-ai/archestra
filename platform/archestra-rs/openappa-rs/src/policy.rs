@@ -19,9 +19,51 @@ pub(crate) const CONSULT_TIMEOUT: Duration = Duration::from_millis(5000);
 fn defaults() -> HostDefaults {
     HostDefaults {
         archestra: archestra_endpoint(),
-        ..HostDefaults::new(CONSULT_TIMEOUT, 65536)
+        ..HostDefaults::new(CONSULT_TIMEOUT, host_max_body_bytes())
     }
 }
+
+/// The body size limit the host sets for every hosted policy: the body limit of the LLM
+/// proxy, which the backend publishes before it crosses into the addon. A tool result the
+/// proxy accepted is therefore never dropped by this cap. A policy's own `max_body_bytes`
+/// has no effect on it; see [`enforce_host_limits`].
+///
+/// A process that has not published a value (a standalone script, a test), or published
+/// one that is not a positive integer, has no host limit: a policy there keeps the value
+/// its text states, or [`FALLBACK_MAX_BODY_BYTES`] when it states none. No path is
+/// stricter than before the host set the limit.
+fn published_max_body_bytes() -> Option<usize> {
+    parse_max_body_bytes(std::env::var(MAX_BODY_BYTES_ENV).ok().as_deref())
+}
+
+/// What a policy that states none gets, where the host publishes nothing.
+pub(crate) fn host_max_body_bytes() -> usize {
+    published_max_body_bytes().unwrap_or(FALLBACK_MAX_BODY_BYTES)
+}
+
+/// Set the host's body size limit on a hosted `Config`, whatever its text states. Every
+/// `Config` this crate builds from hosted text goes through here, so no path can leave
+/// the limit to the policy. Only `max_body_bytes` is the host's: `timeout_ms` and every
+/// other `[externals]` setting stay with the policy.
+pub(crate) fn enforce_host_limits(config: Config) -> Config {
+    apply_host_limit(config, published_max_body_bytes())
+}
+
+fn apply_host_limit(mut config: Config, limit: Option<usize>) -> Config {
+    if let Some(limit) = limit {
+        config.externals.max_body_bytes = limit;
+    }
+    config
+}
+
+fn parse_max_body_bytes(published: Option<&str>) -> Option<usize> {
+    published
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|bytes| *bytes > 0)
+}
+
+const MAX_BODY_BYTES_ENV: &str = "APPA_ARCHESTRA_MAX_BODY_BYTES";
+const FALLBACK_MAX_BODY_BYTES: usize = 65536;
 
 /// Where a `builtin = "archestra"` annotator posts its rendered prompt: the backend's own
 /// route, behind the same per-process bearer the helper bridge checks. The host publishes
@@ -41,7 +83,9 @@ pub(crate) fn compile(
     content: &str,
     lookup: impl Fn(&str) -> Option<String>,
 ) -> Result<Config, String> {
-    Config::hosted(content, defaults(), lookup).map_err(|error| error.to_string())
+    Config::hosted(content, defaults(), lookup)
+        .map(enforce_host_limits)
+        .map_err(|error| error.to_string())
 }
 
 /// Open a runtime over `store` under the Archestra adapter.
@@ -122,9 +166,11 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
             })
             .ok_or(IncludeResolution::Unknown)
     })
+    .map(enforce_host_limits)
     .map_err(|error| error.to_string())?;
     let content = String::from_utf8(config.policy_file().bytes().to_vec())
         .map_err(|error| error.to_string())?;
+    let content = omit_unstated_result_cap(&document, content)?;
     let credentials = config.credentials().clone();
     Runtime::check_hosted(config, None, crate::adapter::adapter())
         .map_err(|error| error.to_string())?;
@@ -132,6 +178,30 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         content,
         credentials,
     })
+}
+
+/// The composed text is stored and compiled again at every dispatch, and that compile
+/// gives a text that leaves `max_body_bytes` out the host's current default. A default
+/// the composition materialised would freeze the value of the day it was composed, so a
+/// root that states none leaves it out of the stored text. A stated value stays.
+fn omit_unstated_result_cap(root: &toml::Table, content: String) -> Result<String, String> {
+    let stated = root
+        .get("externals")
+        .and_then(toml::Value::as_table)
+        .is_some_and(|externals| externals.contains_key("max_body_bytes"));
+    if stated {
+        return Ok(content);
+    }
+    let mut document = content
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|error| error.to_string())?;
+    if let Some(externals) = document
+        .get_mut("externals")
+        .and_then(toml_edit::Item::as_table_mut)
+    {
+        externals.remove("max_body_bytes");
+    }
+    Ok(document.to_string())
 }
 
 /// A battery's policy as the host serves it, and the credential variables it reads.
@@ -303,6 +373,13 @@ mod tests {
     use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
 
     const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_OPENAPPA_RS_TEST_BRIDGE_TOKEN";
+
+    /// The text a stored composition reloads as, less the result cap the host adds.
+    fn reloaded_without_result_cap(content: &str) -> String {
+        let reloaded =
+            String::from_utf8(compile(content).unwrap().policy_file().bytes().to_vec()).unwrap();
+        omit_unstated_result_cap(&toml::Table::new(), reloaded).unwrap()
+    }
 
     /// A compilation no organization's values reach, as a composition's is.
     fn compile(content: &str) -> Result<Config, String> {
@@ -688,16 +765,10 @@ delta = {{}}
             document["server_aliases"]["github"][0].as_str(),
             Some("github_prod")
         );
-        // The stored bytes are a hosted document: they reload as they are.
+        // The stored bytes are a hosted document: they reload as they are, with the
+        // host's result cap added.
         assert_eq!(
-            String::from_utf8(
-                compile(&composed.content)
-                    .unwrap()
-                    .policy_file()
-                    .bytes()
-                    .to_vec()
-            )
-            .unwrap(),
+            reloaded_without_result_cap(&composed.content),
             composed.content
         );
 
@@ -767,11 +838,9 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
                 .map(Vec::len),
             Some(1)
         );
-        // The composed bytes are a hosted document: they reload as they are.
-        assert_eq!(
-            String::from_utf8(compile(&composed).unwrap().policy_file().bytes().to_vec()).unwrap(),
-            composed
-        );
+        // The composed bytes are a hosted document: they reload as they are, with the
+        // host's result cap added.
+        assert_eq!(reloaded_without_result_cap(&composed), composed);
         // An unbound helper keeps its command, which a hosted document refuses.
         let unbound = ResolvedBattery {
             helpers: None,
@@ -924,6 +993,55 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         assert!(
             String::from_utf8_lossy(config.policy_file().bytes())
                 .contains("https://example.com/review")
+        );
+    }
+
+    #[test]
+    fn the_published_proxy_limit_is_the_host_limit() {
+        assert_eq!(parse_max_body_bytes(Some("73400320")), Some(73_400_320));
+        assert_eq!(parse_max_body_bytes(Some(" 1048576 ")), Some(1_048_576));
+    }
+
+    #[test]
+    fn no_host_limit_without_a_usable_published_value() {
+        for published in [None, Some(""), Some("0"), Some("-5"), Some("70MB")] {
+            assert_eq!(parse_max_body_bytes(published), None);
+        }
+    }
+
+    #[test]
+    fn the_host_limit_replaces_what_a_policy_states_and_keeps_its_other_settings() {
+        const HOST: usize = 70 * 1024 * 1024;
+        for stated in [
+            "[policy]\nversion = 2\n",
+            "[policy]\nversion = 2\n[externals]\nmax_body_bytes = 65536\ntimeout_ms = 1234\n",
+            "[policy]\nversion = 2\n[externals]\nmax_body_bytes = 999999999\ntimeout_ms = 1234\n",
+        ] {
+            let config = apply_host_limit(compile(stated).unwrap(), Some(HOST));
+            assert_eq!(config.externals.max_body_bytes, HOST, "{stated}");
+        }
+        let kept = apply_host_limit(
+            compile(
+                "[policy]\nversion = 2\n[externals]\nmax_body_bytes = 4096\ntimeout_ms = 1234\n",
+            )
+            .unwrap(),
+            Some(HOST),
+        );
+        assert_eq!(kept.externals.timeout, Duration::from_millis(1234));
+    }
+
+    #[test]
+    fn without_a_host_limit_a_policy_keeps_what_it_states() {
+        let stated =
+            compile("[policy]\nversion = 2\n[externals]\nmax_body_bytes = 4096\n").unwrap();
+        assert_eq!(
+            apply_host_limit(stated, None).externals.max_body_bytes,
+            4096
+        );
+        let unstated = compile("[policy]\nversion = 2\n").unwrap();
+        assert_eq!(
+            apply_host_limit(unstated, None).externals.max_body_bytes,
+            FALLBACK_MAX_BODY_BYTES
         );
     }
 }

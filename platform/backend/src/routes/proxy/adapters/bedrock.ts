@@ -30,6 +30,7 @@ import {
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   type SamplingParam,
   withSamplingParamFallback,
@@ -637,28 +638,13 @@ class BedrockRequestAdapter
               toolUseId,
             );
 
-            let content: unknown;
-            // Extract content from tool result
-            if (toolResult.content && toolResult.content.length > 0) {
-              const firstContent = toolResult.content[0];
-              if ("text" in firstContent && firstContent.text) {
-                try {
-                  content = JSON.parse(firstContent.text);
-                } catch {
-                  content = firstContent.text;
-                }
-              } else if ("json" in firstContent) {
-                content = firstContent.json;
-              } else {
-                content = firstContent;
-              }
-            }
-
+            const { content, structured } = sentToolResultContent(toolResult);
             results.push({
               id: toolUseId,
               name: toolUse?.name ?? "unknown",
               arguments: toolUse?.arguments,
               content,
+              structured,
               isError: toolResult.status === "error",
             });
           }
@@ -873,6 +859,18 @@ class BedrockRequestAdapter
             contentBlock.toolResult.toolUseId &&
             Object.hasOwn(updates, contentBlock.toolResult.toolUseId)
           ) {
+            // Kept as sent: the runtime read this one block, so a block
+            // forwarded unchanged (an image, a JSON block) is what it approved.
+            // Further blocks were never read, so they are never forwarded.
+            if (
+              contentBlock.toolResult.content?.length === 1 &&
+              approvedMatches({
+                sent: sentToolResultContent(contentBlock.toolResult),
+                approved: updates[contentBlock.toolResult.toolUseId],
+              })
+            ) {
+              return contentBlock;
+            }
             appliedCount++;
             logger.debug(
               { toolUseId: contentBlock.toolResult.toolUseId },
@@ -2033,4 +2031,43 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/**
+ * The content the runtime reads for a Bedrock tool result: its first block.
+ * `structured` is false for text, whose JSON the adapter parsed.
+ */
+function sentToolResultContent(toolResult: {
+  content?: Array<Record<string, unknown>>;
+}): { content: unknown; structured: boolean } {
+  if (!toolResult.content || toolResult.content.length === 0) {
+    return { content: undefined, structured: false };
+  }
+  const firstContent = toolResult.content[0];
+  if ("text" in firstContent && firstContent.text) {
+    try {
+      return {
+        content: JSON.parse(firstContent.text as string),
+        structured: false,
+      };
+    } catch {
+      return { content: firstContent.text, structured: false };
+    }
+  }
+  if ("json" in firstContent) {
+    return { content: firstContent.json, structured: true };
+  }
+  return { content: firstContent, structured: true };
+}
+
+/** How the runtime is handed a result: text as is, anything else as JSON. */
+function approvedMatches(params: {
+  sent: { content: unknown; structured: boolean };
+  approved: string;
+}): boolean {
+  const { content, structured } = params.sent;
+  if (typeof content === "string") return params.approved === content;
+  return structured
+    ? isApprovedAsSent({ sent: content, approved: params.approved })
+    : params.approved === JSON.stringify(content);
 }

@@ -416,15 +416,18 @@ test("an uploaded entry names the package bytes it is pinned to", async () => {
   );
 });
 
-test("a held pull naming only dropped batteries is accepted with policy permissions", async () => {
+test("a held pull reads as one approval notice, not a sync failure, and approves with policy permissions", async () => {
   let accepted = false;
   declarations = emptyDeclarations({
+    managedInGithub: true,
     heldPull: {
       contentHash: "b".repeat(64),
       sourceCommit: "c".repeat(40),
       reasons: ["drops_batteries"],
+      message: "The repository's policy removes batteries added here: github.",
     },
   });
+  // Policy access alone: the hold comes from the policy, not sync settings.
   grantOnly("openappaPolicy");
   server.use(
     http.post(`${baseUrl}/api/openappa/github-sync/accept-held`, () => {
@@ -441,27 +444,69 @@ test("a held pull naming only dropped batteries is accepted with policy permissi
     }),
   );
   show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Accept repository text" }),
+  expect(
+    await screen.findByText("A change from the repository needs approval"),
+  ).toBeVisible();
+  expect(
+    screen.getByText(/removes batteries added here: github\./),
+  ).toBeVisible();
+  expect(screen.queryByText("GitHub sync failed")).not.toBeInTheDocument();
+  server.use(
+    http.get(`${baseUrl}/api/openappa/github-sync/held`, () =>
+      HttpResponse.json({
+        sourceCommit: "c".repeat(40),
+        reasons: ["drops_batteries"],
+        grants: [],
+        droppedBatteries: ["github"],
+      }),
+    ),
   );
+  fireEvent.click(screen.getByRole("button", { name: "Review" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(
+    await within(dialog).findByRole("region", { name: "Batteries it removes" }),
+  ).toHaveTextContent("github");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Approve" }));
   await waitFor(() => expect(accepted).toBe(true));
 });
 
 test("a held pull that moves credentials needs the credential permission", async () => {
   declarations = emptyDeclarations({
+    managedInGithub: true,
     batteries: [declaredGithub()],
     heldPull: {
       contentHash: "b".repeat(64),
       sourceCommit: "c".repeat(40),
       reasons: ["drops_batteries", "changes_credentials"],
+      message: null,
     },
   });
   grantOnly("openappaPolicy");
+  server.use(
+    http.get(`${baseUrl}/api/openappa/github-sync/held`, () =>
+      HttpResponse.json({
+        sourceCommit: "c".repeat(40),
+        reasons: ["drops_batteries", "changes_credentials"],
+        grants: [
+          {
+            battery: "github",
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+          },
+        ],
+        droppedBatteries: ["linear"],
+      }),
+    ),
+  );
   show();
-  await entry("github");
+  fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+  const dialog = await screen.findByRole("dialog");
   expect(
-    screen.queryByRole("button", { name: "Accept repository text" }),
-  ).not.toBeInTheDocument();
+    await within(dialog).findByRole("region", { name: "Credential access" }),
+  ).toHaveTextContent("APPA_PROVIDER_GITHUB_TOKEN");
+  expect(
+    within(dialog).getByRole("button", { name: "Approve" }),
+  ).toBeDisabled();
 });
 
 test("binding a credential writes that variable alone", async () => {

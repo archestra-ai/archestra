@@ -60,6 +60,7 @@ import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import {
+  connectionSetupReference,
   issueConnectionProxySetupContext,
   rewriteConnectionProxySetupUrl,
 } from "@/services/connection-proxy-setup-context";
@@ -11328,6 +11329,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const tamper = (token: string) =>
       `${token.slice(0, -1)}${token.endsWith("a") ? "b" : "a"}`;
 
+    // What the agent that ran the installer read: its output, which ends with
+    // the setup reference of the setup the token names.
+    const installerOutput = (token: string) => {
+      const [payload] = token.slice("cps1_".length).split(".");
+      const { setupId } = JSON.parse(
+        Buffer.from(payload, "base64url").toString("utf8"),
+      ) as { setupId: string };
+      const reference = connectionSetupReference({
+        setupId,
+        secret: signingSecret(),
+      });
+      return `${secret}\n  Setup reference   ${reference}`;
+    };
+
     const authHeaders = (auth: SetupAuth, family: SetupWire) => {
       const headers: Record<string, string> = { "user-agent": unknownAgent };
       if (family === "anthropic") headers["anthropic-version"] = "2023-06-01";
@@ -11350,6 +11365,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       family: SetupWire,
       stream: boolean,
       deferred: boolean,
+      toolOutput: string,
     ) => {
       if (family === "anthropic") {
         const body = payload(stream, [
@@ -11366,7 +11382,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               {
                 type: "tool_result",
                 tool_use_id: "toolu_old",
-                content: secret,
+                content: toolOutput,
               },
             ],
           },
@@ -11441,7 +11457,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 },
               ],
             },
-            { role: "tool", tool_call_id: "call_prev", content: secret },
+            { role: "tool", tool_call_id: "call_prev", content: toolOutput },
             { role: "user", content: latestUser },
           ],
           tools: tools
@@ -11473,7 +11489,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           {
             type: "function_call_output",
             call_id: "call_prev",
-            output: secret,
+            output: toolOutput,
           },
           {
             type: "message",
@@ -11496,6 +11512,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       knownClient?: boolean;
       malformedSession?: boolean;
       omitSession?: boolean;
+      /** The earlier tool output; by default the installer's, for `token`. */
+      toolOutput?: string;
       headers?: Record<string, string>;
       url?: string;
     }) => {
@@ -11533,6 +11551,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           params.family,
           params.stream,
           params.deferred ?? true,
+          params.toolOutput ??
+            (params.token ? installerOutput(params.token) : secret),
         ) as Record<string, unknown>,
       });
     };
@@ -11778,6 +11798,46 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         headers: { authorization: `Bearer ${otherVirtualKey}` },
       });
       expectStillGoverned(otherKeyGoverned);
+    });
+
+    test("the setup URL exempts nothing in a session started after the setup", async () => {
+      const token = issueFor(passthroughKeyId);
+      // The installer's conversation is exempt...
+      expectBypassed(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          deferred: true,
+        }),
+        token,
+      );
+      // ...but a new session sends the same URL from the client's settings,
+      // and its history holds no setup reference.
+      expectStillGoverned(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          toolOutput: secret,
+          deferred: true,
+        }),
+      );
+      // The reference of another setup does not count either.
+      expectAdmissionBlocked(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          toolOutput: installerOutput(issueFor(passthroughKeyId)),
+          deferred: true,
+        }),
+      );
     });
 
     test("an unrelated deferred request without the setup URL is governed, not refused", async () => {

@@ -65,6 +65,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM Proxy and chat requests.
   - Default: `70MB`
   - Values: bytes (`73400320`) or a size with `KB`, `MB`, or `GB` (`100MB`)
+  - Guardrails uses the same limit for the size of a tool result, so a result the LLM Proxy accepts is never dropped for size. A policy's `max_body_bytes` has no effect.
   - All attachments of one chat message share this limit. Raise it when you raise [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/reference/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT), or for very long conversations.
 
 - **`ARCHESTRA_PROCESS_TYPE`** - Which part of the backend this process runs.

@@ -92,6 +92,35 @@ afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
+/** The held pull itemized, and the reads its review dialog names things with. */
+function serveHeld(credentials: Array<{ key: string; name: string }> = []) {
+  server.use(
+    http.get(`${url}/held`, () =>
+      HttpResponse.json({
+        sourceCommit: "c".repeat(40),
+        reasons: ["changes_credentials"],
+        grants: [
+          {
+            battery: "github",
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+          },
+        ],
+        droppedBatteries: [],
+      }),
+    ),
+    http.get("http://localhost:9000/api/openappa/batteries", () =>
+      HttpResponse.json([]),
+    ),
+    http.get("http://localhost:9000/api/internal_mcp_catalog", () =>
+      HttpResponse.json([]),
+    ),
+    http.get("http://localhost:9000/api/credentials", () =>
+      HttpResponse.json(credentials),
+    ),
+  );
+}
+
 function show(content = <AppaGithubSyncPanel />) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -127,6 +156,96 @@ test("syncs on demand and shows the server's failure while retaining the source"
   );
   expect(screen.getByRole("link", { name: /example\/policies/ })).toBeVisible();
   expect(toast.success).not.toHaveBeenCalled();
+});
+
+test("a held pull waits for approval, not a failure, and is approved from its review", async () => {
+  const message =
+    "The repository's policy gives the github battery the github-token credential.";
+  state = {
+    ...state,
+    source: {
+      ...source,
+      heldReasons: ["changes_credentials"],
+      lastSyncError: message,
+    },
+  };
+  let accepted = false;
+  server.use(
+    http.post(`${url}/accept-held`, () => {
+      accepted = true;
+      state = {
+        ...state,
+        source: { ...source, heldReasons: [], lastSyncError: null },
+      };
+      return HttpResponse.json({
+        contentHash: "a".repeat(64),
+        sourceCommit: "b".repeat(40),
+        reasons: ["changes_credentials"],
+        droppedBatteries: [],
+        changedVariables: ["APPA_PROVIDER_GITHUB_TOKEN"],
+      });
+    }),
+  );
+  show();
+  expect(await screen.findByText("Needs approval")).toBeVisible();
+  expect(screen.queryByText("Sync failed")).not.toBeInTheDocument();
+  expect(screen.getByText("A change from GitHub needs approval")).toBeVisible();
+  expect(screen.getByText(new RegExp(message))).toBeVisible();
+  expect(screen.getByRole("link", { name: "See batteries" })).toHaveAttribute(
+    "href",
+    "/openappa/batteries",
+  );
+  serveHeld();
+  fireEvent.click(screen.getByRole("button", { name: "Review" }));
+  const dialog = await screen.findByRole("dialog");
+  // Each grant reads as the battery, the credential it gets and the variable it fills.
+  expect(await within(dialog).findByText("github")).toBeVisible();
+  expect(within(dialog).getByText("github-token")).toBeVisible();
+  expect(within(dialog).getByText("APPA_PROVIDER_GITHUB_TOKEN")).toBeVisible();
+  // No credential holds that key yet, and the dialog says so.
+  expect(await within(dialog).findByLabelText("Not saved yet")).toBeVisible();
+  // Declining happens in the repository; the dialog points there.
+  expect(
+    within(dialog).getByRole("link", { name: /Edit appa\.toml in GitHub/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/blob/main/appa.toml",
+  );
+  fireEvent.click(within(dialog).getByRole("button", { name: "Approve" }));
+  await waitFor(() => expect(accepted).toBe(true));
+  expect(await screen.findByText("Connected")).toBeVisible();
+});
+
+test("only someone who may bind credentials can approve a credential change", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({ data: !permissions.credential }) as ReturnType<
+        typeof useHasPermissions
+      >,
+  );
+  state = {
+    ...state,
+    source: {
+      ...source,
+      heldReasons: ["changes_credentials"],
+      lastSyncError:
+        "The repository's policy gives the github battery the github-token credential.",
+    },
+  };
+  serveHeld();
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+  const dialog = await screen.findByRole("dialog");
+  // Without access to the credentials list, the key itself names it.
+  expect(await within(dialog).findByText("github-token")).toBeVisible();
+  expect(
+    within(dialog).getByRole("button", { name: "Approve" }),
+  ).toBeDisabled();
+  expect(
+    within(dialog).getByText(
+      "Approving takes permission to update guardrails, and Can use on every credential.",
+    ),
+  ).toBeVisible();
 });
 
 test("confirms disconnect, stops automatic updates and preserves the accepted policy", async () => {

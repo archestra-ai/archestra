@@ -280,9 +280,7 @@ vi.mock("@/lib/organization.query");
 vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/chat/global-chat.context", () => ({
-  useGlobalChat: () => ({
-    getSession: () => mockChatSession.current,
-  }),
+  useChatSessionSnapshot: () => mockChatSession.current,
 }));
 
 vi.mock("@/lib/mcp/archestra-mcp-server", () => ({

@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import AnthropicProvider from "@anthropic-ai/sdk";
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test, vi } from "vitest";
+import { policyView } from "@/openappa/result-view";
 import { anthropicStreamPromise } from "@/test/llm-provider-stubs";
 import type { Anthropic } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
@@ -447,6 +449,163 @@ describe("AnthropicRequestAdapter", () => {
 
       test("replaces them with the approved text when the output changed", () => {
         expect(sentResult("withheld")).toBe("withheld");
+      });
+    });
+
+    describe("an image tool result", () => {
+      // Above OpenAPPA's old 64 KiB default, as a pasted screenshot is.
+      const data = Buffer.alloc(200_000, 7).toString("base64");
+      const hash = (value: string) =>
+        createHash("sha256").update(value).digest("hex");
+      const blocks = [
+        { type: "text", text: "Read the file" },
+        {
+          type: "image",
+          source: { type: "base64", media_type: "image/png", data },
+        },
+      ];
+      const sentResultFor = (sentBlocks: unknown[], update: string) => {
+        const messages = [
+          { role: "user", content: "look at the screenshot" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "toolu_img",
+                name: "Read",
+                input: { file_path: "/tmp/shot.png" },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_img",
+                content: sentBlocks,
+              },
+            ],
+          },
+        ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+        const adapter = anthropicAdapterFactory.createRequestAdapter(
+          createMockRequest(messages),
+        );
+        adapter.applyToolResultUpdates({ toolu_img: update });
+        const content = adapter.toProviderRequest().messages[2]
+          .content as Array<{ content: unknown }>;
+        return content[0].content;
+      };
+      const sentResult = (update: string) => sentResultFor(blocks, update);
+
+      test("is forwarded byte-identical, text and image, when the approved output is the result as sent", () => {
+        const sent = sentResult(
+          JSON.stringify(policyView(blocks)),
+        ) as typeof blocks;
+        expect(sent).toHaveLength(2);
+        expect(sent[0]).toEqual(blocks[0]);
+        const image = sent[1] as (typeof blocks)[1] & {
+          source: { data: string };
+        };
+        expect(image.type).toBe("image");
+        expect(hash(image.source.data)).toBe(hash(data));
+      });
+
+      test("is not forwarded as an image when the runtime rewrote the text beside it", () => {
+        // A sanitizer rewrote the text part: the approved output is no longer
+        // the result as sent, so the replaced output wins and no image block
+        // reaches the provider.
+        const rewritten = JSON.stringify(
+          policyView([{ ...blocks[0], text: "[redacted]" }, blocks[1]]),
+        );
+        const sent = sentResult(rewritten);
+        expect(typeof sent).toBe("string");
+        expect(sent).toBe(rewritten);
+        // The model reads the marker, never the bytes.
+        expect(sent).toContain("[binary image/png, 200000 bytes, sha256 ");
+        expect(sent).not.toContain(data.slice(0, 64));
+      });
+
+      test("a later request with the same bytes under the same id still forwards the image", () => {
+        // The client resends the history, and the runtime answers from its stored decision.
+        const stored = JSON.stringify(policyView(blocks));
+        const first = sentResult(stored) as typeof blocks;
+        const later = sentResult(stored) as typeof blocks;
+        expect(
+          hash((later[1] as { source: { data: string } }).source.data),
+        ).toBe(hash((first[1] as { source: { data: string } }).source.data));
+      });
+
+      test("different bytes under the same id are not forwarded", () => {
+        const stored = JSON.stringify(policyView(blocks));
+        const other = Buffer.alloc(200_000, 9).toString("base64");
+        const sent = sentResultFor(
+          [
+            blocks[0],
+            { ...blocks[1], source: { ...blocks[1].source, data: other } },
+          ],
+          stored,
+        );
+        expect(typeof sent).toBe("string");
+        expect(sent).toBe(stored);
+        expect(sent).not.toContain(other.slice(0, 64));
+      });
+
+      test("keeps a text-only result as text blocks when it is kept as sent", () => {
+        const textBlocks = [
+          { type: "text", text: "first" },
+          { type: "text", text: "second" },
+        ];
+        const adapter = anthropicAdapterFactory.createRequestAdapter(
+          createMockRequest([
+            { role: "user", content: "go" },
+            {
+              role: "assistant",
+              content: [
+                { type: "tool_use", id: "toolu_t", name: "Read", input: {} },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "toolu_t",
+                  content: textBlocks,
+                },
+              ],
+            },
+          ] as unknown as Anthropic.Types.MessagesRequest["messages"]),
+        );
+        adapter.applyToolResultUpdates({
+          toolu_t: JSON.stringify(textBlocks),
+        });
+        const content = adapter.toProviderRequest().messages[2]
+          .content as Array<{ content: unknown }>;
+        expect(content[0].content).toEqual(textBlocks);
+      });
+
+      test("keeps the client's blocks for a result approved before binary parts were replaced by markers", () => {
+        // A stored decision from before the policy view holds the full JSON.
+        const sent = sentResult(JSON.stringify(blocks)) as typeof blocks;
+        expect(sent).toHaveLength(2);
+        expect(
+          hash((sent[1] as { source: { data: string } }).source.data),
+        ).toBe(hash(data));
+      });
+
+      test("keeps a legacy placeholder for a result that was not carried", () => {
+        const placeholder =
+          "[appa] the result was not carried; nothing was admitted";
+        expect(sentResult(placeholder)).toBe(placeholder);
+      });
+
+      test("is not forwarded when the approved output replaces it", () => {
+        const placeholder = "[appa] withheld";
+        const sent = sentResult(placeholder);
+        expect(sent).toBe(placeholder);
+        expect(JSON.stringify(sent)).not.toContain(data.slice(0, 64));
       });
     });
 

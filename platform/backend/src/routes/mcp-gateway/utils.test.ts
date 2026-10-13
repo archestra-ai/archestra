@@ -3364,12 +3364,6 @@ describe("createAgentServer tools/list", () => {
     const copyFileName = archestraMcpBranding.getToolName(
       TOOL_COPY_FILE_SHORT_NAME,
     );
-    // copy_file only exists under the sandbox runtime, so without this both
-    // copy_file assertions below would pass for the wrong reason.
-    const config = (await import("@/config")).default;
-    const originalSandboxEnabled = config.skillsSandbox.enabled;
-    (config.skillsSandbox as { enabled: boolean }).enabled = true;
-
     const gatewayAgent = await makeAgent({
       toolExposureMode: "full",
       organizationId: org.id,
@@ -3412,24 +3406,19 @@ describe("createAgentServer tools/list", () => {
       return new Set(response.tools.map((tool) => tool.name));
     };
 
-    try {
-      const gatewayNames = await listFor(gatewayAgent.id);
-      expect(gatewayNames.has(renderAppName)).toBe(false);
-      // copy_file is chat-locked for the same reason: it exchanges files with
-      // the app the user has open in chat, and an external client has neither a
-      // conversation nor an open app, so every call there could only refuse.
-      expect(gatewayNames.has(copyFileName)).toBe(false);
-      // The rest of the authoring surface (scaffold/read/edit/validate) works
-      // from external clients and stays.
-      expect(gatewayNames.has(scaffoldAppName)).toBe(true);
+    const gatewayNames = await listFor(gatewayAgent.id);
+    expect(gatewayNames.has(renderAppName)).toBe(false);
+    // copy_file is chat-locked for the same reason: it exchanges files with
+    // the app the user has open in chat, and an external client has neither a
+    // conversation nor an open app, so every call there could only refuse.
+    expect(gatewayNames.has(copyFileName)).toBe(false);
+    // The rest of the authoring surface (scaffold/read/edit/validate) works
+    // from external clients and stays.
+    expect(gatewayNames.has(scaffoldAppName)).toBe(true);
 
-      const chatNames = await listFor(chatAgent.id);
-      expect(chatNames.has(renderAppName)).toBe(true);
-      expect(chatNames.has(copyFileName)).toBe(true);
-    } finally {
-      (config.skillsSandbox as { enabled: boolean }).enabled =
-        originalSandboxEnabled;
-    }
+    const chatNames = await listFor(chatAgent.id);
+    expect(chatNames.has(renderAppName)).toBe(true);
+    expect(chatNames.has(copyFileName)).toBe(true);
   });
 
   // The list exclusion above is not enough on its own: sibling tool
@@ -3927,10 +3916,43 @@ describe("createAgentServer tools/list", () => {
     });
   });
 
-  test("ask_user treats Codex automatic MCP decline as no visible form", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
+  test.for([
+    {
+      case: "under its automatic reviewer",
+      callMeta: {},
+      answer: {
+        action: "decline",
+        _meta: { approvals_reviewer: "auto_review" },
+      },
+      noPerson: true,
+    },
+    {
+      // `codex exec` declares forms, then declines each one itself.
+      case: "in a run no person drives",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
+      answer: { action: "decline" },
+      noPerson: true,
+    },
+    {
+      case: "sent as text, in a run no person drives",
+      callMeta: {
+        "x-codex-turn-metadata": JSON.stringify({ turn_trigger: "exec" }),
+      },
+      answer: { action: "decline" },
+      noPerson: true,
+    },
+    {
+      // A person who declines the form in an interactive session refuses it.
+      case: "from a person",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "user" } },
+      answer: { action: "decline" },
+      noPerson: false,
+    },
+  ])("ask_user reads a Codex form decline $case", async ({
+    callMeta,
+    answer,
+    noPerson,
+  }, { makeAgent, makeOrganization }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const { server } = await createAgentServer({ agentId: agent.id });
@@ -3951,21 +3973,20 @@ describe("createAgentServer tools/list", () => {
           },
           _meta: {
             "io.modelcontextprotocol/clientCapabilities": { elicitation: {} },
+            ...callMeta,
           },
         },
       },
-      {
-        sendRequest: vi.fn().mockResolvedValue({
-          action: "decline",
-          _meta: { approvals_reviewer: "auto_review" },
-        }),
-      },
+      { sendRequest: vi.fn().mockResolvedValue(answer) },
     );
-    expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      "This client did not answer the choice form",
-    );
-    expect(JSON.stringify(result.content)).not.toContain("The user declined");
+    const text = JSON.stringify(result.content);
+    if (noPerson) {
+      expect(result.isError).toBe(true);
+      expect(text).toContain("This client did not answer the choice form");
+      expect(text).not.toContain("declined");
+    } else {
+      expect(text).toContain("The MCP client declined the choice form");
+    }
   });
 
   test("ask_user reports a question nobody answered in time, not a client without forms", async ({

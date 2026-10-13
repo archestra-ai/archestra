@@ -202,7 +202,7 @@ describe("filterDefaultArchestraToolIds", () => {
     );
   });
 
-  it("adds only the skill tools when skillsEnabled alone is set", () => {
+  it("adds the skill tools but not the runtime tools when skillsEnabled alone is set", () => {
     const tools = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
       ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
@@ -226,6 +226,7 @@ describe("filterDefaultArchestraToolIds", () => {
           ...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
           ...SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
           ...APP_ARCHESTRA_TOOL_SHORT_NAMES,
+          ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
         ].map((shortName) => `tool-${shortName}`),
       ),
     );

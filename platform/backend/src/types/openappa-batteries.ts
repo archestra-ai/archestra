@@ -222,6 +222,8 @@ const HeldPullViewSchema = z.object({
   contentHash: z.string(),
   sourceCommit: z.string(),
   reasons: z.array(HeldPullReasonSchema),
+  /** What the pull would change, in words: which battery gets which credential, which batteries go. */
+  message: z.string().nullable(),
 });
 
 export const PolicyDeclarationsViewSchema = z.object({

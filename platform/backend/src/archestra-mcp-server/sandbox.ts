@@ -30,7 +30,10 @@ import { projectService } from "@/services/project";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { UnsafePathError } from "@/skills-sandbox/file-path";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
-import type { MyFileResolutionError } from "@/skills-sandbox/file-store";
+import type {
+  MyFileResolutionError,
+  MyFileTarget,
+} from "@/skills-sandbox/file-store";
 import {
   FileNotDeletableError,
   fileStore,
@@ -54,7 +57,7 @@ import {
   SKILL_SANDBOX_LIMITS,
   SkillSandboxError,
 } from "@/skills-sandbox/types";
-import { asSandboxId, type PersistedFile, type SandboxId } from "@/types";
+import { asSandboxId, type SandboxId } from "@/types";
 import { isUuid } from "@/utils/uuid";
 import {
   decodeUtf8Text,
@@ -674,7 +677,7 @@ const SaveFileOutputSchema = z.object({
 const EditFileSchema = z
   .strictObject({
     ...idOrFilenameShape({
-      id: "Id of the file to edit (from search_files / save_file).",
+      id: "Id of the file to edit — the `id` or `ref` from search_files, or a fileId from save_file.",
       filename:
         "Filename to edit instead of `id`; rejected as ambiguous if more than one file shares the name.",
     }),
@@ -724,7 +727,7 @@ const EditFileOutputSchema = z.object({
 const DeleteFileSchema = z
   .strictObject({
     ...idOrFilenameShape({
-      id: "Id of the file to delete (from search_files / save_file).",
+      id: "Id of the file to delete — the `id` or `ref` from search_files, or a fileId from save_file.",
       filename:
         "Filename to delete instead of `id`; rejected as ambiguous if more than one file shares the name.",
     }),
@@ -734,7 +737,9 @@ const DeleteFileSchema = z
   .describe("Permanently delete a persistent file.");
 
 const DeleteFileOutputSchema = z.object({
-  fileId: z.string(),
+  fileId: z
+    .string()
+    .describe("The deleted file's id, or its `ref` for a rowless file."),
   filename: z.string(),
   deleted: z.literal(true),
 });
@@ -757,7 +762,7 @@ const registry = defineArchestraTools([
     schema: RunCommandSchema,
     outputSchema: RunCommandOutputSchema,
     async handler({ args, context }) {
-      const guard = ensureUsable(context);
+      const guard = ensureRuntimeUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
       const resolved = await resolveTarget({
@@ -813,7 +818,7 @@ const registry = defineArchestraTools([
     schema: DownloadFileSchema,
     outputSchema: DownloadFileOutputSchema,
     async handler({ args, context }) {
-      const guard = ensureUsable(context);
+      const guard = ensureRuntimeUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
       const resolved = await resolveTarget({
@@ -889,7 +894,7 @@ const registry = defineArchestraTools([
     schema: UploadFileSchema,
     outputSchema: UploadFileOutputSchema,
     async handler({ args, context }) {
-      const guard = ensureUsable(context);
+      const guard = ensureRuntimeUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
       const resolved = await resolveTarget({
@@ -1104,7 +1109,7 @@ const registry = defineArchestraTools([
         if (data.byteLength > READ_FILE_IMAGE_BYTES_LIMIT) {
           return errorResult(
             `"${originalName}" is too large to view inline (${data.byteLength} bytes > ${READ_FILE_IMAGE_BYTES_LIMIT} byte limit). ` +
-              `Copy it into the sandbox with upload_file and inspect it with run_command.`,
+              sandboxInspectHint("inspect"),
           );
         }
         logger.info(
@@ -1138,7 +1143,7 @@ const registry = defineArchestraTools([
       if (data.byteLength > limit) {
         return errorResult(
           `"${originalName}" is too large to read inline (${data.byteLength} bytes > ${limit} byte limit). ` +
-            `Copy it into the sandbox with upload_file and inspect it with run_command.`,
+            sandboxInspectHint("inspect"),
         );
       }
 
@@ -1149,7 +1154,7 @@ const registry = defineArchestraTools([
       if (text === null) {
         return errorResult(
           `"${originalName}" (${mimeType}) is not text or a supported image. ` +
-            `Copy it into the sandbox with upload_file and process it with run_command.`,
+            sandboxInspectHint("process"),
         );
       }
 
@@ -1199,7 +1204,7 @@ const registry = defineArchestraTools([
         // could be rendered — explain rather than imply the range is empty.
         summary.push(
           `Line ${startLine} is too large to render inline (over the ${config.skillsSandbox.outputBytesLimit}-byte output cap). ` +
-            `Copy it into the sandbox with upload_file and inspect it with run_command.`,
+            sandboxInspectHint("inspect"),
         );
       } else {
         // offset past end of file.
@@ -1400,30 +1405,38 @@ const registry = defineArchestraTools([
       // A headless no-project write resolves the orphan it created on a prior run
       // (no conversation/project scope), so re-runs stay idempotent.
       if (args.overwrite) {
-        const existing = fileScope
-          ? await fileStore.resolveMyFileRef({
+        // A project's hand-placed object (no row) is overwritten in place too.
+        const existing: MyFileTarget | MyFileResolutionError = fileScope
+          ? await fileStore.resolveMyFileTarget({
               organizationId: guard.userCtx.organizationId,
               userId: guard.userCtx.userId,
               filename,
               scope: fileScope,
             })
-          : await fileStore.resolveOrphanRef({
-              organizationId: guard.userCtx.organizationId,
-              userId: guard.userCtx.userId,
-              filename,
-            });
+          : await fileStore
+              .resolveOrphanRef({
+                organizationId: guard.userCtx.organizationId,
+                userId: guard.userCtx.userId,
+                filename,
+              })
+              .then((row) =>
+                "error" in row ? row : { kind: "row" as const, file: row },
+              );
         if (!("error" in existing)) {
-          const updated = await fileStore.update({
-            file: existing,
+          const updated = await fileStore.replace({
+            target: existing,
             mimeType,
-            sizeBytes: data.byteLength,
             data,
+            organizationId: guard.userCtx.organizationId,
+            userId: guard.userCtx.userId,
           });
           if (!updated) {
             return errorResult(describeMyFileError("not_found", filename));
           }
           return saveFileSuccess({
-            row: updated,
+            fileId: updated.fileId,
+            mimeType: updated.mimeType,
+            sizeBytes: data.byteLength,
             filename,
             scope,
             overwritten: true,
@@ -1447,7 +1460,14 @@ const registry = defineArchestraTools([
           sizeBytes: data.byteLength,
           data,
         });
-        return saveFileSuccess({ row, filename, scope, overwritten: false });
+        return saveFileSuccess({
+          fileId: row.id,
+          mimeType: row.mimeType,
+          sizeBytes: row.sizeBytes,
+          filename,
+          scope,
+          overwritten: false,
+        });
       } catch (error) {
         if (error instanceof FileNameExistsError) {
           return errorResult(
@@ -1472,7 +1492,8 @@ const registry = defineArchestraTools([
       "keeping its id and filename. Give the exact `old_string` to find (read " +
       "the file first with read_file) and the `new_string` to put in its place; " +
       "set `replace_all` to change every occurrence. Identify the file by `id` " +
-      "(from search_files / save_file) or by `filename`. Text files only — to " +
+      "(the `id` or `ref` from search_files, or a fileId from save_file) or by " +
+      "`filename`. Text files only — to " +
       "replace a binary file, use save_file with overwrite for inline content, or " +
       "download_file with overwrite for a file in the sandbox. Pass project_id to " +
       "edit a project's file when working outside a chat.",
@@ -1499,16 +1520,27 @@ const registry = defineArchestraTools([
       if (!fileScope) {
         return errorResult(describeMyFileError("not_found", ref));
       }
-      const resolved = await fileStore.resolveMyFileRef({
+      // Covers a project's hand-placed objects too (no row, `obj_` ref): they
+      // are rewritten in place and stay rowless, so their ref is unchanged.
+      const target = await fileStore.resolveMyFileTarget({
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
         id: args.id,
         filename: args.filename,
         scope: fileScope,
       });
-      if ("error" in resolved) {
-        return errorResult(describeMyFileError(resolved.error, ref));
+      if ("error" in target) {
+        return errorResult(describeMyFileError(target.error, ref));
       }
+      const resolved =
+        target.kind === "row"
+          ? {
+              ref: target.file.id,
+              filename: target.file.filename,
+              mimeType: target.file.mimeType,
+              projectId: target.file.projectId,
+            }
+          : target;
       if (
         resolved.projectId &&
         resolved.filename === PROJECT_INSTRUCTIONS_FILENAME &&
@@ -1520,12 +1552,12 @@ const registry = defineArchestraTools([
         return errorResult(INSTRUCTIONS_WRITE_REFUSED);
       }
 
-      // Read the current bytes through the facade (it re-authorizes the row we
+      // Read the current bytes through the facade (it re-authorizes the file we
       // just resolved). Gone bytes surface as a clear model-facing message.
       let current: Awaited<ReturnType<typeof fileStore.get>>;
       try {
         current = await fileStore.get({
-          ref: resolved.id,
+          ref: resolved.ref,
           organizationId: guard.userCtx.organizationId,
           userId: guard.userCtx.userId,
         });
@@ -1570,11 +1602,12 @@ const registry = defineArchestraTools([
       }
 
       // Keep the stored mime — a snippet edit of a text file never changes type.
-      const updated = await fileStore.update({
-        file: resolved,
+      const updated = await fileStore.replace({
+        target,
         mimeType: resolved.mimeType,
-        sizeBytes: data.byteLength,
         data,
+        organizationId: guard.userCtx.organizationId,
+        userId: guard.userCtx.userId,
       });
       if (!updated) {
         return errorResult(describeMyFileError("not_found", ref));
@@ -1582,8 +1615,8 @@ const registry = defineArchestraTools([
 
       logger.info(
         {
-          fileId: updated.id,
-          sizeBytes: updated.sizeBytes,
+          fileId: updated.fileId,
+          sizeBytes: data.byteLength,
           replacements,
           projectScoped: fileScope.kind === "project",
         },
@@ -1592,13 +1625,13 @@ const registry = defineArchestraTools([
 
       return structuredSuccessResult(
         {
-          fileId: updated.id,
-          filename: updated.filename,
-          mimeType: updated.mimeType,
-          sizeBytes: updated.sizeBytes,
+          fileId: updated.fileId,
+          filename: resolved.filename,
+          mimeType: resolved.mimeType,
+          sizeBytes: data.byteLength,
           replacements,
         },
-        `Updated ${updated.filename} (${replacements} replacement${replacements === 1 ? "" : "s"}, ${updated.sizeBytes} bytes).`,
+        `Updated ${resolved.filename} (${replacements} replacement${replacements === 1 ? "" : "s"}, ${data.byteLength} bytes).`,
       );
     },
   }),
@@ -1606,8 +1639,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_DELETE_FILE_SHORT_NAME,
     title: "Delete File",
     description:
-      "Permanently delete a persistent file, identified by `id` " +
-      "(from search_files / save_file) or by `filename`. Pass project_id to " +
+      "Permanently delete a persistent file, identified by `id` (the `id` or " +
+      "`ref` from search_files, or a fileId from save_file) or by `filename`. " +
+      "Pass project_id to " +
       "delete a project's file when working outside a chat.",
     schema: DeleteFileSchema,
     outputSchema: DeleteFileOutputSchema,
@@ -1632,16 +1666,26 @@ const registry = defineArchestraTools([
       if (!fileScope) {
         return errorResult(describeMyFileError("not_found", ref));
       }
-      const resolved = await fileStore.resolveMyFileRef({
+      // Covers a project's hand-placed objects too (no row, `obj_` ref), so
+      // anything search_files lists can be deleted here.
+      const target = await fileStore.resolveMyFileTarget({
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
         id: args.id,
         filename: args.filename,
         scope: fileScope,
       });
-      if ("error" in resolved) {
-        return errorResult(describeMyFileError(resolved.error, ref));
+      if ("error" in target) {
+        return errorResult(describeMyFileError(target.error, ref));
       }
+      const resolved =
+        target.kind === "row"
+          ? {
+              ref: target.file.id,
+              filename: target.file.filename,
+              projectId: target.file.projectId,
+            }
+          : target;
       // The project instructions file is available but never deletable — refuse
       // up front with the canonical message (the store would otherwise throw,
       // and this call site is not wrapped to surface it).
@@ -1655,7 +1699,7 @@ const registry = defineArchestraTools([
       }
 
       const deleted = await fileStore.delete({
-        ref: resolved.id,
+        ref: resolved.ref,
         organizationId: guard.userCtx.organizationId,
         userId: guard.userCtx.userId,
       });
@@ -1664,12 +1708,12 @@ const registry = defineArchestraTools([
       }
 
       logger.info(
-        { fileId: resolved.id, projectScoped: fileScope.kind === "project" },
+        { fileId: resolved.ref, projectScoped: fileScope.kind === "project" },
         "[Sandbox] file deleted from PFS",
       );
 
       return structuredSuccessResult(
-        { fileId: resolved.id, filename: resolved.filename, deleted: true },
+        { fileId: resolved.ref, filename: resolved.filename, deleted: true },
         `Deleted ${resolved.filename}.`,
       );
     },
@@ -1798,24 +1842,26 @@ const registry = defineArchestraTools([
       // Overwrite-else-create, mirroring save_file: replace in place keeps the
       // destination row's id; without overwrite a duplicate name is an error.
       if (args.to.overwrite) {
-        const existing = await fileStore.resolveMyFileRef({
+        // A project's hand-placed object (no row) is overwritten in place too.
+        const existing = await fileStore.resolveMyFileTarget({
           organizationId: guard.userCtx.organizationId,
           userId: guard.userCtx.userId,
           filename,
           scope: destScope,
         });
         if (!("error" in existing)) {
-          const updated = await fileStore.update({
-            file: existing,
+          const updated = await fileStore.replace({
+            target: existing,
             mimeType,
-            sizeBytes: loaded.data.byteLength,
             data: loaded.data,
+            organizationId: guard.userCtx.organizationId,
+            userId: guard.userCtx.userId,
           });
           if (!updated) {
             return errorResult(describeMyFileError("not_found", filename));
           }
           return copyFileSuccess({
-            row: updated,
+            file: updated,
             filename,
             fromType: args.from.type,
             toIsApp,
@@ -1841,7 +1887,11 @@ const registry = defineArchestraTools([
           data: loaded.data,
         });
         return copyFileSuccess({
-          row,
+          file: {
+            fileId: row.id,
+            mimeType: row.mimeType,
+            sizeBytes: row.sizeBytes,
+          },
           filename,
           fromType: args.from.type,
           toIsApp,
@@ -1948,11 +1998,22 @@ async function resolveEnvironmentTarget(
 }
 
 /**
- * Enforces the deployment flag + an authenticated user. `agent:read` is
- * enforced earlier in the dispatch path (see `rbac.ts`), so handlers don't
- * re-check it here.
+ * The next step read_file suggests for a file it can't show inline: the sandbox
+ * when this deployment has one, otherwise a plain dead end (naming tools the
+ * agent doesn't have only sends it looking for them).
  */
-function ensureUsable(
+function sandboxInspectHint(verb: "inspect" | "process"): string {
+  return config.skillsSandbox.enabled
+    ? `Copy it into the sandbox with upload_file and ${verb} it with run_command.`
+    : "This deployment has no code sandbox to open it in.";
+}
+
+/**
+ * Guard for the code runtime tools (run_command/upload_file/download_file),
+ * which materialize a Dagger container: the runtime must be on, then the same
+ * user check as {@link ensureUsable}.
+ */
+function ensureRuntimeUsable(
   context: ArchestraContext,
 ): { userCtx: UserContext } | { error: string } {
   if (!config.skillsSandbox.enabled) {
@@ -1960,6 +2021,18 @@ function ensureUsable(
       error: "The sandbox is not enabled on this deployment.",
     };
   }
+  return ensureUsable(context);
+}
+
+/**
+ * Guard for every file tool: an authenticated user. The persistent-file tools
+ * only touch the file store, so they work without the code runtime.
+ * `agent:read` is enforced earlier in the dispatch path (see `rbac.ts`), so
+ * handlers don't re-check it here.
+ */
+function ensureUsable(
+  context: ArchestraContext,
+): { userCtx: UserContext } | { error: string } {
   if (!context.organizationId || !context.userId) {
     return { error: "This tool requires an authenticated user session." };
   }
@@ -2283,14 +2356,14 @@ function numberLines(params: {
 
 /** Build the copy_file success result for both the create and overwrite paths. */
 function copyFileSuccess(params: {
-  row: PersistedFile;
+  file: { fileId: string; mimeType: string; sizeBytes: number };
   filename: string;
   fromType: "chat_file" | "chat_attachment" | "app_file";
   toIsApp: boolean;
   destProjectId: string | null;
   overwritten: boolean;
 }) {
-  const { row, filename, fromType, toIsApp, destProjectId, overwritten } =
+  const { file, filename, fromType, toIsApp, destProjectId, overwritten } =
     params;
   const destination = toIsApp
     ? ("app" as const)
@@ -2299,8 +2372,8 @@ function copyFileSuccess(params: {
       : ("conversation" as const);
   logger.info(
     {
-      fileId: row.id,
-      sizeBytes: row.sizeBytes,
+      fileId: file.fileId,
+      sizeBytes: file.sizeBytes,
       fromType,
       destination,
       destProjectId,
@@ -2311,10 +2384,10 @@ function copyFileSuccess(params: {
   );
   return structuredSuccessResult(
     {
-      fileId: row.id,
+      fileId: file.fileId,
       filename,
-      mimeType: row.mimeType,
-      sizeBytes: row.sizeBytes,
+      mimeType: file.mimeType,
+      sizeBytes: file.sizeBytes,
       destination,
       overwritten,
     },
@@ -2324,16 +2397,18 @@ function copyFileSuccess(params: {
 
 /** Build the save_file success result for both the create and overwrite paths. */
 function saveFileSuccess(params: {
-  row: PersistedFile;
+  fileId: string;
+  mimeType: string;
+  sizeBytes: number;
   filename: string;
   scope: ProjectFileScope | null;
   overwritten: boolean;
 }) {
-  const { row, filename, scope, overwritten } = params;
+  const { fileId, mimeType, sizeBytes, filename, scope, overwritten } = params;
   logger.info(
     {
-      fileId: row.id,
-      sizeBytes: row.sizeBytes,
+      fileId,
+      sizeBytes,
       projectScoped: !!scope,
       overwritten,
     },
@@ -2341,14 +2416,14 @@ function saveFileSuccess(params: {
   );
   return structuredSuccessResult(
     {
-      fileId: row.id,
+      fileId,
       filename,
       projectName: scope?.projectName ?? null,
-      mimeType: row.mimeType,
-      sizeBytes: row.sizeBytes,
+      mimeType,
+      sizeBytes,
       overwritten,
     },
-    `${overwritten ? "Overwrote" : "Saved"} ${scope ? `${scope.projectName}/` : ""}${filename} (${row.sizeBytes} bytes)${overwritten ? " in place" : " to persistent files"}.`,
+    `${overwritten ? "Overwrote" : "Saved"} ${scope ? `${scope.projectName}/` : ""}${filename} (${sizeBytes} bytes)${overwritten ? " in place" : " to persistent files"}.`,
   );
 }
 

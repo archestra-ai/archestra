@@ -161,6 +161,7 @@ import {
   runtimeSessionConflicts,
 } from "@/services/agent-runtime/runtime-identity";
 import {
+  carriesConnectionSetupReference,
   connectionProxySetupContext,
   verifyConnectionProxySetupContext,
 } from "@/services/connection-proxy-setup-context";
@@ -206,6 +207,7 @@ import {
   applyInputTokenFallback,
   buildInteractionRecord,
   calculateInteractionCosts,
+  calculateUsageCost,
   handleError,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
@@ -1519,11 +1521,27 @@ export async function handleLLMProxy<
             secret: config.auth.secret,
           }),
       );
-    const installerSetupBypass = appaActive && approvedProxySetup;
+    // The setup URL stays in the client's settings for the whole window, so
+    // sessions started after the setup send it too. Only the conversation
+    // that ran the installer holds the setup reference the installer printed.
+    const installerConversation =
+      approvedProxySetup &&
+      !!approvedProxySetupContext &&
+      carriesConnectionSetupReference({
+        token: approvedProxySetupContext,
+        requestBody: body,
+        secret: config.auth.secret,
+      });
+    const installerSetupBypass = appaActive && installerConversation;
     if (installerSetupBypass) {
       logger.info(
         { profileId: resolvedAgent.id, proof: "approved-installer" },
         "Connection setup APPA bypass active",
+      );
+    } else if (appaActive && approvedProxySetup) {
+      logger.info(
+        { profileId: resolvedAgent.id },
+        "Connection setup URL outside the installer's conversation; Guardrails apply",
       );
     }
     let appaCallerId: string | undefined;
@@ -2363,6 +2381,7 @@ export async function handleLLMProxy<
         false,
         provider.extractInternalCode.bind(provider),
         provider.formatStreamErrorFrame,
+        provider.translatesWireFormat,
       );
     }
     if (pluginContext && pluginSessionInitialized) {
@@ -2430,6 +2449,7 @@ export async function handleLLMProxy<
       requestAdapter.isStreaming(),
       provider.extractInternalCode.bind(provider),
       provider.formatStreamErrorFrame,
+      provider.translatesWireFormat,
     );
   }
 }
@@ -2879,17 +2899,11 @@ async function handleStreaming<
               state.usage.reasoningTokens,
             );
           }
-          const cost = await utils.costOptimization.calculateCost(
-            actualModel,
-            state.usage.inputTokens,
-            state.usage.outputTokens,
-            providerName,
-            {
-              readTokens: state.usage.cacheReadTokens,
-              writeTokens: state.usage.cacheWriteTokens,
-              write1hTokens: state.usage.cacheWrite1hTokens,
-            },
-          );
+          const cost = await calculateUsageCost({
+            model: actualModel,
+            usage: state.usage,
+            provider: providerName,
+          });
           if (cost !== undefined) {
             llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
             llmSpan.setAttribute(ATTR_ARCHESTRA_BILLING_MODE, billingMode);
@@ -3303,6 +3317,7 @@ async function handleStreaming<
             });
           }
         : formatStreamErrorFrame,
+      provider.translatesWireFormat,
     );
   } finally {
     keepAlive.stop();
@@ -3621,17 +3636,11 @@ async function handleNonStreaming<
           usage.reasoningTokens,
         );
       }
-      const cost = await utils.costOptimization.calculateCost(
-        actualModel,
-        usage.inputTokens,
-        usage.outputTokens,
-        providerName,
-        {
-          readTokens: usage.cacheReadTokens,
-          writeTokens: usage.cacheWriteTokens,
-          write1hTokens: usage.cacheWrite1hTokens,
-        },
-      );
+      const cost = await calculateUsageCost({
+        model: actualModel,
+        usage,
+        provider: providerName,
+      });
       if (cost !== undefined) {
         llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
         llmSpan.setAttribute(ATTR_ARCHESTRA_BILLING_MODE, billingMode);

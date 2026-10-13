@@ -33,8 +33,7 @@ The native wrappers create client configuration at run time under `/var/run/arch
 
 Claude Code personal subscriptions use a token from the configured secrets backend. The wrapper sends inference through the Agent-scoped LLM proxy with a personal passthrough key, so token usage appears in proxy logs. The OAuth token remains the provider credential; subscription requests do not count toward metered cost limits. MCP calls use the Agent-scoped gateway and its tool policies.
 
-Maintained clients send the task ID as both `X-Archestra-Run-Id` and `X-Archestra-Session-Id` on proxy and MCP gateway requests. Do the same in any new
-wrapper so the platform can group interactions and tool calls with the run.
+Maintained clients send `ARCHESTRA_AGENT_RUNTIME_TASK_ID` as `X-Archestra-Run-Id` to label one turn. They send `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` as both `X-Archestra-Session-Id` and `X-Appa-Session-ID` to keep the conversation together across turns and follow-ups. New wrappers must use the same stable session ID on proxy and MCP gateway requests; see the [runtime image contract](runtime-contract.md#runtime-environment).
 
 All five targets also export their native message and tool history to
 `$ARCHESTRA_AGENT_RUNTIME_DIR/readable-transcript.json`. The control plane

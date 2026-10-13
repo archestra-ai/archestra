@@ -4,7 +4,9 @@ import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 import Fastify from "fastify";
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  carriesConnectionSetupReference,
   connectionProxySetupContext,
+  connectionSetupReference,
   issueConnectionProxySetupContext,
   rewriteConnectionProxySetupUrl,
   verifyConnectionProxySetupContext,
@@ -281,6 +283,45 @@ function signed(claims: unknown): string {
     .digest("base64url");
   return `${PREFIX}${payload}.${mac}`;
 }
+
+test("only the installer's printed reference marks its conversation", () => {
+  const token = issueConnectionProxySetupContext(scope);
+  const reference = connectionSetupReference(scope);
+  const carries = (requestBody: unknown) =>
+    carriesConnectionSetupReference({
+      token,
+      requestBody,
+      secret: scope.secret,
+    });
+
+  expect(
+    carries({ messages: [{ role: "user", content: `done ${reference}` }] }),
+  ).toBe(true);
+  // A session that read the client's settings has the setup URL and the
+  // setup id, but no way to the reference without the server secret.
+  expect(
+    carries({
+      messages: [
+        {
+          role: "user",
+          content: `ANTHROPIC_BASE_URL=https://a.example/v1/connection-setup/${token}/anthropic ${scope.setupId}`,
+        },
+      ],
+    }),
+  ).toBe(false);
+  expect(
+    carries({
+      content: connectionSetupReference({ ...scope, setupId: "setup-2" }),
+    }),
+  ).toBe(false);
+  expect(
+    carriesConnectionSetupReference({
+      token,
+      requestBody: { content: reference },
+      secret: undefined,
+    }),
+  ).toBe(false);
+});
 
 function decode(token: string): Record<string, unknown> {
   const payload = token.slice(PREFIX.length).split(".")[0] ?? "";

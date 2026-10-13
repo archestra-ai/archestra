@@ -226,6 +226,7 @@ class OpenAppaBatteriesService {
               contentHash: sync.heldContentHash,
               sourceCommit: sync.heldSourceCommit,
               reasons: sync.heldReasons,
+              message: sync.lastSyncError,
             }
           : null,
       credentialBindings: bindings.map(({ variable, credentialKey }) => ({

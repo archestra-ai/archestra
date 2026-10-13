@@ -401,11 +401,8 @@ function opencodeWindowsProxyDisconnect(ctx: StartupGuardContext): string {
     ctx.proxy?.authMode === "primary-providers"
   ) {
     return `function Disconnect-ArchProxy {
-$archPrimaryRestore = @'
-${OPENCODE_PRIMARY_CONFIG_SCRIPT}
-'@
 $env:ARCHESTRA_OC_PRIMARY = 'null'
-try { $archPrimaryRestore | & node -; if ($LASTEXITCODE -ne 0) { throw 'Could not restore provider configuration' } }
+try { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${psq(Buffer.from(OPENCODE_PRIMARY_CONFIG_SCRIPT).toString("base64"))})) | & node -; if ($LASTEXITCODE -ne 0) { throw 'Could not restore provider configuration' } }
 finally { Remove-Item Env:ARCHESTRA_OC_PRIMARY -ErrorAction SilentlyContinue }
 ${opencodeWindowsRestoreRoutingPlugin()}
 }`;

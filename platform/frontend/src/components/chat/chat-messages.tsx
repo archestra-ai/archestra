@@ -93,7 +93,7 @@ import {
   PERSISTED_MESSAGE_ID_METADATA_KEY,
 } from "@/lib/chat/chat-utils";
 import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
-import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import { useChatSessionSnapshot } from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
@@ -325,8 +325,7 @@ export function ChatMessages({
   );
 
   // Get early UI data from the chat session
-  const { getSession } = useGlobalChat();
-  const session = conversationId ? getSession(conversationId) : null;
+  const session = useChatSessionSnapshot(conversationId);
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
   const contextCompaction = session?.contextCompaction;
   const pendingMcpElicitations = session?.pendingMcpElicitations ?? [];

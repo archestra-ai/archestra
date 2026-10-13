@@ -191,6 +191,31 @@ describe("guardrails policy authoring", () => {
     expect(await GuardrailsPolicyModel.findLatest(other.id)).toBeNull();
   });
 
+  test("a stated max_body_bytes is accepted and the check says it has no effect", async () => {
+    const stated = `${content}[externals]\nmax_body_bytes = 65536\n`;
+    const validated = await app.inject({
+      method: "POST",
+      url: "/api/guardrails-policy/validate",
+      payload: { content: stated },
+    });
+    expect(validated.json()).toMatchObject({ valid: true, errors: [] });
+    expect(validated.json().warnings).toEqual([
+      expect.stringContaining("max_body_bytes has no effect"),
+    ]);
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-policy",
+      payload: { content: stated, expectedRevision: 0 },
+    });
+    expect(saved.statusCode, saved.body).toBe(200);
+    const plain = await app.inject({
+      method: "POST",
+      url: "/api/guardrails-policy/validate",
+      payload: { content },
+    });
+    expect(plain.json().warnings).toEqual([]);
+  });
+
   test("rejects invalid contracts and container access without replacing a saved policy", async () => {
     await app.inject({
       method: "PUT",

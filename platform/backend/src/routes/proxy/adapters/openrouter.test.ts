@@ -177,6 +177,90 @@ describe("OpenrouterStreamAdapter", () => {
   });
 });
 
+describe("OpenRouter reported cost", () => {
+  function responseWithUsage(usage: Record<string, unknown>) {
+    return {
+      ...createResponse({ role: "assistant", content: "hi", refusal: null }),
+      usage,
+    } as unknown as Openrouter.Types.ChatCompletionsResponse;
+  }
+
+  test("records the billed cost OpenRouter reports on a response", () => {
+    const adapter = openrouterAdapterFactory.createResponseAdapter(
+      responseWithUsage({
+        prompt_tokens: 1200,
+        completion_tokens: 300,
+        total_tokens: 1500,
+        cost: 0.0123,
+        is_byok: false,
+      }),
+    );
+
+    expect(adapter.getUsage()).toMatchObject({
+      inputTokens: 1200,
+      outputTokens: 300,
+      providerReportedCost: 0.0123,
+    });
+  });
+
+  test("adds the upstream charge to OpenRouter's fee for BYOK requests", () => {
+    const adapter = openrouterAdapterFactory.createResponseAdapter(
+      responseWithUsage({
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        total_tokens: 15,
+        cost: 0.0005,
+        is_byok: true,
+        cost_details: { upstream_inference_cost: 0.01 },
+      }),
+    );
+
+    expect(adapter.getUsage().providerReportedCost).toBeCloseTo(0.0105, 10);
+  });
+
+  test("leaves cost to the price table when OpenRouter reports none", () => {
+    const adapter = openrouterAdapterFactory.createResponseAdapter(
+      responseWithUsage({
+        prompt_tokens: 10,
+        completion_tokens: 5,
+        total_tokens: 15,
+      }),
+    );
+
+    expect(adapter.getUsage().providerReportedCost).toBeUndefined();
+  });
+
+  test("records the billed cost from a stream's trailing usage chunk", () => {
+    const adapter = openrouterAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      id: "gen-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "anthropic/claude-sonnet-4.5",
+      choices: [{ index: 0, delta: { content: "hello" }, finish_reason: null }],
+    });
+    adapter.processChunk({
+      id: "gen-1",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "anthropic/claude-sonnet-4.5",
+      choices: [],
+      usage: {
+        prompt_tokens: 1200,
+        completion_tokens: 300,
+        total_tokens: 1500,
+        cost: 0.0123,
+      },
+    } as unknown as Openrouter.Types.ChatCompletionChunk);
+
+    expect(adapter.state.usage).toMatchObject({
+      inputTokens: 1200,
+      outputTokens: 300,
+      providerReportedCost: 0.0123,
+    });
+  });
+});
+
 describe("openrouterAdapterFactory.execute", () => {
   function captureRequestClient(): {
     client: unknown;

@@ -251,7 +251,8 @@ export function GithubSyncSetupDialog({
         ? "failed"
         : (repoLookup.data?.status ?? "checking");
   // The repository already syncing is neither seeded nor replaced: it is kept.
-  const keepsSource = !!editing && repo === editing.repo;
+  const keepsSource =
+    !!editing && provider === editing.provider && repo === editing.repo;
   const repoStatus: RepositoryStatus =
     keepsSource && USABLE.has(lookedUp) ? "current" : lookedUp;
 
@@ -542,6 +543,13 @@ export function GithubSyncSetupDialog({
       {step === "provider" ? (
         <GitProviderStep
           onPick={(picked) => {
+            // Moving an edited source to the other host starts that host fresh:
+            // the old repository means nothing there.
+            const sameHost = editing?.provider === picked;
+            setRepo(sameHost ? editing.repo : "");
+            setRef(sameHost ? (editing.ref ?? "") : "");
+            setOrigin(sameHost ? "existing" : null);
+            setProjectMode(sameHost ? "existing" : "create");
             setProvider(picked);
             setStep(picked === "gitlab" ? "app" : "start");
           }}

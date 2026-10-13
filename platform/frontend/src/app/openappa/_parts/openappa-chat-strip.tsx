@@ -21,7 +21,7 @@ const QUESTIONS = Object.entries(OPENAPPA_SUGGESTED_LAUNCH_PROMPTS).map(
  */
 export function OpenAppaChatStrip() {
   return (
-    <Card className="gap-2 px-4 py-3">
+    <Card className="px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <OpenAppaChatButton size="sm">
           <AppaKeeperIcon />
@@ -39,10 +39,6 @@ export function OpenAppaChatStrip() {
           </OpenAppaChatButton>
         ))}
       </div>
-      <p className="text-muted-foreground text-xs">
-        Ask what your policy allows, why a call was blocked, or have the policy
-        changed for you.
-      </p>
     </Card>
   );
 }

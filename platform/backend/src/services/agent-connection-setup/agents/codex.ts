@@ -1,6 +1,8 @@
 import {
   CODEX_CLIENT_ID,
   EXTERNAL_AGENT_ID_HEADER,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
+  TOOL_ASK_USER_SHORT_NAME,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { CODEX_GUARD_CLIENT } from "../guard/clients";
@@ -15,6 +17,7 @@ import {
 import type {
   AgentEnding,
   SetupScriptContext,
+  SetupScriptMcpSection,
   SetupScriptProxySection,
   ShellAgentSetup,
 } from "../types";
@@ -53,6 +56,28 @@ function codexAttributionHeaderLines(proxy: SetupScriptProxySection): string {
   return lines.join("\n");
 }
 
+const CODEX_HELPER_APPROVALS_NOTICE =
+  "Codex can call the guardrail helpers without asking each time. Required human reviews still apply.";
+
+/**
+ * Codex asks before each call of an MCP tool that config.toml does not
+ * approve, and one call that needs a person's approval runs the guardrail
+ * helpers several times. Connect approves these helpers, as it does for Claude
+ * Code; other gateway tools keep Codex's question. The tables sit under the
+ * gateway's own entry, the way Codex's "Always allow" writes them, so
+ * `codex mcp remove` drops them with it and a rerun writes them once.
+ *
+ * @public — asserted by the setup script unit tests, which knip --production ignores.
+ */
+export function codexHelperApprovalTables(mcp: SetupScriptMcpSection): string {
+  return [...REQUIRED_OPENAPPA_TOOL_SHORT_NAMES, TOOL_ASK_USER_SHORT_NAME]
+    .map(
+      (name) =>
+        `[mcp_servers.${tomlBasicString(mcp.serverName)}.tools.${tomlBasicString(`${mcp.toolPrefix}${name}`)}]\napproval_mode = "approve"`,
+    )
+    .join("\n\n");
+}
+
 function codexBashSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
@@ -75,7 +100,12 @@ fi`);
       .join("\n");
     sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
-cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
+cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}
+cat >> "$CONFIG" <<'ARCHESTRA_TOML'
+
+${codexHelperApprovalTables(ctx.mcp)}
+ARCHESTRA_TOML
+ok ${sh(CODEX_HELPER_APPROVALS_NOTICE)}`);
   }
 
   if (ctx.proxy) {
@@ -172,7 +202,12 @@ if ((Test-Path $arch_config) -and -not (Test-Path ($arch_config + '.archestra-ba
     sections.push(`Say ${psq(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
 codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}
-if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }`);
+if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }
+Add-Content -Path $arch_config -Encoding utf8 -Value @'
+
+${codexHelperApprovalTables(ctx.mcp)}
+'@
+Ok ${psq(CODEX_HELPER_APPROVALS_NOTICE)}`);
   }
 
   if (ctx.proxy) {

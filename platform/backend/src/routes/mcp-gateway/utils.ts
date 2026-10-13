@@ -36,6 +36,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   type ElicitRequest,
+  type ElicitResult,
   ElicitResultSchema,
   ErrorCode,
   ListPromptsRequestSchema,
@@ -2580,10 +2581,10 @@ function createGatewayUserElicit(params: {
   return async ({ message, requestedSchema }) => {
     const supplied = mrtr?.inputResponses?.[GATEWAY_INPUT_REQUEST_KEY];
     if (supplied !== undefined) {
-      return {
-        status: "answered",
+      return formAnswer({
         result: ElicitResultSchema.parse(supplied),
-      };
+        requestMeta,
+      });
     }
 
     const request = {
@@ -2624,14 +2625,14 @@ function createGatewayUserElicit(params: {
     // client renders its native form.
     if (canElicit) {
       try {
-        return {
-          status: "answered",
+        return formAnswer({
           result: ElicitResultSchema.parse(
             await extra.sendRequest(request, ElicitResultSchema, {
               timeout: ELICITATION_ANSWER_TIMEOUT_MS,
             }),
           ),
-        };
+          requestMeta,
+        });
       } catch (error) {
         // The client showed the form; the person just never answered it.
         if (
@@ -2654,6 +2655,44 @@ function createGatewayUserElicit(params: {
 
     return { status: "no_viewer" };
   };
+}
+
+/**
+ * A form answer no person gave is no answer. Codex declares forms but declines
+ * each one itself when no person drives the turn (`codex exec`) and under its
+ * automatic reviewer. Read as a refusal, that decline would record a denial
+ * nobody made.
+ */
+function formAnswer(params: {
+  result: ElicitResult;
+  requestMeta: Record<string, unknown> | undefined;
+}): ArchestraElicitationOutcome {
+  const { result, requestMeta } = params;
+  if (
+    result.action === "decline" &&
+    (result._meta?.approvals_reviewer === "auto_review" ||
+      codexTurnTrigger(requestMeta) === "exec")
+  ) {
+    return { status: "no_viewer" };
+  }
+  return { status: "answered", result };
+}
+
+/** What started the Codex turn this tool call belongs to, if Codex said. */
+function codexTurnTrigger(
+  requestMeta: Record<string, unknown> | undefined,
+): unknown {
+  let turn = requestMeta?.["x-codex-turn-metadata"];
+  if (typeof turn === "string") {
+    try {
+      turn = JSON.parse(turn);
+    } catch {
+      return undefined;
+    }
+  }
+  return turn && typeof turn === "object"
+    ? (turn as Record<string, unknown>).turn_trigger
+    : undefined;
 }
 
 // First occurrence wins: callers (getMcpToolsByAgent) order candidates with

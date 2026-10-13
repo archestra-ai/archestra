@@ -265,6 +265,7 @@ export function makeCohereOpenaiAdapterFactory(
 > {
   return {
     ...cohereAdapterFactory,
+    translatesWireFormat: true,
     extractApiKey(headers) {
       const authorization = (headers as Record<string, unknown>).authorization;
       if (typeof authorization === "string") {

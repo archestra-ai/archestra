@@ -553,6 +553,14 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    */
   readonly formatStreamErrorFrame?: (event: unknown) => string;
 
+  /**
+   * Set by adapters that serve a client wire format different from the
+   * upstream provider's (e.g. OpenAI-format client, Anthropic upstream). The
+   * upstream's error body is foreign to the client there, so the proxy keeps
+   * its own error envelope instead of relaying it.
+   */
+  readonly translatesWireFormat?: boolean;
+
   // ---------------------------------------------------------------------------
   // Adapter Creation
   // ---------------------------------------------------------------------------

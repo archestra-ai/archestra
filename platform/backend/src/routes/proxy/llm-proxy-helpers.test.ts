@@ -1002,8 +1002,11 @@ describe("handleError", () => {
         sent.statusCode = statusCode;
         return replyShape;
       },
+      type: () => replyShape,
       send: (body: unknown) => {
-        sent.body = body;
+        // Provider bodies are sent pre-serialized; parse so tests assert on
+        // the JSON the client receives.
+        sent.body = typeof body === "string" ? JSON.parse(body) : body;
         return replyShape;
       },
       raw: {
@@ -1595,6 +1598,189 @@ describe("handleError", () => {
     expect(thrown.internalCode).toBe(
       ArchestraInternalErrorCode.ProviderInsufficientBalance,
     );
+  });
+
+  describe("provider error relay for every upstream status", () => {
+    const threadNotFound = {
+      type: "error",
+      error: {
+        type: "not_found_error",
+        message:
+          "No thread state was found for the requested `previous_message_id`.",
+        details: { error_code: "thread_not_found" },
+      },
+      request_id: "req_test",
+    };
+
+    function anthropicError(status: number, body: unknown) {
+      return Object.assign(new Error(JSON.stringify(body)), {
+        status,
+        error: body,
+      });
+    }
+
+    test("relays an Anthropic thread_not_found 404 with its details intact", () => {
+      const { reply, sent } = makeReply(false);
+
+      handleError(
+        anthropicError(404, threadNotFound),
+        reply,
+        extractMessage,
+        true,
+        () => undefined,
+      );
+
+      expect(sent.statusCode).toBe(404);
+      expect(sent.body).toEqual(threadNotFound);
+    });
+
+    test("relays an Anthropic 400 invalid_request_error verbatim", () => {
+      const { reply, sent } = makeReply(false);
+      const body = {
+        type: "error",
+        error: { type: "invalid_request_error", message: "prompt is too long" },
+      };
+
+      handleError(
+        anthropicError(400, body),
+        reply,
+        extractMessage,
+        false,
+        () => undefined,
+      );
+
+      expect(sent.statusCode).toBe(400);
+      expect(sent.body).toEqual(body);
+    });
+
+    test("relays an OpenAI-wire error with its code", () => {
+      const { reply, sent } = makeReply(false);
+      const error = Object.assign(new Error("context too long"), {
+        status: 400,
+        error: {
+          message: "maximum context length exceeded",
+          type: "invalid_request_error",
+          code: "context_length_exceeded",
+        },
+      });
+
+      handleError(error, reply, extractMessage, false, () => undefined);
+
+      expect(sent.statusCode).toBe(400);
+      expect(sent.body).toEqual({
+        error: {
+          message: "maximum context length exceeded",
+          type: "invalid_request_error",
+          code: "context_length_exceeded",
+        },
+      });
+    });
+
+    test("relays a provider 5xx body and still marks nothing as ours", () => {
+      const { reply, sent } = makeReply(false);
+      const body = {
+        type: "error",
+        error: { type: "api_error", message: "Internal server error" },
+      };
+
+      handleError(
+        anthropicError(500, body),
+        reply,
+        extractMessage,
+        false,
+        () => undefined,
+      );
+
+      expect(sent.statusCode).toBe(500);
+      expect(sent.body).toEqual(body);
+    });
+
+    test("keeps the envelope for an error without a recognizable provider body", () => {
+      const { reply } = makeReply(false);
+      const error = Object.assign(new Error("bad gateway"), {
+        status: 502,
+        error: { message: "bad gateway" },
+      });
+
+      expect(throwErrorFor(error, reply).statusCode).toBe(502);
+    });
+
+    test("keeps the envelope for an Archestra ApiError", () => {
+      const { reply } = makeReply(false);
+      const thrown = throwErrorFor(new ApiError(404, "Agent not found"), reply);
+
+      expect(thrown.statusCode).toBe(404);
+      expect(thrown.message).toBe("Agent not found");
+    });
+
+    test("keeps the envelope when the adapter reclassifies the error", () => {
+      const { reply } = makeReply(false);
+      const thrown = (() => {
+        try {
+          handleError(
+            anthropicError(400, {
+              type: "error",
+              error: { type: "invalid_request_error", message: "credit" },
+            }),
+            reply,
+            extractMessage,
+            false,
+            () => ArchestraInternalErrorCode.ProviderInsufficientBalance,
+          );
+        } catch (caught) {
+          return caught as ApiError;
+        }
+        throw new Error("handleError did not throw");
+      })();
+
+      expect(thrown.statusCode).toBe(400);
+      expect(thrown.internalCode).toBe(
+        ArchestraInternalErrorCode.ProviderInsufficientBalance,
+      );
+    });
+
+    test("does not leak a foreign-format body on a wire-translating route", () => {
+      const { reply, sent } = makeReply(false);
+
+      for (const status of [404, 429]) {
+        const thrown = (() => {
+          try {
+            handleError(
+              anthropicError(status, threadNotFound),
+              reply,
+              extractMessage,
+              false,
+              () => undefined,
+              undefined,
+              true,
+            );
+          } catch (caught) {
+            return caught as ApiError;
+          }
+          throw new Error("handleError did not throw");
+        })();
+        expect(thrown.statusCode).toBe(status);
+      }
+      expect(sent.body).toBeUndefined();
+    });
+
+    test("keeps the provider's type and details in a mid-stream error event", () => {
+      const { reply, writes } = makeReply(true);
+
+      handleError(
+        anthropicError(404, threadNotFound),
+        reply,
+        extractMessage,
+        true,
+        () => undefined,
+      );
+
+      const payload = JSON.parse(
+        writes[0].replace(/^event: error\ndata: /, ""),
+      );
+      expect(payload.error.type).toBe("not_found_error");
+      expect(payload.error.details).toEqual({ error_code: "thread_not_found" });
+    });
   });
 });
 

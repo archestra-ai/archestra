@@ -253,12 +253,8 @@ const registry = defineArchestraTools([
         header: effectiveArgs.header,
       });
 
-      if (
-        outcome.status === "no_viewer" ||
-        (outcome.status === "answered" &&
-          outcome.result.action === "decline" &&
-          outcome.result._meta?.approvals_reviewer === "auto_review")
-      ) {
+      // The gateway also reports a decline no person gave as no viewer.
+      if (outcome.status === "no_viewer") {
         return errorResult(
           hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_CHOICE_FORM_MESSAGE,
         );

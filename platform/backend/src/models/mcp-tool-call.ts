@@ -90,14 +90,15 @@ class McpToolCallModel {
       .insert(schema.mcpToolCallsTable)
       // Spread first: the encrypt helper mutates in place, and callers must
       // keep their plaintext copy (e.g. to build the JSON-RPC response).
-      .values(
-        encryptMcpToolCallContent(
+      .values({
+        ...encryptMcpToolCallContent(
           withheld
             ? withholdToolCallContent(data)
             : redactToolCallArguments({ ...data }),
           audit,
         ),
-      )
+        ...toolCallOutcomeColumns(data, audit !== null),
+      })
       .returning();
 
     // Decrypting on a write path is only safe because the key came from this
@@ -734,4 +735,27 @@ function redactToolCallArguments(values: InsertMcpToolCall): InsertMcpToolCall {
 
   values.toolCall = { ...toolCall, arguments: redacted };
   return values;
+}
+
+/**
+ * The plaintext `tool_name`/`is_error` columns for a row, read from the
+ * caller's plaintext before any encryption or withholding. Only `tools/call`
+ * rows have an outcome. An encrypted-chat row keeps its outcome but not its
+ * tool name: what the conversation did is content the server must not read.
+ */
+function toolCallOutcomeColumns(
+  data: InsertMcpToolCall,
+  isEncryptedChat: boolean,
+): { toolName: string | null; isError: boolean | null } {
+  if (data.method !== "tools/call") return { toolName: null, isError: null };
+  const result = data.toolResult;
+  const isError =
+    typeof result === "object" &&
+    result !== null &&
+    "isError" in result &&
+    result.isError === true;
+  return {
+    toolName: isEncryptedChat ? null : (data.toolCall?.name ?? null),
+    isError,
+  };
 }

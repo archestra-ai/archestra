@@ -3739,6 +3739,13 @@
       "when": 1791907571145,
       "tag": "0533_git_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 534,
+      "version": "7",
+      "when": 1791920142623,
+      "tag": "0534_stale_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }

@@ -164,6 +164,7 @@ export { default as SkillUsageEventModel } from "./skill-usage-event";
 export { default as SkillUserModel } from "./skill-user";
 export { default as SkillVersionModel } from "./skill-version";
 export { default as StatisticsModel } from "./statistics";
+export { default as UsageStatisticsModel } from "./usage-statistics";
 export { default as TaskModel } from "./task";
 export { default as TeamModel } from "./team";
 export { default as TeamLabelModel } from "./team-label";

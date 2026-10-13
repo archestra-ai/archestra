@@ -100,6 +100,7 @@ export * from "./skill-sandbox";
 export * from "./skill-share-link";
 export * from "./skill-share-link-revision";
 export * from "./statistics";
+export * from "./usage-statistics";
 export * from "./task";
 export * from "./team";
 export * from "./team-role";

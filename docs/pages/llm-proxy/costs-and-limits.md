@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -104,5 +104,5 @@ Prompt caching lowers the cost of a prompt that starts the same way each time. C
 
 ## What to Know
 
-- **Need the raw numbers?** Get them per person from [`GET /api/statistics/users`](/docs/reference/api#/Statistics/getUserStatistics), or your own from [`GET /api/statistics/me`](/docs/reference/api#/Statistics/getMyStatistics).
+- **Need the raw numbers?** Get them per person from [`GET /api/statistics/users`](/docs/reference/api#/Statistics/getUserStatistics), or your own from [`GET /api/statistics/me`](/docs/reference/api#/Statistics/getMyStatistics). For daily counts of tool calls, app runs, and skill activations, group [`GET /api/statistics/mcp-tool-calls`](/docs/reference/api#/Statistics/getMcpToolCallUsage), [`app-usage`](/docs/reference/api#/Statistics/getAppUsage), or [`skill-usage`](/docs/reference/api#/Statistics/getSkillUsage) by `day`.
 - **Already use Prometheus or Grafana?** Archestra exports cost and token metrics, so you can chart spend next to your other dashboards. See [Metrics](/docs/admin/observability/metrics#llm-metrics).

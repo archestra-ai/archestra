@@ -19,6 +19,7 @@ import {
   type ComponentProps,
   type ReactNode,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { toast } from "sonner";
@@ -552,6 +553,10 @@ export function TextButton({
 /** Copies text with a brief "Copied" on the button, or a toast on failure. */
 export function useCopy() {
   const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<number | undefined>(undefined);
+  // The reset must not outlive the component: one firing after unmount sets
+  // state on a tree that is gone (in tests, after the DOM is torn down).
+  useEffect(() => () => window.clearTimeout(resetTimer.current), []);
   const copy = async (text: string) => {
     try {
       await copyToClipboard(text);
@@ -560,7 +565,8 @@ export function useCopy() {
       return false;
     }
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    window.clearTimeout(resetTimer.current);
+    resetTimer.current = window.setTimeout(() => setCopied(false), 1800);
     return true;
   };
   return { copied, copy };

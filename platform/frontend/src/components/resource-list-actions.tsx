@@ -10,8 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -19,7 +17,8 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 /**
  * Secondary list actions, with the same permission editor for every resource.
  * A page that lists more than one kind of resource names each one with a
- * label, and gets one Permissions item per kind.
+ * label, and gets one Permissions button per kind. Other actions passed as
+ * children go in a "More actions" menu.
  */
 export function ResourceListActions({
   resource,
@@ -62,31 +61,37 @@ export function ResourceListActions({
   if (!kinds.length && !children) return null;
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label="More actions"
-          >
-            <MoreHorizontal className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {children}
-          {children && kinds.length > 0 && <DropdownMenuSeparator />}
-          {kinds.map((kind) => (
-            <DropdownMenuItem
-              key={kind.resource}
-              onSelect={() => setOpened(kind.resource)}
+      {/* Permissions sits in plain sight, not behind the menu: it decides who
+          sees everything on the page. */}
+      {kinds.map((kind) => (
+        <Button
+          key={kind.resource}
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpened(kind.resource)}
+        >
+          <Shield className="size-4" />
+          {/* On a phone only the shield shows, so the header's actions still
+              fit beside its title; the name stays for screen readers. */}
+          <span className="max-sm:sr-only">{kind.label}</span>
+        </Button>
+      ))}
+      {children && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label="More actions"
             >
-              <Shield className="size-4" />
-              <span>{kind.label}</span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">{children}</DropdownMenuContent>
+        </DropdownMenu>
+      )}
       {kinds.map((kind) => (
         <ResourcePermissionsDialog
           key={kind.resource}

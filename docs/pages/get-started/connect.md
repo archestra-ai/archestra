@@ -22,6 +22,8 @@ Open **Connect** in the Archestra sidebar and choose how to connect:
 
 To leave out the proxy or the skills, click **Customize setup** before you approve.
 
+Guardrails recognize Archestra Chat, Claude Code, Codex CLI, and OpenCode automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
+
 ![Connect with Codex selected and its setup command](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
 <span id="claude-code"></span>

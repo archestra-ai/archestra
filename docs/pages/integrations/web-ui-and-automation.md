@@ -2,7 +2,7 @@
 title: Web UIs and Automation
 description: Connect n8n workflows and Open WebUI to Archestra LLM Proxy and MCP Gateway
 order: 4
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -26,6 +26,8 @@ n8n AI workflows can route model inference through the LLM Proxy and execute too
 
 ### Connect the Model
 
+Use an OpenAI credential to keep the virtual key out of workflow expressions.
+
 1. Open your workflow and attach an **AI Agent** node to your trigger.
 2. Connect an **OpenAI Chat Model** node to the agent's model input.
 3. Configure the OpenAI credential: set **Base URL** to `http://localhost:9000/v1/openai` and **API Key** to your Archestra virtual key.
@@ -39,18 +41,22 @@ Store virtual keys in n8n's credential manager rather than inline workflow expre
 <span id="configure-guardrails"></span>
 <span id="n8n-guardrails"></span>
 
-Send the session header so Guardrails track the workflow.
+Use n8n's [execution ID](https://docs.n8n.io/code/cookbook/builtin/execution/#executionid) as the Guardrails session ID so every run keeps its own history. n8n supplies `$execution.id` when a workflow runs; it stays the same across all model calls in that run.
 
 1. Open the OpenAI credential used by your **OpenAI Chat Model** node.
 2. Turn on **Add Custom Header**.
 3. Set **Header Name** to `X-Appa-Session-ID`.
-4. Set **Header Value** to a session identifier, such as a UUID.
+4. Switch **Header Value** to **Expression** and enter `{{ $execution.id }}`. Save the credential.
 
-For workflows that use an **HTTP Request** node, add `X-Appa-Session-ID` to the request headers.
+If you call the proxy with an **HTTP Request** node instead, turn on **Send Headers** and add `X-Appa-Session-ID` with `{{ $execution.id }}`. Keep the virtual key in the credential.
 
-For subagents or child workflows, also send `X-Appa-Parent-ID` with the parent workflow's session ID.
+For a child workflow, use an **HTTP Request** node to send both headers: `X-Appa-Session-ID` set to `{{ $execution.id }}` and `X-Appa-Parent-ID` set to `{{ $json.parentExecutionId }}`. The OpenAI credential only supports one custom header, so child workflows that need a parent session cannot use it.
+
+Run the workflow twice and check **Logs → LLM Proxy** in Archestra. Calls within each run share a session ID, and the two runs get different IDs. Never hardcode a static session ID in the credential. For chats that span multiple workflow runs, see [Session Headers](/docs/agents/guardrails/clients#session-headers).
 
 ### Connect Tools
+
+Attach a gateway to give the agent the tools assigned in Archestra.
 
 <span id="connect-tools"></span>
 
@@ -71,6 +77,8 @@ Open WebUI connects to Archestra via its OpenAI-compatible model provider and re
 
 ### Connect the Model
 
+Add Archestra as an OpenAI-compatible connection in Open WebUI.
+
 1. Navigate to **Settings → Admin → Connections** in Open WebUI.
 2. Add a new connection under **OpenAI API**.
 3. Set the API URL to `http://localhost:9000/v1/openai` and enter your Archestra virtual key as the API key.
@@ -80,15 +88,13 @@ Open WebUI connects to Archestra via its OpenAI-compatible model provider and re
 
 <span id="openwebui-guardrails"></span>
 
-Send the session header so Guardrails track conversations from Open WebUI.
+Do not add `X-Appa-Session-ID` to Open WebUI's global connection headers. Because connection headers apply to every request, setting one there gives all chats the same session ID and mixes their guardrail policies together.
 
-1. Go to **Settings → Admin → Connections** in Open WebUI.
-2. Edit your OpenAI API connection.
-3. Under **Headers**, add `X-Appa-Session-ID` with a session identifier as the value.
-
-For child sessions or pipelines, also send `X-Appa-Parent-ID` with the parent session ID.
+To use Guardrails with Open WebUI, route requests through a custom integration that forwards Open WebUI's chat ID in `X-Appa-Session-ID`. Without that header, Open WebUI follows your [unrecognized client setting](/docs/agents/guardrails/clients#unrecognized-clients): allowed without checks by default, or blocked if set to **Blocked**.
 
 ### Connect Tools
+
+Add the gateway as a remote MCP tool server.
 
 1. Navigate to **Settings → Admin → Integrations**.
 2. Under **External Tool Servers**, add a connection of type **MCP (Streamable HTTP)**.
@@ -105,4 +111,4 @@ Send `Reply with connection verified.` to confirm inference. In Archestra, open 
 - A connection error indicates that the client cannot reach the Archestra API URL.
 - A model error indicates that the requested model is not available under the mapped provider.
 
-To test tools, prompt the client to run a read-only action supported by an assigned tool. Check **Logs → MCP Gateway** in Archestra to confirm tool execution. Configure [guardrails](/docs/agents/guardrails) on your gateway to enforce invocation policies.
+To test tools, prompt the client to run a read-only action supported by an assigned tool. Check **Logs → MCP Gateway** in Archestra to confirm tool execution. [Guardrails](/docs/agents/guardrails) check tool calls only when model requests go through the LLM Proxy; a gateway-only connection does not apply those checks.

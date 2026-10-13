@@ -150,7 +150,7 @@ export function ResourceAccessFilter({
           footer={reset}
         />
       )}
-      {owned && (
+      {owned && (access.includes("others") || owner) && (
         <ResourceOwnerFilter
           resource={resource}
           value={owner ?? []}
@@ -290,9 +290,12 @@ function AccessRelationFilter({
     if (next.length === 0) return;
     updateParams({
       [RESOURCE_ACCESS_PARAM]: serializeAccess(next),
-      // "Shared with" is shown only with "Admin access"; never leave it
-      // filtering the list while hidden.
-      ...(!next.includes("others") && { [SHARED_WITH_PARAM]: null }),
+      // "Shared with" and "Owner" are shown only with "Admin access"; never
+      // leave them filtering the list while hidden.
+      ...(!next.includes("others") && {
+        [SHARED_WITH_PARAM]: null,
+        [OWNER_PARAM]: null,
+      }),
     });
   };
 

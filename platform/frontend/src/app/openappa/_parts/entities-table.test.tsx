@@ -200,7 +200,7 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-test("lists MCP servers including Archestra, each with a chat and scoped details", async () => {
+test("lists MCP servers including Archestra, warns where under half the tools have a rule, and opens scoped details", async () => {
   render(
     <QueryClientProvider
       client={
@@ -219,49 +219,20 @@ test("lists MCP servers including Archestra, each with a chat and scoped details
   expect(entityRequests[0]?.get("type")).toBe("mcp_server");
   expect(screen.queryByRole("combobox", { name: "Type" })).toBeNull();
   expect(entityRequests[0]?.get("sortDirection")).toBe("asc");
-  // One chat for every target, whatever its coverage.
-  const archestraLink = await targets.findByRole("link", {
-    name: "Ask in chat: Archestra",
-  });
-  const archestraUrl = new URL(
-    archestraLink.getAttribute("href") ?? "",
-    origin,
-  );
-  expect([...archestraUrl.searchParams.keys()]).toEqual([
-    "agentId",
-    "user_prompt",
-  ]);
-  expect(archestraUrl.searchParams.get("agentId")).toBe("appa-agent");
-  expect(archestraUrl.searchParams.get("user_prompt")).toContain(
-    'MCP server "Archestra"',
-  );
-  expect(archestraUrl.searchParams.get("user_prompt")).toContain(
-    `Target ID: ${ARCHESTRA_MCP_CATALOG_ID}`,
-  );
-  const serverLink = await targets.findByRole("link", {
-    name: "Ask in chat: GitHub",
-  });
-  const serverUrl = new URL(serverLink.getAttribute("href") ?? "", origin);
-  expect(serverUrl.searchParams.get("user_prompt")).toContain(
-    'MCP server "GitHub"',
-  );
-  expect(serverUrl.searchParams.get("user_prompt")).toContain(
-    `Target ID: ${serverId}`,
-  );
   expect(targets.getByText("2 of 3 covered")).toBeVisible();
   expect(
     targets.getByRole("img", {
       name: "Custom rule: 1, Battery rule: 1, No rule: 1",
     }),
   ).toBeVisible();
-  for (const header of ["Name", "Type", "Tool coverage", "Actions"])
+  for (const header of ["Name", "Type", "Tool coverage"])
     expect(targets.getByRole("columnheader", { name: header })).toBeVisible();
   expect(targets.getByRole("columnheader", { name: "Name" })).toHaveAttribute(
     "aria-sort",
     "ascending",
   );
   expect(targets.queryByText("Auto mode")).toBeNull();
-  expect(targets.getByText("4 of 19 covered")).toBeVisible();
+  expect(targets.getByText("4 of 19 · low")).toBeVisible();
   fireEvent.click(targets.getByRole("button", { name: /Archestra/ }));
   const archestraSummary = within(await screen.findByRole("dialog"));
   for (const [value, label] of [
@@ -291,25 +262,6 @@ test("lists MCP servers including Archestra, each with a chat and scoped details
   ).toHaveTextContent("19synced tools");
   expect(githubSummary.queryByText(/built-in tool/)).not.toBeInTheDocument();
   expect(await screen.findByText("get_issue")).toBeVisible();
-});
-
-test("disables server chat when registry read access is missing", async () => {
-  vi.mocked(useHasPermissions).mockReturnValue({
-    data: false,
-  } as ReturnType<typeof useHasPermissions>);
-  render(
-    <QueryClientProvider client={new QueryClient()}>
-      <EntitiesTable />
-    </QueryClientProvider>,
-  );
-
-  expect(await screen.findByText("GitHub")).toBeVisible();
-  expect(
-    screen.queryByRole("link", { name: "Ask in chat: GitHub" }),
-  ).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: "Ask in chat: GitHub" }),
-  ).toHaveAttribute("aria-disabled", "true");
 });
 
 test("filters tool policy sources and links each rule to its TOML line", async () => {
@@ -720,9 +672,10 @@ test("sorts by name, type, or tool count from the headers, kept in the URL", asy
   expect(
     screen.getByRole("columnheader", { name: "Tool coverage" }),
   ).toHaveAttribute("aria-sort", "ascending");
-  expect(
-    screen.getByRole("columnheader", { name: "Actions" }),
-  ).not.toHaveAttribute("aria-sort");
+  expect(screen.getByRole("columnheader", { name: "Name" })).toHaveAttribute(
+    "aria-sort",
+    "none",
+  );
 
   // Sorting again reverses it, and sorting another column starts ascending.
   await userEvent.click(screen.getByRole("button", { name: "Tool coverage" }));

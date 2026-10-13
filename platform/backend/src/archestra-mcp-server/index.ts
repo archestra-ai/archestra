@@ -8,6 +8,7 @@ import {
   isCodeRuntimeArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isSkillTool,
+  isYellToolShortName,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
@@ -374,7 +375,7 @@ export async function executeArchestraTool(
     args = original;
   }
   if (
-    archestraMcpBranding.getToolShortName(toolName) === "yell" &&
+    isYellToolShortName(archestraMcpBranding.getToolShortName(toolName)) &&
     (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
   ) {
     // An unavailable feedback tool is a recoverable tool refusal, not a
@@ -542,7 +543,7 @@ export async function preflightArchestraToolCall(params: {
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
   const shortName = archestraMcpBranding.getToolShortName(canonicalName);
-  if (shortName === "yell") return openappaYellEnabled();
+  if (isYellToolShortName(shortName)) return openappaYellEnabled();
   if (isOpenappaTool(shortName)) return openappaEnabled();
   if (shortName && isCodeRuntimeArchestraToolShortName(shortName))
     return config.skillsSandbox.enabled;
@@ -613,7 +614,7 @@ async function resolveToolAssignment(
       shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
       shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
       shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME ||
-      (shortName === "yell" && openappaYellEnabled())) &&
+      (isYellToolShortName(shortName) && openappaYellEnabled())) &&
     (await isGuardrailsV2Active())
   )
     return null;

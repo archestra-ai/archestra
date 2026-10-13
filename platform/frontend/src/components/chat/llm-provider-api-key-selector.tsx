@@ -1,11 +1,13 @@
 "use client";
 
 import {
+  providerSupportsChat,
   type ResourceVisibilityScope,
   SUBSCRIPTION_CREDENTIAL_KINDS,
   SUBSCRIPTION_CREDENTIALS,
   type SubscriptionCredentialKind,
   type SupportedProvider,
+  SupportedProviders,
   subscriptionKindFromKeyMetadata,
 } from "@archestra/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -62,6 +64,8 @@ const SUBSCRIPTION_CONNECT_OPTIONS: SubscriptionConnectOption[] =
     };
   });
 
+const CHAT_PROVIDERS = SupportedProviders.filter(providerSupportsChat);
+
 interface LlmProviderApiKeySelectorProps {
   /** Conversation ID for persisting selection (optional for initial chat) */
   conversationId?: string;
@@ -111,11 +115,14 @@ export function LlmProviderApiKeySelector({
       includeKeyId: agentLlmApiKeyId ?? undefined,
     });
   const { data: session, isPending: isSessionLoading } = useSession();
+  // Embeddings-only and decisions-only providers (Voyage, Jev) cannot answer a
+  // conversation, so their keys are neither offered nor auto-selected here.
   const availableKeys = useMemo(
     () =>
       fetchedAvailableKeys.filter(
         (key) =>
-          !isPersonalSubscription(key) || key.userId === session?.user.id,
+          providerSupportsChat(key.provider) &&
+          (!isPersonalSubscription(key) || key.userId === session?.user.id),
       ),
     [fetchedAvailableKeys, session?.user.id],
   );
@@ -347,6 +354,7 @@ export function LlmProviderApiKeySelector({
     availableKeys,
     onSelectKey: applyKeyChange,
     onBeforeOpen: () => handleOpenChange(false),
+    allowedProviders: CHAT_PROVIDERS,
   });
 
   useEffect(() => {

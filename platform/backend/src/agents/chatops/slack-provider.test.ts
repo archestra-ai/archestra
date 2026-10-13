@@ -918,7 +918,11 @@ describe("SlackProvider — bots pinned to an agent sharing a channel", () => {
     ).toBeNull();
   });
 
-  test("Stop on one bot leaves the other answering the thread", async () => {
+  test.each([
+    "stop",
+    "command",
+    "reaction",
+  ])("%s on one bot leaves the other answering the thread", async (control) => {
     const { main, marketing } = createBots();
     await main.parseWebhookNotification(
       message(`<@${MAIN_BOT}> start`, "5555555555.000020"),
@@ -929,10 +933,20 @@ describe("SlackProvider — bots pinned to an agent sharing a channel", () => {
       {},
     );
 
-    await marketing.parseWebhookNotification(
-      stopPayload({ channel: CHANNEL, thread_ts: THREAD }),
-      {},
-    );
+    const mutePayload =
+      control === "stop"
+        ? stopPayload({ channel: CHANNEL, thread_ts: THREAD })
+        : control === "command"
+          ? message(`<@${MARKETING_BOT}> mute`, "5555555555.000023")
+          : makeEventPayload(
+              {},
+              {
+                type: "reaction_added",
+                reaction: "mute",
+                item: { type: "message", channel: CHANNEL, ts: THREAD },
+              },
+            );
+    await marketing.parseWebhookNotification(mutePayload, {});
 
     const next = message("anyone there?", "5555555555.000022");
     expect(await marketing.parseWebhookNotification(next, {})).toBeNull();
@@ -961,6 +975,11 @@ describe("SlackProvider — bots pinned to an agent sharing a channel", () => {
         // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
         (bot as any).client = {
           apiCall: vi.fn().mockResolvedValue({ ok: true }),
+          reactions: {
+            get: vi
+              .fn()
+              .mockResolvedValue({ message: { ts: "5555555555.000030" } }),
+          },
         };
         return bot;
       };
@@ -990,11 +1009,49 @@ describe("SlackProvider — bots pinned to an agent sharing a channel", () => {
         await marketing.parseWebhookNotification(chatter, {}),
       ).not.toBeNull();
       expect(await coding.parseWebhookNotification(chatter, {})).toBeNull();
+      for (const control of ["command", "reaction"]) {
+        const mutePayload =
+          control === "command"
+            ? makeEventPayload({}, { ...chatter.event, text: "mute" })
+            : makeEventPayload(
+                {},
+                {
+                  type: "reaction_added",
+                  reaction: "mute",
+                  item: {
+                    type: "message",
+                    channel: CHANNEL,
+                    ts: chatter.event.ts,
+                  },
+                },
+              );
+        expect(
+          await marketing.parseWebhookNotification(mutePayload, {}),
+        ).toBeNull();
+        expect(
+          await marketing.parseWebhookNotification(chatter, {}),
+        ).toBeNull();
+        expect(
+          await marketing.parseWebhookNotification(
+            makeEventPayload(
+              {},
+              {
+                ...chatter.event,
+                text: `<@${MARKETING_BOT}> resume`,
+              },
+            ),
+            {},
+          ),
+        ).not.toBeNull();
+        expect(
+          await marketing.parseWebhookNotification(chatter, {}),
+        ).not.toBeNull();
+      }
     },
   );
 });
 
-describe("SlackProvider.parseWebhookNotification — Stop button", () => {
+describe("SlackProvider.parseWebhookNotification — thread mute controls", () => {
   function createStopProvider(apiCall = vi.fn().mockResolvedValue({})) {
     const provider = createProvider();
     const setStatus = vi.fn().mockResolvedValue({ ok: true });
@@ -1100,49 +1157,160 @@ describe("SlackProvider.parseWebhookNotification — Stop button", () => {
     expect(apiCall).toHaveBeenCalledTimes(1);
   });
 
-  test("a 'mute' message is ordinary text for the agent, not a command", async () => {
+  test.each([
+    "mute",
+    ":mute:",
+    ":shushing_face:",
+    "<@UBOT123> mute",
+  ])("%s mutes an active thread, cancels its run, and stays quiet until re-mentioned", async (text) => {
     const { provider } = createStopProvider();
     const channel = "C_MUTE_TEXT";
     const threadTs = "6666666666.000030";
-    await provider.parseWebhookNotification(
-      makeEventPayload(
-        {},
-        { channel, text: "<@UBOT123> kick things off", thread_ts: threadTs },
-      ),
-      {},
-    );
-
-    const result = await provider.parseWebhookNotification(
+    const message = (text: string) =>
       makeEventPayload(
         {},
         {
           type: "message",
           channel,
-          text: "mute",
-          ts: "6666666666.000031",
+          text,
           thread_ts: threadTs,
         },
-      ),
-      {},
-    );
-    expect(result?.text).toBe("mute");
+      );
+    await provider.parseWebhookNotification(message("<@UBOT123> start"), {});
+    const run = chatOpsRunRegistry.register({
+      provider: "slack",
+      channelId: channel,
+      threadId: threadTs,
+    });
+    expect(
+      await provider.parseWebhookNotification(message(text), {}),
+    ).toBeNull();
+    expect(run.signal.aborted).toBe(true);
+    expect(
+      await provider.parseWebhookNotification(message("follow up"), {}),
+    ).toBeNull();
+    expect(
+      await provider.parseWebhookNotification(message("<@UBOT123> resume"), {}),
+    ).not.toBeNull();
+    expect(
+      await provider.parseWebhookNotification(message("follow up"), {}),
+    ).not.toBeNull();
+    run.unregister();
   });
 
-  test("reactions are not events the bot acts on", async () => {
-    const { provider, apiCall } = createStopProvider();
+  test.each([
+    "mute",
+    "shushing_face",
+  ])("%s reaction on a reply resolves the root and mutes it", async (reaction) => {
+    const { provider } = createStopProvider();
+    const threadTs = "6666666666.000040";
+    const getReaction = vi.fn().mockResolvedValue({
+      message: { ts: "6666666666.000041", thread_ts: threadTs },
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — inject Slack boundary
+    (provider as any).client.reactions = { get: getReaction };
+    await provider.parseWebhookNotification(
+      makeEventPayload({}, { thread_ts: threadTs }),
+      {},
+    );
     const result = await provider.parseWebhookNotification(
       makeEventPayload(
         {},
         {
           type: "reaction_added",
-          reaction: "mute",
-          item: { type: "message", channel: "C_REACT", ts: "1.0" },
+          reaction,
+          item: { type: "message", channel: "C12345", ts: "6666666666.000041" },
         },
       ),
       {},
     );
     expect(result).toBeNull();
-    expect(apiCall).not.toHaveBeenCalled();
+    expect(getReaction).toHaveBeenCalledWith({
+      channel: "C12345",
+      timestamp: "6666666666.000041",
+    });
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            text: "follow up",
+            thread_ts: threadTs,
+          },
+        ),
+        {},
+      ),
+    ).toBeNull();
+  });
+
+  test("a reaction on a tracked root mutes without a Slack lookup", async () => {
+    const { provider } = createStopProvider();
+    const threadTs = "6666666666.000050";
+    await provider.parseWebhookNotification(
+      makeEventPayload({}, { thread_ts: threadTs }),
+      {},
+    );
+    await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "reaction_added",
+          reaction: "mute",
+          item: { type: "message", channel: "C12345", ts: threadTs },
+        },
+      ),
+      {},
+    );
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            text: "follow up",
+            thread_ts: threadTs,
+          },
+        ),
+        {},
+      ),
+    ).toBeNull();
+  });
+
+  test.each([
+    { reaction: "thumbsup", user: "U_SENDER" },
+    { reaction: "mute", user: "UBOT123" },
+  ])("unrelated and self reactions leave activation intact: %j", async (event) => {
+    const { provider } = createStopProvider();
+    const threadTs = "6666666666.000060";
+    await provider.parseWebhookNotification(
+      makeEventPayload({}, { thread_ts: threadTs }),
+      {},
+    );
+    await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          type: "reaction_added",
+          ...event,
+          item: { type: "message", channel: "C12345", ts: threadTs },
+        },
+      ),
+      {},
+    );
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            text: "follow up",
+            thread_ts: threadTs,
+          },
+        ),
+        {},
+      ),
+    ).not.toBeNull();
   });
 });
 

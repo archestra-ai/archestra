@@ -21,6 +21,7 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
+  providerSupportsChat,
   resolveAgentCatalogId,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
@@ -1896,10 +1897,16 @@ export function AgentForm({
       }).compatible,
     [runtime],
   );
+  // The agent's key answers its conversations, so only providers that can
+  // chat are offered; a runtime narrows that further.
+  const apiKeyProviderFilter = useCallback(
+    (provider: SupportedProvider) =>
+      providerSupportsChat(provider) && runtimeProviderFilter(provider),
+    [runtimeProviderFilter],
+  );
   const allowedApiKeyProviders = useMemo(
-    () =>
-      runtime ? SupportedProviders.filter(runtimeProviderFilter) : undefined,
-    [runtime, runtimeProviderFilter],
+    () => SupportedProviders.filter(apiKeyProviderFilter),
+    [apiKeyProviderFilter],
   );
   // A runtime with no explicit model inherits the organization default. Validate
   // that effective model locally before allowing a create or runtime change.
@@ -2802,7 +2809,7 @@ export function AgentForm({
         }}
         onAddApiKey={onAddApiKey}
         currentProvider={currentLlmProvider ?? undefined}
-        providerFilter={runtime ? runtimeProviderFilter : undefined}
+        providerFilter={apiKeyProviderFilter}
         triggerVariant="button"
         triggerClassName="h-8 max-w-[250px] text-xs"
         popoverClassName="w-96"

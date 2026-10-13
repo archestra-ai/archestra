@@ -1,6 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
   APP_RUNTIME_SYSTEM_PROMPT,
+  APPA_KEEPER_AGENT_ICON,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
@@ -131,6 +132,7 @@ export async function syncBuiltInAgents(
             BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
           ],
         ),
+        icon: APPA_KEEPER_AGENT_ICON,
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
         } as const,
@@ -1266,6 +1268,8 @@ type BuiltInAgentDefinition = {
   name: string;
   description: string;
   systemPrompt: string;
+  /** Only built-ins people pick in chat carry one. */
+  icon?: string;
   builtInAgentConfig: BuiltInAgentConfig;
 };
 
@@ -1309,6 +1313,7 @@ async function insertMissingBuiltInAgents(params: {
         scope: "org" as const,
         description: builtInAgent.description,
         systemPrompt: builtInAgent.systemPrompt,
+        icon: builtInAgent.icon ?? null,
         builtInAgentConfig: builtInAgent.builtInAgentConfig,
       })),
     )
@@ -1359,6 +1364,10 @@ async function syncBuiltInAgentRow(params: {
   if (renamed || existing.description !== builtInAgent.description) {
     updates.name = builtInAgent.name;
     updates.description = builtInAgent.description;
+  }
+  // The icon is not editable on a built-in either, for the same reason.
+  if (builtInAgent.icon && existing.icon !== builtInAgent.icon) {
+    updates.icon = builtInAgent.icon;
   }
 
   if (

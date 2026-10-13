@@ -506,6 +506,52 @@ describe("LlmProviderApiKeySelector subscriptions", () => {
     );
   });
 
+  it("neither offers nor auto-selects keys of providers that cannot chat", () => {
+    // Jev serves decisions and Voyage serves embeddings; neither can answer a
+    // conversation, so listing their keys here only offered a dead end.
+    vi.mocked(useAvailableLlmProviderApiKeys).mockReturnValue({
+      data: [
+        { id: "jev-key", name: "Jev", provider: "jev", scope: "personal" },
+        {
+          id: "voyage-key",
+          name: "Voyage",
+          provider: "voyage",
+          scope: "personal",
+        },
+        {
+          id: "anthropic-key",
+          name: "Anthropic",
+          provider: "anthropic",
+          scope: "org",
+        },
+      ] as unknown as LlmProviderApiKey[],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useAvailableLlmProviderApiKeys>);
+    const onApiKeyChange = vi.fn();
+
+    // No OpenAI key exists, so auto-select falls back to any key — personal
+    // first, which used to be the Jev key.
+    render(
+      <LlmProviderApiKeySelector
+        currentConversationChatApiKeyId={null}
+        currentProvider="openai"
+        onApiKeyChange={onApiKeyChange}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /^Jev/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Voyage/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Anthropic Connected/ }),
+    ).toBeInTheDocument();
+    expect(onApiKeyChange).toHaveBeenCalledWith("anthropic-key");
+    expect(onApiKeyChange).not.toHaveBeenCalledWith("jev-key");
+  });
+
   it("recognizes a SuperGrok key as connected without absorbing plain xAI API keys", () => {
     // Both keys live on the `xai` provider; only the subscriptionKind the
     // backend read off the stored secret distinguishes the subscription.

@@ -45,6 +45,7 @@ import {
 } from "@/lib/mcp/mcp-server.query";
 import {
   canFixInstall,
+  canReinstallInstall,
   facetIssues,
   type McpServerAttentionFacet,
   type McpServerIssue,
@@ -493,7 +494,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
     canManageInstalls: !!canManageInstalls,
   };
   const userFlaggedInstalls = allServersForCatalog.filter(
-    (s) => s.reinstallRequired && canFixInstall({ server: s, viewer }),
+    (s) => s.reinstallRequired && canReinstallInstall({ server: s, viewer }),
   );
   const needsReinstall = userFlaggedInstalls.length > 0;
   const needsCatalogReinstall =

@@ -1,5 +1,5 @@
 {
-  "id": "3464fc6a-f76b-450b-b616-a38d35df8e90",
+  "id": "97329a84-b507-48e3-b8ba-c491e03fea6c",
   "prevId": "96af2c48-3a45-4aa6-af45-143e674b7033",
   "version": "7",
   "dialect": "postgresql",
@@ -16111,18 +16111,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "tool_name": {
-          "name": "tool_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_error": {
-          "name": "is_error",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
         "encrypted_chat_conversation_id": {
           "name": "encrypted_chat_conversation_id",
           "type": "uuid",
@@ -19580,6 +19568,12 @@
               "expression": "lower(\"source_marketplace_plugin_name\")",
               "asc": true,
               "isExpression": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_type",
+              "isExpression": false,
+              "asc": true,
               "nulls": "last"
             }
           ],

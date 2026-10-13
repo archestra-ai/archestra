@@ -1287,8 +1287,9 @@ export async function handleLLMProxy<
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
   const appaObserving = appaFeatureEnabled && !appaActive;
-  // An encrypted chat that started while enforcement was off stays out of
-  // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
+  // An encrypted chat that started while enforcement was off, or that a
+  // person superyelled, stays out of OpenAPPA, so the encrypted storage
+  // OpenAPPA lacks does not matter to it.
   if (
     appaActive &&
     isEncryptedChatSession &&
@@ -1984,11 +1985,12 @@ export async function handleLLMProxy<
           }).session,
         ))
       ) {
-        // The session started while enforcement was off. OpenAPPA never
-        // governs it: the request goes on as if enforcement were off.
+        // The session started while enforcement was off, or a person
+        // superyelled it. OpenAPPA never governs it: the request goes on as
+        // if enforcement were off.
         logger.info(
           { sessionId: openappaSession.session_id },
-          "OpenAPPA ignores a session that started while Guardrails enforcement was off",
+          "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
         );
         openappaSession = undefined;
       }
@@ -3339,6 +3341,19 @@ async function handleStreaming<
     const codexError =
       error instanceof CodexResponsesGenerationError ? error : undefined;
     if (codexError) {
+      // The terminal status and its reason are not on the chat completion type.
+      const outcome = asRecord(codexError.completion);
+      logger.warn(
+        {
+          status: outcome?.status,
+          incompleteReason: asRecord(outcome?.incomplete_details)?.reason,
+          errorCode: asRecord(outcome?.error)?.code,
+          errorMessage: asRecord(outcome?.error)?.message,
+          usagePresent: codexError.completion.usage !== undefined,
+          usage: codexError.completion.usage,
+        },
+        "Codex subscription response ended without completing",
+      );
       // Translation keeps partial text and usage, but is not a successful turn.
       failedStreamResponse = codexError.completion;
       streamAdapter.state.usage = provider

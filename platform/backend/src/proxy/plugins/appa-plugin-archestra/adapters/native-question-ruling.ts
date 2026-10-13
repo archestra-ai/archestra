@@ -12,7 +12,7 @@ export function structuredQuestionRuling(
   result: NativeQuestionResult,
   question: string,
 ): NativeQuestionReading {
-  if (result.isError) return "none";
+  if (result.isError) return "unavailable";
   try {
     const parsed = JSON.parse(result.content) as { answers?: unknown };
     if (typeof parsed === "string") return textQuestionRuling(parsed, question);
@@ -29,7 +29,7 @@ export function openCodeQuestionRuling(
   result: NativeQuestionResult,
   question: string,
 ): NativeQuestionReading {
-  if (result.isError) return "none";
+  if (result.isError) return "unavailable";
   return textQuestionRuling(result.content, question);
 }
 
@@ -63,7 +63,7 @@ function textQuestionRuling(
         return rulingFromValues([label]);
     }
   }
-  return NO_ANSWER_TEXTS.includes(content.trim()) ? "none" : "unrecognized";
+  return NO_ANSWER.get(content.trim()) ?? "unrecognized";
 }
 
 function rulingFromValues(values: readonly string[]): NativeQuestionRuling {
@@ -90,11 +90,11 @@ const ANSWER_OPENINGS = [
 ];
 
 // The whole answer when the user answered nothing: Claude Code, and earlier
-// Claude Code versions. These can only withhold an approval.
-const NO_ANSWER_TEXTS = [
-  "The user did not answer the questions.",
-  "User has declined to answer your questions.",
-];
+// Claude Code versions. These close the review; they are not a Deny.
+const NO_ANSWER = new Map<string, "unanswered" | "declined">([
+  ["The user did not answer the questions.", "unanswered"],
+  ["User has declined to answer your questions.", "declined"],
+]);
 
 // What follows a selected option: the closing sentence, or the selected
 // option's preview (Claude Code).

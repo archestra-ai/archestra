@@ -1,7 +1,7 @@
 "use client";
 
 import type { Column, ColumnDef, SortingState } from "@tanstack/react-table";
-import { Bot, ChevronDown, ChevronUp, MessageCircle } from "lucide-react";
+import { Bot, ChevronDown, ChevronUp, TriangleAlert } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
@@ -22,7 +22,7 @@ import {
   type CoverageEntity,
   useCoverageEntities,
 } from "@/lib/openappa-coverage.query";
-import { OpenAppaChatButton } from "./openappa-chat-button";
+import { cn } from "@/lib/utils/tailwind";
 import { RuleCoverageBar } from "./rule-coverage-bar";
 import { ToolTable } from "./tool-table";
 
@@ -144,39 +144,15 @@ export function EntitiesTable() {
               total={row.original.toolCount}
               className="h-1.5 min-w-0 max-w-48 flex-1"
             />
-            <span className="text-muted-foreground w-28 shrink-0 whitespace-nowrap text-right text-xs tabular-nums">
-              {`${(row.original.rules.root + row.original.rules.battery + row.original.rules.catchAll).toLocaleString()} of ${row.original.toolCount.toLocaleString()} covered`}
-            </span>
+            <CoverageCount
+              covered={
+                row.original.rules.root +
+                row.original.rules.battery +
+                row.original.rules.catchAll
+              }
+              total={row.original.toolCount}
+            />
           </div>
-        ),
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        size: 100,
-        cell: ({ row }) => (
-          <OpenAppaChatButton
-            permissions={
-              row.original.type === "mcp_server"
-                ? { mcpRegistry: ["read"] }
-                : {}
-            }
-            variant="outline"
-            size="sm"
-            className="h-7"
-            // On the button, so a refused one, which drops the link, keeps it.
-            aria-label={`Ask in chat: ${row.original.name}`}
-            promptKey="reviewCoverage"
-            target={{
-              kind: row.original.type,
-              id: row.original.id,
-              name: row.original.name,
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <MessageCircle />
-            <span>Ask</span>
-          </OpenAppaChatButton>
         ),
       },
     ],
@@ -379,6 +355,27 @@ function EntitySummary({ entity }: { entity: CoverageEntity }) {
             <span>{stat.label}</span>
           </span>
         ))}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * "N of M covered", turned to a warning when fewer than half of the tools
+ * have a rule: those calls run with any data.
+ */
+function CoverageCount({ covered, total }: { covered: number; total: number }) {
+  const low = total > 0 && covered * 2 < total;
+  return (
+    <span
+      className={cn(
+        "flex w-36 shrink-0 items-center justify-end gap-1.5 whitespace-nowrap text-xs tabular-nums",
+        low ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
+      )}
+    >
+      {low && <TriangleAlert aria-hidden className="size-3.5" />}
+      <span>
+        {`${covered.toLocaleString()} of ${total.toLocaleString()}${low ? (covered === 0 ? " · no rules" : " · low") : " covered"}`}
       </span>
     </span>
   );

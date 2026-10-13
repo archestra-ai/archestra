@@ -90,6 +90,7 @@ import { useCoverageSummary } from "@/lib/openappa-coverage.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
   type RuntimeCredentialDefinition,
+  useCanUseEveryCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -152,10 +153,11 @@ const knownFilter = (
 export function BatteriesUploadAction() {
   const pathname = usePathname();
   const declarations = usePolicyDeclarations();
-  const { data: canBind } = useHasPermissions({
+  const { data: canEditPolicy } = useHasPermissions({
     openappaPolicy: ["update"],
-    credential: ["update"],
   });
+  const { data: canUseEveryCredential } = useCanUseEveryCredential();
+  const canBind = canEditPolicy === true && canUseEveryCredential === true;
   const [uploading, setUploading] = useState(false);
   if (
     pathname !== "/openappa/batteries" ||
@@ -185,11 +187,9 @@ export function BatteriesPanel() {
     openappaPolicy: ["update"],
   });
   // Binding a credential hands its value to helper code, and an uploaded
-  // package may carry such code, so both take the credential permission too.
-  const { data: canBind } = useHasPermissions({
-    openappaPolicy: ["update"],
-    credential: ["update"],
-  });
+  // package may carry such code, so both take Can use on every credential too.
+  const { data: canUseEveryCredential } = useCanUseEveryCredential();
+  const canBind = canManage === true && canUseEveryCredential === true;
   // Filters and page live in the URL, so a reload or a shared link keeps them.
   const {
     searchParams,

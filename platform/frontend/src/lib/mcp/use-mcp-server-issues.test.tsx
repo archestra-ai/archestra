@@ -10,6 +10,7 @@ vi.mock("@/lib/mcp/use-can-reauthenticate", () => ({
   useCanReauthenticate: () => () => true,
 }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: () => ({
     data: [
       {

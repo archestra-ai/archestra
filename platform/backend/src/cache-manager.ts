@@ -58,6 +58,8 @@ export const CacheKey = {
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** review_required results the proxy already asked the client to put to the user, once each */
+  OpenAppaHitlQuestionAsked: "openappa-hitl-question-asked",
   /** Per-call server-issued review status, for history only; never a ruling. */
   OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
   /** Pending OpenAPPA review indexed by a verified runtime workspace */

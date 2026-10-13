@@ -1,3 +1,4 @@
+import { APPA_KEEPER_AGENT_ICON } from "@archestra/shared";
 import { siAnthropic, siGithub, siGitlab } from "simple-icons";
 
 /** Values the shared Agent icon controls render as images rather than emoji. */
@@ -20,7 +21,11 @@ export function getBuiltInServiceIconPath(
 export function isBuiltInServiceIcon(
   icon: string | null | undefined,
 ): icon is string {
-  return icon === "logo:openappa" || getBuiltInServiceIconPath(icon) !== null;
+  return (
+    icon === "logo:openappa" ||
+    icon === APPA_KEEPER_AGENT_ICON ||
+    getBuiltInServiceIconPath(icon) !== null
+  );
 }
 
 /**

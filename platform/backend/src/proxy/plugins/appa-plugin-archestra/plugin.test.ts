@@ -1378,6 +1378,111 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("asks once per review_required result when Codex resends its history", async () => {
+    // Codex sends the whole conversation on every request. In `codex exec`
+    // the form cannot be shown, so ask_user fails and the review stays open.
+    // Asking again on every later request forced Codex into another ask_user
+    // call each turn, with no way to end the turn.
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const sessionId = "codex-exec-review";
+    const reviewRequired = (id: string) => ({
+      id,
+      name: "archestra__execute_remedy_plan",
+      content: JSON.stringify({
+        ok: false,
+        outcome: "review_required",
+        offer_id: "offer-exec",
+      }),
+      isError: false,
+    });
+    const noViewer = {
+      id: "call_ask",
+      name: "archestra__ask_user",
+      content:
+        "This client cannot show the HITL review. Keep the tool call blocked. Do not ask for approval in plain text and do not retry it.",
+      isError: true,
+    };
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const turn = async (
+      toolResults: Parameters<typeof plugin.onToolResults>[0]["toolResults"],
+    ) => {
+      const context = requestContext({ sessionId });
+      context.headers = { originator: "codex_cli_rs" };
+      context.provider = "openai";
+      context.interactionType = "openai:responses";
+      const trusted = context.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      trusted.request = {
+        tools: {
+          control: { name: "archestra__execute_remedy_plan" },
+          notice: { name: "archestra__get_remedy_plans" },
+          askUser: { name: "archestra__ask_user" },
+          platformToolNames: new Set(),
+          namespaces: new Map(),
+        },
+        customTools: new Set(),
+        declaredTools: [],
+        session: {},
+      };
+      const request = {
+        instructions: "Base",
+        input: [] as unknown[],
+        tool_choice: "auto",
+        parallel_tool_calls: true,
+      };
+      try {
+        await plugin.onSessionInit(context);
+        await plugin.onToolResults({ ...context, toolResults });
+        await plugin.onBeforeModel({ ...context, request });
+      } finally {
+        await plugin.onCleanup(context);
+      }
+      return {
+        asked: JSON.stringify(request).includes(
+          "The policy needs the user's approval for the last execute_remedy_plan result.",
+        ),
+        toolChoice: request.tool_choice,
+      };
+    };
+    await stageHitlReview({
+      session: (
+        requestContext({ sessionId }).resources.get(
+          APPA_PLUGIN_TRUSTED_CONTEXT,
+        ) as AppaTrustedContext
+      ).session,
+      review: { offerId: "offer-exec", text: "Canonical HITL review." },
+    });
+
+    try {
+      // The result comes back: the model is told to ask, and must call a tool.
+      await expect(turn([reviewRequired("call_execute")])).resolves.toEqual({
+        asked: true,
+        toolChoice: "required",
+      });
+      // ask_user could not show the form. The same result, resent, asks
+      // nothing, so the model can explain that the call stays blocked.
+      await expect(
+        turn([reviewRequired("call_execute"), noViewer]),
+      ).resolves.toEqual({ asked: false, toolChoice: "auto" });
+      await expect(
+        turn([reviewRequired("call_execute"), noViewer]),
+      ).resolves.toEqual({ asked: false, toolChoice: "auto" });
+      // A new execute_remedy_plan call for the review is asked about once more.
+      await expect(
+        turn([
+          reviewRequired("call_execute"),
+          noViewer,
+          reviewRequired("call_execute_again"),
+        ]),
+      ).resolves.toEqual({ asked: true, toolChoice: "required" });
+    } finally {
+      processResults.mockRestore();
+    }
+  });
+
   test("hands OpenCode the model's ask_user as its question tool", async () => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({

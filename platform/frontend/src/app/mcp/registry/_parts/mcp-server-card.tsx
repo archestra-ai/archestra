@@ -69,7 +69,6 @@ import {
   canFixInstall,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
-import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { isCardShowingInstallInProgress } from "./card-install-state";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
@@ -97,6 +96,7 @@ import {
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 import { OAuthReauthIndicator } from "./oauth-reauth-indicator";
+import { isOwnPersonalInstall } from "./uninstall-scope";
 import {
   UninstallServerDialog,
   type UninstallServerInstall,
@@ -299,16 +299,17 @@ export function McpServerCard({
     (s) => s.catalogId === item.id,
   );
 
-  // Find the current user's personal connection for this catalog item
-  const personalServer = mcpServerOfCurrentCatalogItem?.find(
-    (s) => s.ownerId === currentUserId && !s.teamId,
+  // Find the current user's personal connection for this catalog item. An
+  // org-wide install the user created is not theirs to uninstall here.
+  const personalServer = mcpServerOfCurrentCatalogItem?.find((s) =>
+    isOwnPersonalInstall(s, currentUserId),
   );
 
   const allServersForCatalog = (allMcpServers ?? []).filter(
     (s) => s.catalogId === item.id,
   );
-  const personalServersForCatalog = allServersForCatalog.filter(
-    (s) => s.ownerId === currentUserId && !s.teamId,
+  const personalServersForCatalog = allServersForCatalog.filter((s) =>
+    isOwnPersonalInstall(s, currentUserId),
   );
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
@@ -337,7 +338,12 @@ export function McpServerCard({
     return install
       ? [
           {
-            server: { id: install.id, name: install.name },
+            server: {
+              id: install.id,
+              name: install.name,
+              scope: install.scope,
+              teamId: install.teamId,
+            },
             assignedAgents: install.assignedAgents ?? [],
           },
         ]
@@ -400,22 +406,18 @@ export function McpServerCard({
 
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
-  // Check for OAuth refresh errors on any credential the user can see
-  // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
-  // Re-auth entry point gated by per-connection permission, not catalog-edit
-  // access; the detailed reason lives on the credentials tab. When several
-  // connections have failed, prefer one the caller can re-authenticate so the
-  // marker stays actionable regardless of row order.
-  const canReauthenticate = useCanReauthenticate();
-  const oauthFailedServers =
-    mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [];
-  const oauthFailedServer =
-    oauthFailedServers.find((s) => canReauthenticate(s)) ??
-    oauthFailedServers[0];
-  const oauthReauthIndicator = oauthFailedServer ? (
+  // The re-auth marker follows the shared issue rule: it shows only when a
+  // connection the viewer's own calls resolve to lost its sign-in, never for a
+  // colleague's connection an admin merely sees. It is a click target when the
+  // viewer may re-authenticate that connection; the detailed reason lives on
+  // the credentials tab.
+  const viewerReauthIssue = issues?.find(
+    (issue) => issue.kind === "needs-reauth" && issue.onViewerConnection,
+  );
+  const oauthReauthIndicator = viewerReauthIssue ? (
     <OAuthReauthIndicator
       onActivate={
-        canReauthenticate(oauthFailedServer)
+        viewerReauthIssue.audience === "you"
           ? () => goToItemPage("credentials")
           : undefined
       }

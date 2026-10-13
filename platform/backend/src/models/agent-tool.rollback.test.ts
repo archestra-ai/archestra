@@ -189,12 +189,26 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
       serverTwo.id,
     ]);
 
+    // `pinned` tells the uninstall dialog which agents lose this install for
+    // every caller, rather than only for callers who resolve to it.
     expect(result.get(serverOne.id)).toEqual([
-      expect.objectContaining({ id: dynamicAgent.id, name: "Dynamic Agent" }),
-      expect.objectContaining({ id: pinnedAgent.id, name: "Pinned Agent" }),
+      expect.objectContaining({
+        id: dynamicAgent.id,
+        name: "Dynamic Agent",
+        pinned: false,
+      }),
+      expect.objectContaining({
+        id: pinnedAgent.id,
+        name: "Pinned Agent",
+        pinned: true,
+      }),
     ]);
     expect(result.get(serverTwo.id)).toEqual([
-      expect.objectContaining({ id: dynamicAgent.id, name: "Dynamic Agent" }),
+      expect.objectContaining({
+        id: dynamicAgent.id,
+        name: "Dynamic Agent",
+        pinned: false,
+      }),
     ]);
   });
 
@@ -221,7 +235,11 @@ describe("AgentToolModel.getAssignedAgentDetailsForMcpServers", () => {
     ]);
 
     expect(result.get(server.id)).toEqual([
-      expect.objectContaining({ id: agent.id, name: "Both Rules Agent" }),
+      expect.objectContaining({
+        id: agent.id,
+        name: "Both Rules Agent",
+        pinned: true,
+      }),
     ]);
   });
 

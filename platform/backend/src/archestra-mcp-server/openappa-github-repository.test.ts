@@ -205,7 +205,7 @@ describe("connect_guardrails_repository", () => {
 
     expect(response.isError).toBe(true);
     expect(JSON.stringify(response.content)).toContain(
-      "Stop the existing GitHub sync before connecting another repository",
+      "Stop the current Git sync before connecting another repository",
     );
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       repo: "example/current-policy",

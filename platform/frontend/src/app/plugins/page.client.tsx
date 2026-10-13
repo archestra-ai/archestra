@@ -5,7 +5,7 @@ import {
   Braces,
   ChevronDown,
   ChevronUp,
-  Github,
+  GitBranch,
   PackagePlus,
   Pencil,
   Plus,
@@ -76,6 +76,7 @@ import {
   useDeletePlugin,
   usePlugins,
 } from "@/lib/plugins/plugin.query";
+import { repositoryLabel } from "@/lib/skills/skill-source";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import {
   getPluginActionModel,
@@ -89,7 +90,10 @@ import {
   pluginDetailHref,
   resolvePluginInstallSelection,
 } from "./_parts/plugin-page-config";
-import { PluginSourceIcon } from "./_parts/plugin-source-icon";
+import {
+  PluginSourceIcon,
+  pluginRepository,
+} from "./_parts/plugin-source-icon";
 import { PluginSourceInfo } from "./_parts/plugin-source-info";
 
 const PLUGINS_DESCRIPTION =
@@ -200,9 +204,7 @@ function PluginsList() {
               return false;
           }
           if (sourceRepo) {
-            const pluginRepo =
-              plugin.sourceMarketplaceRepo ?? plugin.sourceRepo;
-            if (pluginRepo !== sourceRepo) return false;
+            if (pluginRepository(plugin) !== sourceRepo) return false;
           }
           return true;
         })
@@ -219,7 +221,7 @@ function PluginsList() {
       Array.from(
         new Set(
           (plugins ?? [])
-            .map((plugin) => plugin.sourceMarketplaceRepo ?? plugin.sourceRepo)
+            .map(pluginRepository)
             .filter((repo): repo is string => !!repo),
         ),
       ).sort(),
@@ -542,8 +544,8 @@ function PluginsList() {
                             ["all", "All sources"],
                             [
                               "github",
-                              "GitHub",
-                              <Github key="github" className="size-4" />,
+                              "Git repository",
+                              <GitBranch key="github" className="size-4" />,
                             ],
                             [
                               "manual",
@@ -580,7 +582,7 @@ function PluginsList() {
                                       (repo) =>
                                         [
                                           repo,
-                                          repo,
+                                          repositoryLabel(repo),
                                           <RepositoryOwnerIcon
                                             key={repo}
                                             repo={repo}

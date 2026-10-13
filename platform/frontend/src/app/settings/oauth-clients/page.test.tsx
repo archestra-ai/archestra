@@ -268,7 +268,7 @@ describe("OauthClientsPage", () => {
     );
   });
 
-  it("offers the permissions of both client kinds from the header menu", async () => {
+  it("offers the permissions of both client kinds as header buttons", async () => {
     let headerAction: React.ReactNode = null;
     const { useSetSettingsAction } = await import("@/app/settings/layout");
     vi.mocked(useSetSettingsAction).mockReturnValue((node) => {
@@ -289,13 +289,14 @@ describe("OauthClientsPage", () => {
       </QueryClientProvider>,
     );
 
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-
     expect(
-      screen.getByRole("menuitem", { name: "LLM client permissions" }),
+      screen.getByRole("button", { name: "LLM client permissions" }),
     ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "MCP client permissions" }),
+    );
     expect(
-      screen.getByRole("menuitem", { name: "MCP client permissions" }),
+      await screen.findByRole("dialog", { name: /Permissions for all/ }),
     ).toBeVisible();
   });
 });

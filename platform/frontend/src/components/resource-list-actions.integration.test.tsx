@@ -137,8 +137,7 @@ it("edits only the all-agents policy and guards dismissing unsaved changes", asy
   );
   renderActions();
   const user = userEvent.setup();
-  await user.click(screen.getByRole("button", { name: "More actions" }));
-  await user.click(screen.getByRole("menuitem", { name: "Permissions" }));
+  await user.click(screen.getByRole("button", { name: "Permissions" }));
   const dialog = await screen.findByRole("dialog", {
     name: "Permissions for all agents",
   });
@@ -220,6 +219,9 @@ it("does not offer all-resource permissions to a recipient with only individual 
     screen.getByRole("menuitem", { name: "Import Agent" }),
   ).toBeInTheDocument();
   expect(
+    screen.queryByRole("button", { name: "Permissions" }),
+  ).not.toBeInTheDocument();
+  expect(
     screen.queryByRole("menuitem", { name: "Permissions" }),
   ).not.toBeInTheDocument();
 });
@@ -246,6 +248,14 @@ it("opens a linked read-only permissions dialog for the current resource and pre
   });
 });
 
+it("shows Permissions as a button and no empty menu when a page has no other actions", async () => {
+  renderActions();
+  expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "More actions" }),
+  ).not.toBeInTheDocument();
+});
+
 it("adds recipients to the permission draft in the same dialog", async () => {
   server.use(
     http.get(`${origin}/api/resource-permissions/agent/:scope/subjects`, () =>
@@ -256,8 +266,7 @@ it("adds recipients to the permission draft in the same dialog", async () => {
   );
   renderActions();
   const user = userEvent.setup();
-  await user.click(screen.getByRole("button", { name: "More actions" }));
-  await user.click(screen.getByRole("menuitem", { name: "Permissions" }));
+  await user.click(screen.getByRole("button", { name: "Permissions" }));
   const dialog = await screen.findByRole("dialog", {
     name: "Permissions for all agents",
   });

@@ -1247,6 +1247,18 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteGithubAppConfig]: {},
   // stored PATs share the githubAppConfig resource: both are org GitHub
   // credentials managed on the same settings page by the same audience
+  [RouteId.ListGitCredentials]: {
+    credential: ["read"],
+  },
+  [RouteId.CreateGitlabToken]: {
+    credential: ["create"],
+  },
+  [RouteId.ListGitCredentialRepositories]: {
+    credential: ["read"],
+  },
+  [RouteId.ListGitCredentialNamespaces]: {
+    credential: ["read"],
+  },
   [RouteId.ListGithubPats]: {
     credential: ["read"],
   },

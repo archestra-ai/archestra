@@ -1,11 +1,8 @@
+import { gitWebUrls } from "@archestra/shared";
+import { resolveGitSourceAccess } from "@/git-hosts/git-access";
 import logger from "@/logging";
 import { SkillModel } from "@/models";
-import {
-  resolveGithubPatToken,
-  resolveGithubSkillAppCredentials,
-} from "@/skills/github-app-token";
 import { importSkills } from "@/skills/github-import";
-import type { GithubSkillSource } from "@/skills/github-source";
 import { isSkillNameConflict, toSkillInsertFields } from "@/skills/validation";
 import { ApiError, type Skill } from "@/types";
 
@@ -26,7 +23,7 @@ export async function handleSkillGithubSync(
 ): Promise<void> {
   const skillId = typeof payload.skillId === "string" ? payload.skillId : null;
   if (!skillId) {
-    throw new Error("Missing skillId in skill GitHub sync payload");
+    throw new Error("Missing skillId in skill Git sync payload");
   }
 
   const skill = await SkillModel.findById(skillId);
@@ -40,7 +37,7 @@ export async function handleSkillGithubSync(
     const message = syncErrorMessage(error);
     logger.warn(
       { skillId: skill.id, skillName: skill.name, error: message },
-      "[Skills] GitHub sync failed; keeping last synced content",
+      "[Skills] Git sync failed; keeping last synced content",
     );
     await SkillModel.markGithubSyncResult(skill.id, message);
   }
@@ -56,44 +53,27 @@ async function syncSkill(skill: Skill): Promise<void> {
     );
   }
 
-  const credentials: {
-    githubToken?: string;
-    githubSource?: GithubSkillSource;
-  } = skill.githubAppConfigId
-    ? await resolveGithubSkillAppCredentials({
-        githubAppConfigId: skill.githubAppConfigId,
-        organizationId: skill.organizationId,
-      })
-    : {
-        githubToken: skill.githubPatId
-          ? await resolveGithubPatToken({
-              githubPatId: skill.githubPatId,
-              organizationId: skill.organizationId,
-            })
-          : undefined,
-      };
-  const sourceOrigin = skill.sourceOrigin ?? "https://github.com";
-  if (
-    (credentials.githubSource?.webOrigin ?? "https://github.com") !==
-    sourceOrigin
-  ) {
-    throw new Error(
-      "GitHub App host does not match the skill's original repository host",
-    );
-  }
+  const access = await resolveGitSourceAccess({
+    organizationId: skill.organizationId,
+    provider: skill.sourceProvider ?? "github",
+    credentialId:
+      skill.githubAppConfigId ?? skill.gitlabTokenId ?? skill.githubPatId,
+    origin: skill.sourceOrigin,
+  });
 
-  // convey the tracking ref through the URL form parseRepoUrl understands;
+  // convey the tracking ref through the URL form the parser understands;
   // no ref tracks the repo's default branch (HEAD) on every pull.
-  const repoUrl =
-    `${sourceOrigin}/${source.owner}/${source.repo}` +
-    (skill.githubSyncRef
-      ? `/tree/${encodeURIComponent(skill.githubSyncRef)}`
-      : "");
+  const repoUrl = skill.githubSyncRef
+    ? gitWebUrls({ host: access.host, path: source.repo }).tree(
+        skill.githubSyncRef,
+      )
+    : `${access.host.webUrl}/${source.repo}`;
 
   const [imported] = await importSkills({
     repoUrl,
-    ...credentials,
+    access,
     skillPaths: [source.skillPath],
+    fresh: true,
   });
   if (!imported) {
     throw new Error(`No skill found at ${source.skillPath}`);
@@ -102,7 +82,7 @@ async function syncSkill(skill: Skill): Promise<void> {
   if (imported.sourceCommit === skill.sourceCommit) {
     logger.debug(
       { skillId: skill.id, commit: skill.sourceCommit },
-      "[Skills] GitHub sync: source unchanged",
+      "[Skills] Git sync: source unchanged",
     );
     return;
   }
@@ -135,22 +115,25 @@ async function syncSkill(skill: Skill): Promise<void> {
       commit: imported.sourceCommit,
       skippedFiles: imported.skippedFiles.length,
     },
-    "[Skills] GitHub sync: skill updated from source",
+    "[Skills] Git sync: skill updated from source",
   );
 }
 
-/** Split a `owner/repo@ref:path` provenance string; path may be empty. */
+/**
+ * Split a `owner/repo@ref:path` (or GitLab `group/sub/project@ref:path`)
+ * provenance string; path may be empty.
+ */
 function parseSourceRef(
   sourceRef: string | null,
-): { owner: string; repo: string; skillPath: string } | null {
+): { repo: string; skillPath: string } | null {
   if (!sourceRef) return null;
   const atIdx = sourceRef.indexOf("@");
   if (atIdx === -1) return null;
-  const [owner, repo] = sourceRef.slice(0, atIdx).split("/");
-  if (!owner || !repo) return null;
+  const repo = sourceRef.slice(0, atIdx);
+  if (repo.split("/").filter(Boolean).length < 2) return null;
   const colonIdx = sourceRef.indexOf(":", atIdx);
   if (colonIdx === -1) return null;
-  return { owner, repo, skillPath: sourceRef.slice(colonIdx + 1) };
+  return { repo, skillPath: sourceRef.slice(colonIdx + 1) };
 }
 
 function syncErrorMessage(error: unknown): string {

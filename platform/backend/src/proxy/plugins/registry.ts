@@ -1,3 +1,4 @@
+import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -792,10 +793,10 @@ function addsOnlyRuntimeProof(params: {
   if (!before || !after) return false;
   const { attachment } = params;
   const originalArgs = attachment.wrapped
-    ? argumentRecord(canonicalJson(before.tool_args))
+    ? readRunToolArgs(before.tool_args)
     : before;
   const signedArgs = attachment.wrapped
-    ? argumentRecord(canonicalJson(after.tool_args))
+    ? readRunToolArgs(after.tool_args)
     : after;
   if (
     !originalArgs ||
@@ -808,8 +809,10 @@ function addsOnlyRuntimeProof(params: {
   if (attachment.wrapped) {
     const { tool_args: beforeArgs, ...beforeWrapper } = before;
     const { tool_args: afterArgs, ...afterWrapper } = after;
+    // Missing tool_args are an empty object; the proof adds that object.
+    const beforeForm = beforeArgs === undefined ? "object" : typeof beforeArgs;
     if (
-      typeof beforeArgs !== typeof afterArgs ||
+      beforeForm !== typeof afterArgs ||
       canonicalJson(beforeWrapper) !== canonicalJson(afterWrapper)
     )
       return false;

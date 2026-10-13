@@ -555,7 +555,12 @@ const McpServerRowActions = memo(function McpServerRowActions({
     return install
       ? [
           {
-            server: { id: install.id, name: install.name },
+            server: {
+              id: install.id,
+              name: install.name,
+              scope: install.scope,
+              teamId: install.teamId,
+            },
             assignedAgents: install.assignedAgents ?? [],
           },
         ]

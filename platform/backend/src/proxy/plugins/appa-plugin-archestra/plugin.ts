@@ -4880,6 +4880,8 @@ async function pendingNativeHitlOfferIds(params: {
 /**
  * Whether the proxy already asked for the user's approval after this
  * review_required result. Records the current ask so the next one counts.
+ * Not atomic: a client sends a session's requests one after another, and two
+ * parallel requests could at worst ask once more, never skip the question.
  */
 async function reviewQuestionAskedBefore(params: {
   session: OpenAppaSession;

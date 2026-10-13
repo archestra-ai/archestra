@@ -6,10 +6,10 @@ import {
   type PaginationQuery,
   PERSONAL_MCP_GATEWAY_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   providerRequiresPerUserCredential,
   type ResourcePermissionGrant,
-  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
   TimeInMs,
@@ -843,9 +843,9 @@ class AgentModel {
       // apps without per-agent setup.
       await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
 
-      // Code-execution sandbox + persistent-files tools — gated on the sandbox
-      // runtime flag, same as the composer.
-      if (composesGroup(SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES)) {
+      // Persistent-files tools, plus the code runtime tools when the runtime
+      // is on — the same composition as the create form.
+      if (composesGroup(PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES)) {
         await ToolModel.assignSandboxToolsToAgent(
           createdAgent.id,
           organizationId,

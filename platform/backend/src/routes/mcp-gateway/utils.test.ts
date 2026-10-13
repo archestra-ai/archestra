@@ -3364,12 +3364,6 @@ describe("createAgentServer tools/list", () => {
     const copyFileName = archestraMcpBranding.getToolName(
       TOOL_COPY_FILE_SHORT_NAME,
     );
-    // copy_file only exists under the sandbox runtime, so without this both
-    // copy_file assertions below would pass for the wrong reason.
-    const config = (await import("@/config")).default;
-    const originalSandboxEnabled = config.skillsSandbox.enabled;
-    (config.skillsSandbox as { enabled: boolean }).enabled = true;
-
     const gatewayAgent = await makeAgent({
       toolExposureMode: "full",
       organizationId: org.id,
@@ -3412,24 +3406,19 @@ describe("createAgentServer tools/list", () => {
       return new Set(response.tools.map((tool) => tool.name));
     };
 
-    try {
-      const gatewayNames = await listFor(gatewayAgent.id);
-      expect(gatewayNames.has(renderAppName)).toBe(false);
-      // copy_file is chat-locked for the same reason: it exchanges files with
-      // the app the user has open in chat, and an external client has neither a
-      // conversation nor an open app, so every call there could only refuse.
-      expect(gatewayNames.has(copyFileName)).toBe(false);
-      // The rest of the authoring surface (scaffold/read/edit/validate) works
-      // from external clients and stays.
-      expect(gatewayNames.has(scaffoldAppName)).toBe(true);
+    const gatewayNames = await listFor(gatewayAgent.id);
+    expect(gatewayNames.has(renderAppName)).toBe(false);
+    // copy_file is chat-locked for the same reason: it exchanges files with
+    // the app the user has open in chat, and an external client has neither a
+    // conversation nor an open app, so every call there could only refuse.
+    expect(gatewayNames.has(copyFileName)).toBe(false);
+    // The rest of the authoring surface (scaffold/read/edit/validate) works
+    // from external clients and stays.
+    expect(gatewayNames.has(scaffoldAppName)).toBe(true);
 
-      const chatNames = await listFor(chatAgent.id);
-      expect(chatNames.has(renderAppName)).toBe(true);
-      expect(chatNames.has(copyFileName)).toBe(true);
-    } finally {
-      (config.skillsSandbox as { enabled: boolean }).enabled =
-        originalSandboxEnabled;
-    }
+    const chatNames = await listFor(chatAgent.id);
+    expect(chatNames.has(renderAppName)).toBe(true);
+    expect(chatNames.has(copyFileName)).toBe(true);
   });
 
   // The list exclusion above is not enough on its own: sibling tool

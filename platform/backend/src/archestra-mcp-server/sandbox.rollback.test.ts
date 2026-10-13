@@ -3474,7 +3474,7 @@ describe("edit_file / delete_file", () => {
   });
 });
 
-describe("persistent-files tools follow the sandbox runtime flag", () => {
+describe("persistent-files tools without the code runtime", () => {
   const originalSandbox = config.skillsSandbox.enabled;
   afterAll(() => {
     (config.skillsSandbox as { enabled: boolean }).enabled = originalSandbox;
@@ -3497,7 +3497,7 @@ describe("persistent-files tools follow the sandbox runtime flag", () => {
     }
   });
 
-  test("hides every sandbox tool when the runtime is off", () => {
+  test("with the runtime off, keeps the PFS tools and hides only the runtime tools", () => {
     (config.skillsSandbox as { enabled: boolean }).enabled = false;
     const names = getArchestraMcpTools().map((tool) => tool.name);
     for (const name of [
@@ -3506,11 +3506,134 @@ describe("persistent-files tools follow the sandbox runtime flag", () => {
       TOOL_SAVE_FILE_FULL_NAME,
       TOOL_EDIT_FILE_FULL_NAME,
       TOOL_DELETE_FILE_FULL_NAME,
+    ]) {
+      expect(names).toContain(name);
+    }
+    for (const name of [
       TOOL_RUN_COMMAND_FULL_NAME,
       TOOL_DOWNLOAD_FILE_FULL_NAME,
       TOOL_UPLOAD_FILE_FULL_NAME,
     ]) {
       expect(names).not.toContain(name);
     }
+  });
+
+  test("with the runtime off, an agent saves, finds, reads, edits and deletes a file", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+    const agent = await makeAgent({ name: "No Runtime Files Agent" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    // The runtime-off catalog: the file tools are seeded and assignable.
+    await seedAndAssignArchestraTools(agent.id);
+    const project = await ProjectModel.create({
+      organizationId: agent.organizationId,
+      userId: user.id,
+      name: "no-runtime",
+      description: null,
+    });
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: agent.organizationId,
+      agentId: agent.id,
+      projectId: project.id,
+      title: "no runtime",
+    });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      conversationId: conversation.id,
+    };
+
+    const saved = await executeArchestraTool(
+      TOOL_SAVE_FILE_FULL_NAME,
+      { filename: "notes.md", content: "draft one" },
+      ctx,
+    );
+    expect(saved.isError, textOf(saved)).toBeFalsy();
+
+    const found = await executeArchestraTool(
+      TOOL_SEARCH_FILES_FULL_NAME,
+      {},
+      ctx,
+    );
+    expect(textOf(found)).toContain("notes.md");
+
+    const edited = await executeArchestraTool(
+      TOOL_EDIT_FILE_FULL_NAME,
+      { filename: "notes.md", old_string: "one", new_string: "two" },
+      ctx,
+    );
+    expect(edited.isError, textOf(edited)).toBeFalsy();
+
+    const read = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { filename: "notes.md" },
+      ctx,
+    );
+    expect(textOf(read)).toContain("draft two");
+
+    const deleted = await executeArchestraTool(
+      TOOL_DELETE_FILE_FULL_NAME,
+      { filename: "notes.md" },
+      ctx,
+    );
+    expect(deleted.isError, textOf(deleted)).toBeFalsy();
+    expect(
+      await FileModel.listByProject({
+        organizationId: agent.organizationId,
+        projectId: project.id,
+      }),
+    ).toEqual([]);
+  });
+  test("with the runtime off, read_file on a binary file doesn't send the agent to sandbox tools", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    seedAndAssignArchestraTools,
+  }) => {
+    (config.skillsSandbox as { enabled: boolean }).enabled = false;
+    const agent = await makeAgent({ name: "No Runtime Binary Agent" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
+    await seedAndAssignArchestraTools(agent.id);
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: agent.organizationId,
+      agentId: agent.id,
+      title: "binary",
+    });
+    const ctx: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      agentId: agent.id,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      conversationId: conversation.id,
+    };
+    const saved = await executeArchestraTool(
+      TOOL_SAVE_FILE_FULL_NAME,
+      {
+        filename: "blob.bin",
+        contentBase64: Buffer.from([0, 1, 2, 0, 255]).toString("base64"),
+      },
+      ctx,
+    );
+    expect(saved.isError, textOf(saved)).toBeFalsy();
+
+    const read = await executeArchestraTool(
+      TOOL_READ_FILE_FULL_NAME,
+      { filename: "blob.bin" },
+      ctx,
+    );
+    expect(read.isError).toBe(true);
+    expect(textOf(read)).toContain("no code sandbox");
+    expect(textOf(read)).not.toContain("upload_file");
+    expect(textOf(read)).not.toContain("run_command");
   });
 });

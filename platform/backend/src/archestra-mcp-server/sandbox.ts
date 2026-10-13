@@ -762,7 +762,7 @@ const registry = defineArchestraTools([
     schema: RunCommandSchema,
     outputSchema: RunCommandOutputSchema,
     async handler({ args, context }) {
-      const guard = ensureUsable(context);
+      const guard = ensureRuntimeUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
       const resolved = await resolveTarget({
@@ -818,7 +818,7 @@ const registry = defineArchestraTools([
     schema: DownloadFileSchema,
     outputSchema: DownloadFileOutputSchema,
     async handler({ args, context }) {
-      const guard = ensureUsable(context);
+      const guard = ensureRuntimeUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
       const resolved = await resolveTarget({
@@ -894,7 +894,7 @@ const registry = defineArchestraTools([
     schema: UploadFileSchema,
     outputSchema: UploadFileOutputSchema,
     async handler({ args, context }) {
-      const guard = ensureUsable(context);
+      const guard = ensureRuntimeUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
       const resolved = await resolveTarget({
@@ -1109,7 +1109,7 @@ const registry = defineArchestraTools([
         if (data.byteLength > READ_FILE_IMAGE_BYTES_LIMIT) {
           return errorResult(
             `"${originalName}" is too large to view inline (${data.byteLength} bytes > ${READ_FILE_IMAGE_BYTES_LIMIT} byte limit). ` +
-              `Copy it into the sandbox with upload_file and inspect it with run_command.`,
+              sandboxInspectHint("inspect"),
           );
         }
         logger.info(
@@ -1143,7 +1143,7 @@ const registry = defineArchestraTools([
       if (data.byteLength > limit) {
         return errorResult(
           `"${originalName}" is too large to read inline (${data.byteLength} bytes > ${limit} byte limit). ` +
-            `Copy it into the sandbox with upload_file and inspect it with run_command.`,
+            sandboxInspectHint("inspect"),
         );
       }
 
@@ -1154,7 +1154,7 @@ const registry = defineArchestraTools([
       if (text === null) {
         return errorResult(
           `"${originalName}" (${mimeType}) is not text or a supported image. ` +
-            `Copy it into the sandbox with upload_file and process it with run_command.`,
+            sandboxInspectHint("process"),
         );
       }
 
@@ -1204,7 +1204,7 @@ const registry = defineArchestraTools([
         // could be rendered — explain rather than imply the range is empty.
         summary.push(
           `Line ${startLine} is too large to render inline (over the ${config.skillsSandbox.outputBytesLimit}-byte output cap). ` +
-            `Copy it into the sandbox with upload_file and inspect it with run_command.`,
+            sandboxInspectHint("inspect"),
         );
       } else {
         // offset past end of file.
@@ -1998,11 +1998,22 @@ async function resolveEnvironmentTarget(
 }
 
 /**
- * Enforces the deployment flag + an authenticated user. `agent:read` is
- * enforced earlier in the dispatch path (see `rbac.ts`), so handlers don't
- * re-check it here.
+ * The next step read_file suggests for a file it can't show inline: the sandbox
+ * when this deployment has one, otherwise a plain dead end (naming tools the
+ * agent doesn't have only sends it looking for them).
  */
-function ensureUsable(
+function sandboxInspectHint(verb: "inspect" | "process"): string {
+  return config.skillsSandbox.enabled
+    ? `Copy it into the sandbox with upload_file and ${verb} it with run_command.`
+    : "This deployment has no code sandbox to open it in.";
+}
+
+/**
+ * Guard for the code runtime tools (run_command/upload_file/download_file),
+ * which materialize a Dagger container: the runtime must be on, then the same
+ * user check as {@link ensureUsable}.
+ */
+function ensureRuntimeUsable(
   context: ArchestraContext,
 ): { userCtx: UserContext } | { error: string } {
   if (!config.skillsSandbox.enabled) {
@@ -2010,6 +2021,18 @@ function ensureUsable(
       error: "The sandbox is not enabled on this deployment.",
     };
   }
+  return ensureUsable(context);
+}
+
+/**
+ * Guard for every file tool: an authenticated user. The persistent-file tools
+ * only touch the file store, so they work without the code runtime.
+ * `agent:read` is enforced earlier in the dispatch path (see `rbac.ts`), so
+ * handlers don't re-check it here.
+ */
+function ensureUsable(
+  context: ArchestraContext,
+): { userCtx: UserContext } | { error: string } {
   if (!context.organizationId || !context.userId) {
     return { error: "This tool requires an authenticated user session." };
   }

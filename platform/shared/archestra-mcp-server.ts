@@ -961,9 +961,7 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
 /**
  * Persistent-files ("My Files" / Projects) tools. Also gated by `agent:read`,
  * but they operate purely on persistent file storage and never touch the Dagger
- * runtime — their exposure and dynamic-access participation follow the sandbox
- * runtime flag (`config.skillsSandbox.enabled`), like the runtime tools (see
- * `dynamic-tools.ts` and the backend `index.ts` registration gate).
+ * runtime, so they are available whether or not the code runtime is on.
  */
 export const PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_SEARCH_FILES_SHORT_NAME,
@@ -996,16 +994,22 @@ export function isAppRuntimeOnlyArchestraToolShortName(
 }
 
 /**
- * The file tools an MCP App's runtime may call: the persistent-files group plus
- * the two sandbox file-transfer tools. `run_command` is deliberately excluded —
- * an app is a UI surface, not an execution environment.
+ * The file tools an MCP App's runtime may call: the persistent-files group
+ * (minus `copy_file`) plus the two sandbox file-transfer tools. `run_command` is
+ * deliberately excluded — an app is a UI surface, not an execution environment.
+ * `copy_file` is the agent-side exchange between a chat and its open app; an
+ * app's namespace is hermetic, so only the agent may broker across it.
  *
  * Apps address these against their own per-(app, viewer) namespace rather than a
  * conversation's files, so the set is meaningful on every app surface (chat
  * inline, the standalone page, and the shareable connector).
  */
 export const APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
-  ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_READ_FILE_SHORT_NAME,
+  TOOL_SAVE_FILE_SHORT_NAME,
+  TOOL_EDIT_FILE_SHORT_NAME,
+  TOOL_DELETE_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_READ_FILE_RAW_SHORT_NAME,
@@ -1013,7 +1017,7 @@ export const APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
 
 /**
  * The full sandbox tool group (runtime + persistent-files). All share the
- * `agent:read` RBAC permission and require the runtime to execute.
+ * `agent:read` RBAC permission; only the runtime tools need the code runtime.
  */
 const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
   ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -1028,15 +1032,28 @@ export function isSandboxArchestraToolShortName(shortName: string): boolean {
   return SANDBOX_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
+const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAME_SET: ReadonlySet<string> =
+  new Set(SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES);
+
+/**
+ * Whether a built-in materializes a Dagger container, so it exists only while
+ * the code runtime is on (`config.skillsSandbox.enabled`).
+ */
+export function isCodeRuntimeArchestraToolShortName(
+  shortName: string,
+): boolean {
+  return SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
 /**
  * The built-in tool set assigned to a new agent at creation, composed from
  * the deployment/org feature flags:
  * - the always-on defaults (todo_write, query_knowledge_sources),
  * - the MCP App management tools (the apps feature is always on),
  * - the skill tools when the org opted in (`organization.skillToolsEnabled`),
- * - the sandbox runtime + persistent-files tools when the skills-sandbox
- *   runtime is on (`config.skillsSandbox.enabled`) — mirroring
- *   `assignSandboxToolsToAgent`.
+ * - the persistent-files tools (always on),
+ * - the sandbox runtime tools when the code runtime is on
+ *   (`config.skillsSandbox.enabled`) — mirroring `assignSandboxToolsToAgent`.
  *
  * Single source of truth for creation defaults: the backend assigns exactly
  * this set in `AgentModel.create`, and the frontend create form pre-selects
@@ -1057,9 +1074,9 @@ export function getCreationDefaultArchestraToolShortNames(params: {
     shortNames.push(...SKILL_ARCHESTRA_TOOL_SHORT_NAMES);
   }
   shortNames.push(...APP_ARCHESTRA_TOOL_SHORT_NAMES);
+  shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
   if (sandboxEnabled) {
     shortNames.push(...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES);
-    shortNames.push(...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES);
   }
   return shortNames;
 }

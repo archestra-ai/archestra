@@ -25,6 +25,7 @@ import {
   exists,
   getTableColumns,
   getTableName,
+  gte,
   ilike,
   inArray,
   isNotNull,
@@ -1202,8 +1203,21 @@ class AgentModel {
     return results;
   }
 
-  /** Distinct runtime configurations are selected by the warm pool reconciler. */
-  static async listWarmPoolCandidates() {
+  /**
+   * Runtime Agents run since `since`, most recently run first. The warm pool
+   * reconciler takes distinct configurations from the top, so its limited
+   * pools follow the Agents people actually use.
+   */
+  static async listWarmPoolCandidates(params: { since: Date }) {
+    const recentRuns = db
+      .select({
+        agentId: schema.agentRunsTable.agentId,
+        lastRunAt: max(schema.agentRunsTable.startedAt).as("last_run_at"),
+      })
+      .from(schema.agentRunsTable)
+      .where(gte(schema.agentRunsTable.startedAt, params.since))
+      .groupBy(schema.agentRunsTable.agentId)
+      .as("recent_runs");
     return db
       .select({
         id: schema.agentsTable.id,
@@ -1216,6 +1230,7 @@ class AgentModel {
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
       })
       .from(schema.agentsTable)
+      .innerJoin(recentRuns, eq(recentRuns.agentId, schema.agentsTable.id))
       .innerJoin(
         schema.organizationsTable,
         eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
@@ -1236,7 +1251,7 @@ class AgentModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .orderBy(schema.agentsTable.createdAt, schema.agentsTable.id);
+      .orderBy(desc(recentRuns.lastRunAt), schema.agentsTable.id);
   }
 
   /**

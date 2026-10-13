@@ -5,10 +5,16 @@ import {
   getAgentRuntimeModelCompatibility,
   getArchestraMcpServerName,
   isModelSelectionComplete,
+  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   RouteId,
   type SupportedProvider,
 } from "@archestra/shared";
+import {
+  INSTALLER_CLIENT_KEY_PROVIDERS,
+  INSTALLER_CLIENT_LABELS,
+  type InstallerClientId,
+} from "@archestra/shared/connection-setup";
 import { and, eq, inArray, like } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -57,6 +63,7 @@ import {
   ApiError,
   AppearanceSettingsSchema,
   CompleteOnboardingSchema,
+  type ConnectionClientProviderKeys,
   constructResponseSchema,
   KeywordRankingStatusSchema,
   type NetworkPolicy,
@@ -398,36 +405,11 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      if (body.connectionDefaultProviderKeys) {
-        const keyIds = Object.values(body.connectionDefaultProviderKeys);
-        const keys = await LlmProviderApiKeyModel.findByIds(keyIds);
-        const keysById = new Map(keys.map((k) => [k.id, k]));
-        for (const [provider, keyId] of Object.entries(
-          body.connectionDefaultProviderKeys,
-        )) {
-          const key = keysById.get(keyId);
-          if (!key || key.organizationId !== organizationId) {
-            throw new ApiError(404, "Provider API key not found");
-          }
-          if (key.provider !== provider) {
-            throw new ApiError(
-              400,
-              `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
-            );
-          }
-          // Per-user providers (GitHub Copilot) can't back a shared default:
-          // each user connects their own account at setup time, so an admin
-          // default would be meaningless (and the connection flow would refuse
-          // to wrap someone else's personal key).
-          if (
-            providerRequiresPerUserCredential(provider as SupportedProvider)
-          ) {
-            throw new ApiError(
-              400,
-              `${provider} is per-user — each user connects their own account, so it can't be set as a default provider key for setup commands.`,
-            );
-          }
-        }
+      if (body.connectionClientProviderKeys) {
+        await validateConnectionClientProviderKeys({
+          organizationId,
+          mapping: body.connectionClientProviderKeys,
+        });
       }
 
       const organization = await OrganizationModel.patch(organizationId, body);
@@ -1482,13 +1464,61 @@ export default organizationRoutes;
 // === Internal helpers ===
 
 /**
- * Refuse a role assignment that would hand out more than the caller holds.
- * Resolved through `getPermissionsForUserContext` so a service-account caller
- * is measured against its own role rather than a synthetic user, and compared
- * with the same `validateRolePermissions` rule custom-role authoring uses —
- * which deliberately ignores the UI-behavior resources, where the admin role
- * legitimately holds less than the member role.
+ * Every mapped key must belong to the organization, match its provider, and
+ * be a provider the client can route — one key per provider, except where a
+ * provider's keys are separate endpoints. Per-user providers (GitHub Copilot)
+ * can't be mapped: each user connects their own account at setup time, and
+ * the connection flow refuses to wrap someone else's personal key.
  */
+async function validateConnectionClientProviderKeys(params: {
+  organizationId: string;
+  mapping: ConnectionClientProviderKeys;
+}) {
+  const entries = Object.entries(params.mapping).flatMap(([clientId, keys]) =>
+    (keys ?? []).map((key) => ({
+      ...key,
+      clientId: clientId as InstallerClientId,
+    })),
+  );
+  const keys = await LlmProviderApiKeyModel.findByIds([
+    ...new Set(entries.map((entry) => entry.providerApiKeyId)),
+  ]);
+  const keysById = new Map(keys.map((key) => [key.id, key]));
+  const seen = new Set<string>();
+  for (const { clientId, provider, providerApiKeyId } of entries) {
+    const key = keysById.get(providerApiKeyId);
+    if (!key || key.organizationId !== params.organizationId) {
+      throw new ApiError(404, "Provider API key not found");
+    }
+    if (key.provider !== provider) {
+      throw new ApiError(
+        400,
+        `Key "${key.name}" is for provider "${key.provider}", not "${provider}"`,
+      );
+    }
+    if (providerRequiresPerUserCredential(provider)) {
+      throw new ApiError(
+        400,
+        `${provider} is per-user — each user connects their own account, so it can't be mapped to a setup command's virtual key.`,
+      );
+    }
+    if (!INSTALLER_CLIENT_KEY_PROVIDERS[clientId].includes(provider)) {
+      throw new ApiError(
+        400,
+        `${INSTALLER_CLIENT_LABELS[clientId]} can't route ${provider} requests.`,
+      );
+    }
+    const slot = `${clientId}:${provider}`;
+    if (seen.has(slot) && !providerHasEndpointLocalModels(provider)) {
+      throw new ApiError(
+        400,
+        `${INSTALLER_CLIENT_LABELS[clientId]} can map only one ${provider} key.`,
+      );
+    }
+    seen.add(slot);
+  }
+}
+
 async function assertCallerCanGrantRole(params: {
   role: OrganizationRole;
   userId: string;

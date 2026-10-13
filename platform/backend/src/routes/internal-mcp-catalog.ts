@@ -908,6 +908,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // retired sharing fields are refused rather than dropped.
           scope: RetiredSharingUpdateFieldSchema,
           teams: RetiredSharingUpdateFieldSchema,
+          // Tenancy is locked after creation. Accepted only so a change can be
+          // refused with a 400 instead of silently dropped; the unchanged
+          // value is fine, since edit forms send it back.
+          multitenant: z.boolean().optional(),
           // BYOS: External Vault path for OAuth client secret
           oauthClientSecretVaultPath: z.string().optional(),
           // BYOS: External Vault key for OAuth client secret
@@ -932,6 +936,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
+        multitenant: requestedMultitenant,
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -979,6 +984,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!originalCatalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      if (
+        requestedMultitenant !== undefined &&
+        requestedMultitenant !== originalCatalogItem.multitenant
+      ) {
+        throw new ApiError(
+          400,
+          "Tenancy can't be changed after the server is created",
+        );
       }
 
       // App backing catalogs are owned by the Apps flow. Through this generic

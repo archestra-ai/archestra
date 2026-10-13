@@ -257,11 +257,15 @@ function cursorInstructions(target: DeploymentTarget): string {
     inventory: `- MCP: the mcpServers entry in ~/.cursor/mcp.json whose URL starts with ${base}/mcp/.
 - Skills: a folder in ~/.cursor/skills/ that is a git clone of ${host}/skills/
   (check with git -C FOLDER remote get-url origin).
-- LLM proxy and User Rules: Cursor keeps these in its settings UI, not in a file.`,
+- LLM proxy: Settings > Models > API Keys, with Override OpenAI Base URL pointing
+  at ${host}. Setup wrote it into Cursor's settings database and kept a copy of
+  that database as state.vscdb.archestra-backup beside it.
+- User Rules: Cursor keeps these in its settings UI, not in a file.`,
     remove: `- Remove the gateway entry from ~/.cursor/mcp.json and keep the other servers.
 - Delete the skills folder found above.
 - Ask the user to open Settings > Models > API Keys, turn off Override OpenAI Base URL
-  if it points at ${host}, and remove the key they entered for it.
+  if it points at ${host}, and remove the key in the API Key field. Do not restore
+  the database backup: it would undo every Cursor setting changed since setup.
 - If the user pasted runtime handoff instructions into Customize > Rules > User Rules,
   ask them to delete that text. Do not change their other rules.`,
     finish:

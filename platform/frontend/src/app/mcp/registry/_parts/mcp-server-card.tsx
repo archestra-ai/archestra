@@ -88,6 +88,7 @@ import {
   installBlockedSummary,
   useMcpInstallBlockers,
 } from "./mcp-credential-blockers";
+import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
 import {
   type AgentUsage,
   agentOwnerLabel,
@@ -313,6 +314,10 @@ export function McpServerCard({
   );
   const hasPersonalConnection =
     personalServersForCatalog.length > 0 || !!personalServer;
+  // Install is offered only while the viewer has no connection they can use —
+  // the same rule as the registry's Installed filter and the server page.
+  const isInstalledForViewer =
+    isMcpServerInstalledForViewer(allServersForCatalog);
 
   // The distinct agents that can reach this catalog item, across every install
   // of it — the audience affected if those installs go away. Shared with the
@@ -406,23 +411,29 @@ export function McpServerCard({
 
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
+  // Worst live issue first, since issues are kind-ordered; an item whose only
+  // trouble the viewer muted still shows it, muted.
+  const statusIssue =
+    issues?.find((issue) => !issue.muted) ?? issues?.[0] ?? null;
   // The re-auth marker follows the shared issue rule: it shows only when a
   // connection the viewer's own calls resolve to lost its sign-in, never for a
   // colleague's connection an admin merely sees. It is a click target when the
   // viewer may re-authenticate that connection; the detailed reason lives on
-  // the credentials tab.
+  // the credentials tab. The issue badge already says "Needs
+  // re-authentication", so a second marker for it on the same row is skipped.
   const viewerReauthIssue = issues?.find(
     (issue) => issue.kind === "needs-reauth" && issue.onViewerConnection,
   );
-  const oauthReauthIndicator = viewerReauthIssue ? (
-    <OAuthReauthIndicator
-      onActivate={
-        viewerReauthIssue.audience === "you"
-          ? () => goToItemPage("credentials")
-          : undefined
-      }
-    />
-  ) : null;
+  const oauthReauthIndicator =
+    viewerReauthIssue && statusIssue?.kind !== "needs-reauth" ? (
+      <OAuthReauthIndicator
+        onActivate={
+          viewerReauthIssue.audience === "you"
+            ? () => goToItemPage("credentials")
+            : undefined
+        }
+      />
+    ) : null;
 
   const isInstalling = isCardShowingInstallInProgress({
     deploymentFailed: isDeploymentFailed,
@@ -529,10 +540,6 @@ export function McpServerCard({
   const deploymentStatusIndicator = deploymentSummary ? (
     <DeploymentStatusIconDot summary={deploymentSummary} />
   ) : null;
-  // Worst live issue first, since issues are kind-ordered; an item whose only
-  // trouble the viewer muted still shows it, muted.
-  const statusIssue =
-    issues?.find((issue) => !issue.muted) ?? issues?.[0] ?? null;
   const primaryIssueAction = statusIssue ? (
     <McpServerIssueNotice
       item={item}
@@ -546,7 +553,7 @@ export function McpServerCard({
   const chatButton = shouldShowMcpCardChatButton({
     toolsCount,
     isBuiltin: isBuiltinVariant,
-    hasInstallation: allServersForCatalog.length > 0,
+    hasInstallation: isInstalledForViewer,
   }) ? (
     <Button
       variant="outline"

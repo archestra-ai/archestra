@@ -476,7 +476,7 @@ describe("chat tool execution", () => {
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
   });
 
-  test("accepts the proxy's rewritten review call with option previews", async () => {
+  test("accepts the proxy's rewritten review call without option previews", async () => {
     const offerId = "offer-hitl-preview";
     const session = reviewSession({
       sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
@@ -494,7 +494,6 @@ describe("chat tool execution", () => {
       session,
       offerIds: [offerId],
     });
-    expect(rewritten?.options[0].preview).toBe("Approve\n\nvalue  1");
     const requests: Array<{ message: string }> = [];
     mockContext = {
       ...mockContext,

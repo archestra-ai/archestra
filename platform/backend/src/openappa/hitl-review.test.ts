@@ -1,6 +1,9 @@
-import { expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
+import { AppaClaudeCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/claude-code";
+import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { AppaOpenCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/opencode";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   consumeHitlRuling,
@@ -301,13 +304,13 @@ test("uses the staged review for fixed native approval choices", async () => {
   ).toBe(false);
 });
 
-test("asks preview hosts about a structured tool by name and previews its arguments beside each choice", async () => {
-  const active = session("preview-review");
+test("keeps the reviewed arguments in the question instead of an optional preview", async () => {
+  const active = session("text-review");
   await stageHitlReview({
     session: active,
     review: {
       offerId: "offer-1",
-      text: "Full review text.",
+      text: runtimeReview("  - attention: human-approval"),
       tool: "mcp/slack/send_message",
       arguments: JSON.stringify({ channel: "#general", text: "Hello" }),
     },
@@ -317,19 +320,16 @@ test("asks preview hosts about a structured tool by name and previews its argume
   expect(
     await getHitlAskUserArguments({ session: active, offerIds: ["offer-1"] }),
   ).toEqual({
-    question: "Full review text.",
-    previewQuestion: "Approve slack__send_message?",
+    question: `Approve slack__send_message?\n\n${argumentLines}\n\nApprove lets this exact call run. Deny keeps it blocked.`,
     header: "Approval",
     options: [
       {
         label: "Approve",
         description: "Allow this exact tool call.",
-        preview: `Approve\n\n${argumentLines}`,
       },
       {
         label: "Deny",
         description: "Keep this tool call blocked.",
-        preview: `Deny\n\n${argumentLines}`,
       },
     ],
     allowMultiple: false,
@@ -337,14 +337,14 @@ test("asks preview hosts about a structured tool by name and previews its argume
   });
 });
 
-test("wraps long argument values to the preview pane width", async () => {
-  const active = session("wrapped-preview");
-  const text = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ");
+test("keeps review coverage before long arguments in every native question", async () => {
+  const active = session("long-question");
+  const text = Array.from({ length: 500 }, (_, i) => `word${i}`).join(" ");
   await stageHitlReview({
     session: active,
     review: {
       offerId: "offer-1",
-      text: "Full review text.",
+      text: runtimeReview("  - the readers must be the public audience"),
       tool: "mcp/slack/send_message",
       arguments: JSON.stringify({ text }),
     },
@@ -354,24 +354,37 @@ test("wraps long argument values to the preview pane width", async () => {
     session: active,
     offerIds: ["offer-1"],
   });
-  const lines = question?.options[0].preview?.split("\n") ?? [];
-  expect(lines.slice(0, 2)).toEqual(["Approve", ""]);
-  expect(lines.length).toBeGreaterThan(3);
-  expect(lines.slice(2).every((line) => line.length <= 56)).toBe(true);
-  expect(
-    lines
-      .slice(2)
-      .map((line) => line.slice("text  ".length))
-      .join(" "),
-  ).toBe(text);
+  expect(question).toBeDefined();
+  if (!question) throw new Error("Missing review question");
+  for (const adapter of [
+    new AppaClaudeCodeAdapter(),
+    new AppaCodexAdapter(),
+    new AppaOpenCodeAdapter(),
+  ]) {
+    const asked = adapter.nativeQuestion.fromAskUser(question).questions[0];
+    expect(asked.question).toBe(question.question);
+    const lines = asked.question.split("\n\n")[2].split("\n");
+    expect(lines.length).toBeGreaterThan(3);
+    expect(lines.map((line) => line.slice("text  ".length)).join(" ")).toBe(
+      text,
+    );
+    // Keep coverage in the prefix even for clients that truncate long questions.
+    expect(asked.question.length).toBeGreaterThan(2000);
+    expect(asked.question.slice(0, 2000)).toContain(
+      "the readers must be the public audience",
+    );
+    expect(asked.question.slice(0, 2000)).toContain("text  word0");
+    for (const option of asked.options)
+      expect(option).not.toHaveProperty("preview");
+  }
 });
 
 test.each([
   ["no arguments", undefined],
   ["empty arguments", "{}"],
   ["arguments that are not an object", "[1,2]"],
-])("previews only the choice when the review has %s", async (_, reviewedArguments) => {
-  const active = session("bare-preview");
+])("keeps the full review when the review has %s", async (_, reviewedArguments) => {
+  const active = session("bare-question");
   await stageHitlReview({
     session: active,
     review: {
@@ -387,10 +400,9 @@ test.each([
     offerIds: ["offer-1"],
   });
   expect(question?.question).toBe("Full review text.");
-  expect(question?.previewQuestion).toBe("Approve local_tool?");
-  expect(question?.options.map((option) => option.preview)).toEqual([
-    "Approve",
-    "Deny",
+  expect(question?.options).toEqual([
+    { label: "Approve", description: "Allow this exact tool call." },
+    { label: "Deny", description: "Keep this tool call blocked." },
   ]);
 });
 
@@ -418,21 +430,17 @@ test.each([
     coverage: "  - attention: human-approval",
     expected:
       "Approve send_report?\n\nto  finance@example.com\n\nApprove lets this exact call run. Deny keeps it blocked.",
-    expectedPreview: "Approve send_report?",
   },
   {
     case: "more than the person's attention",
     coverage:
       "  - attention: human-approval\n  - the readers must be the public audience",
     expected:
-      "Approve send_report?\n\nto  finance@example.com\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
-    expectedPreview:
-      "Approve send_report?\n\nApproving also accepts:\n  - the readers must be the public audience",
+      "Approve send_report?\n\nApproving also accepts:\n  - the readers must be the public audience\n\nto  finance@example.com\n\nApprove lets this exact call run. Deny keeps it blocked.",
   },
 ])("asks about the call itself when the ruling covers $case", async ({
   coverage,
   expected,
-  expectedPreview,
 }) => {
   const active = session("form-question");
   await stageHitlReview({
@@ -450,36 +458,94 @@ test.each([
     offerIds: ["offer-1"],
   });
   expect(question?.question).toBe(expected);
-  expect(question?.previewQuestion).toBe(expectedPreview);
 });
 
-test("shows a command once although the proxy reviews it under both spellings", async () => {
-  const active = session("command-review");
-  await stageHitlReview({
-    session: active,
-    review: {
-      offerId: "offer-1",
-      text: runtimeReview("  - the readers must be the public audience"),
-      tool: "Bash",
-      // The runtime returns the arguments as the proxy evaluated them.
-      arguments: JSON.stringify({
-        cmd: "git push -u origin feature",
-        command: "git push -u origin feature",
-        description: "Push the branch",
-      }),
-    },
-  });
+describe.each([
+  { adapter: new AppaClaudeCodeAdapter(), tool: "Bash" },
+  { adapter: new AppaCodexAdapter(), tool: "exec_command" },
+  { adapter: new AppaOpenCodeAdapter(), tool: "bash" },
+])("$tool approval questions", ({ adapter, tool }) => {
+  test.each([
+    { label: "Approve", ruling: "approve" },
+    { label: "Deny", ruling: "deny" },
+  ] as const)("shows the command without a preview and reads $label for that exact question", async ({
+    label,
+    ruling,
+  }) => {
+    const active = session("command-review");
+    await stageHitlReview({
+      session: active,
+      review: {
+        offerId: "offer-1",
+        text: runtimeReview("  - the readers must be the public audience"),
+        tool,
+        // The runtime returns the arguments as the proxy evaluated them.
+        arguments: JSON.stringify({
+          cmd: 'git push -u origin "feature"',
+          command: 'git push -u origin "feature"',
+          description: "Push the branch",
+        }),
+      },
+    });
 
-  const question = await getHitlAskUserArguments({
-    session: active,
-    offerIds: ["offer-1"],
+    const question = await getHitlAskUserArguments({
+      session: active,
+      offerIds: ["offer-1"],
+    });
+    const argumentLines =
+      'command      git push -u origin "feature"\ndescription  Push the branch';
+    expect(question?.question).toBe(
+      `Approve ${tool}?\n\nApproving also accepts:\n  - the readers must be the public audience\n\n${argumentLines}\n\nApprove lets this exact call run. Deny keeps it blocked.`,
+    );
+    expect(question).toBeDefined();
+    if (!question) throw new Error("Missing review question");
+    const nativeQuestion = adapter.nativeQuestion;
+    const asked = nativeQuestion.fromAskUser(question).questions[0];
+    expect(asked.question).toBe(question.question);
+    expect(asked.header).toBe("Approval");
+    if (adapter.id === "codex")
+      expect(asked).toHaveProperty("id", "archestra_question");
+    if (adapter.id === "opencode")
+      expect(asked).toHaveProperty("multiple", false);
+    expect(asked.options).toEqual([
+      { label: "Approve", description: "Allow this exact tool call." },
+      { label: "Deny", description: "Keep this tool call blocked." },
+    ]);
+    const content =
+      adapter.id === "codex"
+        ? JSON.stringify({
+            answers: { archestra_question: { answers: [label] } },
+          })
+        : adapter.id === "opencode"
+          ? `User has answered your questions: "${asked.question}"="${label}". You can now continue with the user's answers in mind.`
+          : `Your questions have been answered: "${asked.question}"="${label}". You can now continue with these answers in mind.`;
+    const result = nativeQuestion.rulingFromResult(
+      {
+        content,
+      },
+      question,
+    );
+    expect(result).toBe(ruling);
+    if (adapter.id === "opencode") {
+      expect(
+        nativeQuestion.rulingFromResult(
+          {
+            content: `User has answered your questions: "Approve ${tool}?"="${label}". You can now continue with the user's answers in mind.`,
+          },
+          question,
+        ),
+      ).toBe("unrecognized");
+    }
+    expect(
+      await recordHitlRuling({ session: active, offerId: "offer-1", ruling }),
+    ).toBe(true);
+    expect(
+      await consumeHitlRuling({ session: active, offerId: "offer-1" }),
+    ).toBe(ruling);
+    expect(
+      await consumeHitlRuling({ session: active, offerId: "offer-1" }),
+    ).toBeUndefined();
   });
-  const argumentLines =
-    "command      git push -u origin feature\ndescription  Push the branch";
-  expect(question?.options[0].preview).toBe(`Approve\n\n${argumentLines}`);
-  expect(question?.question).toBe(
-    `Approve Bash?\n\n${argumentLines}\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.`,
-  );
 });
 
 test("keeps both arguments when a command tool's cmd and command differ", async () => {
@@ -488,7 +554,7 @@ test("keeps both arguments when a command tool's cmd and command differ", async 
     session: active,
     review: {
       offerId: "offer-1",
-      text: "Full review text.",
+      text: runtimeReview("  - attention: human-approval"),
       tool: "exec_command",
       arguments: JSON.stringify({ cmd: "ls", command: "rm -rf build" }),
     },
@@ -498,9 +564,7 @@ test("keeps both arguments when a command tool's cmd and command differ", async 
     session: active,
     offerIds: ["offer-1"],
   });
-  expect(question?.options[0].preview).toBe(
-    "Approve\n\ncmd      ls\ncommand  rm -rf build",
-  );
+  expect(question?.question).toContain("cmd      ls\ncommand  rm -rf build");
 });
 
 test("keeps the full review text when its coverage is in an unknown shape", async () => {

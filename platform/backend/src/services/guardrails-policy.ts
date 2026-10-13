@@ -18,7 +18,6 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
-import { parsePolicyToml } from "@/openappa/policy-text";
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { CredentialAccess } from "@/services/credential-access";
 import { ApiError } from "@/types";
@@ -198,7 +197,6 @@ export const guardrailsPolicyService = {
             : `include: no battery answers ${JSON.stringify(entry.entry)}`,
         );
     errors.push(...duplicateEntryErrors(resolution));
-    if (statesResultBodyLimit(content)) warnings.push(RESULT_BODY_LIMIT_NOTE);
     if (errors.length === 0) {
       const composed = await openappaDeclarations.composeForCheck({
         root: content,
@@ -398,17 +396,4 @@ builtin = "hitl"
 [externals.annotators.noop]
 url = "${noopAnnotatorUrl()}"
 `;
-}
-
-const RESULT_BODY_LIMIT_NOTE =
-  "externals.max_body_bytes has no effect: the platform sets the body size limit from its LLM proxy body limit.";
-
-/** Whether the document's `[externals]` table states `max_body_bytes`. */
-function statesResultBodyLimit(content: string): boolean {
-  const externals = parsePolicyToml(content)?.externals;
-  return (
-    typeof externals === "object" &&
-    externals !== null &&
-    "max_body_bytes" in externals
-  );
 }

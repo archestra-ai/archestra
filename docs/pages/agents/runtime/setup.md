@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 alpha: "Agent Runtime is in Alpha and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-13
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -90,6 +90,16 @@ Archestra prefetches maintained catalog images onto runtime nodes. Registry and 
 Prefetch uses the runtime namespace's default ServiceAccount image pull secrets. Each image consumes disk on every matching node. Fresh nodes still need their first download; an unavailable image does not block other launches.
 
 <!-- SPDX-SnippetEnd -->
+
+## Upgrades
+
+Upgrading Archestra moves every agent made from a catalog template onto the new maintained image. You do not edit agents after an upgrade. An agent runs this deployment's image, whatever tag was current when someone created it.
+
+- **New runs** start on the new image.
+- **Retained workspaces** move to the new image on their next turn. Archestra restarts the workspace and keeps its files and conversation.
+- **A turn already running** keeps its image until it ends.
+
+A custom image, or a maintained image pinned by digest, runs exactly as saved.
 
 ## Troubleshooting
 

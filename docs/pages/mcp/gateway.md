@@ -2,7 +2,7 @@
 title: MCP Gateway
 description: One MCP endpoint that gives a client the tools, knowledge, subagents, and skills you choose
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,7 +27,7 @@ You may not need to. Everyone already has a personal gateway, My Gateway, with e
 2. Enter a name, such as `support-tools`. Under **Advanced**, choose the people and teams who can use it.
 3. Under **Tools & Knowledge**, pick its tools. See [Choose Its Tools](#choose-its-tools).
 4. Click **Create**.
-5. Use it from your coding agent: go to **Connect**, click **Customize setup**, and pick the gateway under **Gateway**.
+5. Use it from your coding agent: on **Connect**, run the setup command. On the approval page, open **Setup options** and click **Change** next to **Tools** to pick the gateway.
 
 Your agent then lists only the tools you chose. For a script or your own app, use the authentication options on the gateway's **Connect** tab. See [MCP Gateway Authentication](/docs/mcp/authentication/gateway).
 

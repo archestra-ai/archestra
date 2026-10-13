@@ -1,5 +1,5 @@
 {
-  "id": "51a8dce0-4b4f-4e73-aa7e-d2f9e933dc02",
+  "id": "b79379c2-1da1-4a37-8a06-8888396e90a2",
   "prevId": "279670c1-c100-436d-88ee-e45ee253d7e3",
   "version": "7",
   "dialect": "postgresql",
@@ -18494,6 +18494,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "connection_client_provider_keys": {
+          "name": "connection_client_provider_keys",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
         "connection_default_provider_keys": {
           "name": "connection_default_provider_keys",
           "type": "jsonb",
@@ -19516,12 +19522,6 @@
               "expression": "lower(\"source_marketplace_plugin_name\")",
               "asc": true,
               "isExpression": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "client_type",
-              "isExpression": false,
-              "asc": true,
               "nulls": "last"
             }
           ],

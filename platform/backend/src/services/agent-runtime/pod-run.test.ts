@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import config from "@/config";
 import type { AgentRuntime } from "@/types";
 import { extractFinalAnswer, resolveAgentRuntime } from "./pod-run";
 
@@ -19,6 +20,16 @@ describe("resolveAgentRuntime", () => {
       environmentId: "environment-1",
       secretId: "secret-1",
     });
+  });
+
+  test("launches a maintained image saved on an older release with this deployment's tag", () => {
+    const current = config.agentRuntime.catalogImages["claude-code"];
+    const repository = current.slice(0, current.lastIndexOf(":"));
+    const resolved = resolveAgentRuntime({
+      ...agentWithRuntime,
+      runtime: { ...runtime, image: `${repository}:1.4.0-rc.31` },
+    });
+    expect(resolved?.image).toBe(current);
   });
 });
 

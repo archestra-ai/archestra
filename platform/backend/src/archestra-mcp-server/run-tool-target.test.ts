@@ -85,6 +85,28 @@ describe("resolveRunToolDispatch", () => {
     ).toEqual({ kind: "unresolved" });
   });
 
+  // Policies rule on the arguments run_tool will run, and some models send
+  // tool_args as JSON text that run_tool reads as an object.
+  test("reads the target's arguments as run_tool does", () => {
+    const target = { path: "notes.md", content: '{"a": 1}' };
+    for (const toolArgs of [target, JSON.stringify(target)]) {
+      expect(
+        resolveRunToolTarget({
+          toolName: "archestra__run_tool",
+          args: { tool_name: "archestra__save_file", tool_args: toolArgs },
+        }).toolInput,
+      ).toEqual(target);
+    }
+    for (const toolArgs of [undefined, "not json", "[1]", '"{}"', null]) {
+      expect(
+        resolveRunToolTarget({
+          toolName: "archestra__run_tool",
+          args: { tool_name: "archestra__save_file", tool_args: toolArgs },
+        }).toolInput,
+      ).toEqual({});
+    }
+  });
+
   test("does not mistake a third-party tool named run_tool for the wrapper", () => {
     for (const toolName of [
       "run_tool",

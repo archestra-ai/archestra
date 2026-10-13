@@ -455,6 +455,9 @@ function reviewCoverage(text: string): string[] | undefined {
 
 const COVERAGE_HEADING = "What this ruling would cover:";
 
+/** Shown under the title: a command's description, or the file a call writes. */
+type CallPreview = { subject: string; summary?: string; body: string[] };
+
 /**
  * The reviewed call as Claude Code previews it beside the choices: a title
  * naming the call, the call in full, and what an approval also accepts. The
@@ -488,9 +491,6 @@ function previewText(params: {
   ].join("\n\n");
 }
 
-/** Shown under the title: a command's description, or the file a call writes. */
-type CallPreview = { subject: string; summary?: string; body: string[] };
-
 /**
  * The call in the form a person reads it in: a command as it runs, a file
  * write as the file's content, an edit as a diff, and any other call as its
@@ -498,7 +498,7 @@ type CallPreview = { subject: string; summary?: string; body: string[] };
  */
 function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
   const label = reviewedToolLabel(tool);
-  const name = tool.replace(/^(builtin:|host\/[^/]+\/)/, "");
+  const baseName = tool.replace(/^(builtin:|host\/[^/]+\/)/, "");
   const { command, description, file_path, content, old_string, new_string } =
     args;
   if (isCommandExecutionTool(tool) && typeof command === "string") {
@@ -519,7 +519,7 @@ function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
   }
   const subject = `${label} call`;
   if (typeof file_path === "string") {
-    if (name === "Write" && typeof content === "string")
+    if (baseName === "Write" && typeof content === "string")
       return {
         subject,
         summary: file_path,
@@ -529,7 +529,7 @@ function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
         ],
       };
     if (
-      name === "Edit" &&
+      baseName === "Edit" &&
       typeof old_string === "string" &&
       typeof new_string === "string"
     )
@@ -544,7 +544,7 @@ function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
         ],
       };
     const edits = args.edits;
-    if (name === "MultiEdit" && Array.isArray(edits) && edits.every(isEdit))
+    if (baseName === "MultiEdit" && Array.isArray(edits) && edits.every(isEdit))
       return {
         subject,
         summary: file_path,

@@ -2597,6 +2597,54 @@ describe("unwrapToolResultForPreview (SDK tools.call parity)", () => {
     ).toBe("null");
   });
 
+  test("embedded resources serialize alongside the text, blob base64 elided", () => {
+    expect(
+      unwrapToolResultForPreview(
+        envelope({
+          content: [
+            {
+              type: "text",
+              text: "successfully downloaded text file (SHA: abc)",
+            },
+            {
+              type: "resource",
+              resource: {
+                uri: "repo://acme/web/contents/package.json",
+                mimeType: "text/plain; charset=utf-8",
+                text: '{"name": "web"}',
+              },
+            },
+            {
+              type: "resource",
+              resource: {
+                uri: "repo://acme/web/contents/logo.png",
+                mimeType: 'image/png" onerror="alert(1)',
+                blob: "aGk=",
+              },
+            },
+          ],
+        }),
+      ),
+    ).toBe(
+      JSON.stringify({
+        text: "successfully downloaded text file (SHA: abc)",
+        resources: [
+          {
+            uri: "repo://acme/web/contents/package.json",
+            mimeType: "text/plain; charset=utf-8",
+            text: '{"name": "web"}',
+          },
+          {
+            uri: "repo://acme/web/contents/logo.png",
+            mimeType: 'image/png" onerror="alert(1)',
+            dataUrl:
+              "data:application/octet-stream;base64,…[base64 elided in preview]",
+          },
+        ],
+      }),
+    );
+  });
+
   test("no text, structured, or media data serializes as null", () => {
     expect(unwrapToolResultForPreview(envelope({ content: [] }))).toBe("null");
   });

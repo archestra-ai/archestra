@@ -1,12 +1,11 @@
 "use client";
 
 import {
-  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  defaultRuntimeHandoffInstructions,
   providerRequiresPerUserCredential,
-  type SupportedProvider,
+  resolveRuntimeHandoffInstructions,
 } from "@archestra/shared";
 import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
-import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ClientIcon } from "@/app/connection/client-icon";
 import { CONNECT_CLIENTS, orderedClients } from "@/app/connection/clients";
@@ -19,7 +18,6 @@ import {
 } from "@/app/connection/connection-base-urls.utils";
 import { AgentSelector } from "@/components/agent-selector";
 import { CodeText } from "@/components/code-text";
-import { ProviderIcon } from "@/components/provider-icon";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import {
   SettingsBlock,
@@ -36,14 +34,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
-import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   useOrganization,
   useUpdateConnectionSettings,
 } from "@/lib/organization.query";
 
-import { AvailableAgentsList } from "./available-agents-list";
+import {
+  AvailableAgentsList,
+  type ClientProviderKeys,
+} from "./available-agents-list";
 
 const DEFAULT_VALUE = "__default__";
 // "Any client" is always visible on the connection page; admins cannot hide it.
@@ -61,6 +62,8 @@ const NO_DEFAULT_URL = "__none__";
 
 export function ConnectionSettingsForm() {
   const { data: organization } = useOrganization();
+  const appName = useAppName();
+  const defaultInstructions = defaultRuntimeHandoffInstructions(appName);
   const { data: mcpGateways } = useProfiles({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
@@ -78,20 +81,17 @@ export function ConnectionSettingsForm() {
       { description: string; isDefault: boolean; visible: boolean }
     >
   >({});
-  // provider → provider API key id used by auto-provisioned setup virtual keys
-  const [defaultProviderKeys, setDefaultProviderKeys] = useState<
-    Record<string, string>
-  >({});
+  // client → provider API keys its setup command's virtual key maps to
+  const [clientProviderKeys, setClientProviderKeys] =
+    useState<ClientProviderKeys>({});
   const [skillsEnabled, setSkillsEnabled] = useState(true);
   const [llmProxyEnabled, setLlmProxyEnabled] = useState(true);
   const [pluginsEnabled, setPluginsEnabled] = useState(true);
   const [runtimeHandoffEnabled, setRuntimeHandoffEnabled] = useState(true);
-  const [runtimeHandoffInstructions, setRuntimeHandoffInstructions] = useState(
-    DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
-  );
+  const [runtimeHandoffInstructions, setRuntimeHandoffInstructions] =
+    useState(defaultInstructions);
   const pluginsFeatureEnabled = useFeature("plugins") === true;
   const { data: providerApiKeys } = useLlmProviderApiKeys();
-  const providerCatalog = useModelProviderCatalog();
 
   // Env-configured candidate URLs the admin can curate. Keep order stable so
   // the UI mirrors what end users see in the dropdowns elsewhere.
@@ -108,12 +108,7 @@ export function ConnectionSettingsForm() {
         .map((c) => c.id),
     );
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
-    setDefaultProviderKeys(
-      (organization.connectionDefaultProviderKeys ?? {}) as Record<
-        string,
-        string
-      >,
-    );
+    setClientProviderKeys(organization.connectionClientProviderKeys ?? {});
     setSkillsEnabled(organization.connectionSkillsEnabled);
     setLlmProxyEnabled(organization.connectionLlmProxyEnabled);
     setPluginsEnabled(organization.connectionPluginsEnabled);
@@ -121,10 +116,12 @@ export function ConnectionSettingsForm() {
       organization.connectionRuntimeHandoffEnabled ?? true,
     );
     setRuntimeHandoffInstructions(
-      organization.connectionRuntimeHandoffInstructions ??
-        DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+      resolveRuntimeHandoffInstructions({
+        stored: organization.connectionRuntimeHandoffInstructions,
+        appName,
+      }),
     );
-  }, [organization]);
+  }, [organization, appName]);
 
   const updateMutation = useUpdateConnectionSettings(
     "Connection settings updated",
@@ -173,24 +170,22 @@ export function ConnectionSettingsForm() {
     [baseUrlMeta, serverBaseUrlMeta, envBaseUrls],
   );
 
-  const serverDefaultProviderKeys =
-    (organization?.connectionDefaultProviderKeys ?? {}) as Record<
-      string,
-      string
-    >;
+  const serverClientProviderKeys: ClientProviderKeys =
+    organization?.connectionClientProviderKeys ?? {};
 
   const serverSkillsEnabled = organization?.connectionSkillsEnabled ?? true;
   const serverLlmProxyEnabled = organization?.connectionLlmProxyEnabled ?? true;
   const serverPluginsEnabled = organization?.connectionPluginsEnabled ?? true;
   const serverRuntimeHandoffEnabled =
     organization?.connectionRuntimeHandoffEnabled ?? true;
-  const serverRuntimeHandoffInstructions =
-    organization?.connectionRuntimeHandoffInstructions ??
-    DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS;
+  const serverRuntimeHandoffInstructions = resolveRuntimeHandoffInstructions({
+    stored: organization?.connectionRuntimeHandoffInstructions,
+    appName,
+  });
 
   const hasChanges =
-    JSON.stringify(defaultProviderKeys) !==
-      JSON.stringify(serverDefaultProviderKeys) ||
+    JSON.stringify(withoutEmptyClients(clientProviderKeys)) !==
+      JSON.stringify(withoutEmptyClients(serverClientProviderKeys)) ||
     gatewayId !== serverGatewayId ||
     defaultClientId !== serverDefaultClientId ||
     JSON.stringify([...shownClientIds].sort()) !==
@@ -218,8 +213,7 @@ export function ConnectionSettingsForm() {
       connectionRuntimeHandoffEnabled: runtimeHandoffEnabled,
       connectionRuntimeHandoffInstructions:
         !runtimeHandoffInstructions.trim() ||
-        runtimeHandoffInstructions.trim() ===
-          DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+        runtimeHandoffInstructions.trim() === defaultInstructions
           ? null
           : runtimeHandoffInstructions.trim(),
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
@@ -227,10 +221,7 @@ export function ConnectionSettingsForm() {
         ? { connectionClientOrder: selectedClientOrder }
         : {}),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
-      connectionDefaultProviderKeys:
-        Object.keys(defaultProviderKeys).length > 0
-          ? defaultProviderKeys
-          : null,
+      connectionClientProviderKeys: withoutEmptyClients(clientProviderKeys),
       ...(skillsEnabled !== serverSkillsEnabled
         ? { connectionSkillsEnabled: skillsEnabled }
         : {}),
@@ -249,7 +240,7 @@ export function ConnectionSettingsForm() {
     setShownClientIds(serverShownClients);
     setClientOrder(serverClientOrder);
     setBaseUrlMeta(serverBaseUrlMeta);
-    setDefaultProviderKeys(serverDefaultProviderKeys);
+    setClientProviderKeys(serverClientProviderKeys);
     setSkillsEnabled(serverSkillsEnabled);
     setLlmProxyEnabled(serverLlmProxyEnabled);
     setPluginsEnabled(serverPluginsEnabled);
@@ -281,15 +272,15 @@ export function ConnectionSettingsForm() {
     (gateway) => !gateway.isPersonalGateway || gateway.id === gatewayId,
   );
 
-  const providerKeysByProvider = useMemo(() => {
-    const grouped = new Map<string, { id: string; name: string }[]>();
-    for (const key of providerApiKeys ?? []) {
-      const list = grouped.get(key.provider) ?? [];
-      list.push({ id: key.id, name: key.name });
-      grouped.set(key.provider, list);
-    }
-    return grouped;
-  }, [providerApiKeys]);
+  // Per-user providers (GitHub Copilot) can't be mapped: each user connects
+  // their own account at setup time, and the backend rejects such a mapping.
+  const sharedProviderKeys = useMemo(
+    () =>
+      (providerApiKeys ?? []).filter(
+        (key) => !providerRequiresPerUserCredential(key.provider),
+      ),
+    [providerApiKeys],
+  );
 
   return (
     <WithPermissions
@@ -301,51 +292,28 @@ export function ConnectionSettingsForm() {
         return (
           <>
             <SettingsSectionStack>
-              <SettingsBlock
-                title="Managed instructions"
-                description="When users connect an agent through the Connect page, these managed instructions are appended to its system prompt."
-                control={
-                  <Switch
-                    checked={runtimeHandoffEnabled}
-                    onCheckedChange={setRuntimeHandoffEnabled}
-                    disabled={locked}
-                    aria-label="Enable managed instructions"
-                  />
-                }
+              <SettingRow
+                title="Default client"
+                description="Pre-selected client tile."
               >
-                <div className="space-y-2">
-                  <Label htmlFor="managed-instructions">
-                    Instructions for connected agents
-                  </Label>
-                  <Textarea
-                    id="managed-instructions"
-                    value={runtimeHandoffInstructions}
-                    onChange={(event) =>
-                      setRuntimeHandoffInstructions(event.target.value)
-                    }
-                    rows={2}
-                    maxLength={20000}
-                    disabled={locked || !runtimeHandoffEnabled}
-                    className="font-mono text-xs leading-relaxed"
-                  />
-                  <div className="flex justify-between gap-4 text-xs text-muted-foreground">
-                    <span>
-                      Supported agents receive updates on next launch; other
-                      clients need setup or manual copying.
-                    </span>
-                    <span className="shrink-0 tabular-nums">
-                      {runtimeHandoffInstructions.length.toLocaleString()} /
-                      20,000
-                    </span>
-                  </div>
-                  {runtimeHandoffEnabled &&
-                    !runtimeHandoffInstructions.trim() && (
-                      <InlineNotice variant="error">
-                        Enter instructions.
-                      </InlineNotice>
-                    )}
-                </div>
-              </SettingsBlock>
+                <SingleSelectCombobox
+                  className="w-60"
+                  value={defaultClientId ?? "none"}
+                  onChange={(value) =>
+                    setDefaultClientId(value === "none" ? null : value)
+                  }
+                  options={[
+                    { value: "none", label: "Not selected" },
+                    ...CONNECT_CLIENTS.map((c) => ({
+                      value: c.id,
+                      label: c.label,
+                      icon: <ClientIcon client={c} size={18} />,
+                    })),
+                  ]}
+                  searchPlaceholder="Search clients…"
+                  disabled={locked}
+                />
+              </SettingRow>
 
               <SettingRow
                 title="Default MCP Gateway"
@@ -370,105 +338,62 @@ export function ConnectionSettingsForm() {
               </SettingRow>
 
               <SettingRow
-                title="Default client"
-                description="Pre-selected client tile."
+                title="LLM Proxy on Connect"
+                description="Offer routing through the LLM Proxy. Existing client configs keep working."
               >
-                <SingleSelectCombobox
-                  className="w-60"
-                  value={defaultClientId ?? "none"}
-                  onChange={(value) =>
-                    setDefaultClientId(value === "none" ? null : value)
-                  }
-                  options={[
-                    { value: "none", label: "Not selected" },
-                    ...CONNECT_CLIENTS.map((c) => ({
-                      value: c.id,
-                      label: c.label,
-                      icon: <ClientIcon client={c} size={18} />,
-                    })),
-                  ]}
-                  searchPlaceholder="Search clients…"
+                <Switch
+                  checked={llmProxyEnabled}
+                  onCheckedChange={setLlmProxyEnabled}
                   disabled={locked}
+                  aria-label="Offer the LLM Proxy on the Connect page"
                 />
               </SettingRow>
 
-              <SettingSection
-                title="Default provider keys for setup commands"
-                description="Which provider API key a setup command's virtual key maps to. Automatic falls back to the user's own key resolution (personal, then team, then organization)."
+              <SettingRow
+                title="Skills on Connect"
+                description="Offer installing shared skills. Existing installs keep working."
               >
-                {providerKeysByProvider.size === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No provider API keys configured yet. Add one under{" "}
-                    <Link href="/settings/llm" className="underline">
-                      LLM provider keys
-                    </Link>{" "}
-                    to set a default.
-                  </p>
-                ) : (
-                  <div className="grid gap-2">
-                    {[...providerKeysByProvider.entries()].map(
-                      ([provider, keys]) => {
-                        // Per-user providers (GitHub Copilot) can't have a
-                        // shared default — each user connects their own account
-                        // at setup time (and the backend rejects such a default
-                        // on save). Show the row read-only so it's discoverable
-                        // and explained rather than silently missing.
-                        const isPerUser = providerRequiresPerUserCredential(
-                          provider as SupportedProvider,
-                        );
-                        return (
-                          <div
-                            key={provider}
-                            className="grid grid-cols-[minmax(0,1fr)_240px] items-center gap-3"
-                          >
-                            <div className="flex min-w-0 items-center gap-2">
-                              <ProviderIcon
-                                provider={provider as SupportedProvider}
-                              />
-                              <span className="truncate text-sm">
-                                {providerCatalog.label(
-                                  provider as SupportedProvider,
-                                )}
-                              </span>
-                            </div>
-                            {isPerUser ? (
-                              <span className="text-xs text-muted-foreground">
-                                Per-user — each user connects their own account
-                              </span>
-                            ) : (
-                              <SingleSelectCombobox
-                                className="w-full"
-                                value={
-                                  defaultProviderKeys[provider] ?? DEFAULT_VALUE
-                                }
-                                onChange={(value) =>
-                                  setDefaultProviderKeys((prev) => {
-                                    const next = { ...prev };
-                                    if (value === DEFAULT_VALUE) {
-                                      delete next[provider];
-                                    } else {
-                                      next[provider] = value;
-                                    }
-                                    return next;
-                                  })
-                                }
-                                options={[
-                                  { value: DEFAULT_VALUE, label: "Automatic" },
-                                  ...keys.map((key) => ({
-                                    value: key.id,
-                                    label: key.name,
-                                  })),
-                                ]}
-                                searchPlaceholder="Search keys…"
-                                disabled={locked}
-                              />
-                            )}
-                          </div>
-                        );
-                      },
-                    )}
-                  </div>
-                )}
+                <Switch
+                  checked={skillsEnabled}
+                  onCheckedChange={setSkillsEnabled}
+                  disabled={locked}
+                  aria-label="Offer skills on the Connect page"
+                />
+              </SettingRow>
+
+              {pluginsFeatureEnabled && (
+                <SettingRow
+                  title="Plugins on Connect"
+                  description="Offer installing approved plugins. Existing installs keep working."
+                >
+                  <Switch
+                    checked={pluginsEnabled}
+                    onCheckedChange={setPluginsEnabled}
+                    disabled={locked}
+                    aria-label="Offer plugins on the Connect page"
+                  />
+                </SettingRow>
+              )}
+
+              <SettingSection
+                title="Agents users can connect"
+                description="Pick which agents show on the Connect page and drag to set their order. Click one to choose the model keys it uses."
+              >
+                <AvailableAgentsList
+                  clients={clientsInOrder}
+                  shownClientIds={shownClientIds}
+                  onShownClientIdsChange={setShownClientIds}
+                  onOrderChange={setClientOrder}
+                  clientProviderKeys={clientProviderKeys}
+                  onClientKeysChange={(clientId, value) =>
+                    setClientProviderKeys((prev) => ({
+                      ...prev,
+                      [clientId]: value,
+                    }))
+                  }
+                  providerApiKeys={sharedProviderKeys}
+                  disabled={locked}
+                />
               </SettingSection>
 
               {envBaseUrls.length > 1 && (
@@ -553,56 +478,48 @@ export function ConnectionSettingsForm() {
                 </SettingSection>
               )}
 
-              <SettingRow
-                title="LLM Proxy on Connect"
-                description="Offer routing through the LLM Proxy. Existing client configs keep working."
-              >
-                <Switch
-                  checked={llmProxyEnabled}
-                  onCheckedChange={setLlmProxyEnabled}
-                  disabled={locked}
-                  aria-label="Offer the LLM Proxy on the Connect page"
-                />
-              </SettingRow>
-
-              <SettingRow
-                title="Skills on Connect"
-                description="Offer installing shared skills. Existing installs keep working."
-              >
-                <Switch
-                  checked={skillsEnabled}
-                  onCheckedChange={setSkillsEnabled}
-                  disabled={locked}
-                  aria-label="Offer skills on the Connect page"
-                />
-              </SettingRow>
-
-              {pluginsFeatureEnabled && (
-                <SettingRow
-                  title="Plugins on Connect"
-                  description="Offer installing approved plugins. Existing installs keep working."
-                >
+              <SettingsBlock
+                title="Instructions for connected agents"
+                description="Added to the system prompt of every agent users connect from the Connect page."
+                control={
                   <Switch
-                    checked={pluginsEnabled}
-                    onCheckedChange={setPluginsEnabled}
+                    checked={runtimeHandoffEnabled}
+                    onCheckedChange={setRuntimeHandoffEnabled}
                     disabled={locked}
-                    aria-label="Offer plugins on the Connect page"
+                    aria-label="Enable instructions for connected agents"
                   />
-                </SettingRow>
-              )}
-
-              <SettingSection
-                title="Available agents"
-                description="Choose which agents are available on Connect, and in what order."
+                }
               >
-                <AvailableAgentsList
-                  clients={clientsInOrder}
-                  shownClientIds={shownClientIds}
-                  onShownClientIdsChange={setShownClientIds}
-                  onOrderChange={setClientOrder}
-                  disabled={locked}
-                />
-              </SettingSection>
+                <div className="space-y-2">
+                  <Textarea
+                    aria-label="Instructions for connected agents"
+                    value={runtimeHandoffInstructions}
+                    onChange={(event) =>
+                      setRuntimeHandoffInstructions(event.target.value)
+                    }
+                    rows={2}
+                    maxLength={20000}
+                    disabled={locked || !runtimeHandoffEnabled}
+                    className="font-mono text-xs leading-relaxed"
+                  />
+                  <div className="flex justify-between gap-4 text-xs text-muted-foreground">
+                    <span>
+                      Supported agents receive updates on next launch; other
+                      clients need setup or manual copying.
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {runtimeHandoffInstructions.length.toLocaleString()} /
+                      20,000
+                    </span>
+                  </div>
+                  {runtimeHandoffEnabled &&
+                    !runtimeHandoffInstructions.trim() && (
+                      <InlineNotice variant="error">
+                        Enter instructions.
+                      </InlineNotice>
+                    )}
+                </div>
+              </SettingsBlock>
             </SettingsSectionStack>
             <SettingsSaveBar
               hasChanges={hasChanges}
@@ -654,4 +571,14 @@ function SettingSection({
       {children}
     </SettingsBlock>
   );
+}
+
+/** Drop clients left with no keys, so they read as unset. */
+function withoutEmptyClients(
+  keys: ClientProviderKeys,
+): ClientProviderKeys | null {
+  const set = Object.entries(keys).filter(
+    ([, mappings]) => mappings && mappings.length > 0,
+  );
+  return set.length > 0 ? Object.fromEntries(set) : null;
 }

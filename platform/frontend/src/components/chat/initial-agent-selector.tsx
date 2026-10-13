@@ -248,9 +248,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     return catalogItems.filter((c) => catalogIds.has(c.id));
   }, [currentAgentDetail, catalogItems]);
 
+  // Loaded with the composer, not deferred to the picker opening: the trigger
+  // shows these icons from the start, and a short id list is cheap.
   const { data: triggerDelegations = [] } = useAgentDelegations(
     effectiveAgentId ?? undefined,
-    { enabled: shouldLoadAgentManagementDetails },
   );
   const triggerSubagents = useMemo(() => {
     const targetIds = new Set(triggerDelegations.map((d) => d.id));

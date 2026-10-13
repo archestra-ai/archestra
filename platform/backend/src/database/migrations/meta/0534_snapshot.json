@@ -1,5 +1,5 @@
 {
-  "id": "0a49cbe4-652f-4b62-a9a5-6686dfa2c098",
+  "id": "b79379c2-1da1-4a37-8a06-8888396e90a2",
   "prevId": "279670c1-c100-436d-88ee-e45ee253d7e3",
   "version": "7",
   "dialect": "postgresql",
@@ -6589,52 +6589,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.browser_storage_states": {
-      "name": "browser_storage_states",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "encrypted_state": {
-          "name": "encrypted_state",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "browser_storage_states_user_id_user_id_fk": {
-          "name": "browser_storage_states_user_id_user_id_fk",
-          "tableFrom": "browser_storage_states",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -18536,6 +18490,12 @@
         },
         "connection_base_urls": {
           "name": "connection_base_urls",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "connection_client_provider_keys": {
+          "name": "connection_client_provider_keys",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false

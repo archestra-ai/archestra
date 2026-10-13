@@ -912,6 +912,7 @@ const PIXEL_REVIEW_HEADING =
 type StoredRuling = {
   offerId?: unknown;
   ruling?: unknown;
+  // Cache JSON is untrusted until closureOf checks the closed set.
   closure?: unknown;
 };
 

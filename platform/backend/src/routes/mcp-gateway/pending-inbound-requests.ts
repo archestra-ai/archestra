@@ -111,7 +111,6 @@ export class PendingInboundRequests {
   private shutdown: Promise<void> | undefined;
   private readonly inflight = new Set<Promise<unknown>>();
   private readonly pendingCancels = new Set<string>();
-  private readonly delivered = new Set<string>();
   private collectChain: Promise<Set<string>> = Promise.resolve(new Set());
 
   constructor(
@@ -415,6 +414,8 @@ export class PendingInboundRequests {
   private collectParked(): Promise<Set<string>> {
     if (this.closed || !this.shared) return Promise.resolve(new Set());
     const run = this.collectChain.then(() => this.collectOnce());
+    // The chain only orders ticks. Callers use the promise returned here,
+    // not a later tick's deliveries.
     this.collectChain = run.then(
       () => new Set<string>(),
       () => new Set<string>(),
@@ -451,7 +452,6 @@ export class PendingInboundRequests {
       });
       if (!entry) continue;
       deliverClientMessage({ entry, message: answer.message });
-      this.delivered.add(wireId);
       delivered.add(wireId);
       try {
         await this.cancelShared(wireId);

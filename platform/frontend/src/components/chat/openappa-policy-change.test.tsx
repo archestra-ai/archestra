@@ -158,7 +158,7 @@ test("confirmed publication offers a return action without opening the diff", ()
     ),
   );
   expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
-  expect(screen.getByText(/Enforcement confirmed on/)).toBeInTheDocument();
+  expect(screen.getByText(/enforcement on/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "View Guardrails" })).toHaveAttribute(
     "href",
     "/openappa",

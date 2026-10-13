@@ -4479,15 +4479,27 @@ async function recordNativeHitlRulings(params: {
   for (const [answer, claim] of params.verifiedNativeQuestionResults) {
     if (!claim.offerIds || claim.offerIds.length === 0 || !isRecord(answer))
       continue;
-    const ruling = parse({
-      content:
-        typeof answer.content === "string"
-          ? answer.content
-          : JSON.stringify(answer.content ?? null),
-      ...(typeof answer.isError === "boolean"
-        ? { isError: answer.isError }
-        : {}),
+    // The question the answer is read against comes from the review this
+    // server holds, the same source the question was issued from. Without
+    // that review the answer is not a ruling.
+    const asked = await getHitlAskUserArguments({
+      session: params.binding.session,
+      offerIds: claim.offerIds,
     });
+    const ruling = asked
+      ? parse(
+          {
+            content:
+              typeof answer.content === "string"
+                ? answer.content
+                : JSON.stringify(answer.content ?? null),
+            ...(typeof answer.isError === "boolean"
+              ? { isError: answer.isError }
+              : {}),
+          },
+          asked,
+        )
+      : "none";
     logger.debug(
       {
         ruling,

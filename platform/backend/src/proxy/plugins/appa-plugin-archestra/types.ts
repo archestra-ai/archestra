@@ -114,7 +114,15 @@ export type AppaClientAdapter = {
     isAvailable?(headers: IncomingHttpHeaders): boolean;
     supportsMultiple?: boolean;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
-    rulingFromResult?(result: NativeQuestionResult): NativeQuestionRuling;
+    /**
+     * Approve or Deny from the tool's result. `asked` is the question the
+     * platform wrote for the review; the ruling is read against it, never
+     * found by a search of the result text.
+     */
+    rulingFromResult?(
+      result: NativeQuestionResult,
+      asked: AskUserArguments,
+    ): NativeQuestionRuling;
   };
   /**
    * The client's own tool that waits for MCP servers which are still

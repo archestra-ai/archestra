@@ -253,6 +253,50 @@ describe("APPA feature boundary", () => {
     expect(decisions).toEqual([{ kind: "allow" }]);
   });
 
+  test("an allowed superyell also has the runtime release the yell it carries, and a denied one does not", async () => {
+    const args = { message: "Turn it off", with_trajectory: true };
+    const ruled = () =>
+      native.dispatchHook.mock.calls.map(([raw]) => {
+        const { operation_id, tool, arguments: carried } = JSON.parse(raw);
+        return { operation_id, tool, arguments: carried };
+      });
+
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "deny_call", feedback: "needs approval" }),
+    );
+    await evaluateToolCalls(
+      session,
+      [{ id: "super", name: "archestra__superyell", arguments: args }],
+      { canonicalize: (name) => name },
+    );
+    expect(ruled()).toEqual([
+      {
+        operation_id: "call:super",
+        tool: "archestra__superyell",
+        arguments: args,
+      },
+    ]);
+
+    native.dispatchHook.mockClear();
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    const decisions = await evaluateToolCalls(
+      session,
+      [{ id: "super", name: "archestra__superyell", arguments: args }],
+      { canonicalize: (name) => name },
+    );
+    expect(decisions).toEqual([{ kind: "allow" }]);
+    expect(ruled()).toEqual([
+      {
+        operation_id: "call:super",
+        tool: "archestra__superyell",
+        arguments: args,
+      },
+      { operation_id: "call:super~yell", tool: "yell", arguments: args },
+    ]);
+  });
+
   test("retains signed child lineage on the first evaluated tool call", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "allow_call" }),

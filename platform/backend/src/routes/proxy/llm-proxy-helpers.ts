@@ -337,6 +337,33 @@ function isAlwaysDirectlyCallableBuiltIn(toolName: string): boolean {
 }
 
 /**
+ * The cost recorded for a response: what the provider says it billed when it
+ * reports one (OpenRouter does on every response), otherwise the all-in cost
+ * computed from the model's token prices.
+ */
+export async function calculateUsageCost(params: {
+  model: string;
+  usage: UsageView;
+  provider: SupportedProvider;
+}): Promise<number | undefined> {
+  const { model, usage, provider } = params;
+  if (usage.providerReportedCost !== undefined) {
+    return usage.providerReportedCost;
+  }
+  return utils.costOptimization.calculateCost(
+    model,
+    usage.inputTokens,
+    usage.outputTokens,
+    provider,
+    {
+      readTokens: usage.cacheReadTokens ?? 0,
+      writeTokens: usage.cacheWriteTokens ?? 0,
+      write1hTokens: usage.cacheWrite1hTokens ?? 0,
+    },
+  );
+}
+
+/**
  * Calculate the costs recorded on an interaction.
  */
 export async function calculateInteractionCosts(params: {
@@ -349,23 +376,16 @@ export async function calculateInteractionCosts(params: {
   cacheSavings: number | undefined;
   cacheReadSavings: number | undefined;
 }> {
-  const cacheTokens = {
-    readTokens: params.usage.cacheReadTokens ?? 0,
-    writeTokens: params.usage.cacheWriteTokens ?? 0,
-    write1hTokens: params.usage.cacheWrite1hTokens ?? 0,
-  };
-  const actualCost = await utils.costOptimization.calculateCost(
-    params.actualModel,
-    params.usage.inputTokens,
-    params.usage.outputTokens,
-    params.providerName,
-    cacheTokens,
-  );
+  const actualCost = await calculateUsageCost({
+    model: params.actualModel,
+    usage: params.usage,
+    provider: params.providerName,
+  });
   const cacheBreakdown = await utils.costOptimization.calculateCacheCost(
     params.actualModel,
     params.providerName,
-    cacheTokens.readTokens,
-    cacheTokens.writeTokens,
+    params.usage.cacheReadTokens ?? 0,
+    params.usage.cacheWriteTokens ?? 0,
     params.usage.cacheWrite1hTokens ?? 0,
   );
   return {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  readRunToolArgs,
   resolveRunToolDispatch,
   resolveRunToolTarget,
 } from "./run-tool-target";
@@ -89,21 +90,22 @@ describe("resolveRunToolDispatch", () => {
   // tool_args as JSON text that run_tool reads as an object.
   test("reads the target's arguments as run_tool does", () => {
     const target = { path: "notes.md", content: '{"a": 1}' };
+    const toolInputOf = (toolArgs: unknown) =>
+      resolveRunToolTarget({
+        toolName: "archestra__run_tool",
+        args: { tool_name: "archestra__save_file", tool_args: toolArgs },
+      }).toolInput;
     for (const toolArgs of [target, JSON.stringify(target)]) {
-      expect(
-        resolveRunToolTarget({
-          toolName: "archestra__run_tool",
-          args: { tool_name: "archestra__save_file", tool_args: toolArgs },
-        }).toolInput,
-      ).toEqual(target);
+      expect(readRunToolArgs(toolArgs)).toEqual(target);
+      expect(toolInputOf(toolArgs)).toEqual(target);
     }
-    for (const toolArgs of [undefined, "not json", "[1]", '"{}"', null]) {
-      expect(
-        resolveRunToolTarget({
-          toolName: "archestra__run_tool",
-          args: { tool_name: "archestra__save_file", tool_args: toolArgs },
-        }).toolInput,
-      ).toEqual({});
+    // run_tool runs a call without tool_args with no arguments.
+    expect(readRunToolArgs(undefined)).toEqual({});
+    expect(toolInputOf(undefined)).toEqual({});
+    // run_tool refuses these, so the target has no arguments to rule on.
+    for (const toolArgs of ["not json", "[1]", '"{}"', null]) {
+      expect(readRunToolArgs(toolArgs)).toBeUndefined();
+      expect(toolInputOf(toolArgs)).toEqual({});
     }
   });
 

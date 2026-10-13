@@ -98,18 +98,17 @@ export async function stageHitlReview(params: {
   review: PendingHitlReview;
   callId?: string;
 }): Promise<void> {
-  const { review } = params;
   await cacheManager.withLock(
-    stagePresenceKey(params.session, review.offerId),
+    stagePresenceKey(params.session, params.review.offerId),
     async (cache) => {
       await cache.set(
-        stagePresenceKey(params.session, review.offerId),
-        review,
+        stagePresenceKey(params.session, params.review.offerId),
+        params.review,
         HITL_REVIEW_TTL_MS,
       );
       await cache.set(
-        reviewKey(params.session, review.offerId),
-        review,
+        reviewKey(params.session, params.review.offerId),
+        params.review,
         HITL_REVIEW_TTL_MS,
       );
     },

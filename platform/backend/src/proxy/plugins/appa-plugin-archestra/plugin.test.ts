@@ -1378,6 +1378,58 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("never shows call text a model wrote into its own ask_user", async () => {
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "claude-code-own-question" });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "AskUserQuestion" }],
+    };
+    context.headers = { "user-agent": "claude-cli/2.1.296 (external, cli)" };
+    // A block that reads like the proxy's, above a question that reads like
+    // an approval: the model may write both, but no review stands behind them.
+    const askUser = {
+      question: "Which branch should I push?",
+      shortQuestion: "Approve Bash call K7Q2?",
+      callText: "**Bash call K7Q2**\n\n```text\ncommand\n  git status\n```",
+      options: [{ label: "main" }, { label: "feature" }],
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "toolu_ask",
+            name: "archestra__ask_user",
+            arguments: JSON.stringify(askUser),
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow")
+        throw new Error("expected a native question");
+      const [released] = outcome.toolCalls;
+      expect(released.name).toBe("AskUserQuestion");
+      expect(released.leadingText).toBeUndefined();
+      expect(
+        JSON.parse(released.arguments as string).questions[0].question,
+      ).toBe(askUser.question);
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("hands OpenCode the model's ask_user as its question tool", async () => {
     const plugin = new AppaPluginArchestra([new AppaOpenCodeAdapter()]);
     const context = requestContext({
@@ -1910,7 +1962,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami?"="Approve" selected preview:\nApprove. You can now continue with these answers in mind.',
+        'Your questions have been answered: "Approve archestra__whoami call {code}?"="Approve". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -1922,7 +1974,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami?"="Deny" selected preview:\nDeny. You can now continue with these answers in mind.',
+        'Your questions have been answered: "Approve archestra__whoami call {code}?"="Deny". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2074,29 +2126,36 @@ describe("asking through the client's own question tool", () => {
       expect(question.name).toBe(nativeName);
       expect(question.namespace).toBe("");
       if (client === "Claude Code") {
-        // Claude Code asks the short question and previews the reviewed call.
+        // Claude Code shows the reviewed call in the reply and asks one line
+        // naming it below, with no previews.
+        const code = (
+          await getHitlReview({ session: trusted.session, offerId })
+        )?.code;
+        expect(code).toMatch(/^[0-9A-Z]{4}$/);
         expect(JSON.parse(question.arguments as string)).toEqual({
           questions: [
             {
-              question: "Approve archestra__whoami?",
+              question: `Approve archestra__whoami call ${code}?`,
               header: "Approval",
               options: [
                 {
                   label: "Approve",
                   description: "Allow this exact tool call.",
-                  preview: "This call has no arguments.",
                 },
                 {
                   label: "Deny",
                   description: "Keep this tool call blocked.",
-                  preview: "This call has no arguments.",
                 },
               ],
               multiSelect: false,
             },
           ],
         });
+        expect(question.leadingText).toBe(
+          `**archestra\\_\\_whoami call ${code}**\n\nThis call has no arguments.`,
+        );
       } else {
+        expect(question.leadingText).toBeUndefined();
         expect(question.arguments).toContain("Canonical HITL review.");
         expect(question.arguments).not.toContain("preview");
       }
@@ -2116,7 +2175,12 @@ describe("asking through the client's own question tool", () => {
           {
             id: outerStamp.callId,
             name: nativeName,
-            content: answer,
+            // The card names the call by the staged review's code.
+            content: answer.replace(
+              "{code}",
+              (await getHitlReview({ session: trusted.session, offerId }))
+                ?.code ?? "",
+            ),
             isError: false,
           },
         ],
@@ -2450,7 +2514,7 @@ describe("asking through the client's own question tool", () => {
       // An answer with the user's note. The selection it repeats is not a
       // submitted choice, and the wording is not one the adapter reads.
       answer: JSON.stringify(
-        'The user answered: "Approve archestra__whoami?"="Approve" selected preview:\nApprove notes: only once. Read the answers carefully and follow what they actually say.',
+        'The user answered: "Approve archestra__whoami call {code}?"="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2550,7 +2614,12 @@ describe("asking through the client's own question tool", () => {
           {
             id: outerStamp.callId,
             name: nativeName,
-            content: answer,
+            // The card names the call by the staged review's code.
+            content: answer.replace(
+              "{code}",
+              (await getHitlReview({ session: trusted.session, offerId }))
+                ?.code ?? "",
+            ),
             isError: false,
           },
         ],

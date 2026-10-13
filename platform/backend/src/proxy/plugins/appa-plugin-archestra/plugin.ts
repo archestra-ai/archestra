@@ -887,7 +887,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         offerIds.length > 0 &&
         (await hitlReviewAskedInForm({ session: binding.session, offerIds }))
           ? prepared
-          : this.asNativeQuestion(binding, prepared);
+          : this.asNativeQuestion(binding, prepared, offerIds.length > 0);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issued =
@@ -1676,6 +1676,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   private asNativeQuestion(
     binding: AppaPluginBinding,
     call: LlmProxyToolCallsContext["toolCalls"][number],
+    /** The call carries a server-held review, not arguments the model wrote. */
+    review: boolean,
   ): LlmProxyToolCallsContext["toolCalls"][number] {
     if (binding.runtimeSessionId) return call;
     const native = binding.adapter?.nativeQuestion;
@@ -1692,9 +1694,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     ) {
       return call;
     }
-    const args = parseAskUserArguments(call.arguments);
-    if (!args) return call;
-    if (args.allowMultiple && native.supportsMultiple === false) return call;
+    const parsed = parseAskUserArguments(call.arguments);
+    if (!parsed) return call;
+    if (parsed.allowMultiple && native.supportsMultiple === false) return call;
+    // The reply shows only a call this server holds. Text a model put in
+    // these fields of its own question could pass for a review's call.
+    const {
+      callText: _callText,
+      shortQuestion: _shortQuestion,
+      ...asked
+    } = parsed;
+    const args = review ? parsed : asked;
+    const leadingText = native.leadingText?.(args);
     return {
       id: call.id,
       name: native.toolName,
@@ -1702,6 +1713,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // the gateway namespace from the ask_user call this local tool replaces.
       namespace: "",
       arguments: JSON.stringify(native.fromAskUser(args)),
+      ...(leadingText ? { leadingText } : {}),
     };
   }
 

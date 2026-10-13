@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -28,13 +28,22 @@ type PendingHitlReview = {
   tool?: string;
   arguments?: string;
   remedyArguments?: Record<string, unknown>;
+  /**
+   * Names the call in the reply's block and in the form that asks about it,
+   * so a block the agent writes itself cannot pass for this one. Minted when
+   * the review is staged; reviews staged before it existed have none.
+   */
+  code?: string;
 };
 
 type HitlAskUserArguments = {
   question: string;
-  previewQuestion?: string;
+  /** The question for hosts that show the call in the reply (Claude Code). */
+  shortQuestion?: string;
+  /** Markdown the proxy shows in the reply, just above the short question. */
+  callText?: string;
   header: string;
-  options: Array<{ label: string; description: string; preview?: string }>;
+  options: Array<{ label: string; description: string }>;
   allowMultiple: false;
   remedy_offer_ids: [string];
 };
@@ -95,17 +104,18 @@ export async function stageHitlReview(params: {
   review: PendingHitlReview;
   callId?: string;
 }): Promise<void> {
+  const review = { ...params.review, code: mintReviewCode() };
   await cacheManager.withLock(
-    stagePresenceKey(params.session, params.review.offerId),
+    stagePresenceKey(params.session, review.offerId),
     async (cache) => {
       await cache.set(
-        stagePresenceKey(params.session, params.review.offerId),
-        params.review,
+        stagePresenceKey(params.session, review.offerId),
+        review,
         HITL_REVIEW_TTL_MS,
       );
       await cache.set(
-        reviewKey(params.session, params.review.offerId),
-        params.review,
+        reviewKey(params.session, review.offerId),
+        review,
         HITL_REVIEW_TTL_MS,
       );
     },
@@ -218,41 +228,27 @@ export async function getHitlAskUserArguments(params: {
       remedy_offer_ids: [offerId],
     };
   }
-  // Hosts with option previews (Claude Code) ask the short question and show
-  // the reviewed arguments beside each choice. Forms and other hosts ask the
-  // same call in one text. Both keep what an approval accepts besides the call.
+  // Claude Code shows the call in the reply and asks a one-line question below
+  // it, so its form stays one column. Forms and other hosts ask the same call
+  // in one text. Both keep what an approval accepts besides the call.
   const args = withoutCommandAlias(
     review.tool,
     parseReviewedArguments(review.arguments) ?? {},
   );
-  const argumentLines = formatArgumentBlock(args, REVIEW_PREVIEW_WIDTH);
-  // The host already names the highlighted choice above its preview, and both
-  // choices rule on the same call, so each preview shows only the call.
-  const preview = argumentLines
-    ? codeBlock(argumentLines)
-    : "This call has no arguments.";
   const accepted = acceptedCoverage(review.text);
+  const call = `${reviewedToolLabel(review.tool)} call${review.code ? ` ${review.code}` : ""}`;
   return {
     question:
       approvalQuestion({ tool: review.tool, args, accepted }) ??
       formatReviewQuestion(review.text),
-    previewQuestion: [
-      `Approve ${reviewedToolLabel(review.tool)}?`,
-      ...acceptedBlock(accepted),
-    ].join("\n\n"),
+    shortQuestion: `Approve ${call}?`,
+    callText: reviewCallText({ call, args, accepted }),
     header: "Approval",
-    options: options.map((option) => ({ ...option, preview })),
+    options,
     allowMultiple: false,
     remedy_offer_ids: [offerId],
   };
 }
-
-/**
- * Columns of Claude Code's narrowest preview pane: VS Code beside the option
- * list at its 576px breakpoint, with the default 14px editor font. That pane
- * cuts longer lines; the terminal wraps them.
- */
-const REVIEW_PREVIEW_WIDTH = 34;
 
 export async function recordHitlRuling(params: {
   session: OpenAppaSession;
@@ -465,7 +461,53 @@ function reviewCoverage(text: string): string[] | undefined {
 const COVERAGE_HEADING = "What this ruling would cover:";
 
 /**
- * The text as a fenced block. Claude Code renders previews as markdown, so
+ * The reviewed call as Claude Code shows it in the reply: a title naming the
+ * call, its arguments in a fenced block, and what an approval also accepts.
+ */
+function reviewCallText(params: {
+  call: string;
+  args: Record<string, unknown>;
+  accepted: string[] | undefined;
+}): string {
+  const argumentLines = formatArgumentBlock(params.args, CALL_TEXT_WIDTH);
+  const accepted = params.accepted ?? [];
+  return [
+    `**${escapeMarkdown(params.call)}**`,
+    argumentLines ? codeBlock(argumentLines) : "This call has no arguments.",
+    ...(accepted.length > 0
+      ? [
+          [
+            "Approving also accepts:",
+            ...accepted.map((line) => `- ${escapeMarkdown(line)}`),
+          ].join("\n"),
+        ]
+      : []),
+  ].join("\n\n");
+}
+
+/**
+ * Columns of a code block in Claude Code's VS Code chat in a 400px panel with
+ * the default 14px editor font. The block cuts longer lines; the terminal
+ * wraps them.
+ */
+const CALL_TEXT_WIDTH = 40;
+
+/** Four characters the agent cannot predict, without the look-alikes I, L, O, U. */
+function mintReviewCode(): string {
+  return Array.from(
+    randomBytes(4),
+    (byte) => REVIEW_CODE_ALPHABET[byte % REVIEW_CODE_ALPHABET.length],
+  ).join("");
+}
+
+const REVIEW_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+function escapeMarkdown(text: string): string {
+  return text.replace(/[\\`*_[\]<>#~|]/g, "\\$&");
+}
+
+/**
+ * The text as a fenced block. Claude Code renders replies as markdown, so
  * outside a block it would drop the `**`, `__` and backticks of a reviewed
  * command. The fence is longer than any backtick run in the text, so the
  * text cannot end the block early.

@@ -121,6 +121,8 @@ export type AppaClientAdapter = {
     isAvailable?(headers: IncomingHttpHeaders): boolean;
     supportsMultiple?: boolean;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
+    /** Text the client shows in the reply just before the question, if any. */
+    leadingText?(args: AskUserArguments): string | undefined;
     /**
      * Approve or Deny from the tool's result. `asked` is the question the
      * platform wrote for the review; the ruling is read against it, never
@@ -333,14 +335,15 @@ export type AppaRelayArrival = {
 export type AskUserArguments = {
   question: string;
   /**
-   * The question for hosts that show option previews (Claude Code), set when
-   * every option's preview carries what `question` spells out.
+   * For a server-held review only: the one-line question for hosts that show
+   * the call in the reply (Claude Code), and the markdown that shows it.
+   * Together they carry what `question` spells out.
    */
-  previewQuestion?: string;
+  shortQuestion?: string;
+  callText?: string;
   /** Short tab label; unvalidated here, as the model wrote it. */
   header?: unknown;
-  /** `preview` is shown only by hosts with option previews (Claude Code). */
-  options: Array<{ label: string; description?: string; preview?: string }>;
+  options: Array<{ label: string; description?: string }>;
   allowMultiple?: boolean;
   remedy_offer_ids?: string[];
 };

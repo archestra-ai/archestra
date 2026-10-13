@@ -158,6 +158,8 @@ export interface AccumulatedToolCall {
    * stays on `id`; only what is written to the client changes.
    */
   wireId?: string;
+  /** Markdown written to the client just before this call (Anthropic only). */
+  leadingText?: string;
 }
 
 /**

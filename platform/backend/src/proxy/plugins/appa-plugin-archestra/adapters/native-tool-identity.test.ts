@@ -81,61 +81,42 @@ describe("native local tool identities", () => {
     });
   });
 
-  const previewedReview: AskUserArguments = {
+  const shownReview: AskUserArguments = {
     question: "Full review text.",
-    previewQuestion: "Approve slack__send_message?",
+    shortQuestion: "Approve slack__send_message call K7Q2?",
+    callText:
+      "**slack\\_\\_send\\_message call K7Q2**\n\n```text\ntext  Hello\n```",
     header: "Approval",
     options: [
-      {
-        label: "Approve",
-        description: "Allow this exact tool call.",
-        preview: "```text\ntext  Hello\n```",
-      },
-      {
-        label: "Deny",
-        description: "Keep this tool call blocked.",
-        preview: "```text\ntext  Hello\n```",
-      },
+      { label: "Approve", description: "Allow this exact tool call." },
+      { label: "Deny", description: "Keep this tool call blocked." },
     ],
     allowMultiple: false,
   };
 
-  test("shows Claude Code the short question with option previews", () => {
-    expect(
-      new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(previewedReview),
-    ).toEqual({
+  test("asks Claude Code the one-line question below the call it shows", () => {
+    const native = new AppaClaudeCodeAdapter().nativeQuestion;
+    expect(native.fromAskUser(shownReview)).toEqual({
       questions: [
         {
-          question: "Approve slack__send_message?",
+          question: "Approve slack__send_message call K7Q2?",
           header: "Approval",
-          options: previewedReview.options,
+          options: shownReview.options,
           multiSelect: false,
         },
       ],
     });
+    expect(native.leadingText(shownReview)).toBe(shownReview.callText);
   });
 
-  test("keeps the full question when Claude Code cannot show previews", () => {
-    const [question] = new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser({
-      ...previewedReview,
-      allowMultiple: true,
-    }).questions as Array<{
-      question: string;
-      options: Array<Record<string, unknown>>;
-    }>;
-    expect(question.question).toBe("Full review text.");
-    expect(question.options.some((option) => "preview" in option)).toBe(false);
-  });
-
-  test("other native question tools ignore previews", () => {
+  test("other native question tools ask the full review text", () => {
     for (const converted of [
-      new AppaCodexAdapter().nativeQuestion.fromAskUser(previewedReview),
-      new AppaOpenCodeAdapter().nativeQuestion.fromAskUser(previewedReview),
+      new AppaCodexAdapter().nativeQuestion.fromAskUser(shownReview),
+      new AppaOpenCodeAdapter().nativeQuestion.fromAskUser(shownReview),
     ]) {
       const text = JSON.stringify(converted);
       expect(text).toContain("Full review text.");
-      expect(text).not.toContain("preview");
-      expect(text).not.toContain("Approve slack__send_message?");
+      expect(text).not.toContain("K7Q2");
     }
   });
 

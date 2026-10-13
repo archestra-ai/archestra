@@ -584,6 +584,7 @@ class AnthropicResponseAdapter
       name: string;
       arguments: string;
       wireId?: string;
+      leadingText?: string;
     }>,
   ): AnthropicResponse {
     // Positional: one rewritten entry per call this response carries, in
@@ -591,20 +592,25 @@ class AnthropicResponseAdapter
     // call carries the one it is given instead.
     let next = 0;
     const wireIdByProviderId = new Map<string, string>();
-    const content = this.response.content.map((block) => {
-      if (block.type !== "tool_use") return block;
-      const rewritten = toolCalls[next++];
-      if (!rewritten) return block;
-      if (rewritten.wireId && rewritten.wireId !== block.id) {
-        wireIdByProviderId.set(block.id, rewritten.wireId);
-      }
-      return {
-        ...block,
-        id: rewritten.wireId ?? block.id,
-        name: rewritten.name,
-        input: parseArgs(rewritten.arguments),
-      };
-    });
+    const content = this.response.content.flatMap(
+      (block): AnthropicResponse["content"] => {
+        if (block.type !== "tool_use") return [block];
+        const rewritten = toolCalls[next++];
+        if (!rewritten) return [block];
+        if (rewritten.wireId && rewritten.wireId !== block.id) {
+          wireIdByProviderId.set(block.id, rewritten.wireId);
+        }
+        const call = {
+          ...block,
+          id: rewritten.wireId ?? block.id,
+          name: rewritten.name,
+          input: parseArgs(rewritten.arguments),
+        };
+        return rewritten.leadingText
+          ? [{ type: "text", text: rewritten.leadingText, citations: [] }, call]
+          : [call];
+      },
+    );
     // Response keys outside `content` (for example `safeguard_results`, keyed
     // by tool-use id) must name the calls the way the client now knows them.
     const { content: _content, ...rest } = this.response;
@@ -1031,6 +1037,9 @@ class AnthropicStreamAdapter
       if (toolCall.wireId && toolCall.wireId !== toolCall.id) {
         this.wireIdByProviderId.set(toolCall.id, toolCall.wireId);
       }
+      if (toolCall.leadingText) {
+        events.push(...this.textBlockEvents(toolCall.leadingText));
+      }
       const index = this.nextOutIndex++;
       let input: Record<string, unknown> = {};
       try {
@@ -1076,6 +1085,11 @@ class AnthropicStreamAdapter
 
   formatCompleteTextSSE(text: string): string[] {
     this.replacedText = text;
+    return this.textBlockEvents(text);
+  }
+
+  /** One complete text block at the next output index. */
+  private textBlockEvents(text: string): string[] {
     const index = this.nextOutIndex++;
     return [
       `event: content_block_start\ndata: ${JSON.stringify({
@@ -1190,6 +1204,13 @@ class AnthropicStreamAdapter
         // Keep empty object if parse fails
       }
 
+      if (toolCall.leadingText) {
+        content.push({
+          type: "text",
+          text: toolCall.leadingText,
+          citations: null,
+        });
+      }
       content.push({
         type: "tool_use",
         id: toolCall.id,

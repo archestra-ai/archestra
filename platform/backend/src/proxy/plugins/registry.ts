@@ -60,6 +60,12 @@ type LlmProxyToolCall = {
    * stays on `id`; only what is written to the client changes.
    */
   wireId?: string;
+  /**
+   * Markdown the client is shown in the same reply just before this call: a
+   * review's call above Claude Code's question about it. Only the Anthropic
+   * Messages adapters write it.
+   */
+  leadingText?: string;
 };
 
 export type LlmProxyToolCallsContext = LlmProxyRequestContext & {

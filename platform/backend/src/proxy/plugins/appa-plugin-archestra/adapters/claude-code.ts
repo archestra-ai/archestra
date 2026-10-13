@@ -80,26 +80,24 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
-    fromAskUser: (args: AskUserArguments) => {
-      const previews = showsPreviews(args);
-      return {
-        questions: [
-          {
-            question: shownQuestion(args),
-            // Claude Code's AskUserQuestion tab label is at most 12 characters.
-            header: questionHeader(args.header, 12),
-            options: args.options.map((option) => ({
-              label: option.label,
-              description: option.description ?? option.label,
-              ...(previews && typeof option.preview === "string"
-                ? { preview: option.preview }
-                : {}),
-            })),
-            multiSelect: args.allowMultiple === true,
-          },
-        ],
-      };
-    },
+    // No option previews: any preview makes the VS Code form two columns. A
+    // review's call goes in the reply above the form instead.
+    fromAskUser: (args: AskUserArguments) => ({
+      questions: [
+        {
+          question: shownQuestion(args),
+          // Claude Code's AskUserQuestion tab label is at most 12 characters.
+          header: questionHeader(args.header, 12),
+          options: args.options.map((option) => ({
+            label: option.label,
+            description: option.description ?? option.label,
+          })),
+          multiSelect: args.allowMultiple === true,
+        },
+      ],
+    }),
+    leadingText: (args: AskUserArguments) =>
+      showsCallText(args) ? args.callText : undefined,
     rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
       structuredQuestionRuling(result, shownQuestion(asked)),
     formFallback: true,
@@ -403,19 +401,18 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 }
 
-/** AskUserQuestion shows option previews for single-select questions only. */
-function showsPreviews(args: AskUserArguments): boolean {
+/** A review whose call the reply shows, so the form can ask in one line. */
+function showsCallText(
+  args: AskUserArguments,
+): args is AskUserArguments & { callText: string; shortQuestion: string } {
   return (
-    args.allowMultiple !== true &&
-    args.options.some((option) => typeof option.preview === "string")
+    typeof args.callText === "string" && typeof args.shortQuestion === "string"
   );
 }
 
 /** The question text Claude Code shows, and repeats before the answer. */
 function shownQuestion(args: AskUserArguments): string {
-  return showsPreviews(args) && typeof args.previewQuestion === "string"
-    ? args.previewQuestion
-    : args.question;
+  return showsCallText(args) ? args.shortQuestion : args.question;
 }
 
 function parentSessionId(context: AppaMatchContext): string | undefined {

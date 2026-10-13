@@ -301,8 +301,15 @@ test("uses the staged review for fixed native approval choices", async () => {
   ).toBe(false);
 });
 
-test("asks preview hosts about a structured tool by name and previews its arguments beside each choice", async () => {
-  const active = session("preview-review");
+/** The code the staged review names its call with. */
+async function codeOf(active: OpenAppaSession): Promise<string> {
+  const review = await getHitlReview({ session: active, offerId: "offer-1" });
+  if (!review?.code) throw new Error("expected a staged review code");
+  return review.code;
+}
+
+test("asks Claude Code in one line and shows the call in the reply above it", async () => {
+  const active = session("reply-review");
   await stageHitlReview({
     session: active,
     review: {
@@ -313,32 +320,42 @@ test("asks preview hosts about a structured tool by name and previews its argume
     },
   });
 
-  const preview = "```text\nchannel  #general\ntext     Hello\n```";
+  const code = await codeOf(active);
   expect(
     await getHitlAskUserArguments({ session: active, offerIds: ["offer-1"] }),
   ).toEqual({
     question: "Full review text.",
-    previewQuestion: "Approve slack__send_message?",
+    shortQuestion: `Approve slack__send_message call ${code}?`,
+    callText: [
+      `**slack\\_\\_send\\_message call ${code}**`,
+      "```text\nchannel  #general\ntext     Hello\n```",
+    ].join("\n\n"),
     header: "Approval",
     options: [
-      {
-        label: "Approve",
-        description: "Allow this exact tool call.",
-        preview,
-      },
-      {
-        label: "Deny",
-        description: "Keep this tool call blocked.",
-        preview,
-      },
+      { label: "Approve", description: "Allow this exact tool call." },
+      { label: "Deny", description: "Keep this tool call blocked." },
     ],
     allowMultiple: false,
     remedy_offer_ids: ["offer-1"],
   });
 });
 
-test("wraps long argument values to the narrowest preview pane", async () => {
-  const active = session("wrapped-preview");
+test("names each staged call with a code of four unambiguous characters", async () => {
+  const codes: string[] = [];
+  for (const name of ["code-a", "code-b"]) {
+    const active = session(name);
+    await stageHitlReview({
+      session: active,
+      review: { offerId: "offer-1", text: "Full review text.", tool: "Bash" },
+    });
+    codes.push(await codeOf(active));
+  }
+  for (const code of codes) expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}$/);
+  expect(codes[0]).not.toBe(codes[1]);
+});
+
+test("wraps long argument values to a narrow chat code block", async () => {
+  const active = session("wrapped-call");
   const text = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ");
   await stageHitlReview({
     session: active,
@@ -354,14 +371,12 @@ test("wraps long argument values to the narrowest preview pane", async () => {
     session: active,
     offerIds: ["offer-1"],
   });
-  const preview = question?.options[0].preview ?? "";
-  expect(question?.options[1].preview).toBe(preview);
-  const lines = preview.split("\n");
+  const lines = (question?.callText ?? "").split("\n\n")[1].split("\n");
   expect([lines[0], lines.at(-1)]).toEqual(["```text", "```"]);
   const block = lines.slice(1, -1);
   expect(block[0]).toBe("text");
   expect(block.length).toBeGreaterThan(2);
-  expect(block.every((line) => line.length <= 34)).toBe(true);
+  expect(block.every((line) => line.length <= 40)).toBe(true);
   expect(
     block
       .slice(1)
@@ -371,7 +386,7 @@ test("wraps long argument values to the narrowest preview pane", async () => {
 });
 
 test("shows a reviewed command exactly as written, markdown and fences included", async () => {
-  const active = session("markdown-preview");
+  const active = session("markdown-call");
   await stageHitlReview({
     session: active,
     review: {
@@ -388,12 +403,14 @@ test("shows a reviewed command exactly as written, markdown and fences included"
     session: active,
     offerIds: ["offer-1"],
   });
-  expect(question?.options[0].preview).toBe(
+  expect(question?.callText).toBe(
     [
+      `**Bash call ${await codeOf(active)}**`,
+      "",
       "````text",
       "command",
-      "  rm -rf __pycache__ && echo",
-      "  **done** `whoami`",
+      "  rm -rf __pycache__ && echo **done**",
+      "  `whoami`",
       "  ```",
       "  EOF",
       "````",
@@ -406,7 +423,7 @@ test.each([
   ["empty arguments", "{}"],
   ["arguments that are not an object", "[1,2]"],
 ])("says the call has no arguments when the review has %s", async (_, reviewedArguments) => {
-  const active = session("bare-preview");
+  const active = session("bare-call");
   await stageHitlReview({
     session: active,
     review: {
@@ -421,12 +438,12 @@ test.each([
     session: active,
     offerIds: ["offer-1"],
   });
+  const code = await codeOf(active);
   expect(question?.question).toBe("Full review text.");
-  expect(question?.previewQuestion).toBe("Approve local_tool?");
-  expect(question?.options.map((option) => option.preview)).toEqual([
-    "This call has no arguments.",
-    "This call has no arguments.",
-  ]);
+  expect(question?.shortQuestion).toBe(`Approve local_tool call ${code}?`);
+  expect(question?.callText).toBe(
+    `**local\\_tool call ${code}**\n\nThis call has no arguments.`,
+  );
 });
 
 /** A review as the OpenAPPA runtime writes it, with the given coverage lines. */
@@ -453,7 +470,7 @@ test.each([
     coverage: "  - attention: human-approval",
     expected:
       "Approve send_report?\n\nto  finance@example.com\n\nApprove lets this exact call run. Deny keeps it blocked.",
-    expectedPreview: "Approve send_report?",
+    expectedAccepted: "",
   },
   {
     case: "more than the person's attention",
@@ -461,13 +478,13 @@ test.each([
       "  - attention: human-approval\n  - the readers must be the public audience",
     expected:
       "Approve send_report?\n\nto  finance@example.com\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
-    expectedPreview:
-      "Approve send_report?\n\nApproving also accepts:\n  - the readers must be the public audience",
+    expectedAccepted:
+      "\n\nApproving also accepts:\n- the readers must be the public audience",
   },
 ])("asks about the call itself when the ruling covers $case", async ({
   coverage,
   expected,
-  expectedPreview,
+  expectedAccepted,
 }) => {
   const active = session("form-question");
   await stageHitlReview({
@@ -484,8 +501,12 @@ test.each([
     session: active,
     offerIds: ["offer-1"],
   });
+  const code = await codeOf(active);
   expect(question?.question).toBe(expected);
-  expect(question?.previewQuestion).toBe(expectedPreview);
+  expect(question?.shortQuestion).toBe(`Approve send_report call ${code}?`);
+  expect(question?.callText).toBe(
+    `**send\\_report call ${code}**\n\n\`\`\`text\nto  finance@example.com\n\`\`\`${expectedAccepted}`,
+  );
 });
 
 test("shows a command once although the proxy reviews it under both spellings", async () => {
@@ -509,11 +530,11 @@ test("shows a command once although the proxy reviews it under both spellings", 
     session: active,
     offerIds: ["offer-1"],
   });
-  expect(question?.options[0].preview).toBe(
-    "```text\ncommand\n  git push -u origin feature\ndescription\n  Push the branch\n```",
-  );
+  const argumentLines =
+    "command      git push -u origin feature\ndescription  Push the branch";
+  expect(question?.callText).toContain(`\`\`\`text\n${argumentLines}\n\`\`\``);
   expect(question?.question).toBe(
-    "Approve Bash?\n\ncommand      git push -u origin feature\ndescription  Push the branch\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
+    `Approve Bash?\n\n${argumentLines}\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.`,
   );
 });
 
@@ -533,7 +554,7 @@ test("keeps both arguments when a command tool's cmd and command differ", async 
     session: active,
     offerIds: ["offer-1"],
   });
-  expect(question?.options[0].preview).toBe(
+  expect(question?.callText).toContain(
     "```text\ncmd      ls\ncommand  rm -rf build\n```",
   );
 });
@@ -587,7 +608,7 @@ test("renders a terminal-safe heading without changing the reviewed payload", as
     session: active,
     offerId: "offer-1",
   });
-  expect(staged).toEqual(review);
+  expect(staged).toEqual({ ...review, code: expect.any(String) });
   const nativeQuestion = await getHitlAskUserArguments({
     session: active,
     offerIds: ["offer-1"],
@@ -705,7 +726,7 @@ test("approved native review context remains readable without reopening its clai
   ).toBe(true);
   expect(
     await getHitlReview({ session: active, offerId: review.offerId }),
-  ).toEqual(review);
+  ).toEqual({ ...review, code: expect.any(String) });
   expect(
     await recordHitlRuling({
       session: active,

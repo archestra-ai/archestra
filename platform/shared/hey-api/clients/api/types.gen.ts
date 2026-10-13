@@ -79204,6 +79204,7 @@ export type GetMcpServersResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         alertMutes: Array<{
@@ -79370,6 +79371,7 @@ export type InstallMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -79593,6 +79595,7 @@ export type GetMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -79738,6 +79741,7 @@ export type ReauthenticateMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -79973,6 +79977,7 @@ export type RestoreMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -80588,6 +80593,7 @@ export type ReinstallMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };

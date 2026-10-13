@@ -129,6 +129,78 @@ describe("chatMessageQueue", () => {
     ).toEqual(externalMcpSkill);
   });
 
+  it("persists small attachments with their message", () => {
+    const conversationId = freshConversationId();
+    const files = [
+      {
+        url: "data:image/png;base64,iVBORw0KGgo=",
+        mediaType: "image/png",
+        filename: "screenshot.png",
+      },
+    ];
+
+    chatMessageQueue.enqueue(conversationId, { text: "look", files });
+
+    expect(chatMessageQueue.get(conversationId)[0].files).toEqual(files);
+    expect(
+      JSON.parse(localStorage.getItem(storageKey(conversationId)) ?? "[]")[0]
+        .files,
+    ).toEqual(files);
+  });
+
+  it("keeps oversized attachments in memory without persisting that message", () => {
+    const conversationId = freshConversationId();
+    const largeImage = {
+      url: `data:image/png;base64,${"A".repeat(1_100_000)}`,
+      mediaType: "image/png",
+      filename: "large.png",
+    };
+
+    chatMessageQueue.enqueue(conversationId, { text: "before" });
+    chatMessageQueue.enqueue(conversationId, {
+      text: "with image",
+      files: [largeImage],
+    });
+    chatMessageQueue.enqueue(conversationId, { text: "after" });
+
+    // The live queue still sends everything, attachments included.
+    const queue = chatMessageQueue.get(conversationId);
+    expect(queue.map((m) => m.text)).toEqual(["before", "with image", "after"]);
+    expect(queue[1].files).toEqual([largeImage]);
+    // The persisted copy drops the attachment message whole rather than
+    // keeping it without its files.
+    const persisted = JSON.parse(
+      localStorage.getItem(storageKey(conversationId)) ?? "[]",
+    );
+    expect(persisted.map((m: { text: string }) => m.text)).toEqual([
+      "before",
+      "after",
+    ]);
+  });
+
+  it("keeps queueing in memory when storage rejects the write", () => {
+    const conversationId = freshConversationId();
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota", "QuotaExceededError");
+      });
+    try {
+      chatMessageQueue.enqueue(conversationId, {
+        text: "still queued",
+        files: [
+          { url: "data:text/plain;base64,aGk=", mediaType: "text/plain" },
+        ],
+      });
+    } finally {
+      setItem.mockRestore();
+    }
+
+    expect(chatMessageQueue.get(conversationId).map((m) => m.text)).toEqual([
+      "still queued",
+    ]);
+  });
+
   it("drops malformed persisted entries instead of trusting them", () => {
     const malformedJson = freshConversationId();
     localStorage.setItem(storageKey(malformedJson), "not json {");
@@ -144,6 +216,7 @@ describe("chatMessageQueue", () => {
       JSON.stringify([
         { id: "ok", text: "valid", queuedAt: "2026-07-07T00:00:00.000Z" },
         { text: "missing id" },
+        { id: "bad-files", text: "bad files", files: [{ url: 1 }] },
         "just a string",
         null,
       ]),

@@ -1,4 +1,8 @@
-import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
+import {
+  ARCHESTRA_TOKEN_PREFIX,
+  type OpenCodeFamilyDescriptor,
+  openCodeFamilyRecord,
+} from "@archestra/shared";
 import {
   CLAUDE_DESKTOP_PROFILE_ID,
   INSTALLER_CLIENT_IDS,
@@ -173,48 +177,7 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
     finish:
       "Tell the user to open a new terminal so the removed environment variables are gone.",
   },
-  opencode: {
-    binary: "opencode",
-    inventory: `- Config: \${XDG_CONFIG_HOME:-~/.config}/opencode/opencode.json. The gateway is the mcp
-  entry whose URL starts with {{BASE}}/mcp/. The proxy is a provider entry whose
-  options.baseURL (V1) or settings.baseURL (V2 providers) points at {{HOST}}, or x-archestra-* headers added to a provider.
-- Skills: the folder \${XDG_CONFIG_HOME:-~/.config}/opencode/skills/MARKETPLACE cloned from {{HOST}}/skills/.
-- Routing plugin: \${XDG_CONFIG_HOME:-~/.config}/opencode/plugins/archestra-llm-proxy.js.`,
-    manual: `- opencode mcp logout SERVER_NAME, then remove mcp.SERVER_NAME from opencode.json.
-- Delete the skills folder named above.
-- If ~/.archestra/opencode-primary-state.json exists, restore its sections and fields
-  into opencode.json: null means delete the field or provider entry. Then delete
-  that state file and ~/.archestra/opencode-primary.key.
-- Otherwise, remove the provider entry that points at {{HOST}}, or only the baseURL and
-  x-archestra-* headers that were added to the user's own provider.
-- Routing plugin: if ~/.archestra/opencode-routing-plugin-state.json says the plugin
-  file existed before, restore its saved content; otherwise delete archestra-llm-proxy.js.
-  Then delete the state file and any ~/.archestra/opencode-*.key file.`,
-    finish:
-      "Do not restart OpenCode from inside this conversation. Tell the user to close OpenCode and launch opencode in a new terminal.",
-  },
-  kilo: {
-    binary: "kilo",
-    inventory: `- Config: \${XDG_CONFIG_HOME:-~/.config}/kilo/kilo.json, the file setup writes. The gateway is
-  the mcp entry whose URL starts with {{BASE}}/mcp/. The proxy is a provider entry whose
-  options.baseURL points at {{HOST}}, or x-archestra-* headers added to a provider.
-  Check kilo.jsonc in the same folder too: kilo mcp add writes there, and it can have comments.
-- Skills: the folder \${XDG_CONFIG_HOME:-~/.config}/kilo/skills/MARKETPLACE cloned from {{HOST}}/skills/.
-- Routing plugin: \${XDG_CONFIG_HOME:-~/.config}/kilo/plugins/archestra-llm-proxy.js.`,
-    manual: `- kilo mcp logout SERVER_NAME, then remove mcp.SERVER_NAME from kilo.json (or kilo.jsonc,
-  editing it as text so its comments stay).
-- Delete the skills folder named above.
-- If ~/.archestra/kilo-primary-state.json exists, restore its sections and fields
-  into kilo.json: null means delete the field or provider entry. Then delete
-  that state file and ~/.archestra/kilo-primary.key.
-- Otherwise, remove the provider entry that points at {{HOST}}, or only the baseURL and
-  x-archestra-* headers that were added to the user's own provider.
-- Routing plugin: if ~/.archestra/kilo-routing-plugin-state.json says the plugin
-  file existed before, restore its saved content; otherwise delete archestra-llm-proxy.js.
-  Then delete the state file and any ~/.archestra/kilo-*.key file.`,
-    finish:
-      "Do not restart Kilo Code from inside this conversation. Tell the user to close Kilo Code and launch kilo in a new terminal.",
-  },
+  ...openCodeFamilyRecord(openCodeFamilyGuardClient),
 };
 
 function focusedInstructions(
@@ -339,4 +302,30 @@ function genericInstructions(target: DeploymentTarget): string {
 - If the app keeps these settings in its UI, tell the user exactly where to change them.`,
     finish: "Reload or restart the app if it needs to.",
   });
+}
+
+/** OpenCode and Kilo Code: one layout, from the family descriptor. */
+function openCodeFamilyGuardClient(client: OpenCodeFamilyDescriptor) {
+  const configDir = `\${XDG_CONFIG_HOME:-~/.config}/${client.dir}`;
+  const state = `~/.archestra/${client.stateName}`;
+  const mcpAddFile = client.mcpAddConfigFile;
+  return {
+    binary: client.binary,
+    inventory: `- Config: ${configDir}/${client.configFile}${mcpAddFile ? ", the file setup writes" : ""}. The gateway is the mcp
+  entry whose URL starts with {{BASE}}/mcp/. The proxy is a provider entry whose
+  options.baseURL (V1) or settings.baseURL (V2 providers) points at {{HOST}}, or x-archestra-* headers added to a provider.
+${mcpAddFile ? `  Check ${mcpAddFile} in the same folder too: ${client.binary} mcp add writes there, and it can have comments.\n` : ""}- Skills: the folder ${configDir}/skills/MARKETPLACE cloned from {{HOST}}/skills/.
+- Routing plugin: ${configDir}/plugins/archestra-llm-proxy.js.`,
+    manual: `- ${client.binary} mcp logout SERVER_NAME, then remove mcp.SERVER_NAME from ${client.configFile}${mcpAddFile ? ` (or ${mcpAddFile},\n  editing it as text so its comments stay)` : ""}.
+- Delete the skills folder named above.
+- If ${state}-primary-state.json exists, restore its sections and fields
+  into ${client.configFile}: null means delete the field or provider entry. Then delete
+  that state file and ${state}-primary.key.
+- Otherwise, remove the provider entry that points at {{HOST}}, or only the baseURL and
+  x-archestra-* headers that were added to the user's own provider.
+- Routing plugin: if ${state}-routing-plugin-state.json says the plugin
+  file existed before, restore its saved content; otherwise delete archestra-llm-proxy.js.
+  Then delete the state file and any ${state}-*.key file.`,
+    finish: `Do not restart ${client.label} from inside this conversation. Tell the user to close ${client.label} and launch ${client.binary} in a new terminal.`,
+  };
 }

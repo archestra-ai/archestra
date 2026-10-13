@@ -12,6 +12,7 @@ import {
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
   TimeInMs,
 } from "@archestra/shared";
+import { isOpenCodeFamilySessionSource } from "@archestra/shared/opencode-family";
 import {
   and,
   asc,
@@ -179,7 +180,7 @@ function computeRequestType(
   if (source === "opencode:main") return "main";
   if (source?.startsWith("opencode:")) return "subagent";
 
-  if (sessionSource === "opencode_session") {
+  if (isOpenCodeFamilySessionSource(sessionSource)) {
     return computeOpenCodeRequestType(request);
   }
 
@@ -781,14 +782,14 @@ class InteractionModel {
               THEN 'main'
               WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction')
               THEN 'subagent'
-              WHEN ${schema.interactionsTable.sessionSource} = 'opencode_session'
+              WHEN ${schema.interactionsTable.sessionSource} IN ('opencode_session', 'kilo_session')
                 AND LOWER(CONCAT_WS('\n',
                   ${schema.interactionsTable.request}->>'system',
                   ${schema.interactionsTable.request}->>'instructions',
                   ${schema.interactionsTable.request}#>>'{systemInstruction,parts,0,text}'
                 )) LIKE '%title generator%'
               THEN 'subagent'
-              WHEN ${schema.interactionsTable.sessionSource} = 'opencode_session'
+              WHEN ${schema.interactionsTable.sessionSource} IN ('opencode_session', 'kilo_session')
                 AND ${schema.interactionsTable.request} ? 'tools'
                 AND NOT EXISTS (
                   SELECT 1
@@ -2141,7 +2142,7 @@ class InteractionModel {
 
       for (const interaction of windowRows) {
         const isOpenCodeSideTurn =
-          interaction.sessionSource === "opencode_session" &&
+          isOpenCodeFamilySessionSource(interaction.sessionSource) &&
           computeRequestType(
             interaction.request,
             interaction.sessionSource,

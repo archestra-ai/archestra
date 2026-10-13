@@ -350,7 +350,7 @@ describe("extractSessionInfo", () => {
       }),
     ).toEqual({
       sessionId: "ses_ec9353a9cffeIs4iZ3LOssZSTc",
-      sessionSource: "opencode_session",
+      sessionSource: "kilo_session",
     });
   });
 

@@ -1,5 +1,9 @@
 import { z } from "zod";
 import type { SupportedProvider } from "../model-constants";
+import {
+  OPENCODE_FAMILY_CLIENTS,
+  openCodeFamilyClientForUserAgent,
+} from "../opencode-family";
 
 /**
  * Client-app attribution for an interaction lives in
@@ -167,10 +171,7 @@ export function isCursorUserAgent(
 export function isOpenCodeUserAgent(
   userAgent: string | null | undefined,
 ): boolean {
-  return (
-    !!userAgent &&
-    userAgent.split("/", 1)[0]?.trim().toLowerCase() === "opencode"
-  );
+  return openCodeFamilyClientForUserAgent(userAgent)?.id === "opencode";
 }
 
 /**
@@ -180,9 +181,7 @@ export function isOpenCodeUserAgent(
  * Its OpenAI subscription login sends OpenCode's identity instead.
  */
 export function isKiloUserAgent(userAgent: string | null | undefined): boolean {
-  return (
-    !!userAgent && userAgent.split("/", 1)[0]?.trim().toLowerCase() === "kilo"
-  );
+  return openCodeFamilyClientForUserAgent(userAgent)?.id === "kilo";
 }
 
 /**
@@ -421,26 +420,18 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     agentIds: CODEX_CLIENT_AGENT_IDS,
     isClientAgentId: isCodexClientAgentId,
   },
-  {
-    filter: OPENCODE_CLIENT_FILTER,
-    label: OPENCODE_CLIENT_LABEL,
-    // OpenCode routes to many providers; its own mark takes precedence.
-    provider: "openai",
-    icon: "/icons/opencode.png",
-    agentIds: OPENCODE_CLIENT_AGENT_IDS,
-    isClientAgentId: isOpenCodeClientAgentId,
-  },
-  {
-    // The filter is also the Connect tile id, so proxy traffic and sign-ins
-    // merge into one connected agent.
-    filter: KILO_CLIENT_FILTER,
-    label: KILO_CLIENT_LABEL,
-    // Kilo routes to many providers; its own mark takes precedence.
-    provider: "openai",
-    icon: "/icons/kilo.png",
-    agentIds: KILO_CLIENT_AGENT_IDS,
-    isClientAgentId: isKiloClientAgentId,
-  },
+  // OpenCode and Kilo Code route to many providers; their own mark takes
+  // precedence. The filter is also the Connect tile id, so proxy traffic and
+  // sign-ins merge into one connected agent.
+  ...OPENCODE_FAMILY_CLIENTS.map((client) => ({
+    filter: client.id,
+    label: client.label,
+    provider: "openai" as const,
+    icon: client.icon,
+    agentIds: [client.id] as readonly string[],
+    isClientAgentId: (externalAgentId: string | null | undefined) =>
+      externalAgentId?.trim().toLowerCase() === client.id,
+  })),
   {
     filter: COPILOT_CLI_CLIENT_FILTER,
     label: COPILOT_CLI_CLIENT_LABEL,

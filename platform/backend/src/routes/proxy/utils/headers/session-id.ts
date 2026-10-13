@@ -2,10 +2,14 @@ import {
   CLAUDE_CODE_HEADER_SESSION_SOURCE,
   CLAUDE_METADATA_SESSION_SOURCE,
   isCodexClientAgentId,
-  isKiloClientAgentId,
-  isOpenCodeClientAgentId,
   SESSION_ID_HEADER,
 } from "@archestra/shared";
+import {
+  isOpenCodeFamilyClient,
+  OPENCODE_FAMILY,
+  type OpenCodeFamilyClientId,
+  type OpenCodeFamilySessionSource,
+} from "@archestra/shared/opencode-family";
 import { getHeaderValue, parseMetaHeader } from "./meta-header";
 
 const OPENWEBUI_CHAT_ID_HEADER = "x-openwebui-chat-id";
@@ -45,7 +49,7 @@ export type SessionSource =
   | "meta_header"
   | "openwebui_chat"
   | "codex_session"
-  | "opencode_session"
+  | OpenCodeFamilySessionSource
   | typeof CLAUDE_CODE_HEADER_SESSION_SOURCE
   | "openai_user"
   | null;
@@ -146,17 +150,22 @@ export function extractSessionInfo({
 
   // Priority 5: OpenCode's session id, gated on the resolved client
   // attribution for the same reason as Codex: these header names are generic.
-  // Kilo Code, an OpenCode fork, sends the same headers and session ids.
-  if (
-    isOpenCodeClientAgentId(externalAgentId) ||
-    isKiloClientAgentId(externalAgentId)
-  ) {
+  // Kilo Code, an OpenCode fork, sends the same headers and session ids; its
+  // rows carry its own source.
+  const openCodeFamilyClient =
+    externalAgentId &&
+    isOpenCodeFamilyClient(externalAgentId.trim().toLowerCase())
+      ? OPENCODE_FAMILY[
+          externalAgentId.trim().toLowerCase() as OpenCodeFamilyClientId
+        ]
+      : null;
+  if (openCodeFamilyClient) {
     for (const header of OPENCODE_SESSION_ID_HEADERS) {
       const openCodeSessionId = getHeaderValue(headers, header)?.trim();
       if (openCodeSessionId) {
         return {
           sessionId: openCodeSessionId,
-          sessionSource: "opencode_session",
+          sessionSource: openCodeFamilyClient.sessionSource,
         };
       }
     }

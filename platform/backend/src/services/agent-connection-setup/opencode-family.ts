@@ -1,54 +1,39 @@
+import {
+  OPENCODE_FAMILY,
+  type OpenCodeFamilyClientId,
+  type OpenCodeFamilyDescriptor,
+} from "@archestra/shared/opencode-family";
+
 /**
- * OpenCode and Kilo Code's CLI, an OpenCode fork, take the same setup: the
- * same config keys, `mcp` commands, plugin hooks and session headers. These
- * are the parts that differ: where each keeps its files, its binary, and the
- * names it reads.
+ * The shared family descriptor plus what only the installer needs: the config
+ * schema, the inline-config variable the launch check uses, and whether the
+ * plugin API follows the binary's major version.
  */
-export interface OpenCodeFamilyClient {
-  clientId: "opencode" | "kilo";
-  label: string;
-  binary: string;
-  /**
-   * Folder under XDG_CONFIG_HOME for config, plugins and skills, and under
-   * XDG_DATA_HOME for the client's auth store.
-   */
-  dir: string;
-  /** The global config file setup writes in that folder (plain JSON). */
-  configFile: string;
+export interface OpenCodeFamilyClient extends OpenCodeFamilyDescriptor {
+  clientId: OpenCodeFamilyClientId;
   schemaUrl: string;
-  /** Prefix of the files setup keeps in ~/.archestra. */
-  stateName: string;
-  /** Env var that adds inline config at launch; it loads the handoff plugin. */
+  /** Environment variable the client reads inline config from. */
   inlineConfigEnv: string;
   /**
-   * OpenCode 2 replaced the plugin API, so setup reads `opencode --version`.
-   * Kilo Code keeps OpenCode 1's plugin API at every version.
+   * OpenCode 2 changed its plugin API, so its setup reads the installed major
+   * version. Kilo Code is numbered 7.x but keeps OpenCode 1's API at every
+   * version, so its setup never looks.
    */
   versionedPluginApi: boolean;
 }
 
 export const OPENCODE_CLIENT: OpenCodeFamilyClient = {
+  ...OPENCODE_FAMILY.opencode,
   clientId: "opencode",
-  label: "OpenCode",
-  binary: "opencode",
-  dir: "opencode",
-  configFile: "opencode.json",
   schemaUrl: "https://opencode.ai/config.json",
-  stateName: "opencode",
   inlineConfigEnv: "OPENCODE_CONFIG_CONTENT",
   versionedPluginApi: true,
 };
 
-// Kilo also reads kilo.jsonc, where `kilo mcp add` writes. Setup writes
-// kilo.json so it never rewrites a commented file; Kilo merges both.
 export const KILO_CLIENT: OpenCodeFamilyClient = {
+  ...OPENCODE_FAMILY.kilo,
   clientId: "kilo",
-  label: "Kilo Code",
-  binary: "kilo",
-  dir: "kilo",
-  configFile: "kilo.json",
   schemaUrl: "https://app.kilo.ai/config.json",
-  stateName: "kilo",
   inlineConfigEnv: "KILO_CONFIG_CONTENT",
   versionedPluginApi: false,
 };

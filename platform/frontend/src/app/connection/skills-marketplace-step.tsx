@@ -1,6 +1,10 @@
 "use client";
 
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  isOpenCodeFamilyClient,
+} from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -765,8 +769,7 @@ function isClientSupported(client: ConnectClient | null): boolean {
     client.id === "codex" ||
     client.id === "copilot-cli" ||
     client.id === "cursor" ||
-    client.id === "opencode" ||
-    client.id === "kilo" ||
+    isOpenCodeFamilyClient(client.id) ||
     usesGenericInstructions(client)
   );
 }

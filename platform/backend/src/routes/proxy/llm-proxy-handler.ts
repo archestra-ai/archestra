@@ -25,6 +25,7 @@ import {
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
   context as otelContext,
@@ -720,7 +721,7 @@ export async function handleLLMProxy<
     childReturns = collectAndStripChildReturns(body, {
       // Kilo Code frames its background tasks as OpenCode does.
       openCodeBackgroundReturns:
-        nativeClient === "opencode" || nativeClient === "kilo",
+        !!nativeClient && isOpenCodeFamilyClient(nativeClient),
       codexMailboxReturns: nativeClient === "codex",
       onRefusal: (refusal) => {
         childReturnRefusal ??= refusal;

@@ -569,77 +569,12 @@ ${opencodeWindowsStrip(client, "mcp", "$McpServerName")}`,
   };
 }
 
-export const OPENCODE_GUARD_CLIENT = openCodeFamilyGuardClient(
-  OPENCODE_CLIENT,
-  {
-    disableEnvVar: "ARCHESTRA_OPENCODE_GUARD",
-    // One-shot and headless subcommands: warn on stderr, skip the pre-loader.
-    nonInteractiveArgPatterns: [
-      "run",
-      "serve",
-      "web",
-      "acp",
-      "mcp",
-      "auth",
-      "debug",
-      "models",
-      "export",
-      "import",
-      "stats",
-      "upgrade",
-      "uninstall",
-    ],
-    utilitySubcommands: [
-      "auth",
-      "mcp",
-      "plugin",
-      "plugins",
-      "install",
-      "uninstall",
-      "update",
-      "upgrade",
-      "doctor",
-      "completion",
-      "completions",
-      "config",
-      "login",
-      "logout",
-      "debug",
-      "models",
-      "stats",
-      "export",
-      "import",
-      "github",
-      "session",
-      "providers",
-      "db",
-      "help",
-    ],
-    handoffSkipSubcommands: [
-      "serve",
-      "web",
-      "acp",
-      "models",
-      "stats",
-      "export",
-      "import",
-      "github",
-      "session",
-      "attach",
-      "providers",
-      "db",
-      "pr",
-      "agent",
-    ],
-  },
-);
-
-// Kilo's commands (kilo 7.8.8): OpenCode's, without `web`, plus its own.
-export const KILO_GUARD_CLIENT = openCodeFamilyGuardClient(KILO_CLIENT, {
-  disableEnvVar: "ARCHESTRA_KILO_GUARD",
-  nonInteractiveArgPatterns: [
+const OPENCODE_SUBCOMMANDS = {
+  // One-shot and headless subcommands: warn on stderr, skip the pre-loader.
+  nonInteractive: [
     "run",
     "serve",
+    "web",
     "acp",
     "mcp",
     "auth",
@@ -650,17 +585,22 @@ export const KILO_GUARD_CLIENT = openCodeFamilyGuardClient(KILO_CLIENT, {
     "stats",
     "upgrade",
     "uninstall",
-    "daemon",
-    "roll-call",
   ],
-  utilitySubcommands: [
+  utility: [
     "auth",
     "mcp",
     "plugin",
+    "plugins",
+    "install",
     "uninstall",
+    "update",
     "upgrade",
+    "doctor",
     "completion",
+    "completions",
     "config",
+    "login",
+    "logout",
     "debug",
     "models",
     "stats",
@@ -671,16 +611,10 @@ export const KILO_GUARD_CLIENT = openCodeFamilyGuardClient(KILO_CLIENT, {
     "providers",
     "db",
     "help",
-    "console",
-    "cloud",
-    "profile",
-    "remote",
-    "daemon",
-    "worktree",
-    "roll-call",
   ],
-  handoffSkipSubcommands: [
+  handoffSkip: [
     "serve",
+    "web",
     "acp",
     "models",
     "stats",
@@ -693,12 +627,57 @@ export const KILO_GUARD_CLIENT = openCodeFamilyGuardClient(KILO_CLIENT, {
     "db",
     "pr",
     "agent",
-    "console",
-    "cloud",
-    "profile",
-    "remote",
-    "daemon",
-    "worktree",
-    "roll-call",
   ],
+};
+
+export const OPENCODE_GUARD_CLIENT = openCodeFamilyGuardClient(
+  OPENCODE_CLIENT,
+  {
+    disableEnvVar: OPENCODE_CLIENT.guardEnvVar,
+    nonInteractiveArgPatterns: OPENCODE_SUBCOMMANDS.nonInteractive,
+    utilitySubcommands: OPENCODE_SUBCOMMANDS.utility,
+    handoffSkipSubcommands: OPENCODE_SUBCOMMANDS.handoffSkip,
+  },
+);
+
+// Kilo 7.8.8 has none of these OpenCode subcommands (captured 2026-10-13).
+const KILO_MISSING_SUBCOMMANDS = new Set([
+  "web",
+  "plugins",
+  "install",
+  "update",
+  "doctor",
+  "completions",
+  "login",
+  "logout",
+]);
+// Kilo's own: its cloud, profile and daemon commands.
+const KILO_ONLY_SUBCOMMANDS = [
+  "console",
+  "cloud",
+  "profile",
+  "remote",
+  "daemon",
+  "worktree",
+  "roll-call",
+];
+const kiloSubcommands = (base: string[], extra: string[]) => [
+  ...base.filter((subcommand) => !KILO_MISSING_SUBCOMMANDS.has(subcommand)),
+  ...extra,
+];
+
+export const KILO_GUARD_CLIENT = openCodeFamilyGuardClient(KILO_CLIENT, {
+  disableEnvVar: KILO_CLIENT.guardEnvVar,
+  nonInteractiveArgPatterns: kiloSubcommands(
+    OPENCODE_SUBCOMMANDS.nonInteractive,
+    ["daemon", "roll-call"],
+  ),
+  utilitySubcommands: kiloSubcommands(
+    OPENCODE_SUBCOMMANDS.utility,
+    KILO_ONLY_SUBCOMMANDS,
+  ),
+  handoffSkipSubcommands: kiloSubcommands(
+    OPENCODE_SUBCOMMANDS.handoffSkip,
+    KILO_ONLY_SUBCOMMANDS,
+  ),
 });

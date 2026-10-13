@@ -1,3 +1,8 @@
+import {
+  OPENCODE_FAMILY_CLIENTS,
+  type OpenCodeFamilyClientId,
+  type OpenCodeFamilyDescriptor,
+} from "@archestra/shared";
 /**
  * Builders for the Claude Code / Codex install snippets shown inside the
  * Skills marketplace step. The two snippets share a `cloneUrl` +
@@ -11,7 +16,12 @@ export interface SkillMarketplaceInstallStep {
 }
 
 export interface SkillMarketplaceClient {
-  id: "claude-code" | "codex" | "cursor" | "copilot-cli" | "opencode" | "kilo";
+  id:
+    | "claude-code"
+    | "codex"
+    | "cursor"
+    | "copilot-cli"
+    | OpenCodeFamilyClientId;
   getInstallSteps: (
     params: SkillMarketplaceInstallParams,
   ) => SkillMarketplaceInstallStep[];
@@ -88,52 +98,7 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
       },
     ],
   },
-  {
-    id: "opencode",
-    // OpenCode has no plugin marketplace, but it loads every SKILL.md under
-    // its skills folder recursively, so a plain clone there is the install.
-    // "$HOME" rather than "~": the manual flow has no OS picker, and Windows
-    // PowerShell expands $HOME for git.exe but leaves ~ literal.
-    getInstallSteps: ({ cloneUrl, marketplaceName }) => {
-      const skillsDir = `"$HOME/.config/opencode/skills/${marketplaceName}"`;
-      return [
-        {
-          label: "Clone the marketplace into OpenCode's skills folder",
-          body: "OpenCode loads the shared skills the next time it starts.",
-          code: `git clone ${cloneUrl} ${skillsDir}`,
-          language: "bash",
-        },
-        {
-          label: "Pull updates",
-          body: "Run this whenever the shared skills change.",
-          code: `git -C ${skillsDir} pull`,
-          language: "bash",
-        },
-      ];
-    },
-  },
-  {
-    id: "kilo",
-    // Kilo Code keeps OpenCode's skills loader: every SKILL.md under its
-    // skills folder, recursively.
-    getInstallSteps: ({ cloneUrl, marketplaceName }) => {
-      const skillsDir = `"$HOME/.config/kilo/skills/${marketplaceName}"`;
-      return [
-        {
-          label: "Clone the marketplace into Kilo Code's skills folder",
-          body: "Kilo Code loads the shared skills the next time it starts.",
-          code: `git clone ${cloneUrl} ${skillsDir}`,
-          language: "bash",
-        },
-        {
-          label: "Pull updates",
-          body: "Run this whenever the shared skills change.",
-          code: `git -C ${skillsDir} pull`,
-          language: "bash",
-        },
-      ];
-    },
-  },
+  ...OPENCODE_FAMILY_CLIENTS.map(openCodeFamilySkillsClient),
 ];
 
 export const SKILL_MARKETPLACE_TTL_PRESETS: {
@@ -153,4 +118,35 @@ export function computeSkillMarketplaceExpiresAt(
   if (days === null) return null;
   const d = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
   return d.toISOString();
+}
+
+/**
+ * OpenCode and Kilo Code have no plugin marketplace, but load every SKILL.md
+ * under their skills folder recursively, so a plain clone there is the
+ * install. "$HOME" rather than "~": the manual flow has no OS picker, and
+ * Windows PowerShell expands $HOME for git.exe but leaves ~ literal.
+ */
+function openCodeFamilySkillsClient(
+  client: OpenCodeFamilyDescriptor,
+): SkillMarketplaceClient {
+  return {
+    id: client.id,
+    getInstallSteps: ({ cloneUrl, marketplaceName }) => {
+      const skillsDir = `"$HOME/.config/${client.dir}/skills/${marketplaceName}"`;
+      return [
+        {
+          label: `Clone the marketplace into ${client.label}'s skills folder`,
+          body: `${client.label} loads the shared skills the next time it starts.`,
+          code: `git clone ${cloneUrl} ${skillsDir}`,
+          language: "bash",
+        },
+        {
+          label: "Pull updates",
+          body: "Run this whenever the shared skills change.",
+          code: `git -C ${skillsDir} pull`,
+          language: "bash",
+        },
+      ];
+    },
+  };
 }

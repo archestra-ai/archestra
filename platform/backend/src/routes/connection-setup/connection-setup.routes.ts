@@ -20,6 +20,7 @@ import {
   isOpenCodeFamilyClient,
   type OpenCodeFamilyClientId,
 } from "@archestra/shared/connection-setup";
+import { openCodeFamilyRecord } from "@archestra/shared/opencode-family";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
@@ -122,21 +123,21 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
     "cerebras",
     "github-copilot",
   ],
-  // OpenCode can only route the providers its plugin redirects natively.
-  opencode: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
-    ({ provider }) => provider,
+  // OpenCode and Kilo Code route only the providers their plugin redirects
+  // natively.
+  ...openCodeFamilyRecord(() =>
+    OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ provider }) => provider),
   ),
-  // Kilo Code, an OpenCode fork, runs the same plugin.
-  kilo: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ provider }) => provider),
 };
 
 /** Clients whose proxy setup mints one virtual key mapped to many providers. */
 const MULTI_PROVIDER_KEY_CLIENTS: Partial<
   Record<ConnectionSetupClientId, { keyName: string }>
 > = {
-  opencode: { keyName: "OpenCode primary providers" },
-  kilo: { keyName: "Kilo Code primary providers" },
   cursor: { keyName: "Cursor model router" },
+  ...openCodeFamilyRecord((client) => ({
+    keyName: `${client.label} primary providers`,
+  })),
 };
 
 const CreateConnectionSetupBodySchema = z.object({

@@ -25,7 +25,6 @@ import { cn } from "@/lib/utils/tailwind";
 import { BatteriesCard, hasBatteries } from "./batteries-card";
 import { CoverageWarnings } from "./coverage-warnings";
 import { OpenAppaChatButton } from "./openappa-chat-button";
-import { UnrecognizedClientsCard } from "./overview-setup-cards";
 import { RULE_BUCKETS } from "./rule-coverage-bar";
 
 type Totals = CoverageSummary["totals"];
@@ -53,7 +52,6 @@ export function CoverageCharts() {
               className="flex-1"
             />
           )}
-          <UnrecognizedClientsCard />
         </div>
       </div>
     </div>

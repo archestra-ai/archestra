@@ -302,6 +302,7 @@ const githubSyncSource = () =>
     HttpResponse.json({
       enabled: true,
       hasPolicy: true,
+      githubWebUrl: "https://github.com",
       source: {
         organizationId: "org-1",
         repo: "acme/policy",

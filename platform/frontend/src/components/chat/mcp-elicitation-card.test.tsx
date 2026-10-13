@@ -22,7 +22,7 @@ describe("McpElicitationCard", () => {
     vi.useRealTimers();
   });
 
-  it("shows a single question with Dismiss and Submit, no tabs or navigation", async () => {
+  it("shows a single question with only Submit, no header, tabs or navigation", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
 
@@ -51,9 +51,6 @@ describe("McpElicitationCard", () => {
       screen.queryByTestId("mcp-elicitation-back"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Dismiss question" }),
-    ).toBeInTheDocument();
-    expect(
       screen.queryByText("1 of 1", { exact: false }),
     ).not.toBeInTheDocument();
 
@@ -73,7 +70,7 @@ describe("McpElicitationCard", () => {
     });
   });
 
-  it("renders an OpenAPPA review inline with formatted arguments and submits approval", async () => {
+  it("renders an OpenAPPA review as a collapsed tool card and submits approval from Approve", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
     const request = openappaReview();
@@ -84,69 +81,25 @@ describe("McpElicitationCard", () => {
     const card = screen.getByTestId("mcp-elicitation-card");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByText("archestra__todo_write")).toBeInTheDocument();
+    expect(screen.getByText("Approval requested")).toBeInTheDocument();
+    // Arguments stay collapsed until the header opens them.
+    expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
+    await user.click(screen.getByText("archestra__todo_write"));
     expect(screen.getByText(/qa-hitl/)).toBeInTheDocument();
     expect(card).not.toHaveTextContent(/\\"/);
 
-    const submit = screen.getByRole("button", { name: "Submit" });
-    expect(submit).toBeDisabled();
-    await user.click(screen.getByRole("radio", { name: "approve" }));
-    expect(submit).toBeEnabled();
-    await user.click(submit);
+    expect(card).not.toHaveTextContent("APPA asks you to rule");
+    expect(card).not.toHaveTextContent("What this ruling would cover");
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Submit" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Approve" }));
 
     expect(onRespond).toHaveBeenCalledExactlyOnceWith({
       id: "review-1",
       action: "accept",
       content: { action: "approve" },
-    });
-  });
-
-  it("dismisses a single question from the header without submitting a selection", async () => {
-    const user = userEvent.setup();
-    const onRespond = vi.fn().mockResolvedValue(true);
-    render(
-      <McpElicitationCard
-        requests={[
-          singleChoice({
-            id: "q-1",
-            message: "Who should see the app?",
-            options: ["Only me", "Team"],
-          }),
-        ]}
-        onRespond={onRespond}
-      />,
-    );
-
-    const dismiss = screen.getByRole("button", { name: "Dismiss question" });
-    dismiss.focus();
-    await user.keyboard("{Enter}");
-    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
-      id: "q-1",
-      action: "cancel",
-    });
-  });
-
-  it("dismisses a question with Escape from an option", async () => {
-    const user = userEvent.setup();
-    const onRespond = vi.fn().mockResolvedValue(true);
-    render(
-      <McpElicitationCard
-        requests={[
-          singleChoice({
-            id: "q-1",
-            message: "Who should see the app?",
-            options: ["Only me", "Team"],
-          }),
-        ]}
-        onRespond={onRespond}
-      />,
-    );
-
-    await user.click(screen.getByRole("radio", { name: "Team" }));
-    await user.keyboard("{Escape}");
-
-    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
-      id: "q-1",
-      action: "cancel",
     });
   });
 
@@ -506,10 +459,6 @@ describe("McpElicitationCard", () => {
     expect(footerButtons()).toEqual(["Back", "Next"]);
     await user.click(screen.getByTestId("mcp-elicitation-next"));
     expect(footerButtons()).toEqual(["Back", "Submit"]);
-    // Dismissing stays within reach on every tab, from the header.
-    expect(
-      screen.getByRole("button", { name: "Dismiss questions" }),
-    ).toBeInTheDocument();
   });
 
   it("moves on when the already-picked option is clicked again", async () => {
@@ -725,27 +674,6 @@ describe("McpElicitationCard", () => {
 
     await user.keyboard("[Enter]");
     expect(screen.getByText("Second?")).toBeInTheDocument();
-  });
-
-  it("dismisses every question in the card from its header", async () => {
-    const user = userEvent.setup();
-    const onRespond = vi.fn().mockResolvedValue(true);
-
-    render(
-      <McpElicitationCard
-        requests={[
-          singleChoice({ id: "q-1", message: "First?", options: ["A", "B"] }),
-          singleChoice({ id: "q-2", message: "Second?", options: ["C", "D"] }),
-        ]}
-        onRespond={onRespond}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Dismiss questions" }));
-
-    expect(onRespond).toHaveBeenCalledTimes(2);
-    expect(onRespond).toHaveBeenCalledWith({ id: "q-1", action: "cancel" });
-    expect(onRespond).toHaveBeenCalledWith({ id: "q-2", action: "cancel" });
   });
 
   it("appends a question that arrives later without losing picks or the active tab", async () => {
@@ -1174,75 +1102,6 @@ describe("McpElicitationCard", () => {
       id: "q-2",
       action: "accept",
       content: { choice: "Apple" },
-    });
-  });
-
-  it("does not snapshot an already-submitted question when dismissing the remainder", async () => {
-    const user = userEvent.setup();
-    const first = singleChoice({
-      id: "q-1",
-      toolCallId: "call-1",
-      message: "Pick a color",
-      options: ["Blue", "Green"],
-    });
-    const second = singleChoice({
-      id: "q-2",
-      toolCallId: "call-2",
-      message: "Pick a fruit",
-      options: ["Apple", "Pear"],
-    });
-    const dismissResponse = deferred<boolean>();
-    const onRespond = vi
-      .fn()
-      .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce(false)
-      .mockReturnValue(dismissResponse.promise);
-    const { rerender } = render(
-      <McpElicitationCard
-        groupId="assistant-1-ask-user-1"
-        members={[
-          groupMember("call-1", "Pick a color", { status: "waiting" }),
-          groupMember("call-2", "Pick a fruit", { status: "waiting" }),
-        ]}
-        requests={[first, second]}
-        onRespond={onRespond}
-      />,
-    );
-
-    await user.click(screen.getByRole("radio", { name: "Blue" }));
-    await waitFor(() =>
-      expect(screen.getByText("Pick a fruit")).toBeInTheDocument(),
-    );
-    await user.click(screen.getByRole("radio", { name: "Apple" }));
-    await user.click(screen.getByRole("button", { name: "Submit" }));
-    expect(onRespond).toHaveBeenCalledTimes(2);
-
-    rerender(
-      <McpElicitationCard
-        groupId="assistant-1-ask-user-1"
-        members={[
-          groupMember("call-1", "Pick a color", { status: "waiting" }),
-          groupMember("call-2", "Pick a fruit", { status: "waiting" }),
-        ]}
-        requests={[second]}
-        onRespond={onRespond}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Dismiss questions" }));
-    expect(onRespond).toHaveBeenCalledTimes(3);
-    expect(onRespond).toHaveBeenLastCalledWith({
-      id: "q-2",
-      action: "cancel",
-    });
-    expect(
-      screen.queryByRole("radio", { name: "Blue" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: "Apple" })).toBeInTheDocument();
-
-    await act(async () => {
-      dismissResponse.resolve(true);
-      await dismissResponse.promise;
     });
   });
 });

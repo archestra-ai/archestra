@@ -259,29 +259,32 @@ function ToolCallSkillPill({
     return target;
   })();
 
+  const pill = (
+    <SkillPill
+      skillName={skillName}
+      data-tool-name={toolName}
+      role="status"
+      aria-label={tooltipLabel}
+      tabIndex={display.source ? 0 : undefined}
+      showNativeTitle={false}
+    >
+      {state === "running" || state === "error" ? (
+        <span
+          className={cn(
+            "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+            state === "running" && "bg-blue-500 animate-pulse",
+            state === "error" && "bg-destructive",
+          )}
+        />
+      ) : null}
+    </SkillPill>
+  );
+  // The pill already shows the name; a tooltip only helps when it says more.
+  if (tooltipLabel === display.name) return pill;
   return (
     <TooltipProvider delayDuration={200}>
       <Tooltip>
-        <TooltipTrigger asChild>
-          <SkillPill
-            skillName={skillName}
-            data-tool-name={toolName}
-            role="status"
-            aria-label={tooltipLabel}
-            tabIndex={display.source ? 0 : undefined}
-            showNativeTitle={false}
-          >
-            {state === "running" || state === "error" ? (
-              <span
-                className={cn(
-                  "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
-                  state === "running" && "bg-blue-500 animate-pulse",
-                  state === "error" && "bg-destructive",
-                )}
-              />
-            ) : null}
-          </SkillPill>
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{pill}</TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {tooltipLabel}
         </TooltipContent>

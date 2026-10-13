@@ -9,7 +9,7 @@ import {
   type ScopedResource,
 } from "@archestra/shared";
 import { Check, ChevronDown, Users } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { filterControlClass } from "@/components/filter-bar";
 import {
@@ -38,6 +38,8 @@ import { cn } from "@/lib/utils/tailwind";
  *    viewer) is off, and offered only to a viewer who reads every object of
  *    the type through a `*` grant, because nobody else can see such objects.
  * 2. "Shared with": objects whose own grants reach a picked recipient.
+ *    Shown only while "Admin access" is on, the one view where the viewer
+ *    browses objects shared with other people.
  * 3. "Owner": objects authored by a picked person.
  *
  * The selection lives in the `access`, `sharedWith` and `owner` URL
@@ -69,7 +71,6 @@ export function ResourceAccessFilter({
   queryParamsAdapter?: QueryParamsAdapter;
 }) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const {
     access,
@@ -84,8 +85,13 @@ export function ResourceAccessFilter({
 
   const updateParams = useCallback(
     (updates: Record<string, string | null>) => {
+      // The lists fetch on the client, so the URL changes in place: a
+      // router navigation would re-render the server page on every click.
       if (queryParamsAdapter) {
-        queryParamsAdapter.updateQueryParams({ ...updates, page: null });
+        queryParamsAdapter.updateQueryParams(
+          { ...updates, page: null },
+          { shallow: true },
+        );
         return;
       }
       const params = new URLSearchParams(searchParams.toString());
@@ -95,11 +101,10 @@ export function ResourceAccessFilter({
       }
       // reset server-side pagination (a no-op on pages without a page param)
       params.delete("page");
-      const navigateTo =
-        navigate ?? ((url: string) => router.push(url, { scroll: false }));
+      const navigateTo = navigate ?? pushUrlInPlace;
       navigateTo(`${pathname}?${params.toString()}`);
     },
-    [searchParams, router, pathname, navigate, queryParamsAdapter],
+    [searchParams, pathname, navigate, queryParamsAdapter],
   );
 
   const reset = isDefault ? null : (
@@ -133,16 +138,18 @@ export function ResourceAccessFilter({
         updateParams={updateParams}
         reset={reset}
       />
-      <ResourceSharedWithFilter
-        resource={resource}
-        value={sharedWith ?? []}
-        onChange={(next) =>
-          updateParams({
-            [SHARED_WITH_PARAM]: next.length > 0 ? next.join(",") : null,
-          })
-        }
-        footer={reset}
-      />
+      {(access.includes("others") || sharedWith) && (
+        <ResourceSharedWithFilter
+          resource={resource}
+          value={sharedWith ?? []}
+          onChange={(next) =>
+            updateParams({
+              [SHARED_WITH_PARAM]: next.length > 0 ? next.join(",") : null,
+            })
+          }
+          footer={reset}
+        />
+      )}
       {owned && (
         <ResourceOwnerFilter
           resource={resource}
@@ -280,8 +287,13 @@ function AccessRelationFilter({
       toggled.has(relation) ? turnOn : selected.has(relation),
     );
     // An empty selection would list nothing; keep the last option on.
-    if (next.length > 0)
-      updateParams({ [RESOURCE_ACCESS_PARAM]: serializeAccess(next) });
+    if (next.length === 0) return;
+    updateParams({
+      [RESOURCE_ACCESS_PARAM]: serializeAccess(next),
+      // "Shared with" is shown only with "Admin access"; never leave it
+      // filtering the list while hidden.
+      ...(!next.includes("others") && { [SHARED_WITH_PARAM]: null }),
+    });
   };
 
   return (
@@ -424,6 +436,11 @@ function serializeAccess(access: ResourceAccessRelation[]): string | null {
     access.includes(relation),
   ).join(",");
   return value === DEFAULT_RESOURCE_ACCESS_RELATIONS.join(",") ? null : value;
+}
+
+/** Change the URL without re-rendering the server page; Next.js syncs `useSearchParams`. */
+function pushUrlInPlace(url: string) {
+  window.history.pushState(null, "", url);
 }
 
 /** A comma-separated list parameter; undefined when absent or empty. */

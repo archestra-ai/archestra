@@ -67,22 +67,32 @@ Over [A2A](/docs/agents/triggers-and-channels/webhook-a2a#approving-tool-calls),
 
 ## GitHub Sync
 
-With GitHub sync, the policy lives in a repository. The agent opens a pull request instead of saving, and a change applies after merge and successful sync.
+With GitHub sync, the policy lives in a GitHub repository, and changes go through pull requests. Sync runs both ways: a change merged in GitHub applies here, and a change made here opens a pull request instead of saving.
 
-1. On **Overview**, click **Create repository** on the **GitHub sync** card.
-2. Choose a GitHub App, and enter the owner and repository name.
-3. Archestra creates a private repository from the [configuration template](https://github.com/archestra-ai/openappa-config) and commits your current policy. If repository rules block the commit, it opens a pull request instead.
-4. If a pull request is needed, click **Review and merge PR**, wait for the repository checks to pass, and merge it. The dialog stays open and keeps checking for the merge; click **Check if merged** to check right away. Your current policy stays active until then.
+1. Go to **Settings → Guardrails** and click **Create GitHub repository** under **GitHub sync**.
+2. Enter the **GitHub URL**, either GitHub.com or your GitHub Enterprise Server address, and the **Organization**. Then choose one:
+   - **Start fresh:** click **Create on GitHub** to create a private repository from the [OpenAPPA template](https://github.com/archestra-ai/openappa-config). On GitHub Enterprise Server, create an empty private repository instead, and setup adds the OpenAPPA files.
+   - **Use an existing repository:** one that already holds an OpenAPPA policy.
+3. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install a new App on the policy repository only.
+4. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
 
-To use a repository you already have, click **Connect existing repository** in the same dialog, or ask the setup chat. The policy file in that repository replaces the current policy.
+Before you connect, the dialog checks the repository:
 
-The **GitHub sync** card shows **Connected** after setup. When a pull request is needed, it shows **Awaiting initial merge** until the initial policy is merged and synced. Manage it under **Settings → OpenAPPA**.
+- **OpenAPPA template** or **Empty repository:** setup copies your current policy into it.
+- **Found appa.toml:** that file replaces your current policy.
+- **No appa.toml:** pick another repository, or set the policy file under **Advanced**.
+- **No access:** the App cannot read the repository. Click **Change access** to fix it on GitHub.
+
+It also warns when the validations folder is missing. When setup is done, **GitHub sync** shows **Connected**.
+
+If repository rules block the commit, setup opens an initial pull request instead. Your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass. Until then, the Guardrails pages show **Merge your initial policy**.
+
+After the configuration agent saves a policy, the banner in chat links to **Set up GitHub sync**. It opens this setup in a new tab.
 
 What to know:
 
-- Setting up sync needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
-- **The GitHub App** must be installed on the owner with **All repositories**, and **Read & write** on Administration, Contents, and Pull requests. The setup chat can create it.
-- For an existing repository configured with a PAT, read access supports sync. Publishing policy or validation changes also needs Contents and Pull requests **Read & write**. Creating a repository through the setup flow requires a GitHub App.
+- Setting up sync needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update). Creating a new GitHub App also needs [`credential:create`](/docs/reference/permissions#credential:create).
+- The GitHub App needs only the policy repository, with **Read & write** on Contents and Pull requests. On GitHub Enterprise Server, an App created in setup also gets Workflows **Read & write**.
 - A pull request that changes a battery credential waits until someone with [`credential:update`](/docs/reference/permissions#credential:update) clicks **Accept repository text** on **Batteries**.
 
 ## Validations
@@ -106,7 +116,7 @@ What to know:
 
 With sync enabled, Git is the only source of truth for validation files. Archestra loads them from the same accepted commit as the policy, with no local fallback.
 
-Set the optional validation directory under **Settings → OpenAPPA → GitHub source**. Saving checks that the folder exists on the selected branch. Leave it empty to disable Git-backed validations and their automatic runs. Editor changes remain drafts you can preview and export for a repository commit.
+Set the validations folder under **Advanced** during setup, or later with **Edit source** under **Settings → Guardrails → GitHub sync**. It defaults to `traces`. Validations run once the folder holds `.appa` files. Editor changes remain drafts you can preview and export for a repository commit.
 
 ### Ask the Configuration Agent
 

@@ -1,9 +1,57 @@
+import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import type { ReactNode } from "react";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  test,
+  vi,
+} from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
 } from "./openappa-policy-change";
+
+vi.mock("@/lib/auth/auth.query");
+const server = setupServer();
+let sync: archestraApiTypes.GetAppaGithubSyncResponses["200"];
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+beforeEach(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+    typeof useHasPermissions
+  >);
+  sync = {
+    enabled: true,
+    hasPolicy: true,
+    validationDirectory: "",
+    githubWebUrl: "https://github.com",
+    source: null,
+  };
+  server.use(
+    http.get("http://localhost:9000/api/openappa/github-sync", () =>
+      HttpResponse.json(sync),
+    ),
+  );
+});
+afterEach(() => server.resetHandlers());
+afterAll(() => {
+  server.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+function withQueries(ui: ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
+}
 
 test("shows a policy preview from the chat tool's text result", () => {
   render(
@@ -20,8 +68,6 @@ test("shows a policy preview from the chat tool's text result", () => {
     />,
   );
 
-  expect(screen.getByText("Proposed policy")).toBeInTheDocument();
-  expect(screen.getByText("Local revision")).toBeInTheDocument();
   expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
     '+name = "example__search"',
   );
@@ -43,7 +89,6 @@ test("shows a reviewable policy diff and the pull request link", () => {
     />,
   );
 
-  expect(screen.getByText("PR #17")).toBeInTheDocument();
   expect(
     screen.getByRole("link", { name: "Review pull request" }),
   ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
@@ -105,7 +150,11 @@ const saved = {
 };
 
 test("confirmed publication offers a return action without opening the diff", () => {
-  render(<OpenAppaPolicyCompletion output={{ structuredContent: saved }} />);
+  render(
+    withQueries(
+      <OpenAppaPolicyCompletion output={{ structuredContent: saved }} />,
+    ),
+  );
   expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
   expect(screen.getByText(/Enforcement confirmed on/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "View Guardrails" })).toHaveAttribute(
@@ -125,7 +174,7 @@ test.each([
   { ...saved, enforcement: undefined },
   { ...saved, effective: undefined },
 ])("saved but unconfirmed results do not claim active protection", (output) => {
-  render(<OpenAppaPolicyCompletion output={output} />);
+  render(withQueries(<OpenAppaPolicyCompletion output={output} />));
   expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
   expect(
     screen.queryByText(/Enforcement confirmed on/),
@@ -141,24 +190,112 @@ test.each([
   { ...saved, delivery: "pull_request", number: 4 },
   { ...saved, revision: 0 },
 ])("preview and pending PR do not appear as a saved local policy", (output) => {
-  const { container } = render(<OpenAppaPolicyCompletion output={output} />);
+  const { container } = render(
+    withQueries(<OpenAppaPolicyCompletion output={output} />),
+  );
   expect(container).toBeEmptyDOMElement();
 });
 
 test("published PR stays reviewable outside collapsed tool details", () => {
   render(
-    <OpenAppaPolicyCompletion
-      output={{
-        delivery: "pull_request",
-        number: 17,
-        url: "https://github.com/example/policies/pull/17",
-        before: "old",
-        after: "new",
-      }}
-    />,
+    withQueries(
+      <OpenAppaPolicyCompletion
+        output={{
+          delivery: "pull_request",
+          number: 17,
+          url: "https://github.com/example/policies/pull/17",
+          before: "old",
+          after: "new",
+        }}
+      />,
+    ),
   );
   expect(
     screen.getByRole("link", { name: "Review pull request" }),
   ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
   expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
+});
+
+test("a locally saved policy suggests GitHub sync to admins who have not set it up", async () => {
+  render(
+    withQueries(
+      <OpenAppaPolicyCompletion output={{ structuredContent: saved }} />,
+    ),
+  );
+  const link = await screen.findByRole("link", { name: "Set up GitHub sync" });
+  expect(link).toHaveAttribute(
+    "href",
+    "/settings/guardrails?setup=github-sync",
+  );
+  // A new tab keeps the conversation in place.
+  expect(link).toHaveAttribute("target", "_blank");
+});
+
+test.each([
+  [
+    "sync already has a repository",
+    () => {
+      sync = {
+        ...sync,
+        source: {
+          organizationId: "org",
+          repo: "example/policies",
+          ref: "main",
+          path: "appa.toml",
+          interval: "1h",
+          githubPatId: null,
+          githubAppConfigId: null,
+          revision: "revision",
+          sourceCommit: null,
+          setupPullRequestNumber: null,
+          lastSyncedAt: null,
+          lastSyncError: null,
+          declarationsPendingPublish: false,
+          heldContentHash: null,
+          heldSourceCommit: null,
+          heldReasons: [],
+        },
+      };
+    },
+  ],
+  [
+    "sync is off on the server",
+    () => {
+      sync = { ...sync, enabled: false };
+    },
+  ],
+  [
+    "the user cannot manage settings",
+    () => {
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions) =>
+          ({
+            data:
+              permissions.organizationSettings?.every(
+                (action) => action === "read",
+              ) ?? false,
+          }) as ReturnType<typeof useHasPermissions>,
+      );
+    },
+  ],
+])("no GitHub sync tip when %s", async (_name, arrange) => {
+  arrange();
+  let requested = false;
+  server.use(
+    http.get("http://localhost:9000/api/openappa/github-sync", () => {
+      requested = true;
+      return HttpResponse.json(sync);
+    }),
+  );
+  render(
+    withQueries(
+      <OpenAppaPolicyCompletion output={{ structuredContent: saved }} />,
+    ),
+  );
+  await vi.waitFor(() => expect(requested).toBe(true));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(
+    screen.queryByRole("link", { name: "Set up GitHub sync" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
 });

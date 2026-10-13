@@ -163,6 +163,7 @@ beforeEach(() => {
     http.get(`${origin}/api/openappa/github-sync`, () =>
       HttpResponse.json({
         enabled: true,
+        githubWebUrl: "https://github.com",
         source: {
           repo: "example/policies",
           ref: "main",
@@ -858,6 +859,42 @@ test("repository errors disable inspection and replay without local fallback", a
   ).not.toBeInTheDocument();
   await new Promise((resolve) => setTimeout(resolve, 350));
   expect(inspections).toBe(0);
+});
+
+test("a pending setup pull request replaces the repository error with the merge request", async () => {
+  server.use(
+    http.get(`${origin}/api/openappa/github-sync`, () =>
+      HttpResponse.json({
+        enabled: true,
+        githubWebUrl: "https://github.example.com",
+        source: {
+          repo: "example/policies",
+          ref: "main",
+          path: "appa.toml",
+          lastSyncError: null,
+          setupPullRequestNumber: 7,
+        },
+      }),
+    ),
+    http.get(endpoint, () =>
+      HttpResponse.json({
+        ...collection,
+        source: "github",
+        files: [],
+        error: "No accepted commit to read validations from",
+      }),
+    ),
+  );
+  showPage();
+  expect(
+    await screen.findByRole("link", { name: /Review and merge PR/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.example.com/example/policies/pull/7",
+  );
+  expect(
+    screen.queryByText("No accepted commit to read validations from"),
+  ).not.toBeInTheDocument();
 });
 
 test("Git directory configuration lives in source settings; browser refresh still protects editor drafts", async () => {

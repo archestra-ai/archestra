@@ -301,6 +301,99 @@ test("uses the staged review for fixed native approval choices", async () => {
   ).toBe(false);
 });
 
+test("asks preview hosts about a structured tool by name and previews its arguments beside each choice", async () => {
+  const active = session("preview-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "mcp/slack/send_message",
+      arguments: JSON.stringify({ channel: "#general", text: "Hello" }),
+    },
+  });
+
+  const argumentLines = "channel  #general\ntext     Hello";
+  expect(
+    await getHitlAskUserArguments({ session: active, offerIds: ["offer-1"] }),
+  ).toEqual({
+    question: "Full review text.",
+    previewQuestion: "Approve slack__send_message?",
+    header: "Approval",
+    options: [
+      {
+        label: "Approve",
+        description: "Allow this exact tool call.",
+        preview: `Approve\n\n${argumentLines}`,
+      },
+      {
+        label: "Deny",
+        description: "Keep this tool call blocked.",
+        preview: `Deny\n\n${argumentLines}`,
+      },
+    ],
+    allowMultiple: false,
+    remedy_offer_ids: ["offer-1"],
+  });
+});
+
+test("wraps long argument values to the preview pane width", async () => {
+  const active = session("wrapped-preview");
+  const text = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "mcp/slack/send_message",
+      arguments: JSON.stringify({ text }),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  const lines = question?.options[0].preview?.split("\n") ?? [];
+  expect(lines.slice(0, 2)).toEqual(["Approve", ""]);
+  expect(lines.length).toBeGreaterThan(3);
+  expect(lines.slice(2).every((line) => line.length <= 56)).toBe(true);
+  expect(
+    lines
+      .slice(2)
+      .map((line) => line.slice("text  ".length))
+      .join(" "),
+  ).toBe(text);
+});
+
+test.each([
+  ["no arguments", undefined],
+  ["empty arguments", "{}"],
+  ["arguments that are not an object", "[1,2]"],
+])("previews only the choice when the review has %s", async (_, reviewedArguments) => {
+  const active = session("bare-preview");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "local_tool",
+      ...(reviewedArguments ? { arguments: reviewedArguments } : {}),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.question).toBe("Full review text.");
+  expect(question?.previewQuestion).toBe("Approve local_tool?");
+  expect(question?.options.map((option) => option.preview)).toEqual([
+    "Approve",
+    "Deny",
+  ]);
+});
+
 test("renders a terminal-safe heading without changing the reviewed payload", async () => {
   const active = session("terminal-review");
   const graphicHeading =
@@ -322,8 +415,6 @@ test("renders a terminal-safe heading without changing the reviewed payload", as
   const review = {
     offerId: "offer-1",
     text: `${graphicHeading}${body}`,
-    tool: "mcp/example/write",
-    arguments: reviewedArguments,
     remedyArguments: { offer_id: "offer-1", plan: "Submit for approval" },
   };
   await stageHitlReview({ session: active, review });

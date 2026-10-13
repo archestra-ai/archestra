@@ -311,9 +311,15 @@ export type AppaRelayArrival = {
 /** The arguments of the platform's ask_user tool. */
 export type AskUserArguments = {
   question: string;
+  /**
+   * The question for hosts that show option previews (Claude Code), set when
+   * every option's preview carries what `question` spells out.
+   */
+  previewQuestion?: string;
   /** Short tab label; unvalidated here, as the model wrote it. */
   header?: unknown;
-  options: Array<{ label: string; description?: string }>;
+  /** `preview` is shown only by hosts with option previews (Claude Code). */
+  options: Array<{ label: string; description?: string; preview?: string }>;
   allowMultiple?: boolean;
   remedy_offer_ids?: string[];
 };

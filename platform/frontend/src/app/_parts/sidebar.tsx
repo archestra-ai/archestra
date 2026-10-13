@@ -621,7 +621,10 @@ export function AppSidebar() {
           />
         )}
       </SidebarHeader>
-      <SidebarContent>
+      {/* The nav scrolls under the footer; the fade keeps the last row from
+          ending in a hard cut. It takes its own space at the end, so it covers
+          nothing once scrolled to the bottom or when nothing overflows. */}
+      <SidebarContent className="relative after:pointer-events-none after:sticky after:bottom-0 after:-mt-2 after:block after:h-4 after:shrink-0 after:bg-gradient-to-t after:from-sidebar after:to-transparent after:content-['']">
         {isAuthenticated &&
           permissionMap &&
           (sidebarMode === "chats" ? (

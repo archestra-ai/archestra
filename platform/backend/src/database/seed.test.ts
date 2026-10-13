@@ -1014,6 +1014,77 @@ describe("syncBuiltInSkills", () => {
     expect(preserved?.content).toBe("EDITED BY USER");
   });
 
+  test("drops a body's own frontmatter from an edited copy and keeps every edit", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+    const staleVersion = builtInSkillVersion({ content: "OLD", files: [] });
+    // A body shipped with its own frontmatter, then edited, so SKILL.md showed two blocks.
+    const edits =
+      "# Guide\n\nEDITED BY USER\n\n---\n\nA rule after a divider.\n";
+    const created = await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: BASE_SKILL.name,
+        description: "user description",
+        content: `---\nname: ${BASE_SKILL.name}\ndescription: shipped twice\n---\n\n${edits}`,
+        sourceType: "built_in",
+        sourceRef,
+        sourceCommit: staleVersion,
+      },
+      files: [{ path: "notes.md", content: "kept", kind: "reference" }],
+      ...accessGrants("org"),
+    });
+
+    await syncBuiltInSkills();
+    await syncBuiltInSkills();
+
+    const preserved = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(preserved?.id).toBe(created?.id);
+    expect(preserved?.content).toBe(edits);
+    expect(preserved?.description).toBe("user description");
+    // Still an edited copy: not re-shipped, so a reset stays available.
+    expect(preserved?.sourceCommit).toBe(staleVersion);
+    const files = await SkillFileModel.findBySkillId(preserved?.id ?? "");
+    expect(files.map((file) => [file.path, file.content])).toEqual([
+      ["notes.md", "kept"],
+    ]);
+  });
+
+  test("upgrades a pristine copy whose stale body carried frontmatter", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const sourceRef = builtInSkillSourceRef(BASE_SKILL.builtInSkillId);
+    const stale = "---\nname: old\n---\n\nOLD";
+    await SkillModel.createWithFiles({
+      skill: {
+        organizationId: org.id,
+        name: BASE_SKILL.name,
+        description: "old description",
+        content: stale,
+        sourceType: "built_in",
+        sourceRef,
+        sourceCommit: builtInSkillVersion({ content: stale, files: [] }),
+      },
+      files: [],
+      ...accessGrants("org"),
+    });
+
+    await syncBuiltInSkills();
+
+    const upgraded = await SkillModel.findBuiltIn({
+      organizationId: org.id,
+      sourceRef,
+    });
+    expect(upgraded?.content).toBe(BASE_SKILL.content);
+    expect(upgraded?.sourceCommit).toBe(builtInSkillVersion(BASE_SKILL));
+  });
+
   test("a soft-deleted built-in stays deleted across syncs (durable opt-out)", async ({
     makeOrganization,
   }) => {

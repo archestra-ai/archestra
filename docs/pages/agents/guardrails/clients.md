@@ -20,14 +20,14 @@ These clients identify themselves to the proxy and work without extra configurat
 - **Codex CLI**: terminal coding agent. Sends conversation identifiers in request metadata.
 - **OpenCode**: terminal coding agent. Sends its session headers automatically.
 
-All other clients, including workflow automations like [n8n](/docs/integrations/n8n) and custom API integrations, require [session headers](#session-headers).
+All other clients, including workflow automations like [n8n](/docs/integrations/web-ui-and-automation#n8n) and custom API integrations, require [session headers](#session-headers).
 
 ## Connect a Client
 
 1. [Connect the client](/docs/get-started/connect) to the [LLM Proxy](/docs/llm-proxy) and the [MCP Gateway](/docs/mcp/gateway). The proxy checks each tool call. The gateway gives the agent the tools to handle a block.
 2. For a client without built-in support, add the [session headers](#session-headers).
 
-The **Client coverage** card on **Guardrails → Overview** lists the supported clients, and sets what happens to [unrecognized ones](#unrecognized-clients).
+**Other clients** under **Settings → Guardrails** sets what happens to [unrecognized ones](#unrecognized-clients).
 
 ## Session Headers
 
@@ -36,7 +36,7 @@ Give each conversation one session ID, and send it with every request. Guardrail
 - **`X-Appa-Session-ID`** (required): a new ID per conversation, such as a UUID. Keep it for every turn.
 - **`X-Appa-Parent-ID`**: the parent conversation's ID. Send it only from a subagent.
 
-In [n8n](/docs/integrations/n8n), configure the header depending on your node:
+In [n8n](/docs/integrations/web-ui-and-automation#n8n), configure the header depending on your node:
 
 - **OpenAI Chat Model node**: open the model's OpenAI credential, turn on **Add Custom Header**, set **Header Name** to `X-Appa-Session-ID`, and enter a session identifier.
 - **HTTP Request node**: add `X-Appa-Session-ID` to the headers alongside `Authorization: Bearer <virtual-key>`. Use `{{ $execution.id }}` or a generated UUID for each execution.
@@ -79,12 +79,10 @@ curl "https://archestra.example.com/v1/openai/chat/completions" \
 
 ## Unrecognized Clients
 
-By default, Guardrails let an unrecognized client through, unchecked. To change that, open the **Client coverage** card on **Guardrails → Overview**:
+By default, Guardrails let an unrecognized client through, unchecked. To change that, go to **Settings → Guardrails** and set **Other clients**:
 
 - **Allowed** (default): its requests reach the model without checks.
 - **Blocked:** the proxy rejects its requests with HTTP 400 and tells the user to add an `X-Appa-Session-ID` header.
-
-![The Client coverage card on the Guardrails Overview tab](/docs/automated_screenshots/platform-ai-tool-guardrails_client_coverage.webp)
 
 The setting also decides whether a client that Guardrails do not check can [hand work off](/docs/agents/runtime/handoff#hand-off-with-guardrails-on) to Agent Runtime.
 

@@ -1172,7 +1172,7 @@ function CredentialRow({
 /** The synced policy file on GitHub, when the sync names one. */
 function PolicyFileLink() {
   const { data } = useAppaGithubSync();
-  const href = githubPolicyFileUrl(data?.source, "blob");
+  const href = githubPolicyFileUrl(data, "blob");
   if (!href) return null;
   return (
     <a

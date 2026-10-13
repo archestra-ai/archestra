@@ -1,16 +1,10 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  render,
-  renderHook,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { render, renderHook, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import type { ComponentProps } from "react";
 import {
   afterAll,
@@ -69,6 +63,7 @@ const recipients = [
 ];
 const subjectRequests: Array<{ resource: string; scope: string }> = [];
 
+/** The URL each filter change writes; filters update it in place. */
 const push = vi.fn();
 function setQuery(query: string) {
   vi.mocked(useSearchParams).mockReturnValue(
@@ -90,9 +85,9 @@ beforeEach(() => {
       return HttpResponse.json(recipients);
     }),
   );
-  vi.mocked(useRouter).mockReturnValue({ push } as unknown as ReturnType<
-    typeof useRouter
-  >);
+  vi.spyOn(window.history, "pushState").mockImplementation(
+    (_state, _unused, url) => push(url),
+  );
   vi.mocked(usePathname).mockReturnValue("/agents");
   vi.mocked(useSession).mockReturnValue({
     data: {
@@ -103,7 +98,10 @@ beforeEach(() => {
   setReadsEveryObject(true);
   vi.mocked(useAppName).mockReturnValue("Acme AI");
 });
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  vi.restoreAllMocks();
+});
 afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
@@ -172,9 +170,7 @@ describe("access box", () => {
       "with you, your team, your role or everyone",
     );
     await user.click(option(/^Shared with me/));
-    expect(push).toHaveBeenCalledWith("/agents?name=x&access=mine", {
-      scroll: false,
-    });
+    expect(push).toHaveBeenCalledWith("/agents?name=x&access=mine");
   });
 
   it("adds objects nobody shared as the others relation", async () => {
@@ -184,7 +180,6 @@ describe("access box", () => {
     await user.click(option(/^Admin access/));
     expect(push).toHaveBeenCalledWith(
       "/agents?access=mine%2Cshared%2Corg%2Cothers",
-      { scroll: false },
     );
     expect(
       screen.getByText(
@@ -200,7 +195,7 @@ describe("access box", () => {
     const user = userEvent.setup();
     await user.click(accessTrigger());
     await user.click(option(/^Admin access/));
-    expect(push).toHaveBeenCalledWith("/agents?", { scroll: false });
+    expect(push).toHaveBeenCalledWith("/agents?");
   });
 
   it("offers Admin access only to a viewer who reads every object of the type", async () => {
@@ -244,9 +239,7 @@ describe("access box", () => {
       "system agents that Acme AI runs for you",
     );
     await user.click(option(/^Built-in/));
-    expect(push).toHaveBeenCalledWith("/agents?builtIn=true", {
-      scroll: false,
-    });
+    expect(push).toHaveBeenCalledWith("/agents?builtIn=true");
   });
 
   it("hides built-in agents from other viewers", async () => {
@@ -275,7 +268,6 @@ describe("access box", () => {
     expect(
       screen.queryByRole("button", { name: "Filter by owner" }),
     ).not.toBeInTheDocument();
-    expect(sharedWithTrigger()).toBeInTheDocument();
     const user = userEvent.setup();
     await user.click(accessTrigger());
     expect(
@@ -287,7 +279,24 @@ describe("access box", () => {
 });
 
 describe("Shared with box", () => {
+  it("is offered only while Admin access is on", () => {
+    renderFilter();
+    expect(
+      screen.queryByRole("button", { name: "Filter by shared with" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("drops the picked recipients when Admin access is turned off", async () => {
+    setQuery(`${ADMIN_ACCESS}&sharedWith=org`);
+    renderFilter();
+    const user = userEvent.setup();
+    await user.click(accessTrigger());
+    await user.click(option(/^Admin access/));
+    expect(push).toHaveBeenCalledWith("/agents?");
+  });
+
   it("groups recipients like the add-access field, searched at the type's scope", async () => {
+    setQuery(ADMIN_ACCESS);
     renderFilter();
     const user = userEvent.setup();
     await user.click(sharedWithTrigger());
@@ -318,17 +327,19 @@ describe("Shared with box", () => {
   });
 
   it("writes a picked team as its subject key", async () => {
+    setQuery(ADMIN_ACCESS);
     renderFilter();
     const user = userEvent.setup();
     await user.click(sharedWithTrigger());
     await user.click(
       await screen.findByRole("checkbox", { name: "Engineering" }),
     );
-    expect(push).toHaveBeenCalledWith("/agents?sharedWith=team%3Ateam-eng", {
-      scroll: false,
-    });
+    expect(push).toHaveBeenCalledWith(
+      "/agents?access=mine%2Cshared%2Corg%2Cothers&sharedWith=team%3Ateam-eng",
+    );
   });
 
+  // A bookmarked selection stays visible, so it can still be cleared.
   it("adds the organization to a picked team and keeps the team at the top", async () => {
     setQuery("sharedWith=team:team-eng&page=2");
     renderFilter();
@@ -347,7 +358,6 @@ describe("Shared with box", () => {
     );
     expect(push).toHaveBeenCalledWith(
       "/agents?sharedWith=team%3Ateam-eng%2Corg",
-      { scroll: false },
     );
   });
 
@@ -362,7 +372,7 @@ describe("Shared with box", () => {
         { name: "Everyone in the organization" },
       ),
     );
-    expect(push).toHaveBeenCalledWith("/agents?", { scroll: false });
+    expect(push).toHaveBeenCalledWith("/agents?");
   });
 });
 
@@ -385,9 +395,7 @@ describe("Owner box", () => {
     await user.click(
       await screen.findByRole("checkbox", { name: "Alex Reader" }),
     );
-    expect(push).toHaveBeenCalledWith("/agents?owner=user-alex", {
-      scroll: false,
-    });
+    expect(push).toHaveBeenCalledWith("/agents?owner=user-alex");
   });
 
   it("writes Me as the viewer's own id", async () => {
@@ -395,9 +403,7 @@ describe("Owner box", () => {
     const user = userEvent.setup();
     await user.click(ownerTrigger());
     await user.click(screen.getByRole("checkbox", { name: "Me" }));
-    expect(push).toHaveBeenCalledWith("/agents?owner=user-me", {
-      scroll: false,
-    });
+    expect(push).toHaveBeenCalledWith("/agents?owner=user-me");
   });
 });
 
@@ -411,7 +417,7 @@ it("resets all three filters and the built-in option together", async () => {
   const user = userEvent.setup();
   await user.click(accessTrigger());
   await user.click(screen.getByRole("button", { name: "Reset" }));
-  expect(push).toHaveBeenCalledWith("/agents?name=x", { scroll: false });
+  expect(push).toHaveBeenCalledWith("/agents?name=x");
 });
 
 it("offers no reset while every filter is at its default", async () => {
@@ -421,8 +427,11 @@ it("offers no reset while every filter is at its default", async () => {
   expect(
     screen.queryByRole("button", { name: "Reset" }),
   ).not.toBeInTheDocument();
-  await waitFor(() => expect(sharedWithTrigger()).not.toHaveTextContent(/\d/));
+  expect(ownerTrigger()).not.toHaveTextContent(/\d/);
 });
+
+/** The access selection that turns Admin access on. */
+const ADMIN_ACCESS = "access=mine,shared,org,others";
 
 function renderFilter(
   props: Partial<ComponentProps<typeof ResourceAccessFilter>> = {},

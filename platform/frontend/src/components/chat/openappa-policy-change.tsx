@@ -3,7 +3,6 @@
 import {
   ArrowUpRight,
   CheckCircle2,
-  FileText,
   GitPullRequest,
   TriangleAlert,
 } from "lucide-react";
@@ -12,9 +11,10 @@ import {
   CodeBlock,
   CodeBlockCopyButton,
 } from "@/components/ai-elements/code-block";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 
 type PolicyChange = {
   stage?: "preview";
@@ -54,31 +54,22 @@ export function OpenAppaPolicyChange({
       ? change.url
       : null;
   return (
-    <div className="space-y-3 px-3 pb-3 pt-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <FileText className="size-4 text-muted-foreground" />
-        <span className="text-sm font-medium">
-          {change.stage === "preview" ? "Proposed policy" : "Policy change"}
-        </span>
-        <Badge variant="secondary">
-          {change.stage === "preview"
-            ? change.delivery === "pull_request"
-              ? "GitHub pull request"
-              : "Local revision"
-            : change.delivery === "pull_request"
-              ? `PR #${change.number}`
-              : `Revision ${change.revision}`}
-        </Badge>
-        {pullUrl && (
-          <Button variant="outline" size="sm" className="ml-auto" asChild>
+    <div className="space-y-3 p-3">
+      {pullUrl && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" asChild>
             <a href={pullUrl} target="_blank" rel="noreferrer">
               <span>Review pull request</span>
               <ArrowUpRight className="size-3.5" />
             </a>
           </Button>
-        )}
-      </div>
-      <p className="font-mono text-xs text-muted-foreground">{path}</p>
+        </div>
+      )}
+      {/* A validation change can touch any of several files; name it. The
+          policy is always the one file, so its name says nothing. */}
+      {validationChange && (
+        <p className="font-mono text-xs text-muted-foreground">{path}</p>
+      )}
       {unchanged ? (
         <CodeBlock code={change.after} language="toml" aria-label="Policy">
           <CodeBlockCopyButton />
@@ -174,8 +165,37 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
             <span>{active ? "View Guardrails" : "Check policy"}</span>
           </Link>
         </Button>
+        <GithubSyncTip />
       </InlineNotice>
     </div>
+  );
+}
+
+/**
+ * In a locally saved revision's banner: GitHub sync is set up in the guardrails
+ * settings, opened in a new tab so the chat stays put and the operator sees
+ * what setup leaves to do (such as merging its pull request).
+ */
+function GithubSyncTip() {
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  const { data: sync } = useAppaGithubSync();
+  if (canManage !== true || !sync?.enabled || sync.source?.repo) return null;
+  return (
+    // Its own line in the banner, under the title: past the icon and its gap.
+    <p className="basis-full pl-[22px] opacity-80">
+      Tip: keep the policy in GitHub, so changes go through pull requests.{" "}
+      <a
+        href="/settings/guardrails?setup=github-sync"
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-0.5 font-medium underline underline-offset-4"
+      >
+        Set up GitHub sync
+        <ArrowUpRight className="size-3" aria-hidden />
+      </a>
+    </p>
   );
 }
 

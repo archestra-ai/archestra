@@ -196,13 +196,15 @@ export interface AddApprovalRequestFormOptions {
    */
   toolName: string;
   /**
-   * The arguments the tool will be invoked with, rendered as a code block in
-   * the approval prompt. Undefined/empty when there is nothing to show.
+   * The arguments the tool will be invoked with. Approval prompts keep them
+   * out of sight until the reviewer asks for them. Undefined/empty when there
+   * is nothing to show.
    */
   toolArgs?: Record<string, unknown>;
   /**
-   * OpenAPPA's review text for a paused `execute_remedy_plan` call. Shown in
-   * place of the tool and its arguments, which only name the remedy.
+   * OpenAPPA's review text for a paused `execute_remedy_plan` call whose review
+   * names no structured tool. Shown in place of the tool and its arguments,
+   * which only name the remedy.
    */
   reviewText?: string;
   originalMessage: IncomingChatMessage;
@@ -447,7 +449,7 @@ export interface ChatOpsProvider {
   addApprovalRequestForm(options: AddApprovalRequestFormOptions): Promise<void>;
 
   /**
-   * Update the status of an existing approval request to Approved/Declined
+   * Update the status of an existing approval request to Approved/Denied
    */
   updateApprovalRequest(options: UpdateApprovalRequestOptions): Promise<void>;
 

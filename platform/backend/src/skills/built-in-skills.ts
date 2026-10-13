@@ -47,6 +47,16 @@ export interface BuiltInSkill {
   files: BuiltInSkillFile[];
 }
 
+/**
+ * Removes a frontmatter block from the start of a built-in skill body. One
+ * built-in once shipped its body with its own frontmatter, so its SKILL.md
+ * showed two; copies an admin has since edited keep their edits but lose
+ * that block when the built-ins are synced.
+ */
+export function stripBuiltInBodyFrontmatter(content: string): string {
+  return content.replace(/^---\n[\s\S]*?\n---\n+/, "");
+}
+
 /** `source_ref` value for a built-in skill. */
 export function builtInSkillSourceRef(builtInSkillId: string): string {
   return `${BUILT_IN_SKILL_SOURCE_REF_PREFIX}${builtInSkillId}`;

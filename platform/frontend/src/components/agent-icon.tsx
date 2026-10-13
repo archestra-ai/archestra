@@ -1,6 +1,9 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  APPA_KEEPER_AGENT_ICON,
+  type archestraApiTypes,
+} from "@archestra/shared";
 import {
   Bot,
   Folder,
@@ -15,6 +18,7 @@ import {
   getBuiltInServiceIconPath,
   isAgentImageIcon,
 } from "@/components/agent-icon.utils";
+import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
 import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { imageToneClassName, useImageTone } from "@/lib/hooks/use-image-tone";
 import { cn } from "@/lib/utils/tailwind";
@@ -83,6 +87,15 @@ export function AgentIcon({
           imageToneClassName(imageTone),
           className,
         )}
+      />
+    );
+  }
+
+  if (icon === APPA_KEEPER_AGENT_ICON) {
+    return (
+      <AppaKeeperIcon
+        className={cn("shrink-0", className)}
+        style={{ width: size, height: size }}
       />
     );
   }

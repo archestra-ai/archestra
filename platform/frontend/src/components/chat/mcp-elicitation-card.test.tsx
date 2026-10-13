@@ -1096,6 +1096,34 @@ describe("McpElicitationCard", () => {
     expect(typed).toHaveTextContent("Which site?GoogleTyped answer");
   });
 
+  it("lists the offered options under an answered question", () => {
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember(
+            "call-1",
+            "Stricter or looser?",
+            { status: "answered", selected: ["Stricter"] },
+            ["Stricter", "Looser"],
+          ),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const options = within(
+      screen.getByRole("list", { name: "Offered options" }),
+    ).getAllByRole("listitem");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Stricter",
+      "Looser",
+    ]);
+    expect(options[0]).toHaveAttribute("aria-current", "true");
+    expect(options[1]).not.toHaveAttribute("aria-current");
+  });
+
   it("folds a long answered question until the user expands it", async () => {
     const user = userEvent.setup();
     const longQuestion = `${"It is late on a Friday and prod is down. ".repeat(8)}What do you do first?`;
@@ -1294,8 +1322,9 @@ function groupMember(
   toolCallId: string,
   question: string,
   outcome: AskUserGroupMember["outcome"],
-) {
-  return { toolCallId, question, outcome };
+  options: string[] = [],
+): AskUserGroupMember {
+  return { toolCallId, question, options, outcome };
 }
 
 function deferred<T>() {

@@ -3757,8 +3757,22 @@
     {
       "idx": 536,
       "version": "7",
-      "when": 1791922883907,
-      "tag": "0536_parched_warlock",
+      "when": 1791922639443,
+      "tag": "0536_mixed_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 537,
+      "version": "7",
+      "when": 1791925050165,
+      "tag": "0537_cultured_king_cobra",
+      "breakpoints": true
+    },
+    {
+      "idx": 538,
+      "version": "7",
+      "when": 1791926998854,
+      "tag": "0538_condemned_firebird",
       "breakpoints": true
     }
   ]

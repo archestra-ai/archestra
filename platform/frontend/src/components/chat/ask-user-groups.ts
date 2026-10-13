@@ -2,6 +2,7 @@ import type { UIMessage } from "@ai-sdk/react";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   type AskUserGroupMember,
+  getAskUserOptions,
   getAskUserOutcome,
   getAskUserQuestion,
 } from "./ask-user-outcome";
@@ -111,6 +112,7 @@ export function identifyAskUserGroups({
         members: group.map((record) => ({
           toolCallId: record.toolCallId,
           question: getAskUserQuestion(record.part.input),
+          options: getAskUserOptions(record.part.input),
           outcome: record.outcome,
         })),
       };

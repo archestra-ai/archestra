@@ -2197,6 +2197,9 @@ export function AgentForm({
           id: agent.id,
           data: {
             builtInAgentConfig,
+            // An emptied prompt is stored as null, which the runtime reads as
+            // the shipped default.
+            systemPrompt: trimmedSystemPrompt || null,
             ...(llmSelectionChanged && {
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
@@ -3225,23 +3228,6 @@ export function AgentForm({
                         />
                       </div>
                     )}
-                </SettingsSection>
-              )}
-
-              {/* Labels for built-in agents (the Advanced step that holds
-                them for everyone else does not exist for a built-in). */}
-              {isBuiltIn && (
-                <SettingsSection
-                  title="Labels"
-                  description="Use key-value labels to organize and filter this resource."
-                >
-                  <ProfileLabels
-                    ref={agentLabelsRef}
-                    labels={labels}
-                    onLabelsChange={setLabels}
-                    showLabel={false}
-                    showDescription={false}
-                  />
                 </SettingsSection>
               )}
             </SettingsSectionGroup>

@@ -194,9 +194,9 @@ class OpenAiCodexPassthroughResponsesClient {
  * rejects it with 400 "Unsupported parameter" — the chat⇄responses translator
  * path likewise never forwards an output cap), and supply the Codex persona only
  * when the caller (e.g. a non-Codex client) sent no instructions of its own.
- * Codex sends its instructions as a developer message and no `instructions`;
- * adding the persona there made Codex answer twice. A `promptCacheKey` is used
- * only when the caller sent no `prompt_cache_key`.
+ * Codex sends its instructions as a developer message, not as `instructions`.
+ * A persona added to such a request made Codex answer twice. A
+ * `promptCacheKey` is used only when the caller sent no `prompt_cache_key`.
  */
 function applyCodexResponsesTransforms(
   request: ResponsesRequest & { stream?: boolean },

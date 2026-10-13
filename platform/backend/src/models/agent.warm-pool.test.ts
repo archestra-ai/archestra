@@ -1,4 +1,9 @@
-import { A2AContextModel, A2ATaskModel, AgentModel, AgentRunModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentModel,
+  AgentRunModel,
+} from "@/models";
 import { expect, test } from "@/test";
 
 test("warm pool candidates are the Agents run recently, most recent first", async ({
@@ -30,14 +35,9 @@ test("warm pool candidates are the Agents run recently, most recent first", asyn
     actorKind: "user",
     actorId: user.id,
   });
-  const now = Date.now();
-  const since = new Date(now - 7 * 24 * 3600_000);
-  for (const [agentId, startedAt] of [
-    [stale.id, new Date(now - 8 * 24 * 3600_000)],
-    [earlier.id, new Date(now - 3600_000)],
-    [latest.id, new Date(now - 60_000)],
-    [earlier.id, new Date(now - 2 * 3600_000)],
-  ] as const) {
+  // Run start times come from the database clock, so order the runs in time
+  // and take the window boundary between them.
+  async function run(agentId: string) {
     const task = await A2ATaskModel.create({
       contextId: context.id,
       agentId,
@@ -53,9 +53,14 @@ test("warm pool candidates are the Agents run recently, most recent first", asyn
       workloadName: `run-${task.id}`,
       backend: "kubernetes",
       runtimeScope: "test",
-      startedAt,
     });
+    await new Promise((resolve) => setTimeout(resolve, 5));
   }
+  await run(stale.id);
+  const since = new Date();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  await run(earlier.id);
+  await run(latest.id);
 
   const candidates = await AgentModel.listWarmPoolCandidates({ since });
 

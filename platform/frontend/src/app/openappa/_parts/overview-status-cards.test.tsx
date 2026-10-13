@@ -312,23 +312,68 @@ test("the dashboard adopts a newer result when history refreshes", async () => {
   });
 });
 
-test("sync offers to set itself up while no repository is connected", async () => {
+test("an unconnected sync offers to create a repository", async () => {
   show();
   expect(
-    await screen.findByRole("link", { name: "Set up sync" }),
-  ).toHaveAttribute("href", "/settings/guardrails");
+    await screen.findByRole("button", { name: "Create repository" }),
+  ).toBeVisible();
+  expect(screen.getByText("Not connected")).toBeVisible();
 });
 
-test("sync names its repository and shows a failed sync", async () => {
+test("members who cannot manage sync are told who can connect it", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: Object.values(permissions).every((actions) =>
+          actions.every((action) => action === "read"),
+        ),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  show();
+  expect(
+    await screen.findByText("Ask an administrator to connect a repository."),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Create repository" }),
+  ).not.toBeInTheDocument();
+});
+
+test("a failed sync says so and links to the sync settings", async () => {
   sync = {
     ...sync,
     hasPolicy: true,
     source: { ...source, lastSyncError: "appa.toml was not found" },
   };
   show();
-  expect(await screen.findByText("example/policies · main")).toBeVisible();
-  expect(screen.getByText("Failed")).toBeVisible();
-  expect(screen.getByRole("link", { name: "Sync settings" })).toHaveAttribute(
+  expect(await screen.findByText("Sync failed")).toBeVisible();
+  expect(screen.getByText("example/policies")).toBeVisible();
+  expect(screen.getByRole("link", { name: /Sync settings/ })).toHaveAttribute(
+    "href",
+    "/settings/guardrails",
+  );
+});
+
+test("shows the initial merge link while sync waits for setup", async () => {
+  sync = {
+    ...sync,
+    source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
+  };
+  show();
+  expect(await screen.findByText("Awaiting initial merge")).toBeVisible();
+  expect(
+    screen.getByRole("link", { name: "Review and merge PR" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/7");
+  expect(
+    screen.getByText(/Your current policy stays active until it merges/),
+  ).toBeVisible();
+});
+
+test("a connected sync names its repository", async () => {
+  sync = { ...sync, hasPolicy: true, source };
+  show();
+  expect(await screen.findByText("Connected")).toBeInTheDocument();
+  expect(screen.getByText("example/policies")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Sync settings/ })).toHaveAttribute(
     "href",
     "/settings/guardrails",
   );

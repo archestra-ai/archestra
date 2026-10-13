@@ -3,12 +3,16 @@
 import {
   ArrowRight,
   CircleCheck,
+  CircleDashed,
   CircleX,
   ClipboardCheck,
-  GitBranch,
+  Github,
+  LoaderCircle,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,11 +27,18 @@ import {
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
+import {
+  useAppaGithubSync,
+  useUpdateAppaGithubSync,
+} from "@/lib/openappa-github-sync.query";
 import { useOpenAppaPolicyTestRuns } from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
-import { formatDate } from "@/lib/utils/date-time";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
+import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import { openAppaUrl } from "./overview-setup-cards";
 
 /** Where the policy syncs from, the latest validation run, and the unresolved yells. */
 export function OverviewStatusCards() {
@@ -43,7 +54,7 @@ export function OverviewStatusCards() {
   if (!canReadSettings && !canReadPolicy && !canReadYells) return null;
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {canReadSettings && <SyncCard />}
+      {canReadSettings && <GithubSyncCard />}
       {canReadPolicy && <ValidationCard />}
       {canReadYells && <YellsCard />}
     </div>
@@ -54,62 +65,122 @@ export function OverviewStatusCards() {
 // Internal components
 // =============================================================================
 
-function SyncCard() {
+function GithubSyncCard() {
   const sync = useAppaGithubSync();
-  const source = sync.data?.source;
-  const connected = Boolean(source?.repo);
+  const update = useUpdateAppaGithubSync();
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  const appName = useAppName();
+  const [creating, setCreating] = useState(false);
+  const source = sync.data?.source ?? null;
+  const connected = Boolean(source?.interval);
+  const failed = source?.lastSyncError;
   return (
-    <StatusCard
-      icon={<GitBranch />}
-      title="Git sync"
-      status={
-        source?.lastSyncError ? (
-          <Badge variant="destructive">
-            <CircleX />
-            <span>Failed</span>
-          </Badge>
-        ) : source?.setupPullRequestNumber ? (
-          <Badge variant="outline">
-            <span>Waiting for merge</span>
-          </Badge>
-        ) : connected ? (
-          <Badge variant="outline">
-            <CircleCheck className="text-emerald-600 dark:text-emerald-400" />
-            <span>Synced</span>
-          </Badge>
-        ) : undefined
-      }
-      action={
-        <Button size="sm" variant="outline" asChild>
-          <Link href="/settings/guardrails">
-            <span>{connected ? "Sync settings" : "Set up sync"}</span>
-            <ArrowRight />
-          </Link>
-        </Button>
-      }
-    >
-      {sync.isError ? (
-        <Button variant="ghost" size="sm" onClick={() => sync.refetch()}>
-          Could not load sync. Retry
-        </Button>
-      ) : sync.isPending ? (
-        <Skeleton className="h-12 w-full" />
-      ) : connected && source ? (
-        <div className="space-y-1.5">
-          <p className="truncate font-mono text-sm">{`${source.repo} · ${source.ref ?? "HEAD"}`}</p>
-          <CardDescription>
-            {source.lastSyncedAt
-              ? `Last synced ${formatDate({ date: source.lastSyncedAt })}.`
-              : "Not synced yet."}
-          </CardDescription>
-        </div>
-      ) : (
-        <CardDescription className="leading-relaxed">
-          Keep your policy in a repository and review every change as a pull
-          request.
-        </CardDescription>
-      )}
-    </StatusCard>
+    <>
+      <StatusCard
+        icon={<Github />}
+        title="GitHub sync"
+        status={
+          !sync.data ? null : failed ? (
+            <Status failed>Sync failed</Status>
+          ) : connected && source?.setupPullRequestNumber ? (
+            <Badge variant="outline">
+              <LoaderCircle className="animate-spin text-muted-foreground" />
+              <span>Awaiting initial merge</span>
+            </Badge>
+          ) : connected ? (
+            <Status done>Connected</Status>
+          ) : !sync.data.enabled ? (
+            <Status>Not available</Status>
+          ) : (
+            <Status>Not connected</Status>
+          )
+        }
+        description={
+          connected && source?.setupPullRequestNumber ? (
+            <span>
+              Merge the initial policy pull request to finish setup. Your
+              current policy stays active until it merges.{" "}
+              <span aria-live="polite">
+                {source.lastSyncedAt
+                  ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}.`
+                  : "Checking for the merge…"}
+              </span>
+            </span>
+          ) : connected && source?.repo ? (
+            <span>
+              {appName} pulls the policy from{" "}
+              <span className="font-mono text-foreground">{source.repo}</span>.
+              Every change is a reviewed pull request.
+            </span>
+          ) : sync.data && !sync.data.enabled ? (
+            "GitHub sync is turned off on this server."
+          ) : (
+            "Keep your guardrail policy in a repository, so every change is a reviewed pull request."
+          )
+        }
+        learnMore={{
+          href: openAppaUrl("/validation"),
+          label: "CI checks",
+        }}
+        action={
+          !sync.data?.enabled ? null : connected &&
+            source?.setupPullRequestNumber ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="outline" asChild>
+                <a
+                  href={`https://github.com/${source.repo}/pull/${source.setupPullRequestNumber}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>Review and merge PR</span>
+                  <ArrowRight />
+                </a>
+              </Button>
+              {canManage && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={update.isPending}
+                  onClick={() => update.mutate({ action: "sync" })}
+                >
+                  <RefreshCw
+                    className={cn(update.isPending && "animate-spin")}
+                  />
+                  <span>
+                    {update.isPending ? "Checking…" : "Check if merged"}
+                  </span>
+                </Button>
+              )}
+            </div>
+          ) : !canManage ? (
+            connected ? null : (
+              <p className="text-sm text-muted-foreground">
+                Ask an administrator to connect a repository.
+              </p>
+            )
+          ) : connected || failed ? (
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/settings/guardrails">
+                <span>Sync settings</span>
+                <ArrowRight />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCreating(true)}
+            >
+              <Github />
+              <span>Create repository</span>
+            </Button>
+          )
+        }
+      />
+      {creating && <GithubSyncSetupDialog onOpenChange={setCreating} />}
+    </>
   );
 }
 
@@ -228,6 +299,7 @@ function StatusCard({
   status,
   description,
   children,
+  learnMore,
   action,
 }: {
   icon: ReactNode;
@@ -235,6 +307,7 @@ function StatusCard({
   status?: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
+  learnMore?: { href: string; label: string };
   action: ReactNode;
 }) {
   return (
@@ -254,7 +327,19 @@ function StatusCard({
         )}
         {children}
       </CardContent>
-      <CardFooter className="px-4">{action}</CardFooter>
+      {(action || learnMore) && (
+        <CardFooter className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4">
+          {action}
+          {learnMore && (
+            <ExternalDocsLink
+              href={learnMore.href}
+              className="shrink-0 text-xs text-muted-foreground"
+            >
+              {learnMore.label}
+            </ExternalDocsLink>
+          )}
+        </CardFooter>
+      )}
     </Card>
   );
 }
@@ -264,5 +349,28 @@ function CardIcon({ children }: { children: ReactNode }) {
     <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary [&>svg]:size-4">
       {children}
     </span>
+  );
+}
+
+function Status({
+  done,
+  failed,
+  children,
+}: {
+  done?: boolean;
+  failed?: boolean;
+  children: string;
+}) {
+  return (
+    <Badge variant={failed ? "destructive" : "outline"}>
+      {failed ? (
+        <CircleX />
+      ) : done ? (
+        <CircleCheck className="text-emerald-600 dark:text-emerald-400" />
+      ) : (
+        <CircleDashed className="text-muted-foreground" />
+      )}
+      <span>{children}</span>
+    </Badge>
   );
 }

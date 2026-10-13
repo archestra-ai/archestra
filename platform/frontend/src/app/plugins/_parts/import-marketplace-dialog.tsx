@@ -426,12 +426,9 @@ export function ImportMarketplaceDialog({
     />
   );
 
-  // Counted over the marketplace's own clients, plus Claude Desktop copies
-  // once Desktop is chosen, so hiding a client does not shrink the totals.
-  const countedRows = filteredByClient(rows, [
-    ...marketplaceClientOptions(marketplace?.entries ?? []),
-    ...clients,
-  ]);
+  // Counted over the clients in view: hidden clients' plugins are not part of
+  // this batch, and a Claude Code entry's Desktop copy is a row of its own.
+  const countedRows = filteredByClient(rows, clients);
   const isImported = (row: ImportRow) =>
     importedMarketplacePlugins.has(
       marketplaceEntryKey(marketplace?.repoUrl ?? "", row.name, row.clientType),

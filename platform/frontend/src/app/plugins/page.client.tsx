@@ -857,7 +857,7 @@ function PluginsEmptyState() {
       className="min-h-[60vh]"
       icon={Braces}
       title="No plugins yet."
-      description="Create a plugin for Claude Code, Codex, Copilot CLI, or Cursor."
+      description="Create a plugin for Claude Code, Claude Desktop, Codex, Copilot CLI, or Cursor."
       action={
         <PermissionButton
           permissions={{ plugin: ["create", "update"] }}

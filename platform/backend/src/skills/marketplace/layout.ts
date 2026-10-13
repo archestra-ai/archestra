@@ -118,13 +118,20 @@ export function computeLayout(
     version,
   });
 
+  const desktopEntryNames = claudeDesktopEntryNames({
+    plugins,
+    reserved: req.marketplaceName,
+  });
   for (const plugin of plugins) {
     const pluginName = resolvePluginName(plugin.pluginSlug);
-    const simpleEntry = buildPluginMarketplaceEntry({
-      pluginName,
-      description: plugin.description,
-      version,
-    });
+    const simpleEntry = {
+      ...buildPluginMarketplaceEntry({
+        pluginName,
+        description: plugin.description,
+        version,
+      }),
+      name: desktopEntryNames.get(plugin.pluginSlug) ?? pluginName,
+    };
     // Claude Desktop reads the same `.claude-plugin` marketplace as Claude
     // Code. A share link carries one client's plugins, so the two never mix.
     if (
@@ -418,3 +425,56 @@ function resolvePluginFile(params: {
     content: file.content,
   };
 }
+
+/**
+ * Claude Desktop accepts a marketplace plugin only when the entry's name
+ * matches the `name` its own `.claude-plugin/plugin.json` declares. List each
+ * Desktop plugin under that declared name, keeping the slug when the plugin
+ * declares none, declares an invalid one, or shares it with another entry.
+ */
+function claudeDesktopEntryNames(params: {
+  plugins: readonly MaterializePluginInput[];
+  reserved: string;
+}): Map<string, string> {
+  const declared = new Map<string, string>();
+  for (const plugin of params.plugins) {
+    if (plugin.clientType !== "claude-desktop") continue;
+    const name = declaredPluginName(plugin);
+    if (name) declared.set(plugin.pluginSlug, name);
+  }
+  const counts = new Map<string, number>();
+  for (const name of declared.values()) {
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const slugs = new Set(params.plugins.map((plugin) => plugin.pluginSlug));
+  const names = new Map<string, string>();
+  for (const [slug, name] of declared) {
+    const unique =
+      counts.get(name) === 1 &&
+      name !== params.reserved &&
+      (name === slug || !slugs.has(name));
+    if (unique) names.set(slug, name);
+  }
+  return names;
+}
+
+function declaredPluginName(plugin: MaterializePluginInput): string | null {
+  const manifest = plugin.files.find(
+    (file) => file.path === ".claude-plugin/plugin.json",
+  );
+  if (!manifest) return null;
+  try {
+    const text =
+      manifest.encoding === "base64"
+        ? Buffer.from(manifest.content, "base64").toString("utf8")
+        : manifest.content;
+    const name = (JSON.parse(text) as { name?: unknown }).name;
+    return typeof name === "string" && CLAUDE_PLUGIN_NAME.test(name)
+      ? name
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const CLAUDE_PLUGIN_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;

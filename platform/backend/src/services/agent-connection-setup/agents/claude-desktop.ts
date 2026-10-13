@@ -100,6 +100,17 @@ def probe(token, headers, model):
                            '. Check model access, quota, and proxy routing. Desktop configuration was not changed.') from None
 
 
+def pinned_revision(clone_url):
+    # Desktop auto-installs a marketplace only when it is pinned to a commit.
+    url = clone_url.rstrip('/') + '/info/refs?service=git-upload-pack'
+    with urllib.request.urlopen(url, timeout=60) as response:
+        refs = response.read().decode('utf-8', 'replace')
+    head = re.search(r'[0-9a-f]{4}([0-9a-f]{40}) HEAD(?:\x00|\n)', refs)
+    if not head:
+        raise RuntimeError('The shared marketplace did not provide a valid Git revision. Desktop configuration was not changed.')
+    return head.group(1)
+
+
 def subscription_token():
     cli = shutil.which('claude')
     if sys.platform == 'win32' and cli and not cli.lower().endswith('.exe'):
@@ -247,8 +258,12 @@ def main():
             profile['organizationInstructions'] = instructions
     if SETUP.get('skills'):
         skills = SETUP['skills']
-        profile['allowedPluginMarketplaces'] = [{'source': 'git', 'url': skills['cloneUrl'],
-                                                 'expectedName': skills['marketplaceName']}]
+        marketplace = {'source': 'git', 'url': skills['cloneUrl'],
+                       'expectedName': skills['marketplaceName']}
+        if skills['cloneUrl'].startswith('https://'):
+            marketplace.update({'ref': pinned_revision(skills['cloneUrl']),
+                                'installationPreference': 'auto_install'})
+        profile['allowedPluginMarketplaces'] = [marketplace]
     print('Applying Desktop setup. Finish any active tasks before continuing.', flush=True)
     stop_desktop(launch)
     # Preserve other profiles and application preferences. Keep the first backup
@@ -278,7 +293,10 @@ def main():
     if SETUP.get('mcp'):
         print('In Desktop Settings > Connectors, connect the gateway and finish its browser sign-in.')
     if SETUP.get('skills'):
-        print('In Desktop Settings > Plugins, install your shared marketplace.')
+        if SETUP['skills']['cloneUrl'].startswith('https://'):
+            print('Your shared skills and plugins install automatically after Desktop restarts.')
+        else:
+            print('In Desktop Settings > Plugins, install your shared marketplace.')
     if proxy:
         print('In Desktop Settings > Import, bring over your Claude.ai conversations. Rerun the import later to add newer conversations.')
     if subscription:

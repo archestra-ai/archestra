@@ -518,7 +518,8 @@ describe("NewPluginPage", () => {
     await user.click(claudeClient);
     expect(screen.queryByText("plugin-0")).not.toBeInTheDocument();
     expect(screen.getByText("plugin-1")).toBeVisible();
-    expect(screen.getByText(/5 of 101 selected/)).toBeVisible();
+    // The totals follow the clients in view.
+    expect(screen.getByText(/5 of 50 selected/)).toBeVisible();
   });
 
   it("submits selected permissions with a new plugin instead of legacy visibility", async () => {

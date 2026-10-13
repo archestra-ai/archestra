@@ -6,6 +6,7 @@ import { RulesCard } from "./coverage-charts";
 import { EntitiesTable } from "./entities-table";
 import { OpenAppaChatStrip } from "./openappa-chat-strip";
 import { OverviewSetupCards } from "./overview-setup-cards";
+import { OverviewStatusCards } from "./overview-status-cards";
 import { RemediesCard } from "./remedies-panels";
 import { LabelCard } from "./trust-audience-card";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
@@ -47,6 +48,7 @@ export function OverviewTab() {
               <RemediesCard />
             </div>
           </section>
+          <OverviewStatusCards />
           <section aria-labelledby="overview-mcp-servers" className="space-y-3">
             <div className="space-y-1">
               <h2 id="overview-mcp-servers" className="text-base font-semibold">

@@ -23,6 +23,9 @@ vi.mock("./coverage-charts", () => ({
 vi.mock("./trust-audience-card", () => ({ LabelCard: () => null }));
 vi.mock("./remedies-panels", () => ({ RemediesCard: () => null }));
 vi.mock("./openappa-chat-strip", () => ({ OpenAppaChatStrip: () => null }));
+vi.mock("./overview-status-cards", () => ({
+  OverviewStatusCards: () => null,
+}));
 vi.mock("./entities-table", () => ({
   EntitiesTable: () => <div>Entities table</div>,
 }));

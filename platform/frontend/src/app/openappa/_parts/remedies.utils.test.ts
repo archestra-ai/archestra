@@ -2,7 +2,6 @@
 import { describe, expect, test } from "vitest";
 import type {
   Authority,
-  BlockCoverage,
   RemediesView,
   Sanitizer,
 } from "@/lib/openappa-remedies.query";

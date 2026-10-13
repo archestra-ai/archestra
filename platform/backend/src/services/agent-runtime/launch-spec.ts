@@ -107,6 +107,10 @@ export async function buildAgentRunLaunchSpec(params: {
     runtime: params.runtime,
     organizationId: params.organizationId,
     userId: actorUserId,
+    authorizationUserId:
+      params.actor.kind === "serviceAccount"
+        ? serviceAccountUserId(params.actor.id)
+        : actorUserId,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(

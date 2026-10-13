@@ -130,6 +130,9 @@ const pluginsTable = softDeletablePgTable(
         sql`lower(${table.sourceMarketplaceRepo})`,
         table.sourceMarketplacePath,
         sql`lower(${table.sourceMarketplacePluginName})`,
+        // Claude Code and Claude Desktop share a plugin format, so one entry
+        // can be imported once per client.
+        table.clientType,
       )
       .where(
         sql`${table.sourceMarketplaceRepo} IS NOT NULL AND ${table.sourceMarketplacePath} IS NOT NULL AND ${table.sourceMarketplacePluginName} IS NOT NULL AND ${table.deletedAt} IS NULL`,

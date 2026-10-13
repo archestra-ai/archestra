@@ -371026,6 +371026,7 @@
                         "type": "string",
                         "enum": [
                           "claude-code",
+                          "claude-desktop",
                           "copilot-cli",
                           "codex",
                           "cursor"
@@ -371632,6 +371633,7 @@
                     "type": "string",
                     "enum": [
                       "claude-code",
+                      "claude-desktop",
                       "copilot-cli",
                       "codex",
                       "cursor"
@@ -371891,6 +371893,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -372649,6 +372652,7 @@
                             "type": "string",
                             "enum": [
                               "claude-code",
+                              "claude-desktop",
                               "copilot-cli",
                               "codex",
                               "cursor"
@@ -373054,6 +373058,7 @@
                           "type": "string",
                           "enum": [
                             "claude-code",
+                            "claude-desktop",
                             "copilot-cli",
                             "codex",
                             "cursor"
@@ -373307,6 +373312,7 @@
                             "type": "string",
                             "enum": [
                               "claude-code",
+                              "claude-desktop",
                               "copilot-cli",
                               "codex",
                               "cursor"
@@ -374468,6 +374474,7 @@
                         "type": "string",
                         "enum": [
                           "claude-code",
+                          "claude-desktop",
                           "copilot-cli",
                           "codex",
                           "cursor"
@@ -374668,6 +374675,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -375808,6 +375816,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -376539,6 +376548,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -377516,6 +377526,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -378398,6 +378409,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"
@@ -379379,6 +379391,7 @@
                         "type": "string",
                         "enum": [
                           "claude-code",
+                          "claude-desktop",
                           "copilot-cli",
                           "codex",
                           "cursor"
@@ -380123,6 +380136,7 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
+                        "claude-desktop",
                         "copilot-cli",
                         "codex",
                         "cursor"

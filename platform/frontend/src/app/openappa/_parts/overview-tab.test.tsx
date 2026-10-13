@@ -18,7 +18,13 @@ import { OverviewTab } from "./overview-tab";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("./coverage-charts", () => ({
-  CoverageCharts: () => <div>Coverage charts</div>,
+  RulesCard: () => <div>Coverage charts</div>,
+}));
+vi.mock("./trust-audience-card", () => ({ LabelCard: () => null }));
+vi.mock("./remedies-panels", () => ({ RemediesCard: () => null }));
+vi.mock("./openappa-chat-strip", () => ({ OpenAppaChatStrip: () => null }));
+vi.mock("./overview-status-cards", () => ({
+  OverviewStatusCards: () => null,
 }));
 vi.mock("./entities-table", () => ({
   EntitiesTable: () => <div>Entities table</div>,

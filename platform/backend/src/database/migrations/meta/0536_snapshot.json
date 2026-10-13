@@ -1,5 +1,5 @@
 {
-  "id": "7c9572fc-e932-48ca-974c-cc3cbd94e505",
+  "id": "97329a84-b507-48e3-b8ba-c491e03fea6c",
   "prevId": "96af2c48-3a45-4aa6-af45-143e674b7033",
   "version": "7",
   "dialect": "postgresql",
@@ -10410,12 +10410,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "service_account_id": {
-          "name": "service_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "virtual_key_id": {
           "name": "virtual_key_id",
           "type": "uuid",
@@ -10859,19 +10853,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "interactions_service_account_id_service_accounts_id_fk": {
-          "name": "interactions_service_account_id_service_accounts_id_fk",
-          "tableFrom": "interactions",
-          "tableTo": "service_accounts",
-          "columnsFrom": [
-            "service_account_id"
           ],
           "columnsTo": [
             "id"
@@ -17419,12 +17400,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "service_account_id": {
-          "name": "service_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "reference_id": {
           "name": "reference_id",
           "type": "text",
@@ -17508,19 +17483,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "oauth_client_service_account_id_service_accounts_id_fk": {
-          "name": "oauth_client_service_account_id_service_accounts_id_fk",
-          "tableFrom": "oauth_client",
-          "tableTo": "service_accounts",
-          "columnsFrom": [
-            "service_account_id"
           ],
           "columnsTo": [
             "id"
@@ -19607,6 +19569,12 @@
               "asc": true,
               "isExpression": true,
               "nulls": "last"
+            },
+            {
+              "expression": "client_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
             }
           ],
           "isUnique": true,
@@ -21403,12 +21371,6 @@
           "notNull": true,
           "default": false
         },
-        "secret_id": {
-          "name": "secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "last_used_at": {
           "name": "last_used_at",
           "type": "timestamp",
@@ -21474,22 +21436,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "service_account_tokens_platform_token_unique_idx": {
-          "name": "service_account_tokens_platform_token_unique_idx",
-          "columns": [
-            {
-              "expression": "service_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_account_tokens\".\"secret_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -21499,19 +21445,6 @@
           "tableTo": "service_accounts",
           "columnsFrom": [
             "service_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_account_tokens_secret_id_secret_id_fk": {
-          "name": "service_account_tokens_secret_id_secret_id_fk",
-          "tableFrom": "service_account_tokens",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
           ],
           "columnsTo": [
             "id"
@@ -21562,19 +21495,6 @@
           "notNull": true,
           "default": false
         },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_system": {
-          "name": "is_system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -21618,21 +21538,6 @@
           "method": "btree",
           "with": {}
         },
-        "service_accounts_team_id_idx": {
-          "name": "service_accounts_team_id_idx",
-          "columns": [
-            {
-              "expression": "team_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "service_accounts_organization_id_name_unique_idx": {
           "name": "service_accounts_organization_id_name_unique_idx",
           "columns": [
@@ -21653,22 +21558,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "service_accounts_organization_id_system_unique_idx": {
-          "name": "service_accounts_organization_id_system_unique_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_accounts\".\"is_system\"",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -21683,19 +21572,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_accounts_team_id_team_id_fk": {
-          "name": "service_accounts_team_id_team_id_fk",
-          "tableFrom": "service_accounts",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "service_accounts_created_by_user_id_fk": {

@@ -126,7 +126,7 @@ import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
-import { ApiError } from "@/types";
+import { ApiError, type CommonToolResult } from "@/types";
 import type {
   RuntimeLaunchFailureReason,
   RuntimeLaunchOutcome,
@@ -507,25 +507,28 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const waitTool = binding.adapter?.pendingServersTool;
     // A ruling in the result of the client's wait tool is a denial that tool
     // carried: the model made another call there, and has to be told so.
-    const carriedDenials = new Set(
+    const carriedDenials = new Map(
       toolResults.flatMap((answer) =>
         answer.name === waitTool &&
         !answer.namespace &&
         result.toolResultUpdates[answer.id]?.denied &&
         !binding.request.restoredNoticeCallIds?.has(answer.id)
-          ? [answer.id]
+          ? [[answer.id, answer] as const]
           : [],
       ),
     );
     const toolResultUpdates = {
       ...childResultUpdates,
       ...Object.fromEntries(
-        Object.entries(result.toolResultUpdates).map(([id, result]) => [
-          id,
-          carriedDenials.has(id)
-            ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them. The ruling on your call follows.\n\n${result.content}`
-            : result.content,
-        ]),
+        Object.entries(result.toolResultUpdates).map(([id, result]) => {
+          const wait = carriedDenials.get(id);
+          return [
+            id,
+            wait
+              ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them.${waitFailure(wait)} The ruling on your call follows.\n\n${result.content}`
+              : result.content,
+          ];
+        }),
       ),
       ...failedLaunchResults,
     };
@@ -1813,6 +1816,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ? undefined
       : name;
   }
+}
+
+/** The client's own report of a failed wait, so the model sees the real error. */
+function waitFailure(wait: CommonToolResult): string {
+  if (!wait.isError) return "";
+  const reported =
+    typeof wait.content === "string"
+      ? wait.content
+      : JSON.stringify(wait.content);
+  return ` The wait itself failed, and the client reported:\n${reported}\n`;
 }
 
 function notLoadedRulingKey(params: {

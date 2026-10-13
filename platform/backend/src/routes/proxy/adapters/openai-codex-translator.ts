@@ -473,6 +473,11 @@ function chatToolsToResponsesTools(
         name: tool.function.name,
         description: tool.function.description,
         parameters: tool.function.parameters ?? {},
+        // Chat tools are non-strict unless the caller opts in; Responses tools
+        // are not. With `strict` unset, the Codex backend fits calls to the
+        // schema, and one `pattern` with nested repetition plus a `maxLength`
+        // ends every turn `incomplete` with no output. Codex sends `false` too.
+        strict: tool.function.strict ?? false,
       },
     ];
   });

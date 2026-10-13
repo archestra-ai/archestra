@@ -122,8 +122,31 @@ describe("buildCodexResponsesRequest", () => {
       tool_choice?: string;
     };
 
-    expect(body.tools?.[0]).toMatchObject({ type: "function", name: "search" });
+    expect(body.tools?.[0]).toMatchObject({
+      type: "function",
+      name: "search",
+      strict: false,
+    });
     expect(body.tool_choice).toBe("auto");
+  });
+
+  it("keeps a chat tool's strict opt-in", () => {
+    const body = buildCodexResponsesRequest(
+      req({
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "search",
+              parameters: { type: "object" },
+              strict: true,
+            },
+          },
+        ],
+      } as Partial<ChatCompletionsRequest>),
+    ) as unknown as { tools?: Array<Record<string, unknown>> };
+
+    expect(body.tools?.[0]).toMatchObject({ name: "search", strict: true });
   });
 
   it("maps a forced-function tool_choice to the responses object form", () => {

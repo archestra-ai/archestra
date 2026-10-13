@@ -1,6 +1,7 @@
 import { PassThrough } from "node:stream";
 import {
   type ImagePullSecretConfig,
+  isPlaywrightCatalogItem,
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
   type McpDeploymentState,
@@ -2285,14 +2286,18 @@ export default class K8sDeployment {
           // prevents DiskPressure eviction cascades on over-packed nodes.
           resources: {
             requests: {
-              memory: config.orchestrator.mcpServerResources.requests.memory,
+              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
+                ? PLAYWRIGHT_MEMORY_REQUEST
+                : config.orchestrator.mcpServerResources.requests.memory,
               cpu: config.orchestrator.mcpServerResources.requests.cpu,
               "ephemeral-storage":
                 config.orchestrator.mcpServerResources.requests
                   .ephemeralStorage,
             },
             limits: {
-              memory: config.orchestrator.mcpServerResources.limits.memory,
+              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
+                ? PLAYWRIGHT_MEMORY_LIMIT
+                : config.orchestrator.mcpServerResources.limits.memory,
               "ephemeral-storage":
                 config.orchestrator.mcpServerResources.limits.ephemeralStorage,
             },
@@ -5825,3 +5830,12 @@ const CREDENTIAL_EXPIRY_ANNOTATION = "archestra.ai/credential-expires-at";
 const CREDENTIAL_REFRESH_ANNOTATION = "archestra.ai/credential-refresh-at";
 
 const CREDENTIALS_RESOLVED_ANNOTATION = "archestra.ai/credentials-resolved";
+
+/**
+ * The built-in Playwright server runs one Chromium shared by every browser
+ * session in its Environment, with a context per conversation. The generic MCP
+ * server default (sized for small tool servers) starves it: pages slow to a
+ * crawl and screenshots time out long before the pod is OOM-killed.
+ */
+const PLAYWRIGHT_MEMORY_REQUEST = "512Mi";
+const PLAYWRIGHT_MEMORY_LIMIT = "2Gi";

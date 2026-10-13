@@ -58,7 +58,7 @@ Reuse `$SESSION_ID` when sending tool results back to the model.
 
 - Reuse the same ID when resuming a chat. Start a new ID only when a separate conversation starts.
 - Any string up to 512 bytes works (no control characters). It does not need to be a UUID.
-- [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) labels requests in logs, but Guardrails ignore it. When you send both, use the same value.
+- [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) labels requests in logs, but Guardrails ignore it. When you send both `X-Archestra-Session-Id` and `X-Appa-Session-ID`, use the same value for both.
 
 ## Unrecognized Clients
 

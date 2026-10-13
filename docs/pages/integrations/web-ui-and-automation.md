@@ -50,7 +50,7 @@ Use n8n's [execution ID](https://docs.n8n.io/code/cookbook/builtin/execution/#ex
 
 If you call the proxy with an **HTTP Request** node instead, turn on **Send Headers** and add `X-Appa-Session-ID` with `{{ $execution.id }}`. Keep the virtual key in the credential.
 
-For a child workflow, use an **HTTP Request** node to send both headers: `X-Appa-Session-ID` set to `{{ $execution.id }}` and `X-Appa-Parent-ID` set to `{{ $json.parentExecutionId }}`. The OpenAI credential only supports one custom header, so child workflows that need a parent session cannot use it.
+For a child workflow, pass the parent workflow's `$execution.id` in its input data as `parentExecutionId`. In the child's **HTTP Request** node, send both headers: `X-Appa-Session-ID` set to `{{ $execution.id }}` and `X-Appa-Parent-ID` set to `{{ $json.parentExecutionId }}`. The OpenAI credential only supports one custom header, so child workflows that need a parent session cannot use it.
 
 Run the workflow twice and check **Logs → LLM Proxy** in Archestra. Calls within each run share a session ID, and the two runs get different IDs. Never hardcode a static session ID in the credential. For chats that span multiple workflow runs, see [Session Headers](/docs/agents/guardrails/clients#session-headers).
 

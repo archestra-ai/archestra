@@ -1,6 +1,13 @@
-import { ResourcePermissionGrantSchema, RouteId } from "@archestra/shared";
+import {
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
+  ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import {
   createRuntimeCredentialDefinition,
   deleteRuntimeCredentialConnection,
@@ -94,16 +101,28 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "List reusable credentials available to platform integrations",
         tags: ["Credentials"],
+        querystring: z.object({
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
+        }),
         response: constructResponseSchema(
           z.array(RuntimeCredentialDefinitionViewSchema),
         ),
       },
     },
-    async (request, reply) =>
+    async ({ user, organizationId, query }, reply) =>
       reply.send(
         await listRuntimeCredentialDefinitions({
-          organizationId: request.organizationId,
-          userId: request.user.id,
+          organizationId,
+          userId: user.id,
+          access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+            userId: user.id,
+            organizationId,
+            relations: query.access,
+            sharedWith: query.sharedWith,
+            ownerIds: query.owner,
+          }),
         }),
       ),
   );

@@ -19,6 +19,11 @@ test("credential role actions become grants on every credential and leave the ro
   const unrelated = await makeCustomRole(org.id, {
     permission: { agent: ["read"] },
   });
+  // A credential saved before the cutover, with no policy of its own yet.
+  const [existing] = await db
+    .insert(schema.runtimeCredentialDefinitionsTable)
+    .values({ organizationId: org.id, key: "existing", name: "Existing" })
+    .returning();
 
   await runScopedResourcePermissionCutover();
 
@@ -38,7 +43,20 @@ test("credential role actions become grants on every credential and leave the ro
   expect(actionsOf("admin")).toEqual(everything);
   expect(actionsOf("platform_admin")).toEqual(everything);
   expect(actionsOf("editor")).toEqual(everything);
-  expect(actionsOf("member")).toEqual(["read", "use"]);
+  // Members reach a credential through its own policy instead, so one can
+  // later be kept to a team: every credential that already existed is shared
+  // with the organization, as a new one is by default.
+  expect(actionsOf("member")).toBeUndefined();
+  expect(
+    (
+      await ResourcePermissionPolicyModel.find({
+        ...key,
+        scope: existing.id,
+      })
+    )?.grants,
+  ).toEqual([
+    { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
+  ]);
   expect(actionsOf(manager.id)).toEqual(everything);
   expect(actionsOf(viewer.id)).toEqual(["read", "use"]);
   expect(actionsOf(unrelated.id)).toBeUndefined();
@@ -68,7 +86,7 @@ test("credential role actions become grants on every credential and leave the ro
     ...key,
     revision: policy?.revision ?? 0,
     grants: (policy?.grants ?? []).filter(
-      (grant) => grant.subject.id !== "member",
+      (grant) => grant.subject.id !== "editor",
     ),
   });
   await runScopedResourcePermissionCutover();

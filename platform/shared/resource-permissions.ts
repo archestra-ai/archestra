@@ -102,6 +102,15 @@ export type ResourcePermissionGrant = z.infer<
 >;
 
 /**
+ * Who a new credential reaches when its creator names nobody: everyone in the
+ * organization can see it and connect or bind its value. Remove the grant on
+ * a credential to keep it to the people named instead.
+ */
+export const DEFAULT_CREDENTIAL_GRANTS: ResourcePermissionGrant[] = [
+  { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
+];
+
+/**
  * `internal_code` of a permissions save refused because afterwards nobody
  * could manage the objects the policy covers.
  */

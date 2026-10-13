@@ -53,6 +53,9 @@ describe("credential object grants", () => {
             allowPersonal: false,
             allowOrganization: true,
           },
+          // Not shared with the organization, which a new credential is by
+          // default, so only a grant made below reaches it.
+          initialGrants: [],
         });
       mine = await create("mine");
       theirs = await create("theirs");

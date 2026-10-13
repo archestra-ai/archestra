@@ -735,6 +735,7 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpRegistry: ["create"],
   },
   [RouteId.GetInternalMcpCatalogItem]: {},
+  [RouteId.GetInternalMcpCatalogCredentialPreflight]: {},
   [RouteId.GetInternalMcpCatalogTools]: {},
   [RouteId.GetInternalMcpCatalogToolsBatch]: {},
   // These handlers authorize the action against the resolved catalog object.

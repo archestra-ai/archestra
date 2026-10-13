@@ -74,9 +74,20 @@ export class CredentialAccess {
     key: string;
     message: string;
   }): Promise<void> {
+    await CredentialAccess.requireOnKey({ ...params, action: "use" });
+  }
+
+  /** {@link CredentialAccess.requireUseOfKey} for any action. */
+  static async requireOnKey(params: {
+    organizationId: string;
+    userId: string;
+    key: string;
+    action: ResourcePermissionAction;
+    message: string;
+  }): Promise<void> {
     const definition = await RuntimeCredentialDefinitionModel.find(params);
     if (!definition) {
-      await CredentialAccess.requireOnEvery({ ...params, action: "use" });
+      await CredentialAccess.requireOnEvery(params);
       return;
     }
     const permitted = await ResourcePermissions.getPermittedIds({
@@ -84,9 +95,35 @@ export class CredentialAccess {
       userId: params.userId,
       resource: "credential",
       scopes: [definition.id],
-      action: "use",
+      action: params.action,
     });
     if (!permitted.has(definition.id)) throw new ApiError(403, params.message);
+  }
+
+  /**
+   * The keys, of those given, whose credential the caller may `use`. A key
+   * with no credential behind it is never usable.
+   */
+  static async usableKeys(params: {
+    organizationId: string;
+    userId: string;
+    keys: string[];
+  }): Promise<Set<string>> {
+    if (params.keys.length === 0) return new Set();
+    const definitions =
+      await RuntimeCredentialDefinitionModel.findByKeys(params);
+    const permitted = await ResourcePermissions.getPermittedIds({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "credential",
+      scopes: [...definitions.values()].map((definition) => definition.id),
+      action: "use",
+    });
+    return new Set(
+      [...definitions.values()]
+        .filter((definition) => permitted.has(definition.id))
+        .map((definition) => definition.key),
+    );
   }
 
   /**

@@ -1,5 +1,14 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ResourceAccessRelation,
+} from "@archestra/shared";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 import { rememberGitHubConnectionReturn } from "@/lib/github-connection-return";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
@@ -25,6 +34,31 @@ export type RuntimeCredentialUsage =
 export const runtimeCredentialsQueryKey = ["runtime-credentials"] as const;
 export const runtimeCredentialUsageQueryKey = (key: string | null) =>
   ["runtime-credential-usage", key] as const;
+
+/**
+ * The Credentials page's list, narrowed by its access filters. Pickers
+ * elsewhere use {@link useRuntimeCredentials}, which lists every credential
+ * the viewer can read.
+ */
+export function useFilteredRuntimeCredentials(params: {
+  access: ResourceAccessRelation[];
+  sharedWith?: string[];
+  owner?: string[];
+}) {
+  const { access, sharedWith, owner } = params;
+  return useQuery({
+    queryKey: [...runtimeCredentialsQueryKey, { access, sharedWith, owner }],
+    queryFn: async () => {
+      const { data, error } = await listRuntimeCredentials({
+        query: { access, sharedWith, owner },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    placeholderData: keepPreviousData,
+    refetchOnMount: "always",
+  });
+}
 
 export function useRuntimeCredentials(enabled = true) {
   return useQuery({

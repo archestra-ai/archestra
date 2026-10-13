@@ -120,6 +120,7 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   fetchCatalogTools: vi.fn(),
   useCatalogTools: () => ({ data: [] }),
   useInternalMcpCatalog: (options?: unknown) =>

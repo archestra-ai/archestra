@@ -23,6 +23,11 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+  useResourceAccessParam,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
@@ -37,16 +42,34 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { useScopedCapabilities } from "@/lib/auth/auth.query";
 import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type RuntimeCredentialDefinition,
   useDeleteRuntimeCredential,
   useDeleteRuntimeCredentialConnection,
-  useRuntimeCredentials,
+  useFilteredRuntimeCredentials,
   useRuntimeCredentialUsage,
 } from "@/lib/runtime-credentials.query";
 
 export function RuntimeCredentialsSection() {
-  const definitions = useRuntimeCredentials();
+  const {
+    searchParams,
+    pageIndex,
+    pageSize,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams({ defaultPageSize: 10 });
+  const {
+    access,
+    sharedWith,
+    owner,
+    isDefault: isDefaultAccess,
+  } = useResourceAccessParam();
+  const definitions = useFilteredRuntimeCredentials({
+    access,
+    sharedWith,
+    owner,
+  });
   const byosEnabled = useFeature("byosEnabled");
   const [definitionDialog, setDefinitionDialog] = useState<
     RuntimeCredentialDefinition | "new" | null
@@ -62,20 +85,24 @@ export function RuntimeCredentialsSection() {
   const disconnect = useDeleteRuntimeCredentialConnection();
 
   const setActionButton = useSetSettingsAction();
-  const [search, setSearch] = useState("");
-  const [kind, setKind] = useState("all");
-  const [scope, setScope] = useState("all");
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
+  const search = searchParams.get("search") ?? "";
+  const kind = searchParams.get("kind") ?? "all";
+  const scope = searchParams.get("scope") ?? "all";
   const hasActiveFilters =
-    Boolean(search.trim()) || kind !== "all" || scope !== "all";
-  const resetPage = () =>
-    setPagination((previous) => ({ ...previous, pageIndex: 0 }));
-  const clearFilters = () => {
-    setSearch("");
-    setKind("all");
-    setScope("all");
-    resetPage();
-  };
+    Boolean(search.trim()) ||
+    kind !== "all" ||
+    scope !== "all" ||
+    !isDefaultAccess;
+  const clearFilters = () =>
+    updateQueryParams({
+      search: null,
+      kind: null,
+      scope: null,
+      ...Object.fromEntries(
+        RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
+      ),
+      page: "1",
+    });
 
   useEffect(() => {
     setActionButton(
@@ -187,21 +214,19 @@ export function RuntimeCredentialsSection() {
               objectNamePlural="credentials"
               searchFields={["name", "key", "description"]}
               className={filterSearchClass}
-              syncQueryParams={false}
-              value={search}
-              onSearchChange={(value) => {
-                setSearch(value);
-                resetPage();
-              }}
+              paramName="search"
             />
           }
         >
+          <ResourceAccessFilter resource="credential" noun="credentials" />
           <FilterSelect
             value={kind}
-            onValueChange={(value) => {
-              setKind(value);
-              resetPage();
-            }}
+            onValueChange={(value) =>
+              updateQueryParams({
+                kind: value === "all" ? null : value,
+                page: "1",
+              })
+            }
             placeholder="Filter by type"
             items={[
               { value: "all", label: "All types" },
@@ -224,10 +249,12 @@ export function RuntimeCredentialsSection() {
           />
           <FilterSelect
             value={scope}
-            onValueChange={(value) => {
-              setScope(value);
-              resetPage();
-            }}
+            onValueChange={(value) =>
+              updateQueryParams({
+                scope: value === "all" ? null : value,
+                page: "1",
+              })
+            }
             placeholder="Filter by scope"
             items={[
               { value: "all", label: "All scopes" },
@@ -248,7 +275,11 @@ export function RuntimeCredentialsSection() {
           data={filteredDefinitions}
           getRowId={(definition) => definition.key}
           isLoading={definitions.isPending}
-          pagination={{ ...pagination, total: filteredDefinitions.length }}
+          pagination={{
+            pageIndex,
+            pageSize,
+            total: filteredDefinitions.length,
+          }}
           onPaginationChange={setPagination}
           emptyMessage="No credentials yet"
           emptyDescription="Add a credential to make it available to agents, MCP servers, skills, and knowledge."

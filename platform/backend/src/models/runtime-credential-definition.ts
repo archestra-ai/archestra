@@ -1,4 +1,5 @@
 import type { ResourcePermissionGrant } from "@archestra/shared";
+import { DEFAULT_CREDENTIAL_GRANTS } from "@archestra/shared";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import type {
@@ -8,6 +9,7 @@ import type {
 } from "@/types";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import type { ResourceAccessFilter } from "./resource-permission-subject";
 
 export default class RuntimeCredentialDefinitionModel {
   static async hasGitHubUserDefinitions(params: {
@@ -112,7 +114,7 @@ export default class RuntimeCredentialDefinitionModel {
         organizationId: created.organizationId,
         resource: "credential",
         scope: created.id,
-        grants: params.initialPermissionGrants,
+        grants: params.initialPermissionGrants ?? DEFAULT_CREDENTIAL_GRANTS,
         authorId: CreatedByModel.id(created, created.createdBy) ?? null,
       });
       // SPDX-SnippetEnd
@@ -122,14 +124,31 @@ export default class RuntimeCredentialDefinitionModel {
 
   static async list(
     organizationId: string,
+    /** The Credentials page's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter,
   ): Promise<RuntimeCredentialDefinition[]> {
     return db
       .select()
       .from(schema.runtimeCredentialDefinitionsTable)
       .where(
-        eq(
-          schema.runtimeCredentialDefinitionsTable.organizationId,
-          organizationId,
+        and(
+          eq(
+            schema.runtimeCredentialDefinitionsTable.organizationId,
+            organizationId,
+          ),
+          // SPDX-SnippetBegin
+          // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+          access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                ...access,
+                organizationId,
+                resource: "credential",
+                scopeColumn: schema.runtimeCredentialDefinitionsTable.id,
+                ownerColumn: schema.runtimeCredentialDefinitionsTable.createdBy,
+              })
+            : undefined,
+          // SPDX-SnippetEnd
         ),
       )
       .orderBy(asc(schema.runtimeCredentialDefinitionsTable.name));

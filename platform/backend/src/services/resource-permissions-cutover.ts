@@ -646,19 +646,44 @@ SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resourc
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
   // ---------------------------------------------------------------------
+  // shareExistingCredentialsWithOrganization
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- Every member could see every credential and connect their own value to it
+-- (\`credential:read\`). That reach moves onto each credential, as a grant to
+-- everyone in the organization, the same grant a new credential starts with.
+-- On the credential, not at \`*\`: a grant at \`*\` cannot be taken away from
+-- one credential, so no credential could ever be kept to a team.
+--
+-- Runs once per organization, in the same pass that converts the role
+-- actions below and marks the organization converted. Revoking the grant
+-- afterwards therefore sticks.
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
+SELECT d.organization_id, 'credential', d.id::text,
+  jsonb_build_array(jsonb_build_object(
+    'subject', jsonb_build_object('type', 'organization', 'id', '*'),
+    'actions', jsonb_build_array('read', 'use'))),
+  true
+FROM credential_definitions d
+WHERE NOT EXISTS (
+  SELECT 1 FROM resource_permission_policies p
+  WHERE p.organization_id = d.organization_id AND p.resource = 'credential'
+    AND p.scope = '*' AND p.legacy_sharing_migrated
+)
+ON CONFLICT (organization_id, resource, scope) DO NOTHING;
+`),
+  // ---------------------------------------------------------------------
   // convertCredentialAuthority
   // ---------------------------------------------------------------------
   sql.raw(`
--- A saved credential has no audience of its own either: the organization owns
--- every one, and who could see, change or delete one was decided entirely by
--- the caller's \`credential\` role actions. Those actions become grants at \`*\`,
--- for the same reason convertServiceAccountAuthority above writes there and
--- not onto each credential: a copy on every object could not be revoked from
--- the object's own Permissions tab, and \`*\` also covers credentials created
--- after the upgrade.
+-- Who could change or delete a saved credential was decided entirely by the
+-- caller's \`credential\` role actions. Those actions become grants at \`*\`,
+-- for the same reason convertServiceAccountAuthority above writes there:
+-- they reached every credential, including ones created later. Members'
+-- read was converted onto each credential above.
 --
--- Members held \`credential:read\`, which let them connect their own value to a
--- personal credential. Connecting is \`use\` now, so read carries use with it.
+-- A custom role's \`credential:read\` let its holders connect their own value
+-- to a personal credential. Connecting is \`use\` now, so read carries use.
 WITH role_actions AS (
   -- Built-in roles keep their permissions in code, not in this table.
   SELECT o.id AS organization_id, builtin.id AS subject_id, action
@@ -666,8 +691,7 @@ WITH role_actions AS (
   CROSS JOIN (VALUES
     ('admin', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']),
     ('platform_admin', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']),
-    ('editor', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']),
-    ('member', ARRAY['read', 'use'])
+    ('editor', ARRAY['read', 'use', 'update', 'delete', 'manage-permissions'])
   ) builtin(id, actions)
   CROSS JOIN LATERAL unnest(builtin.actions) action
   WHERE NOT EXISTS (

@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { RuntimeCredentialsSection } from "./runtime-credentials-section";
@@ -66,12 +68,21 @@ vi.mock("@/lib/auth/auth.query", () => ({
   }),
 }));
 vi.mock("@/lib/config/config.query", () => ({ useFeature: () => false }));
-// The type-wide Permissions menu has its own tests.
+// The type-wide Permissions menu and the access section have their own tests.
 vi.mock("@/components/resource-list-actions", () => ({
   ResourceListActions: () => null,
 }));
+vi.mock("@/components/resource-access-section", () => ({
+  ResourceAccessSection: () => null,
+}));
 vi.mock("@/lib/runtime-credentials.query", () => ({
   useRuntimeCredentials: () => ({
+    data: mocks.definitions,
+    isPending: false,
+    isError: false,
+    refetch: mocks.refetch,
+  }),
+  useFilteredRuntimeCredentials: () => ({
     data: mocks.definitions,
     isPending: false,
     isError: false,
@@ -104,8 +115,39 @@ vi.mock("@/lib/runtime-credentials.query", () => ({
   }),
 }));
 
+/**
+ * The page's query string, which the router mock writes and `useSearchParams`
+ * reads back, so a search or filter survives the navigation it causes.
+ */
+let url = new URLSearchParams();
+const urlListeners = new Set<() => void>();
+const navigate = (href: string) => {
+  url = new URLSearchParams(href.split("?")[1] ?? "");
+  for (const listener of urlListeners) listener();
+};
+const useUrl = () =>
+  useSyncExternalStore(
+    (listener) => {
+      urlListeners.add(listener);
+      return () => urlListeners.delete(listener);
+    },
+    () => url,
+  );
+const mockUrlNavigation = () => {
+  url = new URLSearchParams();
+  vi.mocked(usePathname).mockReturnValue("/settings/credentials");
+  vi.mocked(useRouter).mockReturnValue({
+    replace: vi.fn(navigate),
+    push: vi.fn(navigate),
+  } as unknown as ReturnType<typeof useRouter>);
+  vi.mocked(useSearchParams).mockImplementation(
+    () => useUrl() as ReturnType<typeof useSearchParams>,
+  );
+};
+
 describe("RuntimeCredentialsSection", () => {
   beforeEach(() => {
+    mockUrlNavigation();
     vi.mocked(useAppName).mockReturnValue("Example Platform");
     vi.clearAllMocks();
     mocks.definitions = [

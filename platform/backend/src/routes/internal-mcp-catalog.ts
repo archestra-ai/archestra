@@ -55,6 +55,7 @@ import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
+import { preflightMcpCredentials } from "@/services/credentials";
 import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
@@ -94,6 +95,7 @@ import {
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
+  McpCredentialBlockerSchema,
   type McpServer,
   McpServerAlertMuteSchema,
   type McpServerDismissibleAlertKind,
@@ -754,6 +756,49 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       await requireCatalogRead({ request, id });
       return reply.send(catalogItem);
+    },
+  );
+
+  fastify.get(
+    "/api/internal_mcp_catalog/:id/credential-preflight",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogCredentialPreflight,
+        description:
+          "List the saved credentials that would stop the caller installing this MCP server, and why",
+        tags: ["MCP Catalog"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          scope: z.enum(["personal", "team", "org"]),
+        }),
+        response: constructResponseSchema(
+          z.object({ blockers: z.array(McpCredentialBlockerSchema) }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      await requireCatalogRead({ request, id });
+      return reply.send({
+        blockers: await preflightMcpCredentials({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          installationScope: request.query.scope,
+          environment: catalogItem.localConfig?.environment ?? [],
+        }),
+      });
     },
   );
 

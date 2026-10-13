@@ -1,4 +1,5 @@
 import type { ResourcePermissionGrant } from "@archestra/shared";
+import { DEFAULT_CREDENTIAL_GRANTS } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { RuntimeCredentialDefinition } from "@/types";
@@ -94,7 +95,7 @@ export async function createSharedCredential(data: {
       organizationId: created.organizationId,
       resource: "credential",
       scope: created.id,
-      grants: initialPermissionGrants,
+      grants: initialPermissionGrants ?? DEFAULT_CREDENTIAL_GRANTS,
       authorId: CreatedByModel.id(created, created.createdBy) ?? null,
     });
     // SPDX-SnippetEnd

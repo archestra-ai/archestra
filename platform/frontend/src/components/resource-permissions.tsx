@@ -155,6 +155,17 @@ export function ResourcePermissions({
   );
 }
 
+/**
+ * Whether an object's permissions show its audience chip (Personal,
+ * Team-wide, Org-wide). A credential already has an audience of its own, the
+ * person or organization that provides its value, and every credential
+ * reaches members through the grants on all credentials, so a chip read off
+ * its own grants alone would contradict both.
+ */
+export function showsAudience(resource: ScopedResource): boolean {
+  return resource !== "credential";
+}
+
 /** Shared by resource lists and the explanation of inherited access. */
 export function ResourcePermissionsDialog({
   resource,
@@ -368,12 +379,16 @@ function PermissionsEditor({
   // An object's own grants decide its audience. The organization-wide policy
   // has no audience of its own, so it shows no chip.
   const audience =
-    policy.scope === "*" ? null : grantsAudience(draftGrants ?? []);
+    policy.scope === "*" || !showsAudience(policy.resource)
+      ? null
+      : grantsAudience(draftGrants ?? []);
   const Container = embedded ? "div" : "form";
   const noun = scopedResourceNouns[policy.resource];
   const explanation =
     description === undefined
-      ? `Applies to every ${scopedResourceNouns[policy.resource]}, including ones created later.`
+      ? policy.scope === "*"
+        ? `Applies to every ${scopedResourceNouns[policy.resource]}, including ones created later.`
+        : null
       : description;
   const presetOptions = Object.entries(presets).map(([value, preset]) => ({
     value,

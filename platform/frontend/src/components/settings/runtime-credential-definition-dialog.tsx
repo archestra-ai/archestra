@@ -1,15 +1,16 @@
 "use client";
 
+import { DEFAULT_CREDENTIAL_GRANTS } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft } from "lucide-react";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardFormDialog } from "@/components/standard-dialog";
-import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -76,13 +77,12 @@ export function RuntimeCredentialDefinitionDialog({
       entry.organizationConfigured,
   );
   const update = useUpdateRuntimeCredential();
-  const [activeTab, setActiveTab] = useState<EditTab>("general");
   // Editing is a grant on this one credential, not a role action.
   const { data: canUpdate } = useHasPermissions(
     { credential: ["update"] },
     definition?.id ?? "",
   );
-  // The Permissions tab keeps its edits in its own form. For someone who may
+  // The Permissions section keeps its edits in its own form. For someone who may
   // edit the credential, the dialog's Save is the only Save and commits both.
   const permissionsSave = useRef<(() => Promise<void>) | null>(null);
   const registerPermissionsSave = useCallback(
@@ -92,6 +92,15 @@ export function RuntimeCredentialDefinitionDialog({
     [],
   );
   const [permissionsDirty, setPermissionsDirty] = useState(false);
+  // A new credential has no policy yet, so its starting grants travel with it.
+  // It starts shared with everyone; remove that to keep it to a team.
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    () =>
+      DEFAULT_CREDENTIAL_GRANTS.map((grant) => ({
+        ...grant,
+        name: "Everyone in the organization",
+      })),
+  );
   const form = useForm<DefinitionFormValues>({
     resolver: zodResolver(DefinitionFormSchema),
     defaultValues: {
@@ -160,6 +169,10 @@ export function RuntimeCredentialDefinitionDialog({
         icon: values.icon,
         allowPersonal: values.scope === "personal",
         allowOrganization: values.scope === "organization",
+        initialGrants: initialGrants.map(({ subject, actions }) => ({
+          subject,
+          actions,
+        })),
       },
       {
         onSuccess: (created) => {
@@ -436,81 +449,6 @@ export function RuntimeCredentialDefinitionDialog({
     </>
   );
 
-  if (definition)
-    return (
-      <TabbedDialogShell
-        open
-        onOpenChange={(open) => {
-          if (!open) onClose();
-        }}
-        title={`Edit ${definition.name}`}
-        description="Change the credential and choose who can use it."
-        sidebarLabel={form.watch("name") || definition.name}
-        sidebarDescription="Credential"
-        sidebarIcon={
-          <RuntimeCredentialIcon
-            icon={
-              definition.icon ??
-              (definition.kind === "secret" ? null : "logo:github")
-            }
-            className="size-4"
-          />
-        }
-        activeSection={activeTab}
-        navItems={EDIT_NAV_ITEMS}
-        onActiveSectionChange={setActiveTab}
-        onSubmit={(event) => {
-          if (!canUpdate) {
-            event.preventDefault();
-            return;
-          }
-          void form.handleSubmit(save)(event);
-        }}
-        isDirty={form.formState.isDirty || permissionsDirty}
-        className="max-w-4xl h-[80vh]"
-        contentClassName="px-4"
-        footer={
-          canUpdate ? (
-            <>
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={pending}>
-                {pending ? "Saving…" : "Save changes"}
-              </Button>
-            </>
-          ) : (
-            <Button type="button" variant="outline" onClick={onClose}>
-              Close
-            </Button>
-          )
-        }
-      >
-        <fieldset
-          disabled={!canUpdate}
-          hidden={activeTab !== "general"}
-          className="space-y-4 py-4"
-        >
-          <Form {...form}>{fields}</Form>
-        </fieldset>
-        {/* Kept mounted on every tab, so Save commits its edits. Someone who
-            may manage access but not edit the credential saves it on its own. */}
-        <div hidden={activeTab !== "permissions"} className="py-4">
-          {/* SPDX-SnippetBegin
-              SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-              SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-          <ResourceAccessSection
-            resource="credential"
-            id={definition.id}
-            standalone
-            onDirtyChange={setPermissionsDirty}
-            registerSave={canUpdate ? registerPermissionsSave : undefined}
-          />
-          {/* SPDX-SnippetEnd */}
-        </div>
-      </TabbedDialogShell>
-    );
-
   return (
     <StandardFormDialog
       open
@@ -518,40 +456,73 @@ export function RuntimeCredentialDefinitionDialog({
         if (!open) onClose();
       }}
       title={
-        initialKind === "github_app"
-          ? "Add GitHub App credential"
-          : "Add credential"
+        definition
+          ? `Edit ${definition.name}`
+          : initialKind === "github_app"
+            ? "Add GitHub App credential"
+            : "Add credential"
       }
       description={
-        initialKind === "github_app"
-          ? "Enter the App details, then connect its private key."
-          : "Choose the credential type and who provides its value. Use it across the platform."
+        definition
+          ? undefined
+          : initialKind === "github_app"
+            ? "Enter the App details, then connect its private key."
+            : "Choose the credential type and who provides its value. Use it across the platform."
       }
       size={size}
-      onSubmit={form.handleSubmit(save)}
+      onSubmit={(event) => {
+        if (definition && !canUpdate) {
+          event.preventDefault();
+          return;
+        }
+        void form.handleSubmit(save)(event);
+      }}
+      isDirty={form.formState.isDirty || permissionsDirty}
       bodyClassName="space-y-4"
       footer={
-        <>
+        definition && !canUpdate ? (
           <Button type="button" variant="outline" onClick={onClose}>
-            {backLabel && <ArrowLeft className="size-4" />}
-            {backLabel ?? "Cancel"}
+            Close
           </Button>
-          <Button type="submit" disabled={pending}>
-            {pending ? "Saving…" : "Add"}
-          </Button>
-        </>
+        ) : (
+          <>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {backLabel && <ArrowLeft className="size-4" />}
+              {backLabel ?? "Cancel"}
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Saving…" : definition ? "Save changes" : "Add"}
+            </Button>
+          </>
+        )
       }
     >
-      <Form {...form}>{fields}</Form>
+      <fieldset disabled={!!definition && !canUpdate} className="space-y-4">
+        <Form {...form}>{fields}</Form>
+      </fieldset>
+      {/* SPDX-SnippetBegin
+          SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+      {/* Someone who may edit the credential saves its permissions with the
+          dialog's Save; someone who may only share it saves them on their own. */}
+      {definition ? (
+        <ResourceAccessSection
+          resource="credential"
+          id={definition.id}
+          onDirtyChange={setPermissionsDirty}
+          registerSave={canUpdate ? registerPermissionsSave : undefined}
+        />
+      ) : (
+        <ResourceAccessSection
+          resource="credential"
+          grants={initialGrants}
+          onGrantsChange={setInitialGrants}
+        />
+      )}
+      {/* SPDX-SnippetEnd */}
     </StandardFormDialog>
   );
 }
-
-type EditTab = "general" | "permissions";
-const EDIT_NAV_ITEMS = [
-  { id: "general" as const, label: "General" },
-  { id: "permissions" as const, label: "Permissions" },
-];
 
 const DefinitionFormSchema = z
   .object({

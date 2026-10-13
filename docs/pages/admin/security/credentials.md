@@ -2,7 +2,7 @@
 title: Credentials and Secrets
 description: Save credentials once, reuse them across integrations, and configure encrypted secrets storage
 order: 1
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -54,8 +54,8 @@ Each recipient gets a level:
 What to know:
 
 - Opening **Settings → Credentials** needs [`credential:read`](/docs/reference/permissions#credential:read). Adding one needs [`credential:create`](/docs/reference/permissions#credential:create), and its creator gets **Full access**.
-- By default, admins and editors have **Full access** to every credential. Members can view and use them.
-- Grants decide who manages a credential, not who runs with it. Agents, MCP servers, and syncs that reference a credential keep resolving it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
+- A new credential is shared with **Everyone in the organization** at **Can use**, and admins and editors have **Full access** to every credential. Remove the **Everyone** grant to keep a credential to a team.
+- An organization value keeps working everywhere it is referenced: Agents, MCP servers, and syncs resolve it for anyone who can use them. A personal value needs **Can use**. Without it, the MCP server's **Install** button is disabled and the Agent's chat says "You don't have access", both asking you to get an admin to share it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ## Secrets Storage
 

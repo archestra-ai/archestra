@@ -6,6 +6,7 @@ import {
   RuntimeCredentialConnectionModel,
   RuntimeCredentialDefinitionModel,
 } from "@/models";
+import type { ResourceAccessFilter } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled } from "@/secrets-manager";
 import { CredentialAccess } from "@/services/credential-access";
@@ -22,9 +23,11 @@ import { ApiError } from "@/types";
 export async function listRuntimeCredentialDefinitions(params: {
   organizationId: string;
   userId: string;
+  /** The list's `access`, `sharedWith`, and `owner` filters. */
+  access?: ResourceAccessFilter;
 }): Promise<RuntimeCredentialDefinitionView[]> {
   const [all, configured] = await Promise.all([
-    RuntimeCredentialDefinitionModel.list(params.organizationId),
+    RuntimeCredentialDefinitionModel.list(params.organizationId, params.access),
     RuntimeCredentialConnectionModel.listConfigured(params),
   ]);
   const custom = await CredentialAccess.filterReadable({

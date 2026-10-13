@@ -88,6 +88,16 @@ type ResolvedMyFile = {
   mimeType: string;
   originalName: string;
 };
+/** What edit/overwrite/delete act on: a `files` row, or a project's hand-placed object. */
+export type MyFileTarget =
+  | { kind: "row"; file: PersistedFile }
+  | {
+      kind: "object";
+      ref: string;
+      filename: string;
+      mimeType: string;
+      projectId: string;
+    };
 export type MyFileResolutionError = {
   error: "not_found" | "ambiguous" | "missing_bytes" | "outside_project";
 };
@@ -561,23 +571,20 @@ class FileStore {
   }
 
   /**
-   * Resolve a `my_file` ref (id, filename, or `obj_` ref) to the ref that
-   * {@link delete} takes. Rows resolve exactly as {@link resolveMyFileRef}; for a
-   * project scope a hand-placed object (no row) is matched too, so whatever
-   * `search_files` lists can be deleted. The returned object ref is re-minted
-   * from the scope's own project, never echoed from the caller, so a ref naming
-   * another project resolves to not-found here.
+   * Resolve a `my_file` ref (id, filename, or `obj_` ref) to the file that
+   * edit/overwrite/delete act on. Rows resolve exactly as
+   * {@link resolveMyFileRef}; for a project scope a hand-placed object (no row)
+   * is matched too, so whatever `search_files` lists can be changed. An object's
+   * ref is re-minted from the scope's own project, never echoed from the caller,
+   * so a ref naming another project resolves to not-found here.
    */
-  async resolveMyFileDeletion(params: {
+  async resolveMyFileTarget(params: {
     organizationId: string;
     userId: string;
     id?: string;
     filename?: string;
     scope: MyFileScope;
-  }): Promise<
-    | { ref: string; filename: string; projectId: string | null }
-    | MyFileResolutionError
-  > {
+  }): Promise<MyFileTarget | MyFileResolutionError> {
     const parsed = params.id ? parseObjectRef(params.id) : null;
     if (params.id && parsed) {
       if (params.scope.kind !== "project") return { error: "not_found" };
@@ -599,7 +606,53 @@ class FileStore {
       );
     }
     if ("error" in row) return row;
-    return { ref: row.id, filename: row.filename, projectId: row.projectId };
+    return { kind: "row", file: row };
+  }
+
+  /**
+   * Replace a resolved file's bytes in place (edit_file, and the overwrite
+   * paths of save_file / download_file / copy_file). A row keeps its id; a
+   * project's hand-placed object stays rowless at the same key, so its `obj_`
+   * ref is the id reported back. Returns null when the file can no longer be
+   * reached.
+   */
+  async replace(params: {
+    target: MyFileTarget;
+    mimeType: string;
+    data: Buffer;
+    organizationId: string;
+    userId: string;
+  }): Promise<{ fileId: string; mimeType: string; sizeBytes: number } | null> {
+    const { target, data } = params;
+    if (target.kind === "row") {
+      const updated = await this.update({
+        file: target.file,
+        mimeType: params.mimeType,
+        sizeBytes: data.byteLength,
+        data,
+      });
+      return updated
+        ? {
+            fileId: updated.id,
+            mimeType: updated.mimeType,
+            sizeBytes: updated.sizeBytes,
+          }
+        : null;
+    }
+    const written = await this.updateObject({
+      ref: target.ref,
+      organizationId: params.organizationId,
+      userId: params.userId,
+      data,
+    });
+    // a rowless object has no stored mime; it is always derived from its name.
+    return written
+      ? {
+          fileId: target.ref,
+          mimeType: target.mimeType,
+          sizeBytes: data.byteLength,
+        }
+      : null;
   }
 
   /**
@@ -889,11 +942,41 @@ class FileStore {
     }
   }
 
-  /** A project's hand-placed object (no row), as an `obj_` ref for {@link delete}. */
+  /**
+   * Replace a hand-placed object's bytes in place (the rowless half of
+   * {@link replace}). It stays rowless at the same key, so
+   * its `obj_` ref is unchanged. Same authorization as {@link delete}: the
+   * caller must reach the ref's scope, and the key must be an object that scope
+   * owns. Returns false when it can't be reached.
+   */
+  private async updateObject(params: {
+    ref: string;
+    organizationId: string;
+    userId: string;
+    data: Buffer;
+  }): Promise<boolean> {
+    const parsed = parseObjectRef(params.ref);
+    const store = getObjectStore();
+    if (!parsed || parsed.scope.kind !== "project" || !store) return false;
+    if (!(await this.canAccessScope(parsed.scope, params))) return false;
+    if (!(await this.objectRefOwned(parsed, store))) return false;
+    const ownerScope = await this.projectScope(parsed.scope.projectId);
+    if (!ownerScope) return false;
+    const { key } = await store.write({
+      scope: ownerScope,
+      name: keyName(parsed.key),
+      data: params.data,
+      overwrite: true,
+    });
+    // enumerate only surfaces top-level objects, so (scope, name) is the key.
+    return key === parsed.key;
+  }
+
+  /** A project's hand-placed object (no row), addressed by a fresh `obj_` ref. */
   private async findUntrackedObject(params: {
     projectId: string;
     matches: (object: { key: string; name: string }) => boolean;
-  }): Promise<{ ref: string; filename: string; projectId: string } | null> {
+  }): Promise<Extract<MyFileTarget, { kind: "object" }> | null> {
     const store = getObjectStore();
     if (!store) return null;
     const ownerScope = await this.projectScope(params.projectId);
@@ -902,11 +985,13 @@ class FileStore {
     const match = objects.find(params.matches);
     if (!match) return null;
     return {
+      kind: "object",
       ref: encodeObjectRef(
         { kind: "project", projectId: params.projectId },
         match.key,
       ),
       filename: match.name,
+      mimeType: mimeFromExtension(match.name),
       projectId: params.projectId,
     };
   }

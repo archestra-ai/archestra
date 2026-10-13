@@ -322,7 +322,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `id` | `string` | No | Id of the file to edit (from search_files / save_file). |
+| `id` | `string` | No | Id of the file to edit — the `id` or `ref` from search_files, or a fileId from save_file. |
 | `filename` | `string` | No | Filename to edit instead of `id`; rejected as ambiguous if more than one file shares the name. |
 | `old_string` | `string` | Yes | The exact text to replace; must match the file's current content (read it first with read_file). Include enough surrounding context to be unique unless replace_all is set. |
 | `new_string` | `string` | Yes | The text to insert in place of old_string. |

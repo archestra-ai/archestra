@@ -3349,6 +3349,112 @@ describe("edit_file / delete_file", () => {
       expect(await exists(onDisk)).toBe(true);
     });
 
+    test("edit_file rewrites one in place by filename and it stays rowless", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-edit");
+      const onDisk = await drop(project.slug, "plan.md", "ship on Monday\n");
+      const refBefore = await refOf(ctx, "plan.md");
+
+      const result = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        { filename: "plan.md", old_string: "Monday", new_string: "Friday" },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(structuredOf<{ fileId: string }>(result).fileId).toBe(refBefore);
+      expect(await fs.readFile(onDisk, "utf8")).toBe("ship on Friday\n");
+      // still the same hand-placed object: no row adopted, ref unchanged
+      expect(await refOf(ctx, "plan.md")).toBe(refBefore);
+      expect(
+        await FileModel.listByProject({
+          organizationId,
+          projectId: project.id,
+        }),
+      ).toEqual([]);
+    });
+
+    test("edit_file rewrites one by the ref search_files returned", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-edit-ref");
+      const onDisk = await drop(project.slug, "notes.txt", "a b a");
+      const ref = await refOf(ctx, "notes.txt");
+
+      const result = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        { id: ref, old_string: "a", new_string: "z", replace_all: true },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(structuredOf<{ replacements: number }>(result).replacements).toBe(
+        2,
+      );
+      expect(await fs.readFile(onDisk, "utf8")).toBe("z b z");
+    });
+
+    test("edit_file outside a chat with project_id", async () => {
+      const project = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "hand-edit-headless",
+        description: null,
+      });
+      const onDisk = await drop(project.slug, "todo.txt", "draft");
+
+      const result = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        {
+          filename: "todo.txt",
+          old_string: "draft",
+          new_string: "final",
+          project_id: project.id,
+        },
+        context,
+      );
+      expect(result.isError).toBe(false);
+      expect(await fs.readFile(onDisk, "utf8")).toBe("final");
+    });
+
+    test("a project chat cannot edit another project's object by its ref", async () => {
+      const { ctx: otherCtx, project: other } =
+        await makeProjectChatCtx("hand-edit-other");
+      const onDisk = await drop(other.slug, "theirs.txt", "original");
+      const foreignRef = await refOf(otherCtx, "theirs.txt");
+      const { ctx } = await makeProjectChatCtx("hand-edit-mine");
+
+      const result = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        { id: foreignRef, old_string: "original", new_string: "hacked" },
+        ctx,
+      );
+      expect(result.isError).toBe(true);
+      expect(await fs.readFile(onDisk, "utf8")).toBe("original");
+    });
+
+    test("save_file overwrite replaces one in place instead of failing on the name", async () => {
+      const { project, ctx } = await makeProjectChatCtx("hand-save");
+      const onDisk = await drop(project.slug, "report.md", "v1");
+      const refBefore = await refOf(ctx, "report.md");
+
+      // without overwrite the name is taken, and the error says to overwrite
+      const refused = await executeArchestraTool(
+        TOOL_SAVE_FILE_FULL_NAME,
+        { filename: "report.md", content: "v2" },
+        ctx,
+      );
+      expect(refused.isError).toBe(true);
+      expect(textOf(refused)).toContain("overwrite: true");
+
+      const result = await executeArchestraTool(
+        TOOL_SAVE_FILE_FULL_NAME,
+        { filename: "report.md", content: "v2", overwrite: true },
+        ctx,
+      );
+      expect(result.isError).toBe(false);
+      expect(
+        structuredOf<{ overwritten: boolean; fileId: string }>(result),
+      ).toMatchObject({ overwritten: true, fileId: refBefore });
+      expect(await fs.readFile(onDisk, "utf8")).toBe("v2");
+      expect(await fs.readdir(path.dirname(onDisk))).toEqual(["report.md"]);
+    });
+
     test("refuses a hand-placed instructions file", async () => {
       const { project, ctx } = await makeProjectChatCtx("hand-instructions");
       const onDisk = await drop(

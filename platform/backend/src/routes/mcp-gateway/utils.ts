@@ -2660,10 +2660,12 @@ function createGatewayUserElicit(params: {
 }
 
 /**
- * A form answer no person gave is no answer. Codex declares forms but declines
- * each one itself when no person drives the turn (`codex exec`) and under its
- * automatic reviewer. Read as a refusal, that decline would record a denial
- * nobody made.
+ * A form answer that no person gave is not an answer. Codex declares forms but
+ * answers each one itself when no person drives the turn (`codex exec`) and
+ * under its automatic reviewer. Any of those results, including an accept,
+ * means no person saw the form.
+ * Read as a refusal, a decline would record a denial nobody made; read as an
+ * accept, it would record an approval nobody made.
  */
 function formAnswer(params: {
   result: ElicitResult;
@@ -2671,9 +2673,8 @@ function formAnswer(params: {
 }): ArchestraElicitationOutcome {
   const { result, requestMeta } = params;
   if (
-    result.action === "decline" &&
-    (result._meta?.approvals_reviewer === "auto_review" ||
-      codexTurnTrigger(requestMeta) === "exec")
+    result._meta?.approvals_reviewer === "auto_review" ||
+    codexTurnTrigger(requestMeta) === "exec"
   ) {
     return { status: "no_viewer" };
   }

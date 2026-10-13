@@ -177,13 +177,16 @@ describe("Claude Code approval answers", () => {
   });
 
   test.each([
-    "The user did not answer the questions.",
-    "User has declined to answer your questions.",
-  ])("records no ruling for the answer %s", (content) => {
-    expect(ruling({ content }, review(APPROVAL_LIKE))).toBe("none");
+    ["The user did not answer the questions.", "unanswered"],
+    ["User has declined to answer your questions.", "declined"],
+  ] as const)("closes %s as %s, not a ruling or an unreadable answer", (content, expected) => {
+    expect(ruling({ content }, review(APPROVAL_LIKE))).toBe(expected);
+    expect(ruling({ content }, review(APPROVAL_LIKE))).not.toBe("unrecognized");
+    expect(ruling({ content }, review(APPROVAL_LIKE))).not.toBe("approve");
+    expect(ruling({ content }, review(APPROVAL_LIKE))).not.toBe("deny");
   });
 
-  test("records no ruling for a dismissed question", () => {
+  test("a dismissed question is unavailable, not an unreadable answer", () => {
     expect(
       ruling(
         {
@@ -195,7 +198,7 @@ describe("Claude Code approval answers", () => {
         },
         review("send the Q3 report"),
       ),
-    ).toBe("none");
+    ).toBe("unavailable");
   });
 });
 
@@ -233,6 +236,6 @@ describe("Codex approval answers", () => {
 
   test("reads the selected option from the structured answer", () => {
     expect(ruling({ content }, asked)).toBe("approve");
-    expect(ruling({ content, isError: true }, asked)).toBe("none");
+    expect(ruling({ content, isError: true }, asked)).toBe("unavailable");
   });
 });

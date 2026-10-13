@@ -29,11 +29,16 @@ import {
 } from "@/openappa/current-trajectory";
 import {
   clearHitlReview,
+  closureFromReviewOutcome,
   consumeHitlRuling,
   getHitlReviewResult,
   type HitlReviewOutcome,
+  peekHitlDecision,
   recordHitlReviewResult,
+  recordHitlRuling,
+  reviewOutcomeFromClosure,
   reviewSessionFromTrajectory,
+  sealHitlClosure,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
@@ -1082,7 +1087,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is canceled, unavailable, or unanswered, tell the user that the action stays blocked.",
+      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial.",
     // The proxy alone writes these members. They have no `.describe()` text,
     // so no rendering of the full schema can show the model their prose:
     // - execution: retry identity and history restoration; it does not authorize.
@@ -1163,8 +1168,17 @@ const registry = defineArchestraTools([
           callId,
           offerId: remedy.offer_id,
         });
-        if (previousOutcome && previousOutcome !== "review_required")
-          return unansweredReviewResult(remedy.offer_id, previousOutcome);
+        if (previousOutcome && previousOutcome !== "review_required") {
+          const decided = await peekHitlDecision({
+            session: reviewSession,
+            offerId: remedy.offer_id,
+          });
+          // A human ruling that won the race is still spendable. A stored
+          // closure, including one with no closure metadata, is not.
+          if (decided?.ruling !== "approve" && decided?.ruling !== "deny") {
+            return unansweredReviewResult(remedy.offer_id, previousOutcome);
+          }
+        }
       }
       const review = await loadOfferReview({
         organizationId: context.organizationId,
@@ -1187,67 +1201,108 @@ const registry = defineArchestraTools([
             offerId: remedy.offer_id,
           });
         } else {
-          const cachedRuling = await consumeHitlRuling({
+          const cached = await peekHitlDecision({
             session: reviewSession,
             offerId: remedy.offer_id,
           });
-          if (cachedRuling === "approve" || cachedRuling === "deny") {
-            ruling = cachedRuling;
-          } else if (cachedRuling === "none") {
-            // Legacy native answers did not distinguish dismissal from other
-            // missing rulings. Do not invent a timeout or explicit denial.
-            reviewOutcome = "review_invalid";
-          } else if (context.mrtr) {
-            // External MCP clients reach their native question tool through ask_user.
-            // Stage the exact review first so the model cannot alter
-            // the question or bind an answer to a different offer.
+          if (cached?.ruling === "approve" || cached?.ruling === "deny") {
+            const spent = await consumeHitlRuling({
+              session: reviewSession,
+              offerId: remedy.offer_id,
+            });
+            if (spent === "approve" || spent === "deny") ruling = spent;
+            else reviewOutcome = reviewOutcomeFromClosure(cached.closure);
+          } else if (cached?.ruling === "none") {
+            // A none entry from before closures were stored has no reason.
+            // That is not a denial, and it must not open another question.
+            reviewOutcome = reviewOutcomeFromClosure(cached.closure);
+          } else if (context.mrtr || context.elicitation) {
             const stagedReview = {
               offerId: remedy.offer_id,
               text: review.text,
               ...(review.tool ? { tool: review.tool } : {}),
               ...(review.arguments ? { arguments: review.arguments } : {}),
             };
-            await stageHitlReview({
+            const staged = await stageHitlReview({
               session: reviewSession,
-              callId,
+              ...(context.mrtr && callId ? { callId } : {}),
               review: { ...stagedReview, remedyArguments: submittedArguments },
             });
-            try {
-              await bindRuntimeHitlReview({
+            if (staged.status === "approve" || staged.status === "deny") {
+              const spent = await consumeHitlRuling({
                 session: reviewSession,
-                review: stagedReview,
+                offerId: remedy.offer_id,
               });
-            } catch (error) {
-              logger.warn(
-                { error, offerId: remedy.offer_id },
-                "Could not index the runtime OpenAPPA review",
-              );
-            }
-            return nativeReviewRequiredResult(remedy.offer_id);
-          } else if (context.elicitation) {
-            // Archestra Chat keeps its inline approval card.
-            const outcome = await context.elicitation.elicit({
-              toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-              message: review.text,
-              requestedSchema: HITL_RULING_SCHEMA,
-              kind: "openappa_review",
-              ...(review.tool ? { reviewedTool: review.tool } : {}),
-              ...(review.arguments
-                ? { reviewedArguments: review.arguments }
-                : {}),
-            });
-            ruling = parseHitlRuling(
-              outcome.status === "answered" ? outcome.result : undefined,
-            );
-            if (!ruling) {
-              reviewOutcome =
-                outcome.status === "unanswered"
-                  ? "review_unanswered"
-                  : outcome.status === "no_viewer"
-                    ? "review_unavailable"
-                    : outcome.result.action === "cancel"
-                      ? "review_cancelled"
+              if (spent === "approve" || spent === "deny") ruling = spent;
+              else reviewOutcome = "review_invalid";
+            } else if (staged.status === "none") {
+              reviewOutcome = reviewOutcomeFromClosure(staged.closure);
+            } else if (context.mrtr) {
+              // External MCP clients reach their native question tool through ask_user.
+              // Stage the exact review first so the model cannot alter
+              // the question or bind an answer to a different offer.
+              try {
+                await bindRuntimeHitlReview({
+                  session: reviewSession,
+                  review: stagedReview,
+                });
+              } catch (error) {
+                logger.warn(
+                  { error, offerId: remedy.offer_id },
+                  "Could not index the runtime OpenAPPA review",
+                );
+              }
+              return nativeReviewRequiredResult(remedy.offer_id);
+            } else if (context.elicitation) {
+              const outcome = await context.elicitation.elicit({
+                toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+                message: review.text,
+                requestedSchema: HITL_RULING_SCHEMA,
+                kind: "openappa_review",
+                ...(review.tool ? { reviewedTool: review.tool } : {}),
+                ...(review.arguments
+                  ? { reviewedArguments: review.arguments }
+                  : {}),
+              });
+              if (outcome.status === "answered") {
+                const parsed = parseHitlRuling(outcome.result);
+                if (!parsed) {
+                  reviewOutcome =
+                    outcome.result.action === "decline"
+                      ? "review_declined"
+                      : outcome.result.action === "cancel"
+                        ? "review_cancelled"
+                        : "review_invalid";
+                } else {
+                  const claimed = await claimStagedRuling({
+                    session: reviewSession,
+                    offerId: remedy.offer_id,
+                    ruling: parsed,
+                  });
+                  if (claimed.ok) {
+                    ruling = claimed.ruling;
+                  } else {
+                    if (callId)
+                      await recordHitlReviewResult({
+                        session: reviewSession,
+                        callId,
+                        offerId: remedy.offer_id,
+                        outcome: claimed.outcome,
+                      });
+                    return unansweredReviewResult(
+                      remedy.offer_id,
+                      claimed.outcome,
+                    );
+                  }
+                }
+              } else {
+                reviewOutcome =
+                  outcome.status === "unanswered"
+                    ? "review_unanswered"
+                    : outcome.status === "no_viewer"
+                      ? "review_unavailable"
                       : "review_invalid";
+              }
             }
           } else {
             reviewOutcome = "review_unavailable";
@@ -1258,18 +1313,44 @@ const registry = defineArchestraTools([
       if (reviewOutcome) {
         // No human ruling exists. Do not invoke the embedded HITL backend with
         // undefined: without its own elicitation it would record Unreachable.
-        await clearHitlReview({
+        // Seal the closure unless a human ruling won the lock.
+        const sealed = await sealHitlClosure({
           session: reviewSession,
           offerId: remedy.offer_id,
+          ...(reviewOutcome === "review_invalid"
+            ? {}
+            : { closure: closureFromReviewOutcome(reviewOutcome) }),
         });
-        if (callId)
-          await recordHitlReviewResult({
+        if (sealed === "approve" || sealed === "deny") {
+          // The closure lost to a stored ruling. Claim it before execution so
+          // a concurrent retry cannot spend the same approval.
+          const spent = await consumeHitlRuling({
             session: reviewSession,
-            callId,
             offerId: remedy.offer_id,
-            outcome: reviewOutcome,
           });
-        return unansweredReviewResult(remedy.offer_id, reviewOutcome);
+          if (spent === "approve" || spent === "deny") {
+            ruling = spent;
+            reviewOutcome = undefined;
+          } else {
+            if (callId)
+              await recordHitlReviewResult({
+                session: reviewSession,
+                callId,
+                offerId: remedy.offer_id,
+                outcome: reviewOutcome,
+              });
+            return unansweredReviewResult(remedy.offer_id, reviewOutcome);
+          }
+        } else {
+          if (callId)
+            await recordHitlReviewResult({
+              session: reviewSession,
+              callId,
+              offerId: remedy.offer_id,
+              outcome: reviewOutcome,
+            });
+          return unansweredReviewResult(remedy.offer_id, reviewOutcome);
+        }
       }
 
       const byOffer = await executeRemedyByOffer({
@@ -1586,13 +1667,56 @@ function nativeReviewRequiredResult(offerId: string): CallToolResult {
   });
 }
 
+async function claimStagedRuling(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  ruling: "approve" | "deny";
+}): Promise<
+  | { ok: true; ruling: "approve" | "deny" }
+  | {
+      ok: false;
+      outcome: Exclude<HitlReviewOutcome, "review_required">;
+    }
+> {
+  const recorded = await recordHitlRuling({
+    session: params.session,
+    offerId: params.offerId,
+    ruling: params.ruling,
+  });
+  if (!recorded) {
+    const decided = await peekHitlDecision({
+      session: params.session,
+      offerId: params.offerId,
+    });
+    return {
+      ok: false,
+      outcome:
+        decided?.ruling === "none"
+          ? reviewOutcomeFromClosure(decided.closure)
+          : "review_invalid",
+    };
+  }
+  const spent = await consumeHitlRuling({
+    session: params.session,
+    offerId: params.offerId,
+  });
+  if (spent === "approve" || spent === "deny") {
+    return { ok: true, ruling: spent };
+  }
+  return { ok: false, outcome: "review_invalid" };
+}
+
 function unansweredReviewResult(
   offerId: string,
   outcome: Exclude<HitlReviewOutcome, "review_required">,
 ): CallToolResult {
   const reason = {
-    review_unanswered: "The human review timed out without an answer.",
-    review_cancelled: "The human canceled the review without giving a ruling.",
+    review_declined:
+      "The client declined the review form. That is not a human denial.",
+    review_unanswered:
+      "The review timed out without an answer. That does not show a person saw it.",
+    review_cancelled:
+      "The client canceled the review without a ruling. That does not show a person saw it.",
     review_unavailable:
       "No human review channel is available in this execution.",
     review_invalid:
@@ -1686,10 +1810,9 @@ function parseArgumentsRecord(
 /**
  * Parses the unified elicitation envelope into a remedy ruling.
  * An `accept` action must include an explicit `approve` or `deny` content action.
- * Malformed or missing actions yield no ruling. The handler records a failed
- * review as a history fact without invoking an authority or granting approval.
- * A `decline` action maps to `deny`.
- * A `cancel` action or unrecognized payload yields no ruling.
+ * A client `decline` or `cancel` is not a human ruling. Malformed or missing
+ * actions yield no ruling. The handler records that as a history fact without
+ * invoking an authority or granting approval.
  */
 function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
   if (typeof envelope !== "object" || envelope === null) return undefined;
@@ -1697,7 +1820,6 @@ function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
     action?: unknown;
     content?: unknown;
   };
-  if (action === "decline") return "deny";
   if (action !== "accept") return undefined;
   const contentAction =
     typeof content === "object" && content !== null

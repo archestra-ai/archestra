@@ -10,10 +10,13 @@ import {
   getHitlAskUserArguments,
   getHitlReview,
   getHitlReviewResult,
+  peekHitlDecision,
   peekHitlRuling,
   recordHitlReviewResult,
   recordHitlRuling,
+  reviewOutcomeFromClosure,
   reviewSessionFromTrajectory,
+  sealHitlClosure,
   stageHitlReview,
 } from "./hitl-review";
 import type { OpenAppaSession } from "./service";
@@ -184,6 +187,7 @@ test("historical status survives review expiry but cannot create an approval", a
 });
 
 test.each([
+  "review_declined",
   "review_unanswered",
   "review_cancelled",
   "review_unavailable",
@@ -824,6 +828,111 @@ test("native reviewers atomically claim one approval and a timeout cannot overwr
   expect(
     await consumeHitlRuling({ session: active, offerId: "native-claim" }),
   ).toBeUndefined();
+});
+
+test("a closure cannot erase an unspent approval, and a later denial still can", async () => {
+  const active = session("closure-cannot-revoke");
+  const lookup = { session: active, offerId: "kept" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "kept", text: "Review this exact call." },
+  });
+  expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+  expect(
+    await recordHitlRuling({ ...lookup, ruling: "none", closure: "cancelled" }),
+  ).toBe(false);
+  expect(await sealHitlClosure({ ...lookup, closure: "unavailable" })).toBe(
+    "approve",
+  );
+  expect(await peekHitlRuling(lookup)).toBe("approve");
+  expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(true);
+  expect(await consumeHitlRuling(lookup)).toBe("deny");
+});
+
+test("an approval wins when it races a closure", async () => {
+  const active = session("closure-race");
+  const lookup = { session: active, offerId: "race" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "race", text: "Review this exact call." },
+  });
+  await Promise.all([
+    recordHitlRuling({ ...lookup, ruling: "approve" }),
+    sealHitlClosure({ ...lookup, closure: "cancelled" }),
+  ]);
+  expect(await consumeHitlRuling(lookup)).toBe("approve");
+  expect(await peekHitlDecision(lookup)).toBeUndefined();
+});
+
+test("a later stage does not reopen a sealed closure", async () => {
+  const lookup = { session: session("stage-after-seal"), offerId: "closed" };
+  const review = { offerId: "closed", text: "Review this exact call." };
+  await stageHitlReview({ ...lookup, review });
+  expect(await sealHitlClosure({ ...lookup, closure: "unavailable" })).toBe(
+    "sealed",
+  );
+  expect(await stageHitlReview({ ...lookup, review })).toEqual({
+    status: "none",
+    closure: "unavailable",
+  });
+  expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(false);
+  expect(await peekHitlDecision(lookup)).toEqual({
+    ruling: "none",
+    closure: "unavailable",
+  });
+  expect(await getHitlReview(lookup)).toBeUndefined();
+});
+
+test("an existing denial is not replaced by a ghost review", async () => {
+  const lookup = { session: session("stage-after-deny"), offerId: "denied" };
+  const review = { offerId: "denied", text: "Review this exact call." };
+  await stageHitlReview({ ...lookup, review });
+  expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(true);
+  expect(await stageHitlReview({ ...lookup, review })).toEqual({
+    status: "deny",
+  });
+  expect(
+    await getHitlAskUserArguments({
+      session: lookup.session,
+      offerIds: [lookup.offerId],
+    }),
+  ).toBeUndefined();
+  expect(await peekHitlRuling(lookup)).toBe("deny");
+  expect(await getHitlReview(lookup)).toBeUndefined();
+});
+
+test("a sealed closure stays closed and is not a denial", async () => {
+  const lookup = { session: session("sealed-closure"), offerId: "closed" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "closed", text: "Review this exact call." },
+  });
+  expect(await sealHitlClosure({ ...lookup, closure: "declined" })).toBe(
+    "sealed",
+  );
+  expect(await peekHitlDecision(lookup)).toEqual({
+    ruling: "none",
+    closure: "declined",
+  });
+  expect(reviewOutcomeFromClosure("declined")).toBe("review_declined");
+  expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(false);
+  expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(false);
+  expect(await consumeHitlRuling(lookup)).toBe("none");
+  expect(await peekHitlDecision(lookup)).toEqual({
+    ruling: "none",
+    closure: "declined",
+  });
+});
+
+test("a stored none without a closure is not a denial", async () => {
+  const lookup = { session: session("legacy-none"), offerId: "legacy" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "legacy", text: "Review this exact call." },
+  });
+  expect(await recordHitlRuling({ ...lookup, ruling: "none" })).toBe(true);
+  expect(await peekHitlDecision(lookup)).toEqual({ ruling: "none" });
+  expect(reviewOutcomeFromClosure(undefined)).toBe("review_invalid");
 });
 
 test("a later genuine denial revokes an approval that has not been spent", async () => {

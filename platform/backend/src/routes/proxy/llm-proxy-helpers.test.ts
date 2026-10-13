@@ -717,6 +717,24 @@ describe("calculateInteractionCosts", () => {
     );
   });
 
+  test("records the cost the provider reports instead of the price-table estimate", async () => {
+    mockCalculateCost.mockResolvedValue(0.0099);
+    mockCalculateCacheCost.mockResolvedValue(undefined);
+
+    const result = await calculateInteractionCosts({
+      actualModel: "anthropic/claude-sonnet-4.5",
+      usage: {
+        inputTokens: 1200,
+        outputTokens: 300,
+        providerReportedCost: 0.0123,
+      },
+      providerName: "openrouter",
+    });
+
+    expect(result.actualCost).toBe(0.0123);
+    expect(mockCalculateCost).not.toHaveBeenCalled();
+  });
+
   test("handles undefined costs (model not found)", async () => {
     mockCalculateCost.mockResolvedValue(undefined);
     mockCalculateCacheCost.mockResolvedValue(undefined);

@@ -206,6 +206,7 @@ import {
   applyInputTokenFallback,
   buildInteractionRecord,
   calculateInteractionCosts,
+  calculateUsageCost,
   handleError,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
@@ -2879,17 +2880,11 @@ async function handleStreaming<
               state.usage.reasoningTokens,
             );
           }
-          const cost = await utils.costOptimization.calculateCost(
-            actualModel,
-            state.usage.inputTokens,
-            state.usage.outputTokens,
-            providerName,
-            {
-              readTokens: state.usage.cacheReadTokens,
-              writeTokens: state.usage.cacheWriteTokens,
-              write1hTokens: state.usage.cacheWrite1hTokens,
-            },
-          );
+          const cost = await calculateUsageCost({
+            model: actualModel,
+            usage: state.usage,
+            provider: providerName,
+          });
           if (cost !== undefined) {
             llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
             llmSpan.setAttribute(ATTR_ARCHESTRA_BILLING_MODE, billingMode);
@@ -3621,17 +3616,11 @@ async function handleNonStreaming<
           usage.reasoningTokens,
         );
       }
-      const cost = await utils.costOptimization.calculateCost(
-        actualModel,
-        usage.inputTokens,
-        usage.outputTokens,
-        providerName,
-        {
-          readTokens: usage.cacheReadTokens,
-          writeTokens: usage.cacheWriteTokens,
-          write1hTokens: usage.cacheWrite1hTokens,
-        },
-      );
+      const cost = await calculateUsageCost({
+        model: actualModel,
+        usage,
+        provider: providerName,
+      });
       if (cost !== undefined) {
         llmSpan.setAttribute(ATTR_ARCHESTRA_COST, cost);
         llmSpan.setAttribute(ATTR_ARCHESTRA_BILLING_MODE, billingMode);

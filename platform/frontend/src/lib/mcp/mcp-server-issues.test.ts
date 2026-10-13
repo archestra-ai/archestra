@@ -11,6 +11,7 @@ import {
   bucketOf,
   type CatalogItemForIssues,
   canFixInstall,
+  canReinstallInstall,
   computeMcpServerIssues,
   describeOtherConnectionsReauth,
   facetIssues,
@@ -786,6 +787,48 @@ describe("canFixInstall", () => {
       canFixInstall({
         server: server({ id: "s2", catalogId: "a" }),
         viewer: member,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("canReinstallInstall", () => {
+  const personal = (
+    ownerId: string,
+    reinstallReason: "new-input" | "restart",
+  ) => ({ ownerId, scope: "personal", teamId: null, reinstallReason }) as const;
+
+  it("leaves a personal install that owes new values to its owner", () => {
+    expect(
+      canReinstallInstall({
+        server: personal(OTHER, "new-input"),
+        viewer: admin,
+      }),
+    ).toBe(false);
+    expect(
+      canReinstallInstall({
+        server: personal(ME, "new-input"),
+        viewer: member,
+      }),
+    ).toBe(true);
+  });
+
+  it("lets an installs admin restart others' installs and fix team ones", () => {
+    expect(
+      canReinstallInstall({
+        server: personal(OTHER, "restart"),
+        viewer: admin,
+      }),
+    ).toBe(true);
+    expect(
+      canReinstallInstall({
+        server: {
+          ownerId: OTHER,
+          scope: "team",
+          teamId: "team-1",
+          reinstallReason: "new-input",
+        },
+        viewer: admin,
       }),
     ).toBe(true);
   });

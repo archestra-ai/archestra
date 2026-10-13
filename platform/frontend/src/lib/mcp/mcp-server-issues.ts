@@ -285,6 +285,28 @@ export function canFixInstall({
 }
 
 /**
+ * Whether the viewer may reinstall one flagged install. A personal install
+ * that owes new values waits for its owner: those values are the owner's own
+ * credentials, so an installs admin has nothing to enter for them.
+ */
+export function canReinstallInstall({
+  server,
+  viewer,
+}: {
+  server: Pick<
+    archestraApiTypes.GetMcpServersResponses["200"][number],
+    "ownerId" | "scope" | "teamId" | "reinstallReason"
+  >;
+  viewer: Pick<IssueViewer, "userId" | "canManageInstalls">;
+}): boolean {
+  const scope = server.scope ?? (server.teamId ? "team" : "personal");
+  if (scope === "personal" && server.reinstallReason === "new-input") {
+    return server.ownerId === viewer.userId;
+  }
+  return canFixInstall({ server, viewer });
+}
+
+/**
  * What the status means and what clears it, in the words a row or banner
  * shows under the status pill. `what` states the condition; `fix` names the
  * concrete next step. `whoActs` names the role that can take that step when

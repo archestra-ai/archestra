@@ -73,7 +73,6 @@ describe("resolveOpenedApp", () => {
     makeMember,
     makeApp,
   }) => {
-    config.skillsSandbox.enabled = false;
     const org = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
@@ -99,7 +98,7 @@ describe("resolveOpenedApp", () => {
       description: "Logs receipts.",
       tools: [],
       files: [],
-      hasFileStore: false,
+      hasFileStore: true,
       reportedContext: null,
     });
   });
@@ -233,7 +232,7 @@ describe("resolveOpenedApp", () => {
     });
   });
 
-  test("reports no file store, and lists no files, when the deployment runs without the sandbox", async ({
+  test("lists the app's files even when the deployment runs without the code runtime", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -247,8 +246,7 @@ describe("resolveOpenedApp", () => {
       authorId: user.id,
       name: "Expense Tracker",
     });
-    // A row exists — so the empty result below is the config gate, not an
-    // empty table.
+    // The app file store is the plain file store, so it needs no sandbox.
     await fileStore.put({
       organizationId: org.id,
       userId: user.id,
@@ -268,7 +266,10 @@ describe("resolveOpenedApp", () => {
         userId: user.id,
         organizationId: org.id,
       }),
-    ).toMatchObject({ files: [], hasFileStore: false });
+    ).toMatchObject({
+      files: [expect.objectContaining({ filename: "receipts.csv" })],
+      hasFileStore: true,
+    });
   });
 
   test("flattens the app-reported display state and nulls it when absent", async ({

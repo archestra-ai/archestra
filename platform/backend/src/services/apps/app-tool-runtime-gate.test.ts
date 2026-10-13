@@ -7,7 +7,10 @@ import {
   TOOL_APP_DATA_GET_SHORT_NAME,
   TOOL_APP_LLM_COMPLETE_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
+  TOOL_DELETE_FILE_SHORT_NAME,
+  TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_EDIT_APP_SHORT_NAME,
+  TOOL_EDIT_FILE_SHORT_NAME,
   TOOL_LIST_AGENT_RUNS_SHORT_NAME,
   TOOL_PUBLISH_APP_SHORT_NAME,
   TOOL_READ_FILE_RAW_SHORT_NAME,
@@ -15,6 +18,8 @@ import {
   TOOL_REFINE_APP_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_SCAFFOLD_APP_SHORT_NAME,
+  TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_UPLOAD_FILE_SHORT_NAME,
   TOOL_VALIDATE_APP_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
@@ -193,7 +198,7 @@ test("refuses a management Archestra tool, allows the reserved app built-ins", a
   }
 });
 
-test("refuses the file tools when the sandbox runtime is off", async ({
+test("with the code runtime off, admits the store-only file tools and refuses upload/download and copy_file", async ({
   makeOrganization,
   makeUser,
   makeApp,
@@ -209,24 +214,69 @@ test("refuses the file tools when the sandbox runtime is off", async ({
     makeTool,
     makeAppTool,
   });
-  // The file tools are only registered under the sandbox flag, so the gate must
-  // not admit a call the dispatcher could not resolve.
   const originalEnabled = config.skillsSandbox.enabled;
   config.skillsSandbox.enabled = false;
+  const decide = (shortName: ArchestraToolShortName) =>
+    gateAppToolCall({ appId, toolName: getArchestraToolFullName(shortName) });
   try {
-    for (const shortName of APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES) {
+    // The persistent-file tools only touch the file store.
+    for (const shortName of [
+      TOOL_SEARCH_FILES_SHORT_NAME,
+      TOOL_READ_FILE_SHORT_NAME,
+      TOOL_READ_FILE_RAW_SHORT_NAME,
+      TOOL_SAVE_FILE_SHORT_NAME,
+      TOOL_EDIT_FILE_SHORT_NAME,
+      TOOL_DELETE_FILE_SHORT_NAME,
+    ]) {
+      expect(await decide(shortName), `${shortName} must be admitted`).toEqual({
+        allowed: true,
+        kind: "app-builtin",
+      });
+    }
+    // upload/download move bytes through the code runtime, which is off, so
+    // the gate must not admit a call the dispatcher could not resolve; and
+    // copy_file is agent-only (see the next test).
+    for (const shortName of [
+      TOOL_UPLOAD_FILE_SHORT_NAME,
+      TOOL_DOWNLOAD_FILE_SHORT_NAME,
+      TOOL_COPY_FILE_SHORT_NAME,
+    ]) {
+      expect(
+        (await decide(shortName)).allowed,
+        `${shortName} must be refused`,
+      ).toBe(false);
+    }
+  } finally {
+    config.skillsSandbox.enabled = originalEnabled;
+  }
+});
+
+test("copy_file is never app-callable, with or without the code runtime", async ({
+  makeOrganization,
+  makeUser,
+  makeApp,
+  makeInternalMcpCatalog,
+  makeTool,
+  makeAppTool,
+}) => {
+  const { appId } = await setup({
+    makeOrganization,
+    makeUser,
+    makeApp,
+    makeInternalMcpCatalog,
+    makeTool,
+    makeAppTool,
+  });
+  const originalEnabled = config.skillsSandbox.enabled;
+  try {
+    for (const enabled of [true, false]) {
+      config.skillsSandbox.enabled = enabled;
       const decision = await gateAppToolCall({
         appId,
-        toolName: getArchestraToolFullName(shortName),
+        toolName: getArchestraToolFullName(TOOL_COPY_FILE_SHORT_NAME),
       });
-      expect(decision.allowed, `${shortName} must be refused`).toBe(false);
+      expect(decision.allowed, `runtime ${enabled ? "on" : "off"}`).toBe(false);
     }
-    // The flag-independent built-ins keep working.
-    const dataStore = await gateAppToolCall({
-      appId,
-      toolName: getArchestraToolFullName(TOOL_APP_DATA_GET_SHORT_NAME),
-    });
-    expect(dataStore).toEqual({ allowed: true, kind: "app-builtin" });
   } finally {
     config.skillsSandbox.enabled = originalEnabled;
   }

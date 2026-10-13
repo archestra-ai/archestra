@@ -126,10 +126,10 @@ const CODE_RUNTIME_PREREQUISITE =
 
 const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
   skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/agents#code-sandbox) page covers what the runtime is and how an agent uses it.`,
-  // Same gate as the sandbox, since these tools ship from the same module —
-  // but they read and write saved files rather than entering a container, so
-  // the note says what they are instead of pointing at the runtime page.
-  files: `These tools are ${CODE_RUNTIME_PREREQUISITE} They operate on the conversation's persistent files, not inside the sandbox container.`,
+  // They ship from the sandbox module but only touch saved files, so they are
+  // always served — say so, since the neighbouring sandbox group is gated.
+  files:
+    "These tools work on saved files, so they don't need the code runtime.",
 };
 
 const HOOK_RUNTIME_NOTE =

@@ -8,6 +8,9 @@ import { makeAnthropicOpenaiAdapterFactory } from "./anthropic-openai";
 import type { AnthropicOpenaiContext } from "./anthropic-openai-translator";
 import { azureAdapterFactory } from "./azure";
 import { azureResponsesAdapterFactory } from "./azure-responses";
+import { makeBedrockOpenaiAdapterFactory } from "./bedrock-openai";
+import { makeCohereOpenaiAdapterFactory } from "./cohere-openai";
+import { makeGeminiOpenaiAdapterFactory } from "./gemini-openai";
 import { openaiAdapterFactory } from "./openai";
 import { openAiResponsesAdapterFactory } from "./openai-responses";
 import { makeResponsesFromChatAdapterFactory } from "./openai-responses-from-chat";
@@ -1006,5 +1009,119 @@ describe("stream text suffix seam", () => {
     expect(
       JSON.stringify(responsesFromChat.toProviderResponse()),
     ).not.toContain("protected session");
+  });
+
+  const routedContext = {
+    chatcmplId: "chatcmpl_routed",
+    createdUnix: 1,
+    requestedModel: "routed-test",
+    responseId: "resp_routed",
+  };
+  const claudeAnswer = (stopReason: string) => [
+    { type: "message_start", message: { usage: {} } },
+    {
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "answer" },
+    },
+    { type: "message_delta", delta: { stop_reason: stopReason } },
+    { type: "message_stop" },
+  ];
+
+  test.each([
+    {
+      provider: "Claude",
+      adapter: () =>
+        makeResponsesFromChatAdapterFactory(
+          makeAnthropicOpenaiAdapterFactory(routedContext),
+          routedContext,
+        ).createStreamAdapter(),
+      chunks: claudeAnswer("end_turn"),
+    },
+    {
+      provider: "Bedrock",
+      adapter: () =>
+        makeResponsesFromChatAdapterFactory(
+          makeBedrockOpenaiAdapterFactory({
+            ...routedContext,
+            includeUsageInStream: false,
+          }),
+          routedContext,
+        ).createStreamAdapter({ modelId: "routed-test", messages: [] }),
+      chunks: [
+        { messageStart: { role: "assistant" } },
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: { text: "answer" },
+          },
+        },
+        { messageStop: { stopReason: "end_turn" } },
+      ],
+    },
+    {
+      provider: "Gemini",
+      adapter: () =>
+        makeResponsesFromChatAdapterFactory(
+          makeGeminiOpenaiAdapterFactory(routedContext),
+          routedContext,
+        ).createStreamAdapter(),
+      chunks: [
+        {
+          candidates: [
+            {
+              content: { parts: [{ text: "answer" }], role: "model" },
+              finishReason: "STOP",
+              index: 0,
+            },
+          ],
+          modelVersion: "routed-test",
+          responseId: "gemini-response",
+        },
+      ],
+    },
+    {
+      provider: "Cohere",
+      adapter: () =>
+        makeResponsesFromChatAdapterFactory(
+          makeCohereOpenaiAdapterFactory(routedContext),
+          routedContext,
+        ).createStreamAdapter(),
+      chunks: [
+        {
+          type: "content-delta",
+          index: 0,
+          delta: { message: { content: { text: "answer" } } },
+        },
+        { type: "message-end", delta: { finish_reason: "COMPLETE" } },
+      ],
+    },
+  ])("Responses through the model router receipts a finished $provider answer", ({
+    adapter: create,
+    chunks,
+  }) => {
+    const adapter = create();
+    adapter.setTextSuffix?.(signedPrefix);
+    for (const chunk of chunks) adapter.processChunk(chunk as never);
+    const completed = frames(String(adapter.formatEndSSE())).at(-1)
+      ?.response as { output: Array<{ content: Array<{ text: string }> }> };
+    const text = completed.output[0].content[0].text;
+    expect(text).toBe(`answer\n\n${formatSessionReceipt(receiptCode)}`);
+    expect(restoreText(text)).toEqual({
+      text: "answer",
+      sessionIds: ["parent"],
+    });
+  });
+
+  test("Responses through the model router does not receipt a cut-off Claude answer", () => {
+    const adapter = makeResponsesFromChatAdapterFactory(
+      makeAnthropicOpenaiAdapterFactory(routedContext),
+      routedContext,
+    ).createStreamAdapter();
+    adapter.setTextSuffix?.(signedPrefix);
+    for (const chunk of claudeAnswer("max_tokens")) {
+      adapter.processChunk(chunk as never);
+    }
+    expect(String(adapter.formatEndSSE())).not.toContain("protected session");
   });
 });

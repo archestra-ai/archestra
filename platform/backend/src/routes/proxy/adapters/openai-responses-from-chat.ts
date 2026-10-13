@@ -20,6 +20,19 @@ import { toResponsesUsage } from "./responses-usage";
 
 type OpenAiResponse = OpenAi.Types.ChatCompletionsResponse;
 
+// The wrapped adapter keeps its own provider's stop reason, so a finished
+// answer reads "stop" from Chat Completions, "end_turn" or "stop_sequence"
+// from Claude (Anthropic, Bedrock), "STOP" from Gemini and "COMPLETE" or
+// "STOP_SEQUENCE" from Cohere.
+const COMPLETED_STOP_REASONS = new Set([
+  "stop",
+  "end_turn",
+  "stop_sequence",
+  "STOP",
+  "COMPLETE",
+  "STOP_SEQUENCE",
+]);
+
 class ResponsesFromChatAdapter<TResponse>
   implements LLMResponseAdapter<TResponse>
 {
@@ -309,13 +322,16 @@ class ResponsesFromChatStreamAdapter<TChunk, TResponse>
     if (this.outputCompleted) {
       return "data: [DONE]\n\n";
     }
-    const suffix =
+    const footer =
       this.replacedText === null &&
       this.state.toolCalls.length === 0 &&
-      this.state.stopReason === "stop" &&
+      COMPLETED_STOP_REASONS.has(this.state.stopReason ?? "") &&
       this.state.text
         ? (this.getTextSuffix?.(this.state.text) ?? "")
         : "";
+    // The footer's mark spans two lines, so it starts on its own after a blank
+    // line, as the providers that place it first keep it apart from the answer.
+    const suffix = footer ? `\n\n${footer}` : "";
     const text = `${this.state.text}${suffix}`;
     const suffixDelta = suffix ? this.formatTextDeltaSSE(suffix) : "";
     return `${suffixDelta}${this.completeOutput(text)}data: [DONE]\n\n`;

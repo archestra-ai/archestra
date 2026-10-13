@@ -1,6 +1,7 @@
 "use client";
 
 import { ASK_USER_OTHER_ANSWER_FIELD } from "@archestra/shared";
+import { ArrowRightIcon, PencilIcon } from "lucide-react";
 import { z } from "zod";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -15,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -93,7 +95,7 @@ export function getElicitationFields(schema: unknown): ElicitationField[] {
 }
 
 /**
- * `ask_user`'s "Other" field: a typed answer instead of a pick. Only the
+ * `ask_user`'s "Type something" field: a typed answer instead of a pick. Only the
  * property it names counts; another server's optional text field is its own
  * question, and its form keeps the dialog.
  */
@@ -123,6 +125,38 @@ export function isSingleChoiceForm(fields: ElicitationField[]) {
     choices[0].schema.type !== "boolean" &&
     (choices[0].schema.enum?.length ?? 0) > 0
   );
+}
+
+/**
+ * The answer a chat message gives the open question. With one question
+ * waiting, and it a single pick that takes a typed answer, the composer is
+ * that typed answer: the card shows no text box of its own.
+ */
+export function getComposerAnswer({
+  requests,
+  text,
+}: {
+  requests: ChatMcpElicitationRequest[];
+  text: string;
+}): ElicitationResponse | null {
+  const typed = text.trim();
+  if (requests.length !== 1 || !typed) {
+    return null;
+  }
+  const [request] = requests;
+  const fields = getElicitationFields(request.requestedSchema);
+  const other = fields.find(isOtherTextField);
+  if (!other || !isSingleChoiceForm(fields)) {
+    return null;
+  }
+  return {
+    id: request.id,
+    action: "accept",
+    content: normalizeValues(fields, {
+      ...Object.fromEntries(fields.map((field) => [field.name, ""])),
+      [other.name]: typed,
+    }),
+  };
 }
 
 export function getDefaultValues(fields: ElicitationField[]) {
@@ -188,14 +222,14 @@ export function validateValues(
 /**
  * Checks whether a choice form has required selections before submitting.
  * Required fields must have a value. An all-optional form is complete even with
- * nothing selected, unless it offers "Other": then it needs a pick or text.
+ * nothing selected, unless it offers "Type something": then it needs a pick or text.
  */
 export function hasChoiceSelection(
   fields: ElicitationField[],
   values: Record<string, unknown>,
 ) {
   if (Object.keys(validateValues(fields, values)).length > 0) return false;
-  // With an "Other" field, a pick or a typed answer is what answers it.
+  // With an "Type something" field, a pick or a typed answer is what answers it.
   return (
     !fields.some(isOtherTextField) ||
     fields.some((field) => {
@@ -260,6 +294,7 @@ export function ElicitationFieldInput({
   onPick,
   onFocus,
   other,
+  submitsOnPick = false,
 }: {
   /** Keeps control ids unique when several requests render at once. */
   idPrefix: string;
@@ -282,8 +317,13 @@ export function ElicitationFieldInput({
   onPick?: (value: string) => void;
   /** Focus on a text field; choice controls ignore it. */
   onFocus?: () => void;
-  /** Adds an "Other" option to a single pick, for a typed answer instead. */
+  /** Adds an "Type something" option to a single pick, for a typed answer instead. */
   other?: { selected: boolean; onSelect: () => void };
+  /**
+   * Options are buttons that answer on activation, not radios that only
+   * select: a radio promises a pick that something else submits.
+   */
+  submitsOnPick?: boolean;
 }) {
   const id = `mcp-elicitation-${idPrefix}-${field.name}`;
   const errorId = `${id}-error`;
@@ -336,6 +376,53 @@ export function ElicitationFieldInput({
           </p>
         ) : null}
       </div>
+    );
+  }
+
+  if (enumValues?.length && choiceStyle && submitsOnPick) {
+    return (
+      <fieldset
+        aria-labelledby={labelledBy}
+        aria-label={labelledBy ? undefined : field.label}
+        className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0"
+      >
+        {enumValues.map((option, index) => {
+          const description =
+            typeof enumDescriptions?.[index] === "string" &&
+            enumDescriptions[index].length > 0
+              ? enumDescriptions[index]
+              : undefined;
+          return (
+            <OptionButton
+              key={option}
+              selected={value === option}
+              disabled={disabled}
+              onClick={() => {
+                onChange(option);
+                onPick?.(option);
+              }}
+            >
+              <span className="text-sm font-medium leading-5">{option}</span>
+              {description ? (
+                <FieldDescription className="group-hover:text-primary-foreground/80 group-focus-visible:text-primary-foreground/80">
+                  {description}
+                </FieldDescription>
+              ) : null}
+            </OptionButton>
+          );
+        })}
+        {other ? (
+          <OptionButton
+            selected={other.selected}
+            aria-expanded={other.selected}
+            disabled={disabled}
+            onClick={other.onSelect}
+            icon={<PencilIcon className="size-4" aria-hidden />}
+          >
+            <span className="text-sm leading-5">Type something…</span>
+          </OptionButton>
+        ) : null}
+      </fieldset>
     );
   }
 
@@ -402,7 +489,7 @@ export function ElicitationFieldInput({
                 value={OTHER_OPTION_VALUE}
                 className="mt-0.5"
               />
-              <span className="text-sm leading-5">Other</span>
+              <span className="text-sm leading-5">Type something</span>
             </OptionRow>
           ) : null}
         </RadioGroup>
@@ -501,6 +588,47 @@ type FieldSchema = {
   enumDescriptions?: unknown[];
   default?: unknown;
 };
+
+/**
+ * An option that answers when pressed. A bordered tile that fills with the
+ * primary color on hover, with an arrow, so it reads as an action rather
+ * than a pick that something else submits. With `icon` it opens a typed
+ * answer instead: a quieter tile with the icon in front and no arrow.
+ */
+function OptionButton({
+  selected = false,
+  icon,
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"button"> & {
+  selected?: boolean;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <UnstyledButton
+      className={cn(
+        "group flex min-h-11 w-full items-center gap-3 rounded-md border bg-card px-3 py-2 text-left shadow-xs transition-colors outline-none",
+        "hover:border-primary hover:bg-primary hover:text-primary-foreground",
+        "focus-visible:border-primary focus-visible:bg-primary focus-visible:text-primary-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "disabled:pointer-events-none disabled:opacity-50",
+        icon ? "text-muted-foreground" : null,
+        selected ? "border-primary" : "border-border",
+        className,
+      )}
+      {...props}
+    >
+      {icon}
+      <span className="flex min-w-0 flex-1 flex-col">{children}</span>
+      {icon ? null : (
+        <ArrowRightIcon
+          className="size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+          aria-hidden
+        />
+      )}
+    </UnstyledButton>
+  );
+}
 
 /**
  * One selectable option row. Clicking anywhere on the row selects it.

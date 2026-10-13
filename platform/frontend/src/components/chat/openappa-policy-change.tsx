@@ -117,7 +117,7 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
     change.url?.startsWith("https://github.com/")
   ) {
     return (
-      <div className="mt-4 w-full max-w-2xl">
+      <div className="mt-4 w-full">
         <InlineNotice variant="success">
           <GitPullRequest />
           <span className="font-medium">{`Opened PR #${change.number}`}</span>
@@ -147,7 +147,7 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
     change.effective.batteries.every((battery) => battery.status === "active");
   const active = healthy && change.enforcement?.enabled === true;
   return (
-    <div className="mt-4 w-full max-w-2xl">
+    <div className="mt-4 w-full">
       <InlineNotice variant={active ? "success" : "warning"}>
         {active ? <CheckCircle2 /> : <TriangleAlert />}
         <span className="font-medium">{`Saved revision ${change.revision}`}</span>
@@ -222,7 +222,7 @@ export function OpenAppaValidationCompletion({ output }: { output: unknown }) {
   const healthy = replayPassed(counts);
   const replay = `Draft replay: ${replaySummary(counts)}`;
   return (
-    <div className="mt-4 w-full max-w-2xl">
+    <div className="mt-4 w-full">
       <InlineNotice variant={healthy ? "success" : "warning"}>
         {pullUrl ? (
           <GitPullRequest />

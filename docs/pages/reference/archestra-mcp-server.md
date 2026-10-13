@@ -80,7 +80,6 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `options[].label` | `string` | Yes | The option shown to the user. |
 | `options[].description` | `string` | No | Optional extra detail shown next to the option. |
 | `allowMultiple` | `boolean` | No | When true, the user may select more than one option. Defaults to false (exactly one). |
-| `allowText` | `boolean` | No | When true, the user may type an answer of their own instead of picking, returned as `text`. Defaults to false. Not for secrets: never use it to collect a password, token, or key. |
 | `remedy_offer_ids` | `string[]` | No | Exact offer IDs from the blocked ruling that this question asks the user to decide: a review execute_remedy_plan requires, or a plan that would prevent what the user asked for. Say in the question what it would prevent. Omit for ordinary questions. |
 
 ##### Output
@@ -89,7 +88,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 |-------|------|----------|-------------|
 | `action` | `"accept" \| "decline" \| "cancel"` | Yes | Whether the choice form was submitted, declined, or canceled. |
 | `selected` | `string[]` | Yes | The labels the user selected. Empty when declined or canceled. |
-| `text` | `string` | No | What the user typed, when allowText offered a free-text answer. |
+| `text` | `string` | No | What the user typed instead of picking an option. |
 | `timedOut` | `boolean` | No | True when the question expired without an answer. |
 
 ### Tool Discovery

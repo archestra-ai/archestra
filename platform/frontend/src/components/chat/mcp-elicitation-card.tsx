@@ -46,6 +46,8 @@ const AUTO_ADVANCE_DELAY_MS = 300;
 /**
  * Displays pending multiple-choice questions in one inline card with one tab per question.
  * Selecting an option on a single-choice tab answers it and advances to the next tab.
+ * A lone single-choice question is answered by the click itself, with Skip
+ * to dismiss; a typed answer comes from the chat composer instead.
  * Multiple-choice tabs advance when the user clicks Next.
  * Navigation buttons appear in the footer of each tab.
  * The Submit button on the final tab sends all answers when every question is answered.
@@ -74,11 +76,11 @@ export function McpElicitationCard({
     Record<string, ChatMcpElicitationRequest>
   >(() => Object.fromEntries(requests.map((request) => [request.id, request])));
   const [activeId, setActiveId] = useState<string | null>(null);
-  // Questions whose "Other" answer is open; its text box shows only then.
+  // Questions whose "Type something" answer is open; its text box shows only then.
   const [otherOpenById, setOtherOpenById] = useState<Record<string, boolean>>(
     {},
   );
-  // Request whose just-opened "Other" box takes focus after it renders.
+  // Request whose just-opened "Type something" box takes focus after it renders.
   const focusOtherRef = useRef<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAwaitingResults, setIsAwaitingResults] = useState(false);
@@ -241,6 +243,15 @@ export function McpElicitationCard({
     !allMembersSettled &&
     !isMultiple &&
     activeQuestion?.request.kind === "openappa_review";
+  // A lone single pick answers on click; its typed answer comes from the chat
+  // composer. A pick kept after its answer failed to save is retried by
+  // pressing it again.
+  const answersOnClick = (question: CardQuestion) =>
+    !isMultiple && question.isPending && isSingleChoiceForm(question.fields);
+  const answersOnClickOnly =
+    activeQuestion !== undefined &&
+    answersOnClick(activeQuestion) &&
+    otherOpenById[activeQuestion.request.id] !== true;
 
   useEffect(
     () => () => {
@@ -367,7 +378,7 @@ export function McpElicitationCard({
     const { request, fields } = question;
     const other = fields.find(isOtherTextField);
     const typed = other?.name === fieldName;
-    // A single pick and "Other" are alternatives: choosing one clears the other.
+    // A single pick and "Type something" are alternatives: choosing one clears the other.
     const cleared =
       other && isSingleChoiceForm(fields) && (!typed || value !== "")
         ? Object.fromEntries(
@@ -394,7 +405,7 @@ export function McpElicitationCard({
   };
 
   /**
-   * Opening "Other" on a single pick replaces the pick; closing it drops the
+   * Opening "Type something" on a single pick replaces the pick; closing it drops the
    * typed text, so only what is on screen is sent.
    */
   const setOtherOpen = ({
@@ -453,6 +464,49 @@ export function McpElicitationCard({
     if (hasRetryableRequest) {
       submissionSnapshotRef.current = null;
     }
+  };
+
+  /**
+   * A lone single pick shows its options as buttons, and pressing one
+   * answers at once, by pointer or keyboard. The picked value is sent
+   * directly: state set by the same press has not rendered yet.
+   */
+  const pickOption = ({
+    question,
+    fieldName,
+    value,
+  }: {
+    question: CardQuestion;
+    fieldName: string;
+    value: string;
+  }) => {
+    if (!answersOnClick(question)) {
+      advanceOnPick(question);
+      return;
+    }
+    if (isSubmitting) {
+      return;
+    }
+    const values = {
+      ...Object.fromEntries(question.fields.map((field) => [field.name, ""])),
+      [fieldName]: value,
+    };
+    void respondToAll(({ request, fields }) => ({
+      id: request.id,
+      action: "accept",
+      content: normalizeValues(fields, values),
+    }));
+  };
+
+  /**
+   * Leaves the questions unanswered. Skip is the user's own choice, so it reads
+   * as a dismissal: decline would tell the model the form never reached them.
+   */
+  const skip = () => {
+    if (isSubmitting || pendingQuestions.length === 0) {
+      return;
+    }
+    void respondToAll(({ request }) => ({ id: request.id, action: "cancel" }));
   };
 
   const submit = () => {
@@ -525,7 +579,16 @@ export function McpElicitationCard({
       event.target instanceof HTMLElement
         ? event.target.getAttribute("role")
         : null;
-    if (event.key !== "Enter" || (role !== "radio" && role !== "checkbox")) {
+    // In the typed answer, Enter sends like the chat composer; Shift+Enter
+    // adds a line, and Enter that confirms an IME composition is left alone.
+    const sendsTypedAnswer =
+      event.target instanceof HTMLTextAreaElement &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing;
+    if (
+      event.key !== "Enter" ||
+      (role !== "radio" && role !== "checkbox" && !sendsTypedAnswer)
+    ) {
       return;
     }
     event.preventDefault();
@@ -563,9 +626,13 @@ export function McpElicitationCard({
         onChange={(value) =>
           setFieldValue({ question, fieldName: field.name, value })
         }
-        onPick={() => advanceOnPick(question)}
+        onPick={(value) =>
+          pickOption({ question, fieldName: field.name, value })
+        }
+        submitsOnPick={answersOnClick(question)}
         other={
-          otherField && singlePick
+          // The chat composer takes a lone question's typed answer.
+          otherField && singlePick && !answersOnClick(question)
             ? {
                 selected: otherOpen,
                 onSelect: () => setOtherOpen({ question, open: true }),
@@ -667,13 +734,9 @@ export function McpElicitationCard({
       }
       className={cn(
         "not-prose relative mb-4 w-full overflow-hidden rounded-lg",
-        allMembersSettled
-          ? "max-w-2xl"
-          : isSingleReview
-            ? "max-w-4xl"
-            : "border border-border/60 bg-card shadow-sm",
-        !allMembersSettled && isMultiple && "max-w-4xl",
-        !allMembersSettled && !isMultiple && !isSingleReview && "max-w-2xl",
+        !allMembersSettled &&
+          !isSingleReview &&
+          "border border-border/60 bg-card shadow-sm",
       )}
       onPointerDown={() => {
         lastInputRef.current = "pointer";
@@ -768,6 +831,16 @@ export function McpElicitationCard({
             <span className="text-xs text-muted-foreground">
               Waiting for answers...
             </span>
+          ) : answersOnClickOnly ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-testid="mcp-elicitation-skip"
+              onClick={skip}
+            >
+              Skip
+            </Button>
           ) : isLastTab ? (
             <Button
               key="submit"

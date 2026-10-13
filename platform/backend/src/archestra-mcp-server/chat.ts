@@ -76,9 +76,7 @@ const AskUserOutputSchema = z.object({
   text: z
     .string()
     .optional()
-    .describe(
-      "What the user typed, when allowText offered a free-text answer.",
-    ),
+    .describe("What the user typed instead of picking an option."),
   timedOut: z
     .boolean()
     .optional()
@@ -110,12 +108,6 @@ const AskUserSchema = z.object({
     .optional()
     .describe(
       "When true, the user may select more than one option. Defaults to false (exactly one).",
-    ),
-  allowText: z
-    .boolean()
-    .optional()
-    .describe(
-      "When true, the user may type an answer of their own instead of picking, returned as `text`. Defaults to false. Not for secrets: never use it to collect a password, token, or key.",
     ),
   remedy_offer_ids: z
     .array(z.string().min(1).max(128))
@@ -183,7 +175,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description: `Ask the user to pick from a short list of options. For Agent Runtime guardrail reviews, use this tool with the offer IDs: the authorized reviewer answers on the run page. Do not substitute a native question or a plain-text answer for that review. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Set allowText when the user may type their own answer, such as a name; the form then adds its own "Other" choice, so do not add one to the options. It is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
+    description: `Ask the user to pick from a short list of options. For Agent Runtime guardrail reviews, use this tool with the offer IDs: the authorized reviewer answers on the run page. Do not substitute a native question or a plain-text answer for that review. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. The form always adds its own "Type something" choice, so the user may type an answer instead of picking, returned as \`text\`; do not add an "Other" option. It is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
     schema: AskUserExecutionSchema,
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
@@ -238,7 +230,8 @@ const registry = defineArchestraTools([
       if (new Set(labels).size !== labels.length) {
         return errorResult("Give each option a different label.");
       }
-      const allowText = !hitlArgs && args.allowText === true;
+      // A guardrail review is a decision, so only ordinary questions take text.
+      const allowText = !hitlArgs;
 
       const elicitation = context.elicitation;
       if (!elicitation) {
@@ -391,7 +384,7 @@ function buildSingleChoiceSchema(
 }
 
 /**
- * Adds an optional "Other" text field. The pick turns optional too, so a
+ * Adds an optional "Type something" text field. The pick turns optional too, so a
  * typed answer stands on its own.
  */
 function withTextField(params: {
@@ -408,7 +401,7 @@ function withTextField(params: {
       ...schema.properties,
       [ASK_USER_OTHER_ANSWER_FIELD]: {
         type: "string" as const,
-        title: "Other",
+        title: "Type something",
       },
     },
     required: [],

@@ -62,6 +62,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useInternalMcpCatalog,
   useRefreshInternalMcpCatalogImage,
@@ -225,6 +226,7 @@ function CatalogItemDetails({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const appName = useAppName();
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const pendingHrefRef = useRef<string | null>(null);
   useBeforeUnloadWhileDirty(permissionsDirty);
@@ -618,7 +620,7 @@ function CatalogItemDetails({
               {item.serverType === "builtin" && (
                 <OverviewSummary
                   facts={[
-                    { label: "Hosting", value: "Built into Archestra" },
+                    { label: "Hosting", value: `Built into ${appName}` },
                     {
                       label: "Tools",
                       value: `${item.toolCount ?? 0} available`,

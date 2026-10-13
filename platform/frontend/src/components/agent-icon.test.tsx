@@ -1,3 +1,4 @@
+import { APPA_KEEPER_AGENT_ICON } from "@archestra/shared";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AgentIcon } from "./agent-icon";
@@ -17,5 +18,14 @@ describe("AgentIcon", () => {
 
     expect(container.querySelector("svg > path")).not.toBeNull();
     expect(container).not.toHaveTextContent("logo:github");
+  });
+
+  it("draws the APPA Keeper for its icon token, not literal text", () => {
+    const { container } = render(
+      <AgentIcon icon={APPA_KEEPER_AGENT_ICON} size={20} />,
+    );
+
+    expect(container.querySelector("svg > rect")).not.toBeNull();
+    expect(container).not.toHaveTextContent(APPA_KEEPER_AGENT_ICON);
   });
 });

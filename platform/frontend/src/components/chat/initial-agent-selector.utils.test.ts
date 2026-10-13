@@ -32,7 +32,7 @@ function makeAgent(
 describe("filterAndSortInitialAgents", () => {
   it("hides built-ins even when selected or matched by search", () => {
     const agents = [
-      makeAgent({ id: "builtin", name: "APPAdvisor", builtIn: true }),
+      makeAgent({ id: "builtin", name: "APPA Keeper", builtIn: true }),
       makeAgent({
         id: "personal",
         name: "My Assistant",
@@ -52,7 +52,7 @@ describe("filterAndSortInitialAgents", () => {
       filterAndSortInitialAgents({
         allAgents: agents,
         currentAgentId: "builtin",
-        search: "APPAdvisor",
+        search: "APPA Keeper",
         userId,
       }),
     ).toEqual([]);

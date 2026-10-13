@@ -1,13 +1,6 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -20,8 +13,7 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
-import { formatDate } from "@/lib/utils/date-time";
+import { appaGithubSyncQueryKey } from "@/lib/openappa-policy-views";
 import { OverviewSetupCards } from "./overview-setup-cards";
 
 vi.mock("@/lib/auth/auth.query");
@@ -63,30 +55,6 @@ const source = {
   heldContentHash: null,
   heldSourceCommit: null,
   heldReasons: [],
-};
-const validationRun: PolicyTestRun = {
-  id: "latest-run",
-  createdAt: "2026-10-06T12:00:00Z",
-  createdBy: null,
-  source: "github",
-  sourceVersion: "tests-v1",
-  sourceCommit: source.sourceCommit,
-  definitionHash: "definitions-v1",
-  policyRevision: 1,
-  policyHash: "policy-v1",
-  effectivePolicyHash: "effective-v1",
-  engineVersion: "engine-v1",
-  draft: false,
-  stale: false,
-  trigger: "github_sync",
-  validation: { valid: true, errors: [], warnings: [] },
-  files: ["passed", "failed", "cannot_run"].map((status, index) => ({
-    path: `scenario-${index}.appa`,
-    contentHash: `content-${index}`,
-    assertionCount: 1,
-    status: status as "passed" | "failed" | "cannot_run",
-    steps: [],
-  })),
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
@@ -132,10 +100,6 @@ beforeEach(() => {
     http.get(`${api}/openappa/github-app/pending`, () =>
       HttpResponse.json(null),
     ),
-    http.get(`${api}/openappa/yells/summary`, () =>
-      HttpResponse.json({ unresolved: 0 }),
-    ),
-    http.get(`${api}/openappa/policy-tests/runs`, () => HttpResponse.json([])),
   );
 });
 afterEach(() => {
@@ -197,64 +161,17 @@ test("members who cannot edit the policy are told who can", async () => {
   ).not.toBeInTheDocument();
 });
 
-function nextStep(container: HTMLElement) {
-  return container.querySelector("[data-next-step]");
-}
-
-test("a saved policy with enforcement off makes enforcement the next step", async () => {
-  revision = 3;
-  const { container } = show();
-  expect(
-    await screen.findByText(/Guardrails are off\. Your policy isn't applied/),
-  ).toBeInTheDocument();
-  expect(nextStep(container)).toHaveTextContent("Enforcement");
-  // Enforcement is switched in settings; the card links straight to it.
-  expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
-    "href",
-    "/settings/guardrails#enforcement",
-  );
-  expect(
-    screen.getByRole("link", { name: "Ask about the policy" }),
-  ).toBeInTheDocument();
-  expect(
-    screen.queryByRole("heading", { name: "Turn on the guardrail" }),
-  ).not.toBeInTheDocument();
-});
-
-test("members who cannot manage enforcement are told who can, without a settings link", async () => {
-  revision = 3;
-  vi.mocked(useHasPermissions).mockImplementation(
-    (permissions) =>
-      ({
-        data: Object.values(permissions).every((actions) =>
-          actions.every((action) => action === "read"),
-        ),
-      }) as ReturnType<typeof useHasPermissions>,
-  );
-  show();
-  expect(
-    await screen.findByText(
-      /Only administrators can change enforcement settings/,
-    ),
-  ).toBeInTheDocument();
-  expect(
-    screen.queryByRole("link", { name: "Settings" }),
-  ).not.toBeInTheDocument();
-});
-
-test("an enforced policy with healthy sync leaves no next step and no GitHub notice", async () => {
+test("a saved policy with healthy sync shows nothing here", async () => {
   revision = 1;
   enabled = true;
   sync = { ...sync, hasPolicy: true, source };
-  const { container } = show();
-  expect(
-    await screen.findByText(/Guardrails are on\. Every tool call is checked/),
-  ).toBeInTheDocument();
-  expect(nextStep(container)).toBeNull();
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  expect(
-    screen.queryByText("Merge your initial policy"),
-  ).not.toBeInTheDocument();
+  const { client, container } = show();
+  await waitFor(() =>
+    expect(client.getQueryState(appaGithubSyncQueryKey)?.status).toBe(
+      "success",
+    ),
+  );
+  expect(container).toBeEmptyDOMElement();
 });
 
 test("a failed sync shows its error", async () => {
@@ -294,158 +211,4 @@ test("shows the initial merge link on Overview while sync waits for setup", asyn
   expect(
     screen.getByText(/Your current policy stays active until it merges/),
   ).toBeVisible();
-});
-
-test("the dashboard summarizes the latest run time and validation count with a direct link", async () => {
-  revision = 1;
-  server.use(
-    http.get(`${api}/openappa/policy-tests/runs`, () =>
-      HttpResponse.json([
-        validationRun,
-        { ...validationRun, id: "older", files: [] },
-      ]),
-    ),
-  );
-  show();
-  const summary = await screen.findByRole("region", {
-    name: "Last validation run",
-  });
-  expect(summary).not.toHaveTextContent("1 passed");
-  expect(summary).not.toHaveTextContent("1 failed");
-  expect(summary).not.toHaveTextContent("1 cannot run");
-  expect(summary).toHaveTextContent(
-    `Last run executed on ${formatDate({ date: validationRun.createdAt })}.`,
-  );
-  expect(summary).toHaveTextContent(/3\s*validations in this run/);
-  expect(summary).not.toHaveTextContent("Git sync run");
-  expect(screen.getByText("Failed")).toBeVisible();
-  expect(
-    screen.getByRole("link", { name: "View Validations" }),
-  ).toHaveAttribute("href", "/openappa/validation");
-});
-
-test.each([
-  {
-    name: "all passing",
-    run: { ...validationRun, files: [validationRun.files[0]] },
-    status: "Passed",
-  },
-  {
-    name: "incomplete",
-    run: { ...validationRun, files: [validationRun.files[2]] },
-    status: "Cannot run",
-  },
-  { name: "empty", run: { ...validationRun, files: [] }, status: "Cannot run" },
-  {
-    name: "invalid policy",
-    run: {
-      ...validationRun,
-      validation: {
-        valid: false,
-        errors: ["Invalid configuration"],
-        warnings: [],
-      },
-    },
-    status: "Cannot run",
-  },
-])("the dashboard reports $name runs accurately", async ({ run, status }) => {
-  revision = 1;
-  server.use(
-    http.get(`${api}/openappa/policy-tests/runs`, () =>
-      HttpResponse.json([run]),
-    ),
-  );
-  show();
-  expect(await screen.findByText(status)).toBeVisible();
-});
-
-test("draft and stale results are visibly qualified", async () => {
-  revision = 1;
-  server.use(
-    http.get(`${api}/openappa/policy-tests/runs`, () =>
-      HttpResponse.json([{ ...validationRun, draft: true, stale: true }]),
-    ),
-  );
-  show();
-  const summary = await screen.findByRole("region", {
-    name: "Last validation run",
-  });
-  expect(await screen.findByText("Failed (draft, outdated)")).toBeVisible();
-  expect(summary).toHaveTextContent(
-    formatDate({ date: validationRun.createdAt }),
-  );
-  expect(summary).not.toHaveTextContent("Draft run");
-});
-
-test("unavailable runs show cannot run without detailed errors or invented counts", async () => {
-  revision = 1;
-  server.use(
-    http.get(`${api}/openappa/policy-tests/runs`, () =>
-      HttpResponse.json([
-        {
-          ...validationRun,
-          executionError: "GitHub denied access to validation files",
-          files: [],
-        },
-      ]),
-    ),
-  );
-  show();
-  const summary = await screen.findByRole("region", {
-    name: "Last validation run",
-  });
-  expect(await screen.findByText("Cannot run")).toBeVisible();
-  expect(summary).not.toHaveTextContent(
-    "GitHub denied access to validation files",
-  );
-  expect(summary).not.toHaveTextContent("0 passed");
-});
-
-test("no saved runs is distinguished from a history-loading failure", async () => {
-  revision = 1;
-  show();
-  expect(await screen.findByText("No runs yet.")).toBeVisible();
-  expect(screen.queryByText("Passed")).not.toBeInTheDocument();
-});
-
-test("failed history loading is retryable rather than presented as empty or passing", async () => {
-  revision = 1;
-  let unavailable = true;
-  server.use(
-    http.get(`${api}/openappa/policy-tests/runs`, () =>
-      unavailable
-        ? new HttpResponse(null, { status: 503 })
-        : HttpResponse.json([validationRun]),
-    ),
-  );
-  show();
-  expect(await screen.findByText("Could not load validation")).toBeVisible();
-  expect(screen.queryByText("No runs yet.")).not.toBeInTheDocument();
-  expect(screen.queryByText("Passed")).not.toBeInTheDocument();
-  unavailable = false;
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-  expect(await screen.findByText("Failed")).toBeVisible();
-});
-
-test("the dashboard adopts a newer result when history refreshes", async () => {
-  revision = 1;
-  let latest = validationRun;
-  server.use(
-    http.get(`${api}/openappa/policy-tests/runs`, () =>
-      HttpResponse.json([latest]),
-    ),
-  );
-  const { client } = show();
-  await screen.findByRole("region", { name: "Last validation run" });
-  latest = { ...validationRun, id: "newer", files: [validationRun.files[0]] };
-  await act(() =>
-    client.invalidateQueries({ queryKey: ["openappa-policy-test-runs"] }),
-  );
-  await waitFor(() => {
-    expect(screen.getByText("Passed")).toBeVisible();
-    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("region", { name: "Last validation run" }),
-    ).toHaveTextContent(/1\s*validation in this run/);
-  });
 });

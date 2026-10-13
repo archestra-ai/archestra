@@ -42,8 +42,8 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - The port in this URL sets the API listen port.
   - [Agent Runtime](#agent-runtime) pods use it to reach the API unless [`ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL) is set.
 
-- **`ARCHESTRA_FRONTEND_URL`** - Public URL of the Archestra web app. Setting it turns on origin validation for CORS and sign-in.
-  - Default: unset (all origins accepted)
+- **`ARCHESTRA_FRONTEND_URL`** - Public URL of the Archestra web app. Setting it restricts CORS and sign-in to the configured origins.
+  - Default: unset (only same-origin requests to the host the app is opened on are accepted)
   - Values: an origin, for example `https://archestra.example.com`
   - Set it in production. Users who open the app on a LAN IP need that URL here, for example `http://192.168.1.5:3000`.
 
@@ -147,7 +147,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra origins allowed for CORS and sign-in, besides [`ARCHESTRA_FRONTEND_URL`](/docs/reference/configuration#ARCHESTRA_FRONTEND_URL).
   - Default: unset
   - Values: comma-separated origins, for example `https://idp.example.com,http://192.168.1.5:3000`
-  - Setting it turns on origin validation, even without [`ARCHESTRA_FRONTEND_URL`](/docs/reference/configuration#ARCHESTRA_FRONTEND_URL). Add your SSO identity provider and any other URL users open the app on.
+  - Setting it restricts origins to the configured list, even without [`ARCHESTRA_FRONTEND_URL`](/docs/reference/configuration#ARCHESTRA_FRONTEND_URL). Add your SSO identity provider and any other URL users open the app on.
 
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Domain the session cookie is scoped to. Set it when the frontend and backend run on different subdomains.
   - Default: unset (the cookie stays on the exact frontend host)

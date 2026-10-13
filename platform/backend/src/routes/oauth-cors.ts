@@ -71,12 +71,13 @@ type CorsOptionsCallback = (
  * - the browser-facing `authorize` endpoint (see {@link isOAuthAuthorizePath})
  *   gets `authorizeDisabled` (CORS off);
  * - public OAuth endpoints (see {@link isPublicOAuthCorsPath}) get `publicOAuth`;
- * - every other route gets `restricted`.
+ * - every other route gets `restricted(req)`, resolved per request so the
+ *   allowed origins can depend on the request's own host.
  * Registered via the plugin's function-as-options form:
  * `fastify.register(fastifyCors, createOAuthAwareCorsDelegate(...))`.
  */
 export function createOAuthAwareCorsDelegate(params: {
-  restricted: FastifyCorsOptions;
+  restricted: (req: FastifyRequest) => FastifyCorsOptions;
   publicOAuth: FastifyCorsOptions;
   authorizeDisabled: FastifyCorsOptions;
 }): () => (req: FastifyRequest, callback: CorsOptionsCallback) => void {
@@ -86,6 +87,9 @@ export function createOAuthAwareCorsDelegate(params: {
       callback(null, authorizeDisabled);
       return;
     }
-    callback(null, isPublicOAuthCorsPath(req.url) ? publicOAuth : restricted);
+    callback(
+      null,
+      isPublicOAuthCorsPath(req.url) ? publicOAuth : restricted(req),
+    );
   };
 }

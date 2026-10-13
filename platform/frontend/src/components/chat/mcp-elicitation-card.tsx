@@ -5,6 +5,7 @@ import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CircleHelpIcon,
   Loader2,
 } from "lucide-react";
 import {
@@ -697,7 +698,9 @@ export function McpElicitationCard({
         >
           {header}
           {settledMembers.length > 0 && !shouldHoldSubmissionSnapshot ? (
-            <AnswerSummary members={settledMembers} label="Saved answers" />
+            <div className="px-4 pt-3">
+              <AnswerSummary members={settledMembers} label="Saved answers" />
+            </div>
           ) : null}
           {questions.map((question) => (
             <TabsContent
@@ -722,7 +725,9 @@ export function McpElicitationCard({
         <>
           {header}
           {settledMembers.length > 0 && !shouldHoldSubmissionSnapshot ? (
-            <AnswerSummary members={settledMembers} label="Saved answers" />
+            <div className="px-4 pt-3">
+              <AnswerSummary members={settledMembers} label="Saved answers" />
+            </div>
           ) : null}
           <div className="flex min-w-0 flex-col gap-3 px-4 pb-3 pt-4 [&>p:first-child]:font-medium">
             <ElicitationMessage request={activeQuestion.request} />
@@ -833,6 +838,11 @@ type CardQuestion = {
   isPending: boolean;
 };
 
+/**
+ * Settled questions read as the exchange they were: the agent's question on
+ * the left, in line with the thinking rows, and the answer on the right as a
+ * small reply bubble. Questions without an answer show their outcome there.
+ */
 function AnswerSummary({
   members,
   label = "Answers",
@@ -841,30 +851,30 @@ function AnswerSummary({
   label?: string;
 }) {
   return (
-    <ul
-      aria-label={label}
-      className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
-    >
+    <ul aria-label={label} className="flex min-w-0 flex-col gap-4">
       {members.map((member) => (
-        <li
-          key={member.toolCallId}
-          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-5"
-        >
-          {member.outcome?.status === "answered" ? (
-            <CheckIcon
-              className="size-3.5 shrink-0 text-emerald-600"
+        <li key={member.toolCallId} className="flex min-w-0 flex-col gap-2">
+          <div className="flex min-w-0 items-start gap-2 pl-2">
+            <CircleHelpIcon
+              className="mt-1 size-4 shrink-0 text-muted-foreground"
               aria-hidden
             />
-          ) : null}
-          <span className="min-w-0 flex-1 whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
-            {member.question || "Question"}
-          </span>
+            <AnsweredQuestionText question={member.question || "Question"} />
+          </div>
           {member.outcome?.status === "answered" ? (
-            <span className="ml-auto shrink-0 font-medium text-foreground">
-              {getOutcomeSummary(member)}
-            </span>
+            <div className="flex max-w-[80%] flex-col items-end gap-1 self-end">
+              <span className="whitespace-pre-wrap rounded-lg rounded-br-sm bg-primary/10 px-3 py-2 text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+                {getOutcomeSummary(member)}
+              </span>
+              {member.outcome.text !== undefined &&
+              member.outcome.selected.length === 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  Typed answer
+                </span>
+              ) : null}
+            </div>
           ) : (
-            <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+            <span className="self-end text-xs text-muted-foreground [overflow-wrap:anywhere]">
               {getOutcomeSummary(member)}
             </span>
           )}
@@ -873,6 +883,39 @@ function AnswerSummary({
     </ul>
   );
 }
+
+/** A long question folds to three lines so the answer stays in view. */
+function AnsweredQuestionText({ question }: { question: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = question.length > LONG_QUESTION_CHARACTERS;
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1">
+      <p
+        className={cn(
+          "whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]",
+          isLong && !expanded && "line-clamp-3",
+        )}
+      >
+        {question}
+      </p>
+      {isLong ? (
+        <Button
+          type="button"
+          variant="link"
+          size="xs"
+          className="h-auto px-0 text-muted-foreground"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          <span>{expanded ? "Show less" : "Show full question"}</span>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+// Roughly three lines at the chat column's width.
+const LONG_QUESTION_CHARACTERS = 240;
 
 function getOutcomeSummary(member: AskUserGroupMember) {
   if (member.outcome?.status === "answered") {

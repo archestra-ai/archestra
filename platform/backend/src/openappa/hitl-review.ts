@@ -222,8 +222,9 @@ export async function getHitlAskUserArguments(params: {
     };
   }
   // Claude Code shows the call in full in each option's preview and asks one
-  // line about it. Forms and other hosts ask the same call in one text. Both
-  // keep what an approval accepts besides the call.
+  // line about it. Where it would withhold that preview, and on forms and
+  // other hosts, the question itself carries the exact call and what an
+  // approval accepts besides it.
   const args = withoutCommandAlias(
     review.tool,
     parseReviewedArguments(review.arguments) ?? {},
@@ -397,8 +398,9 @@ function approvalQuestion(params: {
   const argumentLines = formatArgumentLines(params.args);
   return [
     `Approve ${reviewedToolLabel(params.tool)}?`,
-    ...(argumentLines ? [argumentLines] : []),
+    // Native clients can truncate long questions; show review coverage first.
     ...acceptedBlock(params.accepted),
+    ...(argumentLines ? [argumentLines] : []),
     "Approve lets this exact call run. Deny keeps it blocked.",
   ].join("\n\n");
 }

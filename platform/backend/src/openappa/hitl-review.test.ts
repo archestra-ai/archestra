@@ -1,6 +1,9 @@
-import { expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
+import { AppaClaudeCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/claude-code";
+import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { AppaOpenCodeAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/opencode";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   consumeHitlRuling,
@@ -495,7 +498,7 @@ test.each([
     coverage:
       "  - attention: human-approval\n  - the readers must be the public audience",
     expected:
-      "Approve send_report?\n\nto  finance@example.com\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
+      "Approve send_report?\n\nApproving also accepts:\n  - the readers must be the public audience\n\nto  finance@example.com\n\nApprove lets this exact call run. Deny keeps it blocked.",
     expectedAccepted:
       "\n\nApproving also accepts:\n• the readers must be the public\n  audience",
   },
@@ -526,20 +529,164 @@ test.each([
   );
 });
 
-test("shows a command once although the proxy reviews it under both spellings", async () => {
-  const active = session("command-review");
+describe.each([
+  { adapter: new AppaClaudeCodeAdapter(), tool: "Bash" },
+  { adapter: new AppaCodexAdapter(), tool: "exec_command" },
+  { adapter: new AppaOpenCodeAdapter(), tool: "bash" },
+])("$tool approval questions", ({ adapter, tool }) => {
+  test.each([
+    { label: "Approve", ruling: "approve" },
+    { label: "Deny", ruling: "deny" },
+  ] as const)("shows the command once and reads $label for that exact question", async ({
+    label,
+    ruling,
+  }) => {
+    const active = session("command-review");
+    await stageHitlReview({
+      session: active,
+      review: {
+        offerId: "offer-1",
+        text: runtimeReview("  - the readers must be the public audience"),
+        tool,
+        // The runtime returns the arguments as the proxy evaluated them.
+        arguments: JSON.stringify({
+          cmd: 'git push -u origin "feature"',
+          command: 'git push -u origin "feature"',
+          description: "Push the branch",
+        }),
+      },
+    });
+
+    const question = await getHitlAskUserArguments({
+      session: active,
+      offerIds: ["offer-1"],
+    });
+    const argumentLines =
+      'command      git push -u origin "feature"\ndescription  Push the branch';
+    expect(question?.question).toBe(
+      `Approve ${tool}?\n\nApproving also accepts:\n  - the readers must be the public audience\n\n${argumentLines}\n\nApprove lets this exact call run. Deny keeps it blocked.`,
+    );
+    expect(question?.callPreview).toBe(
+      `**${tool.replace(/_/g, "\\_")} command**\n*Push the branch*\n\n\`\`\`sh\ngit push -u origin "feature"\n\`\`\`\n\nApproving also accepts:\n• the readers must be the public\n  audience`,
+    );
+    if (!question) throw new Error("Missing review question");
+    const nativeQuestion = adapter.nativeQuestion;
+    const asked = nativeQuestion.fromAskUser(question).questions[0];
+    expect(asked.header).toBe("Approval");
+    const options = [
+      { label: "Approve", description: "Allow this exact tool call." },
+      { label: "Deny", description: "Keep this tool call blocked." },
+    ];
+    if (adapter.id === "claude-code") {
+      // Claude Code asks one line and previews the call in each option.
+      expect(asked.question).toBe(`Approve the ${tool} command?`);
+      expect(asked.options).toEqual(
+        options.map((option) => ({ ...option, preview: question.callPreview })),
+      );
+    } else {
+      expect(asked.question).toBe(question.question);
+      expect(asked.options).toEqual(options);
+    }
+    if (adapter.id === "codex")
+      expect(asked).toHaveProperty("id", "archestra_question");
+    if (adapter.id === "opencode")
+      expect(asked).toHaveProperty("multiple", false);
+    const content =
+      adapter.id === "codex"
+        ? JSON.stringify({
+            answers: { archestra_question: { answers: [label] } },
+          })
+        : adapter.id === "opencode"
+          ? `User has answered your questions: "${asked.question}"="${label}". You can now continue with the user's answers in mind.`
+          : `Your questions have been answered: "${asked.question}"="${label}". You can now continue with these answers in mind.`;
+    expect(nativeQuestion.rulingFromResult({ content }, question)).toBe(ruling);
+    if (adapter.id === "opencode") {
+      expect(
+        nativeQuestion.rulingFromResult(
+          {
+            content: `User has answered your questions: "Approve ${tool}?"="${label}". You can now continue with the user's answers in mind.`,
+          },
+          question,
+        ),
+      ).toBe("unrecognized");
+    }
+    expect(
+      await recordHitlRuling({ session: active, offerId: "offer-1", ruling }),
+    ).toBe(true);
+    expect(
+      await consumeHitlRuling({ session: active, offerId: "offer-1" }),
+    ).toBe(ruling);
+    expect(
+      await consumeHitlRuling({ session: active, offerId: "offer-1" }),
+    ).toBeUndefined();
+  });
+});
+
+test("asks the full question when Claude Code would withhold the preview", async () => {
+  const active = session("long-question");
+  const text = Array.from({ length: 500 }, (_, i) => `word${i}`).join(" ");
   await stageHitlReview({
     session: active,
     review: {
       offerId: "offer-1",
       text: runtimeReview("  - the readers must be the public audience"),
-      tool: "Bash",
-      // The runtime returns the arguments as the proxy evaluated them.
-      arguments: JSON.stringify({
-        cmd: "git push -u origin feature",
-        command: "git push -u origin feature",
-        description: "Push the branch",
-      }),
+      tool: "mcp/slack/send_message",
+      arguments: JSON.stringify({ text }),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  if (!question) throw new Error("Missing review question");
+  // Longer than the 2,000 characters Claude Code shows of a preview.
+  expect(question.callPreview?.length).toBeGreaterThan(2000);
+  for (const adapter of [
+    new AppaClaudeCodeAdapter(),
+    new AppaCodexAdapter(),
+    new AppaOpenCodeAdapter(),
+  ]) {
+    const asked = adapter.nativeQuestion.fromAskUser(question).questions[0];
+    expect(asked.question).toBe(question.question);
+    const lines = asked.question.split("\n\n")[2].split("\n");
+    expect(lines.length).toBeGreaterThan(3);
+    expect(lines.map((line) => line.slice("text  ".length)).join(" ")).toBe(
+      text,
+    );
+    // Keep coverage in the prefix even for clients that truncate long questions.
+    expect(asked.question.length).toBeGreaterThan(2000);
+    expect(asked.question.slice(0, 2000)).toContain(
+      "the readers must be the public audience",
+    );
+    expect(asked.question.slice(0, 2000)).toContain("text  word0");
+    for (const option of asked.options)
+      expect(option).not.toHaveProperty("preview");
+  }
+});
+
+test("asks the full question when the preview has control characters", async () => {
+  const asked = await askedAbout("control-question", "Bash", {
+    command: "printf '\u001b[31mred\u001b[0m'",
+  });
+  if (!asked) throw new Error("Missing review question");
+  const [question] = new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(
+    asked,
+  ).questions as Array<{ question: string; options: object[] }>;
+  expect(question.question).toBe(asked.question);
+  for (const option of question.options)
+    expect(option).not.toHaveProperty("preview");
+});
+
+test("keeps both arguments when a command tool's cmd and command differ", async () => {
+  const active = session("distinct-command-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: runtimeReview("  - attention: human-approval"),
+      tool: "exec_command",
+      arguments: JSON.stringify({ cmd: "ls", command: "rm -rf build" }),
     },
   });
 
@@ -548,21 +695,9 @@ test("shows a command once although the proxy reviews it under both spellings", 
     offerIds: ["offer-1"],
   });
   expect(question?.callPreview).toBe(
-    "**Bash command**\n*Push the branch*\n\n```sh\ngit push -u origin feature\n```\n\nApproving also accepts:\n• the readers must be the public\n  audience",
-  );
-  expect(question?.question).toBe(
-    "Approve Bash?\n\ncommand      git push -u origin feature\ndescription  Push the branch\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
-  );
-});
-
-test("keeps both arguments when a command tool's cmd and command differ", async () => {
-  const asked = await askedAbout("distinct-command-review", "exec_command", {
-    cmd: "ls",
-    command: "rm -rf build",
-  });
-  expect(asked?.callPreview).toBe(
     "**exec\\_command command**\n\n```sh\nrm -rf build\n```\n\n```yaml\ncmd: ls\n```",
   );
+  expect(question?.question).toContain("cmd      ls\ncommand  rm -rf build");
 });
 
 test("keeps the full review text when its coverage is in an unknown shape", async () => {

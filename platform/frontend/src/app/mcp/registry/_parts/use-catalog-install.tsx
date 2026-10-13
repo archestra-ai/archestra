@@ -45,6 +45,7 @@ import {
   setPendingEnterpriseManagedInstall,
   useEnterpriseManagedInstallConnectUrl,
 } from "@/lib/mcp/enterprise-managed-install-auth";
+import { isInstallInProgress } from "@/lib/mcp/install-status";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useInstallMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
@@ -147,6 +148,8 @@ export function useCatalogInstall(opts?: {
   // torn down and the intent is still pending" (reopen) — on a remount the ref
   // is fresh, so the re-open effect takes over from the stashed intent.
   const deepLinkHandledRef = useRef(false);
+  // Catalog ids with a direct (no-dialog) install request in flight.
+  const directInstallsInFlightRef = useRef(new Set<string>());
 
   // Pre-selected team ID when adding a shared connection from manage dialog
   const [preselectedTeamId, setPreselectedTeamId] = useState<string | null>(
@@ -293,17 +296,19 @@ export function useCatalogInstall(opts?: {
     catalogItems,
   ]);
 
-  // Resume polling for pending installations after page refresh
+  // Resume polling for installs that were already pending when the page
+  // loaded. Only on the first load: later pending rows come from installs
+  // this hook started (tracked by their handlers) or from a catalog edit's
+  // reinstall cascade, which is not an install and must not toast as one.
+  const resumedPendingRef = useRef(false);
   useEffect(() => {
-    if (installedServers) {
-      const pendingServers = installedServers.filter(
-        (s) =>
-          s.localInstallationStatus === "pending" ||
-          s.localInstallationStatus === "discovering-tools",
-      );
-      if (pendingServers.length > 0) {
-        setInstallingServerIds(new Set(pendingServers.map((s) => s.id)));
-      }
+    if (!installedServers || resumedPendingRef.current) return;
+    resumedPendingRef.current = true;
+    const pendingIds = installedServers
+      .filter((s) => isInstallInProgress(s.localInstallationStatus))
+      .map((s) => s.id);
+    if (pendingIds.length > 0) {
+      setInstallingServerIds((prev) => new Set([...prev, ...pendingIds]));
     }
   }, [installedServers]);
 
@@ -441,6 +446,17 @@ export function useCatalogInstall(opts?: {
     openDialog("local-install");
   };
 
+  // The install mutation skips its own toast for an install that comes back
+  // pending, so track it here and let the completion effect toast it.
+  const trackPendingInstall = (
+    server: { id: string; localInstallationStatus?: string | null } | undefined,
+  ) => {
+    if (!server || !isInstallInProgress(server.localInstallationStatus)) {
+      return;
+    }
+    setInstallingServerIds((prev) => new Set(prev).add(server.id));
+  };
+
   // Check if a catalog item needs any config dialogs, or can be installed directly
   const canDirectInstall = (catalogItem: CatalogItem) => {
     if (catalogItem.oauthConfig) return false;
@@ -469,44 +485,54 @@ export function useCatalogInstall(opts?: {
       scope?: McpServerInstallScope;
     },
   ) => {
-    const scope: McpServerInstallScope =
-      target?.scope ?? (target?.teamId ? "team" : "personal");
-    if (
-      !(await ensureEnterpriseManagedInstallAuth(catalogItem, {
-        action: "direct",
+    // Repeated clicks land before the first request (or the enterprise auth
+    // check ahead of it) returns, so React state can't stop them; a ref can.
+    if (directInstallsInFlightRef.current.has(catalogItem.id)) return;
+    directInstallsInFlightRef.current.add(catalogItem.id);
+    try {
+      const scope: McpServerInstallScope =
+        target?.scope ?? (target?.teamId ? "team" : "personal");
+      if (
+        !(await ensureEnterpriseManagedInstallAuth(catalogItem, {
+          action: "direct",
+          catalogId: catalogItem.id,
+          scope,
+          ...(scope === "team" && target?.teamId
+            ? { teamId: target.teamId }
+            : {}),
+        }))
+      ) {
+        return;
+      }
+
+      setInstallingItemId(catalogItem.id);
+      const result = await installMutation.mutateAsync({
+        name: catalogItem.name,
         catalogId: catalogItem.id,
         scope,
         ...(scope === "team" && target?.teamId
           ? { teamId: target.teamId }
           : {}),
-      }))
-    ) {
-      return;
-    }
+        dontShowToast: true,
+      });
 
-    setInstallingItemId(catalogItem.id);
-    const result = await installMutation.mutateAsync({
-      name: catalogItem.name,
-      catalogId: catalogItem.id,
-      scope,
-      ...(scope === "team" && target?.teamId ? { teamId: target.teamId } : {}),
-      dontShowToast: true,
-    });
-
-    const installedServerId = result?.installedServer?.id;
-    if (installedServerId) {
-      setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
-      const isFirstInstallation = !installedServers?.some(
-        (s) => s.catalogId === catalogItem.id,
-      );
-      if (isFirstInstallation) {
-        setFirstInstallationServerIds((prev) =>
-          new Set(prev).add(installedServerId),
+      const installedServerId = result?.installedServer?.id;
+      if (installedServerId) {
+        setInstallingServerIds((prev) => new Set(prev).add(installedServerId));
+        const isFirstInstallation = !installedServers?.some(
+          (s) => s.catalogId === catalogItem.id,
         );
+        if (isFirstInstallation) {
+          setFirstInstallationServerIds((prev) =>
+            new Set(prev).add(installedServerId),
+          );
+        }
       }
+      setInstallingItemId(null);
+      onInstalled?.();
+    } finally {
+      directInstallsInFlightRef.current.delete(catalogItem.id);
     }
-    setInstallingItemId(null);
-    onInstalled?.();
   };
 
   // Add personal connection: skip dialog if no config needed, otherwise open dialog with personalOnly
@@ -745,13 +771,14 @@ export function useCatalogInstall(opts?: {
 
     const catalogItem = noAuthCatalogItem;
     setInstallingItemId(catalogItem.id);
-    await installMutation.mutateAsync({
+    const installResult = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: result.catalogId,
       scope: result.scope,
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
     });
+    trackPendingInstall(installResult?.installedServer);
     closeDialog("no-auth");
     setNoAuthCatalogItem(null);
     setInstallingItemId(null);
@@ -867,7 +894,7 @@ export function useCatalogInstall(opts?: {
 
     setInstallingItemId(catalogItem.id);
 
-    await installMutation.mutateAsync({
+    const installResult = await installMutation.mutateAsync({
       name: catalogItem.name,
       catalogId: result.catalogId,
       ...credentialPayload,
@@ -875,6 +902,7 @@ export function useCatalogInstall(opts?: {
       teamId:
         result.scope === "team" ? (result.teamId ?? undefined) : undefined,
     });
+    trackPendingInstall(installResult?.installedServer);
     setInstallingItemId(null);
     onInstalled?.();
   };

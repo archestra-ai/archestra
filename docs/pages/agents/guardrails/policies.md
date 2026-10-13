@@ -1,7 +1,7 @@
 ---
 title: Guardrail Policies
 sidebarTitle: Policies
-description: Cover your tools with rules, change the policy, and sync it with GitHub
+description: Cover your tools with rules, change the policy, and sync it with GitHub or GitLab
 order: 1
 alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
 lastUpdated: 2026-10-12
@@ -65,25 +65,54 @@ In Slack, Microsoft Teams, and Telegram, the agent pauses and posts the review i
 
 Over [A2A](/docs/agents/triggers-and-channels/webhook-a2a#approving-tool-calls), the task pauses and the caller answers.
 
-## GitHub Sync
+<span id="github-sync"></span>
 
-With GitHub sync, the policy lives in a repository. The agent opens a pull request instead of saving, and a change applies after merge and successful sync.
+## Git Sync
 
-1. On **Overview**, click **Create repository** on the **GitHub sync** card.
-2. Choose a GitHub App, and enter the owner and repository name.
-3. Archestra creates a private repository from the [configuration template](https://github.com/archestra-ai/openappa-config) and commits your current policy. If repository rules block the commit, it opens a pull request instead.
-4. If a pull request is needed, click **Review and merge PR**, wait for the repository checks to pass, and merge it. The dialog stays open and keeps checking for the merge; click **Check if merged** to check right away. Your current policy stays active until then.
+With Git sync, the policy lives in a GitHub or GitLab repository, and every change gets reviewed there. Sync runs both ways: a change merged in the repository applies here, and a change made here opens a pull request (a merge request on GitLab) instead of saving.
 
-To use a repository you already have, click **Connect existing repository** in the same dialog, or ask the setup chat. The policy file in that repository replaces the current policy.
+1. Go to **Settings → Guardrails** and click **Set up Git sync**.
+2. Pick **GitHub** or **GitLab**, then follow its steps below.
 
-The **GitHub sync** card shows **Connected** after setup. When a pull request is needed, it shows **Awaiting initial merge** until the initial policy is merged and synced. Manage it under **Settings → OpenAPPA**.
+### GitHub
+
+1. Enter the **GitHub URL**, either GitHub.com or your GitHub Enterprise Server address, and the **Organization**. Then choose one:
+   - **Start fresh:** click **Create on GitHub** to create a private repository from the [OpenAPPA template](https://github.com/archestra-ai/openappa-config). On GitHub Enterprise Server, create an empty private repository instead, and setup adds the OpenAPPA files.
+   - **Use an existing repository:** one that already holds an OpenAPPA policy.
+2. Pick a GitHub App: **Use an App I already have**, or **Create a new GitHub App**, which creates one on GitHub with no keys to copy. Install a new App on the policy repository only.
+3. Choose the repository and click **Connect repository**. To change the **Branch**, **Policy file** (`appa.toml`), **Validations folder** (`traces`), or **Sync schedule**, open **Advanced** first.
+
+If repository rules block the commit, setup opens an initial pull request instead, and your current policy stays active until it merges. Click **Review and merge**, and merge it once its checks pass. Until then, the Guardrails pages show **Merge your initial policy**.
+
+### GitLab
+
+Git sync works with gitlab.com and self-managed GitLab, through an access token with the `api` scope.
+
+1. Pick a saved token, or click [**Add a GitLab token**](/docs/agents/skills/importing#private-repositories).
+2. Choose the policy project. To change the branch, policy file, validations folder, or schedule, open **Advanced** first.
+   - **New project:** pick a **Group**, or **Your namespace** for your own account, and enter a **Project name**. Click **Create project**. Setup creates a private project and adds the OpenAPPA files with your current policy.
+   - **Existing project:** pick it and click **Connect project**.
+
+If GitLab refuses the first commit to a protected branch, setup stops with an error. To fix it, use a token with the Maintainer role, or allow the initial push to that branch.
+
+### Repository Checks
+
+Before you connect, the dialog checks the repository or project:
+
+- **OpenAPPA template**, **Empty repository**, or **Empty project:** setup copies your current policy into it.
+- **Found appa.toml:** that file replaces your current policy.
+- **No appa.toml:** pick another repository, or set the policy file under **Advanced**.
+- **No access:** the App or token cannot read it. On GitHub, click **Change access** to fix it.
+
+It also warns when the validations folder is missing. When setup is done, the card on **Settings → Guardrails** shows **Connected**.
+
+After the configuration agent saves a policy, the banner in chat links to **Set up Git sync**. It opens this setup in a new tab.
 
 What to know:
 
-- Setting up sync needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
-- **The GitHub App** must be installed on the owner with **All repositories**, and **Read & write** on Administration, Contents, and Pull requests. The setup chat can create it.
-- For an existing repository configured with a PAT, read access supports sync. Publishing policy or validation changes also needs Contents and Pull requests **Read & write**. Creating a repository through the setup flow requires a GitHub App.
-- A pull request that changes a battery credential waits until someone with [`credential:update`](/docs/reference/permissions#credential:update) clicks **Accept repository text** on **Batteries**.
+- Setting up sync needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) and, to pick a saved App or token, [`credential:read`](/docs/reference/permissions#credential:read). Creating a GitHub App or saving a GitLab token also needs [`credential:create`](/docs/reference/permissions#credential:create).
+- The GitHub App needs only the policy repository, with **Read & write** on Contents and Pull requests. On GitHub Enterprise Server, an App created in setup also gets Workflows **Read & write**.
+- A merged change that gives a battery a credential waits for approval. Click **Review** in **Settings > Guardrails** or on **Batteries** to see each battery and its credential, then **Approve**, which needs **Can use** on every credential ([Granular Access Control](/docs/admin/access-control#granular-access-control)). To reject it, undo the change in GitHub or GitLab.
 
 ## Validations
 
@@ -100,13 +129,13 @@ What to know:
 
 - **Results:** the table shows **Passed** or **Failed** and the last run time. A file that cannot run appears as **Failed**, with its reason: replay stops at the first call that needs a live answer, such as the [`run_command`](/docs/reference/archestra-mcp-server#run_command) model label, human review, or a team membership lookup. Open a history run for details; results apply to the policy and files captured by that run.
 - **Drafts:** **Run file** checks only the current editor text. Its temporary result does not change saved suite results or history. Search filters and unsaved drafts do not change **Run all**.
-- **Policy changes:** accepted changes from local saves or GitHub sync automatically queue the full suite. Unchanged syncs and validation-only edits do not trigger runs. Validation failures do not block or roll back a policy; configure repository CI if failures should block merges.
+- **Policy changes:** accepted changes from local saves or Git sync automatically queue the full suite. Unchanged syncs and validation-only edits do not trigger runs. Validation failures do not block or roll back a policy; configure repository CI if failures should block merges.
 
 ### Git-Backed Validations
 
 With sync enabled, Git is the only source of truth for validation files. Archestra loads them from the same accepted commit as the policy, with no local fallback.
 
-Set the optional validation directory under **Settings → OpenAPPA → GitHub source**. Saving checks that the folder exists on the selected branch. Leave it empty to disable Git-backed validations and their automatic runs. Editor changes remain drafts you can preview and export for a repository commit.
+Set the validations folder under **Advanced** during setup, or later with **Edit source** on **Settings → Guardrails**. It defaults to `traces`. Validations run once the folder holds `.appa` files. Editor changes remain drafts you can preview and export for a repository commit.
 
 ### Ask the Configuration Agent
 
@@ -114,7 +143,7 @@ For an open-ended request, the agent discovers a few replayable examples and ask
 
 After you choose a discovered example, the agent previews its exact file for review. A specific requirement uses normal drafting and replay, even when the assertion fails against the current policy. It saves only within your authorization. Validation-only requests leave the policy unchanged, and first-time policy setup skips validations unless requested.
 
-For a concrete policy change, the agent can include a focused regression check and replay the full suite against the proposal. It preserves unrelated files and expectations. Publication saves policy and validations together locally, or opens one GitHub pull request; previews do not create saved run history.
+For a concrete policy change, the agent can include a focused regression check and replay the full suite against the proposal. It preserves unrelated files and expectations. Publication saves policy and validations together locally, or opens one pull request (a merge request on GitLab); previews do not create saved run history.
 
 ## Yells
 

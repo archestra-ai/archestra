@@ -14,7 +14,7 @@ import {
   parseSandboxCommand,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
-import { TerminalSquare, XIcon } from "lucide-react";
+import { PaperclipIcon, TerminalSquare, XIcon } from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -48,10 +48,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
+import { dataUrlToBlob } from "@/lib/app-session-recording/app-recording-binary";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import {
   chatMessageQueue,
+  type QueuedChatFile,
   useConversationMessageQueue,
 } from "@/lib/chat/chat-message-queue";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
@@ -828,7 +830,8 @@ const PromptInputContent = ({
   // Composer keyboard shortcuts layered on top of the primitive textarea:
   //   • Esc — stop the in-flight response (mirrors the Stop button).
   //   • ArrowUp on an empty composer — pop the most recently queued message
-  //     back into the input to edit / resend (like shell history recall).
+  //     (text and attachments) back into the input to edit / resend (like
+  //     shell history recall).
   // Both defer to the slash-command menu when it is open: Esc dismisses that
   // menu and ArrowUp navigates it (handled further down).
   const handleTextareaKeyDown = useCallback(
@@ -849,6 +852,7 @@ const PromptInputContent = ({
         !isSlashCommandOpen &&
         conversationId &&
         controller.textInput.value === "" &&
+        controller.attachments.files.length === 0 &&
         queuedMessages.length > 0
       ) {
         event.preventDefault();
@@ -868,6 +872,18 @@ const PromptInputContent = ({
             .filter(Boolean)
             .join(" ");
           controller.textInput.setInput(restored);
+          if (mostRecent.files?.length) {
+            controller.attachments.add(
+              mostRecent.files.map(
+                (file) =>
+                  new File(
+                    [dataUrlToBlob(file.url)],
+                    file.filename ?? "attachment",
+                    { type: file.mediaType },
+                  ),
+              ),
+            );
+          }
           // Caret to the end so the user can append / edit immediately.
           requestAnimationFrame(() => {
             const element = textareaRef.current;
@@ -916,6 +932,7 @@ const PromptInputContent = ({
     },
     [
       conversationId,
+      controller.attachments,
       controller.textInput,
       isResponseInFlight,
       isSlashCommandOpen,
@@ -948,12 +965,18 @@ const PromptInputContent = ({
               className="group flex items-center gap-2 rounded-md bg-muted/50 py-1 pr-1 pl-3 text-muted-foreground text-sm transition-colors hover:bg-muted"
               data-testid={E2eTestId.ChatMessageQueueItem}
             >
+              {queued.files && queued.files.length > 0 && (
+                <QueuedMessageAttachments files={queued.files} />
+              )}
               <span className="min-w-0 grow truncate">
                 {queued.skill ? `/${queued.skill.name} ` : ""}
                 {queued.externalMcpSkill
                   ? `${queued.externalMcpSkill.commandValue} `
                   : ""}
-                {queued.text}
+                {queued.text ||
+                  (queued.files?.length
+                    ? formatAttachmentCount(queued.files.length)
+                    : "")}
               </span>
               <Button
                 aria-label="Remove queued message"
@@ -1424,3 +1447,45 @@ function getRestorableDraft(storage: Storage, key: string): string | null {
 
   return draft;
 }
+
+// Compact attachment preview on a queued-message row: image thumbnails, a
+// paperclip for anything else. The row stays one line, so only the first few
+// render and the rest collapse into a count.
+function QueuedMessageAttachments({ files }: { files: QueuedChatFile[] }) {
+  const shown = files.slice(0, MAX_QUEUED_ATTACHMENT_PREVIEWS);
+  const hidden = files.length - shown.length;
+  return (
+    <span
+      className="flex shrink-0 items-center gap-1"
+      role="img"
+      aria-label={formatAttachmentCount(files.length)}
+    >
+      {shown.map((file, index) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: a queued message's files never change or reorder
+          key={index}
+          className="flex size-5 items-center justify-center overflow-hidden rounded bg-background"
+        >
+          {file.mediaType.startsWith("image/") ? (
+            <img
+              alt=""
+              className="size-5 object-cover"
+              height={20}
+              src={file.url}
+              width={20}
+            />
+          ) : (
+            <PaperclipIcon className="size-3" />
+          )}
+        </span>
+      ))}
+      {hidden > 0 && <span className="text-xs">+{hidden}</span>}
+    </span>
+  );
+}
+
+function formatAttachmentCount(count: number): string {
+  return count === 1 ? "1 attachment" : `${count} attachments`;
+}
+
+const MAX_QUEUED_ATTACHMENT_PREVIEWS = 3;

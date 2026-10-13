@@ -1,6 +1,7 @@
 import {
   ADMIN_ROLE_NAME,
   APP_RUNTIME_SYSTEM_PROMPT,
+  APPA_KEEPER_AGENT_ICON,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
@@ -60,6 +61,7 @@ import {
   builtInSkillSourceRef,
   builtInSkillVersion,
   getEnabledBuiltInSkills,
+  stripBuiltInBodyFrontmatter,
 } from "@/skills/built-in-skills";
 import type { BuiltInAgentConfig, Organization } from "@/types";
 import {
@@ -130,6 +132,7 @@ export async function syncBuiltInAgents(
             BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG
           ],
         ),
+        icon: APPA_KEEPER_AGENT_ICON,
         builtInAgentConfig: {
           name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
         } as const,
@@ -325,6 +328,13 @@ export async function syncBuiltInSkillsForOrganization(
     // Only auto-upgrade copies that still match the revision we last wrote; a
     // diverged copy was edited by the user and is reset explicitly instead.
     if (liveVersion !== existing.sourceCommit) {
+      const content = stripBuiltInBodyFrontmatter(existing.content);
+      if (content !== existing.content) {
+        await SkillModel.updateWithFiles({
+          id: existing.id,
+          skill: { content },
+        });
+      }
       logger.info(
         {
           builtInSkillId: builtInSkill.builtInSkillId,
@@ -1258,6 +1268,8 @@ type BuiltInAgentDefinition = {
   name: string;
   description: string;
   systemPrompt: string;
+  /** Only built-ins people pick in chat carry one. */
+  icon?: string;
   builtInAgentConfig: BuiltInAgentConfig;
 };
 
@@ -1301,6 +1313,7 @@ async function insertMissingBuiltInAgents(params: {
         scope: "org" as const,
         description: builtInAgent.description,
         systemPrompt: builtInAgent.systemPrompt,
+        icon: builtInAgent.icon ?? null,
         builtInAgentConfig: builtInAgent.builtInAgentConfig,
       })),
     )
@@ -1351,6 +1364,10 @@ async function syncBuiltInAgentRow(params: {
   if (renamed || existing.description !== builtInAgent.description) {
     updates.name = builtInAgent.name;
     updates.description = builtInAgent.description;
+  }
+  // The icon is not editable on a built-in either, for the same reason.
+  if (builtInAgent.icon && existing.icon !== builtInAgent.icon) {
+    updates.icon = builtInAgent.icon;
   }
 
   if (

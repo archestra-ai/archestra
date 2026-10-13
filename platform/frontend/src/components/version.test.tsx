@@ -121,4 +121,18 @@ describe("Version", () => {
       deferMs: 5000,
     });
   });
+
+  it("shortens a full commit SHA and keeps the full value in the title", () => {
+    const sha = "f12beffe7b60b380558b47c052fa7a00533cd312";
+    mockUseHealth.mockReturnValue({ data: { version: sha } });
+    mockUseOrganization.mockReturnValue({
+      data: { footerText: "Custom footer" },
+    });
+
+    const { container } = render(<Version inline />);
+
+    expect(container.firstChild).toHaveTextContent("Custom footer (vf12beff)");
+    expect(container.firstChild).not.toHaveTextContent(sha);
+    expect(container.firstChild).toHaveAttribute("title", sha);
+  });
 });

@@ -5,7 +5,6 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
-import { userHasPermission } from "@/auth";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -20,6 +19,7 @@ import OrganizationModel from "@/models/organization";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
+import { CredentialAccess } from "@/services/credential-access";
 import {
   GUARDRAILS_REVISION_CONFLICT,
   guardrailsPolicyService,
@@ -226,6 +226,7 @@ class OpenAppaBatteriesService {
               contentHash: sync.heldContentHash,
               sourceCommit: sync.heldSourceCommit,
               reasons: sync.heldReasons,
+              message: sync.lastSyncError,
             }
           : null,
       credentialBindings: bindings.map(({ variable, credentialKey }) => ({
@@ -577,14 +578,33 @@ class OpenAppaBatteriesService {
         409,
         `${variable} is set by a [credentials] line in the policy text. Remove its line there to manage it here.`,
       );
-    if (key === null)
+    if (key === null) {
+      // Unbinding is a credential change too: it takes use on what is bound.
+      const bound = await OpenAppaCredentialBindingModel.find({
+        organizationId,
+        variable,
+      });
+      if (bound)
+        await CredentialAccess.requireUseOfKey({
+          organizationId,
+          userId,
+          key: bound.credentialKey,
+          message: `Use access to ${bound.credentialKey} is required to unbind it`,
+        });
       await OpenAppaCredentialBindingModel.delete({ organizationId, variable });
-    else {
+    } else {
       if (!(await this.bindableKeys(organizationId)).has(key))
         throw new ApiError(
           400,
           `${key} is not a credential with an organization value`,
         );
+      // Binding hands the credential's value to helper code.
+      await CredentialAccess.requireByKey({
+        organizationId,
+        userId,
+        key,
+        action: "use",
+      });
       await OpenAppaCredentialBindingModel.upsert({
         organizationId,
         variable,
@@ -751,11 +771,12 @@ class OpenAppaBatteriesService {
     // Helper code runs with whatever credentials get bound to it later, so
     // supplying it takes the permission binding a credential takes.
     if (inspected.credentials.length > 0 || inspected.externals.length > 0)
-      await requireCredentialUpdate({
+      await CredentialAccess.requireOnEvery({
         userId,
         organizationId,
+        action: "use",
         message:
-          "Credential update permission is required to upload a battery with helper scripts",
+          "Use access to every credential is required to upload a battery with helper scripts",
       });
     await OpenAppaBatteryPackageModel.insert({
       organizationId,
@@ -822,6 +843,7 @@ class OpenAppaBatteriesService {
     if (
       effective &&
       effective.rootRevision === root.revision &&
+      effective.installFingerprint.startsWith(COMPOSITION_VERSION) &&
       effective.installFingerprint.endsWith(
         root.revision === 0 ? `:${root.contentHash}` : "",
       )
@@ -1834,6 +1856,10 @@ function heldBackRemedy(battery: HeldBackBattery): string {
   }
 }
 
+// Recompose legacy documents that froze an unstated 64 KiB body limit before
+// explicit policy limits took precedence over the host default.
+const COMPOSITION_VERSION = "v2:";
+
 /**
  * What a stored composition answers: the batteries it composed, the credential
  * table and, when any is held back, the statuses its refusal explains.
@@ -1846,13 +1872,15 @@ function compositionFingerprint(params: {
   const { planned, batteries, root } = params;
   const held = heldBack(planned.batteries).map(heldBackNote);
   return (
+    COMPOSITION_VERSION +
     hash(
       JSON.stringify({
         batteries,
         credentials: planned.resolution.credentials,
         ...(held.length > 0 ? { held } : {}),
       }),
-    ) + (root.revision === 0 ? `:${root.contentHash}` : "")
+    ) +
+    (root.revision === 0 ? `:${root.contentHash}` : "")
   );
 }
 
@@ -2018,22 +2046,6 @@ function prefixRenames(
       renames.set(before, after);
   }
   return renames;
-}
-
-async function requireCredentialUpdate(params: {
-  userId: string;
-  organizationId: string;
-  message: string;
-}): Promise<void> {
-  if (
-    !(await userHasPermission(
-      params.userId,
-      params.organizationId,
-      "credential",
-      "update",
-    ))
-  )
-    throw new ApiError(403, params.message);
 }
 
 /**

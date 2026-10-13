@@ -114,6 +114,8 @@ export const RouteId = {
   GetInternalMcpCatalog: "getInternalMcpCatalog",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  GetInternalMcpCatalogCredentialPreflight:
+    "getInternalMcpCatalogCredentialPreflight",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   GetInternalMcpCatalogToolsBatch: "getInternalMcpCatalogToolsBatch",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
@@ -640,6 +642,10 @@ export const RouteId = {
   DeleteGithubAppConfig: "deleteGithubAppConfig",
 
   // Stored GitHub personal access tokens
+  ListGitCredentials: "listGitCredentials",
+  CreateGitlabToken: "createGitlabToken",
+  ListGitCredentialRepositories: "listGitCredentialRepositories",
+  ListGitCredentialNamespaces: "listGitCredentialNamespaces",
   ListGithubPats: "listGithubPats",
   CreateGithubPat: "createGithubPat",
   UpdateGithubPat: "updateGithubPat",
@@ -838,6 +844,14 @@ export const RouteId = {
   GetAppaGithubSync: "getAppaGithubSync",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
+  StartAppaGithubApp: "startAppaGithubApp",
+  CompleteAppaGithubApp: "completeAppaGithubApp",
+  GetPendingAppaGithubApp: "getPendingAppaGithubApp",
+  DiscardAppaGithubApp: "discardAppaGithubApp",
+  InstallAppaGithubApp: "installAppaGithubApp",
+  GetAppaGithubAppAccounts: "getAppaGithubAppAccounts",
+  GetAppaGithubAppRepositories: "getAppaGithubAppRepositories",
+  GetAppaGithubRepositoryStatus: "getAppaGithubRepositoryStatus",
   UpdateAppaGithubSync: "updateAppaGithubSync",
   GetOpenappaBatteries: "getOpenappaBatteries",
   GetOpenappaBatteryPolicySource: "getOpenappaBatteryPolicySource",
@@ -852,6 +866,7 @@ export const RouteId = {
   SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
+  GetHeldAppaGithubPull: "getHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
   // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
   AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",

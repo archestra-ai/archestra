@@ -35,6 +35,7 @@ import {
   type ChatHitlDecision,
   decideChatHitlReview,
 } from "@/openappa/a2a-hitl-review";
+import { approvalPromptCall } from "@/openappa/review-display";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
@@ -2810,7 +2811,7 @@ export class ChatOpsManager {
         },
       });
 
-      const reviewTexts = await attachHitlReviews({
+      const reviews = await attachHitlReviews({
         organizationId: reviewer.organizationId,
         taskId: task.id,
         approvalRequests,
@@ -2835,9 +2836,11 @@ export class ChatOpsManager {
           taskId: task.id,
           channelId: message.channelId,
           threadId: message.threadId,
-          toolName,
-          toolArgs: toolInput,
-          reviewText: reviewTexts.get(approvalRequest.approvalId),
+          ...approvalPromptCall({
+            toolName,
+            toolArgs: toolInput,
+            review: reviews.get(approvalRequest.approvalId),
+          }),
           originalMessage: message,
         });
       }

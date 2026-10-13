@@ -1,8 +1,8 @@
 import type { ChatMessage } from "@/types";
 
-// UTF-8 bytes, the unit OpenAPPA measures a result body in: its 64 KiB host
-// default `max_body_bytes` (archestra-rs/openappa-rs/src/policy.rs) drops a
-// longer result outright. ~16k tokens, still ample for legitimate large outputs.
+// How much of a chat tool result the model gets to read, in UTF-8 bytes: ~16k
+// tokens, ample for legitimate large outputs. It bounds model context only and
+// is independent of the policy's result cap (`max_body_bytes`).
 export const MAX_TOOL_RESULT_CONTEXT_BYTES = 65_536;
 
 export function utf8Length(text: string): number {

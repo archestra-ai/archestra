@@ -8,7 +8,7 @@ import type {
   AgentRunAttachStartedMessage,
 } from "@archestra/shared";
 import { resolveAgentCatalogId } from "@archestra/shared";
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import {
   type ExecSessionTransport,
   ExecTerminal,
@@ -26,6 +26,7 @@ export function AgentRunTerminal({
   taskId,
   active,
   title,
+  toolbarStart,
   showManualCommand,
   showDisconnectedStatus,
   onCommandChange,
@@ -35,6 +36,7 @@ export function AgentRunTerminal({
   taskId: string;
   active: boolean;
   title?: string;
+  toolbarStart?: ReactNode;
   showManualCommand?: boolean;
   showDisconnectedStatus?: boolean;
   onCommandChange?: (command: string | null) => void;
@@ -62,6 +64,7 @@ export function AgentRunTerminal({
       // a fresh 0:00 counter on every reload before correcting itself.
       isActive={active && !!run}
       title={title}
+      toolbarStart={toolbarStart}
       disconnectedLabel="Run finishing…"
       showManualCommand={showManualCommand}
       showDisconnectedStatus={showDisconnectedStatus}

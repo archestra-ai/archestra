@@ -191,8 +191,9 @@ export function ChatSidebarSection({
   });
 
   // Conversations whose title should play the typing animation (shared via chat
-  // context); getSession drives the live "generating" spinner.
-  const { animatingTitleIds, markTitleAnimating, getSession } = useGlobalChat();
+  // context); generatingConversationIds drives the live "generating" spinner.
+  const { animatingTitleIds, markTitleAnimating, generatingConversationIds } =
+    useGlobalChat();
 
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -458,9 +459,7 @@ export function ChatSidebarSection({
       );
     }
     const isCurrentConversation = currentConversationId === conv.id;
-    const sessionStatus = getSession(conv.id)?.status;
-    const isGenerating =
-      sessionStatus === "submitted" || sessionStatus === "streaming";
+    const isGenerating = generatingConversationIds.has(conv.id);
     // `unread` is server-derived (lastMessageAt > lastReadAt). Suppressed on the
     // chat you're viewing (its read marker is being updated) and while it is
     // actively generating (the spinner wins).
@@ -764,7 +763,16 @@ export function ChatSidebarSection({
     const isPinned = !!run.pinnedAt;
     return (
       <SidebarMenuSubItem key={menuKey}>
-        <div className="flex w-full items-center justify-between gap-1">
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-between gap-1 rounded-md hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            active && "bg-sidebar-accent",
+            // The menu trigger sits inside the row highlight; reserve its
+            // gutter only while the trigger is visible.
+            !isEditing && "hover:pr-7 focus-within:pr-7",
+            !isEditing && isMenuOpen && "pr-7",
+          )}
+        >
           {isEditing ? (
             <Input
               ref={inputRef}
@@ -832,7 +840,7 @@ export function ChatSidebarSection({
                   type="button"
                   aria-label="Run actions"
                   className={cn(
-                    "shrink-0 transition-opacity",
+                    "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
                     isMenuOpen
                       ? "opacity-100"
                       : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
@@ -921,7 +929,16 @@ export function ChatSidebarSection({
 
     return (
       <SidebarMenuSubItem key={menuKey}>
-        <div className="flex items-center justify-between w-full gap-1">
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-between gap-1 rounded-md hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            isActive && "bg-sidebar-accent",
+            // The menu trigger sits inside the row highlight; reserve its
+            // gutter only while the trigger is visible.
+            "hover:pr-7 focus-within:pr-7",
+            isMenuOpen && "pr-7",
+          )}
+        >
           <SidebarMenuButton
             onClick={() => handleSelectProject(project.id)}
             isActive={isActive}
@@ -956,7 +973,7 @@ export function ChatSidebarSection({
                 type="button"
                 aria-label="Project actions"
                 className={cn(
-                  "shrink-0 transition-opacity",
+                  "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
                   isMenuOpen
                     ? "opacity-100"
                     : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
@@ -994,7 +1011,15 @@ export function ChatSidebarSection({
 
     return (
       <SidebarMenuSubItem key={menuKey}>
-        <div className="flex items-center justify-between w-full gap-1">
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-between gap-1 rounded-md hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            // The menu trigger sits inside the row highlight; reserve its
+            // gutter only while the trigger is visible.
+            "hover:pr-7 focus-within:pr-7",
+            isMenuOpen && "pr-7",
+          )}
+        >
           <SidebarMenuButton
             onClick={() => handleSelectApp(appItem)}
             className="cursor-pointer flex-1 justify-between"
@@ -1027,7 +1052,7 @@ export function ChatSidebarSection({
                 type="button"
                 aria-label="App actions"
                 className={cn(
-                  "shrink-0 transition-opacity",
+                  "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
                   isMenuOpen
                     ? "opacity-100"
                     : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",

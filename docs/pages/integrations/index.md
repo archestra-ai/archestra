@@ -2,7 +2,7 @@
 title: Integrations
 description: Connect AI clients and agent frameworks to the LLM Proxy and MCP Gateway
 order: 8
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,4 +17,6 @@ Choose the guide for your client:
 - **Web UIs & Automation:** connect [n8n and Open WebUI](/docs/integrations/web-ui-and-automation) to the proxy and gateway.
 - **AI SDKs & Frameworks:** route [Vercel AI SDK, Pydantic AI, and Mastra](/docs/integrations/sdks-and-frameworks) model calls through Archestra.
 
-An LLM virtual key authenticates model requests. A gateway token authenticates MCP calls. They are separate credentials; use each with its matching endpoint. When Guardrails are active, clients without built-in recognition also send `X-Appa-Session-ID`; see [Guardrail Clients](/docs/agents/guardrails/clients).
+An LLM virtual key authenticates model requests. A gateway token authenticates MCP calls. Use each with its matching endpoint.
+
+To use Guardrails with custom clients or workflows, send an [`X-Appa-Session-ID`](/docs/agents/guardrails/clients#session-headers) header to link requests to the same conversation.

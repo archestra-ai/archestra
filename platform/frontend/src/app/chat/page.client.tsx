@@ -61,6 +61,7 @@ import { ConversationFilesPanel } from "@/components/chat/conversation-files-pan
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { getComposerAnswer } from "@/components/chat/mcp-elicitation-fields";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   AppsPanelContent,
@@ -2214,25 +2215,29 @@ export function ChatPageContent({
   >(async (message, e, options) => {
     e.preventDefault();
 
-    // Enqueue this submission instead of sending it now (throws on inputs that
-    // can't be queued, keeping the composer intact per the onSubmit contract).
-    // Only reached when queueing is on and a conversation exists.
+    // Enqueue this submission instead of sending it now (throws on an empty
+    // submit, keeping the composer intact per the onSubmit contract). Only
+    // reached when queueing is on and a conversation exists.
     const enqueueSubmission = () => {
       if (!conversationId) return;
-      if (message.files && message.files.length > 0) {
-        toast.error(
-          "Attachments can't be queued. Wait for the current response to finish, then send.",
-        );
-        // Keep the typed text, draft, and attachments for a later submit.
-        throw new Error("attachments-not-queueable");
-      }
       const queueText = message.text?.trim();
-      if (!queueText && !options?.skill && !options?.externalMcpSkill) {
+      const queueFiles = (message.files ?? []).map((file) => ({
+        url: file.url,
+        mediaType: file.mediaType,
+        ...(file.filename ? { filename: file.filename } : {}),
+      }));
+      if (
+        !queueText &&
+        queueFiles.length === 0 &&
+        !options?.skill &&
+        !options?.externalMcpSkill
+      ) {
         // Nothing to queue (Enter on an empty composer while streaming).
         throw new Error("empty-queue-submit");
       }
       chatMessageQueue.enqueue(conversationId, {
         text: message.text ?? "",
+        ...(queueFiles.length > 0 ? { files: queueFiles } : {}),
         ...(options?.skill ? { skill: options.skill } : {}),
         ...(options?.externalMcpSkill
           ? { externalMcpSkill: options.externalMcpSkill }
@@ -2243,8 +2248,30 @@ export function ChatPageContent({
         conversationId,
         agentId: conversation?.agentId ?? undefined,
         messageLength: message.text?.length ?? 0,
+        fileCount: queueFiles.length,
       });
     };
+
+    // An open single-pick question takes the composer's text as its typed
+    // answer instead of a new message waiting behind it in the queue.
+    const composerAnswer =
+      chatSession &&
+      !message.files?.length &&
+      !options?.skill &&
+      !options?.externalMcpSkill &&
+      !options?.sandboxCommand
+        ? getComposerAnswer({
+            requests: chatSession.pendingMcpElicitations ?? [],
+            text: message.text ?? "",
+          })
+        : null;
+    if (composerAnswer && chatSession) {
+      if (!(await chatSession.resolveMcpElicitation(composerAnswer))) {
+        // Already reported; keep the text for another try (onSubmit contract).
+        throw new Error("elicitation-answer-not-saved");
+      }
+      return;
+    }
 
     const queueEnabled = !!conversationId;
     const submitAction = classifyChatSubmitAction({
@@ -3429,7 +3456,7 @@ export function ChatPageContent({
                   </ViewTransition>
 
                   {isReadOnlyConversation ? (
-                    <div className="sticky bottom-0 bg-background p-4">
+                    <div className={COMPOSER_DOCK_CLASS}>
                       <div className="max-w-4xl mx-auto space-y-3">
                         <div className="relative">
                           <div className="border-input dark:bg-input/30 relative flex w-full flex-col rounded-md border shadow-xs opacity-30 blur-[3px] pointer-events-none select-none">
@@ -3483,7 +3510,7 @@ export function ChatPageContent({
                       </div>
                     </div>
                   ) : isAgentDeleted ? (
-                    <div className="sticky bottom-0 bg-background p-4">
+                    <div className={COMPOSER_DOCK_CLASS}>
                       <div className="max-w-4xl mx-auto">
                         <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
                           <div className="flex items-center gap-3 text-muted-foreground">
@@ -3509,12 +3536,12 @@ export function ChatPageContent({
                     /* Review chat with no LLM key: the replay plays in the panel
                        without a key, but chatting needs one — prompt for it here
                        instead of the composer (which assumes a selected model). */
-                    <div className="sticky bottom-0 bg-background p-4">
+                    <div className={COMPOSER_DOCK_CLASS}>
                       <ReviewChatNoKeyNotice onKeyAdded={handleFirstKeyAdded} />
                     </div>
                   ) : (
                     activeAgentId && (
-                      <div className="sticky bottom-0 bg-background p-4">
+                      <div className={COMPOSER_DOCK_CLASS}>
                         {/* Shared-element pair with the centered New Chat
                             composer (and the project-page composer): on the
                             splash → conversation swap the box morphs from
@@ -4127,3 +4154,8 @@ function ReviewChatNoKeyNotice({ onKeyAdded }: { onKeyAdded: () => void }) {
 function subscriptionDebug(event: string, data: Record<string, unknown>) {
   console.info(`[subscription-debug] ${event}`, data);
 }
+
+// Messages scroll under the composer; a short fade above it keeps a line
+// from being sliced in half by the opaque band.
+const COMPOSER_DOCK_CLASS =
+  "sticky bottom-0 bg-background p-4 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-gradient-to-t before:from-background before:to-transparent";

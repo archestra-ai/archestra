@@ -357,9 +357,12 @@ test.describe("Chat thinking block layout", () => {
       .fill(`Test message ${testMessageId}: think it through.`);
     await page.keyboard.press("Enter");
 
-    // A live block is expanded while it streams, so this is the state the
-    // overflow shows up in. Wait for the widest content — the long code line —
-    // to be on screen before measuring.
+    // Thinking stays collapsed while it streams; the reader opens it. Then wait
+    // for the widest content — the long code line — before measuring.
+    await page
+      .getByText(/^(Thinking\.\.\.|Thought for)/)
+      .first()
+      .click({ timeout: 90_000 });
     const thinkingCodeLine = page.getByText("reconcileEverything").first();
     await expect(thinkingCodeLine).toBeVisible({ timeout: 90_000 });
     expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
@@ -372,17 +375,12 @@ test.describe("Chat thinking block layout", () => {
     expect(streaming.proseOverflow).toBeLessThanOrEqual(1);
     expect(streaming.codePanelOverflow).toBeLessThanOrEqual(1);
 
-    // And again once the block has settled and the reader reopens it. Wait for
-    // the block's own auto-collapse rather than racing it: clicking the trigger
-    // while it is still open would close the block instead of reopening it.
+    // And again once the block has settled. A block the reader opened stays
+    // open when streaming ends; nothing collapses it behind their back.
     await expect(
       page.getByText("The helper reconciles every knob").first(),
     ).toBeVisible({ timeout: 90_000 });
-    await expect(thinkingCodeLine).toBeHidden({ timeout: 30_000 });
-    await page
-      .getByText(/Thought for/)
-      .first()
-      .click();
+    await expect(page.getByText(/Thought for/).first()).toBeVisible();
     await expect(thinkingCodeLine).toBeVisible({ timeout: 10_000 });
     expect(await conversationHorizontalOverflow(page)).toBeLessThanOrEqual(1);
 

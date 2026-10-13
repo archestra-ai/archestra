@@ -1,5 +1,6 @@
 "use client";
 
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -9,6 +10,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { BatteriesUploadAction } from "./batteries-panel";
 import { OpenAppaPageActionSlotContext } from "./openappa-page-action";
+import { OverviewHeaderActions } from "./overview-header-actions";
 import { openAppaUrl } from "./overview-setup-cards";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
@@ -29,8 +31,19 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
     pathname === "/openappa/batteries"
       ? {
           title: "Batteries",
-          description:
-            "Add and manage reusable policy rules for your tools. See which batteries are active and what they need to work.",
+          description: (
+            <>
+              <span>
+                Batteries are ready-made sets of guardrail rules for your tools
+                and services. See which are active and what they need to work.
+              </span>{" "}
+              <ExternalDocsLink
+                href={getDocsUrl(DocsPage.PlatformAiToolGuardrailsBatteries)}
+              >
+                Learn more
+              </ExternalDocsLink>
+            </>
+          ),
         }
       : pathname === "/openappa/policy"
         ? {
@@ -114,7 +127,9 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
           pathname === "/openappa/yells" ||
           pathname === "/openappa/tests" ||
           pathname.startsWith("/openappa/validation") ||
-          pathname === "/openappa/policy" ? null : (
+          pathname === "/openappa/policy" ? null : pathname === "/openappa" ? (
+          <OverviewHeaderActions />
+        ) : (
           <BatteriesUploadAction />
         )
       }

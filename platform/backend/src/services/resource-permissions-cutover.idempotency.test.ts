@@ -327,6 +327,7 @@ describe("cutover idempotency", () => {
         "agentRun",
         "environment",
         "serviceAccount",
+        "credential",
         "mcpOauthClient",
         "llmOauthClient",
         "scheduledTask",

@@ -662,7 +662,11 @@ class ToolModel {
    * Get all tools for an agent.
    * All tools are linked via the agent_tools junction table.
    */
-  static async getToolsByAgent(agentId: string): Promise<AssignedTool[]> {
+  static async getToolsByAgent(
+    agentId: string,
+    /** Only tools from this catalog item. */
+    catalogId?: string,
+  ): Promise<AssignedTool[]> {
     const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
@@ -686,6 +690,7 @@ class ToolModel {
           ne(schema.toolsTable.name, brandedKnowledgeToolName),
           // Hide tools whose catalog was soft-deleted (retained binding).
           notDeleted(schema.toolsTable),
+          catalogId ? eq(schema.toolsTable.catalogId, catalogId) : undefined,
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -1552,8 +1557,9 @@ class ToolModel {
   /**
    * One-time backfill triggered on startup: when a sandbox built-in tool
    * (runtime or persistent-files) is created for the first time on this seed
-   * run — i.e. the code runtime was just enabled — assign just those new
-   * tools to every existing agent in every org.
+   * run — the code runtime was just enabled, or the persistent-files tools are
+   * seeded for the first time on a deployment without it — assign just those
+   * new tools to every existing agent in every org.
    *
    * New agents inherit the sandbox surface via
    * {@link assignSandboxToolsToAgent}, but agents that predate the runtime
@@ -1671,25 +1677,23 @@ class ToolModel {
   }
 
   /**
-   * Assign the code-execution sandbox tools to a single agent when the
-   * skills-sandbox runtime is on (`config.skillsSandbox.enabled`). No-op
-   * otherwise. Covers both the runtime tools
-   * (run_command/upload_file/download_file) and the persistent-files tools
-   * (search_files/read_file/save_file/edit_file/delete_file).
+   * Assign the file tools to a single agent: the persistent-files tools
+   * (search_files/read_file/save_file/edit_file/delete_file/copy_file) always,
+   * plus the code runtime tools (run_command/upload_file/download_file) when
+   * the runtime is on (`config.skillsSandbox.enabled`) — with it dark they are
+   * not even seeded.
    *
-   * Called from `AgentModel.create` so new agents inherit the sandbox surface.
-   * With the runtime dark the sandbox tools are not even seeded, so there is
-   * nothing to assign.
+   * Called from `AgentModel.create` so new agents inherit the file surface.
    */
   static async assignSandboxToolsToAgent(
     agentId: string,
     organizationId: string,
   ): Promise<void> {
-    if (!config.skillsSandbox.enabled) return;
-
     const shortNames: ArchestraToolShortName[] = [
-      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
       ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...(config.skillsSandbox.enabled
+        ? SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES
+        : []),
     ];
 
     const toolIds = await ToolModel.getToolIdsForOrgByShortNames(

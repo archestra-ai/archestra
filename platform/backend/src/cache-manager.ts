@@ -36,6 +36,10 @@ export const CacheKey = {
   LegacySseSession: "legacy-sse-session",
   /** Short-lived replies waiting for a legacy SSE stream on another replica */
   LegacySseMessages: "legacy-sse-messages",
+  /** Who an in-band gateway request (a form) was sent to, readable by every replica */
+  McpGatewayPendingRequest: "mcp-gateway-pending-request",
+  /** A client's answer to an in-band gateway request, waiting for the replica that sent it */
+  McpGatewayParkedAnswer: "mcp-gateway-parked-answer",
   /** IdP groups cache during login flow */
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
@@ -54,6 +58,8 @@ export const CacheKey = {
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** review_required results the proxy already asked the client to put to the user, once each */
+  OpenAppaHitlQuestionAsked: "openappa-hitl-question-asked",
   /** Per-call server-issued review status, for history only; never a ruling. */
   OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
   /** Pending OpenAPPA review indexed by a verified runtime workspace */
@@ -137,6 +143,8 @@ export const CacheKey = {
    * read an old boolean and mistake it for "not an encrypted chat".
    */
   EncryptedChatSession: "encrypted-chat-session-v2",
+  /** Arguments behind a Slack approval's "View arguments" button (a button value is capped at 2,000 chars) */
+  SlackApprovalArguments: "chatops-slack-approval-arguments",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

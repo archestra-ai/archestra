@@ -6,10 +6,10 @@ import {
   type PaginationQuery,
   PERSONAL_MCP_GATEWAY_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   providerRequiresPerUserCredential,
   type ResourcePermissionGrant,
-  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
   TimeInMs,
@@ -25,6 +25,7 @@ import {
   exists,
   getTableColumns,
   getTableName,
+  gte,
   ilike,
   inArray,
   isNotNull,
@@ -843,9 +844,9 @@ class AgentModel {
       // apps without per-agent setup.
       await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
 
-      // Code-execution sandbox + persistent-files tools — gated on the sandbox
-      // runtime flag, same as the composer.
-      if (composesGroup(SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES)) {
+      // Persistent-files tools, plus the code runtime tools when the runtime
+      // is on — the same composition as the create form.
+      if (composesGroup(PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES)) {
         await ToolModel.assignSandboxToolsToAgent(
           createdAgent.id,
           organizationId,
@@ -1202,8 +1203,21 @@ class AgentModel {
     return results;
   }
 
-  /** Distinct runtime configurations are selected by the warm pool reconciler. */
-  static async listWarmPoolCandidates() {
+  /**
+   * Runtime Agents run since `since`, most recently run first. The warm pool
+   * reconciler takes distinct configurations from the top, so its limited
+   * pools follow the Agents people actually use.
+   */
+  static async listWarmPoolCandidates(params: { since: Date }) {
+    const recentRuns = db
+      .select({
+        agentId: schema.agentRunsTable.agentId,
+        lastRunAt: max(schema.agentRunsTable.startedAt).as("last_run_at"),
+      })
+      .from(schema.agentRunsTable)
+      .where(gte(schema.agentRunsTable.startedAt, params.since))
+      .groupBy(schema.agentRunsTable.agentId)
+      .as("recent_runs");
     return db
       .select({
         id: schema.agentsTable.id,
@@ -1216,6 +1230,7 @@ class AgentModel {
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
       })
       .from(schema.agentsTable)
+      .innerJoin(recentRuns, eq(recentRuns.agentId, schema.agentsTable.id))
       .innerJoin(
         schema.organizationsTable,
         eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
@@ -1236,7 +1251,7 @@ class AgentModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .orderBy(schema.agentsTable.createdAt, schema.agentsTable.id);
+      .orderBy(desc(recentRuns.lastRunAt), schema.agentsTable.id);
   }
 
   /**

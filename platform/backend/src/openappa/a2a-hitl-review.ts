@@ -57,10 +57,19 @@ type HitlReviewAnswerer =
     }
   | { kind: "caller" };
 
+/** What a chat surface shows for one OpenAPPA review. */
+type HitlReviewDisplay = {
+  text: string;
+  /** The reviewed call's tool, as OpenAPPA proposed it for ruling. */
+  tool?: string;
+  /** The reviewed call's arguments as JSON text. */
+  arguments?: string;
+};
+
 /**
  * Links each paused `execute_remedy_plan` request to its OpenAPPA review and
- * its answerer. Returns the review text per approval id; requests for other
- * tools are skipped.
+ * its answerer. Returns the review per approval id; requests for other tools
+ * are skipped.
  */
 export async function attachHitlReviews(params: {
   organizationId: string;
@@ -68,8 +77,8 @@ export async function attachHitlReviews(params: {
   approvalRequests: A2AArchestraApprovalRequest[];
   answerer: HitlReviewAnswerer;
   now: Date;
-}): Promise<Map<string, string>> {
-  const reviewTexts = new Map<string, string>();
+}): Promise<Map<string, HitlReviewDisplay>> {
+  const reviews = new Map<string, HitlReviewDisplay>();
   for (const request of params.approvalRequests) {
     if (!isRemedyTool(request.toolName) || !request.toolInput) continue;
     const offer = reviewedOffer(request.toolInput);
@@ -93,9 +102,14 @@ export async function attachHitlReviews(params: {
         chatThreadId: params.answerer.threadId,
       }),
     });
-    if (attached) reviewTexts.set(request.approvalId, review.text);
+    if (attached)
+      reviews.set(request.approvalId, {
+        text: review.text,
+        ...(review.tool ? { tool: review.tool } : {}),
+        ...(review.arguments ? { arguments: review.arguments } : {}),
+      });
   }
-  return reviewTexts;
+  return reviews;
 }
 
 export type ChatHitlDecision =

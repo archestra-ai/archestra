@@ -13,6 +13,7 @@ import type {
   ChatCompletionCreateParamsStreaming,
 } from "openai/resources/chat/completions/completions";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
+import { getOpenRouterReportedCost } from "@/clients/openrouter-reported-cost";
 import { applyResponseHealing } from "@/clients/openrouter-response-healing";
 import config from "@/config";
 import { metrics } from "@/observability";
@@ -24,6 +25,7 @@ import type {
   LLMStreamAdapter,
   Openrouter,
   StreamAccumulatorState,
+  UsageView,
 } from "@/types";
 import {
   OpenAIRequestAdapter,
@@ -213,7 +215,10 @@ class OpenrouterResponseAdapter
     return this.delegate.hasToolCalls();
   }
   getUsage() {
-    return this.delegate.getUsage();
+    return withReportedCost(
+      this.delegate.getUsage(),
+      this.delegate.getOriginalResponse().usage,
+    );
   }
   getOriginalResponse() {
     return this.delegate.getOriginalResponse();
@@ -247,7 +252,11 @@ class OpenrouterStreamAdapter
 
   processChunk(chunk: OpenrouterStreamChunk) {
     const result = this.delegate.processChunk(chunk);
-    assertOpenrouterStreamChunkHasOutput(this.delegate.state, chunk);
+    const { state } = this.delegate;
+    if (chunk.usage && state.usage) {
+      state.usage = withReportedCost(state.usage, chunk.usage);
+    }
+    assertOpenrouterStreamChunkHasOutput(state, chunk);
     return result;
   }
   getSSEHeaders() {
@@ -451,6 +460,13 @@ function assertOpenrouterStreamChunkHasOutput(
   }
 
   throwEmptyOpenrouterResponseError();
+}
+
+function withReportedCost(usage: UsageView, rawUsage: unknown): UsageView {
+  const providerReportedCost = getOpenRouterReportedCost(rawUsage);
+  return providerReportedCost === undefined
+    ? usage
+    : { ...usage, providerReportedCost };
 }
 
 function hasText(content: string | null | undefined): boolean {

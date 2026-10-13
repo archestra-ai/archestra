@@ -4,6 +4,12 @@ import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { sessionCallerId } from "./actor";
+import { isCommandExecutionTool } from "./command-normalization";
+import {
+  formatArgumentLines,
+  parseReviewedArguments,
+  reviewedToolLabel,
+} from "./review-display";
 import type { OpenAppaSession } from "./service";
 
 type HitlRuling = "approve" | "deny" | "none";
@@ -197,19 +203,32 @@ export async function getHitlAskUserArguments(params: {
   const offerId = params.offerIds[0];
   const review = await getHitlReview({ session: params.session, offerId });
   if (!review) return undefined;
+  const options = [
+    { label: "Approve", description: "Allow this exact tool call." },
+    { label: "Deny", description: "Keep this tool call blocked." },
+  ];
+  if (!review.tool) {
+    return {
+      question: formatReviewQuestion(review.text),
+      header: "Approval",
+      options,
+      allowMultiple: false,
+      remedy_offer_ids: [offerId],
+    };
+  }
+  // Claude Code can withhold long option previews entirely.
+  // Keep the exact call and review coverage in the question on every host.
+  const args = withoutCommandAlias(
+    review.tool,
+    parseReviewedArguments(review.arguments) ?? {},
+  );
+  const accepted = acceptedCoverage(review.text);
   return {
-    question: formatReviewQuestion(review.text),
+    question:
+      approvalQuestion({ tool: review.tool, args, accepted }) ??
+      formatReviewQuestion(review.text),
     header: "Approval",
-    options: [
-      {
-        label: "Approve",
-        description: "Allow this exact tool call.",
-      },
-      {
-        label: "Deny",
-        description: "Keep this tool call blocked.",
-      },
-    ],
+    options,
     allowMultiple: false,
     remedy_offer_ids: [offerId],
   };
@@ -316,6 +335,34 @@ export async function clearHitlReview(params: {
   );
 }
 
+/**
+ * Asks a pending review once more through the gateway's MCP form, where the
+ * choice comes back as data. For an answer the proxy could not read.
+ */
+export async function askHitlReviewInForm(params: {
+  session: OpenAppaSession;
+  offerId: string;
+}): Promise<void> {
+  await cacheManager.set(
+    formKey(params.session, params.offerId),
+    { offerId: params.offerId },
+    HITL_REVIEW_TTL_MS,
+  );
+}
+
+export async function hitlReviewAskedInForm(params: {
+  session: OpenAppaSession;
+  offerIds: readonly string[];
+}): Promise<boolean> {
+  for (const offerId of params.offerIds) {
+    const entry = await cacheManager.get<{ offerId: string }>(
+      formKey(params.session, offerId),
+    );
+    if (entry?.offerId === offerId) return true;
+  }
+  return false;
+}
+
 export function hitlRulingFromLabels(
   labels: readonly string[],
 ): HitlRuling | undefined {
@@ -324,6 +371,79 @@ export function hitlRulingFromLabels(
   if (labels[0] === "Deny") return "deny";
   return undefined;
 }
+
+/**
+ * The review as one question: the call by the name the user knows it under,
+ * its arguments as named values, and what an approval accepts besides the
+ * person's attention, such as a wider audience. Undefined when the review
+ * text's coverage is not in the shape read here, so the full text is shown
+ * and nothing it covers is left out.
+ */
+function approvalQuestion(params: {
+  tool: string;
+  args: Record<string, unknown>;
+  accepted: string[] | undefined;
+}): string | undefined {
+  if (!params.accepted) return undefined;
+  const argumentLines = formatArgumentLines(params.args);
+  return [
+    `Approve ${reviewedToolLabel(params.tool)}?`,
+    // Native clients can truncate long questions; show review coverage first.
+    ...acceptedBlock(params.accepted),
+    ...(argumentLines ? [argumentLines] : []),
+    "Approve lets this exact call run. Deny keeps it blocked.",
+  ].join("\n\n");
+}
+
+/**
+ * What an approval accepts besides the person's attention, or undefined when
+ * the review text's coverage is not in the shape read here.
+ */
+function acceptedCoverage(text: string): string[] | undefined {
+  return reviewCoverage(text)?.filter(
+    (line) => !line.startsWith("attention: "),
+  );
+}
+
+function acceptedBlock(accepted: string[] | undefined): string[] {
+  if (!accepted || accepted.length === 0) return [];
+  return [
+    ["Approving also accepts:", ...accepted.map((line) => `  - ${line}`)].join(
+      "\n",
+    ),
+  ];
+}
+
+/**
+ * The proxy evaluates command tools with `command` and `cmd` set to one value,
+ * so policies match either spelling. The reviewer sees that value once.
+ */
+function withoutCommandAlias(
+  tool: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!isCommandExecutionTool(tool) || args.cmd !== args.command) return args;
+  return Object.fromEntries(
+    Object.entries(args).filter(([name]) => name !== "cmd"),
+  );
+}
+
+/** The runtime's "What this ruling would cover" lines, or undefined. */
+function reviewCoverage(text: string): string[] | undefined {
+  const lines = text.split("\n");
+  const start = lines.indexOf(COVERAGE_HEADING);
+  if (start < 0) return undefined;
+  const coverage: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line === "") return coverage;
+    if (line === "  (none)") continue;
+    if (!line.startsWith("  - ")) return undefined;
+    coverage.push(line.slice("  - ".length));
+  }
+  return coverage;
+}
+
+const COVERAGE_HEADING = "What this ruling would cover:";
 
 function formatReviewQuestion(text: string): string {
   // Native question renderers fold/indent rows independently, breaking pixel art.
@@ -346,6 +466,10 @@ function stagePresenceKey(
     session,
     `${offerId}:stage-presence`,
   );
+}
+
+function formKey(session: OpenAppaSession, offerId: string): AllowedCacheKey {
+  return scopedKey(CacheKey.OpenAppaHitlRuling, session, `${offerId}:form`);
 }
 
 function reviewKey(session: OpenAppaSession, offerId: string): AllowedCacheKey {

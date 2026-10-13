@@ -11,6 +11,7 @@ import type {
   AppaMatchContext,
   AppaSpawnPromptField,
   AskUserArguments,
+  NativeQuestionResult,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
 import { structuredQuestionRuling } from "./native-question-ruling";
@@ -55,7 +56,9 @@ export class AppaCodexAdapter implements AppaClientAdapter {
         },
       ],
     }),
-    rulingFromResult: structuredQuestionRuling,
+    rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
+      structuredQuestionRuling(result, asked.question),
+    formFallback: true,
   };
   matches(context: AppaMatchContext): boolean {
     const userAgent = (

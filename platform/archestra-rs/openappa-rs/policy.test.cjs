@@ -42,9 +42,9 @@ delta = {}
     );
     await hook({ event: 'tool_result', tool_call_id: tool, output: 'completed', outcome: 'success' });
   }
-  assert.notEqual(
-    (await hook({ event: 'tool_call', operation_id: 'call:unknown_local', tool: 'unknown_local', arguments: {} })).decision,
-    'allow_call',
+  await assert.rejects(
+    () => hook({ event: 'tool_call', operation_id: 'call:unknown_local', tool: 'unknown_local', arguments: {} }),
+    /not declared in this policy/,
     'an unknown local tool must stay governed',
   );
 });
@@ -58,13 +58,13 @@ test('saved text changes enforcement for new sessions and preserves existing ses
   const fresh = scope();
   assert.equal((await hook(fresh, { event: 'session_start' }, deny)).decision, 'ack');
   const call = { event: 'tool_call', operation_id: 'call:read', tool: 'read', arguments: {} };
-  assert.notEqual((await hook(fresh, call, deny)).decision, 'allow_call');
+  await assert.rejects(() => hook(fresh, call, deny), /not declared in this policy/);
   assert.equal((await hook(old, call, deny)).decision, 'allow_call');
   // A refused policy leaves the organization's last working deployment serving.
   await assert.rejects(hook(scope(), { event: 'session_start' }, '[policy]\nversion = 999'));
   const next = scope();
   assert.equal((await hook(next, { event: 'session_start' }, deny)).decision, 'ack');
-  assert.notEqual((await hook(next, call, deny)).decision, 'allow_call');
+  await assert.rejects(() => hook(next, call, deny), /not declared in this policy/);
 });
 
 test('a fork keeps its parent policy revision when its dispatch carries newer text', { skip: !databaseUrl }, async () => {
@@ -127,7 +127,7 @@ test('a new session opens under the text its dispatch carried while a stale sibl
   assert.equal((await freshStart).decision, 'ack');
   assert.equal((await staleStart).decision, 'ack');
 
-  assert.notEqual((await hook(fresh, call, deny)).decision, 'allow_call');
+  await assert.rejects(() => hook(fresh, call, deny), /not declared in this policy/);
   assert.equal((await hook(stale, call, allow)).decision, 'allow_call');
 });
 
@@ -178,4 +178,93 @@ url = "http://127.0.0.1:${server.address().port}/annotate"
   assert.notEqual((await call('write_trusted', 'write')).decision, 'allow_call');
   // Externals see the canonical identity the runtime judges, not the host's spelling.
   assert.deepEqual(requests.map(request => request.artifact.args.name), ['host/archestra/unknown_before', 'host/archestra/unknown_after']);
+});
+
+test('an explicit policy result cap takes precedence over the host default', { skip: !databaseUrl }, async () => {
+  const proxyLimit = 70 * 1024 * 1024;
+  const priorLimit = process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+  try {
+    await native.initializeOpenappa(databaseUrl, 2);
+    const text = 'x'.repeat(100_000);
+    const withheld = '[appa] the result was not carried; nothing was admitted';
+    const report = async (policyText, output) => {
+      const session = { organization_id: `native-body-cap-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() };
+      const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policyText)));
+      assert.equal((await hook({ event: 'tool_call', operation_id: 'call:1', tool: 'read', arguments: {} })).decision, 'allow_call');
+      return hook({ event: 'tool_result', tool_call_id: '1', output, outcome: 'success' });
+    };
+    const carried = async (policyText, output) => {
+      const kept = await report(policyText, output);
+      assert.equal(kept.decision, 'ack');
+      assert.equal(kept.approved_output, output);
+    };
+    process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = String(proxyLimit);
+    // Without an explicit cap, results use the published proxy limit. A policy can
+    // also choose a cap above that default without changing the proxy request limit.
+    for (const stated of ['', 'max_body_bytes = 999999999999\n']) {
+      const policyText = stated ? `${allow}[externals]\ntimeout_ms = 2000\n${stated}` : allow;
+      await carried(policyText, text);
+      await carried(policyText, 'x'.repeat(5 * 1024 * 1024));
+    }
+    for (const limit of [4096, 65536]) {
+      const policyText = `${allow}[externals]\nmax_body_bytes = ${limit}\n`;
+      await carried(policyText, 'x'.repeat(limit));
+      const dropped = await report(policyText, 'x'.repeat(limit + 1));
+      assert.equal(dropped.decision, 'replace_output');
+      assert.equal(dropped.approved_output, withheld);
+    }
+    // A policy keeps its stated limit even without a published host default.
+    delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+    const stated = `${allow}[externals]\ntimeout_ms = 2000\nmax_body_bytes = 65536\n`;
+    const dropped = await report(stated, text);
+    assert.equal(dropped.decision, 'replace_output');
+    assert.equal(dropped.approved_output, withheld);
+    await carried(allow, 'x'.repeat(1000));
+  } finally {
+    if (priorLimit === undefined) delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+    else process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = priorLimit;
+  }
+});
+
+test('a long kept result is stored once, and a row that holds the text twice still replays', { skip: !databaseUrl }, async () => {
+  const proxyLimit = String(70 * 1024 * 1024);
+  const prior = process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+  process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = proxyLimit;
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    await native.initializeOpenappa(databaseUrl, 2);
+    const session = { organization_id: `native-stored-once-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() };
+    const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(allow)));
+    const column = async (id) => (await client.query(
+      'SELECT approved_output, decision FROM openappa_processed_results WHERE organization_id=$1 AND session_id=$2 AND tool_call_id=$3',
+      [session.organization_id, session.session_id, id],
+    )).rows[0];
+    const text = 'long result '.repeat(2000);
+    const short = 'short result';
+    for (const [id, output] of [['long', text], ['short', short]]) {
+      assert.equal((await hook({ event: 'tool_call', operation_id: `call:${id}`, tool: 'read', arguments: {} })).decision, 'allow_call');
+      const first = await hook({ event: 'tool_result', tool_call_id: id, output, outcome: 'success' });
+      assert.equal(first.approved_output, output);
+    }
+    const long = await column('long');
+    // The decision keeps the text; the column holds its digest.
+    assert.equal(long.decision.approved_output, text);
+    assert.equal(long.approved_output, `sha256:${createHash('sha256').update(text).digest('hex')}`);
+    assert.equal((await column('short')).approved_output, short);
+    // A replay answers from the decision.
+    const replay = await hook({ event: 'tool_result', tool_call_id: 'long', output: text, outcome: 'success' });
+    assert.equal(replay.approved_output, text);
+    // A row written before the column held a digest keeps the text in both places and replays the same.
+    await client.query(
+      'UPDATE openappa_processed_results SET approved_output=$4 WHERE organization_id=$1 AND session_id=$2 AND tool_call_id=$3',
+      [session.organization_id, session.session_id, 'long', text],
+    );
+    const legacy = await hook({ event: 'tool_result', tool_call_id: 'long', output: text, outcome: 'success' });
+    assert.deepEqual(legacy, replay);
+  } finally {
+    await client.end();
+    if (prior === undefined) delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+    else process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = prior;
+  }
 });

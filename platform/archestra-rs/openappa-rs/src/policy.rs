@@ -19,9 +19,34 @@ pub(crate) const CONSULT_TIMEOUT: Duration = Duration::from_millis(5000);
 fn defaults() -> HostDefaults {
     HostDefaults {
         archestra: archestra_endpoint(),
-        ..HostDefaults::new(CONSULT_TIMEOUT, 65536)
+        ..HostDefaults::new(CONSULT_TIMEOUT, host_max_body_bytes())
     }
 }
+
+/// The default body size limit for a policy that omits `max_body_bytes`: the LLM proxy's
+/// limit, published by the backend before it crosses into the addon. Explicit policy
+/// limits take precedence for external responses and carried tool results.
+///
+/// A process that has not published a value (a standalone script, a test), or published
+/// one that is not a positive integer, keeps the policy's stated value or uses
+/// [`FALLBACK_MAX_BODY_BYTES`] when the policy states none.
+fn published_max_body_bytes() -> Option<usize> {
+    parse_max_body_bytes(std::env::var(MAX_BODY_BYTES_ENV).ok().as_deref())
+}
+
+/// What a policy that states none gets, where the host publishes nothing.
+pub(crate) fn host_max_body_bytes() -> usize {
+    published_max_body_bytes().unwrap_or(FALLBACK_MAX_BODY_BYTES)
+}
+
+fn parse_max_body_bytes(published: Option<&str>) -> Option<usize> {
+    published
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|bytes| *bytes > 0)
+}
+
+const MAX_BODY_BYTES_ENV: &str = "APPA_ARCHESTRA_MAX_BODY_BYTES";
+const FALLBACK_MAX_BODY_BYTES: usize = 65536;
 
 /// Where a `builtin = "archestra"` annotator posts its rendered prompt: the backend's own
 /// route, behind the same per-process bearer the helper bridge checks. The host publishes
@@ -125,6 +150,7 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
     .map_err(|error| error.to_string())?;
     let content = String::from_utf8(config.policy_file().bytes().to_vec())
         .map_err(|error| error.to_string())?;
+    let content = strip_default_result_cap(&document, content)?;
     let credentials = config.credentials().clone();
     Runtime::check_hosted(config, None, crate::adapter::adapter())
         .map_err(|error| error.to_string())?;
@@ -132,6 +158,30 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         content,
         credentials,
     })
+}
+
+/// The composed text is stored and compiled again at every dispatch, and that compile
+/// gives a text that leaves `max_body_bytes` out the host's current default. A default
+/// the composition materialised would freeze the value of the day it was composed, so a
+/// root that states none leaves it out of the stored text. A stated value stays.
+fn strip_default_result_cap(root: &toml::Table, content: String) -> Result<String, String> {
+    let stated = root
+        .get("externals")
+        .and_then(toml::Value::as_table)
+        .is_some_and(|externals| externals.contains_key("max_body_bytes"));
+    if stated {
+        return Ok(content);
+    }
+    let mut document = content
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|error| error.to_string())?;
+    if let Some(externals) = document
+        .get_mut("externals")
+        .and_then(toml_edit::Item::as_table_mut)
+    {
+        externals.remove("max_body_bytes");
+    }
+    Ok(document.to_string())
 }
 
 /// A battery's policy as the host serves it, and the credential variables it reads.
@@ -303,6 +353,13 @@ mod tests {
     use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
 
     const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_OPENAPPA_RS_TEST_BRIDGE_TOKEN";
+
+    /// The text a stored composition reloads as, less the result cap the host adds.
+    fn reloaded_without_result_cap(content: &str) -> String {
+        let reloaded =
+            String::from_utf8(compile(content).unwrap().policy_file().bytes().to_vec()).unwrap();
+        strip_default_result_cap(&toml::Table::new(), reloaded).unwrap()
+    }
 
     /// A compilation no organization's values reach, as a composition's is.
     fn compile(content: &str) -> Result<Config, String> {
@@ -688,16 +745,10 @@ delta = {{}}
             document["server_aliases"]["github"][0].as_str(),
             Some("github_prod")
         );
-        // The stored bytes are a hosted document: they reload as they are.
+        // The stored bytes are a hosted document: they reload as they are, with the
+        // host's result cap added.
         assert_eq!(
-            String::from_utf8(
-                compile(&composed.content)
-                    .unwrap()
-                    .policy_file()
-                    .bytes()
-                    .to_vec()
-            )
-            .unwrap(),
+            reloaded_without_result_cap(&composed.content),
             composed.content
         );
 
@@ -767,11 +818,9 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
                 .map(Vec::len),
             Some(1)
         );
-        // The composed bytes are a hosted document: they reload as they are.
-        assert_eq!(
-            String::from_utf8(compile(&composed).unwrap().policy_file().bytes().to_vec()).unwrap(),
-            composed
-        );
+        // The composed bytes are a hosted document: they reload as they are, with the
+        // host's result cap added.
+        assert_eq!(reloaded_without_result_cap(&composed), composed);
         // An unbound helper keeps its command, which a hosted document refuses.
         let unbound = ResolvedBattery {
             helpers: None,
@@ -826,6 +875,11 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             .is_err()
         );
         assert!(validate("[policy\n").is_err());
+        for limit in ["0", "-1", "\"65536\""] {
+            let invalid = format!("[policy]\nversion = 2\n[externals]\nmax_body_bytes = {limit}\n");
+            assert!(validate(&invalid).is_err(), "{invalid}");
+            assert!(compile(&invalid).is_err(), "{invalid}");
+        }
     }
 
     #[test]
@@ -925,5 +979,100 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             String::from_utf8_lossy(config.policy_file().bytes())
                 .contains("https://example.com/review")
         );
+    }
+
+    #[test]
+    fn the_published_proxy_limit_is_the_host_default() {
+        assert_eq!(parse_max_body_bytes(Some("73400320")), Some(73_400_320));
+        assert_eq!(parse_max_body_bytes(Some(" 1048576 ")), Some(1_048_576));
+    }
+
+    #[test]
+    fn no_host_default_without_a_usable_published_value() {
+        for published in [None, Some(""), Some("0"), Some("-5"), Some("70MB")] {
+            assert_eq!(parse_max_body_bytes(published), None);
+        }
+    }
+
+    #[test]
+    fn a_stated_body_limit_survives_compilation_composition_and_reload() {
+        for limit in [4096, 65536, 999999999] {
+            let stated = format!(
+                "[policy]\nversion = 2\n[externals]\nmax_body_bytes = {limit}\ntimeout_ms = 1234\n"
+            );
+            let config = compile(&stated).unwrap();
+            assert_eq!(config.externals.max_body_bytes, limit);
+            assert_eq!(config.externals.timeout, Duration::from_millis(1234));
+            let composed = compose(&stated, &[]).unwrap();
+            let document: toml::Table = toml::from_str(&composed.content).unwrap();
+            assert_eq!(
+                document["externals"]["max_body_bytes"].as_integer(),
+                Some(limit as i64)
+            );
+            let reloaded = compile(&composed.content).unwrap();
+            assert_eq!(reloaded.externals.max_body_bytes, limit);
+            assert_eq!(reloaded.externals.timeout, Duration::from_millis(1234));
+        }
+    }
+
+    #[test]
+    fn an_unstated_body_limit_uses_the_host_default_without_freezing_it_in_storage() {
+        let content = "[policy]\nversion = 2\n";
+        let unstated = compile(content).unwrap();
+        assert_eq!(unstated.externals.max_body_bytes, host_max_body_bytes());
+        let composed = compose(content, &[]).unwrap();
+        let document: toml::Table = toml::from_str(&composed.content).unwrap();
+        assert!(document["externals"].get("max_body_bytes").is_none());
+        assert_eq!(
+            compile(&composed.content).unwrap().externals.max_body_bytes,
+            host_max_body_bytes()
+        );
+    }
+
+    #[tokio::test]
+    async fn an_explicit_limit_caps_carried_tool_results_by_utf8_bytes() {
+        use appa_runtime_api::{OutcomeBody, ToolOutcome};
+
+        let runtime = memory_runtime(
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = 'read'\ndelta = {}\n[externals]\nmax_body_bytes = 64\n",
+        );
+        let actor = started(&runtime, "body-cap").await;
+        for output in [
+            "x".repeat(64),
+            "x".repeat(65),
+            "\u{e9}".repeat(32),
+            "\u{e9}".repeat(33),
+        ] {
+            let event = call(&actor, "read");
+            assert!(matches!(
+                hooks::handle(&runtime, event.clone()).await,
+                HookDecision::AllowCall { .. }
+            ));
+            let HookEvent::ToolCall { call, call_id, .. } = event else {
+                unreachable!();
+            };
+            let expected = if output.len() <= 64 {
+                HookDecision::Ack
+            } else {
+                HookDecision::ReplaceOutput {
+                    output: "[appa] the result was not carried; nothing was admitted".into(),
+                }
+            };
+            assert_eq!(
+                hooks::handle(
+                    &runtime,
+                    HookEvent::ToolResult {
+                        actor: actor.clone(),
+                        call,
+                        call_id,
+                        outcome: ToolOutcome::Success {
+                            body: OutcomeBody::Available(output),
+                        },
+                    },
+                )
+                .await,
+                expected
+            );
+        }
     }
 }

@@ -1242,17 +1242,31 @@ describe("chat model routes", () => {
         recentlyAttempted: false,
       }),
     ).toBe(true);
+  });
 
-    // recentlyAttempted never rescues a key whose linked models have aged out
+  test("isModelSyncStateStale spares aged-out keys whose sync just failed", () => {
+    const now = new Date("2026-05-28T12:00:00.000Z");
+    const agedOut = {
+      linkedModelCount: 1,
+      oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
+    };
+
+    // a failed sync leaves the old links in place; without the attempt marker
+    // every request would re-sync against the provider
     expect(
       isModelSyncStateStale({
         provider: "openrouter",
         now,
-        syncState: {
-          linkedModelCount: 1,
-          oldestLastSyncedAt: new Date(now.getTime() - 2 * TimeInMs.Hour),
-        },
+        syncState: agedOut,
         recentlyAttempted: true,
+      }),
+    ).toBe(false);
+    expect(
+      isModelSyncStateStale({
+        provider: "openrouter",
+        now,
+        syncState: agedOut,
+        recentlyAttempted: false,
       }),
     ).toBe(true);
   });

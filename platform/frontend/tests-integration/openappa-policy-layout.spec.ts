@@ -9,7 +9,7 @@ for (const viewport of [
   test.describe(`OpenAPPA at ${viewport.width}px`, () => {
     test.use({ viewport });
 
-    test("shows the read-only policy and keeps the GitHub form padded and its actions reachable", async ({
+    test("shows the read-only policy and keeps the Git setup dialog padded and its actions reachable", async ({
       page,
       mswControl,
       request,
@@ -181,49 +181,43 @@ for (const viewport of [
         path: testInfo.outputPath("policy-source.png"),
         fullPage: true,
       });
-      await page.goto("/openappa");
+      // Git sync and enforcement live in Settings → Guardrails.
+      await page.goto("/settings/guardrails");
       await expect(
         page.getByRole("switch", { name: "Enforce the policy" }),
       ).toBeVisible();
-      await page
-        .getByRole("button", { name: "Create repository", exact: true })
-        .click();
-      await page
-        .getByRole("dialog", { name: "Create OpenAPPA repository" })
-        .getByRole("button", { name: "Connect existing repository" })
-        .click();
-      const dialog = page.getByRole("dialog", {
-        name: "Connect OpenAPPA to GitHub",
-      });
-      await expect(dialog).toBeVisible();
-      await dialog
-        .getByLabel("Repository", { exact: true })
-        .fill("example/policies");
+      await page.getByRole("button", { name: "Set up Git sync" }).click();
+      // The title follows the step, so hold the dialog by its role.
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toHaveAccessibleName("Set up Git sync");
+      // Measure the settled dialog, not a frame of its zoom-in animation.
+      await dialog.evaluate((element) =>
+        Promise.all(element.getAnimations().map((a) => a.finished)),
+      );
+      const choice = dialog.getByRole("button", { name: /^GitHub/ });
       const bounds = await dialog.boundingBox();
-      const input = await dialog
-        .getByLabel("Repository", { exact: true })
-        .boundingBox();
-      if (!bounds || !input)
-        throw new Error("Dialog and repository must be rendered");
-      // Catch the reported edge-to-edge form and oversized modal in actual layout.
-      expect(bounds.x).toBeGreaterThanOrEqual(12);
-      expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width - 12);
-      expect(bounds.width).toBeLessThanOrEqual(600);
-      expect(input.x - bounds.x).toBeGreaterThanOrEqual(12);
+      const card = await choice.boundingBox();
+      if (!bounds || !card)
+        throw new Error("Dialog and its choices must be rendered");
+      // Dialogs fill a phone's width and cap at 672px (max-w-2xl) elsewhere;
+      // either way the modal stays on screen and its content keeps a gutter.
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width);
+      expect(bounds.width).toBeLessThanOrEqual(672);
+      expect(card.x - bounds.x).toBeGreaterThanOrEqual(12);
       expect(
-        bounds.x + bounds.width - input.x - input.width,
+        bounds.x + bounds.width - card.x - card.width,
       ).toBeGreaterThanOrEqual(12);
-      await dialog.getByLabel("Sync frequency").scrollIntoViewIfNeeded();
+      await choice.click();
+      await expect(dialog).toHaveAccessibleName("Set up Git sync");
       await expect(
-        dialog.getByRole("button", { name: "Save source and sync" }),
-      ).toBeInViewport();
+        dialog.getByRole("button", { name: /Use an existing repository/ }),
+      ).toBeVisible();
       await expect(
         dialog.getByRole("button", { name: "Cancel", exact: true }),
       ).toBeInViewport();
       await page.screenshot({ path: testInfo.outputPath("github-dialog.png") });
       await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-      // The repository field holds an unsaved value, so Cancel asks first.
-      await page.getByRole("button", { name: "Discard changes" }).click();
       await expect(dialog).toBeHidden();
       await page.goto("/openappa/policy");
       await expect(

@@ -5,8 +5,8 @@ import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CircleHelpIcon,
   Loader2,
-  XIcon,
 } from "lucide-react";
 import {
   type KeyboardEvent,
@@ -15,12 +15,6 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-} from "@/components/ai-elements/tool";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils/tailwind";
@@ -37,21 +31,20 @@ import {
   isSingleChoiceForm,
   normalizeValues,
 } from "./mcp-elicitation-fields";
-import { parseReviewPresentation } from "./openappa-review-presentation";
-
-/**
- * Long enough for the picked row to visibly highlight before the next
- * question replaces it, short enough not to read as lag.
- */
-const AUTO_ADVANCE_DELAY_MS = 300;
+import {
+  getReviewDecisionContent,
+  getReviewDecisionField,
+  type ReviewDecision,
+} from "./openappa-review-presentation";
+import { OpenappaReviewToolCard } from "./openappa-review-tool-card";
 
 /**
  * Displays pending multiple-choice questions in one inline card with one tab per question.
- * Selecting an option on a single-choice tab answers it and advances to the next tab.
- * Multiple-choice tabs advance when the user clicks Next.
+ * A lone single-choice question is answered by the click itself, with Skip
+ * to dismiss; a typed answer comes from the chat composer instead.
+ * With several questions, picking an option only selects it: Next moves on.
  * Navigation buttons appear in the footer of each tab.
  * The Submit button on the final tab sends all answers when every question is answered.
- * The close button in the header dismisses the questions.
  * New questions append as tabs without resetting selections.
  * If a displayed question leaves, the card switches to an adjacent tab.
  */
@@ -77,11 +70,11 @@ export function McpElicitationCard({
     Record<string, ChatMcpElicitationRequest>
   >(() => Object.fromEntries(requests.map((request) => [request.id, request])));
   const [activeId, setActiveId] = useState<string | null>(null);
-  // Questions whose "Other" answer is open; its text box shows only then.
+  // Questions whose "Type something" answer is open; its text box shows only then.
   const [otherOpenById, setOtherOpenById] = useState<Record<string, boolean>>(
     {},
   );
-  // Request whose just-opened "Other" box takes focus after it renders.
+  // Request whose just-opened "Type something" box takes focus after it renders.
   const focusOtherRef = useRef<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAwaitingResults, setIsAwaitingResults] = useState(false);
@@ -91,13 +84,10 @@ export function McpElicitationCard({
   const submissionSnapshotRef = useRef<ChatMcpElicitationRequest[] | null>(
     null,
   );
-  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Read by delayed auto-advance to inspect current tabs when the timer fires.
-  const questionIdsRef = useRef<string[]>([]);
   // Move focus to the active question so keyboard users stay focused after tab changes.
   const focusPanelOnChangeRef = useRef(false);
-  // Clicking an option answers a single-choice tab and advances. Moving
-  // between options with arrow keys selects the option without advancing.
+  // A pointer-opened "Type something" box takes focus; a keyboard user's
+  // focus stays where it is.
   const lastInputRef = useRef<"pointer" | "keyboard">("pointer");
   // Tracks if focus was inside the card, even if a focused control unmounts.
   const focusWithinRef = useRef(false);
@@ -217,7 +207,6 @@ export function McpElicitationCard({
       isPending: pendingRequestIds.has(request.id),
     };
   });
-  questionIdsRef.current = questions.map((question) => question.request.id);
 
   const hasUserAnswers = Object.keys(valuesById).length > 0;
   const userHasNavigated = userSelectedTabRef.current || hasUserAnswers;
@@ -238,15 +227,21 @@ export function McpElicitationCard({
     pendingQuestions.length > 0 &&
     pendingQuestions.every((question) => question.isAnswered);
   const activeRequestId = activeQuestion?.request.id;
-
-  useEffect(
-    () => () => {
-      if (advanceTimerRef.current) {
-        clearTimeout(advanceTimerRef.current);
-      }
-    },
-    [],
-  );
+  // A lone OpenAPPA review renders as a tool approval card: its own
+  // Approve/Deny row replaces the card header, fields, and footer.
+  const isSingleReview =
+    !allMembersSettled &&
+    !isMultiple &&
+    activeQuestion?.request.kind === "openappa_review";
+  // A lone single pick answers on click; its typed answer comes from the chat
+  // composer. A pick kept after its answer failed to save is retried by
+  // pressing it again.
+  const answersOnClick = (question: CardQuestion) =>
+    !isMultiple && question.isPending && isSingleChoiceForm(question.fields);
+  const answersOnClickOnly =
+    activeQuestion !== undefined &&
+    answersOnClick(activeQuestion) &&
+    otherOpenById[activeQuestion.request.id] !== true;
 
   useEffect(() => {
     if (allMembersSettled) {
@@ -302,15 +297,7 @@ export function McpElicitationCard({
     return null;
   }
 
-  const cancelAutoAdvance = () => {
-    if (advanceTimerRef.current) {
-      clearTimeout(advanceTimerRef.current);
-      advanceTimerRef.current = null;
-    }
-  };
-
   const showQuestion = (id: string, options?: { focusPanel?: boolean }) => {
-    cancelAutoAdvance();
     focusPanelOnChangeRef.current = options?.focusPanel ?? false;
     userSelectedTabRef.current = true;
     setActiveId(id);
@@ -320,35 +307,6 @@ export function McpElicitationCard({
     const question = questions[index];
     if (question) {
       showQuestion(question.request.id, { focusPanel: true });
-    }
-  };
-
-  const scheduleAutoAdvance = (fromId: string) => {
-    cancelAutoAdvance();
-    advanceTimerRef.current = setTimeout(() => {
-      advanceTimerRef.current = null;
-      const ids = questionIdsRef.current;
-      const index = ids.indexOf(fromId);
-      if (index === -1 || index === ids.length - 1) {
-        return;
-      }
-      focusPanelOnChangeRef.current = true;
-      userSelectedTabRef.current = true;
-      setActiveId((current) =>
-        (current ?? ids[0]) === fromId ? ids[index + 1] : current,
-      );
-    }, AUTO_ADVANCE_DELAY_MS);
-  };
-
-  // A click on an option answers a single-choice tab, even a click on the
-  // option already picked (going back to a tab to confirm its answer).
-  const advanceOnPick = (question: CardQuestion) => {
-    if (
-      isMultiple &&
-      isSingleChoiceForm(question.fields) &&
-      lastInputRef.current === "pointer"
-    ) {
-      scheduleAutoAdvance(question.request.id);
     }
   };
 
@@ -364,7 +322,7 @@ export function McpElicitationCard({
     const { request, fields } = question;
     const other = fields.find(isOtherTextField);
     const typed = other?.name === fieldName;
-    // A single pick and "Other" are alternatives: choosing one clears the other.
+    // A single pick and "Type something" are alternatives: choosing one clears the other.
     const cleared =
       other && isSingleChoiceForm(fields) && (!typed || value !== "")
         ? Object.fromEntries(
@@ -384,14 +342,10 @@ export function McpElicitationCard({
     if (other && isSingleChoiceForm(fields) && !typed) {
       setOtherOpen({ question, open: false });
     }
-    // Typing never advances, and stops an advance a pick just scheduled;
-    // Next or Submit sends the text.
-    if (typed) cancelAutoAdvance();
-    else advanceOnPick(question);
   };
 
   /**
-   * Opening "Other" on a single pick replaces the pick; closing it drops the
+   * Opening "Type something" on a single pick replaces the pick; closing it drops the
    * typed text, so only what is on screen is sent.
    */
   const setOtherOpen = ({
@@ -404,7 +358,6 @@ export function McpElicitationCard({
     const { request, fields } = question;
     const other = fields.find(isOtherTextField);
     if (!other) return;
-    cancelAutoAdvance();
     const cleared = open
       ? isSingleChoiceForm(fields)
         ? Object.fromEntries(
@@ -430,7 +383,6 @@ export function McpElicitationCard({
   const respondToAll = async (
     buildResponse: (question: CardQuestion) => ElicitationResponse,
   ) => {
-    cancelAutoAdvance();
     // Freeze only questions the backend is still waiting on. Already-settled
     // or acknowledged members stay out so a later dismiss cannot resurrect them.
     submissionSnapshotRef.current = pendingQuestions.map(
@@ -452,6 +404,45 @@ export function McpElicitationCard({
     }
   };
 
+  /**
+   * A lone single pick shows its options as buttons, and pressing one
+   * answers at once, by pointer or keyboard. The picked value is sent
+   * directly: state set by the same press has not rendered yet.
+   */
+  const pickOption = ({
+    question,
+    fieldName,
+    value,
+  }: {
+    question: CardQuestion;
+    fieldName: string;
+    value: string;
+  }) => {
+    if (!answersOnClick(question) || isSubmitting) {
+      return;
+    }
+    const values = {
+      ...Object.fromEntries(question.fields.map((field) => [field.name, ""])),
+      [fieldName]: value,
+    };
+    void respondToAll(({ request, fields }) => ({
+      id: request.id,
+      action: "accept",
+      content: normalizeValues(fields, values),
+    }));
+  };
+
+  /**
+   * Leaves the questions unanswered. Skip is the user's own choice, so it reads
+   * as a dismissal: decline would tell the model the form never reached them.
+   */
+  const skip = () => {
+    if (isSubmitting || pendingQuestions.length === 0) {
+      return;
+    }
+    void respondToAll(({ request }) => ({ id: request.id, action: "cancel" }));
+  };
+
   const submit = () => {
     if (!allAnswered || isSubmitting || pendingQuestions.length === 0) {
       return;
@@ -463,32 +454,75 @@ export function McpElicitationCard({
     }));
   };
 
-  const dismiss = () => {
+  /**
+   * Approve/Deny answer the review with the same content its form did. A
+   * review that is the only pending question submits at once; among other
+   * questions it records the pick, like a radio, and Submit sends all.
+   */
+  const decideReview = (question: CardQuestion, decision: ReviewDecision) => {
+    if (isSubmitting || !question.isPending) {
+      return;
+    }
+    const othersPending = pendingQuestions.some(
+      (pending) => pending.request.id !== question.request.id,
+    );
+    if (othersPending) {
+      setFieldValue({
+        question,
+        fieldName: getReviewDecisionField(question.request.requestedSchema),
+        value: decision,
+      });
+      return;
+    }
     void respondToAll(({ request }) => ({
       id: request.id,
-      action: "cancel",
+      action: "accept",
+      content: getReviewDecisionContent({
+        requestedSchema: request.requestedSchema,
+        decision,
+      }),
     }));
   };
 
-  // Enter on a picked option confirms it, like the click that auto-advances.
-  // Escape on an option or tab dismisses the pending questions.
+  const renderReview = (question: CardQuestion) => {
+    const picked =
+      question.values[getReviewDecisionField(question.request.requestedSchema)];
+    return (
+      <OpenappaReviewToolCard
+        id={questionMessageId(question.request.id)}
+        message={question.request.message}
+        reviewedTool={question.request.reviewedTool}
+        reviewedArguments={question.request.reviewedArguments}
+        disabled={isSubmitting || !question.isPending}
+        secondaryText={
+          isSubmitting ? (
+            <span>Saving answer...</span>
+          ) : picked === "approve" || picked === "deny" ? (
+            <span>Selected: {picked === "approve" ? "Approve" : "Deny"}</span>
+          ) : undefined
+        }
+        onDecide={(decision) => decideReview(question, decision)}
+      />
+    );
+  };
+
+  // Enter on a picked option confirms it, like Next or Submit.
   const handleKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
     lastInputRef.current = "keyboard";
     const role =
       event.target instanceof HTMLElement
         ? event.target.getAttribute("role")
         : null;
+    // In the typed answer, Enter sends like the chat composer; Shift+Enter
+    // adds a line, and Enter that confirms an IME composition is left alone.
+    const sendsTypedAnswer =
+      event.target instanceof HTMLTextAreaElement &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing;
     if (
-      event.key === "Escape" &&
-      (role === "radio" || role === "checkbox" || role === "tab") &&
-      !isSubmitting &&
-      pendingQuestions.length > 0
+      event.key !== "Enter" ||
+      (role !== "radio" && role !== "checkbox" && !sendsTypedAnswer)
     ) {
-      event.preventDefault();
-      dismiss();
-      return;
-    }
-    if (event.key !== "Enter" || (role !== "radio" && role !== "checkbox")) {
       return;
     }
     event.preventDefault();
@@ -526,9 +560,13 @@ export function McpElicitationCard({
         onChange={(value) =>
           setFieldValue({ question, fieldName: field.name, value })
         }
-        onPick={() => advanceOnPick(question)}
+        onPick={(value) =>
+          pickOption({ question, fieldName: field.name, value })
+        }
+        submitsOnPick={answersOnClick(question)}
         other={
-          otherField && singlePick
+          // The chat composer takes a lone question's typed answer.
+          otherField && singlePick && !answersOnClick(question)
             ? {
                 selected: otherOpen,
                 onSelect: () => setOtherOpen({ question, open: true }),
@@ -568,7 +606,6 @@ export function McpElicitationCard({
           onChange={(value) =>
             setFieldValue({ question, fieldName: otherField.name, value })
           }
-          onFocus={cancelAutoAdvance}
         />,
       );
     }
@@ -577,65 +614,44 @@ export function McpElicitationCard({
     ) : (
       <fieldset
         aria-labelledby={questionId}
-        className="flex min-w-0 flex-col gap-4"
+        className="flex min-w-0 flex-col gap-1.5"
       >
         {inputs}
       </fieldset>
     );
   };
 
-  const header = (
-    <div
-      className={cn(
-        "flex items-center gap-3",
-        isMultiple ? "px-4 pt-3" : "absolute right-2 top-2 z-10",
-      )}
-    >
-      {isMultiple ? (
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-          <span className="sr-only">Question </span>
-          {activeIndex + 1} of {questions.length}
-        </span>
-      ) : null}
-      {isMultiple ? (
-        <TabsList
-          size="sm"
-          aria-label="Questions"
-          className="h-7 min-w-0 justify-start overflow-x-auto"
-        >
-          {questions.map((question, index) => (
-            <TabsTrigger
-              key={question.request.id}
-              value={question.request.id}
-              data-testid={`mcp-elicitation-tab-${index}`}
-              className="max-w-40 flex-none gap-1"
-            >
-              {question.isAnswered ? (
-                <CheckIcon className="size-3 text-emerald-600" aria-hidden />
-              ) : null}
-              <span className="min-w-0 truncate">{question.label}</span>
-              {question.isAnswered ? (
-                <span className="sr-only">(answered)</span>
-              ) : null}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      ) : null}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={isMultiple ? "Dismiss questions" : "Dismiss question"}
-        title={isMultiple ? "Dismiss questions" : "Dismiss question"}
-        data-testid="mcp-elicitation-dismiss"
-        disabled={isSubmitting || pendingQuestions.length === 0}
-        onClick={dismiss}
-        className="ml-auto shrink-0 text-muted-foreground hover:text-foreground"
+  // Tabs only matter with several questions; a single one needs no header.
+  const header = isMultiple ? (
+    <div className="flex items-center gap-3 px-4 pt-3">
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+        <span className="sr-only">Question </span>
+        {activeIndex + 1} of {questions.length}
+      </span>
+      <TabsList
+        size="sm"
+        aria-label="Questions"
+        className="h-7 min-w-0 justify-start overflow-x-auto"
       >
-        <XIcon aria-hidden />
-      </Button>
+        {questions.map((question, index) => (
+          <TabsTrigger
+            key={question.request.id}
+            value={question.request.id}
+            data-testid={`mcp-elicitation-tab-${index}`}
+            className="max-w-40 flex-none gap-1"
+          >
+            {question.isAnswered ? (
+              <CheckIcon className="size-3 text-emerald-600" aria-hidden />
+            ) : null}
+            <span className="min-w-0 truncate">{question.label}</span>
+            {question.isAnswered ? (
+              <span className="sr-only">(answered)</span>
+            ) : null}
+          </TabsTrigger>
+        ))}
+      </TabsList>
     </div>
-  );
+  ) : null;
 
   return (
     <form
@@ -651,16 +667,9 @@ export function McpElicitationCard({
       }
       className={cn(
         "not-prose relative mb-4 w-full overflow-hidden rounded-lg",
-        allMembersSettled
-          ? "max-w-2xl"
-          : "border border-border/60 bg-card shadow-sm",
         !allMembersSettled &&
-          (isMultiple || activeQuestion?.request.kind === "openappa_review") &&
-          "max-w-4xl",
-        !allMembersSettled &&
-          !isMultiple &&
-          activeQuestion?.request.kind !== "openappa_review" &&
-          "max-w-2xl",
+          !isSingleReview &&
+          "border border-border/60 bg-card shadow-sm",
       )}
       onPointerDown={() => {
         lastInputRef.current = "pointer";
@@ -689,7 +698,9 @@ export function McpElicitationCard({
         >
           {header}
           {settledMembers.length > 0 && !shouldHoldSubmissionSnapshot ? (
-            <AnswerSummary members={settledMembers} label="Saved answers" />
+            <div className="px-4 pt-3">
+              <AnswerSummary members={settledMembers} label="Saved answers" />
+            </div>
           ) : null}
           {questions.map((question) => (
             <TabsContent
@@ -697,24 +708,34 @@ export function McpElicitationCard({
               value={question.request.id}
               className="flex min-w-0 flex-col gap-4 p-4"
             >
-              <ElicitationMessage request={question.request} />
-              {renderFields(question)}
+              {question.request.kind === "openappa_review" ? (
+                renderReview(question)
+              ) : (
+                <>
+                  <ElicitationMessage request={question.request} />
+                  {renderFields(question)}
+                </>
+              )}
             </TabsContent>
           ))}
         </Tabs>
+      ) : isSingleReview ? (
+        renderReview(activeQuestion)
       ) : (
         <>
           {header}
           {settledMembers.length > 0 && !shouldHoldSubmissionSnapshot ? (
-            <AnswerSummary members={settledMembers} label="Saved answers" />
+            <div className="px-4 pt-3">
+              <AnswerSummary members={settledMembers} label="Saved answers" />
+            </div>
           ) : null}
-          <div className="flex min-w-0 flex-col gap-3 px-4 pb-3 pt-4 [&>p:first-child]:pr-8 [&>p:first-child]:font-medium">
+          <div className="flex min-w-0 flex-col gap-3 px-4 pb-3 pt-4 [&>p:first-child]:font-medium">
             <ElicitationMessage request={activeQuestion.request} />
             {renderFields(activeQuestion)}
           </div>
         </>
       )}
-      {!allMembersSettled ? (
+      {!allMembersSettled && !isSingleReview ? (
         <div
           data-testid="mcp-elicitation-footer"
           className={cn(
@@ -747,6 +768,16 @@ export function McpElicitationCard({
             <span className="text-xs text-muted-foreground">
               Waiting for answers...
             </span>
+          ) : answersOnClickOnly ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-testid="mcp-elicitation-skip"
+              onClick={skip}
+            >
+              Skip
+            </Button>
           ) : isLastTab ? (
             <Button
               key="submit"
@@ -787,58 +818,13 @@ function ElicitationMessage({
 }: {
   request: ChatMcpElicitationRequest;
 }) {
-  const id = questionMessageId(request.id);
-  if (request.kind !== "openappa_review") {
-    return (
-      <p
-        id={id}
-        className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
-      >
-        {request.message}
-      </p>
-    );
-  }
-
-  const presentation = parseReviewPresentation({
-    message: request.message,
-    reviewedTool: request.reviewedTool,
-    reviewedArguments: request.reviewedArguments,
-  });
-  const toolType = `tool-${presentation.tool ?? "call"}` as const;
-
   return (
-    <div id={id} className="flex min-w-0 flex-col gap-3">
-      {presentation.intro ? (
-        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
-          {presentation.intro}
-        </p>
-      ) : null}
-      {presentation.tool || presentation.arguments !== undefined ? (
-        <Tool defaultOpen className="mb-0">
-          <ToolHeader
-            type={toolType}
-            state="approval-requested"
-            title={presentation.tool}
-            isCollapsible={false}
-            statusLabel="Needs review"
-          />
-          {presentation.arguments !== undefined ? (
-            <ToolContent>
-              <ToolInput input={presentation.arguments} />
-            </ToolContent>
-          ) : null}
-        </Tool>
-      ) : (
-        <p className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]">
-          {request.message}
-        </p>
-      )}
-      {presentation.rest ? (
-        <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground [overflow-wrap:anywhere]">
-          {presentation.rest}
-        </p>
-      ) : null}
-    </div>
+    <p
+      id={questionMessageId(request.id)}
+      className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
+    >
+      {request.message}
+    </p>
   );
 }
 
@@ -852,6 +838,11 @@ type CardQuestion = {
   isPending: boolean;
 };
 
+/**
+ * Settled questions read as the exchange they were: the agent's question on
+ * the left, in line with the thinking rows, and the answer on the right as a
+ * small reply bubble. Questions without an answer show their outcome there.
+ */
 function AnswerSummary({
   members,
   label = "Answers",
@@ -860,30 +851,30 @@ function AnswerSummary({
   label?: string;
 }) {
   return (
-    <ul
-      aria-label={label}
-      className="flex min-w-0 flex-col gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2"
-    >
+    <ul aria-label={label} className="flex min-w-0 flex-col gap-4">
       {members.map((member) => (
-        <li
-          key={member.toolCallId}
-          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs leading-5"
-        >
-          {member.outcome?.status === "answered" ? (
-            <CheckIcon
-              className="size-3.5 shrink-0 text-emerald-600"
+        <li key={member.toolCallId} className="flex min-w-0 flex-col gap-2">
+          <div className="flex min-w-0 items-start gap-2 pl-2">
+            <CircleHelpIcon
+              className="mt-1 size-4 shrink-0 text-muted-foreground"
               aria-hidden
             />
-          ) : null}
-          <span className="min-w-0 flex-1 whitespace-pre-wrap text-muted-foreground [overflow-wrap:anywhere]">
-            {member.question || "Question"}
-          </span>
+            <AnsweredQuestionText question={member.question || "Question"} />
+          </div>
           {member.outcome?.status === "answered" ? (
-            <span className="ml-auto shrink-0 font-medium text-foreground">
-              {getOutcomeSummary(member)}
-            </span>
+            <div className="flex max-w-[80%] flex-col items-end gap-1 self-end">
+              <span className="whitespace-pre-wrap rounded-lg rounded-br-sm bg-primary/10 px-3 py-2 text-sm font-medium text-foreground [overflow-wrap:anywhere]">
+                {getOutcomeSummary(member)}
+              </span>
+              {member.outcome.text !== undefined &&
+              member.outcome.selected.length === 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  Typed answer
+                </span>
+              ) : null}
+            </div>
           ) : (
-            <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+            <span className="self-end text-xs text-muted-foreground [overflow-wrap:anywhere]">
               {getOutcomeSummary(member)}
             </span>
           )}
@@ -892,6 +883,39 @@ function AnswerSummary({
     </ul>
   );
 }
+
+/** A long question folds to three lines so the answer stays in view. */
+function AnsweredQuestionText({ question }: { question: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = question.length > LONG_QUESTION_CHARACTERS;
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1">
+      <p
+        className={cn(
+          "whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]",
+          isLong && !expanded && "line-clamp-3",
+        )}
+      >
+        {question}
+      </p>
+      {isLong ? (
+        <Button
+          type="button"
+          variant="link"
+          size="xs"
+          className="h-auto px-0 text-muted-foreground"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          <span>{expanded ? "Show less" : "Show full question"}</span>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+// Roughly three lines at the chat column's width.
+const LONG_QUESTION_CHARACTERS = 240;
 
 function getOutcomeSummary(member: AskUserGroupMember) {
   if (member.outcome?.status === "answered") {

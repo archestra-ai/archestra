@@ -33,13 +33,8 @@ export const APPA_GUIDE_SKILL: BuiltInSkill = {
     "Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview policy and lightweight validation changes, and publish locally or through a GitHub pull request.",
   feature: "appa",
   // white-label-ok: applyBuiltInSkillBranding rebrands the built-in skill body at reconcile
-  content: `---
-name: appa-guide
-description: Configure Guardrails v2 (OpenAPPA): explain the effective policy, review tools, preview policy and lightweight validation changes, and publish locally or through a GitHub pull request.
-argument-hint: "init|adjust|validate|explain|review|investigate|github-sync"
----
-
-Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client hosts. Request: $ARGUMENTS
+  // The body only: the frontmatter is built from name and description.
+  content: `Guardrails v2 (OpenAPPA) configuration helper for Archestra and connected client hosts.
 
 You run inside Archestra chat or in a client connected to Archestra (such as Claude Code, Codex, or OpenCode). This skill has these parts:
 
@@ -62,7 +57,7 @@ The first two rows depend on the policy's \`revision\` and \`delivery\`: read th
 |---|---|
 | Set up a starting policy, or \`init\`, while the policy is an unsaved local starter (revision 0, local delivery) | \`references/first-policy.md\` |
 | Set up a starting policy, or \`init\`, otherwise | \`references/init.md\` |
-| Add batteries or their credentials; set up or continue GitHub sync | \`references/first-policy.md\` |
+| Add batteries or their credentials; set up or continue Git sync | \`references/first-policy.md\` |
 | Change the policy, pick a numbered suggestion, or a maintenance goal such as a health audit, agent protection, or a runtime upgrade | \`references/adjust.md\` |
 | Explain the policy or the security label; review coverage, risky tools, batteries, or one target; investigate a yell | \`references/requests.md\` |
 | A general goal on a saved policy, such as "make our agents safe" | **Review** in \`references/requests.md\` |
@@ -100,15 +95,14 @@ These rules replace the shared rules on ending a turn with the proposal: in Arch
 - Preview before you propose, with the revision you read: \`edits\` for a saved policy, naming only the text you replace (to insert rules, replace a nearby line with the new rules plus that same line); \`content\` only for a first policy or a full rewrite. Fix errors and preview again, and explain warnings. Check that \`diff\` shows only the lines you meant to change. A valid preview does not prove that a battery governs tools or a helper works.
 - If a saved policy would not change, say that no update is needed, without approval language. An unsaved local revision-0 starter is the exception: even with an empty diff it still needs approval and publication. Do not manufacture an edit.
 - Preview only a change the operator asked for or picked. Explain and review requests preview nothing. Previewing saves nothing: "show me first" or "don't save yet" still means preview, explain, and ask.
-- When approval is needed, end the same turn with one \`archestra__ask_user\` question: "Apply this policy?" ("Open this pull request?" when approval opens a GitHub PR), unless the workflow names its own question, with options "Approve", "Show TOML", and "Change something". Without \`archestra__ask_user\`, use the client's own question tool with the same options; with neither, end with **Approve, or tell me what to change.** Never end a turn on a preview without the question, also when the operator asked to see the change first. If an optional refinement of a valid preview of the requested change fails while the policy is unchanged since that preview, propose that last valid preview and ask; do not end the turn waiting for a better one. Write the proposal as message text before the question, including any **Effect on agents**; option descriptions are not the proposal.
+- When approval is needed, end the same turn with one \`archestra__ask_user\` question: "Apply this policy?" ("Open this pull request?" when approval opens a GitHub PR), unless the workflow names its own question, with options "Approve" and "Not now"; its "Type something" choice lets the operator type a change instead. The preview card already shows the proposed TOML, so do not offer to show it. Without \`archestra__ask_user\`, use the client's own question tool with the same options; with neither, end with **Approve, or tell me what to change.** Never end a turn on a preview without the question, also when the operator asked to see the change first. If an optional refinement of a valid preview of the requested change fails while the policy is unchanged since that preview, propose that last valid preview and ask; do not end the turn waiting for a better one. Write the proposal as message text before the question, including any **Effect on agents**; option descriptions are not the proposal.
   - **Approve**: continue in the same response with **Publish**.
-  - **Show TOML** is inspection, not approval. For \`edits\`, show the preview's \`diff\` in a fenced diff block and say every other line stays as it is; for a first policy or a full rewrite, show the complete proposed root TOML you previewed in a fenced toml block, with no omissions or invented edits. Then ask again with Approve and Change something.
-  - **Change something**: ask in one sentence what to change, then wait.
-  - Declined, dismissed, or unanswered: stop without saving and wait for the next message.
+  - **A typed answer** is a change request: apply it, preview again, and ask again. If it asks to see the TOML instead, show the preview's \`diff\` in a fenced diff block for \`edits\`, or the complete proposed root TOML for a first policy or full rewrite, with no omissions or invented edits, then ask again.
+  - **Not now**, dismissed, or unanswered: stop without saving and wait for the next message.
 - Ask for approval only before an action you can perform. When the operator must act elsewhere, give the steps or link instead.
 - Call \`archestra__execute_remedy_plan\` with the offered \`offer_id\` without asking first; it requests the review itself, or returns one to ask with \`archestra__ask_user\`. This replaces the shared rule against calling the runtime's remedy tool before approval.
 - Ask independent questions in the same step, one \`archestra__ask_user\` call per question with a short \`header\`; Archestra chat shows them as one card. Ask later only a question whose options depend on an earlier answer.
-- A question that ends your turn with a choice between known options, such as approval, a new or existing repository, or which servers to cover, goes on \`archestra__ask_user\` with those options, not in prose; without it, use the client's question tool, and with neither, end with a line that lists the options. Only these stay in text: the one-sentence question that ends **Explain** or follows **Change something**, the numbered changes that end **Review**, and a one-sentence next step that a workflow offers.
+- A question that ends your turn with a choice between known options, such as approval, a new or existing repository, or which servers to cover, goes on \`archestra__ask_user\` with those options, not in prose; without it, use the client's question tool, and with neither, end with a line that lists the options. Only these stay in text: the one-sentence question that ends **Explain**, the numbered changes that end **Review**, and a one-sentence next step that a workflow offers.
 
 ### Publish
 
@@ -116,7 +110,7 @@ This replaces the summary in the shared **Publish and finish**.
 
 1. Call \`archestra__update_guardrails_policy\` with the same \`edits\` or \`content\` and \`expectedRevision\` you previewed, also for an unchanged revision-0 starter. Do not preview again first: publishing validates the change and refuses it when the policy changed since that revision. Give a GitHub PR a clear \`title\` and \`summary\`.
 2. On a conflict, at preview or publish, read the policy again, tell the operator in one sentence what changed since your read, re-apply your change as \`edits\` on the new text, preview, and ask again if the behavior changes. Never just increase the revision and retry the old draft.
-3. A pull request: give its URL and say the change is not enforced until it merges and the repository syncs. Check it with \`archestra__get_guardrails_policy_change_status\` only when asked, and never for a local revision. If GitHub sync lacks a ready credential or the source changed upstream, do not claim a policy update; fix or sync the source first.
+3. A pull request: give its URL and say the change is not enforced until it merges and the repository syncs. Check it with \`archestra__get_guardrails_policy_change_status\` only when asked, and never for a local revision. If Git sync lacks a ready credential or the source changed upstream, do not claim a policy update; fix or sync the source first.
 4. A local revision: read back the policy and report any \`effective.error\` or non-\`active\` battery as a problem. If composition is refused, \`effective.error\` holds the refusal and \`effective.content\` keeps the last composition that opened, if one did; do not claim the new text is enforced. The publish result's \`enforcement\` is the evidence for the switch; composition alone proves nothing. For a healthy, enabled save the result banner is the completion: add no summary, revision number, or link, overriding the summary in **Publish and finish**; only **Add batteries** adds a short summary, and a first policy its one-sentence next step. If enforcement is off or confirmation failed, say which revision was saved, what is not active and why, and link [OpenAPPA Policy](/openappa/policy). Never claim Guardrails v2 switched off or that an unsaved draft is active. Later saves leave the enforcement switch unchanged.
 5. If a response fails, read the current state before any retry. Never duplicate a successful write or claim success without evidence.
 
@@ -134,7 +128,7 @@ This replaces the summary in the shared **Publish and finish**.
 - If a request is unusual for what the operator says they want, say once why, then propose it as asked. Do not quietly weaken a rule to let a blocked call succeed.
 - Keep secrets out of policy text. Bind a battery's credential variables to runtime credential keys with \`archestra__bind_guardrails_credential\`, outside the policy text. A \`[credentials]\` line in the text overrides the stored binding and locks it in the Batteries dialog; do not add one. A \`token_env\` in your own \`[externals]\` reads the runtime credential its \`[credentials]\` line names, never a backend environment variable. Adding or rekeying that line, or pointing another external at it, needs \`credential:update\`. Never ask for a token or private key in chat.
 - The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\` and \`[server_aliases]\`. An \`include\` entry is \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`; removing it turns the battery off.
-- Reading and previewing need \`openappaPolicy:read\`; publishing \`openappaPolicy:update\`; creating the policy repository \`organizationSettings:update\`; yells and helper errors \`openappaDiagnostics:read\`; GitHub PR publishing and status \`credential:read\`; binding runtime credentials \`openappaPolicy:update\` and \`credential:update\`. On a permission error, say what is missing. Policy writes are assigned only to agents such as the built-in APPAdvisor; elsewhere, preview and direct the operator to that agent.
+- Reading and previewing need \`openappaPolicy:read\`; publishing \`openappaPolicy:update\`; creating the policy repository \`organizationSettings:update\`; yells and helper errors \`openappaDiagnostics:read\`; GitHub PR publishing and status \`credential:read\`; binding runtime credentials \`openappaPolicy:update\` and \`credential:update\`. On a permission error, say what is missing. Policy writes are assigned only to agents such as the built-in APPA Keeper; elsewhere, preview and direct the operator to that agent.
 
 ${APPA_GUIDE_CORE}`,
   files: [

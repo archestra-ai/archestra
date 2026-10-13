@@ -88,6 +88,16 @@ type ResolvedMyFile = {
   mimeType: string;
   originalName: string;
 };
+/** What edit/overwrite/delete act on: a `files` row, or a project's hand-placed object. */
+export type MyFileTarget =
+  | { kind: "row"; file: PersistedFile }
+  | {
+      kind: "object";
+      ref: string;
+      filename: string;
+      mimeType: string;
+      projectId: string;
+    };
 export type MyFileResolutionError = {
   error: "not_found" | "ambiguous" | "missing_bytes" | "outside_project";
 };
@@ -561,6 +571,91 @@ class FileStore {
   }
 
   /**
+   * Resolve a `my_file` ref (id, filename, or `obj_` ref) to the file that
+   * edit/overwrite/delete act on. Rows resolve exactly as
+   * {@link resolveMyFileRef}; for a project scope a hand-placed object (no row)
+   * is matched too, so whatever `search_files` lists can be changed. An object's
+   * ref is re-minted from the scope's own project, never echoed from the caller,
+   * so a ref naming another project resolves to not-found here.
+   */
+  async resolveMyFileTarget(params: {
+    organizationId: string;
+    userId: string;
+    id?: string;
+    filename?: string;
+    scope: MyFileScope;
+  }): Promise<MyFileTarget | MyFileResolutionError> {
+    const parsed = params.id ? parseObjectRef(params.id) : null;
+    if (params.id && parsed) {
+      if (params.scope.kind !== "project") return { error: "not_found" };
+      return (
+        (await this.findUntrackedObject({
+          projectId: params.scope.projectId,
+          matches: (o) => o.key === parsed.key,
+        })) ?? { error: "not_found" }
+      );
+    }
+    const row = await this.findMyFileRow(params);
+    if (row === null) {
+      if (params.scope.kind !== "project") return { error: "not_found" };
+      return (
+        (await this.findUntrackedObject({
+          projectId: params.scope.projectId,
+          matches: (o) => o.name === params.filename,
+        })) ?? { error: "not_found" }
+      );
+    }
+    if ("error" in row) return row;
+    return { kind: "row", file: row };
+  }
+
+  /**
+   * Replace a resolved file's bytes in place (edit_file, and the overwrite
+   * paths of save_file / download_file / copy_file). A row keeps its id; a
+   * project's hand-placed object stays rowless at the same key, so its `obj_`
+   * ref is the id reported back. Returns null when the file can no longer be
+   * reached.
+   */
+  async replace(params: {
+    target: MyFileTarget;
+    mimeType: string;
+    data: Buffer;
+    organizationId: string;
+    userId: string;
+  }): Promise<{ fileId: string; mimeType: string; sizeBytes: number } | null> {
+    const { target, data } = params;
+    if (target.kind === "row") {
+      const updated = await this.update({
+        file: target.file,
+        mimeType: params.mimeType,
+        sizeBytes: data.byteLength,
+        data,
+      });
+      return updated
+        ? {
+            fileId: updated.id,
+            mimeType: updated.mimeType,
+            sizeBytes: updated.sizeBytes,
+          }
+        : null;
+    }
+    const written = await this.updateObject({
+      ref: target.ref,
+      organizationId: params.organizationId,
+      userId: params.userId,
+      data,
+    });
+    // a rowless object has no stored mime; it is always derived from its name.
+    return written
+      ? {
+          fileId: target.ref,
+          mimeType: target.mimeType,
+          sizeBytes: data.byteLength,
+        }
+      : null;
+  }
+
+  /**
    * Resolve a headless (no-project, no-conversation) file by name, for a
    * headless `save_file` overwrite — there is no conversation/project scope to
    * resolve within, so this targets the orphan bucket directly.
@@ -637,19 +732,19 @@ class FileStore {
   }
 
   /**
-   * Overwrite a row-backed text file's content from the browser editor.
-   * Authorizes with the same author-or-project-access rule as {@link get} and
-   * {@link delete} (via {@link authorizedFile}), then replaces the bytes in place
-   * through {@link update}, preserving the filename and stored MIME (a text edit
-   * never changes type). Restricted to Markdown/plain-text rows; the project
+   * Overwrite a text file's content from the browser editor: a row, or a
+   * project's hand-placed object (`obj_` ref, no row) — the Files panel lists
+   * both. Authorizes with the same author-or-project-access rule as {@link get}
+   * and {@link delete}, then replaces the bytes in place (a row through
+   * {@link update}, keeping its stored MIME; an object at its same key, so it
+   * stays rowless). Restricted to Markdown/plain-text files; the project
    * instructions file keeps its own owner/admin-only route and is refused here so
-   * the generic project-access rule can't rewrite project guidance. Returns the
-   * updated row, or a discriminated error the route maps to a status code.
+   * the generic project-access rule can't rewrite project guidance.
    *
    * Oversight `project:admin` never reaches a write here: this uses
-   * `authorizedFile`, not the `getProjectScopedForAdmin` fallback, so an
-   * overseeing admin who is not the author / not a project member gets
-   * `not_found`.
+   * `authorizedFile` / `updateObject`, not the `getProjectScopedForAdmin`
+   * fallback, so an overseeing admin who is not the author / not a project
+   * member gets `not_found`.
    */
   async updateTextFileContent(params: {
     ref: string;
@@ -657,28 +752,35 @@ class FileStore {
     userId: string;
     content: string;
   }): Promise<
-    | PersistedFile
+    | { id: string; filename: string; mimeType: string; sizeBytes: number }
     | { error: "not_found" | "reserved" | "not_editable" | "too_large" }
   > {
-    // Row-backed files only: `authorizedFile` returns null for a non-UUID/`obj_`
-    // ref (a rowless object has no row to update) and for "not yours".
+    const data = Buffer.from(params.content, "utf8");
+    const parsed = parseObjectRef(params.ref);
+    if (parsed) {
+      if (parsed.scope.kind !== "project") return { error: "not_found" };
+      const filename = keyName(parsed.key);
+      const mimeType = mimeFromExtension(filename);
+      const refused = refuseTextEdit({
+        projectScoped: true,
+        filename,
+        mimeType,
+        data,
+      });
+      if (refused) return refused;
+      const written = await this.updateObject({ ...params, data });
+      if (!written) return { error: "not_found" };
+      return { id: params.ref, filename, mimeType, sizeBytes: data.byteLength };
+    }
     const file = await this.authorizedFile(params);
     if (!file) return { error: "not_found" };
-    // The instructions file is editable only through its own owner/admin-gated
-    // route (its content is injected into every chat's system prompt); refuse it
-    // here so the generic project-access rule can't rewrite project guidance.
-    if (file.projectId && file.filename === PROJECT_INSTRUCTIONS_FILENAME) {
-      return { error: "reserved" };
-    }
-    if (
-      !isEditableTextFile({ filename: file.filename, mimeType: file.mimeType })
-    ) {
-      return { error: "not_editable" };
-    }
-    const data = Buffer.from(params.content, "utf8");
-    if (data.byteLength > EDITABLE_TEXT_FILE_MAX_BYTES) {
-      return { error: "too_large" };
-    }
+    const refused = refuseTextEdit({
+      projectScoped: file.projectId !== null,
+      filename: file.filename,
+      mimeType: file.mimeType,
+      data,
+    });
+    if (refused) return refused;
     // Preserve the stored MIME — a content edit of a text file never changes its
     // type (mirrors the edit_file tool).
     const updated = await this.update({
@@ -845,6 +947,60 @@ class FileStore {
       if (error instanceof UnsafePathError) return { error: "not_found" };
       throw error;
     }
+  }
+
+  /**
+   * Replace a hand-placed object's bytes in place (the rowless half of
+   * {@link replace}). It stays rowless at the same key, so
+   * its `obj_` ref is unchanged. Same authorization as {@link delete}: the
+   * caller must reach the ref's scope, and the key must be an object that scope
+   * owns. Returns false when it can't be reached.
+   */
+  private async updateObject(params: {
+    ref: string;
+    organizationId: string;
+    userId: string;
+    data: Buffer;
+  }): Promise<boolean> {
+    const parsed = parseObjectRef(params.ref);
+    const store = getObjectStore();
+    if (!parsed || parsed.scope.kind !== "project" || !store) return false;
+    if (!(await this.canAccessScope(parsed.scope, params))) return false;
+    if (!(await this.objectRefOwned(parsed, store))) return false;
+    const ownerScope = await this.projectScope(parsed.scope.projectId);
+    if (!ownerScope) return false;
+    const { key } = await store.write({
+      scope: ownerScope,
+      name: keyName(parsed.key),
+      data: params.data,
+      overwrite: true,
+    });
+    // enumerate only surfaces top-level objects, so (scope, name) is the key.
+    return key === parsed.key;
+  }
+
+  /** A project's hand-placed object (no row), addressed by a fresh `obj_` ref. */
+  private async findUntrackedObject(params: {
+    projectId: string;
+    matches: (object: { key: string; name: string }) => boolean;
+  }): Promise<Extract<MyFileTarget, { kind: "object" }> | null> {
+    const store = getObjectStore();
+    if (!store) return null;
+    const ownerScope = await this.projectScope(params.projectId);
+    if (!ownerScope) return null;
+    const objects = await store.enumerate(ownerScope);
+    const match = objects.find(params.matches);
+    if (!match) return null;
+    return {
+      kind: "object",
+      ref: encodeObjectRef(
+        { kind: "project", projectId: params.projectId },
+        match.key,
+      ),
+      filename: match.name,
+      mimeType: mimeFromExtension(match.name),
+      projectId: params.projectId,
+    };
   }
 
   /** An untracked object matched by filename within a project upload scope. */
@@ -1182,4 +1338,35 @@ function parseObjectRef(ref: string): { scope: RefScope; key: string } | null {
 /** The basename of an object key (its display filename). */
 function keyName(key: string): string {
   return key.split("/").pop() ?? key;
+}
+
+/**
+ * Why the browser editor refuses a file, or null when it may be written. The
+ * instructions file is edited only through its own owner/admin-gated route (it
+ * is injected into every chat's system prompt).
+ */
+function refuseTextEdit(params: {
+  projectScoped: boolean;
+  filename: string;
+  mimeType: string;
+  data: Buffer;
+}): { error: "reserved" | "not_editable" | "too_large" } | null {
+  if (
+    params.projectScoped &&
+    params.filename === PROJECT_INSTRUCTIONS_FILENAME
+  ) {
+    return { error: "reserved" };
+  }
+  if (
+    !isEditableTextFile({
+      filename: params.filename,
+      mimeType: params.mimeType,
+    })
+  ) {
+    return { error: "not_editable" };
+  }
+  if (params.data.byteLength > EDITABLE_TEXT_FILE_MAX_BYTES) {
+    return { error: "too_large" };
+  }
+  return null;
 }

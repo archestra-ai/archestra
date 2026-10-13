@@ -761,7 +761,7 @@ delta = {}
       [
         { contains: alicePrompt },
         absent(sentinel),
-        absent("Accept this change"),
+        absent("Accept lower trust"),
         absent(`${cue}-spawn`),
       ],
       toolUseEvents(`msg_${cue}_secret`, [
@@ -776,7 +776,7 @@ delta = {}
     await reply(
       [
         { contains: alicePrompt },
-        { contains: "Accept this change for the rest of this session" },
+        { contains: "Accept lower trust for the rest of this session" },
         absent("Authorized"),
         absent(`${cue}-spawn`),
       ],
@@ -787,7 +787,7 @@ delta = {}
           input: {
             offer_id: OFFER_PLACEHOLDER,
             label: {},
-            plan: "Accept this change for the rest of this session",
+            plan: "Accept lower trust for the rest of this session",
           },
         },
       ]),
@@ -1100,7 +1100,7 @@ delta = {}
       inheritedSessionId: session,
       allowDenial: true,
     });
-    expect(firstRead).toContain("Accept this change");
+    expect(firstRead).toContain("Accept lower trust");
     expect(firstRead).not.toContain(sentinel);
     const readRuling = JSON.parse(gatewayText(firstRead)) as {
       message: string;
@@ -1117,7 +1117,7 @@ delta = {}
           priority: 1,
           bodyPatterns: [
             { contains: callId("read") },
-            { contains: "Accept this change for the rest of this session" },
+            { contains: "Accept lower trust for the rest of this session" },
           ],
           events: toolUseEvents(`msg_${cue}_acceptread`, [
             {
@@ -1126,7 +1126,7 @@ delta = {}
               input: {
                 offer_id: offeredId,
                 label: {},
-                plan: "Accept this change for the rest of this session",
+                plan: "Accept lower trust for the rest of this session",
                 trajectory: {
                   v: 1,
                   session_id: "model-selected-wrong-root",
@@ -1185,7 +1185,7 @@ delta = {}
     expect(JSON.parse(execution.original_arguments)).toEqual({
       offer_id: offeredId,
       label: {},
-      plan: "Accept this change for the rest of this session",
+      plan: "Accept lower trust for the rest of this session",
     });
     // Neither the parent nor a different receiver may spend bob's offer.
     // Refusals must leave it live for the real receiver below.

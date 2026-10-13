@@ -14,7 +14,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared/consts";
+import { defaultRuntimeHandoffInstructions } from "@archestra/shared/consts";
 import { parse as parseToml } from "smol-toml";
 import { expect, test } from "vitest";
 import { renderSetupScript } from "../index";
@@ -36,7 +36,7 @@ test("Windows npm Codex shim preserves multiword handoff config at launch", asyn
   const marker = path.join(home, "launched");
   const args = [
     "-c",
-    `developer_instructions=${JSON.stringify(DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS)}`,
+    `developer_instructions=${JSON.stringify(defaultRuntimeHandoffInstructions("Archestra"))}`,
     "-c",
     "model_provider=llm_proxy",
     "exec",
@@ -1244,6 +1244,58 @@ test("Cursor prints literal instructions for manual User Rules without editing p
     await expect(
       readFile(path.join(home, ".cursor/rules")),
     ).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Codex direct mode removal keeps a gateway Codex added inside its block", async () => {
+  const home = await mkdtemp(
+    path.join(tmpdir(), "codex direct foreign table "),
+  );
+  const helper = path.join(home, "handoff.cjs");
+  const configFile = path.join(home, "config.toml");
+  const env = { ...process.env, CODEX_HOME: home };
+  // Codex 0.162 writes a new table before the comments at the end of the
+  // file: here, inside the features block. The approval tables come after.
+  const config = `model = "fixture-model"
+# >>> archestra:codex-direct:root >>>
+# original: web_search = "live"
+web_search = "disabled"
+# <<< archestra:codex-direct:root <<<
+
+# >>> archestra:codex-direct:features >>>
+[features]
+code_mode_host = false
+
+[mcp_servers.gateway]
+url = "https://example.com/v1/mcp/gateway"
+# <<< archestra:codex-direct:features <<<
+
+[mcp_servers."gateway".tools."gateway__ask_user"]
+approval_mode = "approve"
+
+# >>> archestra:codex-direct:tools >>>
+[tools]
+web_search = false
+# <<< archestra:codex-direct:tools <<<
+`;
+  try {
+    await writeFile(helper, CODEX_HANDOFF_HELPER);
+    await writeFile(configFile, config);
+    await exec(process.execPath, [helper, "--remove-direct"], { env });
+    const restored = await readFile(configFile, "utf8");
+    expect(parseToml(restored)).toEqual({
+      model: "fixture-model",
+      web_search: "live",
+      mcp_servers: {
+        gateway: {
+          url: "https://example.com/v1/mcp/gateway",
+          tools: { gateway__ask_user: { approval_mode: "approve" } },
+        },
+      },
+    });
+    expect(restored).not.toContain("archestra:codex-direct");
   } finally {
     await rm(home, { recursive: true, force: true });
   }

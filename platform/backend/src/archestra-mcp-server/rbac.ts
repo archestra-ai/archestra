@@ -663,4 +663,6 @@ const SCOPED_RESOURCE_TOOLS: Partial<
   edit_agent: { resource: "agent", action: "update" },
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },
   edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
+  update_runtime_credential: { resource: "credential", action: "update" },
+  delete_runtime_credential: { resource: "credential", action: "delete" },
 };

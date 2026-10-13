@@ -22,6 +22,7 @@ import {
 import {
   createContext,
   type ReactNode,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -215,11 +216,15 @@ interface ChatContextValue {
     conversationId: string;
     initialMessages?: UIMessage[];
   }) => void;
+  /** Latest session snapshot. Not reactive: render through useChatSessionSnapshot. */
   getSession: (conversationId: string) => ChatSession | undefined;
   clearSession: (conversationId: string) => void;
-  notifySessionUpdate: () => void;
+  /** Subscribe to session snapshot changes (fires on every streamed chunk). */
+  subscribeSessionUpdates: (listener: () => void) => () => void;
   scheduleCleanup: (conversationId: string) => void;
   cancelCleanup: (conversationId: string) => void;
+  /** Conversation IDs whose session is submitting or streaming. Changes only on status transitions. */
+  generatingConversationIds: ReadonlySet<string>;
   /** Conversation IDs whose title should currently play the typing animation */
   animatingTitleIds: Set<string>;
   /** Mark a conversation's title to play the typing animation (auto-clears after a few seconds) */
@@ -241,8 +246,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const cleanupTimersRef = useRef(new Map<string, NodeJS.Timeout>());
   const usageCountRef = useRef(new Map<string, number>());
   const [sessions, setSessions] = useState<Set<string>>(new Set());
-  // Version counter to trigger re-renders when sessions update
-  const [sessionVersion, setSessionVersion] = useState(0);
+  const sessionUpdateListenersRef = useRef(new Set<() => void>());
+  const [generatingConversationIds, setGeneratingConversationIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
   // Conversation IDs currently playing the title typing animation
   const [animatingTitleIds, setAnimatingTitleIds] = useState<Set<string>>(
     new Set(),
@@ -250,10 +257,31 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Per-conversation timers that clear the animation, so they don't cancel each other
   const titleAnimationTimersRef = useRef(new Map<string, NodeJS.Timeout>());
 
-  // Increment version when sessions change (triggers re-renders in consumers)
-  const notifySessionUpdate = useCallback(() => {
-    setSessionVersion((v) => v + 1);
+  const subscribeSessionUpdates = useCallback((listener: () => void) => {
+    sessionUpdateListenersRef.current.add(listener);
+    return () => {
+      sessionUpdateListenersRef.current.delete(listener);
+    };
   }, []);
+
+  // Session snapshots change on every streamed chunk. Only subscribers re-render
+  // for those; the context value changes just when a conversation starts or
+  // stops generating, so global consumers such as the sidebar stay put.
+  const notifySessionUpdate = useCallback(
+    (update?: { conversationId: string; status: ChatSession["status"] }) => {
+      for (const listener of sessionUpdateListenersRef.current) {
+        listener();
+      }
+      if (update) {
+        setConversationGenerating(
+          setGeneratingConversationIds,
+          update.conversationId,
+          update.status === "submitted" || update.status === "streaming",
+        );
+      }
+    },
+    [],
+  );
 
   const markTitleAnimating = useCallback((conversationId: string) => {
     setAnimatingTitleIds((prev) => new Set(prev).add(conversationId));
@@ -320,6 +348,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           next.delete(conversationId);
           return next;
         });
+        setConversationGenerating(
+          setGeneratingConversationIds,
+          conversationId,
+          false,
+        );
       }
     }, SESSION_CLEANUP_TIMEOUT);
 
@@ -355,14 +388,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Get a session
-  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionVersion as dependency to make this reactive
   const getSession = useCallback(
-    (conversationId: string) => {
-      const session = sessionsRef.current.get(conversationId);
-      return session;
-    },
-    [sessionVersion],
+    (conversationId: string) => sessionsRef.current.get(conversationId),
+    [],
   );
 
   // Clear a session manually
@@ -381,6 +409,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         next.delete(conversationId);
         return next;
       });
+      setConversationGenerating(
+        setGeneratingConversationIds,
+        conversationId,
+        false,
+      );
       notifySessionUpdate();
     },
     [notifySessionUpdate],
@@ -405,9 +438,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       registerSession,
       getSession,
       clearSession,
-      notifySessionUpdate,
+      subscribeSessionUpdates,
       scheduleCleanup,
       cancelCleanup,
+      generatingConversationIds,
       animatingTitleIds,
       markTitleAnimating,
     }),
@@ -415,9 +449,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       registerSession,
       getSession,
       clearSession,
-      notifySessionUpdate,
+      subscribeSessionUpdates,
       scheduleCleanup,
       cancelCleanup,
+      generatingConversationIds,
       animatingTitleIds,
       markTitleAnimating,
     ],
@@ -451,7 +486,10 @@ function ChatSessionHook({
   conversationId: string;
   initialMessages: UIMessage[];
   sessionsRef: React.MutableRefObject<Map<string, ChatSession>>;
-  notifySessionUpdate: () => void;
+  notifySessionUpdate: (update: {
+    conversationId: string;
+    status: ChatSession["status"];
+  }) => void;
   markTitleAnimating: (conversationId: string) => void;
 }) {
   const queryClient = useQueryClient();
@@ -1357,11 +1395,19 @@ function ChatSessionHook({
       return;
     }
     queueDrainInFlightRef.current = true;
+    const fileParts = (next.files ?? []).map((file) => ({
+      type: "file" as const,
+      ...file,
+    }));
     sendMessageRef.current?.({
       role: "user",
-      // a bare skill command carries no text; keep an empty text part so the
-      // message is well-formed and the backend can inject the skill
-      parts: [{ type: "text", text: next.text }],
+      // Text first, then attachments — the same order as a direct send. A
+      // bare skill command carries no text; keep an empty text part so the
+      // message is well-formed and the backend can inject the skill.
+      parts:
+        next.text.trim() || fileParts.length === 0
+          ? [{ type: "text", text: next.text }, ...fileParts]
+          : fileParts,
       metadata: {
         createdAt: new Date().toISOString(),
         ...(next.skill ? { skill: next.skill } : {}),
@@ -1613,7 +1659,7 @@ function ChatSessionHook({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — deps trigger the sync, ref provides the snapshot
   useEffect(() => {
     sessionsRef.current.set(conversationId, sessionRef.current);
-    notifySessionUpdate();
+    notifySessionUpdate({ conversationId, status });
   }, [
     conversationId,
     stableMessages,
@@ -1726,8 +1772,8 @@ export function useChatSession(params: {
   enabled?: boolean;
 }) {
   const { conversationId, initialMessages, enabled = true } = params;
-  const { registerSession, getSession, scheduleCleanup, cancelCleanup } =
-    useGlobalChat();
+  const { registerSession, scheduleCleanup, cancelCleanup } = useGlobalChat();
+  const session = useChatSessionSnapshot(conversationId);
 
   useEffect(() => {
     if (!conversationId || !enabled) return;
@@ -1747,5 +1793,47 @@ export function useChatSession(params: {
     scheduleCleanup,
   ]);
 
-  return conversationId ? getSession(conversationId) : null;
+  return session;
+}
+
+/**
+ * The latest snapshot of a conversation's chat session, re-rendering as it
+ * changes. Snapshots change on every streamed chunk, so those re-renders run as
+ * transitions: a keystroke in the composer interrupts an in-progress transcript
+ * render instead of queueing behind it.
+ */
+export function useChatSessionSnapshot(
+  conversationId: string | undefined,
+): ChatSession | null {
+  const { getSession, subscribeSessionUpdates } = useGlobalChat();
+  const [, setVersion] = useState(0);
+
+  useEffect(
+    () =>
+      subscribeSessionUpdates(() => {
+        startTransition(() => {
+          setVersion((version) => version + 1);
+        });
+      }),
+    [subscribeSessionUpdates],
+  );
+
+  return conversationId ? (getSession(conversationId) ?? null) : null;
+}
+
+function setConversationGenerating(
+  setIds: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>,
+  conversationId: string,
+  generating: boolean,
+) {
+  setIds((prev) => {
+    if (prev.has(conversationId) === generating) return prev;
+    const next = new Set(prev);
+    if (generating) {
+      next.add(conversationId);
+    } else {
+      next.delete(conversationId);
+    }
+    return next;
+  });
 }

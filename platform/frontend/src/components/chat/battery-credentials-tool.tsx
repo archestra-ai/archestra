@@ -106,7 +106,7 @@ export function BatteryCredentialsTool({
   return (
     <div
       data-testid="battery-credentials-card"
-      className="not-prose relative mb-4 w-full max-w-2xl overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm"
+      className="not-prose relative mb-4 w-full overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm"
     >
       <div className="flex items-center gap-3 px-4 pt-3">
         {total > 1 ? (

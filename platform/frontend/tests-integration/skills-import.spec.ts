@@ -132,17 +132,20 @@ test.describe("Skills import", () => {
     skillsNewPage,
   }) => {
     await skillsNewPage.goto();
-    await skillsNewPage.customGithubUrlCard.click();
+    await skillsNewPage.gitRepositoryCard.click();
 
-    const discoverDialog = page.getByRole("dialog", {
-      name: "Import skills from GitHub",
-    });
+    const discoverDialog = page.getByRole("dialog", { name: "Import skills" });
     await expect(discoverDialog).toBeVisible();
-
+    await discoverDialog.getByRole("button", { name: /^GitHub/ }).click();
+    // No saved GitHub Apps: the public repository is picked for you.
+    await expect(
+      discoverDialog.getByRole("radio", { name: /Public repository/ }),
+    ).toBeChecked();
+    await discoverDialog.getByRole("button", { name: "Continue" }).click();
     await discoverDialog
-      .getByLabel("Repository URL")
+      .getByPlaceholder("github.com/owner/repo")
       .fill("github.com/acme/skills");
-    await discoverDialog.getByRole("button", { name: "Discover" }).click();
+    await discoverDialog.getByRole("button", { name: "Find skills" }).click();
 
     // The default discover handler returns two importable skills.
     const selectDialog = page.getByRole("dialog", {
@@ -158,11 +161,21 @@ test.describe("Skills import", () => {
     ).toBeVisible();
   });
 
-  test("Enterprise App imports shorthand with its custom source and no public owner lookups", async ({
+  test("Enterprise App imports a pasted path against its own host with no public owner lookups", async ({
     page,
     skillsNewPage,
     mswControl,
+    request,
   }) => {
+    // Saved Apps are offered only to someone who may read credentials.
+    const permissions = await (
+      await request.get("/internal-test/api/api/user/permissions")
+    ).json();
+    await mswControl.use({
+      method: "get",
+      url: "/api/user/permissions",
+      body: { ...permissions, credential: ["read"] },
+    });
     const repoInput = "acme/skills";
     const sourceOrigin = "https://git.acme.example";
     const repoUrl = `${sourceOrigin}/acme/skills`;
@@ -178,14 +191,15 @@ test.describe("Skills import", () => {
     });
     await mswControl.use({
       method: "get",
-      url: "/api/credentials",
+      url: "/api/git-credentials",
       body: [
         {
           id: appId,
           name: "Acme GitHub App",
+          provider: "github",
           kind: "github_app",
-          githubUrl: `${sourceOrigin}/api/v3`,
-          allowOrganization: true,
+          webUrl: sourceOrigin,
+          createdAt: "2026-10-01T00:00:00.000Z",
         },
       ],
     });
@@ -235,39 +249,30 @@ test.describe("Skills import", () => {
     });
 
     await skillsNewPage.goto();
-    await skillsNewPage.customGithubUrlCard.click();
-    const discoverDialog = page.getByRole("dialog", {
-      name: "Import skills from GitHub",
-    });
-    await discoverDialog.getByLabel("Repository URL").fill(repoInput);
+    await skillsNewPage.gitRepositoryCard.click();
+    const discoverDialog = page.getByRole("dialog", { name: "Import skills" });
+    await discoverDialog.getByRole("button", { name: /^GitHub/ }).click();
+    // The saved App is picked first; its Enterprise host is named beside it.
     await expect(
-      discoverDialog.getByRole("combobox", { name: "Keep in sync" }),
-    ).toContainText("Once a day");
-    await discoverDialog
-      .getByRole("button", { name: "Authentication & subpath" })
-      .click();
-    await discoverDialog
-      .getByRole("combobox", { name: "Authentication" })
-      .click();
-    await page.getByRole("option", { name: "GitHub App", exact: true }).click();
-    await discoverDialog
-      .getByRole("combobox", { name: "GitHub App Configuration" })
-      .click();
-    await page
-      .getByRole("option", { name: "Acme GitHub App", exact: true })
-      .click();
-    await discoverDialog.getByLabel("Subpath").fill("packages/skills");
+      discoverDialog.getByRole("radio", { name: /Acme GitHub App/ }),
+    ).toBeChecked();
+    await expect(discoverDialog).toContainText("git.acme.example");
+    await discoverDialog.getByRole("button", { name: "Continue" }).click();
+    await discoverDialog.getByLabel("Repository URL").fill(repoInput);
+    await discoverDialog.getByRole("button", { name: /Advanced/ }).click();
+    await discoverDialog.getByLabel("Folder").fill("packages/skills");
     const discoverRequest = page.waitForRequest(
       (request) =>
         request.method() === "POST" &&
         new URL(request.url()).pathname.endsWith("/api/skills/github/discover"),
     );
     await discoverDialog
-      .getByRole("button", { name: "Discover", exact: true })
+      .getByRole("button", { name: "Find skills", exact: true })
       .click();
     expect((await discoverRequest).postDataJSON()).toEqual({
-      repoUrl: repoInput,
+      repoUrl,
       path: "packages/skills",
+      provider: "github",
       githubAppConfigId: appId,
     });
 
@@ -276,6 +281,9 @@ test.describe("Skills import", () => {
     });
     await expect(selectDialog).toContainText("git.acme.example/acme/skills");
     await expect(selectDialog).toContainText("1 of 1 selected");
+    await expect(
+      selectDialog.getByRole("combobox", { name: "Keep in sync" }),
+    ).toContainText("Once a day");
     const importRequest = page.waitForRequest(
       (request) =>
         request.method() === "POST" &&
@@ -283,8 +291,9 @@ test.describe("Skills import", () => {
     );
     await selectDialog.getByRole("button", { name: /^Import/ }).click();
     expect((await importRequest).postDataJSON()).toEqual({
-      repoUrl: repoInput,
+      repoUrl,
       path: "packages/skills",
+      provider: "github",
       githubAppConfigId: appId,
       skillPaths: [skillPath],
       initialGrants: [],
@@ -294,7 +303,10 @@ test.describe("Skills import", () => {
     await expect(
       page.getByRole("heading", { name: "Skills", exact: true }),
     ).toBeVisible();
-    await expect(page.getByText(repoUrl, { exact: true })).toBeVisible();
+    // The list names the repository by host and path, without the scheme.
+    await expect(
+      page.getByRole("cell", { name: "git.acme.example/acme/skills" }),
+    ).toBeVisible();
     expect(publicOwnerLookups).toEqual([]);
   });
 

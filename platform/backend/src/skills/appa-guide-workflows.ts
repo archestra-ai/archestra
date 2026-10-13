@@ -3,9 +3,9 @@
  * to them, so a policy chat loads only the workflow it needs.
  */
 
-/** `references/first-policy.md`: Starter policy, batteries and GitHub sync. */
+/** `references/first-policy.md`: Starter policy, batteries and Git sync. */
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
-export const FIRST_POLICY_WORKFLOW = `# First policy, batteries, and GitHub sync
+export const FIRST_POLICY_WORKFLOW = `# First policy, batteries, and Git sync
 
 Approval and publishing follow **Approval in Archestra** and **Publish** in the skill body.
 
@@ -14,12 +14,12 @@ Approval and publishing follow **Approval in Archestra** and **Publish** in the 
 Use this while the policy's revision is 0 and its delivery is local, also for an explicit \`init\`; otherwise follow \`references/init.md\`. Skip validations unless the operator asks for them.
 
 1. Read the policy, then briefly inspect deployed servers (\`archestra__list_mcp_server_deployments\`) and battery fits (\`archestra__list_guardrails_battery_fits\` without \`mcpServerId\`). Do not enumerate every tool or ask the operator to classify servers.
-2. Use the returned starter text: it declares controls for built-in platform tool calls, the \`run_command\` annotator rule, context control, and the catch-all. Defer batteries, credentials, GitHub sync, and tuning until after the first save. Never invent a credential key. If the operator explicitly asks for more protection, inspect the relevant tools and ask at most one plain-language question.
+2. Use the returned starter text: it declares controls for built-in platform tool calls, the \`run_command\` annotator rule, context control, and the catch-all. Defer batteries, credentials, Git sync, and tuning until after the first save. Never invent a credential key. If the operator explicitly asks for more protection, inspect the relevant tools and ask at most one plain-language question.
 3. Do not ask about provider-hosted tools, and do not claim that tools the starter does not cover are safe.
 4. Preview the complete starter with \`content\` and the revision you read.
 5. Explain in at most three short sentences: the starter's declared controls for built-in platform tool calls will be saved and switched on (only saved, when the preview's \`turnsOnEnforcement\` is false); the other connected tools, named by one or two servers, keep working as they do now; and batteries for them can be set up next. When setup follows a broader safety goal, explain that establishing that goal still requires examining the relevant calls and dependencies; saving the starter does not establish it. Do not describe individual rules or server health unless asked, and avoid "audience", "catch-all", "composition", "revision", "preview", and "rule pack". This replaces the fuller proposal the shared rules ask for.
-6. Ask for approval with the question "Would you like me to save this policy and turn it on?" ("Would you like me to save this policy?" when \`turnsOnEnforcement\` is false). For **Show TOML**, also say that the include line loads the built-in rules you described, kept in a separate file. If asked for those rules too, show the effective policy separately and label it.
-7. Publish. Resume any still-pending authorized workflow for which policy setup was a prerequisite. Otherwise offer the next step in one sentence: batteries for the connected servers that have one (name them), or GitHub sync.
+6. Ask for approval with the question "Would you like me to save this policy and turn it on?" ("Would you like me to save this policy?" when \`turnsOnEnforcement\` is false). If the operator asks to see the TOML, also say that the include line loads the built-in rules you described, kept in a separate file. If asked for those rules too, show the effective policy separately and label it.
+7. Publish. Resume any still-pending authorized workflow for which policy setup was a prerequisite. Otherwise offer the next step in one sentence: batteries for the connected servers that have one (name them). Do not offer Git sync; the saved-revision banner already links to its setup.
 
 ## Add batteries
 
@@ -33,15 +33,9 @@ Use this when the operator picks batteries to add: from a review, after the firs
 4. Preview one change that adds every battery with its \`include\` and \`[server_aliases]\` entries, and ask for approval. Describe each battery as **Propose a battery** says.
 5. After a local save, below the result banner, finish in at most five lines: which tools are now protected and how, which batteries were skipped, and that the operator can ask later to add them.
 
-## GitHub sync
+## Git sync
 
-After the first policy is saved, offer GitHub sync in one sentence: the policy source can live in a GitHub repository, and later edits then open pull requests. Continue only if the operator accepts or asks for it.
-
-1. List the credentials the operator can read. Choose an organization GitHub App only when \`organizationConfigured\` is true. If none is ready and they may create credentials, call \`archestra__request_runtime_credential_setup\` with \`{ "kind": "github_app" }\`. The App must be installed on the GitHub account that will own the repository, with All repositories access and the repository permissions Administration, Contents, and Pull requests, each Read & write. Its App ID, Installation ID, and private key go into the dialog, never the chat. If the caller lacks permission, name the missing permission and direct them to an administrator. After connection, list the credentials again.
-2. Unless the operator already said, ask whether to create a new repository or connect an existing one.
-3. New repository: ask in one batch, with two \`archestra__ask_user\` calls with \`"allowText": true\`, for the login of the account where the App is installed and a repository name not already used there. The template is named \`openappa-config\`, so that name is unavailable under its owner. Create it with \`archestra__create_guardrails_repository\` and the chosen App. If GitHub rejects it, explain the owner or name problem; a new App is not needed by default.
-4. Existing repository: ask in one batch for \`owner/name\` and the policy file path (default \`appa.toml\` at the root); the App must be installed on that owner with access to the repository. Say in one sentence that the repository's file replaces the current policy, and connect with \`archestra__connect_guardrails_repository\` only after the operator agrees. If it fails, explain the error and say the current policy is unchanged. If the first pull is held, say what it changes and that an operator accepts it in the guardrails panel.
-5. State the repository URL and that later policy edits create pull requests. A template update does not change an existing repository.
+Git sync keeps the policy source in a GitHub or GitLab repository, so later edits open pull requests (merge requests on GitLab). It is set up in the guardrails settings, which walk through the host, its access (a GitHub App or a GitLab token), and the repository, and the saved-revision banner in chat links there; do not offer it unprompted. Do not create or connect a repository from chat. When the operator asks for it, read the policy with \`archestra__get_guardrails_policy\` and give \`delivery.githubSyncSetupUrl\` as a markdown link titled "Set up Git sync", in one sentence that says setup continues there. Setting it up needs \`organizationSettings:update\`; without it, direct them to an administrator. When \`delivery.mode\` is already \`pull_request\`, say which repository the policy syncs with instead.
 `;
 
 /** `references/init.md`: Initial tool sync for a policy that is not an unsaved starter. */

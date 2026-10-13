@@ -1,18 +1,19 @@
 import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
-  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   legacyMcpClientServerNames,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   OPENCODE_PRIMARY_PROVIDERS,
   providerDisplayNames,
   RouteId,
   resolveMcpClientServerName,
+  resolveRuntimeHandoffInstructions,
   STARTUP_GUARD_FORMAT_VERSION,
   type SupportedProvider,
   SupportedProvidersSchema,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import { INSTALLER_CLIENT_KEY_PROVIDERS } from "@archestra/shared/connection-setup";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
@@ -48,7 +49,10 @@ import {
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
 import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
-import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
+import {
+  connectionSetupReference,
+  issueConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
 import {
   type ConnectionCreditWarning,
   ensureConnectionPassthroughKey,
@@ -76,6 +80,10 @@ import {
   type PluginPlatform,
 } from "@/types";
 import {
+  buildRoutableModelId,
+  listRoutableModels,
+} from "../proxy/model-router-resolver";
+import {
   CONNECTION_HEALTH_PATH,
   CONNECTION_INSTRUCTIONS_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
@@ -91,7 +99,9 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   "claude-code": ["anthropic", "bedrock"],
   "claude-desktop": ["anthropic"],
   codex: ["openai"],
-  cursor: ["openai"],
+  // Cursor routes every model through the Model Router with one key that maps
+  // many providers ("primary-providers"), never a single provider.
+  cursor: [],
   "copilot-cli": [
     "openai",
     "azure",
@@ -109,6 +119,14 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
   opencode: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
     ({ provider }) => provider,
   ),
+};
+
+/** Clients whose proxy setup mints one virtual key mapped to many providers. */
+const MULTI_PROVIDER_KEY_CLIENTS: Partial<
+  Record<ConnectionSetupClientId, { keyName: string }>
+> = {
+  opencode: { keyName: "OpenCode primary providers" },
+  cursor: { keyName: "Cursor model router" },
 };
 
 const CreateConnectionSetupBodySchema = z.object({
@@ -371,10 +389,17 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       } = body;
       let provider = requestedProvider;
       const allPrimary = proxyAuth === "primary-providers";
-      if (allPrimary && clientId !== "opencode") {
+      const multiProviderKey = MULTI_PROVIDER_KEY_CLIENTS[clientId];
+      if (allPrimary && !multiProviderKey) {
         throw new ApiError(
           400,
-          "All primary providers is only supported for OpenCode setups",
+          "All primary providers is only supported for OpenCode and Cursor setups",
+        );
+      }
+      if (clientId === "cursor" && provider && !allPrimary) {
+        throw new ApiError(
+          400,
+          "Cursor routes its models through the Model Router. Use primary-providers.",
         );
       }
       const baseUrl = body.baseUrl.replace(/\/+$/, "");
@@ -468,10 +493,13 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // The standard key is personal-scoped (authorId = the acting user), so
           // it carries the user's identity on its own — the proxy attributes the
           // request to that owner. No passthrough key is needed in this mode.
-          if (allPrimary) {
+          const mappedKeys =
+            organization.connectionClientProviderKeys?.[clientId] ?? null;
+          if (allPrimary && multiProviderKey) {
             ({ virtualApiKeyId, provider } = await ensurePrimaryProviderKey({
-              keyName: "OpenCode primary providers",
-              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              keyName: multiProviderKey.keyName,
+              supportedProviders: INSTALLER_CLIENT_KEY_PROVIDERS[clientId],
+              mappedKeys,
               organizationId,
               userId: user.id,
               userTeamIds: await TeamModel.getUserTeamIds(user.id),
@@ -484,10 +512,24 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 userEmail: user.email,
                 userTeamIds: await TeamModel.getUserTeamIds(user.id),
                 provider,
+                clientId,
                 preferredProviderKeyId:
-                  organization.connectionDefaultProviderKeys?.[provider] ??
-                  null,
+                  mappedKeys?.find((key) => key.provider === provider)
+                    ?.providerApiKeyId ?? null,
               }));
+          }
+          // Fail here, where the Connect page shows the message, rather than
+          // when the installer downloads its script.
+          if (clientId === "opencode" && virtualApiKeyId && provider) {
+            await getVirtualKeyProviderCatalog({
+              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              provider: allPrimary ? undefined : provider,
+              mappedKeys,
+              organizationId,
+              userId: user.id,
+              userTeamIds: await TeamModel.getUserTeamIds(user.id),
+              virtualApiKeyId,
+            });
           }
         } else if (
           // provider-key mode is passthrough: the script only rewires the base
@@ -714,8 +756,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           userEmail: user.email,
           userTeamIds: await TeamModel.getUserTeamIds(user.id),
           provider,
-          preferredProviderKeyId:
-            organization.connectionDefaultProviderKeys?.[provider] ?? null,
         });
 
       const value = await readVirtualKeyValue(virtualApiKeyId);
@@ -1103,7 +1143,9 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 
     // The approved installer can change settings in a running conversation.
     // Carry server-authorized setup scope on the URL, independent of client
-    // headers, prompt history, session IDs, or declared tools.
+    // headers, session IDs, or declared tools. The installer also prints the
+    // setup reference; the proxy honors the scope only in the conversation
+    // that holds it, so sessions started after the setup are governed.
     const setupProxyContext =
       setup.virtualApiKeyId && (virtualKeyValue || passthroughVirtualKey)
         ? issueConnectionProxySetupContext({
@@ -1122,6 +1164,14 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       ? `${proxyApiPrefix}/connection-setup/${setupProxyContext}`
       : proxyApiPrefix;
     proxy = {
+      cursorModels:
+        setup.clientId === "cursor" && setup.virtualApiKeyId && virtualKeyValue
+          ? await getCursorModels({
+              organizationId: setup.organizationId,
+              virtualApiKeyId: setup.virtualApiKeyId,
+              defaultModelId: organization.defaultModelId ?? null,
+            })
+          : undefined,
       primaryProviders:
         setup.clientId === "opencode" &&
         setup.proxyAuth !== "provider-key" &&
@@ -1130,6 +1180,8 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
               supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
               provider:
                 setup.proxyAuth === "virtual-key" ? setup.provider : undefined,
+              mappedKeys:
+                organization.connectionClientProviderKeys?.opencode ?? null,
               organizationId: setup.organizationId,
               userId: setup.userId,
               userTeamIds: await TeamModel.getUserTeamIds(setup.userId),
@@ -1140,7 +1192,20 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       provider: setup.provider,
       providerLabel: providerDisplayNames[setup.provider] ?? setup.provider,
       baseUrl: proxyBaseUrl,
-      url: `${proxyBaseUrl}/${setup.provider}`,
+      ...(setupProxyContext
+        ? {
+            setupReference: connectionSetupReference({
+              setupId: setup.id,
+              secret: config.auth.secret,
+            }),
+          }
+        : {}),
+      // Cursor's requests come from Cursor's own servers, never a running
+      // conversation, so its Model Router URL carries no setup context.
+      url:
+        setup.clientId === "cursor"
+          ? `${proxyApiPrefix}/model-router`
+          : `${proxyBaseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
       virtualKeyName,
@@ -1272,8 +1337,10 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
           : null,
       runtimeHandoffInstructions:
         mcp && organization.connectionRuntimeHandoffEnabled
-          ? (organization.connectionRuntimeHandoffInstructions ??
-            DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS)
+          ? resolveRuntimeHandoffInstructions({
+              stored: organization.connectionRuntimeHandoffInstructions,
+              appName,
+            })
           : null,
     },
     marketplaceRender,
@@ -1586,4 +1653,31 @@ function assertConnectSkillsEnabledOrGone(organization: Organization): void {
 
 function assertConnectPluginsEnabledOrGone(organization: Organization): void {
   if (!organization.connectionPluginsEnabled) throw GONE();
+}
+
+/**
+ * The chat models Cursor's picker should list: what the Model Router's
+ * GET /models returns for this virtual key, plus the organization's default
+ * model when the key can route it.
+ */
+async function getCursorModels(params: {
+  organizationId: string;
+  virtualApiKeyId: string;
+  defaultModelId: string | null;
+}): Promise<{ ids: string[]; defaultId: string | null }> {
+  const mappings = await VirtualApiKeyModel.getProviderApiKeysForRouting(
+    params.virtualApiKeyId,
+  );
+  const models = await listRoutableModels({
+    organizationId: params.organizationId,
+    providerApiKeyIds: mappings.map((mapping) => mapping.providerApiKeyId),
+    includeEmbeddings: false,
+  });
+  const defaultModel = models.find(
+    (model) => model.id === params.defaultModelId,
+  );
+  return {
+    ids: models.map(buildRoutableModelId),
+    defaultId: defaultModel ? buildRoutableModelId(defaultModel) : null,
+  };
 }

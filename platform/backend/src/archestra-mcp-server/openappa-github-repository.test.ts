@@ -157,8 +157,9 @@ describe("connect_guardrails_repository", () => {
     );
 
     expect(response.isError).toBe(true);
+    // A missing policy file is named as such, not as a bare HTTP status.
     expect(JSON.stringify(response.content)).toContain(
-      "Could not connect example/existing-policy: GitHub returned HTTP 404",
+      "Could not connect example/existing-policy: Policy file not found: appa.toml in example/existing-policy.",
     );
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
       currentPolicy,
@@ -204,7 +205,7 @@ describe("connect_guardrails_repository", () => {
 
     expect(response.isError).toBe(true);
     expect(JSON.stringify(response.content)).toContain(
-      "Stop the existing GitHub sync before connecting another repository",
+      "Stop the current Git sync before connecting another repository",
     );
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       repo: "example/current-policy",

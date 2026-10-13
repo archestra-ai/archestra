@@ -12,6 +12,7 @@ import type {
   AppaSpawnPromptField,
   AppaTeammateLaunch,
   AskUserArguments,
+  NativeQuestionResult,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
 import {
@@ -79,21 +80,29 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
-    fromAskUser: (args: AskUserArguments) => ({
-      questions: [
-        {
-          question: args.question,
-          // Claude Code's AskUserQuestion tab label is at most 12 characters.
-          header: questionHeader(args.header, 12),
-          options: args.options.map((option) => ({
-            label: option.label,
-            description: option.description ?? option.label,
-          })),
-          multiSelect: args.allowMultiple === true,
-        },
-      ],
-    }),
-    rulingFromResult: structuredQuestionRuling,
+    fromAskUser: (args: AskUserArguments) => {
+      const previews = showsPreviews(args);
+      return {
+        questions: [
+          {
+            question: shownQuestion(args),
+            // Claude Code's AskUserQuestion tab label is at most 12 characters.
+            header: questionHeader(args.header, 12),
+            options: args.options.map((option) => ({
+              label: option.label,
+              description: option.description ?? option.label,
+              ...(previews && typeof option.preview === "string"
+                ? { preview: option.preview }
+                : {}),
+            })),
+            multiSelect: args.allowMultiple === true,
+          },
+        ],
+      };
+    },
+    rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
+      structuredQuestionRuling(result, shownQuestion(asked)),
+    formFallback: true,
   };
   // Claude Code connects MCP servers in the background and declares this tool
   // in the requests it sends before they are ready.
@@ -392,6 +401,21 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
       return;
     }
   }
+}
+
+/** AskUserQuestion shows option previews for single-select questions only. */
+function showsPreviews(args: AskUserArguments): boolean {
+  return (
+    args.allowMultiple !== true &&
+    args.options.some((option) => typeof option.preview === "string")
+  );
+}
+
+/** The question text Claude Code shows, and repeats before the answer. */
+function shownQuestion(args: AskUserArguments): string {
+  return showsPreviews(args) && typeof args.previewQuestion === "string"
+    ? args.previewQuestion
+    : args.question;
 }
 
 function parentSessionId(context: AppaMatchContext): string | undefined {

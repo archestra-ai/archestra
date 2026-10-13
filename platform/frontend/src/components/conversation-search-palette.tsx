@@ -276,6 +276,17 @@ export function ConversationSearchPalette({
     };
   }, [conversations, runs, debouncedSearch]);
 
+  // The browse view keeps recents short so pages stay in reach; older chats
+  // are still found by typing. The recent-chats view lists them all.
+  const visibleRecent = browseItems
+    ? recentChatsView
+      ? browseItems.recent
+      : browseItems.recent.slice(0, RECENT_CHATS_LIMIT)
+    : [];
+  const hiddenRecentCount = browseItems
+    ? browseItems.recent.length - visibleRecent.length
+    : 0;
+
   // Reset state on every open/close transition.
   // Clearing on open handles stale chars from macOS dead keys (e.g. Option+N inserts ˜
   // via a composition event AFTER the dialog closes, bypassing the close cleanup).
@@ -635,10 +646,10 @@ export function ConversationSearchPalette({
             router.push(item.href);
             onOpenChange(false);
           }}
-          className="flex items-center gap-3 px-3 py-2.5 cursor-pointer aria-selected:bg-accent rounded-sm"
+          className="flex min-w-0 items-center gap-2 px-3 py-2! cursor-pointer aria-selected:bg-accent rounded-sm"
         >
           <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="text-sm font-medium">{item.label}</span>
+          <span className="truncate text-sm">{item.label}</span>
         </CommandItem>
       );
     });
@@ -670,7 +681,7 @@ export function ConversationSearchPalette({
           </span>
         )}
       </output>
-      <CommandList className="max-h-[500px]">
+      <CommandList className="max-h-[min(640px,70vh)]">
         {isLoading && !isSearching ? (
           <div className="py-6 text-center text-sm text-muted-foreground">
             Loading conversations...
@@ -702,14 +713,18 @@ export function ConversationSearchPalette({
           </>
         ) : (
           <>
-            <CommandGroup>
+            <CommandGroup
+              className={
+                encryptedChatEnabled ? GRID_GROUP_CLASS_NAME : undefined
+              }
+            >
               <CommandItem
                 value="new-chat"
                 onSelect={handleNewChat}
                 className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
               >
                 <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="font-medium">New chat</span>
+                <span className="text-sm font-medium">New chat</span>
               </CommandItem>
               {encryptedChatEnabled && (
                 <CommandItem
@@ -718,7 +733,9 @@ export function ConversationSearchPalette({
                   className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
                 >
                   <EncryptedChatIcon className="h-4 w-4 shrink-0" />
-                  <span className="font-medium">New encrypted chat</span>
+                  <span className="text-sm font-medium">
+                    New encrypted chat
+                  </span>
                 </CommandItem>
               )}
             </CommandGroup>
@@ -753,9 +770,9 @@ export function ConversationSearchPalette({
                     )}
                   </CommandGroup>
                 )}
-                {browseItems.recent.length > 0 && (
+                {visibleRecent.length > 0 && (
                   <CommandGroup heading="Recent">
-                    {browseItems.recent.map((entry) =>
+                    {visibleRecent.map((entry) =>
                       entry.kind === "conversation"
                         ? renderConversationItem(entry.item, {
                             dateLabel: getDateBucketLabel(entry.timestamp),
@@ -763,6 +780,12 @@ export function ConversationSearchPalette({
                         : renderRunItem(entry.item, {
                             dateLabel: getDateBucketLabel(entry.timestamp),
                           }),
+                    )}
+                    {hiddenRecentCount > 0 && (
+                      // Indented to the title column so it reads as part of the list.
+                      <p className="py-1 pl-9 text-xs text-muted-foreground">
+                        Type to search older chats
+                      </p>
                     )}
                   </CommandGroup>
                 )}
@@ -779,18 +802,9 @@ export function ConversationSearchPalette({
             {!recentChatsView && (
               <>
                 <CommandSeparator className="my-2" />
-
-                <div className="px-2 pb-1.5">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Pages
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      Jump to
-                    </span>
-                  </div>
-                </div>
-                <CommandGroup>{renderNavigationItems()}</CommandGroup>
+                <CommandGroup heading="Pages" className={PAGES_GRID_CLASS_NAME}>
+                  {renderNavigationItems()}
+                </CommandGroup>
               </>
             )}
           </>
@@ -798,10 +812,9 @@ export function ConversationSearchPalette({
       </CommandList>
 
       <div className="border-t bg-muted/30 px-4 py-2.5">
-        {/* Two aligned rows rather than one: the single row overflowed the
-            dialog once there were this many shortcuts. The grid keeps each
-            column lined up between the rows. */}
-        <div className="grid grid-cols-3 gap-x-3 gap-y-1.5">
+        {/* Wraps instead of a fixed grid: the shortcut count changes with
+            encrypted chat, and a grid left an empty cell in its last row. */}
+        <div className="flex flex-wrap justify-center gap-x-5 gap-y-1.5">
           <FooterShortcut
             keys={[modKey, SHORTCUT_SEARCH.label]}
             label="Search"
@@ -854,3 +867,13 @@ function FooterShortcut({ keys, label }: { keys: string[]; label: string }) {
     </div>
   );
 }
+
+/** Recent chats shown before a search; older ones are found by typing. */
+const RECENT_CHATS_LIMIT = 5;
+
+// cmdk moves the selection in DOM order, so a grid of items keeps arrow-key
+// navigation reaching every option while using the dialog's width.
+const GRID_GROUP_CLASS_NAME =
+  "[&_[cmdk-group-items]]:grid [&_[cmdk-group-items]]:grid-cols-2 [&_[cmdk-group-items]]:gap-1";
+const PAGES_GRID_CLASS_NAME =
+  "[&_[cmdk-group-items]]:grid [&_[cmdk-group-items]]:grid-cols-2 sm:[&_[cmdk-group-items]]:grid-cols-3 [&_[cmdk-group-items]]:gap-x-1";

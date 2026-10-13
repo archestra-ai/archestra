@@ -1,7 +1,7 @@
 import {
   CLAUDE_CODE_CLIENT_ID,
   COPILOT_CLI_CLIENT_ID,
-  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  defaultRuntimeHandoffInstructions,
   EXTERNAL_AGENT_ID_HEADER,
   PERSONAL_MCP_GATEWAY_NAME,
   VIRTUAL_KEY_HEADER,
@@ -21,6 +21,9 @@ import {
   SkillShareLinkModel,
   VirtualApiKeyModel,
 } from "@/models";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
+import { readVirtualKeyValue } from "@/services/connection-setup";
 import {
   accessGrants,
   afterEach,
@@ -43,7 +46,10 @@ import { userHasPermission } from "@/auth";
 import config, { parseOpenAppaConfig } from "@/config";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { clientConnectionService } from "@/services/client-connection";
-import { verifyConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
+import {
+  connectionSetupReference,
+  verifyConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
 import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
@@ -111,12 +117,86 @@ describe("GET /api/connection-setups/script/:token", () => {
     });
   }
 
+  test("cursor installer points Cursor at the Model Router with its virtual key", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
+      provider: "anthropic",
+      isPrimary: true,
+    });
+    const { rawToken } = await createSetup({
+      clientId: "cursor",
+      baseUrl: "http://localhost:9000/v1",
+      proxyAuth: "primary-providers",
+    });
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    const virtualKey = await readVirtualKeyValue(
+      setup?.virtualApiKeyId as string,
+    );
+
+    const response = await fetchScript(rawToken);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain(
+      "ARCHESTRA_CURSOR_BASE_URL='http://localhost:9000/v1/model-router'",
+    );
+    expect(response.body).toContain(`ARCHESTRA_CURSOR_API_KEY='${virtualKey}'`);
+    expect(response.body).not.toContain("/connection-setup/");
+  });
+
+  test("cursor installer lists the Model Router's chat models and the organization default", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const providerKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "anthropic", isPrimary: true },
+    );
+    const createModel = (modelId: string, embeddingDimensions?: 1024) =>
+      ModelModel.create({
+        provider: "anthropic",
+        modelId,
+        externalId: `anthropic/${modelId}`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+        embeddingDimensions,
+      });
+    const sonnet = await createModel("claude-sonnet-test");
+    const haiku = await createModel("claude-haiku-test");
+    const embedding = await createModel("embed-test", 1024);
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+      sonnet.id,
+      haiku.id,
+      embedding.id,
+    ]);
+    await OrganizationModel.patch(organizationId, {
+      defaultModelId: sonnet.id,
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "cursor",
+      baseUrl: "http://localhost:9000/v1",
+      proxyAuth: "primary-providers",
+    });
+    const response = await fetchScript(rawToken);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).toContain(
+      `ARCHESTRA_CURSOR_MODELS='${JSON.stringify({
+        ids: ["anthropic:claude-haiku-test", "anthropic:claude-sonnet-test"],
+        defaultId: "anthropic:claude-sonnet-test",
+      })}'`,
+    );
+  });
+
+  // Cursor has no single-provider proxy setup; its Model Router setup is
+  // covered on its own below.
   for (const clientId of [
     "claude-code",
     "claude-desktop",
     "codex",
     "copilot-cli",
-    "cursor",
     "opencode",
   ] as const) {
     for (const proxyAuth of ["virtual-key", "provider-key"] as const) {
@@ -131,16 +211,32 @@ describe("GET /api/connection-setups/script/:token", () => {
           name: "Main Proxy",
         });
         const provider =
-          clientId === "codex" || clientId === "cursor"
+          clientId === "codex"
             ? "openai"
             : clientId === "copilot-cli" && proxyAuth === "provider-key"
               ? "github-copilot"
               : clientId === "copilot-cli"
                 ? "openai"
                 : "anthropic";
-        await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
-          provider,
-        });
+        const providerKey = await makeLlmProviderApiKey(
+          organizationId,
+          (await makeSecret()).id,
+          { provider },
+        );
+        if (clientId === "opencode") {
+          // OpenCode setups only publish providers that have a usable model.
+          const model = await ModelModel.create({
+            provider,
+            modelId: "claude-test",
+            externalId: "claude-test",
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+          });
+          await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+            providerKey.id,
+            [model.id],
+          );
+        }
         const { rawToken } = await createSetup({
           clientId,
           baseUrl: "http://localhost:9000/v1",
@@ -197,6 +293,16 @@ describe("GET /api/connection-setups/script/:token", () => {
             secret: config.auth.secret,
           }),
         ).toBe(false);
+        if (clientId !== "claude-desktop") {
+          // The installer prints the reference the proxy looks for in the
+          // conversation that ran it, as plain text in its ending.
+          expect(response.body).toContain(
+            `Setup reference   ${connectionSetupReference({
+              setupId: setup.id,
+              secret: config.auth.secret,
+            })}`,
+          );
+        }
       });
     }
   }
@@ -238,13 +344,13 @@ describe("GET /api/connection-setups/script/:token", () => {
       clientId: "claude-code",
       enabled: undefined,
       instructions: null,
-      expected: DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+      expected: defaultRuntimeHandoffInstructions("Archestra"),
     },
     {
       clientId: "claude-code",
       enabled: true,
       instructions: null,
-      expected: DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+      expected: defaultRuntimeHandoffInstructions("Archestra"),
     },
     {
       clientId: "claude-code",

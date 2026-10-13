@@ -7,6 +7,7 @@ import {
   deleteRuntimeCredentialConnection,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
+import { CredentialAccess } from "@/services/credential-access";
 import { CredentialResolutionBatch } from "@/services/credentials";
 import type {
   AgentRuntime,
@@ -224,6 +225,15 @@ export async function preflightAgentRuntimeCredentials(params: {
         missing.push(toMissing(declaration));
       }
     }
+    const usable = await CredentialAccess.usableKeys({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      keys: missing.flatMap((entry) =>
+        entry.credentialId ? [entry.credentialId] : [],
+      ),
+    });
+    for (const entry of missing)
+      if (entry.credentialId) entry.canConnect = usable.has(entry.credentialId);
   }
 
   return { configured, missing, misconfigured };
@@ -365,6 +375,17 @@ export async function setAgentRuntimeCredential(params: {
   }
   const declaration = requireDeclaration(params.runtime, params.key);
   assertCredentialValue(params.value);
+  // A value stored here is a value of the saved credential, so it takes the
+  // same grant the Credentials page asks for: `use` to add your own,
+  // `update` to set the organization's.
+  if (declaration.credentialId)
+    await CredentialAccess.requireOnKey({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      key: declaration.credentialId,
+      action: declaration.scope === "per_user" ? "use" : "update",
+      message: `You don't have access to the "${declaration.label}" credential. Ask an admin to share it with you.`,
+    });
 
   if (declaration.scope === "per_user") {
     if (declaration.credentialId) {

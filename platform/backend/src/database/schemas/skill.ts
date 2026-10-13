@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { GitProvider } from "@/types/git-host";
 import type { SkillGithubSyncInterval, SkillSourceType } from "@/types/skill";
 import type { ResourceVisibilityScope } from "@/types/visibility";
 import runtimeCredentialDefinitionsTable from "./runtime-credential-definition";
@@ -51,6 +52,11 @@ const skillsTable = softDeletablePgTable(
     name: text("name").notNull(),
     /** One-line summary the model uses to decide when to activate. */
     description: text("description").notNull(),
+    /**
+     * Emoji or base64 image data URL shown with the name; null = the source
+     * glyph. Archestra-side, so it stays editable on a Git-synced row.
+     */
+    icon: text("icon"),
     /** Full markdown instructions (the SKILL.md body). */
     content: text("content").notNull(),
     /**
@@ -177,6 +183,13 @@ const skillsTable = softDeletablePgTable(
       {
         onDelete: "set null",
       },
+    ),
+    /** Git host of a synced skill; null means GitHub. */
+    sourceProvider: text("source_provider").$type<GitProvider>(),
+    /** GitLab access token for scheduled pulls; the GitLab twin of `githubAppConfigId`. */
+    gitlabTokenId: uuid("gitlab_token_id").references(
+      () => runtimeCredentialDefinitionsTable.id,
+      { onDelete: "set null" },
     ),
     /** When the last scheduled/manual sync ran (success or failure). */
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" }),

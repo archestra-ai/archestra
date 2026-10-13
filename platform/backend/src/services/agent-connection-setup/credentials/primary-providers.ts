@@ -1,12 +1,15 @@
 import {
   PROVIDERS_REQUIRING_BASE_URL,
   providerDisplayNames,
+  providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ModelTeamModel from "@/models/model-team";
+import OrganizationModel from "@/models/organization";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { ApiError } from "@/types";
 import { readVirtualKeyValue } from "../../connection-setup";
@@ -17,17 +20,31 @@ type PrimaryProviderContext = {
   userId: string;
   userTeamIds: string[];
   supportedProviders: readonly SupportedProvider[];
+  /**
+   * Keys an admin mapped for the client being set up. When any is still
+   * usable they replace the user's primary keys, and the user needs no access
+   * of their own to them.
+   */
+  mappedKeys?: Array<{
+    provider: SupportedProvider;
+    providerApiKeyId: string;
+  }> | null;
 };
 
-/** Resolve usable primary credentials before creating or refreshing a personal key. */
+/**
+ * Resolve the credentials for a multi-provider personal key — the client's
+ * admin-mapped keys, else the user's usable primary keys — then create or
+ * refresh the key.
+ */
 export async function ensurePrimaryProviderKey(
   params: PrimaryProviderContext & { keyName: string },
 ) {
-  const keys = await getPrimaryKeys(params);
+  const mapped = await getMappedKeys(params);
+  const keys = mapped.length > 0 ? mapped : await getPrimaryKeys(params);
   if (keys.length === 0) {
     throw new ApiError(
       400,
-      "No usable primary provider keys are available. Mark a compatible provider key as primary, or choose another routing option.",
+      "No usable primary provider keys are available. Mark a compatible provider key as primary, ask an admin to choose provider keys for this client, or choose another routing option.",
     );
   }
   const name = params.keyName;
@@ -96,7 +113,7 @@ export async function getVirtualKeyProviderCatalog(
     provider?: SupportedProvider;
   },
 ): Promise<NonNullable<SetupScriptProxySection["primaryProviders"]>> {
-  const [keys, mappings] = await Promise.all([
+  const [userKeys, mappedKeys, mappings] = await Promise.all([
     params.provider
       ? LlmProviderApiKeyModel.getAvailableKeysForUser(
           params.organizationId,
@@ -104,8 +121,16 @@ export async function getVirtualKeyProviderCatalog(
           params.userTeamIds,
         )
       : getPrimaryKeys(params),
+    getMappedKeys(params),
     VirtualApiKeyModel.getProviderApiKeys(params.virtualApiKeyId),
   ]);
+  // Admin-mapped keys stand in for the user's own access.
+  const keys = [
+    ...mappedKeys,
+    ...userKeys.filter(
+      (key) => !mappedKeys.some((mapped) => mapped.id === key.id),
+    ),
+  ];
   // Connection keys can be reused by other clients/providers. Only publish the
   // provider selected in this setup, never the key's unrelated mappings.
   const selectedMappings = mappings.filter(
@@ -136,27 +161,93 @@ export async function getVirtualKeyProviderCatalog(
     action: "use",
   });
   const providers = [...new Set(selected.map((key) => key.provider))];
-  return providers.map((provider) => ({
-    provider,
-    name:
-      selected.filter((key) => key.provider === provider).length === 1
-        ? (selected.find((key) => key.provider === provider)?.name ??
-          providerDisplayNames[provider])
-        : providerDisplayNames[provider],
-    models: models
-      .filter(
-        ({ model }) =>
-          model.provider === provider &&
-          allowedModelIds.has(model.id) &&
-          ModelModel.supportsTextChat(model),
-      )
-      .map(({ model }) => ({
-        id: model.modelId,
-        name: model.modelId,
-        context: model.customContextLength ?? model.contextLength,
-        output: model.customOutputLength ?? model.outputLength,
-      })),
-  }));
+  const entries = providers
+    .map((provider) => ({
+      provider,
+      name:
+        selected.filter((key) => key.provider === provider).length === 1
+          ? (selected.find((key) => key.provider === provider)?.name ??
+            providerDisplayNames[provider])
+          : providerDisplayNames[provider],
+      models: models
+        .filter(
+          ({ model }) =>
+            model.provider === provider &&
+            allowedModelIds.has(model.id) &&
+            ModelModel.supportsTextChat(model) &&
+            // OpenCode sends tools on every agent turn. Unknown (null) stays.
+            model.supportsToolCalling !== false,
+        )
+        .map(({ model }) => ({
+          id: model.modelId,
+          name: model.modelId,
+          context: model.customContextLength ?? model.contextLength,
+          output: model.customOutputLength ?? model.outputLength,
+        })),
+    }))
+    .filter((entry) => entry.models.length > 0);
+  if (!entries.length)
+    throw new ApiError(
+      400,
+      "No model from the selected providers can run in OpenCode. OpenCode needs models that support tool calling. Sync the provider's models or choose another provider.",
+    );
+  const preferred = await getPreferredModels(params);
+  const lead = preferred.find(({ provider, modelId }) =>
+    entries.some(
+      (entry) =>
+        entry.provider === provider &&
+        entry.models.some((model) => model.id === modelId),
+    ),
+  )?.provider;
+  return [
+    ...entries.filter((entry) => entry.provider === lead),
+    ...entries.filter((entry) => entry.provider !== lead),
+  ];
+}
+
+/**
+ * OpenCode starts on the first provider it is given, so lead with the one the
+ * user already chats with: their default model's, else the organization's.
+ * Returned in preference order; the caller uses the first one it really offers.
+ */
+async function getPreferredModels(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<Array<{ provider: SupportedProvider; modelId: string }>> {
+  const [member, organization] = await Promise.all([
+    MemberModel.getDefaultModelSelection(params.userId, params.organizationId),
+    OrganizationModel.getById(params.organizationId),
+  ]);
+  const ids = [member.modelId, organization?.defaultModelId].filter(
+    (id): id is string => Boolean(id),
+  );
+  const found = await ModelModel.findByIds(ids);
+  return ids.flatMap((id) => {
+    const model = found.find((candidate) => candidate.id === id);
+    return model ? [{ provider: model.provider, modelId: model.modelId }] : [];
+  });
+}
+
+async function getMappedKeys(params: PrimaryProviderContext) {
+  const mapped = params.mappedKeys ?? [];
+  const keys = await LlmProviderApiKeyModel.findByIds(
+    mapped.map((mapping) => mapping.providerApiKeyId),
+  );
+  return keys.filter(
+    (key) =>
+      key.organizationId === params.organizationId &&
+      mapped.some(
+        (mapping) =>
+          mapping.providerApiKeyId === key.id &&
+          mapping.provider === key.provider,
+      ) &&
+      params.supportedProviders.includes(key.provider) &&
+      // A per-user credential is never shared through an admin mapping.
+      !providerRequiresPerUserCredential(key.provider) &&
+      !key.requiresReauthentication &&
+      (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+        Boolean(key.baseUrl?.trim())),
+  );
 }
 
 async function getPrimaryKeys(params: PrimaryProviderContext) {

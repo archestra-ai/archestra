@@ -1,12 +1,24 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
-import { Bot, Folder, Network, Route, Server } from "lucide-react";
+import {
+  APPA_KEEPER_AGENT_ICON,
+  type archestraApiTypes,
+} from "@archestra/shared";
+import {
+  Bot,
+  Folder,
+  Network,
+  Puzzle,
+  Route,
+  Server,
+  Sparkles,
+} from "lucide-react";
 import Image from "next/image";
 import {
   getBuiltInServiceIconPath,
   isAgentImageIcon,
 } from "@/components/agent-icon.utils";
+import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
 import { OpenAppaSolidIcon } from "@/components/openappa-icon";
 import { imageToneClassName, useImageTone } from "@/lib/hooks/use-image-tone";
 import { cn } from "@/lib/utils/tailwind";
@@ -17,7 +29,12 @@ export type AgentIconVariant = Exclude<
 >;
 
 /** Fallback glyphs supported by the shared icon display/picker. */
-type IconFallbackType = AgentIconVariant | "project" | "server";
+type IconFallbackType =
+  | AgentIconVariant
+  | "project"
+  | "server"
+  | "skill"
+  | "plugin";
 
 interface AgentIconProps {
   icon?: string | null;
@@ -44,7 +61,11 @@ export function AgentIcon({
             ? Folder
             : fallbackType === "server"
               ? Server
-              : Bot;
+              : fallbackType === "skill"
+                ? Sparkles
+                : fallbackType === "plugin"
+                  ? Puzzle
+                  : Bot;
 
     return (
       <FallbackIcon
@@ -66,6 +87,15 @@ export function AgentIcon({
           imageToneClassName(imageTone),
           className,
         )}
+      />
+    );
+  }
+
+  if (icon === APPA_KEEPER_AGENT_ICON) {
+    return (
+      <AppaKeeperIcon
+        className={cn("shrink-0", className)}
+        style={{ width: size, height: size }}
       />
     );
   }

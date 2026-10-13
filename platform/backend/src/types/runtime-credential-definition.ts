@@ -10,6 +10,7 @@ export const CredentialKindSchema = z.enum([
   "secret",
   "github_app",
   "github_app_user",
+  "gitlab_token",
 ]);
 export type CredentialKind = z.infer<typeof CredentialKindSchema>;
 

@@ -65,6 +65,7 @@ export const DocsPage = {
   PlatformAiToolGuardrails: "agents/guardrails",
   PlatformAiToolGuardrailsBatteries: "agents/guardrails/batteries",
   PlatformAiToolGuardrailsClients: "agents/guardrails/clients",
+  PlatformAiToolGuardrailsPolicies: "agents/guardrails/policies",
   PlatformEnterpriseManagedAuth: "admin/identity/sso",
   PlatformEnvironments: "admin/environments",
   PlatformFoundry: "integrations/foundry",

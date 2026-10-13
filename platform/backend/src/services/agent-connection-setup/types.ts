@@ -37,11 +37,23 @@ export interface SetupScriptProxySection {
    * keeps their own provider credentials — virtualKey/virtualKeyName are
    * null. "virtual-key" and "primary-providers": the auto-provisioned key is injected.
    */
+  /**
+   * Cursor only: the chat models GET /models lists for the setup's virtual
+   * key, which replace Cursor's built-in models in its picker. `defaultId` is
+   * the organization's default model when the key can route it.
+   */
+  cursorModels?: { ids: string[]; defaultId: string | null };
   authMode: ConnectionSetupProxyAuth;
   provider: SupportedProvider;
   providerLabel: string;
   /** Browser-facing LLM proxy root before the provider path. */
   baseUrl: string;
+  /**
+   * Printed at the end of setup when `baseUrl` carries the setup context. The
+   * proxy exempts only the conversation that holds it: the one whose agent
+   * ran the installer.
+   */
+  setupReference?: string;
   /** Proxy URL, e.g. https://host/v1/anthropic/<profile-id>. */
   url: string;
   /** Slug of the LLM proxy name — provider id in client configs. */

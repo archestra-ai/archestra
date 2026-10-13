@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { GitProvider } from "@/types/git-host";
 import type {
   ClientType,
   PluginGithubSyncInterval,
@@ -42,6 +43,11 @@ const pluginsTable = softDeletablePgTable(
     pluginSlug: text("plugin_slug").notNull(),
     displayName: text("display_name").notNull(),
     description: text("description").notNull().default(""),
+    /**
+     * Emoji or base64 image data URL shown with the name; null = the source
+     * glyph. Archestra-side, so it stays editable on a Git-synced row.
+     */
+    icon: text("icon"),
     contentHash: text("content_hash").notNull(),
     sourceKind: text("source_kind")
       .$type<PluginSourceKind>()
@@ -68,6 +74,14 @@ const pluginsTable = softDeletablePgTable(
       {
         onDelete: "restrict",
       },
+    ),
+    /** Git host of an imported plugin; null means GitHub. */
+    sourceProvider: text("source_provider").$type<GitProvider>(),
+    /** Web address of a self-hosted source; null means the provider's cloud. */
+    sourceOrigin: text("source_origin"),
+    gitlabTokenId: uuid("gitlab_token_id").references(
+      () => runtimeCredentialDefinitionsTable.id,
+      { onDelete: "restrict" },
     ),
     lastSyncedAt: timestamp("last_synced_at", { mode: "date" }),
     lastSyncError: text("last_sync_error"),

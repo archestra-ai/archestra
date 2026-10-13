@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -62,9 +62,11 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Values: a positive whole number of milliseconds, digits only, such as `620000`
   - Keep it above the keep-alive timeout of every proxy and load balancer in front of Archestra. See [Keep-Alive Timeouts](/docs/admin/deployment#keep-alive-timeouts).
 
-- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM Proxy and chat requests.
+- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum HTTP request body size for LLM Proxy and chat requests.
   - Default: `70MB`
   - Values: bytes (`73400320`) or a size with `KB`, `MB`, or `GB` (`100MB`)
+  - When a policy omits `externals.max_body_bytes`, guardrails use this size for external helper responses and tool results.
+  - The policy setting accepts a positive integer of bytes, not a size string such as `70MB`. It overrides both caps without changing the HTTP request limit; oversized tool results are withheld.
   - All attachments of one chat message share this limit. Raise it when you raise [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/reference/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT), or for very long conversations.
 
 - **`ARCHESTRA_PROCESS_TYPE`** - Which part of the backend this process runs.
@@ -945,6 +947,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images.
   - Default: `latest` on stable releases, otherwise the platform version
+  - Agents made from a catalog template run this tag, whatever tag was current when they were created. See [Upgrades](/docs/agents/runtime/setup#upgrades).
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Lets Agent administrators enable privileged runtime pods, which have node-level access.
   - Default: `false`

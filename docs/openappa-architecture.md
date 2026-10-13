@@ -4,7 +4,7 @@ OpenAPPA evaluates tool calls and tool results at the LLM proxy. The proxy ident
 
 The runtime keys session state by session ID. Internal requests over loopback share session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback forms the platform trust boundary. Requests without a session ID fall back to a shared identity per credential and agent (`<caller-id>@<agent-id>`), which couples their histories and turn approvals.
 
-This guide explains Archestra's integration rather than OpenAPPA policy syntax. The native addon currently pins [OpenAPPA `85465feb`](https://github.com/archestra-ai/OpenAPPA/tree/85465feb8214f662dd21d40df2c01964e5b099fa). Examples use the default `archestra__` tool prefix. Client labels and branding can change this prefix on the wire.
+This guide explains Archestra's integration rather than OpenAPPA policy syntax. The native addon uses the OpenAPPA revision pinned in [`Cargo.toml`](../platform/archestra-rs/openappa-rs/Cargo.toml). Examples use the default `archestra__` tool prefix; client labels and branding can change it on the wire.
 
 Protocol jump links: [call rewriting](#tool-calls-and-results), [remedy execution](#remedies), [user questions](#ask_user-and-native-elicitation), [session and child markers](#protected-session-markers), and [yell reporting](#yell-and-diagnostic-tools).
 
@@ -794,7 +794,9 @@ Sources: [`runtime-crossing.ts`](../platform/backend/src/services/agent-runtime/
 
 The Rust binding stores event batches, policy snapshots, sessions, operations, and receipts in PostgreSQL.
 
-Execution follows three steps under a family advisory lock: insert a pending receipt, run the native hook to append events, and mark the receipt complete. A crash after committing events leaves a pending receipt, failing subsequent operations closed across the session family (except peer reads).
+Execution follows three steps under a family advisory lock: insert a pending receipt, run the native hook to append events, and mark the receipt complete. A crash leaves the receipt pending until the client resubmits that operation. Other operations in the family can continue under the same lock.
+
+On resubmission, the runtime replays a committed decision or continues work it did not record. Operational failures remain retryable; genuine policy denials stay saved. A failed dispatch releases only its own pending receipts when the event log is unchanged, preserving earlier dispatches' recovery evidence.
 
 Completed receipts return saved decisions without re-running the engine. Reusing IDs with modified arguments causes an immediate rejection. The event log enforces strict sequence ordering via transaction advisory locks.
 
@@ -826,11 +828,13 @@ Start new conversations after enabling OpenAPPA. Retained unenforced sessions an
 
 For schema history, inspect [`the migrations directory`](../platform/backend/src/database/migrations/). This includes `0477_appa_github_sync`, `0483_openappa_batteries`, and `0485_fine_silver_surfer`. Startup backfill behavior lives in [`declare-installs.ts`](../platform/backend/src/openappa/declare-installs.ts), not a separate runtime migration.
 
-There is no automated cleanup API for pending receipts. Do not delete pending rows or truncate database tables manually. Investigate the root cause and check external state first. `pnpm --dir backend db:reset-openappa` is a development command that wipes policy data. Never run it to fix stuck production sessions.
+Pending receipts recover through a matching operation retry, not a cleanup API. A result with no committed admission still requires the client to resubmit its bytes; recovery does not invent approvals or guarantee exactly-once external execution. Do not delete pending rows or truncate tables manually.
+
+Investigate persistent failures and check external state first. `pnpm --dir backend db:reset-openappa` is a development command that wipes policy data. Never run it to repair production sessions.
 
 ## Build and deployment
 
-The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads OpenAPPA at the commit pinned in `openappa-rs/Cargo.toml` (`85465feb8214f662dd21d40df2c01964e5b099fa`) and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
+The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads OpenAPPA at the commit pinned in `openappa-rs/Cargo.toml` and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
 
 | Setting | Default | Notes |
 | --- | --- | --- |

@@ -35,6 +35,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import OpenAppaThreadStateModel from "@/models/openappa-thread-state";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildReturnMarker } from "@/openappa/child-return";
@@ -60,6 +61,7 @@ import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { issueRuntimeBinding } from "@/services/agent-runtime/runtime-identity";
 import { buildExternalAppRenderResult } from "@/services/apps/app-render-result";
 import {
+  connectionSetupReference,
   issueConnectionProxySetupContext,
   rewriteConnectionProxySetupUrl,
 } from "@/services/connection-proxy-setup-context";
@@ -1145,6 +1147,178 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     expect(response.statusCode, response.body).toBe(200);
     expect(providerRequests.length).toBeGreaterThan(0);
+  });
+
+  describe("provider-side threads", () => {
+    const create = () => ({
+      ...payload(false),
+      thread: { type: "create" },
+    });
+    const continuation = (previous: string) => ({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 1024,
+      stream: false,
+      thread: { type: "continue", previous_message_id: previous },
+      messages: [{ role: "user", content: "and now?" }],
+    });
+
+    test("rules on a continue with the tools the thread was created with, and sends it without them", async () => {
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      const created = await post(create());
+      expect(created.statusCode, created.body).toBe(200);
+
+      const followed = await post(continuation(created.json().id));
+
+      expect(followed.statusCode, followed.body).toBe(200);
+      const sent = providerRequests.at(-1) as Record<string, unknown>;
+      expect(sent.thread).toEqual({
+        type: "continue",
+        previous_message_id: created.json().id,
+      });
+      // The thread owns the tools: the ruling borrowed them and sent none.
+      expect(sent.tools).toBeUndefined();
+      expect(
+        (sent.messages as Array<{ role: string }>).map((m) => m.role),
+      ).toEqual(["user"]);
+    });
+
+    test("a continue that sends changed tools still rules on the results of the call they answer", async () => {
+      const created = await post(create());
+      expect(created.statusCode, created.body).toBe(200);
+      const call = (
+        created.json().content as Array<{ type: string; id: string }>
+      ).find((block) => block.type === "tool_use");
+      expect(call).toBeDefined();
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      events.length = 0;
+      const processed = vi.spyOn(appaService, "processProxyResults");
+
+      const followed = await post({
+        ...payload(false, [
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: call?.id,
+                content: "RAW TOOL OUTPUT",
+              },
+            ],
+          },
+        ]),
+        thread: { type: "continue", previous_message_id: created.json().id },
+      });
+
+      expect(followed.statusCode, followed.body).toBe(200);
+      // The result was ruled on as the answer to the call the thread holds...
+      expect(events.map((event) => event.event)).toContain("tool_result");
+      expect(
+        processed.mock.calls.flatMap(([params]) => params.results),
+      ).toEqual([expect.objectContaining({ name: "get_weather" })]);
+      // ...which the provider never sees as a message of this request.
+      const sent = providerRequests.at(-1) as {
+        tools?: unknown[];
+        messages: Array<{ role: string }>;
+      };
+      expect(sent.messages.map((message) => message.role)).toEqual(["user"]);
+      expect(sent.tools?.length).toBeGreaterThan(0);
+      // The consumed response keeps no calls.
+      const [row] = await db
+        .select()
+        .from(database.schema.openappaThreadStatesTable)
+        .where(
+          eq(
+            database.schema.openappaThreadStatesTable.messageId,
+            created.json().id,
+          ),
+        );
+      expect(row.calls).toBeNull();
+    });
+
+    test("answers a continue it has no state for with the provider's thread_not_found, under its own request id", async () => {
+      const response = await post(continuation("msg_unknown"));
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({
+        type: "error",
+        error: {
+          type: "not_found_error",
+          details: { error_code: "thread_not_found" },
+        },
+      });
+      expect(response.json().request_id).toMatch(/^req_archestra_/);
+      // Nothing reached the provider: the client replays with a create.
+      expect(providerRequests).toHaveLength(0);
+    });
+
+    test("answers a continue from a response the client holds a rewrite of with a replay request", async () => {
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      const created = await post(create());
+      const id = created.json().id as string;
+      // The client holds text where the provider holds the model's own output.
+      await db
+        .update(database.schema.openappaThreadStatesTable)
+        .set({ diverged: true })
+        .where(eq(database.schema.openappaThreadStatesTable.messageId, id));
+      const before = providerRequests.length;
+
+      const response = await post(continuation(id));
+
+      expect(response.statusCode).toBe(404);
+      expect(providerRequests).toHaveLength(before);
+    });
+
+    test("answers a second continue from the same response with the provider's thread_already_continued", async () => {
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      const created = await post(create());
+      const id = created.json().id as string;
+      const first = await post(continuation(id));
+      expect(first.statusCode, first.body).toBe(200);
+      const before = providerRequests.length;
+
+      const repeated = await post(continuation(id));
+
+      expect(repeated.statusCode).toBe(400);
+      expect(repeated.json()).toMatchObject({
+        type: "error",
+        error: { details: { error_code: "thread_already_continued" } },
+      });
+      expect(repeated.json().request_id).toMatch(/^req_archestra_/);
+      // The provider refuses a repeat as well; the client replays with a create.
+      expect(providerRequests).toHaveLength(before);
+    });
+
+    test("makes the client resend without a thread when the thread store cannot be read", async () => {
+      vi.spyOn(OpenAppaThreadStateModel, "find").mockRejectedValue(
+        new Error("store unavailable"),
+      );
+
+      const response = await post(continuation("msg_store_down"));
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({
+        type: "error",
+        error: { details: { error_code: "thread_unsupported_request" } },
+      });
+      // Never ruled on blind: nothing reached the provider.
+      expect(providerRequests).toHaveLength(0);
+    });
+
+    test("leaves a thread continue alone while Guardrails enforcement is off", async () => {
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      vi.spyOn(GuardrailsDeploymentModel, "get").mockResolvedValue({
+        id: "deployment",
+        enabled: false,
+        unsupportedClientAction: "bypass",
+      });
+
+      const response = await post(continuation("msg_made_elsewhere"));
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(
+        (providerRequests.at(-1) as { thread: unknown }).thread,
+      ).toMatchObject({ previous_message_id: "msg_made_elsewhere" });
+    });
   });
 
   test("passes a tool-less request without opening a root", async () => {
@@ -11328,6 +11502,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const tamper = (token: string) =>
       `${token.slice(0, -1)}${token.endsWith("a") ? "b" : "a"}`;
 
+    // What the agent that ran the installer read: its output, which ends with
+    // the setup reference of the setup the token names.
+    const installerOutput = (token: string) => {
+      const [payload] = token.slice("cps1_".length).split(".");
+      const { setupId } = JSON.parse(
+        Buffer.from(payload, "base64url").toString("utf8"),
+      ) as { setupId: string };
+      const reference = connectionSetupReference({
+        setupId,
+        secret: signingSecret(),
+      });
+      return `${secret}\n  Setup reference   ${reference}`;
+    };
+
     const authHeaders = (auth: SetupAuth, family: SetupWire) => {
       const headers: Record<string, string> = { "user-agent": unknownAgent };
       if (family === "anthropic") headers["anthropic-version"] = "2023-06-01";
@@ -11350,6 +11538,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       family: SetupWire,
       stream: boolean,
       deferred: boolean,
+      toolOutput: string,
     ) => {
       if (family === "anthropic") {
         const body = payload(stream, [
@@ -11366,7 +11555,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               {
                 type: "tool_result",
                 tool_use_id: "toolu_old",
-                content: secret,
+                content: toolOutput,
               },
             ],
           },
@@ -11441,7 +11630,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 },
               ],
             },
-            { role: "tool", tool_call_id: "call_prev", content: secret },
+            { role: "tool", tool_call_id: "call_prev", content: toolOutput },
             { role: "user", content: latestUser },
           ],
           tools: tools
@@ -11473,7 +11662,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           {
             type: "function_call_output",
             call_id: "call_prev",
-            output: secret,
+            output: toolOutput,
           },
           {
             type: "message",
@@ -11496,8 +11685,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       knownClient?: boolean;
       malformedSession?: boolean;
       omitSession?: boolean;
+      /** The earlier tool output; by default the installer's, for `token`. */
+      toolOutput?: string;
       headers?: Record<string, string>;
       url?: string;
+      /** Anthropic only: a continue sends just the newest user turn. */
+      thread?:
+        | { type: "create" }
+        | { type: "continue"; previous_message_id: string };
     }) => {
       providerRequests.length = 0;
       events.length = 0;
@@ -11520,6 +11715,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             : crypto.randomUUID();
         }
       }
+      const history = historyBody(
+        params.family,
+        params.stream,
+        params.deferred ?? true,
+        params.toolOutput ??
+          (params.token ? installerOutput(params.token) : secret),
+      ) as Record<string, unknown>;
       return app.inject({
         method: "POST",
         url:
@@ -11529,11 +11731,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             : `/v1/connection-setup/${params.token}/${route}`),
         remoteAddress,
         headers,
-        payload: historyBody(
-          params.family,
-          params.stream,
-          params.deferred ?? true,
-        ) as Record<string, unknown>,
+        payload:
+          params.thread?.type === "continue"
+            ? {
+                model: history.model,
+                max_tokens: history.max_tokens,
+                stream: params.stream,
+                thread: params.thread,
+                messages: [{ role: "user", content: latestUser }],
+              }
+            : params.thread
+              ? { ...history, thread: params.thread }
+              : history,
       });
     };
 
@@ -11778,6 +11987,77 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         headers: { authorization: `Bearer ${otherVirtualKey}` },
       });
       expectStillGoverned(otherKeyGoverned);
+    });
+
+    test("the setup URL exempts nothing in a session started after the setup", async () => {
+      const token = issueFor(passthroughKeyId);
+      // The installer's conversation is exempt...
+      expectBypassed(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          deferred: true,
+        }),
+        token,
+      );
+      // ...but a new session sends the same URL from the client's settings,
+      // and its history holds no setup reference.
+      expectStillGoverned(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          toolOutput: secret,
+          deferred: true,
+        }),
+      );
+      // The reference of another setup does not count either.
+      expectAdmissionBlocked(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          toolOutput: installerOutput(issueFor(passthroughKeyId)),
+          deferred: true,
+        }),
+      );
+    });
+
+    test("a provider-thread continue in the installer's conversation replays, and the replay stays exempt", async () => {
+      const token = issueFor(passthroughKeyId);
+      // The installer's output is earlier in the thread, not in this continue,
+      // so the request is governed, and no thread state exists for it.
+      const continued = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        token,
+        knownClient: true,
+        thread: { type: "continue", previous_message_id: "msg_in_setup" },
+      });
+      expect(continued.statusCode, continued.body).toBe(404);
+      expect(continued.json()).toMatchObject({
+        error: { details: { error_code: "thread_not_found" } },
+      });
+      expect(providerRequests).toHaveLength(0);
+      // Claude Code replays the whole conversation, which holds the reference.
+      expectBypassed(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          thread: { type: "create" },
+        }),
+        token,
+      );
     });
 
     test("an unrelated deferred request without the setup URL is governed, not refused", async () => {
@@ -13242,6 +13522,28 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
+  });
+
+  test("refuses a governed Responses request that continues a stored response", async () => {
+    // The stored response keeps the conversation at the provider, so the
+    // request in hand is a delta the ruling cannot read.
+    const payload = codexPayload({
+      session_id: CODEX_SESSION,
+      thread_id: CODEX_THREAD,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: {
+        ...payload,
+        previous_response_id: "resp_stored",
+      } as Record<string, unknown>,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.body).toContain("previous_response_id");
   });
 
   /** Codex declares an MCP server's tools as members of one namespace. */

@@ -2,7 +2,7 @@
 title: Apps SDK Reference
 description: The window.archestra SDK, styling, security model, and authoring tools for MCP Apps
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -55,7 +55,7 @@ Do not use `localStorage`, `sessionStorage`, or IndexedDB. The sandbox runs the 
 
 ### Files
 
-`archestra.files` is a file store private to each viewer of the app. It never shows a chat's files, a project's files, or another viewer's files. The store is the same wherever the app runs: inline in chat, on its own page, or in an external MCP client. It needs the [Code Sandbox](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED); a deployment without it has no app file store.
+`archestra.files` is a file store private to each viewer of the app. It never shows a chat's files, a project's files, or another viewer's files. The store is the same wherever the app runs: inline in chat, on its own page, or in an external MCP client.
 
 | Method | Does |
 | --- | --- |
@@ -75,10 +75,11 @@ Use files for documents the app produces or the viewer keeps, such as a generate
 `tools.call` resolves to the first of these that the result has:
 
 1. `structuredContent`
-2. JSON parsed from the text output
-3. The raw text
-4. `{ media: [{ type, mimeType, dataUrl }] }` for an image-only or audio-only result. Use `dataUrl` directly as an `img` or `audio` source.
-5. `null`
+2. `{ text, resources: [{ uri, mimeType, text }] }` when the result embeds resources. A file-read tool, such as GitHub's `get_file_contents`, returns the file body in `resources[0].text`. A binary file carries `dataUrl` instead of `text`.
+3. JSON parsed from the text output
+4. The raw text
+5. `{ media: [{ type, mimeType, dataUrl }] }` for an image-only or audio-only result. Use `dataUrl` directly as an `img` or `audio` source.
+6. `null`
 
 A tool runs as the viewer, with the viewer's own MCP credentials: their personal connection first, then their team's, then the organization's. App code holds no tokens. When the viewer has not connected the tool's MCP server yet, the call rejects with `{ code: "auth_required", url }`. Show the error message with `url` as a link. Once the viewer connects the server, the next call succeeds.
 

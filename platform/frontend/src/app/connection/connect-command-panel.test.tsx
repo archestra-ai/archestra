@@ -11,7 +11,6 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
 
 vi.mock("next/navigation");
 
@@ -124,6 +123,23 @@ function findClient(id: string) {
   const client = CONNECT_CLIENTS.find((c) => c.id === id);
   if (!client) throw new Error(`Missing fixture client: ${id}`);
   return client;
+}
+
+/** An admin's per-client key mapping (Settings → Connection). */
+function mapClientProviderKeys(mapping: Record<string, SupportedProvider[]>) {
+  vi.mocked(useOrganization).mockReturnValue({
+    data: {
+      connectionClientProviderKeys: Object.fromEntries(
+        Object.entries(mapping).map(([clientId, providers]) => [
+          clientId,
+          providers.map((provider) => ({
+            provider,
+            providerApiKeyId: `${provider}-org-key`,
+          })),
+        ]),
+      ),
+    },
+  } as unknown as ReturnType<typeof useOrganization>);
 }
 
 const claudeClient = findClient("claude-code");
@@ -318,18 +334,6 @@ describe("ConnectCommandPanel", () => {
       screen.queryByRole("heading", { name: "Review the setup" }),
     ).toBeNull();
     expect(screen.queryByText("your Claude subscription")).toBeNull();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Customize setup" }),
-    );
-    expect(
-      screen.getByRole("tab", { name: "Claude subscription" }),
-    ).toHaveAttribute("aria-selected", "true");
-    await userEvent.click(
-      screen.getByRole("button", { name: "Done customizing" }),
-    );
-    expect(
-      screen.queryByRole("tab", { name: "Claude subscription" }),
-    ).toBeNull();
     expect(screen.getByText(COMMAND)).not.toBeVisible();
     await userEvent.click(screen.getByText(/Advanced: terminal setup/));
     expect(screen.getByText(COMMAND)).toBeVisible();
@@ -413,7 +417,7 @@ describe("ConnectCommandPanel", () => {
     );
   });
 
-  it("regenerates Desktop setup when the platform or API-key authentication changes", async () => {
+  it("regenerates Desktop setup when the platform changes", async () => {
     const user = userEvent.setup();
     renderPanel({ client: findClient("claude-desktop") });
     await screen.findByText(COMMAND);
@@ -422,26 +426,82 @@ describe("ConnectCommandPanel", () => {
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
         expect.objectContaining({
+          clientId: "claude-desktop",
           platform: "windows",
           proxyAuth: "provider-key",
         }),
       ),
     );
-    await user.click(screen.getByRole("tab", { name: "API key" }));
-    await waitFor(() =>
-      expect(createSetupMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          clientId: "claude-desktop",
-          platform: "windows",
-          proxyAuth: "virtual-key",
-          provider: "anthropic",
-        }),
-      ),
+  });
+
+  // Users don't choose how models authenticate: the client and the admin's
+  // per-client key mapping decide it.
+  it.each([
+    {
+      case: "an unmapped client keeps the user's own key",
+      clientId: "claude-code",
+      mapped: [],
+      canAttribute: true,
+      expected: { proxyAuth: "provider-key", provider: "anthropic" },
+    },
+    {
+      case: "an admin-mapped client gets a virtual key",
+      clientId: "claude-code",
+      mapped: ["anthropic"],
+      canAttribute: true,
+      expected: { proxyAuth: "virtual-key", provider: "anthropic" },
+    },
+    {
+      case: "an admin-mapped Desktop gets an API key instead of the subscription",
+      clientId: "claude-desktop",
+      mapped: ["anthropic"],
+      canAttribute: true,
+      expected: { proxyAuth: "virtual-key", provider: "anthropic" },
+    },
+    {
+      case: "a user who cannot mint virtual keys keeps their own key",
+      clientId: "claude-code",
+      mapped: ["anthropic"],
+      canAttribute: false,
+      expected: { proxyAuth: "provider-key", provider: "anthropic" },
+    },
+    {
+      case: "a mapping for another client does not apply",
+      clientId: "claude-code",
+      mapped: [],
+      otherClientMapped: true,
+      canAttribute: true,
+      expected: { proxyAuth: "provider-key", provider: "anthropic" },
+    },
+  ] satisfies {
+    case: string;
+    clientId: string;
+    mapped: SupportedProvider[];
+    otherClientMapped?: boolean;
+    canAttribute: boolean;
+    expected: { proxyAuth: string; provider: string };
+  }[])("derives proxy auth: $case", async ({
+    clientId,
+    mapped,
+    otherClientMapped,
+    canAttribute,
+    expected,
+  }) => {
+    mapClientProviderKeys({
+      [clientId]: mapped,
+      ...(otherClientMapped ? { codex: ["openai"] } : {}),
+    });
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: "llmVirtualKey" in permissions ? canAttribute : true,
+        }) as ReturnType<typeof useHasPermissions>,
     );
-    await user.click(screen.getByRole("tab", { name: "Claude subscription" }));
+    renderPanel({ client: findClient(clientId) });
+
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
-        expect.objectContaining({ proxyAuth: "provider-key" }),
+        expect.objectContaining({ clientId, llmProxyId: "p1", ...expected }),
       ),
     );
   });
@@ -589,26 +649,20 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
       ).toBeNull();
-      await user.click(screen.getByRole("button", { name: "Customize setup" }));
-      const gateway = screen.getByRole("checkbox", {
-        name: "Connect the MCP gateway (required)",
-      });
-      expect(gateway).toBeChecked();
-      expect(gateway).toBeDisabled();
-      await user.click(
-        screen.getByRole("checkbox", { name: "Install shared skills" }),
-      );
+      // Setup options start collapsed: the defaults need no review.
+      expect(screen.queryByRole("switch", { name: "Skills" })).toBeNull();
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      // The gateway is required, so Tools has no off switch.
+      expect(screen.getByText("My Gateway")).toBeVisible();
+      expect(screen.queryByRole("switch", { name: "Tools" })).toBeNull();
+      await user.click(screen.getByRole("switch", { name: "Skills" }));
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({ skills: undefined }),
+          expect.objectContaining({ mcpGatewayId: "g1", skills: undefined }),
         ),
       );
-      await user.click(
-        screen.getByRole("button", { name: "Done customizing" }),
-      );
-      expect(
-        screen.queryByRole("checkbox", { name: "Install shared skills" }),
-      ).toBeNull();
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      expect(screen.queryByRole("switch", { name: "Skills" })).toBeNull();
       await user.click(
         screen.getByRole("checkbox", {
           name: "This code matches the code in my terminal.",
@@ -658,17 +712,11 @@ describe("ConnectCommandPanel", () => {
       </QueryClientProvider>,
     );
     try {
-      const gateway = await screen.findByRole("checkbox", {
-        name: "Connect the MCP gateway (required)",
-      });
-      expect(gateway).toBeChecked();
-      expect(gateway).toBeDisabled();
-      await user.click(gateway);
-      const optionalLabels = [
-        "Route model requests through the LLM Proxy",
-        "Install shared skills",
-        "Install compatible plugins",
-      ];
+      // Exclusions open the setup options so the user sees what was left out.
+      // A legacy tools exclusion cannot drop the required gateway.
+      expect(await screen.findByText("My Gateway")).toBeVisible();
+      expect(screen.queryByRole("switch", { name: "Tools" })).toBeNull();
+      const optionalLabels = ["Model routing", "Skills", "Plugins"];
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
           expect.objectContaining({
@@ -680,10 +728,10 @@ describe("ConnectCommandPanel", () => {
         ),
       );
       for (const name of optionalLabels) {
-        const checkbox = screen.getByRole("checkbox", { name });
-        expect(checkbox).not.toBeChecked();
-        expect(checkbox).toBeEnabled();
-        await user.click(checkbox);
+        const toggle = screen.getByRole("switch", { name });
+        expect(toggle).not.toBeChecked();
+        expect(toggle).toBeEnabled();
+        await user.click(toggle);
       }
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -698,10 +746,10 @@ describe("ConnectCommandPanel", () => {
       // A refetch must not reapply the initial opt-outs over the user's edits.
       await queryClient.invalidateQueries();
       for (const name of optionalLabels) {
-        expect(screen.getByRole("checkbox", { name })).toBeChecked();
+        expect(screen.getByRole("switch", { name })).toBeChecked();
       }
       for (const name of optionalLabels) {
-        await user.click(screen.getByRole("checkbox", { name }));
+        await user.click(screen.getByRole("switch", { name }));
       }
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -1475,77 +1523,135 @@ describe("ConnectCommandPanel", () => {
     expect(onProviderSelect).toHaveBeenCalledWith("bedrock");
   });
 
-  it("opens an inline add-provider-key dialog from the auth editor when no provider can mint a virtual key", async () => {
-    // No configured provider key, but the user may create one
-    // (hasPermissionsMock defaults to true for llmProviderApiKey:create).
+  it("opens an inline add-provider-key dialog from the proxy editor when no provider can mint a virtual key", async () => {
+    // An admin mapped a key for Claude Code, but the user can resolve none, and
+    // may create one (hasPermissionsMock defaults to true for
+    // llmProviderApiKey:create).
+    mapClientProviderKeys({ "claude-code": ["anthropic"] });
     availableKeysMock.mockReturnValue({ data: [] });
     const user = userEvent.setup();
     renderPanel();
 
     await user.click(screen.getByTestId("connect-change-proxy"));
-    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
     await user.click(screen.getByTestId("connect-auth-add-provider-key"));
 
     expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
   });
 
-  it("explains Cursor needs an API key for proxy passthrough", async () => {
+  it("routes Cursor's models through the Model Router with one virtual key", async () => {
+    availableKeysMock.mockReturnValue({
+      data: [
+        { provider: "anthropic", isPrimary: true },
+        { provider: "openai", isPrimary: true },
+      ],
+    });
     renderPanel({ client: findClient("cursor") });
     await screen.findByText(COMMAND);
 
+    expect(createSetupMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clientId: "cursor",
+        proxyAuth: "primary-providers",
+        provider: undefined,
+      }),
+    );
     expect(
       screen.getByTestId("connect-change-proxy").closest("li"),
     ).toHaveTextContent(
-      "Prepare OpenAI proxy settings for Cursor; finish setup in Cursor Settings",
+      "Route Cursor's models (2 providers) through the Model Router using a virtual key",
     );
-
-    await userEvent.setup().click(screen.getByTestId("connect-change-proxy"));
-    expect(
-      screen.getByText(
-        /Its subscription cannot authenticate requests through the proxy/,
-      ),
-    ).toBeInTheDocument();
   });
 
-  it("gates step 3 and hides the OAuth step when virtual-key auth has no backing key", async () => {
+  it("still connects Cursor's tools when no key can route its models", async () => {
+    // The default keys are not primary, and no admin mapped any for Cursor.
+    renderPanel({ client: findClient("cursor") });
+    await screen.findByText(COMMAND);
+
+    expect(createSetupMock).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ proxyAuth: expect.anything() }),
+    );
+    expect(
+      screen.getByTestId("connect-change-proxy").closest("li"),
+    ).toHaveTextContent("Cursor keeps its own models");
+  });
+
+  it("connects without model routing when an admin-mapped provider has no usable key", async () => {
+    // An admin maps keys for Claude Code, so it needs a virtual key, but the
+    // user can resolve no key to mint one from.
+    mapClientProviderKeys({ "claude-code": ["anthropic", "bedrock"] });
     availableKeysMock.mockReturnValue({ data: [] });
-    const user = userEvent.setup();
     renderPanel();
 
-    // Passthrough by default → a runnable command, plus the OAuth step.
+    // Tools still connect: the setup goes ahead without the proxy...
     await screen.findByText(COMMAND);
+    expect(createSetupMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        mcpGatewayId: "g1",
+        llmProxyId: undefined,
+        provider: undefined,
+        proxyAuth: undefined,
+      }),
+    );
     expect(
       screen.getByRole("heading", { name: "Finish the OAuth flow" }),
     ).toBeInTheDocument();
-
-    // Switch the proxy auth to a virtual key that nothing can back.
-    await user.click(screen.getByTestId("connect-change-proxy"));
-    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
-
-    // Step 3 gates on adding a key instead of shipping a command...
-    const gateButton = await screen.findByTestId(
-      "connect-gate-add-provider-key",
-    );
-    // Two supported providers (Anthropic, Bedrock) → the CTA stays generic.
-    expect(gateButton).toHaveTextContent("Add a provider key");
-    expect(screen.queryByText(COMMAND)).not.toBeInTheDocument();
-    expect(screen.getByTestId("connect-command-status")).toHaveTextContent(
-      "Add a provider key to generate the setup command",
-    );
-    // ...and the setup, now unproducible as configured, drops the OAuth step.
+    // ...and a notice explains why, with a way to add a key. Two supported
+    // providers (Anthropic, Bedrock) → the CTA stays generic.
     expect(
-      screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
-    ).not.toBeInTheDocument();
+      screen.getByText(/Setup connects without model routing until you add/),
+    ).toBeVisible();
+    expect(
+      screen.getByTestId("connect-gate-add-provider-key"),
+    ).toHaveTextContent("Add a provider key");
+  });
+
+  it.each([
+    {
+      case: "no usable primary key",
+      keys: [
+        { provider: "openai", isPrimary: true, requiresReauthentication: true },
+        { provider: "anthropic", isPrimary: false },
+      ],
+      canAttribute: true,
+    },
+    {
+      case: "no permission to mint virtual keys",
+      keys: [{ provider: "anthropic", isPrimary: true }],
+      canAttribute: false,
+    },
+  ])("still connects OpenCode's tools without model routing with $case", async ({
+    keys,
+    canAttribute,
+  }) => {
+    availableKeysMock.mockReturnValue({ data: keys });
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: "llmVirtualKey" in permissions ? canAttribute : true,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    renderPanel({ client: findClient("opencode") });
+
+    await screen.findByText(COMMAND);
+    expect(createSetupMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        clientId: "opencode",
+        mcpGatewayId: "g1",
+        llmProxyId: undefined,
+        proxyAuth: undefined,
+      }),
+    );
+    expect(
+      screen.getByText(/OpenCode.* connects without model routing/),
+    ).toBeVisible();
   });
 
   it("opens the add-provider-key dialog from the step-3 gate", async () => {
+    mapClientProviderKeys({ "claude-code": ["anthropic"] });
     availableKeysMock.mockReturnValue({ data: [] });
     const user = userEvent.setup();
     renderPanel();
-    await screen.findByText(COMMAND);
 
-    await user.click(screen.getByTestId("connect-change-proxy"));
-    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
     await user.click(
       await screen.findByTestId("connect-gate-add-provider-key"),
     );
@@ -1554,13 +1660,9 @@ describe("ConnectCommandPanel", () => {
   });
 
   it("brands the step-3 gate CTA to the sole provider (Codex → OpenAI)", async () => {
+    mapClientProviderKeys({ codex: ["openai"] });
     availableKeysMock.mockReturnValue({ data: [] });
-    const user = userEvent.setup();
     renderPanel({ client: findClient("codex") });
-
-    await screen.findByText(COMMAND);
-    await user.click(screen.getByTestId("connect-change-proxy"));
-    await user.click(screen.getByRole("tab", { name: "Virtual key" }));
 
     const gateButton = await screen.findByTestId(
       "connect-gate-add-provider-key",
@@ -1658,102 +1760,52 @@ describe("ConnectCommandPanel", () => {
       );
     });
 
-    it("sends the selected OpenCode routing mode without retaining an individual provider in all-provider mode", async () => {
-      const user = userEvent.setup();
+    it("routes OpenCode through one virtual key for its primary providers, ignoring a bookmarked provider", async () => {
       availableKeysMock.mockReturnValue({
         data: [
           { provider: "anthropic", isPrimary: true },
           { provider: "bedrock", isPrimary: false },
         ],
       });
-      function OpenCodePanel() {
-        const [provider, setProvider] = useState<SupportedProvider | null>(
-          null,
-        );
-        return (
-          <ConnectCommandPanel
-            {...renderPanelProps({
-              client: findClient("opencode"),
-              urlProvider: provider,
-              onProviderSelect: setProvider,
-            })}
-          />
-        );
-      }
-      render(<OpenCodePanel />, { wrapper: queryWrapper() });
+      renderPanel({ client: findClient("opencode"), urlProvider: "bedrock" });
+
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenLastCalledWith(
           expect.objectContaining({
+            clientId: "opencode",
+            llmProxyId: "p1",
             proxyAuth: "primary-providers",
             provider: undefined,
           }),
         ),
       );
-      await user.click(screen.getByTestId("connect-change-proxy"));
-      fireEvent.keyDown(
-        screen.getByRole("combobox", { name: "Model provider" }),
-        { key: "ArrowDown" },
-      );
-      await user.click(screen.getByRole("option", { name: "AWS Bedrock" }));
-      await waitFor(() =>
-        expect(createSetupMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            proxyAuth: "virtual-key",
-            provider: "bedrock",
-          }),
-        ),
-      );
-      await user.click(screen.getByRole("tab", { name: "Your provider key" }));
-      await waitFor(() =>
-        expect(createSetupMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({ proxyAuth: "provider-key" }),
-        ),
-      );
-      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
-      fireEvent.keyDown(
-        screen.getByRole("combobox", { name: "Model provider" }),
-        { key: "ArrowDown" },
-      );
-      await user.click(
-        screen.getByRole("option", { name: "All model providers" }),
-      );
-      await waitFor(() =>
-        expect(createSetupMock).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            proxyAuth: "primary-providers",
-            provider: undefined,
-          }),
-        ),
-      );
+      expect(
+        screen.queryByRole("combobox", { name: "Provider" }),
+      ).not.toBeInTheDocument();
     });
 
-    it("does not offer unconfigured or expired OpenCode provider credentials", async () => {
-      const user = userEvent.setup();
+    it("backs OpenCode's virtual key only with usable primary credentials", async () => {
       availableKeysMock.mockReturnValue({
         data: [
           { provider: "anthropic", isPrimary: true },
-          { provider: "openai", requiresReauthentication: true },
-          { provider: "vllm", baseUrl: "  " },
           {
-            provider: "microsoft-365-copilot",
-            requiresReauthentication: false,
+            provider: "openai",
+            isPrimary: true,
+            requiresReauthentication: true,
           },
+          { provider: "vllm", isPrimary: true, baseUrl: "  " },
+          // Its proxy adapter rejects tool calls, which OpenCode always sends.
+          { provider: "microsoft-365-copilot", isPrimary: true },
         ],
       });
       renderPanel({ client: findClient("opencode") });
       await screen.findByText(COMMAND);
-      await user.click(screen.getByTestId("connect-change-proxy"));
-      fireEvent.keyDown(
-        screen.getByRole("combobox", { name: "Model provider" }),
-        { key: "ArrowDown" },
-      );
-      expect(screen.getByRole("option", { name: "Anthropic" })).toBeVisible();
+
       expect(
-        screen.getByRole("option", { name: "Microsoft 365 Copilot" }),
-      ).toBeVisible();
-      for (const name of ["GitHub Copilot", "OpenAI", "OpenAI-compatible"]) {
-        expect(screen.queryByRole("option", { name })).not.toBeInTheDocument();
-      }
+        screen.getByTestId("connect-change-proxy").closest("li"),
+      ).toHaveTextContent(
+        "Route all primary model providers (1) through the LLM Proxy using a virtual key",
+      );
     });
 
     it("filters synced models and regenerates setup with the keyboard selection", async () => {
@@ -1914,48 +1966,6 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.queryByRole("button", { name: /Sign in with GitHub/i }),
       ).not.toBeInTheDocument();
-    });
-
-    it("keeps the auth toggle reachable after Virtual key falls back to GitHub Copilot", async () => {
-      // With no configured keys, switching Copilot CLI to a virtual key collapses
-      // the provider list to GitHub Copilot (the only per-user one). The toggle
-      // must stay so the user isn't stranded in virtual-key mode.
-      availableKeysMock.mockReturnValue({ data: [] });
-      const user = userEvent.setup();
-      renderPanel({ client: findClient("copilot-cli") });
-
-      await screen.findByText(COMMAND);
-      await user.click(screen.getByTestId("connect-change-proxy"));
-      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
-
-      // We fell back to the GitHub Copilot connect gate...
-      expect(
-        await screen.findByRole("button", { name: /Sign in with GitHub/i }),
-      ).toBeInTheDocument();
-      // ...but both auth tabs are still there to switch back.
-      expect(
-        screen.getByRole("tab", { name: "Your provider key" }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("tab", { name: "Virtual key" }),
-      ).toBeInTheDocument();
-    });
-
-    it("switches back to passthrough off the per-user provider so the choice sticks", async () => {
-      availableKeysMock.mockReturnValue({ data: [] });
-      const onProviderSelect = vi.fn();
-      const user = userEvent.setup();
-      renderPanel({ client: findClient("copilot-cli"), onProviderSelect });
-
-      await screen.findByText(COMMAND);
-      await user.click(screen.getByTestId("connect-change-proxy"));
-      await user.click(screen.getByRole("tab", { name: "Virtual key" }));
-      await screen.findByRole("button", { name: /Sign in with GitHub/i });
-
-      // Clicking back to passthrough moves off GitHub Copilot (which forces
-      // virtual-key) to the first passthrough-capable provider.
-      await user.click(screen.getByRole("tab", { name: "Your provider key" }));
-      expect(onProviderSelect).toHaveBeenCalledWith("openai");
     });
   });
 });

@@ -23,7 +23,10 @@ import config, { parseOpenAppaConfig } from "@/config";
 import { AgentModel, SkillModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import type { OpenedApp } from "@/services/apps/opened-app-context";
-import { SKILL_SANDBOX_ATTACHMENTS_DIR } from "@/skills-sandbox/runtime-image";
+import {
+  SKILL_SANDBOX_ATTACHMENTS_DIR,
+  SKILL_SANDBOX_HOME,
+} from "@/skills-sandbox/runtime-image";
 import { accessGrants, describe, expect, test } from "@/test";
 import {
   APP_BUILD_CONDUCT_INSTRUCTION,
@@ -62,7 +65,13 @@ const withFileTools: Record<string, Tool> = {
   [brand(TOOL_READ_FILE_SHORT_NAME)]: {} as Tool,
   [brand(TOOL_SAVE_FILE_SHORT_NAME)]: {} as Tool,
 };
-// Sandbox runtime only (Projects off): no persistent-file tools.
+// Persistent-file tools only (no code runtime): the file surface alone.
+const withFilesOnly: Record<string, Tool> = {
+  [searchFilesToolName]: {} as Tool,
+  [brand(TOOL_READ_FILE_SHORT_NAME)]: {} as Tool,
+  [brand(TOOL_SAVE_FILE_SHORT_NAME)]: {} as Tool,
+};
+// Sandbox runtime only (file tools not assigned): no persistent-file tools.
 const withSandboxOnly: Record<string, Tool> = {
   [brand(TOOL_RUN_COMMAND_SHORT_NAME)]: {} as Tool,
   [brand(TOOL_DOWNLOAD_FILE_SHORT_NAME)]: {} as Tool,
@@ -458,6 +467,35 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("code execution environment");
     expect(prompt).not.toContain(searchFilesToolName);
     expect(prompt).not.toContain("did not attach this turn");
+  });
+
+  test("without the code runtime, file guidance never mentions the sandbox", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const agent = await makeAgent({
+      systemPrompt: "Base.",
+      toolExposureMode: "full",
+    });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId);
+
+    const prompt = await buildAgentSystemPrompt({
+      agent,
+      mcpTools: withFilesOnly,
+      organizationId: agent.organizationId,
+      userId: user.id,
+      agentId: agent.id,
+    });
+
+    // The persistent-file guidance is all there...
+    expect(prompt).toContain("Files panel");
+    expect(prompt).toContain(searchFilesToolName);
+    expect(prompt).toContain("did not attach this turn");
+    // ...but nothing points at a sandbox the agent doesn't have.
+    expect(prompt).not.toMatch(/sandbox/i);
+    expect(prompt).not.toContain(SKILL_SANDBOX_HOME);
   });
 
   test("app-exchange guidance is gated on copy_file and keeps the source filename", async ({

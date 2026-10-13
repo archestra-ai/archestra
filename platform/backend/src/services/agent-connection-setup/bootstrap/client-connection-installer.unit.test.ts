@@ -440,6 +440,92 @@ test("writes the approved Windows setup with a UTF-8 BOM so powershell.exe -File
   expect(bytes.subarray(3).toString("utf8")).toBe(scriptBody);
 });
 
+test.each([
+  { serverName: "prod_gateway", runs: true },
+  { serverName: "r&d_(prod)", runs: false },
+])("Windows sign-in for $serverName gives cmd.exe one command line, never an argument list", async ({
+  serverName,
+  runs,
+}) => {
+  const command = ["opencode", "mcp", "auth", serverName];
+  const ending = {
+    label: "OpenCode",
+    appName: "Test",
+    parts: [],
+    signIn: { command, text: command.join(" "), howTo: "Sign in later." },
+    launch: null,
+    notes: [],
+  };
+  scriptBody = `# archestra-ending: ${Buffer.from(JSON.stringify(ending)).toString("base64")}\nWrite-Host 'setup'\n`;
+  const calls: Array<{ command: string; args: unknown }> = [];
+  const output: string[] = [];
+  await new Promise<void>((resolve, reject) => {
+    runInNewContext(CLIENT_CONNECTION_INSTALLER, {
+      __filename: join(directory, "connect.cjs"),
+      process: {
+        argv: [
+          process.execPath,
+          "connect.cjs",
+          "--url",
+          namedLoopbackOrigin(),
+          "--client",
+          "opencode",
+          "--no-open",
+        ],
+        platform: "win32",
+        execPath: process.execPath,
+        env: { NO_COLOR: "1" },
+        stdout: { isTTY: true, write: (text: string) => output.push(text) },
+      },
+      Buffer,
+      URL,
+      fetch,
+      AbortSignal,
+      setTimeout,
+      clearTimeout,
+      console: {
+        log: (message: string) => {
+          output.push(message);
+          if (message.includes("Next: open")) resolve();
+        },
+        error: (message: string) => reject(new Error(message)),
+      },
+      require: (name: string) => {
+        if (name === "node:crypto") return { createHash };
+        // The terminal answers the sign-in question with Enter (yes).
+        if (name === "node:fs")
+          return { openSync: () => 7, readSync: () => 0, closeSync() {} };
+        if (name === "node:fs/promises") return fileSystem;
+        if (name === "node:path") return { join };
+        if (name === "node:os")
+          return { hostname: () => "test-host", tmpdir: () => directory };
+        if (name === "node:child_process")
+          return {
+            spawn,
+            spawnSync: (command: string, args: unknown) => {
+              calls.push({ command, args });
+              return { status: 0 };
+            },
+          };
+        throw new Error(`Unexpected module ${name}`);
+      },
+    });
+  });
+  expect(calls[0]?.command).toBe("powershell.exe");
+  const signIn = calls.slice(1);
+  if (runs) {
+    expect(signIn).toEqual([
+      {
+        command: "opencode mcp auth prod_gateway",
+        args: expect.objectContaining({ shell: true }),
+      },
+    ]);
+  } else {
+    expect(signIn).toEqual([]);
+    expect(output).toContain("  opencode mcp auth r&d_(prod)");
+  }
+});
+
 test("a downloaded Desktop setup redeems its reviewed ticket without another approval flow", async () => {
   const token = `archestra_con_${"A".repeat(43)}`;
   const result = await promisify(execFile)(process.execPath, [

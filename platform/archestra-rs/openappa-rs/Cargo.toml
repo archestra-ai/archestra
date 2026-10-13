@@ -9,12 +9,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# OpenAPPA v0.32.0: replay interrupted admission from committed facts (#620),
-# preserving labels, file evidence, and the original call binding.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b2782543656c9cb5de6873c9afb3d165eed4ac6a", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b2782543656c9cb5de6873c9afb3d165eed4ac6a" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b2782543656c9cb5de6873c9afb3d165eed4ac6a", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "b2782543656c9cb5de6873c9afb3d165eed4ac6a" }
+# OpenAPPA #623 on top of v0.32.0: a blocked-call ruling names the tool and the
+# change a narrowing remedy accepts, and prints the remedy label once.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c3607f083200d318ed497343ba9fc08fabcdcca8", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c3607f083200d318ed497343ba9fc08fabcdcca8" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c3607f083200d318ed497343ba9fc08fabcdcca8", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "c3607f083200d318ed497343ba9fc08fabcdcca8" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

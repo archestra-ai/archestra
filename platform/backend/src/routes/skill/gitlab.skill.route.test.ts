@@ -1,5 +1,4 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
-import { vi } from "vitest";
 import { SkillFileModel, SkillModel } from "@/models";
 import { createGitlabToken } from "@/services/git-credentials";
 import { handleSkillGithubSync } from "@/task-queue/handlers/skill-github-sync-handler";
@@ -102,11 +101,9 @@ describe("GitLab skill import", () => {
           "Updated checklist",
       },
     });
-    // Only the clock moves, past the cached repository snapshot.
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000);
+    // Right after the import, inside the snapshot cache window: a sync still
+    // reads the branch as it is now.
     await handleSkillGithubSync({ skillId: created.id });
-    vi.useRealTimers();
     expect(await SkillModel.findById(created.id)).toMatchObject({
       latestVersion: 2,
       lastSyncError: null,

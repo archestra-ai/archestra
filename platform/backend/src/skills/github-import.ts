@@ -228,10 +228,18 @@ export async function importSkills(params: {
   path?: string;
   access?: GitAccess;
   skillPaths: string[];
+  /**
+   * Read the branch now instead of a recent snapshot. Syncs set it: the cache
+   * only carries a discover over to the import that follows it, and a sync
+   * served from it would miss a commit pushed since.
+   */
+  fresh?: boolean;
 }): Promise<ImportedSkill[]> {
   const location = parseRepoUrl(params);
   const client = clientFor(params.access, location);
-  const snapshot = await loadRepoSnapshot(client, location);
+  const snapshot = await loadRepoSnapshot(client, location, {
+    fresh: params.fresh,
+  });
   const ref = location.ref ?? snapshot.commitSha;
 
   // First pass (no resource I/O beyond a rare manifest cache-miss): resolve each
@@ -391,9 +399,10 @@ function parseRepoUrl(params: {
 async function loadRepoSnapshot(
   client: GitHostClient,
   location: RepoLocation,
+  options: { fresh?: boolean } = {},
 ): Promise<CachedRepo> {
   const cacheKey = repoCacheKey(client, location);
-  const cached = repoCache.get(cacheKey);
+  const cached = options.fresh ? undefined : repoCache.get(cacheKey);
   if (cached) return cached;
 
   let commitSha: string;

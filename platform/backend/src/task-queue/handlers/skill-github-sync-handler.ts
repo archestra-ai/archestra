@@ -73,6 +73,7 @@ async function syncSkill(skill: Skill): Promise<void> {
     repoUrl,
     access,
     skillPaths: [source.skillPath],
+    fresh: true,
   });
   if (!imported) {
     throw new Error(`No skill found at ${source.skillPath}`);

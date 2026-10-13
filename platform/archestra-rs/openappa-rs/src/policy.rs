@@ -23,15 +23,13 @@ fn defaults() -> HostDefaults {
     }
 }
 
-/// The body size limit the host sets for every hosted policy: the body limit of the LLM
-/// proxy, which the backend publishes before it crosses into the addon. A tool result the
-/// proxy accepted is therefore never dropped by this cap. A policy's own `max_body_bytes`
-/// has no effect on it; see [`enforce_host_limits`].
+/// The default body size limit for a policy that omits `max_body_bytes`: the LLM proxy's
+/// limit, published by the backend before it crosses into the addon. Explicit policy
+/// limits take precedence for external responses and carried tool results.
 ///
 /// A process that has not published a value (a standalone script, a test), or published
-/// one that is not a positive integer, has no host limit: a policy there keeps the value
-/// its text states, or [`FALLBACK_MAX_BODY_BYTES`] when it states none. No path is
-/// stricter than before the host set the limit.
+/// one that is not a positive integer, keeps the policy's stated value or uses
+/// [`FALLBACK_MAX_BODY_BYTES`] when the policy states none.
 fn published_max_body_bytes() -> Option<usize> {
     parse_max_body_bytes(std::env::var(MAX_BODY_BYTES_ENV).ok().as_deref())
 }
@@ -39,21 +37,6 @@ fn published_max_body_bytes() -> Option<usize> {
 /// What a policy that states none gets, where the host publishes nothing.
 pub(crate) fn host_max_body_bytes() -> usize {
     published_max_body_bytes().unwrap_or(FALLBACK_MAX_BODY_BYTES)
-}
-
-/// Set the host's body size limit on a hosted `Config`, whatever its text states. Every
-/// `Config` this crate builds from hosted text goes through here, so no path can leave
-/// the limit to the policy. Only `max_body_bytes` is the host's: `timeout_ms` and every
-/// other `[externals]` setting stay with the policy.
-pub(crate) fn enforce_host_limits(config: Config) -> Config {
-    apply_host_limit(config, published_max_body_bytes())
-}
-
-fn apply_host_limit(mut config: Config, limit: Option<usize>) -> Config {
-    if let Some(limit) = limit {
-        config.externals.max_body_bytes = limit;
-    }
-    config
 }
 
 fn parse_max_body_bytes(published: Option<&str>) -> Option<usize> {
@@ -83,9 +66,7 @@ pub(crate) fn compile(
     content: &str,
     lookup: impl Fn(&str) -> Option<String>,
 ) -> Result<Config, String> {
-    Config::hosted(content, defaults(), lookup)
-        .map(enforce_host_limits)
-        .map_err(|error| error.to_string())
+    Config::hosted(content, defaults(), lookup).map_err(|error| error.to_string())
 }
 
 /// Open a runtime over `store` under the Archestra adapter.
@@ -166,7 +147,6 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
             })
             .ok_or(IncludeResolution::Unknown)
     })
-    .map(enforce_host_limits)
     .map_err(|error| error.to_string())?;
     let content = String::from_utf8(config.policy_file().bytes().to_vec())
         .map_err(|error| error.to_string())?;
@@ -895,6 +875,11 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             .is_err()
         );
         assert!(validate("[policy\n").is_err());
+        for limit in ["0", "-1", "\"65536\""] {
+            let invalid = format!("[policy]\nversion = 2\n[externals]\nmax_body_bytes = {limit}\n");
+            assert!(validate(&invalid).is_err(), "{invalid}");
+            assert!(compile(&invalid).is_err(), "{invalid}");
+        }
     }
 
     #[test]
@@ -997,51 +982,97 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
     }
 
     #[test]
-    fn the_published_proxy_limit_is_the_host_limit() {
+    fn the_published_proxy_limit_is_the_host_default() {
         assert_eq!(parse_max_body_bytes(Some("73400320")), Some(73_400_320));
         assert_eq!(parse_max_body_bytes(Some(" 1048576 ")), Some(1_048_576));
     }
 
     #[test]
-    fn no_host_limit_without_a_usable_published_value() {
+    fn no_host_default_without_a_usable_published_value() {
         for published in [None, Some(""), Some("0"), Some("-5"), Some("70MB")] {
             assert_eq!(parse_max_body_bytes(published), None);
         }
     }
 
     #[test]
-    fn the_host_limit_replaces_what_a_policy_states_and_keeps_its_other_settings() {
-        const HOST: usize = 70 * 1024 * 1024;
-        for stated in [
-            "[policy]\nversion = 2\n",
-            "[policy]\nversion = 2\n[externals]\nmax_body_bytes = 65536\ntimeout_ms = 1234\n",
-            "[policy]\nversion = 2\n[externals]\nmax_body_bytes = 999999999\ntimeout_ms = 1234\n",
-        ] {
-            let config = apply_host_limit(compile(stated).unwrap(), Some(HOST));
-            assert_eq!(config.externals.max_body_bytes, HOST, "{stated}");
+    fn a_stated_body_limit_survives_compilation_composition_and_reload() {
+        for limit in [4096, 65536, 999999999] {
+            let stated = format!(
+                "[policy]\nversion = 2\n[externals]\nmax_body_bytes = {limit}\ntimeout_ms = 1234\n"
+            );
+            let config = compile(&stated).unwrap();
+            assert_eq!(config.externals.max_body_bytes, limit);
+            assert_eq!(config.externals.timeout, Duration::from_millis(1234));
+            let composed = compose(&stated, &[]).unwrap();
+            let document: toml::Table = toml::from_str(&composed.content).unwrap();
+            assert_eq!(
+                document["externals"]["max_body_bytes"].as_integer(),
+                Some(limit as i64)
+            );
+            let reloaded = compile(&composed.content).unwrap();
+            assert_eq!(reloaded.externals.max_body_bytes, limit);
+            assert_eq!(reloaded.externals.timeout, Duration::from_millis(1234));
         }
-        let kept = apply_host_limit(
-            compile(
-                "[policy]\nversion = 2\n[externals]\nmax_body_bytes = 4096\ntimeout_ms = 1234\n",
-            )
-            .unwrap(),
-            Some(HOST),
-        );
-        assert_eq!(kept.externals.timeout, Duration::from_millis(1234));
     }
 
     #[test]
-    fn without_a_host_limit_a_policy_keeps_what_it_states() {
-        let stated =
-            compile("[policy]\nversion = 2\n[externals]\nmax_body_bytes = 4096\n").unwrap();
+    fn an_unstated_body_limit_uses_the_host_default_without_freezing_it_in_storage() {
+        let content = "[policy]\nversion = 2\n";
+        let unstated = compile(content).unwrap();
+        assert_eq!(unstated.externals.max_body_bytes, host_max_body_bytes());
+        let composed = compose(content, &[]).unwrap();
+        let document: toml::Table = toml::from_str(&composed.content).unwrap();
+        assert!(document["externals"].get("max_body_bytes").is_none());
         assert_eq!(
-            apply_host_limit(stated, None).externals.max_body_bytes,
-            4096
+            compile(&composed.content).unwrap().externals.max_body_bytes,
+            host_max_body_bytes()
         );
-        let unstated = compile("[policy]\nversion = 2\n").unwrap();
-        assert_eq!(
-            apply_host_limit(unstated, None).externals.max_body_bytes,
-            FALLBACK_MAX_BODY_BYTES
+    }
+
+    #[tokio::test]
+    async fn an_explicit_limit_caps_carried_tool_results_by_utf8_bytes() {
+        use appa_runtime_api::{OutcomeBody, ToolOutcome};
+
+        let runtime = memory_runtime(
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = 'read'\ndelta = {}\n[externals]\nmax_body_bytes = 64\n",
         );
+        let actor = started(&runtime, "body-cap").await;
+        for output in [
+            "x".repeat(64),
+            "x".repeat(65),
+            "\u{e9}".repeat(32),
+            "\u{e9}".repeat(33),
+        ] {
+            let event = call(&actor, "read");
+            assert!(matches!(
+                hooks::handle(&runtime, event.clone()).await,
+                HookDecision::AllowCall { .. }
+            ));
+            let HookEvent::ToolCall { call, call_id, .. } = event else {
+                unreachable!();
+            };
+            let expected = if output.len() <= 64 {
+                HookDecision::Ack
+            } else {
+                HookDecision::ReplaceOutput {
+                    output: "[appa] the result was not carried; nothing was admitted".into(),
+                }
+            };
+            assert_eq!(
+                hooks::handle(
+                    &runtime,
+                    HookEvent::ToolResult {
+                        actor: actor.clone(),
+                        call,
+                        call_id,
+                        outcome: ToolOutcome::Success {
+                            body: OutcomeBody::Available(output),
+                        },
+                    },
+                )
+                .await,
+                expected
+            );
+        }
     }
 }

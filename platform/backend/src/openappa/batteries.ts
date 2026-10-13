@@ -843,6 +843,7 @@ class OpenAppaBatteriesService {
     if (
       effective &&
       effective.rootRevision === root.revision &&
+      effective.installFingerprint.startsWith(COMPOSITION_VERSION) &&
       effective.installFingerprint.endsWith(
         root.revision === 0 ? `:${root.contentHash}` : "",
       )
@@ -1855,6 +1856,10 @@ function heldBackRemedy(battery: HeldBackBattery): string {
   }
 }
 
+// Recompose legacy documents that froze an unstated 64 KiB body limit before
+// explicit policy limits took precedence over the host default.
+const COMPOSITION_VERSION = "v2:";
+
 /**
  * What a stored composition answers: the batteries it composed, the credential
  * table and, when any is held back, the statuses its refusal explains.
@@ -1867,13 +1872,15 @@ function compositionFingerprint(params: {
   const { planned, batteries, root } = params;
   const held = heldBack(planned.batteries).map(heldBackNote);
   return (
+    COMPOSITION_VERSION +
     hash(
       JSON.stringify({
         batteries,
         credentials: planned.resolution.credentials,
         ...(held.length > 0 ? { held } : {}),
       }),
-    ) + (root.revision === 0 ? `:${root.contentHash}` : "")
+    ) +
+    (root.revision === 0 ? `:${root.contentHash}` : "")
   );
 }
 

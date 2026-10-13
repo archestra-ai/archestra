@@ -44,6 +44,37 @@ test("native replay rejects duplicate trajectory paths at the host boundary", as
   })), /unique relative/);
 });
 
+test("native replay honors the policy's helper response cap over the host default", async (t) => {
+  const priorLimit = process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+  process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = String(70 * 1024 * 1024);
+  t.after(() => {
+    if (priorLimit === undefined) delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+    else process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = priorLimit;
+  });
+  const url = "http://127.0.0.1:9/api/guardrails-policy/annotators/noop";
+  const response = { version: 1, answer: { delta: {}, requires: { history: [], attention: [] }, emits: [] } };
+  const responseBytes = Buffer.byteLength(JSON.stringify(response));
+  const policy = `[policy]
+version = 2
+[[policy.annotator]]
+name = "noop"
+[[policy.tool]]
+name = "files__read"
+annotator = "noop"
+[externals.annotators.noop]
+url = "${url}"
+`;
+  for (const [limit, expected] of [[undefined, "passed"], [responseBytes, "passed"], [responseBytes - 1, "cannot_run"]]) {
+    const capped = limit === undefined ? policy : `${policy}[externals]\nmax_body_bytes = ${limit}\n`;
+    const result = JSON.parse(await replayOpenappaPolicy(JSON.stringify({
+      content: capped,
+      files: [{ path: "helper-cap.appa", content: "mcp/files/read {}\nexpect allow" }],
+      noopAnnotator: { url, response },
+    })));
+    assert.equal(result.files[0].status, expected, `helper cap ${limit}: ${JSON.stringify(result.files[0])}`);
+  }
+});
+
 test("native inspection reports ordered tools and distinguishes invalid and empty files without a policy", async () => {
   const response = JSON.parse(await inspectOpenappaPolicyTests(JSON.stringify({
     files: [

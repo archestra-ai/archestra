@@ -26,6 +26,7 @@ export const PLUGIN_DELIVERY_MAX_BYTES = 100 * 1024 * 1024;
 
 export const ClientTypeSchema = z.enum([
   "claude-code",
+  "claude-desktop",
   "copilot-cli",
   "codex",
   "cursor",

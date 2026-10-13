@@ -3757,8 +3757,15 @@
     {
       "idx": 536,
       "version": "7",
-      "when": 1791924772613,
-      "tag": "0536_cultured_king_cobra",
+      "when": 1791922639443,
+      "tag": "0536_mixed_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 537,
+      "version": "7",
+      "when": 1791925050165,
+      "tag": "0537_cultured_king_cobra",
       "breakpoints": true
     }
   ]

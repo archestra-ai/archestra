@@ -1,9 +1,12 @@
 import { DEFAULT_GIT_WEB_URLS, type GitProvider } from "@archestra/shared";
 import { Puzzle } from "lucide-react";
+import { AgentIcon } from "@/components/agent-icon";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
 import { repositoryLabel } from "@/lib/skills/skill-source";
 
 type PluginSource = {
+  /** A chosen icon wins over the source mark. */
+  icon?: string | null;
   sourceMarketplaceRepo: string | null;
   sourceRepo: string | null;
   sourceProvider?: GitProvider | null;
@@ -36,8 +39,12 @@ export function PluginSourceIcon({ plugin }: { plugin: PluginSource }) {
   );
 }
 
-/** The bare source mark, for a container that draws its own tile. */
+/**
+ * The plugin's chosen icon, else its source mark. Bare, for a container that
+ * draws its own tile.
+ */
 export function PluginSourceGlyph({ plugin }: { plugin: PluginSource }) {
+  if (plugin.icon) return <AgentIcon icon={plugin.icon} size={24} />;
   const repo = pluginRepository(plugin);
   return repo ? (
     <RepositoryOwnerIcon

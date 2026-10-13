@@ -88,6 +88,11 @@ export const CreatePluginSchema = z
   .object({
     displayName: z.string().trim().min(1).max(120),
     description: z.string().max(1_000).default(""),
+    icon: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Emoji or base64 image data URL shown with the name."),
     clientType: ClientTypeSchema,
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
     files: z.array(PluginFileInputSchema).min(1).max(PLUGIN_MAX_FILES),
@@ -103,6 +108,11 @@ export const UpdatePluginSchema = z
   .object({
     displayName: z.string().trim().min(1).max(120).optional(),
     description: z.string().max(1_000).optional(),
+    icon: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Emoji or base64 image data URL shown with the name."),
     enabled: z.boolean().optional(),
     supportedPlatforms: z.array(PluginPlatformSchema).min(1).optional(),
     labels: z.array(LabelWithDetailsSchema).optional(),

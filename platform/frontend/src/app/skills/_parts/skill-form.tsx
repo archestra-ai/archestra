@@ -2,6 +2,7 @@
 
 import { type Ref, useMemo } from "react";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
+import { IdentityFields } from "@/components/identity-fields";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -70,8 +71,15 @@ export function SkillForm({
             into the manifest below rather than held beside it: the editor
             stays the source of truth, so the two never disagree. */}
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="skill-name">Skill name</Label>
+          {/* The icon is Archestra's, not the repository's: it stays
+              editable while the name is locked to the source. */}
+          <IdentityFields
+            icon={draft.icon}
+            onIconChange={(icon) => onChange({ icon })}
+            fallbackType="skill"
+            disabled={readOnly}
+            label={<Label htmlFor="skill-name">Skill name</Label>}
+          >
             <Input
               id="skill-name"
               value={parsed.name ?? ""}
@@ -91,7 +99,7 @@ export function SkillForm({
               disabled={contentReadOnly}
               required
             />
-          </div>
+          </IdentityFields>
           <div className="space-y-2">
             <Label htmlFor="skill-description">Description</Label>
             <Textarea

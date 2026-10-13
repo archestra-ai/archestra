@@ -420,6 +420,7 @@ class PluginModel {
               pluginSlug,
               displayName: params.input.displayName,
               description: params.input.description,
+              icon: params.input.icon ?? null,
               contentHash,
               sourceKind: params.source ? "github" : "manual",
               sourceRepo: params.source?.repo,
@@ -592,6 +593,7 @@ class PluginModel {
         .set({
           displayName: params.input.displayName,
           description: params.input.description,
+          icon: params.input.icon,
           enabled: params.input.enabled,
           supportedPlatforms: params.input.supportedPlatforms,
           syncGeneration: sql`${schema.pluginsTable.syncGeneration} + 1`,

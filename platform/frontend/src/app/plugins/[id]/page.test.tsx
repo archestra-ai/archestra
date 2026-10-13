@@ -274,6 +274,21 @@ describe("PluginDetailPage", () => {
     });
   });
 
+  it("shows the immutable plugin identity as a hint on the name, not a field", async () => {
+    const user = userEvent.setup();
+    renderPage({ ...BASE_PLUGIN, pluginSlug: "session-attribution-1a2b3c4d" });
+
+    expect(screen.queryByLabelText("Plugin identity")).not.toBeInTheDocument();
+    await user.hover(
+      screen.getByRole("button", {
+        name: "Plugin identity: session-attribution-1a2b3c4d",
+      }),
+    );
+    expect(
+      (await screen.findAllByText("session-attribution-1a2b3c4d")).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("offers no save row to someone who may not change this plugin", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,

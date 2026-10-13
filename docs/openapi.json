@@ -369244,6 +369244,10 @@
                       "description": {
                         "type": "string"
                       },
+                      "icon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "contentHash": {
                         "type": "string"
                       },
@@ -369509,6 +369513,7 @@
                       "pluginSlug",
                       "displayName",
                       "description",
+                      "icon",
                       "contentHash",
                       "sourceKind",
                       "sourceRepo",
@@ -369811,6 +369816,11 @@
                     "type": "string",
                     "maxLength": 1000
                   },
+                  "icon": {
+                    "description": "Emoji or base64 image data URL shown with the name.",
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "clientType": {
                     "type": "string",
                     "enum": [
@@ -370097,6 +370107,10 @@
                       "type": "string"
                     },
                     "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "contentHash": {
@@ -370432,6 +370446,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -371510,6 +371525,10 @@
                           "description": {
                             "type": "string"
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "contentHash": {
                             "type": "string"
                           },
@@ -371843,6 +371862,7 @@
                           "pluginSlug",
                           "displayName",
                           "description",
+                          "icon",
                           "contentHash",
                           "sourceKind",
                           "sourceRepo",
@@ -372866,6 +372886,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -373199,6 +373223,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -374001,6 +374026,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -374334,6 +374363,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -374727,6 +374757,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -375060,6 +375094,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -375699,6 +375734,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "contentHash": {
                       "type": "string"
                     },
@@ -376032,6 +376071,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -376336,6 +376376,11 @@
                     "type": "string",
                     "maxLength": 1000
                   },
+                  "icon": {
+                    "description": "Emoji or base64 image data URL shown with the name.",
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "enabled": {
                     "type": "boolean"
                   },
@@ -376569,6 +376614,10 @@
                       "type": "string"
                     },
                     "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "contentHash": {
@@ -376904,6 +376953,7 @@
                     "pluginSlug",
                     "displayName",
                     "description",
+                    "icon",
                     "contentHash",
                     "sourceKind",
                     "sourceRepo",
@@ -403575,6 +403625,10 @@
                           "description": {
                             "type": "string"
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "content": {
                             "type": "string"
                           },
@@ -403872,6 +403926,7 @@
                           "scope",
                           "name",
                           "description",
+                          "icon",
                           "content",
                           "digest",
                           "latestVersion",
@@ -404219,6 +404274,11 @@
                     "maxLength": 10485760,
                     "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
                   },
+                  "icon": {
+                    "description": "Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.",
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "files": {
                     "maxItems": 500,
                     "type": "array",
@@ -404468,6 +404528,10 @@
                       "type": "string"
                     },
                     "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "content": {
@@ -404812,6 +404876,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -405145,6 +405210,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "content": {
                       "type": "string"
                     },
@@ -405487,6 +405556,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -405784,6 +405854,11 @@
                     "maxLength": 10485760,
                     "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
                   },
+                  "icon": {
+                    "description": "Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.",
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "files": {
                     "maxItems": 500,
                     "type": "array",
@@ -405919,6 +405994,10 @@
                       "type": "string"
                     },
                     "description": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "content": {
@@ -406263,6 +406342,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -408575,6 +408655,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "content": {
                       "type": "string"
                     },
@@ -408917,6 +409001,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -409528,6 +409613,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "content": {
                       "type": "string"
                     },
@@ -409870,6 +409959,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -410285,6 +410375,10 @@
                     "description": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "content": {
                       "type": "string"
                     },
@@ -410627,6 +410721,7 @@
                     "scope",
                     "name",
                     "description",
+                    "icon",
                     "content",
                     "digest",
                     "latestVersion",
@@ -412540,6 +412635,10 @@
                           "description": {
                             "type": "string"
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "content": {
                             "type": "string"
                           },
@@ -412702,6 +412801,7 @@
                           "scope",
                           "name",
                           "description",
+                          "icon",
                           "content",
                           "digest",
                           "latestVersion",

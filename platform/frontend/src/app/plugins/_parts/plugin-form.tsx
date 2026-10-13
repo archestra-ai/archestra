@@ -66,6 +66,8 @@ export function PluginForm({
             <PluginContentFields
               displayName={draft.displayName}
               onDisplayNameChange={(displayName) => onChange({ displayName })}
+              icon={draft.icon}
+              onIconChange={(icon) => onChange({ icon })}
               description={draft.description}
               onDescriptionChange={(description) => onChange({ description })}
               clientType={isCreate ? draft.clientType : undefined}

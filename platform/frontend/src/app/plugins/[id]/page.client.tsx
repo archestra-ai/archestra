@@ -235,6 +235,7 @@ function PluginDetailView({
               files: submitted.files,
             }),
         labels: submitted.labels,
+        icon: submitted.icon,
       })
       .catch(() => null);
     setIsSaving(false);

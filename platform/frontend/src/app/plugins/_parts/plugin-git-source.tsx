@@ -59,6 +59,7 @@ export function PluginGitSourceCard({
   return (
     <>
       <GitSourceCard
+        sticky
         provider={provider}
         repo={repo}
         href={href}

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { GitProviderLogo } from "@/components/git/git-setup-chrome";
+import { PageHeaderBanner } from "@/components/page-header-banner";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
@@ -31,6 +32,7 @@ export function GitSourceCard({
   sync,
   footer,
   actions,
+  sticky = false,
   children,
 }: {
   provider: GitProvider;
@@ -47,6 +49,11 @@ export function GitSourceCard({
   };
   footer?: ReactNode;
   actions?: ReactNode;
+  /**
+   * Stay at the top of the page while it scrolls: on a page whose content the
+   * source locks, it keeps saying why.
+   */
+  sticky?: boolean;
   /** Notices between the summary and the footer. */
   children?: ReactNode;
 }) {
@@ -62,8 +69,14 @@ export function GitSourceCard({
       <span>{sync.pending ? "Syncing…" : (sync.label ?? "Sync now")}</span>
     </Button>
   );
-  return (
-    <div className="overflow-hidden rounded-lg border bg-card">
+  const card = (
+    <div
+      className={cn(
+        "overflow-hidden rounded-lg border bg-card",
+        // The ring of page background hides what scrolls underneath.
+        sticky && "shadow-md shadow-background ring-12 ring-background",
+      )}
+    >
       <div className="flex flex-wrap items-center gap-4 px-4 py-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -119,6 +132,8 @@ export function GitSourceCard({
       )}
     </div>
   );
+  // Sticky: in the page banner slot, just under the sticky page header.
+  return sticky ? <PageHeaderBanner>{card}</PageHeaderBanner> : card;
 }
 
 /** The branch a source follows, or its default branch. */

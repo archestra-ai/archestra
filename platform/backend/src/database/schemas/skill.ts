@@ -52,6 +52,11 @@ const skillsTable = softDeletablePgTable(
     name: text("name").notNull(),
     /** One-line summary the model uses to decide when to activate. */
     description: text("description").notNull(),
+    /**
+     * Emoji or base64 image data URL shown with the name; null = the source
+     * glyph. Archestra-side, so it stays editable on a Git-synced row.
+     */
+    icon: text("icon"),
     /** Full markdown instructions (the SKILL.md body). */
     content: text("content").notNull(),
     /**

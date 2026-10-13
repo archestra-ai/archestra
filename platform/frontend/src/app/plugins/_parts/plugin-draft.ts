@@ -15,6 +15,8 @@ import type { PluginPlatform } from "./plugin-platforms";
  */
 export interface PluginDraft {
   displayName: string;
+  /** Emoji or image shown with the name; null = the plugin glyph. */
+  icon: string | null;
   description: string;
   clientType: PluginClientType;
   enabled: boolean;
@@ -51,6 +53,7 @@ export function pluginGitAuthentication(gitCredential: string): {
 export function blankPluginDraft(): PluginDraft {
   return {
     displayName: "",
+    icon: null,
     description: "",
     clientType: "claude-code",
     enabled: true,
@@ -75,6 +78,7 @@ export function blankPluginDraft(): PluginDraft {
 export function pluginDraftFromPlugin(plugin: PluginDetail): PluginDraft {
   return {
     displayName: plugin.displayName,
+    icon: plugin.icon ?? null,
     description: plugin.description,
     clientType: plugin.clientType,
     enabled: plugin.enabled,

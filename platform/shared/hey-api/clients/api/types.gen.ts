@@ -97400,6 +97400,7 @@ export type GetPluginsResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -97458,6 +97459,10 @@ export type CreatePluginData = {
     body: {
         displayName: string;
         description?: string;
+        /**
+         * Emoji or base64 image data URL shown with the name.
+         */
+        icon?: string | null;
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
         files: Array<{
@@ -97579,6 +97584,7 @@ export type CreatePluginResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -97900,6 +97906,7 @@ export type ImportGithubPluginMarketplaceResponses = {
             pluginSlug: string;
             displayName: string;
             description: string;
+            icon: string | null;
             contentHash: string;
             sourceKind: 'manual' | 'github';
             sourceRepo: string | null;
@@ -98210,6 +98217,7 @@ export type ImportGithubPluginResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -98487,6 +98495,7 @@ export type ApplyGithubPluginUpdateResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -98646,6 +98655,7 @@ export type UpdatePluginGithubSyncResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -98979,6 +98989,7 @@ export type GetPluginResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -99049,6 +99060,10 @@ export type UpdatePluginData = {
     body: {
         displayName?: string;
         description?: string;
+        /**
+         * Emoji or base64 image data URL shown with the name.
+         */
+        icon?: string | null;
         enabled?: boolean;
         supportedPlatforms?: Array<'posix' | 'windows'>;
         labels?: Array<{
@@ -99163,6 +99178,7 @@ export type UpdatePluginResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -106775,6 +106791,7 @@ export type GetSkillsResponses = {
             scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
+            icon: string | null;
             content: string;
             digest: string | null;
             latestVersion: number;
@@ -106853,6 +106870,10 @@ export type CreateSkillData = {
          * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context.
          */
         content: string;
+        /**
+         * Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.
+         */
+        icon?: string | null;
         files?: Array<{
             /**
              * Resource path, e.g. references/API.md or scripts/run.py
@@ -106985,6 +107006,7 @@ export type CreateSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -107230,6 +107252,7 @@ export type GetSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -107305,6 +107328,10 @@ export type UpdateSkillData = {
          * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context.
          */
         content: string;
+        /**
+         * Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.
+         */
+        icon?: string | null;
         files?: Array<{
             /**
              * Resource path, e.g. references/API.md or scripts/run.py
@@ -107424,6 +107451,7 @@ export type UpdateSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -108075,6 +108103,7 @@ export type RestoreSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -108320,6 +108349,7 @@ export type ResetSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -108509,6 +108539,7 @@ export type UpdateSkillGithubSyncResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -109114,6 +109145,7 @@ export type ImportGithubSkillsResponses = {
             scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
+            icon: string | null;
             content: string;
             digest: string | null;
             latestVersion: number;

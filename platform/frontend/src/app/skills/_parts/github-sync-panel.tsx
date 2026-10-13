@@ -92,6 +92,7 @@ export function GithubSyncPanel({
   return (
     <>
       <GitSourceCard
+        sticky
         provider={provider}
         repo={repoPath ?? providerLabel}
         href={href}

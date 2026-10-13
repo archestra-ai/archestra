@@ -43,6 +43,11 @@ const pluginsTable = softDeletablePgTable(
     pluginSlug: text("plugin_slug").notNull(),
     displayName: text("display_name").notNull(),
     description: text("description").notNull().default(""),
+    /**
+     * Emoji or base64 image data URL shown with the name; null = the source
+     * glyph. Archestra-side, so it stays editable on a Git-synced row.
+     */
+    icon: text("icon"),
     contentHash: text("content_hash").notNull(),
     sourceKind: text("source_kind")
       .$type<PluginSourceKind>()

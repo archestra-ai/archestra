@@ -1,9 +1,17 @@
 "use client";
 
+import { Info } from "lucide-react";
+import { IdentityFields } from "@/components/identity-fields";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { SkillContentEditor } from "../../skills/_parts/skill-content-editor";
 import { PluginClientIcon } from "./plugin-client-icon";
 import { type PluginPlatform, PluginPlatforms } from "./plugin-platforms";
@@ -24,11 +32,14 @@ export type PluginClientType =
 /**
  * The wizard's Content step, shared by the create and edit wizards: the
  * plugin's metadata beside its payload files. Client type is create-only
- * (it is part of the plugin's identity), and the slug is edit-only.
+ * (it is part of the plugin's identity), and the slug, shown as a hint on the
+ * name, is edit-only.
  */
 export function PluginContentFields({
   displayName,
   onDisplayNameChange,
+  icon,
+  onIconChange,
   description,
   onDescriptionChange,
   clientType,
@@ -43,6 +54,8 @@ export function PluginContentFields({
 }: {
   displayName: string;
   onDisplayNameChange: (value: string) => void;
+  icon: string | null;
+  onIconChange: (value: string | null) => void;
   description: string;
   onDescriptionChange: (value: string) => void;
   clientType?: PluginClientType;
@@ -63,8 +76,20 @@ export function PluginContentFields({
   return (
     <div className="space-y-6">
       <section className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="plugin-display-name">Display name</Label>
+        {/* The icon is Archestra's, not the repository's: it stays editable
+            while the name is locked to the source. */}
+        <IdentityFields
+          icon={icon}
+          onIconChange={onIconChange}
+          fallbackType="plugin"
+          disabled={readOnly}
+          label={
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="plugin-display-name">Display name</Label>
+              {pluginSlug ? <PluginIdentityHint slug={pluginSlug} /> : null}
+            </div>
+          }
+        >
           <Input
             id="plugin-display-name"
             value={displayName}
@@ -75,7 +100,7 @@ export function PluginContentFields({
             maxLength={120}
             required
           />
-        </div>
+        </IdentityFields>
         <div className="space-y-2">
           <Label htmlFor="plugin-description">Description</Label>
           <Textarea
@@ -89,20 +114,6 @@ export function PluginContentFields({
             rows={3}
           />
         </div>
-        {pluginSlug ? (
-          <div className="space-y-2">
-            <Label htmlFor="plugin-slug">Plugin identity</Label>
-            <Input
-              id="plugin-slug"
-              value={pluginSlug}
-              readOnly
-              className="font-mono text-xs"
-            />
-            <span className="block text-xs text-muted-foreground">
-              This name stays after you rename the plugin.
-            </span>
-          </div>
-        ) : null}
         {onClientTypeChange && clientType ? (
           <div className="space-y-2">
             <Label htmlFor="plugin-client-type">Target client</Label>
@@ -162,3 +173,30 @@ const PLUGIN_CLIENT_OPTIONS = [
   label,
   icon: <PluginClientIcon clientType={value as PluginClientType} size={18} />,
 }));
+
+/**
+ * The name clients install the plugin by. It never changes, so it is a hint
+ * on the name rather than a field: there is nothing to edit.
+ */
+function PluginIdentityHint({ slug }: { slug: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          type="button"
+          aria-label={`Plugin identity: ${slug}`}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <Info className="size-3.5" />
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        <p className="font-medium">Plugin identity</p>
+        <p className="font-mono text-xs">{slug}</p>
+        <p className="opacity-80">
+          Clients install the plugin by this name. It stays when you rename it.
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}

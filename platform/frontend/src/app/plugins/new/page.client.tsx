@@ -122,6 +122,7 @@ function NewPluginWizard() {
     const created = await createPlugin
       .mutateAsync({
         displayName: draft.displayName.trim(),
+        icon: draft.icon,
         description: draft.description,
         clientType: draft.clientType,
         supportedPlatforms: draft.supportedPlatforms,

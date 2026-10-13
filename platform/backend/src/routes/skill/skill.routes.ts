@@ -224,6 +224,14 @@ const SkillCatalogResultSchema = z.object({
  */
 const SkillManifestFieldsSchema = z.object({
   content: SkillManifestContentSchema,
+  icon: z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      "Emoji or base64 image data URL shown with the name. Omit to leave it " +
+        "untouched; null clears it.",
+    ),
   files: z.array(SkillFileInputSchema).max(MAX_FILES_PER_SKILL).optional(),
   environmentIds: z
     .array(UuidIdSchema)
@@ -763,6 +771,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             authorId: user.id,
             allowedTools: resolveAllowedTools(body, parsed),
             sourceType: "manual",
+            icon: body.icon ?? null,
           },
           files: toSkillFiles(body.files ?? []),
           environmentIds,
@@ -966,6 +975,9 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             skill: {
               ...toSkillInsertFields(parsed),
               allowedTools: resolveAllowedTools(body, parsed),
+              // Presentation only: never forks a version, and stays editable
+              // on a Git-synced skill.
+              ...(body.icon !== undefined && { icon: body.icon }),
             },
             files:
               body.files === undefined ? undefined : toSkillFiles(body.files),

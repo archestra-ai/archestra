@@ -15,6 +15,7 @@ function makeOrgSkill(id: string, name: string): OrgSkill {
     createdByServiceAccountId: null,
     createdBy: null,
     scope: "org",
+    icon: null,
     environments: [],
     labels: [],
     agentName: null,

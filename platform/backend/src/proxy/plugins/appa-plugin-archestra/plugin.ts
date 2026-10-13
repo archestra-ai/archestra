@@ -5272,6 +5272,7 @@ function appendToLastUserTurn(
     ];
   else if (Array.isArray(last.content))
     last.content.push({ type: "text", text });
+  else last.content = [{ type: "text", text }];
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

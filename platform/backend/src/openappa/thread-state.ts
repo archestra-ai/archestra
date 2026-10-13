@@ -129,7 +129,8 @@ class ThreadStates {
     const { record, messageId, calls } = params;
     // A response whose calls are too large to keep cannot be continued from.
     const diverged =
-      params.diverged || JSON.stringify(calls).length > MAX_CALLS_BYTES;
+      params.diverged ||
+      Buffer.byteLength(JSON.stringify(calls)) > MAX_CALLS_BYTES;
     if (!messageId) return;
     const rootMessageId = record.tools
       ? messageId

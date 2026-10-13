@@ -467,6 +467,8 @@ describe("asking through the client's own question tool", () => {
       organizationId: string;
       thread: "create" | "continue";
       pending: boolean;
+      /** The newest user turn arrives without content. */
+      noContent?: boolean;
     }) {
       const plugin = new AppaPluginArchestra([]);
       const context = requestContext({
@@ -501,12 +503,18 @@ describe("asking through the client's own question tool", () => {
       const request = {
         system,
         messages: [
-          {
-            role: "user",
-            content: [
-              { type: "tool_result", tool_use_id: "toolu_1", content: "done" },
-            ],
-          },
+          params.noContent
+            ? { role: "user" }
+            : {
+                role: "user",
+                content: [
+                  {
+                    type: "tool_result",
+                    tool_use_id: "toolu_1",
+                    content: "done",
+                  },
+                ],
+              },
         ],
       };
       await plugin.onBeforeModel({ ...context, request });
@@ -539,6 +547,23 @@ describe("asking through the client's own question tool", () => {
       }
       expect(result.turn).not.toContain(FIXED);
       expect(result.system).not.toContain(FIXED);
+    });
+
+    test("a continue whose newest user turn has no content still gets per-turn guidance", async ({
+      makeOrganization,
+    }) => {
+      config.openappa.enabled = true;
+      const { id } = await makeOrganization();
+
+      const result = await guided({
+        organizationId: id,
+        thread: "continue",
+        pending: true,
+        noContent: true,
+      });
+
+      for (const text of PER_TURN) expect(result.turn).toContain(text);
+      expect(result.systemUntouched).toBe(true);
     });
 
     test("a later continue with nothing pending adds nothing", async ({

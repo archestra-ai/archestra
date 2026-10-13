@@ -211,6 +211,24 @@ describe("thread state rules", () => {
       }),
     ).toEqual({ ok: false, reason: "diverged" });
   });
+
+  test("measures the calls limit in bytes, not characters", async () => {
+    // 150,000 characters, but 300,000 bytes in UTF-8.
+    await threadStates.record({
+      record: { organizationId: "org4", sessionId: "s", tools },
+      messageId: "msg_wide",
+      calls: [{ id: "x", name: "Write", input: { text: "é".repeat(150_000) } }],
+      diverged: false,
+    });
+
+    expect(
+      await threadStates.forContinue({
+        organizationId: "org4",
+        sessionId: "s",
+        previousMessageId: "msg_wide",
+      }),
+    ).toEqual({ ok: false, reason: "diverged" });
+  });
 });
 
 describe("what the ruling is given", () => {

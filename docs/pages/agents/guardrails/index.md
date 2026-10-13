@@ -75,4 +75,5 @@ Guardrails check tool calls. They do not contain the machine the agent runs on. 
 - **Traffic around the proxy:** Guardrails check only requests through the [LLM Proxy](/docs/llm-proxy). [Connect every client](/docs/agents/guardrails/clients) to it, and block the clients Guardrails do not recognize.
 - Provider-hosted tools, such as a provider's own web search: most run before the proxy sees the call. Where you need the check, use a tool that runs in the client or through the [MCP Gateway](/docs/mcp/gateway).
 - **Sessions that cannot be checked:** the proxy rejects them with HTTP 400. These are Codex in code mode and client-run `local_shell` or `computer_use` tools.
+- **Images, documents, and audio in tool results:** the policy sees the type, size, and hash of each one, not its content. A sanitizer cannot read or clean them. The result's restrictions come from the rule for the tool that returned it.
 - **Tools behind a tool search:** some clients load a tool only after the agent searches for it. The proxy refuses a call to a tool that is not loaded yet and tells the agent to search for it first.

@@ -12,6 +12,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import MemberModel from "@/models/member";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
@@ -1175,6 +1176,126 @@ describe("APPA feature boundary", () => {
     expect(result.toolResultUpdates["ask-call"]?.content).toBe(
       reported ? "APPA: withheld; remedy offer-123" : undefined,
     );
+  });
+
+  test("hands the runtime a marker, not the bytes, for a result with an image", async () => {
+    const data = Buffer.alloc(300_000, 5).toString("base64");
+    const adapter = anthropicAdapterFactory.createRequestAdapter({
+      model: "claude-sonnet-4-5",
+      max_tokens: 10,
+      messages: [
+        { role: "user", content: "look" },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "toolu_img", name: "Read", input: {} },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_img",
+              content: [
+                { type: "text", text: "the file" },
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: "image/png", data },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as never);
+
+    await processProxyResults({
+      session,
+      canonicalize: (each) => each,
+      results: adapter.getToolResults(),
+    });
+
+    const [event] = native.dispatchHook.mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .filter((each) => each.event === "tool_result");
+    expect(event.output).toContain("the file");
+    expect(event.output).toContain("[binary image/png, 300000 bytes, sha256 ");
+    expect(event.output).not.toContain(data.slice(0, 64));
+  });
+
+  test("a rewritten text beside an image goes upstream as text with the marker, first and on replay", async () => {
+    const data = Buffer.alloc(300_000, 5).toString("base64");
+    const request = () =>
+      anthropicAdapterFactory.createRequestAdapter({
+        model: "claude-sonnet-4-5",
+        max_tokens: 10,
+        messages: [
+          { role: "user", content: "look" },
+          {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu_img", name: "Read", input: {} },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_img",
+                content: [
+                  { type: "text", text: "the file" },
+                  {
+                    type: "image",
+                    source: { type: "base64", media_type: "image/png", data },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      } as never);
+    // The sanitizer rewrote the text part of the body the runtime was handed.
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event !== "tool_result")
+        return JSON.stringify({ decision: "ack" });
+      const parts = JSON.parse(event.output);
+      parts[0].text = "[redacted]";
+      const rewritten = JSON.stringify(parts);
+      return JSON.stringify({
+        decision: "deliver_value",
+        value: rewritten,
+        approved_output: rewritten,
+        output_source: "tool",
+      });
+    });
+
+    // The same stored decision answers both requests.
+    for (const _request of ["first", "replay"]) {
+      const adapter = request();
+      const { toolResultUpdates } = await processProxyResults({
+        session,
+        canonicalize: (each) => each,
+        results: adapter.getToolResults(),
+      });
+      adapter.applyToolResultUpdates(
+        Object.fromEntries(
+          Object.entries(toolResultUpdates).map(([id, update]) => [
+            id,
+            update.content,
+          ]),
+        ),
+      );
+      const upstream = adapter.toProviderRequest().messages[2]
+        .content as Array<{ content: unknown }>;
+      const sent = upstream[0].content;
+      expect(typeof sent).toBe("string");
+      expect(sent).toContain("[redacted]");
+      expect(sent).toContain("[binary image/png, 300000 bytes, sha256 ");
+      expect(sent).not.toContain(data.slice(0, 64));
+    }
   });
 
   describe("a remedy call the gateway never ran", () => {

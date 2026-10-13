@@ -179,3 +179,86 @@ url = "http://127.0.0.1:${server.address().port}/annotate"
   // Externals see the canonical identity the runtime judges, not the host's spelling.
   assert.deepEqual(requests.map(request => request.artifact.args.name), ['host/archestra/unknown_before', 'host/archestra/unknown_after']);
 });
+
+test('the host sets the result body limit and a policy text cannot change it', { skip: !databaseUrl }, async () => {
+  const proxyLimit = 70 * 1024 * 1024;
+  const priorLimit = process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+  try {
+    await native.initializeOpenappa(databaseUrl, 2);
+    const text = 'x'.repeat(100_000);
+    const withheld = '[appa] the result was not carried; nothing was admitted';
+    const report = async (policyText, output) => {
+      const session = { organization_id: `native-body-cap-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() };
+      const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policyText)));
+      assert.equal((await hook({ event: 'tool_call', operation_id: 'call:1', tool: 'read', arguments: {} })).decision, 'allow_call');
+      return hook({ event: 'tool_result', tool_call_id: '1', output, outcome: 'success' });
+    };
+    const carried = async (policyText, output) => {
+      const kept = await report(policyText, output);
+      assert.equal(kept.decision, 'ack');
+      assert.equal(kept.approved_output, output);
+    };
+    process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = String(proxyLimit);
+    // The host limit applies to a text that states nothing, one that states the old
+    // 64 KiB (as every stored effective text does today), a lower value and a higher one.
+    for (const stated of ['', 'max_body_bytes = 65536\n', 'max_body_bytes = 4096\n', 'max_body_bytes = 999999999999\n']) {
+      const policyText = stated ? `${allow}[externals]\ntimeout_ms = 2000\n${stated}` : allow;
+      await carried(policyText, text);
+      await carried(policyText, 'x'.repeat(5 * 1024 * 1024));
+    }
+    // A result the limit does carry is still ruled on by the policy: a rewrite stands.
+    // Without a published limit a policy keeps the value its text states.
+    delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+    const stated = `${allow}[externals]\ntimeout_ms = 2000\nmax_body_bytes = 65536\n`;
+    const dropped = await report(stated, text);
+    assert.equal(dropped.decision, 'replace_output');
+    assert.equal(dropped.approved_output, withheld);
+    await carried(allow, 'x'.repeat(1000));
+  } finally {
+    if (priorLimit === undefined) delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+    else process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = priorLimit;
+  }
+});
+
+test('a long kept result is stored once, and a row that holds the text twice still replays', { skip: !databaseUrl }, async () => {
+  const proxyLimit = String(70 * 1024 * 1024);
+  const prior = process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+  process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = proxyLimit;
+  const client = new Client({ connectionString: databaseUrl });
+  await client.connect();
+  try {
+    await native.initializeOpenappa(databaseUrl, 2);
+    const session = { organization_id: `native-stored-once-${randomUUID()}`, caller_id: 'user:test', session_id: randomUUID() };
+    const hook = async event => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(allow)));
+    const column = async (id) => (await client.query(
+      'SELECT approved_output, decision FROM openappa_processed_results WHERE organization_id=$1 AND session_id=$2 AND tool_call_id=$3',
+      [session.organization_id, session.session_id, id],
+    )).rows[0];
+    const text = 'long result '.repeat(2000);
+    const short = 'short result';
+    for (const [id, output] of [['long', text], ['short', short]]) {
+      assert.equal((await hook({ event: 'tool_call', operation_id: `call:${id}`, tool: 'read', arguments: {} })).decision, 'allow_call');
+      const first = await hook({ event: 'tool_result', tool_call_id: id, output, outcome: 'success' });
+      assert.equal(first.approved_output, output);
+    }
+    const long = await column('long');
+    // The decision keeps the text; the column holds its digest.
+    assert.equal(long.decision.approved_output, text);
+    assert.equal(long.approved_output, `sha256:${createHash('sha256').update(text).digest('hex')}`);
+    assert.equal((await column('short')).approved_output, short);
+    // A replay answers from the decision.
+    const replay = await hook({ event: 'tool_result', tool_call_id: 'long', output: text, outcome: 'success' });
+    assert.equal(replay.approved_output, text);
+    // A row written before the column held a digest keeps the text in both places and replays the same.
+    await client.query(
+      'UPDATE openappa_processed_results SET approved_output=$4 WHERE organization_id=$1 AND session_id=$2 AND tool_call_id=$3',
+      [session.organization_id, session.session_id, 'long', text],
+    );
+    const legacy = await hook({ event: 'tool_result', tool_call_id: 'long', output: text, outcome: 'success' });
+    assert.deepEqual(legacy, replay);
+  } finally {
+    await client.end();
+    if (prior === undefined) delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
+    else process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = prior;
+  }
+});

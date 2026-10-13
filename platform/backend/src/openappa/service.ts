@@ -43,6 +43,7 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
+import { policyView } from "./result-view";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
@@ -787,6 +788,18 @@ function unexecutedControlResult(content: unknown): ProcessedToolResult {
 const UNEXECUTED_REMEDY_QUESTION_HINT =
   "[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
 
+/**
+ * The body handed to the runtime for a result: a string as it is, anything
+ * else as JSON. The runtime records this body, so the payload of each binary
+ * part the client sent is a marker here, never its bytes.
+ */
+function resultOutput(result: CommonToolResult): string {
+  if (typeof result.content === "string") return result.content;
+  return JSON.stringify(
+    result.structured ? policyView(result.content) : result.content,
+  );
+}
+
 function toolResultText(content: unknown): string {
   if (typeof content === "string") return content;
   if (content === null || content === undefined) return "";
@@ -894,10 +907,7 @@ export async function processProxyResults(params: {
     const approved = await approveToolResult({
       session: params.session,
       toolCallId: result.id,
-      output:
-        typeof result.content === "string"
-          ? result.content
-          : JSON.stringify(result.content),
+      output: resultOutput(result),
       outcome,
       controlToolName: params.controlToolName,
       policy,
